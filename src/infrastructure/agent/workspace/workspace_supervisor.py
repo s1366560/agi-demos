@@ -49,6 +49,8 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from sqlalchemy.orm.exc import StaleDataError
+
 from src.domain.model.workspace.wtp_envelope import (
     WtpEnvelope,
     WtpValidationError,
@@ -70,6 +72,8 @@ DEFAULT_STALE_SECONDS = int(os.getenv("WORKSPACE_ATTEMPT_STALE_SECONDS", "900"))
 DEFAULT_WATCHDOG_INTERVAL_SECONDS = float(
     os.getenv("WORKSPACE_ATTEMPT_WATCHDOG_INTERVAL_SECONDS", "30")
 )
+PROGRESS_PERSIST_MAX_ATTEMPTS = 3
+PROGRESS_PERSIST_RETRY_BASE_SECONDS = 0.05
 
 
 # --- Phase 7: Prometheus metrics (soft import) ------------------------------
@@ -523,20 +527,54 @@ class WorkspaceSupervisor:
         summary = str(payload.get("summary") or "").strip()
         if not summary:
             return
-        try:
-            from sqlalchemy import select
+        for attempt_index in range(PROGRESS_PERSIST_MAX_ATTEMPTS):
+            try:
+                await self._persist_progress_once(envelope, summary)
+                return
+            except Exception as exc:
+                if (
+                    _is_retryable_progress_persist_error(exc)
+                    and attempt_index + 1 < PROGRESS_PERSIST_MAX_ATTEMPTS
+                ):
+                    logger.info(
+                        "workspace_supervisor progress persist conflict; retrying "
+                        "(workspace=%s task=%s attempt=%s retry=%s)",
+                        envelope.workspace_id,
+                        envelope.task_id,
+                        envelope.attempt_id,
+                        attempt_index + 1,
+                    )
+                    await asyncio.sleep(
+                        PROGRESS_PERSIST_RETRY_BASE_SECONDS * (attempt_index + 1)
+                    )
+                    continue
+                logger.warning(
+                    "workspace_supervisor failed to persist progress "
+                    "(workspace=%s task=%s attempt=%s)",
+                    envelope.workspace_id,
+                    envelope.task_id,
+                    envelope.attempt_id,
+                    exc_info=True,
+                )
+                return
 
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
-            from src.infrastructure.adapters.secondary.persistence.models import (
-                PlanNodeModel,
-            )
-            from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events import (
-                SqlWorkspacePlanEventRepository,
-            )
+    async def _persist_progress_once(self, envelope: WtpEnvelope, summary: str) -> None:
+        from sqlalchemy import select
 
-            async with async_session_factory() as session:
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            PlanNodeModel,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_events import (
+            SqlWorkspacePlanEventRepository,
+        )
+
+        payload = dict(envelope.payload or {})
+        async with async_session_factory() as session:
+            node = None
+            if envelope.attempt_id:
                 stmt = (
                     select(PlanNodeModel)
                     .where(PlanNodeModel.workspace_task_id == envelope.task_id)
@@ -546,65 +584,56 @@ class WorkspaceSupervisor:
                 )
                 result = await session.execute(stmt)
                 node = result.scalar_one_or_none()
-                if node is None:
-                    fallback = (
-                        select(PlanNodeModel)
-                        .where(PlanNodeModel.workspace_task_id == envelope.task_id)
-                        .order_by(
-                            PlanNodeModel.updated_at.desc(),
-                            PlanNodeModel.created_at.desc(),
-                        )
-                        .limit(1)
+            else:
+                fallback = (
+                    select(PlanNodeModel)
+                    .where(PlanNodeModel.workspace_task_id == envelope.task_id)
+                    .order_by(
+                        PlanNodeModel.updated_at.desc(),
+                        PlanNodeModel.created_at.desc(),
                     )
-                    result = await session.execute(fallback)
-                    node = result.scalar_one_or_none()
-                if node is None:
-                    return
-
-                now = datetime.now(UTC)
-                percent = _progress_percent(payload.get("percent"), node.progress)
-                existing_progress = dict(node.progress or {})
-                node.progress = {
-                    "percent": percent,
-                    "confidence": float(existing_progress.get("confidence", 1.0) or 1.0),
-                    "note": summary,
-                }
-                metadata = dict(node.metadata_json or {})
-                progress_event = _progress_event_payload(
-                    envelope,
-                    summary=summary,
-                    percent=percent,
-                    created_at=now,
+                    .limit(1)
                 )
-                progress_events = metadata.get("progress_events")
-                if not isinstance(progress_events, list):
-                    progress_events = []
-                progress_events.append(progress_event)
-                metadata["progress_events"] = progress_events[-25:]
-                metadata["latest_worker_progress"] = progress_event
-                node.metadata_json = metadata
-                node.updated_at = now
+                result = await session.execute(fallback)
+                node = result.scalar_one_or_none()
+            if node is None:
+                return
 
-                await SqlWorkspacePlanEventRepository(session).append(
-                    plan_id=node.plan_id,
-                    workspace_id=envelope.workspace_id,
-                    event_type="worker_progress",
-                    node_id=node.id,
-                    attempt_id=envelope.attempt_id,
-                    actor_id=_metadata_string(envelope.extra_metadata, "worker_agent_id"),
-                    source="workspace_worker_progress",
-                    payload=progress_event,
-                )
-                await session.commit()
-        except Exception:
-            logger.warning(
-                "workspace_supervisor failed to persist progress "
-                "(workspace=%s task=%s attempt=%s)",
-                envelope.workspace_id,
-                envelope.task_id,
-                envelope.attempt_id,
-                exc_info=True,
+            now = datetime.now(UTC)
+            percent = _progress_percent(payload.get("percent"), node.progress)
+            existing_progress = dict(node.progress or {})
+            node.progress = {
+                "percent": percent,
+                "confidence": float(existing_progress.get("confidence", 1.0) or 1.0),
+                "note": summary,
+            }
+            metadata = dict(node.metadata_json or {})
+            progress_event = _progress_event_payload(
+                envelope,
+                summary=summary,
+                percent=percent,
+                created_at=now,
             )
+            progress_events = metadata.get("progress_events")
+            if not isinstance(progress_events, list):
+                progress_events = []
+            progress_events.append(progress_event)
+            metadata["progress_events"] = progress_events[-25:]
+            metadata["latest_worker_progress"] = progress_event
+            node.metadata_json = metadata
+            node.updated_at = now
+
+            await SqlWorkspacePlanEventRepository(session).append(
+                plan_id=node.plan_id,
+                workspace_id=envelope.workspace_id,
+                event_type="worker_progress",
+                node_id=node.id,
+                attempt_id=envelope.attempt_id,
+                actor_id=_metadata_string(envelope.extra_metadata, "worker_agent_id"),
+                source="workspace_worker_progress",
+                payload=progress_event,
+            )
+            await session.commit()
 
     async def _apply_terminal(self, envelope: WtpEnvelope) -> None:
         """Invoke :func:`apply_workspace_worker_report` for terminal verbs."""
@@ -753,6 +782,18 @@ def _progress_event_payload(
     if conversation_id:
         event["conversation_id"] = conversation_id
     return event
+
+
+def _is_deadlock_error(exc: Exception) -> bool:
+    text_parts = [str(exc).lower()]
+    original = getattr(exc, "orig", None)
+    if original is not None:
+        text_parts.append(str(original).lower())
+    return any("deadlock detected" in text or "40p01" in text for text in text_parts)
+
+
+def _is_retryable_progress_persist_error(exc: Exception) -> bool:
+    return isinstance(exc, StaleDataError) or _is_deadlock_error(exc)
 
 
 __all__ = [

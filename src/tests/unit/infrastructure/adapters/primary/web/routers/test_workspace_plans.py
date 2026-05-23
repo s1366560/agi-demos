@@ -1036,6 +1036,139 @@ def test_reopen_blocked_clears_terminal_retry_debt() -> None:
     assert reopened.metadata["operator_action"]["reason"] == "operator wants another attempt"
 
 
+@pytest.mark.parametrize("failure_status", ["failed", "failure", "error"])
+def test_replan_allows_done_node_with_failed_pipeline_state(failure_status: str) -> None:
+    plan = _make_plan("workspace-plan-api")
+    node = replace(
+        plan.nodes[PlanNodeId("task-api")],
+        intent=TaskIntent.DONE,
+        execution=TaskExecution.IDLE,
+        current_attempt_id="attempt-failed-pipeline",
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-task-api",
+            sequence=1,
+            worktree_path="/workspace/.memstack/worktrees/attempt-failed-pipeline",
+            branch_name="workspace/task-api",
+            base_ref="base",
+            commit_ref="failed-commit",
+        ),
+        metadata={
+            "pipeline_status": failure_status,
+            "pipeline_gate_status": failure_status,
+            "source_publish_status": failure_status,
+            "source_publish_reason": "non-fast-forward",
+            "candidate_artifacts": ["commit_ref:failed-commit"],
+            "last_verification_passed": True,
+        },
+    )
+
+    with pytest.raises(ValueError, match="done nodes cannot be reopened or replanned"):
+        workspace_plans._reset_node_for_operator(
+            node=node,
+            actor_id="plan-api-user",
+            action="operator_replan_requested",
+            reason="retry failed pipeline",
+        )
+
+    replanned = workspace_plans._reset_node_for_operator(
+        node=node,
+        actor_id="plan-api-user",
+        action="operator_replan_requested",
+        reason="retry failed pipeline",
+        allow_done_recovery=workspace_plans._done_node_has_recoverable_failure(node),
+    )
+
+    assert replanned.intent is TaskIntent.TODO
+    assert replanned.execution is TaskExecution.IDLE
+    assert replanned.current_attempt_id is None
+    assert replanned.feature_checkpoint is not None
+    assert replanned.feature_checkpoint.commit_ref is None
+    assert "pipeline_status" not in replanned.metadata
+    assert "pipeline_gate_status" not in replanned.metadata
+    assert "source_publish_status" not in replanned.metadata
+    assert "source_publish_reason" not in replanned.metadata
+    assert replanned.metadata["operator_action"]["reason"] == "retry failed pipeline"
+
+
+@pytest.mark.asyncio
+async def test_request_replan_reactivates_completed_plan_for_failed_done_node(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-replan-completed"
+    await _seed_workspace(db_session, workspace_id)
+    plan = replace(_make_plan(workspace_id), status=PlanStatus.COMPLETED)
+    task_node = replace(
+        plan.nodes[PlanNodeId("task-api")],
+        intent=TaskIntent.DONE,
+        execution=TaskExecution.IDLE,
+        current_attempt_id="attempt-failed-pipeline",
+        metadata={
+            "pipeline_status": "failed",
+            "pipeline_gate_status": "failed",
+            "source_publish_status": "failed",
+            "source_publish_reason": "non-fast-forward",
+        },
+        completed_at=datetime.now(UTC),
+    )
+    plan.replace_node(task_node)
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+
+    async def fake_publish_workspace_event(
+        _redis_client: object,
+        *,
+        workspace_id: str,
+        event_type: object,
+        payload: dict[str, object],
+        metadata: dict[str, object] | None = None,
+        correlation_id: str | None = None,
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(
+        workspace_plans,
+        "publish_workspace_event",
+        fake_publish_workspace_event,
+    )
+    request = cast(
+        Request,
+        SimpleNamespace(
+            app=SimpleNamespace(state=SimpleNamespace(container=SimpleNamespace(redis_client=object())))
+        ),
+    )
+
+    result = await workspace_plans.request_workspace_plan_node_replan(
+        workspace_id=workspace_id,
+        node_id="task-api",
+        body=workspace_plans.WorkspacePlanActionRequest(reason="retry failed pipeline"),
+        request=request,
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert result.ok is True
+    loaded_plan = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded_plan is not None
+    assert loaded_plan.status is PlanStatus.ACTIVE
+    node = loaded_plan.nodes[PlanNodeId("task-api")]
+    assert node.intent is TaskIntent.TODO
+    assert node.execution is TaskExecution.IDLE
+    assert "pipeline_status" not in node.metadata
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert outbox[0].event_type == "supervisor_tick"
+
+
 def test_accept_after_review_marks_node_done_and_records_evidence() -> None:
     plan = _make_plan("workspace-plan-api")
     node = replace(

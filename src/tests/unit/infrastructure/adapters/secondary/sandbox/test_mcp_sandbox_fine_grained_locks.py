@@ -221,8 +221,7 @@ class TestPortAllocationConcurrency:
         with patch("docker.from_env"):
             adapter = MCPSandboxAdapter()
 
-            # Mock _is_port_available to control port availability
-            original_is_available = adapter._is_port_available
+            # Mock _is_port_available to avoid binding real host ports in unit tests.
             call_count = 0
 
             def mock_is_available(port):
@@ -230,7 +229,7 @@ class TestPortAllocationConcurrency:
                 call_count += 1
                 # Simulate port check taking some time
                 time.sleep(0.01)
-                return original_is_available(port)
+                return port not in adapter._used_ports
 
             adapter._is_port_available = mock_is_available
 

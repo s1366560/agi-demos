@@ -69,9 +69,31 @@ vi.mock('../../../../utils/tokenResolver', () => ({
   getAuthToken: () => 'mock-token',
 }));
 
+vi.mock('@/services/sandboxWebSocketUtils', () => ({
+  buildDesktopWebSocketUrl: (projectId: string) =>
+    `ws://localhost:8000/api/v1/projects/${projectId}/sandbox/desktop/proxy/websockify`,
+  buildDesktopWebSocketProtocols: () => ['mock-token'],
+}));
+
 // Mock the vendored KasmVNC dependencies
 vi.mock('../../../../vendor/kasmvnc/core/websock.js', () => ({ default: vi.fn() }));
+vi.mock('@/vendor/kasmvnc/core/websock.js', () => ({ default: vi.fn() }));
 vi.mock('../../../../vendor/kasmvnc/core/mousebuttonmapper.js', () => {
+  class MockMouseButtonMapper {
+    set = vi.fn();
+  }
+  return {
+    default: MockMouseButtonMapper,
+    XVNC_BUTTONS: {
+      LEFT_BUTTON: 1,
+      MIDDLE_BUTTON: 2,
+      RIGHT_BUTTON: 4,
+      BACK_BUTTON: 8,
+      FORWARD_BUTTON: 16,
+    },
+  };
+});
+vi.mock('@/vendor/kasmvnc/core/mousebuttonmapper.js', () => {
   class MockMouseButtonMapper {
     set = vi.fn();
   }
@@ -105,6 +127,29 @@ vi.mock('../../../../vendor/kasmvnc/core/rfb.js', () => {
     constructor() {
       super();
       setTimeout(() => this.dispatchEvent(new Event('connect')), 0);
+    }
+  }
+  return { default: MockRFB };
+});
+vi.mock('@/vendor/kasmvnc/core/rfb.js', () => {
+  class MockRFB extends EventTarget {
+    connect = vi.fn();
+    disconnect = vi.fn();
+    sendCredentials = vi.fn();
+    clipboardPasteFrom = vi.fn();
+    get capabilities() {
+      return { power: false };
+    }
+    scaleViewport = false;
+    resizeSession = false;
+    showDotCursor = false;
+    clipViewport = false;
+    dragViewport = false;
+    qualityLevel = 6;
+    compressionLevel = 2;
+    constructor() {
+      super();
+      setTimeout(() => this.dispatchEvent(new Event('connect')), 10);
     }
   }
   return { default: MockRFB };

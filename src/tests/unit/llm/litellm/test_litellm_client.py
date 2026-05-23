@@ -178,16 +178,16 @@ class TestLiteLLMClient:
         assert get_model_max_input_tokens("gpt-4o", max_output_tokens=16384) == 111616
 
     def test_get_model_max_input_tokens_qwen_specific(self):
-        """qwen-max is now served by the catalog (context=32768, max_out=8192)."""
-        # catalog: context_length=32768, no explicit max_input_tokens
-        # derived: 32768 - 8192 = 24576
-        assert get_model_max_input_tokens("qwen-max", max_output_tokens=8192) == 24576
-        assert get_model_max_input_tokens("dashscope/qwen-max", max_output_tokens=8192) == 24576
+        """qwen-max is now served by the catalog (context=131072, max_out=8192)."""
+        # catalog: context_length=131072, no explicit max_input_tokens
+        # derived: 131072 - 8192 = 122880
+        assert get_model_max_input_tokens("qwen-max", max_output_tokens=8192) == 122880
+        assert get_model_max_input_tokens("dashscope/qwen-max", max_output_tokens=8192) == 122880
 
     def test_get_model_input_budget_qwen_specific(self):
         """Should apply catalog-sourced budget ratio (0.85) for qwen-max."""
-        # 24576 * 0.85 = 20889.6 -> int = 20889
-        assert get_model_input_budget("qwen-max", max_output_tokens=8192) == 20889
+        # 122880 * 0.85 = 104448
+        assert get_model_input_budget("qwen-max", max_output_tokens=8192) == 104448
 
     def test_build_completion_kwargs_trims_oversized_prompt(self, client):
         """Should trim oldest context to stay within model input budget."""
@@ -248,6 +248,25 @@ class TestLiteLLMClient:
 
         assert [message["role"] for message in kwargs["messages"]] == ["system", "user"]
         assert all(message.get("tool_call_id") != "call-1" for message in kwargs["messages"])
+
+    def test_convert_message_normalizes_tool_call_assistant_content(self):
+        """Should avoid provider-invalid null content on assistant tool-call messages."""
+        message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "bash", "arguments": "{}"},
+                }
+            ],
+        }
+
+        converted = LiteLLMClient._convert_message(message)
+
+        assert converted["content"] == ""
+        assert converted["tool_calls"] == message["tool_calls"]
 
     def test_build_completion_kwargs_prefers_max_completion_tokens(self, client):
         """Should avoid sending max_tokens when max_completion_tokens is requested."""
@@ -495,23 +514,49 @@ class TestLiteLLMClient:
         """Should truncate oversized prompts even when token counter underestimates."""
         messages = [
             {"role": "system", "content": "system prompt"},
-            {"role": "user", "content": "你" * 40000},
+            {"role": "user", "content": "你" * 200000},
         ]
         model = "dashscope/qwen-max"
 
         with patch.object(client, "_estimate_input_tokens", return_value=100):
+            original_effective_tokens = client._estimate_effective_input_tokens(model, messages)
             trimmed = client._trim_messages_to_input_limit(
                 model=model,
                 messages=messages,
                 max_tokens=4096,
             )
+            trimmed_effective_tokens = client._estimate_effective_input_tokens(model, trimmed)
 
-        assert len(trimmed) == 1
-        assert trimmed[0]["role"] == "user"
-        assert len(trimmed[0]["content"]) < len(messages[1]["content"])
-        assert client._estimate_effective_input_tokens(
-            model, trimmed
-        ) < client._estimate_effective_input_tokens(model, messages)
+        assert len(trimmed) == 2
+        assert trimmed[0] == messages[0]
+        assert trimmed[1]["role"] == "user"
+        assert len(trimmed[1]["content"]) < len(messages[1]["content"])
+        assert trimmed_effective_tokens < original_effective_tokens
+
+    def test_trim_messages_preserves_latest_user_anchor(self, client):
+        """Should not trim away the user message required by strict providers."""
+        messages = [
+            {"role": "system", "content": "system prompt"},
+            {"role": "user", "content": "original task"},
+            {"role": "assistant", "content": "old tool planning"},
+            {"role": "tool", "tool_call_id": "call-1", "content": "old output"},
+        ]
+
+        with (
+            patch(
+                "src.infrastructure.llm.litellm.litellm_client.get_model_input_budget",
+                return_value=120,
+            ),
+            patch.object(client, "_estimate_effective_input_tokens", side_effect=[400, 300, 80]),
+        ):
+            trimmed = client._trim_messages_to_input_limit(
+                model="zai/glm-5.1",
+                messages=messages,
+                max_tokens=4096,
+            )
+
+        assert [message["role"] for message in trimmed] == ["system", "user"]
+        assert trimmed[1]["content"] == "original task"
 
     def test_ollama_without_api_key_uses_default_base_url(self):
         """Ollama should allow missing API key and apply local default api_base."""

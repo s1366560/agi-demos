@@ -38,6 +38,10 @@ def sandbox_http_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     lifecycle_service.ensure_sandbox_running = AsyncMock(
         return_value=SimpleNamespace(sandbox_id="sandbox-1")
     )
+    orchestrator = SimpleNamespace(
+        stop_desktop=AsyncMock(return_value=True),
+        stop_terminal=AsyncMock(return_value=True),
+    )
 
     app.dependency_overrides[router_mod.get_current_user] = _current_user
     app.dependency_overrides[router_mod.get_current_user_from_desktop_proxy] = _current_user
@@ -45,6 +49,7 @@ def sandbox_http_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app.dependency_overrides[router_mod.get_db] = _db
     app.dependency_overrides[router_mod.get_lifecycle_service] = lambda: lifecycle_service
     app.dependency_overrides[router_mod.get_sandbox_adapter] = lambda: SimpleNamespace(_docker=None)
+    app.dependency_overrides[router_mod.get_orchestrator] = lambda: orchestrator
     app.dependency_overrides[router_mod.get_event_publisher] = lambda: None
 
     manager = AsyncMock()

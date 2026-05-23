@@ -72,9 +72,31 @@ vi.mock('../../../../utils/tokenResolver', () => ({
   getAuthToken: () => 'mock-token',
 }));
 
+vi.mock('@/services/sandboxWebSocketUtils', () => ({
+  buildDesktopWebSocketUrl: (projectId: string) =>
+    `ws://localhost:8000/api/v1/projects/${projectId}/sandbox/desktop/proxy/websockify`,
+  buildDesktopWebSocketProtocols: () => ['mock-token'],
+}));
+
 // Mock the vendored KasmVNC dependencies
 vi.mock('../../../../vendor/kasmvnc/core/websock.js', () => ({ default: vi.fn() }));
+vi.mock('@/vendor/kasmvnc/core/websock.js', () => ({ default: vi.fn() }));
 vi.mock('../../../../vendor/kasmvnc/core/mousebuttonmapper.js', () => {
+  class MockMouseButtonMapper {
+    set = vi.fn();
+  }
+  return {
+    default: MockMouseButtonMapper,
+    XVNC_BUTTONS: {
+      LEFT_BUTTON: 1,
+      MIDDLE_BUTTON: 2,
+      RIGHT_BUTTON: 4,
+      BACK_BUTTON: 8,
+      FORWARD_BUTTON: 16,
+    },
+  };
+});
+vi.mock('@/vendor/kasmvnc/core/mousebuttonmapper.js', () => {
   class MockMouseButtonMapper {
     set = vi.fn();
   }
@@ -103,12 +125,54 @@ vi.mock('../../../../vendor/kasmvnc/core/rfb.js', () => {
     compressionLevel = 2;
     capabilities = { power: false };
 
-    constructor(_target: HTMLElement, _url: string, _options?: unknown) {
+    constructor(
+      _target: HTMLElement,
+      _touchInput: HTMLTextAreaElement,
+      _url: string,
+      _options?: unknown
+    ) {
       super();
       // Simulate async connection
       setTimeout(() => {
         this.dispatchEvent(new CustomEvent('connect'));
-      }, 0);
+      }, 10);
+    }
+
+    disconnect = vi.fn();
+    sendCredentials = vi.fn();
+    sendKey = vi.fn();
+    sendCtrlAltDel = vi.fn();
+    focus = vi.fn();
+    blur = vi.fn();
+    clipboardPasteFrom = vi.fn();
+  }
+
+  return { default: MockRFB };
+});
+vi.mock('@/vendor/kasmvnc/core/rfb.js', () => {
+  class MockRFB extends EventTarget {
+    viewOnly = false;
+    focusOnClick = true;
+    clipViewport = false;
+    dragViewport = false;
+    scaleViewport = true;
+    resizeSession = false;
+    showDotCursor = true;
+    background = '#000000';
+    qualityLevel = 6;
+    compressionLevel = 2;
+    capabilities = { power: false };
+
+    constructor(
+      _target: HTMLElement,
+      _touchInput: HTMLTextAreaElement,
+      _url: string,
+      _options?: unknown
+    ) {
+      super();
+      setTimeout(() => {
+        this.dispatchEvent(new CustomEvent('connect'));
+      }, 10);
     }
 
     disconnect = vi.fn();

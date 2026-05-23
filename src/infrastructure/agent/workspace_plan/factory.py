@@ -437,6 +437,7 @@ async def _project_verification_to_task(
 ) -> None:
     metadata = dict(task.metadata_json or {})
     metadata[PENDING_LEADER_ADJUDICATION] = False
+    metadata.pop("retry_verification_only", None)
     metadata["durable_plan_verdict"] = (
         "accepted" if passed else "blocked" if hard_fail else "replan_requested"
     )
@@ -488,6 +489,7 @@ def _project_verification_pipeline_pending_to_task(
     metadata = dict(task.metadata_json or {})
     feedback = _pipeline_pending_user_feedback()
     metadata[PENDING_LEADER_ADJUDICATION] = False
+    metadata.pop("retry_verification_only", None)
     metadata["durable_plan_verdict"] = "pipeline_pending"
     if summary:
         metadata["durable_plan_raw_verification_summary"] = summary
@@ -523,6 +525,7 @@ def _project_verification_retry_to_task(
     metadata["durable_plan_verified_at"] = now.isoformat().replace("+00:00", "Z")
     metadata["last_attempt_status"] = "awaiting_plan_verification"
     metadata[LAST_LEADER_ADJUDICATION_STATUS] = "verification_retry_scheduled"
+    metadata["retry_verification_only"] = True
     if attempt_id:
         metadata["last_attempt_id"] = attempt_id
         metadata[CURRENT_ATTEMPT_ID] = attempt_id

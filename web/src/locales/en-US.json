@@ -3411,6 +3411,8 @@
         "status_dist": "Status distribution"
       },
       "refresh": "Refresh",
+      "resumeSubmitted": "Submitted {{count}} pending tasks",
+      "resumeFailed": "Failed to resume pending tasks",
       "stats": {
         "failed": "Failed",
         "pending": "Pending",
@@ -5403,6 +5405,24 @@
         "tasks": "Tasks",
         "insights": "Insights",
         "agents": "Agents"
+      },
+      "workspacePlan": {
+        "planSummary": "{{done}}/{{total}} plan nodes done",
+        "partial": "Partial",
+        "loading": "Loading",
+        "untitledPlan": "Workspace plan",
+        "sourceTask": "Task",
+        "sourceVerify": "Verify",
+        "sourcePlan": "Plan",
+        "current": "Current",
+        "empty": "No workspace tasks or plan yet. They will appear here when the workspace starts execution.",
+        "emptyLane": "Empty.",
+        "status": {
+          "todo": "Todo",
+          "in_progress": "In progress",
+          "blocked": "Blocked",
+          "done": "Done"
+        }
       },
       "insights": {
         "empty": "Execution diagnostics will appear after the agent makes routing and tool-selection decisions.",

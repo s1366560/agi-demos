@@ -72,6 +72,7 @@ from ..hitl.coordinator import HITLCoordinator, complete_hitl_request
 from ..permission import PermissionAction, PermissionManager
 from ..retry import RetryPolicy
 from ..workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_CONTRACT,
     WORKSPACE_ROLE_WORKER,
     WORKSPACE_SESSION_ROLE_KEY,
     WORKSPACE_TOOL_MODE_KEY,
@@ -356,8 +357,20 @@ class SessionProcessor:
         "Do not finish with text only. Call workspace_report_complete when the task is done, "
         "or workspace_report_blocked when the task cannot be completed."
     )
+    _WORKSPACE_CONTRACT_TOOL_REQUIRED_HINT = (
+        "[WORKSPACE CONTRACT TOOL REQUIRED] This is a builtin workspace contract-agent "
+        "session. Do not finish with text only. Call the required workspace_submit_* "
+        "contract tool for this turn."
+    )
     _TERMINAL_WORKSPACE_REPORT_TOOLS: ClassVar[frozenset[str]] = frozenset(
         {"workspace_report_complete", "workspace_report_blocked"}
+    )
+    _TERMINAL_WORKSPACE_CONTRACT_TOOLS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "workspace_submit_planning_contract",
+            "workspace_submit_verification_judgment",
+            "workspace_submit_iteration_review",
+        }
     )
 
     def __init__(
@@ -693,6 +706,19 @@ class SessionProcessor:
             if item != self._WORKSPACE_TERMINAL_REPORT_REQUIRED_HINT
         ]
 
+    def _queue_workspace_contract_tool_required_hint(self) -> None:
+        self._clear_workspace_contract_tool_required_hint()
+        self._response_instructions.append(self._WORKSPACE_CONTRACT_TOOL_REQUIRED_HINT)
+
+    def _clear_workspace_contract_tool_required_hint(self) -> None:
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if item != self._WORKSPACE_CONTRACT_TOOL_REQUIRED_HINT
+        ]
+
     def _reset_tool_usage_reminder_streak(self) -> None:
         """Reset reminder streak state after progress resumes or processing restarts."""
         self._tool_reminder_issued_for_streak = False
@@ -702,6 +728,7 @@ class SessionProcessor:
         self._clear_workspace_todoread_snapshot()
         self._clear_workspace_delegation_retry_action()
         self._clear_workspace_terminal_report_required_hint()
+        self._clear_workspace_contract_tool_required_hint()
 
     def _is_workspace_worker_turn(self) -> bool:
         runtime_context = (
@@ -710,6 +737,14 @@ class SessionProcessor:
             else {}
         )
         return runtime_context.get(WORKSPACE_SESSION_ROLE_KEY) == WORKSPACE_ROLE_WORKER
+
+    def _is_workspace_contract_turn(self) -> bool:
+        runtime_context = (
+            dict(self.config.runtime_context)
+            if isinstance(self.config.runtime_context, dict)
+            else {}
+        )
+        return runtime_context.get(WORKSPACE_SESSION_ROLE_KEY) == WORKSPACE_ROLE_CONTRACT
 
     def _is_workspace_task_ledger_only_turn(self) -> bool:
         """Return whether this processor turn is restricted to workspace task-ledger work."""
@@ -795,6 +830,33 @@ class SessionProcessor:
                         "workspace_report_complete or workspace_report_blocked."
                     ),
                     code="WORKSPACE_TERMINAL_REPORT_REQUIRED",
+                )
+            )
+            self._state = ProcessorState.ERROR
+            self._last_process_result = ProcessorResult.STOP
+            return events
+        self._last_process_result = ProcessorResult.CONTINUE
+        return events
+
+    def _evaluate_workspace_contract_no_tool_result(self) -> list[ProcessorEvent] | None:
+        """Require contract agents to finish through their structured contract tools."""
+        if not self._is_workspace_contract_turn():
+            return None
+
+        self._pending_completion_status = None
+        self._no_progress_steps += 1
+        self._queue_workspace_contract_tool_required_hint()
+        events: list[ProcessorEvent] = [
+            AgentStatusEvent(status="workspace_contract_requires_submit_tool")
+        ]
+        if self._no_progress_steps >= self.config.max_no_progress_steps:
+            events.append(
+                AgentErrorEvent(
+                    message=(
+                        "Workspace contract-agent session ended without calling the "
+                        "required workspace_submit_* contract tool."
+                    ),
+                    code="WORKSPACE_CONTRACT_TOOL_REQUIRED",
                 )
             )
             self._state = ProcessorState.ERROR
@@ -1615,6 +1677,11 @@ class SessionProcessor:
         ):
             self._pending_completion_status = "goal_achieved:workspace_terminal_report"
             return ProcessorResult.COMPLETE, True
+        if event_type == AgentEventType.OBSERVE.value and self._is_terminal_workspace_contract(
+            event
+        ):
+            self._pending_completion_status = "goal_achieved:workspace_contract_submitted"
+            return ProcessorResult.COMPLETE, True
         if event_type == AgentEventType.COMPACT_NEEDED.value:
             return ProcessorResult.COMPACT, had_tool_calls
         if event_type in {"task_list_updated", "task_updated"}:
@@ -1654,6 +1721,42 @@ class SessionProcessor:
         applied_report = payload.get("applied_report")
         return not (isinstance(applied_report, dict) and applied_report.get("applied") is False)
 
+    def _is_terminal_workspace_contract(self, event: ProcessorEvent) -> bool:
+        """Return True when a workspace contract submission was durably captured."""
+        if isinstance(event, dict):
+            tool_name = event.get("tool_name")
+            error = event.get("error")
+            result = event.get("result")
+        else:
+            tool_name = getattr(event, "tool_name", None)
+            error = getattr(event, "error", None)
+            result = getattr(event, "result", None)
+
+        if tool_name not in self._TERMINAL_WORKSPACE_CONTRACT_TOOLS or error:
+            return False
+
+        payload: Any
+        if isinstance(result, str):
+            try:
+                payload = json.loads(result)
+            except json.JSONDecodeError:
+                return False
+        else:
+            payload = result
+
+        if not isinstance(payload, dict):
+            return False
+        if payload.get("captured") is True:
+            return True
+        return any(
+            isinstance(payload.get(key), dict)
+            for key in (
+                "planning_contract",
+                "verification_judgment",
+                "iteration_review",
+            )
+        )
+
     async def _evaluate_no_tool_result(  # noqa: PLR0911, PLR0912
         self, session_id: str, messages: list[dict[str, Any]]
     ) -> AsyncIterator[ProcessorEvent]:
@@ -1667,9 +1770,12 @@ class SessionProcessor:
                 yield evt
             return
 
-        worker_events = self._evaluate_workspace_worker_no_tool_result()
-        if worker_events is not None:
-            for evt in worker_events:
+        role_events = (
+            self._evaluate_workspace_worker_no_tool_result()
+            or self._evaluate_workspace_contract_no_tool_result()
+        )
+        if role_events is not None:
+            for evt in role_events:
                 yield evt
             return
 

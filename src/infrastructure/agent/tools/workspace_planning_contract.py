@@ -20,7 +20,7 @@ from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 from src.infrastructure.agent.workspace.runtime_role_contract import (
-    WORKSPACE_ROLE_WORKER,
+    WORKSPACE_ROLE_CONTRACT,
     require_workspace_session_role,
     runtime_context_string,
 )
@@ -512,7 +512,7 @@ async def workspace_submit_planning_contract_tool(
 ) -> ToolResult:
     role_error = require_workspace_session_role(
         ctx,
-        expected_role=WORKSPACE_ROLE_WORKER,
+        expected_role=WORKSPACE_ROLE_CONTRACT,
         action_label=WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
     )
     if role_error:

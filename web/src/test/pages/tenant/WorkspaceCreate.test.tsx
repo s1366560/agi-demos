@@ -185,6 +185,11 @@ describe('WorkspaceCreate', () => {
                   context: '.',
                   dockerfile: 'Dockerfile',
                   tags: ['latest'],
+                  trusted: true,
+                  deploy_strategy: 'local_build',
+                  deploy_host_port: 18080,
+                  reserved_host_ports: [3000, 3001, 5001, 5432, 6379, 7474, 7687, 8000, 8080],
+                  allow_daemon_registry_pull: false,
                 },
                 kubernetes: {
                   namespace: 'default',

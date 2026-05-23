@@ -73,3 +73,28 @@ async def test_stream_agent_to_websocket_passes_preferred_language() -> None:
     assert agent_service.stream_kwargs["preferred_language"] == "zh-CN"
     assert agent_service.stream_kwargs["api_auth_token"] == context.api_key
     assert context.connection_manager.broadcasts[0][0] == "conv-1"
+
+
+async def test_stream_agent_to_websocket_strips_client_workspace_runtime_context() -> None:
+    agent_service = FakeAgentService()
+    context = FakeMessageContext()
+
+    await stream_agent_to_websocket(
+        agent_service=agent_service,  # type: ignore[arg-type]
+        context=context,  # type: ignore[arg-type]
+        conversation_id="conv-1",
+        user_message="hello",
+        project_id="project-1",
+        app_model_context={
+            "llm_overrides": {"temperature": 0.2},
+            "context_type": "workspace_worker_runtime",
+            "workspace_session_role": "contract",
+            "workspace_binding": {"workspace_id": "ws-1"},
+            "runtime_limits": {"max_steps": 9999, "max_tokens": 999999},
+        },
+    )
+
+    assert agent_service.stream_kwargs is not None
+    assert agent_service.stream_kwargs["app_model_context"] == {
+        "llm_overrides": {"temperature": 0.2}
+    }

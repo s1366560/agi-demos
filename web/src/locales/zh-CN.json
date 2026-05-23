@@ -1852,6 +1852,8 @@
       "title": "任务状态看板",
       "subtitle": "系统吞吐量和队列健康状况的实时概览。",
       "refresh": "刷新",
+      "resumeSubmitted": "已提交 {{count}} 个待处理任务",
+      "resumeFailed": "恢复待处理任务失败",
       "new_task": "新建任务",
       "stats": {
         "total": "总任务数 (累计)",
@@ -5426,6 +5428,24 @@
         "tasks": "任务",
         "insights": "洞察",
         "agents": "Agent"
+      },
+      "workspacePlan": {
+        "planSummary": "{{done}}/{{total}} 个计划节点已完成",
+        "partial": "部分",
+        "loading": "加载中",
+        "untitledPlan": "工作空间计划",
+        "sourceTask": "任务",
+        "sourceVerify": "验证",
+        "sourcePlan": "计划",
+        "current": "当前",
+        "empty": "暂无工作空间任务或计划。工作空间开始执行后会显示在这里。",
+        "emptyLane": "空。",
+        "status": {
+          "todo": "待办",
+          "in_progress": "进行中",
+          "blocked": "已阻塞",
+          "done": "已完成"
+        }
       },
       "insights": {
         "empty": "Agent 做出路由和工具选择决策后，执行诊断会显示在这里。",

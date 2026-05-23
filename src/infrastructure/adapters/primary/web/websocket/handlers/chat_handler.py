@@ -21,6 +21,42 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_CLIENT_APP_MODEL_CONTEXT_DENYLIST = frozenset(
+    {
+        "active_execution_root",
+        "additional_instructions",
+        "attempt_worktree",
+        "code_context",
+        "context_type",
+        "iteration_review",
+        "root_goal_task_id",
+        "runtime_limits",
+        "task_authority",
+        "verification_judge",
+        "workspace_binding",
+        "workspace_id",
+        "workspace_planner",
+        "workspace_root_override",
+        "workspace_session_role",
+        "workspace_tool_mode",
+        "workspace_turn_type",
+        "workspace_verification_integrity",
+        "worktree_setup",
+    }
+)
+
+
+def _sanitize_client_app_model_context(value: object) -> dict[str, Any] | None:
+    """Drop server-owned workspace runtime fields from browser-supplied context."""
+    if not isinstance(value, dict):
+        return None
+    sanitized = {
+        key: item
+        for key, item in value.items()
+        if isinstance(key, str) and key not in _CLIENT_APP_MODEL_CONTEXT_DENYLIST
+    }
+    return sanitized or None
+
 
 class SendMessageHandler(WebSocketMessageHandler):
     """Handle send_message: Start agent execution."""
@@ -40,7 +76,7 @@ class SendMessageHandler(WebSocketMessageHandler):
         attachment_ids = message.get("attachment_ids")
         file_metadata = message.get("file_metadata")
         forced_skill_name = message.get("forced_skill_name")
-        app_model_context = message.get("app_model_context")
+        app_model_context = _sanitize_client_app_model_context(message.get("app_model_context"))
         image_attachments = message.get("image_attachments")
         agent_id = message.get("agent_id")
 
@@ -310,7 +346,7 @@ async def stream_agent_to_websocket_with_fresh_session(
             attachment_ids=attachment_ids,
             file_metadata=file_metadata,
             forced_skill_name=forced_skill_name,
-            app_model_context=app_model_context,
+            app_model_context=_sanitize_client_app_model_context(app_model_context),
             image_attachments=image_attachments,
             agent_id=agent_id,
         )
@@ -350,7 +386,7 @@ async def stream_agent_to_websocket(
             attachment_ids=attachment_ids,
             file_metadata=file_metadata,
             forced_skill_name=forced_skill_name,
-            app_model_context=app_model_context,
+            app_model_context=_sanitize_client_app_model_context(app_model_context),
             image_attachments=image_attachments,
             agent_id=agent_id,
             api_auth_token=context.api_key,

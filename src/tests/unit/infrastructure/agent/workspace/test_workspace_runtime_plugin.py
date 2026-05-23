@@ -7,6 +7,7 @@ from src.infrastructure.agent.workspace.runtime_plugin import (
     WORKSPACE_TASK_HARNESS_SKILL_NAME,
     register_builtin_workspace_plugin,
 )
+from src.infrastructure.agent.workspace.runtime_role_contract import WORKSPACE_ROLE_CONTRACT
 
 
 @pytest.mark.unit
@@ -30,6 +31,26 @@ async def test_workspace_runtime_plugin_adds_guidance_for_workspace_context() ->
     assert len(instructions) == 1
     assert "workspace_report_complete" in instructions[0]
     assert "<minimax:tool_call>" in instructions[0]
+
+
+@pytest.mark.unit
+async def test_workspace_runtime_plugin_does_not_add_worker_report_guidance_for_contract_role() -> None:
+    registry = AgentPluginRegistry()
+    register_builtin_workspace_plugin(registry)
+
+    result = await registry.apply_hook(
+        "before_response",
+        payload={
+            "runtime_context": {
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "workspace_session_role": WORKSPACE_ROLE_CONTRACT,
+            },
+            "response_instructions": [],
+        },
+    )
+
+    assert result.payload["response_instructions"] == []
 
 
 @pytest.mark.unit

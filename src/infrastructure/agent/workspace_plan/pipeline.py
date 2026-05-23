@@ -735,8 +735,8 @@ def _compose_port_target(value: object) -> int:
     if not isinstance(value, str):
         return 0
     without_protocol = value.split("/", 1)[0]
-    target = without_protocol.rsplit(":", 1)[-1]
-    return _positive_int(target, 0)
+    target_text = without_protocol.rsplit(":", 1)[-1]
+    return _positive_int(target_text, 0)
 
 
 def _compose_health_path(raw_service: Mapping[str, Any]) -> str:

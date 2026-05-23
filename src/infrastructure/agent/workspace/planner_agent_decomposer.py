@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from collections.abc import Mapping
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Protocol
@@ -18,6 +17,10 @@ from src.infrastructure.agent.subagent.task_decomposer import DecompositionResul
 from src.infrastructure.agent.tools.workspace_planning_contract import (
     WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
     persist_workspace_planning_contract,
+)
+from src.infrastructure.agent.workspace.contract_agent_runtime import (
+    contract_tool_payload_from_event,
+    workspace_contract_input_fingerprint,
 )
 from src.infrastructure.agent.workspace.workspace_metadata_keys import PREFERRED_LANGUAGE
 
@@ -80,28 +83,72 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
         root_metadata: Mapping[str, Any],
         contract_only: bool = False,
     ) -> dict[str, Any] | None:
-        from src.infrastructure.agent.core.project_react_agent import (
-            ProjectAgentConfig,
-            ProjectReActAgent,
+        from src.configuration.factories import create_llm_client
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.agent.workspace.contract_agent_runtime import (
+            create_workspace_contract_agent_service,
+            recover_workspace_contract_payload,
+            resolve_workspace_actor_user_id,
+            workspace_contract_conversation_id,
         )
         from src.infrastructure.agent.workspace.runtime_role_contract import (
-            WORKSPACE_ROLE_WORKER,
+            WORKSPACE_ROLE_CONTRACT,
             WORKSPACE_SESSION_ROLE_KEY,
         )
         from src.infrastructure.agent.workspace.session_conversations import (
             ensure_workspace_llm_conversation,
         )
 
-        turn_id = uuid.uuid4().hex
-        conversation_id = f"workspace-planner:{workspace_id}:{turn_id}"
+        turn_mode = "contract" if contract_only else "initial"
+        code_context = _code_context(workspace_metadata, root_metadata)
+        input_fingerprint = workspace_contract_input_fingerprint(
+            user_prompt,
+            code_context,
+            workspace_metadata,
+            root_metadata,
+            planner_agent.id,
+            turn_mode,
+        )
+        conversation_id = workspace_contract_conversation_id(
+            "planner",
+            self._tenant_id,
+            self._project_id,
+            workspace_id,
+            root_task_id or "root",
+            turn_mode,
+            input_fingerprint,
+        )
         diagnostics: dict[str, Any] = {
             "conversation_id": conversation_id,
             "contract_only": contract_only,
+            "input_fingerprint": input_fingerprint,
             "event_count": 0,
             "observed_tools": [],
             "evidence_summaries": [],
             "contract_submitted": False,
+            "runtime_path": "agent_service.stream_chat_v2",
         }
+        recovered_payload = await recover_workspace_contract_payload(
+            conversation_id=conversation_id,
+            extract_payload=_planning_contract_from_event,
+        )
+        if recovered_payload is not None:
+            diagnostics["recovered_from_events"] = True
+            diagnostics["contract_submitted"] = True
+            self._last_diagnostics = diagnostics
+            return recovered_payload
+
+        resolved_actor_user_id = await resolve_workspace_actor_user_id(
+            workspace_id=workspace_id,
+            actor_user_id=actor_user_id,
+        )
+        diagnostics["actor_user_resolved"] = bool(resolved_actor_user_id)
+        if not resolved_actor_user_id:
+            self._last_diagnostics = diagnostics
+            return None
+
         diagnostics["session_persisted"] = await ensure_workspace_llm_conversation(
             conversation_id=conversation_id,
             tenant_id=self._tenant_id,
@@ -110,56 +157,51 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
             agent_id=planner_agent.id,
             title="Workspace Planner",
             stage="planner",
-            actor_user_id=actor_user_id,
+            actor_user_id=resolved_actor_user_id,
             linked_workspace_task_id=root_task_id,
             metadata={
                 "root_goal_task_id": root_task_id or "",
                 "contract_only": contract_only,
-                "conversation_scope": f"planning:{root_task_id or 'root'}:{turn_id}",
+                "conversation_scope": f"planning:{root_task_id or 'root'}:{turn_mode}",
             },
         )
-        agent = ProjectReActAgent(
-            ProjectAgentConfig(
-                tenant_id=self._tenant_id,
-                project_id=self._project_id,
-                agent_mode="workspace-planner",
-                temperature=0.0,
-                max_tokens=self._max_tokens,
-                max_steps=self._max_steps,
-                persistent=False,
-                enable_subagents=False,
-            )
-        )
-        if not await agent.initialize():
+        if not diagnostics["session_persisted"]:
+            self._last_diagnostics = diagnostics
             return None
 
-        conversation_context = [
-            {
-                "role": "system",
-                "content": "workspace_worker_runtime\n"
-                + json.dumps(
-                    {
-                        "context_type": "workspace_worker_runtime",
-                        WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_WORKER,
-                        "workspace_binding": {
-                            "workspace_id": workspace_id,
-                            "root_goal_task_id": root_task_id or "",
-                        },
-                        "code_context": _code_context(workspace_metadata, root_metadata),
-                    },
-                    ensure_ascii=False,
+        app_model_context = {
+            "context_type": "workspace_worker_runtime",
+            WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_CONTRACT,
+            "workspace_binding": {
+                "workspace_id": workspace_id,
+                "root_goal_task_id": root_task_id or "",
+            },
+            "code_context": code_context,
+            "workspace_planner": {
+                "root_task_id": root_task_id or "",
+                "contract_only": contract_only,
+            },
+            "runtime_limits": {
+                "max_steps": _planner_turn_max_steps(
+                    planner_agent,
+                    fallback=self._max_steps,
+                    prefer_agent_limit=contract_only,
                 ),
-            }
-        ]
-        try:
-            async for event in agent.execute_chat(
+                "max_tokens": self._max_tokens,
+            },
+            "llm_overrides": {"max_tokens": self._max_tokens},
+        }
+        async with async_session_factory() as db:
+            llm = await create_llm_client(self._tenant_id)
+            agent_service = await create_workspace_contract_agent_service(db=db, llm=llm)
+            async for event in agent_service.stream_chat_v2(
                 conversation_id=conversation_id,
                 user_message=user_prompt,
-                user_id=actor_user_id or "workspace-planner",
+                user_id=resolved_actor_user_id,
+                project_id=self._project_id,
                 tenant_id=self._tenant_id,
-                message_id=f"workspace-planner-{turn_id}",
-                conversation_context=conversation_context,
                 agent_id=planner_agent.id,
+                app_model_context=app_model_context,
             ):
                 diagnostics["event_count"] += 1
                 tool_name = _tool_name_from_event(event)
@@ -175,8 +217,15 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
                     diagnostics["contract_submitted"] = True
                     self._last_diagnostics = diagnostics
                     return payload
-        finally:
-            await agent.stop()
+        recovered_payload = await recover_workspace_contract_payload(
+            conversation_id=conversation_id,
+            extract_payload=_planning_contract_from_event,
+        )
+        if recovered_payload is not None:
+            diagnostics["recovered_from_events"] = True
+            diagnostics["contract_submitted"] = True
+            self._last_diagnostics = diagnostics
+            return recovered_payload
         self._last_diagnostics = diagnostics
         return None
 
@@ -534,18 +583,11 @@ class WorkspacePlannerAgentDecomposer:
 
 
 def _planning_contract_from_event(event: Mapping[str, Any]) -> dict[str, Any] | None:
-    if event.get("type") != "observe":
-        return None
-    data = event.get("data")
-    if not isinstance(data, Mapping):
-        return None
-    if data.get("tool_name") != WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME:
-        return None
-    observation = data.get("observation") or data.get("result")
-    if not isinstance(observation, Mapping):
-        return None
-    payload = observation.get("planning_contract")
-    return dict(payload) if isinstance(payload, Mapping) else None
+    return contract_tool_payload_from_event(
+        event,
+        tool_name=WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
+        payload_key="planning_contract",
+    )
 
 
 def _tool_name_from_event(event: Mapping[str, Any]) -> str | None:
@@ -587,6 +629,18 @@ def _code_context(
         if isinstance(raw, Mapping):
             return dict(raw)
     return {}
+
+
+def _planner_turn_max_steps(
+    planner_agent: Agent,
+    *,
+    fallback: int,
+    prefer_agent_limit: bool,
+) -> int:
+    raw_max_iterations = getattr(planner_agent, "max_iterations", None)
+    if prefer_agent_limit and isinstance(raw_max_iterations, int) and raw_max_iterations > 0:
+        return raw_max_iterations
+    return fallback
 
 
 def _planning_contract_metadata(payload: Mapping[str, Any]) -> dict[str, Any]:

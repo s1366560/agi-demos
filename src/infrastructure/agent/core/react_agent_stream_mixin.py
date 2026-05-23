@@ -18,6 +18,7 @@ import logging
 import re
 import time
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Protocol, cast
@@ -45,6 +46,7 @@ from ..routing import ExecutionPath, RoutingDecision
 from ..sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID, build_builtin_sisyphus_agent
 from ..skill import SkillProtocol
 from ..workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_CONTRACT,
     WORKSPACE_ROLE_LEADER,
     WORKSPACE_SESSION_ROLE_KEY,
     WORKSPACE_TOOL_MODE_KEY,
@@ -103,6 +105,27 @@ def _workspace_runtime_forwarded_fields(payload: Mapping[str, Any]) -> dict[str,
     if isinstance(verification_integrity, Mapping):
         forwarded["workspace_verification_integrity"] = dict(verification_integrity)
     return forwarded
+
+
+def _workspace_runtime_limit_overrides(
+    payload: Mapping[str, Any] | None,
+) -> dict[str, int]:
+    """Return positive runtime limit overrides from workspace app context."""
+    if not isinstance(payload, Mapping):
+        return {}
+    if payload.get(WORKSPACE_SESSION_ROLE_KEY) != WORKSPACE_ROLE_CONTRACT:
+        return {}
+    raw_limits = payload.get("runtime_limits")
+    if not isinstance(raw_limits, Mapping):
+        return {}
+    limits: dict[str, int] = {}
+    for key in ("max_steps", "max_tokens"):
+        value = raw_limits.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int) and value > 0:
+            limits[key] = value
+    return limits
 
 
 class _StreamAgent(Protocol):
@@ -1409,6 +1432,17 @@ class StreamMixin:
             selected_agent=selected_agent,
             is_workspace_worker_runtime=has_workspace_binding,
         )
+        runtime_limits = _workspace_runtime_limit_overrides(workspace_runtime_payload)
+        if runtime_limits:
+            runtime_profile = replace(
+                runtime_profile,
+                effective_max_steps=runtime_limits.get(
+                    "max_steps", runtime_profile.effective_max_steps
+                ),
+                effective_max_tokens=runtime_limits.get(
+                    "max_tokens", runtime_profile.effective_max_tokens
+                ),
+            )
         if workspace_replan_turn:
             runtime_profile = self._with_workspace_leader_replan_tool_allowlist(runtime_profile)
         elif has_workspace_binding:

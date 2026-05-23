@@ -76,6 +76,23 @@ const BLACKBOARD_PRODUCT_KEYS = [
   'blackboard.notAvailable',
 ] as const;
 
+const WORKSPACE_PLAN_PANEL_KEYS = [
+  'agent.rightPanel.workspacePlan.planSummary',
+  'agent.rightPanel.workspacePlan.partial',
+  'agent.rightPanel.workspacePlan.loading',
+  'agent.rightPanel.workspacePlan.untitledPlan',
+  'agent.rightPanel.workspacePlan.sourceTask',
+  'agent.rightPanel.workspacePlan.sourceVerify',
+  'agent.rightPanel.workspacePlan.sourcePlan',
+  'agent.rightPanel.workspacePlan.current',
+  'agent.rightPanel.workspacePlan.empty',
+  'agent.rightPanel.workspacePlan.emptyLane',
+  'agent.rightPanel.workspacePlan.status.todo',
+  'agent.rightPanel.workspacePlan.status.in_progress',
+  'agent.rightPanel.workspacePlan.status.blocked',
+  'agent.rightPanel.workspacePlan.status.done',
+] as const;
+
 function readLocaleValue(locale: Record<string, unknown>, key: string): unknown {
   return key.split('.').reduce<unknown>((current, segment) => {
     if (current && typeof current === 'object' && segment in current) {
@@ -91,6 +108,18 @@ describe('Blackboard locale coverage', () => {
     ['zh-CN', zhCN],
   ])('covers product chrome and diagnostics for %s', (_name, locale) => {
     for (const key of BLACKBOARD_PRODUCT_KEYS) {
+      const value = readLocaleValue(locale, key);
+      expect(value, key).toEqual(expect.any(String));
+      expect(value, key).not.toBe(key);
+      expect(String(value).trim(), key).not.toHaveLength(0);
+    }
+  });
+
+  it.each([
+    ['en-US', enUS],
+    ['zh-CN', zhCN],
+  ])('covers workspace plan panel labels for %s', (_name, locale) => {
+    for (const key of WORKSPACE_PLAN_PANEL_KEYS) {
       const value = readLocaleValue(locale, key);
       expect(value, key).toEqual(expect.any(String));
       expect(value, key).not.toBe(key);

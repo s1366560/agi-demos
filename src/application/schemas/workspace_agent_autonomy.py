@@ -381,6 +381,7 @@ class ExecutionTaskMetadataModel(ContractModel):
     pending_leader_adjudication: bool | None = None
     durable_plan_verdict: str | None = None
     durable_plan_verification_summary: str | None = None
+    durable_plan_raw_verification_summary: str | None = None
     durable_plan_verified_at: str | None = None
     pipeline_status: str | None = None
     pipeline_gate_status: str | None = None

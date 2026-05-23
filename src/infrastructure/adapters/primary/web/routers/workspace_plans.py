@@ -2042,9 +2042,12 @@ def _iteration_next_action(  # noqa: PLR0911
         return "Recover failed queue work before advancing the sprint."
     delayed = _earliest_delayed_pending_outbox(outbox_items)
     if delayed is not None:
+        next_attempt_at = delayed.next_attempt_at
+        if next_attempt_at is None:
+            return "A workspace retry is waiting for backoff. Use Retry now to continue immediately."
         return (
             "A workspace retry is waiting for backoff until "
-            f"{delayed.next_attempt_at.isoformat()}. Use Retry now on the delayed queue item "
+            f"{next_attempt_at.isoformat()}. Use Retry now on the delayed queue item "
             "to continue immediately."
         )
     if any(node.intent is TaskIntent.BLOCKED for node in nodes):
@@ -3171,11 +3174,13 @@ def _reset_node_for_operator(
     actor_id: str,
     action: str,
     reason: str | None,
+    allow_done_recovery: bool = False,
 ) -> PlanNode:
     target_intent = TaskIntent.TODO
     if node.intent is TaskIntent.DONE:
-        raise ValueError("done nodes cannot be reopened or replanned")
-    if node.intent is not target_intent:
+        if not allow_done_recovery:
+            raise ValueError("done nodes cannot be reopened or replanned")
+    elif node.intent is not target_intent:
         _ = transition_intent(node.intent, target_intent)
     if node.execution is not TaskExecution.IDLE:
         _ = transition_execution(node.execution, TaskExecution.IDLE)
@@ -3205,6 +3210,34 @@ def _reset_node_for_operator(
         completed_at=None,
         updated_at=current_time,
     )
+
+
+_RECOVERABLE_PIPELINE_FAILURE_STATUSES = frozenset({"failed", "failure", "error"})
+
+
+def _done_node_has_recoverable_failure(node: PlanNode) -> bool:
+    if node.intent is not TaskIntent.DONE:
+        return False
+    metadata = dict(node.metadata or {})
+    return (
+        _normalized_metadata_status(metadata.get("pipeline_status"))
+        in _RECOVERABLE_PIPELINE_FAILURE_STATUSES
+        or _normalized_metadata_status(metadata.get("pipeline_gate_status"))
+        in _RECOVERABLE_PIPELINE_FAILURE_STATUSES
+        or _normalized_metadata_status(metadata.get("source_publish_status"))
+        in _RECOVERABLE_PIPELINE_FAILURE_STATUSES
+        or metadata.get("last_verification_passed") is False
+    )
+
+
+def _normalized_metadata_status(value: object) -> str:
+    return (_metadata_string(value) or "").lower()
+
+
+def _reactivate_plan_for_operator_recovery(plan: Plan) -> Plan:
+    if plan.status in (PlanStatus.COMPLETED, PlanStatus.SUSPENDED):
+        return replace(plan, status=PlanStatus.ACTIVE, updated_at=datetime.now(UTC))
+    return plan
 
 
 def _accept_node_for_operator_review(
@@ -4893,8 +4926,10 @@ async def request_workspace_plan_node_replan(
             actor_id=current_user.id,
             action="operator_replan_requested",
             reason=body.reason,
+            allow_done_recovery=_done_node_has_recoverable_failure(node),
         )
         plan.replace_node(updated)
+        plan = _reactivate_plan_for_operator_recovery(plan)
         await SqlPlanRepository(db).save(plan)
         _ = await SqlWorkspacePlanEventRepository(db).append(
             plan_id=plan.id,
@@ -4962,6 +4997,7 @@ async def reopen_blocked_workspace_plan_node(
             reason=body.reason,
         )
         plan.replace_node(updated)
+        plan = _reactivate_plan_for_operator_recovery(plan)
         await SqlPlanRepository(db).save(plan)
         _ = await SqlWorkspacePlanEventRepository(db).append(
             plan_id=plan.id,

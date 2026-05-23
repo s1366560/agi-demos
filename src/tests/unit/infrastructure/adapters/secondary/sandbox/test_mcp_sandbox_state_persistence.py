@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -12,7 +12,8 @@ from src.infrastructure.agent.workspace.manifest import WorkspaceManifest
 class TestMCPSandboxStatePersistence:
     async def test_persist_sandbox_state_writes_redis_and_manifest(self, tmp_path) -> None:
         redis_client = AsyncMock()
-        adapter = MCPSandboxAdapter(workspace_base=str(tmp_path), redis_client=redis_client)
+        with patch("docker.from_env"):
+            adapter = MCPSandboxAdapter(workspace_base=str(tmp_path), redis_client=redis_client)
 
         await adapter._persist_sandbox_state("sandbox-1", "running", "project-1")
 
@@ -36,7 +37,8 @@ class TestMCPSandboxStatePersistence:
     ) -> None:
         redis_client = AsyncMock()
         redis_client.hset.side_effect = RuntimeError("redis unavailable")
-        adapter = MCPSandboxAdapter(workspace_base=str(tmp_path), redis_client=redis_client)
+        with patch("docker.from_env"):
+            adapter = MCPSandboxAdapter(workspace_base=str(tmp_path), redis_client=redis_client)
 
         await adapter._persist_sandbox_state("sandbox-2", "terminated", "project-2")
 

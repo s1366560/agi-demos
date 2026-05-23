@@ -56,6 +56,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     ATTEMPT_WORKTREE,
     CURRENT_ATTEMPT_ID,
     CURRENT_ATTEMPT_WORKER_BINDING_ID,
+    LAST_WORKER_REPORT_ATTEMPT_ID,
     PREFERRED_LANGUAGE,
     ROOT_GOAL_TASK_ID,
     WORKTREE_SETUP,
@@ -106,7 +107,24 @@ _LATEST_PIPELINE_EVIDENCE_KEY = "latest_workspace_pipeline_evidence"
 _RECENT_PIPELINE_EVIDENCE_KEY = "recent_workspace_pipeline_evidence"
 _WORKSPACE_ROOT_OVERRIDE_MARKERS = ("worktree_path", "[feature-checkpoint]", "[worktree-setup]")
 _WORKER_VERIFICATION_INTEGRITY_PHASES = frozenset({"test", "review"})
-_TERMINAL_REPORT_TOOLS = frozenset({"workspace_report_complete", "workspace_report_blocked"})
+_REPAIR_BRIEF_VERIFICATION_SCOPE_KEYS = (
+    "allowed_write_scope",
+    "allowed_verification_script_paths",
+    "evidence",
+    "evidence_refs",
+    "expected_artifacts",
+    "failed_items",
+    "failure_signature",
+    "feedback_items",
+    "required_next_action",
+    "summary",
+    "verification_script_paths",
+)
+_TERMINAL_REPORT_TOOL_TYPES = {
+    "workspace_report_complete": "completed",
+    "workspace_report_blocked": "blocked",
+}
+_TERMINAL_REPORT_TOOLS = frozenset(_TERMINAL_REPORT_TOOL_TYPES)
 _LOCAL_REGISTRY_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "host.docker.internal"})
 _LOCAL_DOCKER_DEPLOY_STRATEGY = "local_build"
 _DEFAULT_DOCKER_DEPLOY_HOST_PORT = 18080
@@ -432,6 +450,22 @@ def _iter_verification_script_scope_paths(value: object) -> list[str]:
     return paths
 
 
+def _iter_repair_brief_verification_script_scope_paths(value: object) -> list[str]:
+    paths = _iter_verification_script_scope_paths(value)
+    if isinstance(value, Mapping):
+        mapped = cast(Mapping[str, object], value)
+        for key in _REPAIR_BRIEF_VERIFICATION_SCOPE_KEYS:
+            paths.extend(
+                _iter_repair_brief_verification_script_scope_paths(mapped.get(key))
+            )
+        return list(dict.fromkeys(paths))
+    if isinstance(value, (list, tuple, set)):
+        for item in cast(Iterable[object], value):
+            paths.extend(_iter_repair_brief_verification_script_scope_paths(item))
+        return list(dict.fromkeys(paths))
+    return paths
+
+
 def _verification_script_change_allowlist(
     task_meta: Mapping[str, Any],
     node_meta: Mapping[str, Any],
@@ -441,6 +475,7 @@ def _verification_script_change_allowlist(
         paths.extend(
             _iter_verification_script_scope_paths(metadata.get("allowed_verification_script_paths"))
         )
+        paths.extend(_iter_verification_script_scope_paths(metadata.get("expected_artifacts")))
         for repair_key in (
             "current_repair_turn",
             "last_verification_judge_repair_brief",
@@ -454,7 +489,7 @@ def _verification_script_change_allowlist(
                 if repair_key == "current_repair_turn"
                 else mapped_repair
             )
-            paths.extend(_iter_verification_script_scope_paths(brief))
+            paths.extend(_iter_repair_brief_verification_script_scope_paths(brief))
     return list(dict.fromkeys(paths))
 
 
@@ -525,7 +560,7 @@ def _render_visible_verification_integrity_gate(policy: Mapping[str, Any] | None
         rendered_paths = ", ".join(f"`{path}`" for path in cast(list[str], allowed_paths[:8]))
         return (
             "## Test/review integrity gate\n"
-            f"This is a protected `{phase}` workspace node. The current repair brief "
+            f"This is a protected `{phase}` workspace node. The current task contract "
             f"explicitly permits changing only these verification scripts: {rendered_paths}. "
             "Use that exception only to fix the listed failure; do not edit, replace, "
             "regenerate, or loosen other test, spec, E2E, integration, audit, or "
@@ -2282,6 +2317,9 @@ def _effective_repair_plan_node_metadata(
     current_phase = _metadata_text(metadata.get("iteration_phase"))
     if current_phase is None or current_phase.lower() not in _WORKER_VERIFICATION_INTEGRITY_PHASES:
         metadata["iteration_phase"] = normalized_source_phase
+    allowed_script_paths = _verification_script_change_allowlist(metadata, source_metadata)
+    if allowed_script_paths:
+        metadata["allowed_verification_script_paths"] = allowed_script_paths
     return metadata
 
 
@@ -2918,10 +2956,7 @@ def _worker_launch_started_summary(
     attempt_label = f"attempt #{attempt_number}" if attempt_number else "attempt"
     repair_summary = _compact_worker_launch_progress_text(repair_brief_prompt)
     if repair_summary:
-        return (
-            f"Worker {attempt_label} started from verifier feedback: "
-            f"{repair_summary}"
-        )
+        return f"Worker {attempt_label} started from verifier feedback: {repair_summary}"
     return f"Worker {attempt_label} started; session is bound and streaming."
 
 
@@ -3613,6 +3648,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
     terminal_report_tool_observed = False
     terminal_report_tool_denied = False
     terminal_report_tool_applied = False
+    terminal_report_tool_report_type: str | None = None
     heartbeat_stop = asyncio.Event()
     heartbeat_task: asyncio.Task[None] | None = None
     next_event_task: asyncio.Task[dict[str, Any]] | None = None
@@ -3761,6 +3797,10 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     terminal_tool_status = _terminal_report_tool_observation_status(event)
                     if terminal_tool_status is not None:
                         terminal_report_tool_observed = True
+                        terminal_report_tool_report_type = (
+                            _terminal_report_tool_report_type(event)
+                            or terminal_report_tool_report_type
+                        )
                         if terminal_tool_status == "denied":
                             terminal_report_tool_denied = True
                         elif terminal_tool_status == "applied":
@@ -3843,15 +3883,46 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 },
             )
         else:
-            outcome_reason = (
-                "terminal_report_tool_applied"
-                if terminal_report_tool_applied
-                else (
-                    "terminal_report_tool_denied"
-                    if terminal_report_tool_denied
-                    else "terminal_report_tool_observed"
-                )
+            report_recorded_for_attempt = await _terminal_report_recorded_for_attempt(
+                workspace_id=workspace_id,
+                task_id=task.id,
+                actor_user_id=actor_user_id,
+                attempt_id=resolved_attempt_id,
+                report_type=terminal_report_tool_report_type,
             )
+            if _should_reconcile_terminal_report_tool(
+                terminal_report_tool_applied=terminal_report_tool_applied,
+                report_recorded_for_attempt=report_recorded_for_attempt,
+            ):
+                report_type = terminal_report_tool_report_type or "completed"
+                reported = await _report_terminal(
+                    workspace_id=workspace_id,
+                    root_goal_task_id=root_goal_task_id,
+                    task_id=task.id,
+                    attempt_id=resolved_attempt_id,
+                    conversation_id=resolved_conversation_id,
+                    actor_user_id=actor_user_id,
+                    worker_agent_id=worker_agent_id,
+                    leader_agent_id=leader_agent_id,
+                    report_type=report_type,
+                    summary=summary,
+                    apply_fn=apply_workspace_worker_report,
+                )
+                outcome_reason = (
+                    "terminal_report_tool_reconciled"
+                    if reported
+                    else "terminal_report_tool_reconcile_failed"
+                )
+            else:
+                outcome_reason = (
+                    "terminal_report_tool_applied"
+                    if terminal_report_tool_applied
+                    else (
+                        "terminal_report_tool_denied"
+                        if terminal_report_tool_denied
+                        else "terminal_report_tool_observed"
+                    )
+                )
             await _patch_task_launch_state(
                 workspace_id=workspace_id,
                 task_id=task.id,
@@ -3869,6 +3940,7 @@ async def launch_worker_session(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     "attempt_id": resolved_attempt_id,
                     "terminal_report_tool_denied": terminal_report_tool_denied,
                     "terminal_report_tool_applied": terminal_report_tool_applied,
+                    "terminal_report_tool_report_type": terminal_report_tool_report_type,
                 },
             )
     elif terminal_event == "error":
@@ -4104,6 +4176,16 @@ def _terminal_report_tool_observation_status(event: Mapping[str, Any]) -> str | 
     return _terminal_report_tool_result_status(data.get("result"))
 
 
+def _terminal_report_tool_report_type(event: Mapping[str, Any]) -> str | None:
+    if event.get("type") != "observe":
+        return None
+    data = event.get("data")
+    if not isinstance(data, Mapping):
+        return None
+    tool_name = str(data.get("tool_name") or "").strip()
+    return _TERMINAL_REPORT_TOOL_TYPES.get(tool_name)
+
+
 def _terminal_report_tool_result_status(result: object) -> str:
     result_text = result if isinstance(result, str) else ""
     parsed: object | None = None
@@ -4127,15 +4209,97 @@ def _terminal_report_tool_result_status(result: object) -> str:
 
 def _parsed_terminal_report_tool_status(parsed: Mapping[str, Any]) -> str | None:
     applied_report = parsed.get("applied_report")
-    if isinstance(applied_report, Mapping) and (
-        applied_report.get("applied") is True or applied_report.get("skipped") is True
-    ):
-        return "applied"
+    if isinstance(applied_report, Mapping):
+        if applied_report.get("skipped_supervisor_only") is True:
+            return "attempted"
+        if applied_report.get("applied") is True:
+            return "applied"
     if parsed.get("ok") is True:
         return "applied"
     if parsed.get("error"):
         return "denied"
     return None
+
+
+def _terminal_report_metadata_matches_attempt(
+    metadata: Mapping[str, Any] | None,
+    *,
+    attempt_id: str | None,
+    report_type: str | None,
+) -> bool:
+    if not attempt_id or not isinstance(metadata, Mapping):
+        return False
+    if metadata.get(LAST_WORKER_REPORT_ATTEMPT_ID) != attempt_id:
+        return False
+    return not report_type or metadata.get("last_worker_report_type") == report_type
+
+
+def _should_reconcile_terminal_report_tool(
+    *,
+    terminal_report_tool_applied: bool,
+    report_recorded_for_attempt: bool,
+) -> bool:
+    return terminal_report_tool_applied and not report_recorded_for_attempt
+
+
+async def _terminal_report_recorded_for_attempt(
+    *,
+    workspace_id: str,
+    task_id: str,
+    actor_user_id: str,
+    attempt_id: str | None,
+    report_type: str | None,
+) -> bool:
+    if not attempt_id:
+        return False
+    try:
+        from src.application.services.workspace_task_service import WorkspaceTaskService
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_agent_repository import (
+            SqlWorkspaceAgentRepository,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_member_repository import (
+            SqlWorkspaceMemberRepository,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
+            SqlWorkspaceRepository,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
+            SqlWorkspaceTaskRepository,
+        )
+
+        async with async_session_factory() as db:
+            task_service = WorkspaceTaskService(
+                workspace_repo=SqlWorkspaceRepository(db),
+                workspace_member_repo=SqlWorkspaceMemberRepository(db),
+                workspace_agent_repo=SqlWorkspaceAgentRepository(db),
+                workspace_task_repo=SqlWorkspaceTaskRepository(db),
+            )
+            task = await task_service.get_task(
+                workspace_id=workspace_id,
+                task_id=task_id,
+                actor_user_id=actor_user_id,
+            )
+            return _terminal_report_metadata_matches_attempt(
+                getattr(task, "metadata", None),
+                attempt_id=attempt_id,
+                report_type=report_type,
+            )
+    except Exception:
+        logger.warning(
+            "workspace_worker_launch.terminal_report_state_check_failed",
+            extra={
+                "event": "workspace_worker_launch.terminal_report_state_check_failed",
+                "workspace_id": workspace_id,
+                "task_id": task_id,
+                "attempt_id": attempt_id,
+                "report_type": report_type,
+            },
+            exc_info=True,
+        )
+        return True
 
 
 def schedule_worker_session(

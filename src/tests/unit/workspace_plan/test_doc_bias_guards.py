@@ -87,10 +87,7 @@ def test_iteration_review_payload_exposes_sandbox_docker_runtime_constraint() ->
             {
                 "id": "deploy",
                 "title": "verify Drone docker deployment",
-                "verification_summary": (
-                    "Docker runtime is unavailable in the sandbox, but Drone pipeline "
-                    "and registry manifest checks passed."
-                ),
+                "failure_signature": "sandbox-no-docker-runtime",
             },
         ),
         deliverables=(),
@@ -103,6 +100,56 @@ def test_iteration_review_payload_exposes_sandbox_docker_runtime_constraint() ->
     assert '"sandbox_docker_runtime"' in payload
     assert '"available": false' in payload
     assert "Drone docker deploy-step success plus registry manifest/tag checks" in payload
+
+
+def test_iteration_review_payload_exposes_free_text_sandbox_docker_runtime_constraint() -> None:
+    from src.domain.ports.services.iteration_review_port import IterationReviewContext
+    from src.infrastructure.agent.workspace_plan.iteration_review import _user_payload
+
+    ctx = IterationReviewContext(
+        workspace_id="ws-1",
+        plan_id="plan-1",
+        iteration_index=1,
+        goal_title="ship a webapp",
+        goal_description="build code, tests, infra",
+        completed_tasks=(),
+        deliverables=(),
+        feedback_items=("Docker runtime unavailable in sandbox: no socket mounted.",),
+        max_next_tasks=5,
+    )
+    payload = _user_payload(ctx)
+
+    assert '"sandbox_docker_runtime"' in payload
+    assert '"available": false' in payload
+
+
+def test_iteration_review_payload_ignores_free_text_docker_runtime_mentions() -> None:
+    from src.domain.ports.services.iteration_review_port import IterationReviewContext
+    from src.infrastructure.agent.workspace_plan.iteration_review import _user_payload
+
+    ctx = IterationReviewContext(
+        workspace_id="ws-1",
+        plan_id="plan-1",
+        iteration_index=1,
+        goal_title="ship a webapp",
+        goal_description="build code, tests, infra",
+        completed_tasks=(
+            {
+                "id": "deploy",
+                "title": "verify Drone docker deployment",
+                "verification_summary": (
+                    "Earlier notes mentioned Docker runtime was unavailable in the sandbox, "
+                    "but the current structured verifier result did not emit that constraint."
+                ),
+            },
+        ),
+        deliverables=(),
+        feedback_items=(),
+        max_next_tasks=5,
+    )
+    payload = _user_payload(ctx)
+
+    assert '"sandbox_docker_runtime"' not in payload
 
 
 def test_workspace_software_decomposition_context_forbids_doc_only_tasks() -> None:

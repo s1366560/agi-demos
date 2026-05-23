@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol
 
 from src.domain.model.review.finding_filter import filter_findings
 from src.domain.model.review.review_finding import (
@@ -27,6 +26,10 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
 from src.infrastructure.agent.tools.workspace_plan_contract_tools import (
     WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME,
 )
+from src.infrastructure.agent.workspace.contract_agent_runtime import (
+    contract_tool_payload_from_event,
+    workspace_contract_input_fingerprint,
+)
 
 if TYPE_CHECKING:
     from src.domain.model.agent.agent_definition import Agent
@@ -38,6 +41,8 @@ _VALID_PHASES = {"research", "plan", "implement", "test", "deploy", "review"}
 _VALID_SEVERITIES = {s.value for s in ReviewSeverity}
 _MIN_REVIEW_CONFIDENCE = 0.6
 _MAX_FINDINGS = 12
+_DEFAULT_REVIEW_MAX_STEPS = 16
+_MISSING_CONTRACT_RETRY_ATTEMPTS = 1
 
 
 class WorkspaceIterationReviewAgentTurnRunner(Protocol):
@@ -63,7 +68,7 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
         *,
         tenant_id: str,
         project_id: str,
-        max_steps: int = 8,
+        max_steps: int = _DEFAULT_REVIEW_MAX_STEPS,
         max_tokens: int = 8192,
     ) -> None:
         super().__init__()
@@ -87,27 +92,66 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
         iteration_index: int,
         linked_workspace_task_id: str | None = None,
     ) -> dict[str, Any] | None:
-        from src.infrastructure.agent.core.project_react_agent import (
-            ProjectAgentConfig,
-            ProjectReActAgent,
+        from src.configuration.factories import create_llm_client
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.agent.workspace.contract_agent_runtime import (
+            create_workspace_contract_agent_service,
+            recover_workspace_contract_payload,
+            resolve_workspace_actor_user_id,
+            workspace_contract_conversation_id,
         )
         from src.infrastructure.agent.workspace.runtime_role_contract import (
-            WORKSPACE_ROLE_WORKER,
+            WORKSPACE_ROLE_CONTRACT,
             WORKSPACE_SESSION_ROLE_KEY,
         )
         from src.infrastructure.agent.workspace.session_conversations import (
-            append_workspace_llm_turn_messages,
             ensure_workspace_llm_conversation,
         )
 
-        turn_id = uuid.uuid4().hex
-        conversation_id = f"workspace-review:{workspace_id}:{plan_id}:{iteration_index}:{turn_id}"
+        input_fingerprint = workspace_contract_input_fingerprint(
+            user_prompt,
+            workspace_id,
+            plan_id,
+            iteration_index,
+            linked_workspace_task_id or "",
+            reviewer_agent.id,
+        )
+        conversation_id = workspace_contract_conversation_id(
+            "iteration-review",
+            self._tenant_id,
+            self._project_id,
+            workspace_id,
+            plan_id,
+            iteration_index,
+            linked_workspace_task_id or "",
+            input_fingerprint,
+        )
         diagnostics: dict[str, Any] = {
             "conversation_id": conversation_id,
+            "input_fingerprint": input_fingerprint,
             "event_count": 0,
             "observed_tools": [],
             "review_submitted": False,
+            "runtime_path": "agent_service.stream_chat_v2",
         }
+        recovered_payload = await recover_workspace_contract_payload(
+            conversation_id=conversation_id,
+            extract_payload=_iteration_review_from_event,
+        )
+        if recovered_payload is not None:
+            diagnostics["recovered_from_events"] = True
+            diagnostics["review_submitted"] = True
+            self._last_diagnostics = diagnostics
+            return recovered_payload
+
+        resolved_actor_user_id = await resolve_workspace_actor_user_id(workspace_id=workspace_id)
+        diagnostics["actor_user_resolved"] = bool(resolved_actor_user_id)
+        if not resolved_actor_user_id:
+            self._last_diagnostics = diagnostics
+            return None
+
         diagnostics["session_persisted"] = await ensure_workspace_llm_conversation(
             conversation_id=conversation_id,
             tenant_id=self._tenant_id,
@@ -115,6 +159,7 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
             workspace_id=workspace_id,
             linked_workspace_task_id=linked_workspace_task_id,
             agent_id=reviewer_agent.id,
+            actor_user_id=resolved_actor_user_id,
             title=f"Workspace Iteration Review - {iteration_index}",
             stage="iteration_review",
             metadata={
@@ -124,52 +169,40 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
                 "conversation_scope": f"review:{plan_id}:{iteration_index}",
             },
         )
-        agent = ProjectReActAgent(
-            ProjectAgentConfig(
-                tenant_id=self._tenant_id,
-                project_id=self._project_id,
-                agent_mode="workspace-iteration-reviewer",
-                temperature=0.0,
-                max_tokens=self._max_tokens,
-                max_steps=self._max_steps,
-                persistent=False,
-                enable_subagents=False,
-            )
-        )
-        if not await agent.initialize():
+        if not diagnostics["session_persisted"]:
             self._last_diagnostics = diagnostics
             return None
 
-        conversation_context = [
-            {
-                "role": "system",
-                "content": "workspace_worker_runtime\n"
-                + json.dumps(
-                    {
-                        "context_type": "workspace_worker_runtime",
-                        WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_WORKER,
-                        "workspace_binding": {
-                            "workspace_id": workspace_id,
-                            "linked_workspace_task_id": linked_workspace_task_id or "",
-                            "plan_id": plan_id,
-                            "iteration_index": iteration_index,
-                        },
-                    },
-                    ensure_ascii=False,
-                ),
-            }
-        ]
-        output_parts: list[str] = []
-        streamed_text_seen = False
-        try:
-            async for event in agent.execute_chat(
+        app_model_context = {
+            "context_type": "workspace_worker_runtime",
+            WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_CONTRACT,
+            "workspace_binding": {
+                "workspace_id": workspace_id,
+                "linked_workspace_task_id": linked_workspace_task_id or "",
+                "plan_id": plan_id,
+                "iteration_index": iteration_index,
+            },
+            "iteration_review": {
+                "plan_id": plan_id,
+                "iteration_index": iteration_index,
+            },
+            "runtime_limits": {
+                "max_steps": self._max_steps,
+                "max_tokens": self._max_tokens,
+            },
+            "llm_overrides": {"max_tokens": self._max_tokens},
+        }
+        async with async_session_factory() as db:
+            llm = await create_llm_client(self._tenant_id)
+            agent_service = await create_workspace_contract_agent_service(db=db, llm=llm)
+            async for event in agent_service.stream_chat_v2(
                 conversation_id=conversation_id,
                 user_message=user_prompt,
-                user_id="workspace-iteration-reviewer",
+                user_id=resolved_actor_user_id,
+                project_id=self._project_id,
                 tenant_id=self._tenant_id,
-                message_id=f"workspace-iteration-reviewer-{turn_id}",
-                conversation_context=conversation_context,
                 agent_id=reviewer_agent.id,
+                app_model_context=app_model_context,
             ):
                 diagnostics["event_count"] += 1
                 tool_name = _tool_name_from_event(event)
@@ -177,53 +210,20 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
                     observed_tools = diagnostics["observed_tools"]
                     if tool_name not in observed_tools:
                         observed_tools.append(tool_name)
-                output_text = _assistant_text_from_event(
-                    event,
-                    allow_terminal_snapshot=not streamed_text_seen,
-                )
-                if output_text:
-                    output_parts.append(output_text)
-                    if event.get("type") == "text_delta":
-                        streamed_text_seen = True
                 payload = _iteration_review_from_event(event)
                 if payload is not None:
                     diagnostics["review_submitted"] = True
-                    diagnostics["messages_persisted"] = (
-                        await append_workspace_llm_turn_messages(
-                            conversation_id=conversation_id,
-                            user_prompt=user_prompt,
-                            assistant_content=_iteration_review_turn_message_content(
-                                output_parts=output_parts,
-                                review=payload,
-                            ),
-                            agent_id=reviewer_agent.id,
-                            stage="iteration_review",
-                            metadata={
-                                "plan_id": plan_id,
-                                "iteration_index": iteration_index,
-                                "linked_workspace_task_id": linked_workspace_task_id or "",
-                            },
-                        )
-                    )
                     self._last_diagnostics = diagnostics
                     return payload
-        finally:
-            await agent.stop()
-        diagnostics["messages_persisted"] = await append_workspace_llm_turn_messages(
+        recovered_payload = await recover_workspace_contract_payload(
             conversation_id=conversation_id,
-            user_prompt=user_prompt,
-            assistant_content=_iteration_review_turn_message_content(
-                output_parts=output_parts,
-                review=None,
-            ),
-            agent_id=reviewer_agent.id,
-            stage="iteration_review",
-            metadata={
-                "plan_id": plan_id,
-                "iteration_index": iteration_index,
-                "linked_workspace_task_id": linked_workspace_task_id or "",
-            },
+            extract_payload=_iteration_review_from_event,
         )
+        if recovered_payload is not None:
+            diagnostics["recovered_from_events"] = True
+            diagnostics["review_submitted"] = True
+            self._last_diagnostics = diagnostics
+            return recovered_payload
         self._last_diagnostics = diagnostics
         return None
 
@@ -238,10 +238,12 @@ class WorkspaceIterationReviewAgentProvider:
         project_id: str,
         linked_workspace_task_id: str | None = None,
         max_next_tasks: int = 6,
+        missing_contract_retry_attempts: int = _MISSING_CONTRACT_RETRY_ATTEMPTS,
         turn_runner: WorkspaceIterationReviewAgentTurnRunner | None = None,
     ) -> None:
         super().__init__()
         self._max_next_tasks = max(1, max_next_tasks)
+        self._missing_contract_retry_attempts = max(0, missing_contract_retry_attempts)
         self._linked_workspace_task_id = linked_workspace_task_id
         self._reviewer_agent = build_builtin_workspace_iteration_reviewer_agent(
             tenant_id=tenant_id,
@@ -269,6 +271,24 @@ class WorkspaceIterationReviewAgentProvider:
             iteration_index=context.iteration_index,
             linked_workspace_task_id=linked_workspace_task_id,
         )
+        retry_index = 0
+        while not payload and retry_index < self._missing_contract_retry_attempts:
+            retry_index += 1
+            prompt = _build_agent_contract_retry_prompt(
+                context,
+                max_next_tasks=self._max_next_tasks,
+                linked_workspace_task_id=linked_workspace_task_id,
+                diagnostics=getattr(self._turn_runner, "last_diagnostics", {}),
+                retry_index=retry_index,
+            )
+            payload = await self._turn_runner.run_review_turn(
+                reviewer_agent=self._reviewer_agent,
+                user_prompt=prompt,
+                workspace_id=context.workspace_id,
+                plan_id=context.plan_id,
+                iteration_index=context.iteration_index,
+                linked_workspace_task_id=linked_workspace_task_id,
+            )
         if not payload:
             diagnostics = getattr(self._turn_runner, "last_diagnostics", {})
             return _needs_human_review(
@@ -313,6 +333,32 @@ def _build_agent_user_prompt(
         "You are in read-only review mode. Do not implement, edit files, mutate workspace "
         "state, or finish in prose. Your final action must be exactly one "
         f"{WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME} call."
+    )
+
+
+def _build_agent_contract_retry_prompt(
+    context: IterationReviewContext,
+    *,
+    max_next_tasks: int,
+    linked_workspace_task_id: str | None = None,
+    diagnostics: Mapping[str, Any] | None = None,
+    retry_index: int = 1,
+) -> str:
+    diagnostics_json = json.dumps(diagnostics or {}, ensure_ascii=False, default=str)
+    return (
+        "Contract retry for the completed workspace iteration review.\n\n"
+        f"Retry index: {retry_index}\n"
+        "The previous review turn inspected evidence but did not call "
+        f"{WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME}. Submit the contract tool in this "
+        "turn. Do not end in prose.\n\n"
+        f"Previous diagnostics: {diagnostics_json}\n\n"
+        f"{_user_payload(context, linked_workspace_task_id=linked_workspace_task_id)}\n\n"
+        f"Maximum next sprint tasks: {max_next_tasks}\n"
+        "Use at most two bounded read/grep/glob/bash calls only if the payload is "
+        "insufficient. If the completed tasks and deliverables satisfy the goal with no "
+        "actionable follow-up, call complete_goal. If bounded follow-up remains, call "
+        "continue_next_iteration with concrete next_tasks. If only a human-only decision "
+        "can proceed, call needs_human_review."
     )
 
 
@@ -402,26 +448,37 @@ def _runtime_constraints_payload(context: IterationReviewContext) -> dict[str, o
 def _context_has_sandbox_docker_runtime_gap(context: IterationReviewContext) -> bool:
     markers: list[str] = [str(item) for item in context.feedback_items if item]
     for task in context.completed_tasks:
-        for key in ("verification_summary", "description", "title"):
+        for key in (
+            "failure_signature",
+            "failed_criteria",
+            "satisfied_guard_failures",
+            "evidence_refs",
+            "artifacts",
+        ):
             value = task.get(key)
             if isinstance(value, str) and value:
                 markers.append(value)
-        for key in ("evidence_refs", "artifacts"):
-            value = task.get(key)
-            if isinstance(value, list | tuple):
+            elif isinstance(value, list | tuple):
                 markers.extend(str(item) for item in value if item)
-    normalized = "\n".join(marker.lower() for marker in markers if marker)
-    return _has_sandbox_docker_runtime_gap(normalized)
+    return any(_is_sandbox_docker_runtime_gap_marker(marker) for marker in markers)
 
 
-def _has_sandbox_docker_runtime_gap(normalized: str) -> bool:
-    if "sandbox-no-docker-runtime" in normalized:
+def _is_sandbox_docker_runtime_gap_marker(value: str) -> bool:
+    normalized = value.strip().lower().replace("_", "-")
+    if normalized in {
+        "sandbox-no-docker-runtime",
+        "docker-runtime-unavailable-sandbox",
+        "docker-runtime-permanently-unavailable-sandbox",
+        "sandbox-docker-runtime-unavailable",
+    }:
         return True
-    if "docker-runtime-unavailable-sandbox" in normalized:
-        return True
-    if "docker-runtime-permanently-unavailable-sandbox" in normalized:
-        return True
-    docker_runtime_missing = "docker runtime" in normalized and any(
+    if _is_stale_sandbox_docker_runtime_gap_reference(normalized):
+        return False
+    has_sandbox_context = "sandbox" in normalized
+    has_docker_runtime_context = any(
+        token in normalized for token in ("docker runtime", "docker daemon", "docker socket")
+    ) or ("docker" in normalized and "socket" in normalized)
+    has_unavailable_context = any(
         token in normalized
         for token in (
             "not available",
@@ -432,44 +489,29 @@ def _has_sandbox_docker_runtime_gap(normalized: str) -> bool:
             "lacks docker",
             "no docker",
             "no socket",
+            "missing",
+            "cannot access",
+            "can't access",
         )
     )
-    return docker_runtime_missing and "sandbox" in normalized
+    return has_sandbox_context and has_docker_runtime_context and has_unavailable_context
+
+
+def _is_stale_sandbox_docker_runtime_gap_reference(normalized: str) -> bool:
+    return (
+        "earlier notes mentioned" in normalized
+        or "did not emit" in normalized
+        or "didn't emit" in normalized
+        or "not emit" in normalized
+    )
 
 
 def _iteration_review_from_event(event: Mapping[str, Any]) -> dict[str, Any] | None:
-    data = event.get("data")
-    if not isinstance(data, Mapping):
-        return None
-    if _tool_name_from_event(event) != WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME:
-        return None
-
-    event_data = cast("Mapping[str, Any]", data)
-    for key in ("observation", "result", "metadata"):
-        payload = _iteration_review_payload_from_value(event_data.get(key))
-        if payload is not None:
-            return payload
-    return _iteration_review_payload_from_value(event_data)
-
-
-def _iteration_review_payload_from_value(value: object) -> dict[str, Any] | None:
-    if isinstance(value, str):
-        try:
-            value = json.loads(value)
-        except json.JSONDecodeError:
-            return None
-
-    if not isinstance(value, Mapping):
-        return None
-
-    mapping_value = cast("Mapping[str, Any]", value)
-    payload = mapping_value.get("iteration_review")
-    if not isinstance(payload, Mapping):
-        metadata = mapping_value.get("metadata")
-        if isinstance(metadata, Mapping):
-            metadata_value = cast("Mapping[str, Any]", metadata)
-            payload = metadata_value.get("iteration_review")
-    return dict(cast("Mapping[str, Any]", payload)) if isinstance(payload, Mapping) else None
+    return contract_tool_payload_from_event(
+        event,
+        tool_name=WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME,
+        payload_key="iteration_review",
+    )
 
 
 def _tool_name_from_event(event: Mapping[str, Any]) -> str | None:
@@ -478,45 +520,6 @@ def _tool_name_from_event(event: Mapping[str, Any]) -> str | None:
         return None
     tool_name = data.get("tool_name") or data.get("name")
     return tool_name.strip() if isinstance(tool_name, str) and tool_name.strip() else None
-
-
-def _assistant_text_from_event(
-    event: Mapping[str, Any],
-    *,
-    allow_terminal_snapshot: bool,
-) -> str:
-    data = event.get("data")
-    if not isinstance(data, Mapping):
-        return ""
-    event_type = event.get("type")
-    if event_type == "text_delta":
-        return str(data.get("delta") or "")
-    if not allow_terminal_snapshot:
-        return ""
-    if event_type == "text_end":
-        return str(data.get("full_text") or "")
-    if event_type == "complete":
-        return str(data.get("content") or "")
-    return ""
-
-
-def _iteration_review_turn_message_content(
-    *,
-    output_parts: list[str],
-    review: Mapping[str, Any] | None,
-) -> str:
-    text = "".join(output_parts).strip()
-    sections: list[str] = []
-    if text:
-        sections.append(text)
-    if review is not None:
-        sections.append(
-            "Submitted iteration review:\n"
-            + json.dumps(review, ensure_ascii=False, indent=2, default=str)
-        )
-    if not sections:
-        sections.append("Iteration review turn ended without submitting a review.")
-    return "\n\n".join(sections)
 
 
 def _parse_review_response(

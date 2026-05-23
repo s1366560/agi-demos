@@ -24,6 +24,17 @@ from src.infrastructure.agent.mcp.oauth_callback import (
 )
 
 
+class _FakeTCPSite:
+    def __init__(self, *args, **kwargs) -> None:
+        self.started = False
+
+    async def start(self) -> None:
+        self.started = True
+
+    async def stop(self) -> None:
+        self.started = False
+
+
 @pytest.mark.unit
 class TestBase64UrlEncode:
     """Test base64 URL-safe encoding."""
@@ -437,6 +448,13 @@ class TestMCPOAuthProvider:
 class TestMCPOAuthCallbackServer:
     """Test MCP OAuth callback server."""
 
+    @pytest.fixture(autouse=True)
+    def mock_tcp_site(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.infrastructure.agent.mcp.oauth_callback.web.TCPSite",
+            _FakeTCPSite,
+        )
+
     @pytest.fixture
     def server(self):
         """Create callback server instance."""
@@ -514,6 +532,13 @@ class TestMCPOAuthCallbackServer:
 @pytest.mark.unit
 class TestGlobalOAuthCallbackServer:
     """Test global OAuth callback server singleton."""
+
+    @pytest.fixture(autouse=True)
+    def mock_tcp_site(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.infrastructure.agent.mcp.oauth_callback.web.TCPSite",
+            _FakeTCPSite,
+        )
 
     @pytest.mark.asyncio
     async def test_global_singleton(self):

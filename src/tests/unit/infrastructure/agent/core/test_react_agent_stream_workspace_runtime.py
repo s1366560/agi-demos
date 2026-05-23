@@ -2,6 +2,11 @@
 
 from src.infrastructure.agent.core.react_agent_stream_mixin import (
     _workspace_runtime_forwarded_fields,
+    _workspace_runtime_limit_overrides,
+)
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_CONTRACT,
+    WORKSPACE_SESSION_ROLE_KEY,
 )
 
 
@@ -53,3 +58,41 @@ def test_workspace_runtime_forwarded_fields_ignores_empty_or_invalid_values() ->
     )
 
     assert forwarded == {}
+
+
+def test_workspace_runtime_limit_overrides_accepts_positive_ints_only() -> None:
+    assert _workspace_runtime_limit_overrides(
+        {
+            WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_CONTRACT,
+            "runtime_limits": {
+                "max_steps": 8,
+                "max_tokens": 8192,
+                "ignored": 1,
+            },
+        }
+    ) == {"max_steps": 8, "max_tokens": 8192}
+
+    assert (
+        _workspace_runtime_limit_overrides(
+            {
+                WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_CONTRACT,
+                "runtime_limits": {
+                    "max_steps": 0,
+                    "max_tokens": True,
+                },
+            }
+        )
+        == {}
+    )
+
+    assert (
+        _workspace_runtime_limit_overrides(
+            {
+                "runtime_limits": {
+                    "max_steps": 8,
+                    "max_tokens": 8192,
+                }
+            }
+        )
+        == {}
+    )

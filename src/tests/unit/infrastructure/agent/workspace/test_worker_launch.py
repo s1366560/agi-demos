@@ -482,9 +482,7 @@ class TestWorkerStreamOrphanDetection:
             repair_brief_prompt="x" * (wl.WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS + 50),
         )
 
-        assert summary.startswith(
-            "Worker attempt #10 started from verifier feedback: "
-        )
+        assert summary.startswith("Worker attempt #10 started from verifier feedback: ")
         assert summary.endswith("...")
         assert len(summary) < wl.WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS + 80
 
@@ -620,9 +618,29 @@ class TestStreamCompletionFallback:
         }
 
         assert wl._terminal_report_tool_observation_status(event) == "applied"
+        assert wl._terminal_report_tool_report_type(event) == "blocked"
         assert (
             wl._should_synthesize_stream_completion_report(terminal_report_tool_observed=True)
             is False
+        )
+
+    def test_supervisor_only_terminal_report_does_not_reconcile_direct_apply(self) -> None:
+        event = {
+            "type": "observe",
+            "data": {
+                "tool_name": "workspace_report_complete",
+                "result": (
+                    '{"ok": true, "applied_report": '
+                    '{"skipped_supervisor_only": true, "reason": "WORKSPACE_WTP_V1_ONLY"}}'
+                ),
+                "error": None,
+            },
+        }
+
+        assert wl._terminal_report_tool_observation_status(event) == "attempted"
+        assert not wl._should_reconcile_terminal_report_tool(
+            terminal_report_tool_applied=False,
+            report_recorded_for_attempt=False,
         )
 
     def test_text_completion_fallback_remains_available_without_terminal_tool(self) -> None:
@@ -635,6 +653,42 @@ class TestStreamCompletionFallback:
         assert (
             wl._should_synthesize_stream_completion_report(terminal_report_tool_observed=False)
             is True
+        )
+
+    def test_terminal_report_metadata_must_match_current_attempt(self) -> None:
+        metadata = {
+            "last_worker_report_attempt_id": "attempt-1",
+            "last_worker_report_type": "completed",
+        }
+
+        assert wl._terminal_report_metadata_matches_attempt(
+            metadata,
+            attempt_id="attempt-1",
+            report_type="completed",
+        )
+        assert not wl._terminal_report_metadata_matches_attempt(
+            metadata,
+            attempt_id="attempt-2",
+            report_type="completed",
+        )
+        assert not wl._terminal_report_metadata_matches_attempt(
+            metadata,
+            attempt_id="attempt-1",
+            report_type="blocked",
+        )
+
+    def test_applied_terminal_tool_reconciles_when_metadata_is_stale(self) -> None:
+        assert wl._should_reconcile_terminal_report_tool(
+            terminal_report_tool_applied=True,
+            report_recorded_for_attempt=False,
+        )
+        assert not wl._should_reconcile_terminal_report_tool(
+            terminal_report_tool_applied=True,
+            report_recorded_for_attempt=True,
+        )
+        assert not wl._should_reconcile_terminal_report_tool(
+            terminal_report_tool_applied=False,
+            report_recorded_for_attempt=False,
         )
 
 
@@ -1412,7 +1466,10 @@ services:
                 "iteration_phase": "implement",
                 "repair_for_node_id": "node-source",
             },
-            {"iteration_phase": "test"},
+            {
+                "iteration_phase": "test",
+                "expected_artifacts": ["workspace-persistence.test.ts"],
+            },
         )
 
         system_context = wl._build_worker_system_context(
@@ -1425,10 +1482,14 @@ services:
 
         policy = system_context["workspace_verification_integrity"]
         assert plan_node_metadata["iteration_phase"] == "test"
+        assert plan_node_metadata["allowed_verification_script_paths"] == [
+            "workspace-persistence.test.ts"
+        ]
         assert "allow_verification_script_changes" not in plan_node_metadata
         assert policy["iteration_phase"] == "test"
         assert policy["protected_script_changes"] is True
         assert policy["allow_verification_script_changes"] is False
+        assert policy["allowed_verification_script_paths"] == ["workspace-persistence.test.ts"]
 
     def test_explicit_implement_repair_contract_is_not_overwritten_by_test_ancestor(
         self,
@@ -1579,6 +1640,82 @@ services:
         assert policy["protected_script_changes"] is True
         assert policy["allow_verification_script_changes"] is False
         assert policy["allowed_verification_script_paths"] == ["test-data-persistence.js"]
+
+    def test_repair_node_allowlists_paths_from_verifier_feedback_fields(self) -> None:
+        task = _make_task()
+        plan_node_metadata = wl._effective_repair_plan_node_metadata(
+            {
+                "iteration_phase": "implement",
+                "repair_for_node_id": "node-source",
+            },
+            {
+                "iteration_phase": "test",
+                "last_verification_judge_repair_brief": {
+                    "failed_items": [
+                        "test_run: src/workspace/workspace-persistence.test.ts failed"
+                    ],
+                    "required_next_action": (
+                        "Add the Jest import in src/workspace/service.test.ts."
+                    ),
+                    "feedback_items": [
+                        {
+                            "summary": "src/workspace/chat.test.ts also uses jest.fn().",
+                            "failure_signature": "ReferenceError in src/workspace/chat.test.ts",
+                        }
+                    ],
+                },
+            },
+        )
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata=plan_node_metadata,
+        )
+
+        policy = system_context["workspace_verification_integrity"]
+        assert plan_node_metadata["iteration_phase"] == "test"
+        assert set(policy["allowed_verification_script_paths"]) == {
+            "src/workspace/chat.test.ts",
+            "src/workspace/service.test.ts",
+            "src/workspace/workspace-persistence.test.ts",
+        }
+
+    def test_system_context_allows_expected_test_artifact_creation(self) -> None:
+        task = _make_task(
+            metadata={
+                "task_role": "execution_task",
+                "root_goal_task_id": "root-1",
+                "expected_artifacts": [
+                    "workspace-persistence.test.ts",
+                    "drone test log evidence",
+                ],
+            }
+        )
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata={"iteration_phase": "test"},
+        )
+        brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata={"iteration_phase": "test"},
+        )
+
+        policy = system_context["workspace_verification_integrity"]
+        assert policy["protected_script_changes"] is True
+        assert policy["allow_verification_script_changes"] is False
+        assert policy["allowed_verification_script_paths"] == ["workspace-persistence.test.ts"]
+        assert "workspace-persistence.test.ts" in brief
+        assert "drone test log evidence" not in policy["allowed_verification_script_paths"]
 
     def test_system_context_honors_explicit_failed_tests_contract(self) -> None:
         task = _make_task(

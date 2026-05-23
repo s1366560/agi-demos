@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Protocol
 
 from src.infrastructure.agent.sisyphus.builtin_agent import (
@@ -13,6 +13,10 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
 )
 from src.infrastructure.agent.tools.workspace_plan_contract_tools import (
     WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME,
+)
+from src.infrastructure.agent.workspace.contract_agent_runtime import (
+    contract_tool_payload_from_event,
+    workspace_contract_input_fingerprint,
 )
 
 if TYPE_CHECKING:
@@ -37,6 +41,7 @@ _VALID_FEEDBACK_TARGET_LAYERS = {item.value for item in WorkspaceVerificationFee
 _VALID_FEEDBACK_KINDS = {item.value for item in WorkspaceVerificationFeedbackKind}
 _VALID_FEEDBACK_SEVERITIES = {item.value for item in WorkspaceVerificationFeedbackSeverity}
 _VALID_RECOMMENDED_ACTIONS = {item.value for item in WorkspaceVerificationRecommendedAction}
+_MISSING_CONTRACT_RETRY_ATTEMPTS = 1
 
 
 class WorkspaceVerifierAgentTurnRunner(Protocol):
@@ -86,29 +91,66 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
         attempt_id: str | None,
         linked_workspace_task_id: str | None = None,
     ) -> dict[str, Any] | None:
-        from src.infrastructure.agent.core.project_react_agent import (
-            ProjectAgentConfig,
-            ProjectReActAgent,
+        from src.configuration.factories import create_llm_client
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.agent.workspace.contract_agent_runtime import (
+            create_workspace_contract_agent_service,
+            recover_workspace_contract_payload,
+            resolve_workspace_actor_user_id,
+            workspace_contract_conversation_id,
         )
         from src.infrastructure.agent.workspace.runtime_role_contract import (
-            WORKSPACE_ROLE_WORKER,
+            WORKSPACE_ROLE_CONTRACT,
             WORKSPACE_SESSION_ROLE_KEY,
         )
         from src.infrastructure.agent.workspace.session_conversations import (
-            append_workspace_llm_turn_messages,
             ensure_workspace_llm_conversation,
         )
 
-        turn_id = uuid.uuid4().hex
-        conversation_id = (
-            f"workspace-verifier:{workspace_id}:{node_id}:{attempt_id or 'none'}:{turn_id}"
+        input_fingerprint = workspace_contract_input_fingerprint(
+            user_prompt,
+            workspace_id,
+            node_id,
+            attempt_id or "",
+            linked_workspace_task_id or "",
+            verifier_agent.id,
+        )
+        conversation_id = workspace_contract_conversation_id(
+            "verifier",
+            self._tenant_id,
+            self._project_id,
+            workspace_id,
+            node_id,
+            attempt_id or "none",
+            linked_workspace_task_id or "",
+            input_fingerprint,
         )
         diagnostics: dict[str, Any] = {
             "conversation_id": conversation_id,
+            "input_fingerprint": input_fingerprint,
             "event_count": 0,
             "observed_tools": [],
             "judgment_submitted": False,
+            "runtime_path": "agent_service.stream_chat_v2",
         }
+        recovered_payload = await recover_workspace_contract_payload(
+            conversation_id=conversation_id,
+            extract_payload=_verification_judgment_from_event,
+        )
+        if recovered_payload is not None:
+            diagnostics["recovered_from_events"] = True
+            diagnostics["judgment_submitted"] = True
+            self._last_diagnostics = diagnostics
+            return recovered_payload
+
+        resolved_actor_user_id = await resolve_workspace_actor_user_id(workspace_id=workspace_id)
+        diagnostics["actor_user_resolved"] = bool(resolved_actor_user_id)
+        if not resolved_actor_user_id:
+            self._last_diagnostics = diagnostics
+            return None
+
         diagnostics["session_persisted"] = await ensure_workspace_llm_conversation(
             conversation_id=conversation_id,
             tenant_id=self._tenant_id,
@@ -116,6 +158,7 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
             workspace_id=workspace_id,
             linked_workspace_task_id=linked_workspace_task_id,
             agent_id=verifier_agent.id,
+            actor_user_id=resolved_actor_user_id,
             title=f"Workspace Verification Gate - {node_id}",
             stage="verification_judge",
             metadata={
@@ -125,52 +168,40 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
                 "conversation_scope": f"verification:{node_id}:{attempt_id or 'none'}",
             },
         )
-        agent = ProjectReActAgent(
-            ProjectAgentConfig(
-                tenant_id=self._tenant_id,
-                project_id=self._project_id,
-                agent_mode="workspace-verifier",
-                temperature=0.0,
-                max_tokens=self._max_tokens,
-                max_steps=self._max_steps,
-                persistent=False,
-                enable_subagents=False,
-            )
-        )
-        if not await agent.initialize():
+        if not diagnostics["session_persisted"]:
             self._last_diagnostics = diagnostics
             return None
 
-        conversation_context = [
-            {
-                "role": "system",
-                "content": "workspace_worker_runtime\n"
-                + json.dumps(
-                    {
-                        "context_type": "workspace_worker_runtime",
-                        WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_WORKER,
-                        "workspace_binding": {
-                            "workspace_id": workspace_id,
-                            "linked_workspace_task_id": linked_workspace_task_id or "",
-                            "current_plan_node_id": node_id,
-                            "current_attempt_id": attempt_id or "",
-                        },
-                    },
-                    ensure_ascii=False,
-                ),
-            }
-        ]
-        output_parts: list[str] = []
-        streamed_text_seen = False
-        try:
-            async for event in agent.execute_chat(
+        app_model_context = {
+            "context_type": "workspace_worker_runtime",
+            WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_CONTRACT,
+            "workspace_binding": {
+                "workspace_id": workspace_id,
+                "linked_workspace_task_id": linked_workspace_task_id or "",
+                "current_plan_node_id": node_id,
+                "current_attempt_id": attempt_id or "",
+            },
+            "verification_judge": {
+                "node_id": node_id,
+                "attempt_id": attempt_id or "",
+            },
+            "runtime_limits": {
+                "max_steps": self._max_steps,
+                "max_tokens": self._max_tokens,
+            },
+            "llm_overrides": {"max_tokens": self._max_tokens},
+        }
+        async with async_session_factory() as db:
+            llm = await create_llm_client(self._tenant_id)
+            agent_service = await create_workspace_contract_agent_service(db=db, llm=llm)
+            async for event in agent_service.stream_chat_v2(
                 conversation_id=conversation_id,
                 user_message=user_prompt,
-                user_id="workspace-verifier",
+                user_id=resolved_actor_user_id,
+                project_id=self._project_id,
                 tenant_id=self._tenant_id,
-                message_id=f"workspace-verifier-{turn_id}",
-                conversation_context=conversation_context,
                 agent_id=verifier_agent.id,
+                app_model_context=app_model_context,
             ):
                 diagnostics["event_count"] += 1
                 tool_name = _tool_name_from_event(event)
@@ -178,53 +209,20 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
                     observed_tools = diagnostics["observed_tools"]
                     if tool_name not in observed_tools:
                         observed_tools.append(tool_name)
-                output_text = _assistant_text_from_event(
-                    event,
-                    allow_terminal_snapshot=not streamed_text_seen,
-                )
-                if output_text:
-                    output_parts.append(output_text)
-                    if event.get("type") == "text_delta":
-                        streamed_text_seen = True
                 payload = _verification_judgment_from_event(event)
                 if payload is not None:
                     diagnostics["judgment_submitted"] = True
-                    diagnostics["messages_persisted"] = (
-                        await append_workspace_llm_turn_messages(
-                            conversation_id=conversation_id,
-                            user_prompt=user_prompt,
-                            assistant_content=_verification_turn_message_content(
-                                output_parts=output_parts,
-                                judgment=payload,
-                            ),
-                            agent_id=verifier_agent.id,
-                            stage="verification_judge",
-                            metadata={
-                                "current_plan_node_id": node_id,
-                                "current_attempt_id": attempt_id or "",
-                                "linked_workspace_task_id": linked_workspace_task_id or "",
-                            },
-                        )
-                    )
                     self._last_diagnostics = diagnostics
                     return payload
-        finally:
-            await agent.stop()
-        diagnostics["messages_persisted"] = await append_workspace_llm_turn_messages(
+        recovered_payload = await recover_workspace_contract_payload(
             conversation_id=conversation_id,
-            user_prompt=user_prompt,
-            assistant_content=_verification_turn_message_content(
-                output_parts=output_parts,
-                judgment=None,
-            ),
-            agent_id=verifier_agent.id,
-            stage="verification_judge",
-            metadata={
-                "current_plan_node_id": node_id,
-                "current_attempt_id": attempt_id or "",
-                "linked_workspace_task_id": linked_workspace_task_id or "",
-            },
+            extract_payload=_verification_judgment_from_event,
         )
+        if recovered_payload is not None:
+            diagnostics["recovered_from_events"] = True
+            diagnostics["judgment_submitted"] = True
+            self._last_diagnostics = diagnostics
+            return recovered_payload
         self._last_diagnostics = diagnostics
         return None
 
@@ -238,10 +236,12 @@ class WorkspaceVerifierAgentJudge:
         tenant_id: str,
         project_id: str,
         linked_workspace_task_id: str | None = None,
+        missing_contract_retry_attempts: int = _MISSING_CONTRACT_RETRY_ATTEMPTS,
         turn_runner: WorkspaceVerifierAgentTurnRunner | None = None,
     ) -> None:
         super().__init__()
         self._linked_workspace_task_id = linked_workspace_task_id
+        self._missing_contract_retry_attempts = max(0, missing_contract_retry_attempts)
         self._verifier_agent = build_builtin_workspace_verifier_agent(
             tenant_id=tenant_id,
             project_id=project_id,
@@ -255,17 +255,43 @@ class WorkspaceVerifierAgentJudge:
         self,
         request: WorkspaceVerificationJudgeRequest,
     ) -> WorkspaceVerificationJudgeResult:
+        linked_workspace_task_id = (
+            request.linked_workspace_task_id or self._linked_workspace_task_id
+        )
+        resolved_request = (
+            replace(request, linked_workspace_task_id=linked_workspace_task_id)
+            if linked_workspace_task_id != request.linked_workspace_task_id
+            else request
+        )
+        prompt = _build_agent_user_prompt(resolved_request)
         payload = await self._turn_runner.run_verification_turn(
             verifier_agent=self._verifier_agent,
-            user_prompt=_build_agent_user_prompt(request),
+            user_prompt=prompt,
             workspace_id=request.workspace_id,
             node_id=request.node_id,
             attempt_id=request.attempt_id,
-            linked_workspace_task_id=(
-                request.linked_workspace_task_id or self._linked_workspace_task_id
-            ),
+            linked_workspace_task_id=linked_workspace_task_id,
         )
         parsed = _parse_judge_response({"content": json.dumps(payload or {}, ensure_ascii=False)})
+        retry_index = 0
+        while parsed is None and retry_index < self._missing_contract_retry_attempts:
+            retry_index += 1
+            prompt = _build_agent_contract_retry_prompt(
+                resolved_request,
+                diagnostics=getattr(self._turn_runner, "last_diagnostics", {}),
+                retry_index=retry_index,
+            )
+            payload = await self._turn_runner.run_verification_turn(
+                verifier_agent=self._verifier_agent,
+                user_prompt=prompt,
+                workspace_id=request.workspace_id,
+                node_id=request.node_id,
+                attempt_id=request.attempt_id,
+                linked_workspace_task_id=linked_workspace_task_id,
+            )
+            parsed = _parse_judge_response(
+                {"content": json.dumps(payload or {}, ensure_ascii=False)}
+            )
         if parsed is None:
             diagnostics = getattr(self._turn_runner, "last_diagnostics", {})
             raise ValueError(
@@ -313,6 +339,23 @@ def _build_agent_user_prompt(request: WorkspaceVerificationJudgeRequest) -> str:
         "You are in read-only verification mode. Do not implement, edit files, mutate "
         "workspace state, or finish in prose. Your final action must be exactly one "
         f"{WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME} call."
+    )
+
+
+def _build_agent_contract_retry_prompt(
+    request: WorkspaceVerificationJudgeRequest,
+    *,
+    diagnostics: Mapping[str, Any],
+    retry_index: int,
+) -> str:
+    return (
+        f"Contract retry {retry_index}: the previous verifier turn did not call "
+        f"{WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME}.\n\n"
+        f"Diagnostics from the failed turn:\n{json.dumps(diagnostics, ensure_ascii=False, default=str)}\n\n"
+        "Use the same verification payload below. You may make at most one or two "
+        "read-only checks only if essential. Your next and final action must be exactly "
+        f"one {WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME} call; do not finish in prose.\n\n"
+        f"{_request_payload(request)}"
     )
 
 
@@ -474,18 +517,11 @@ def _request_payload(request: WorkspaceVerificationJudgeRequest) -> str:
 
 
 def _verification_judgment_from_event(event: Mapping[str, Any]) -> dict[str, Any] | None:
-    if event.get("type") != "observe":
-        return None
-    data = event.get("data")
-    if not isinstance(data, Mapping):
-        return None
-    if data.get("tool_name") != WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME:
-        return None
-    observation = data.get("observation") or data.get("result")
-    if not isinstance(observation, Mapping):
-        return None
-    payload = observation.get("verification_judgment")
-    return dict(payload) if isinstance(payload, Mapping) else None
+    return contract_tool_payload_from_event(
+        event,
+        tool_name=WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME,
+        payload_key="verification_judgment",
+    )
 
 
 def _tool_name_from_event(event: Mapping[str, Any]) -> str | None:
@@ -494,45 +530,6 @@ def _tool_name_from_event(event: Mapping[str, Any]) -> str | None:
         return None
     tool_name = data.get("tool_name") or data.get("name")
     return tool_name.strip() if isinstance(tool_name, str) and tool_name.strip() else None
-
-
-def _assistant_text_from_event(
-    event: Mapping[str, Any],
-    *,
-    allow_terminal_snapshot: bool,
-) -> str:
-    data = event.get("data")
-    if not isinstance(data, Mapping):
-        return ""
-    event_type = event.get("type")
-    if event_type == "text_delta":
-        return str(data.get("delta") or "")
-    if not allow_terminal_snapshot:
-        return ""
-    if event_type == "text_end":
-        return str(data.get("full_text") or "")
-    if event_type == "complete":
-        return str(data.get("content") or "")
-    return ""
-
-
-def _verification_turn_message_content(
-    *,
-    output_parts: list[str],
-    judgment: Mapping[str, Any] | None,
-) -> str:
-    text = "".join(output_parts).strip()
-    sections: list[str] = []
-    if text:
-        sections.append(text)
-    if judgment is not None:
-        sections.append(
-            "Submitted verification judgment:\n"
-            + json.dumps(judgment, ensure_ascii=False, indent=2, default=str)
-        )
-    if not sections:
-        sections.append("Verifier turn ended without submitting a verification judgment.")
-    return "\n\n".join(sections)
 
 
 def _parse_judge_response(response: dict[str, Any]) -> WorkspaceVerificationJudgeResult | None:

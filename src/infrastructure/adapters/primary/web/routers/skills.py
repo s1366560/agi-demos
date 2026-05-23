@@ -19,7 +19,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from fastapi import (
@@ -641,7 +641,10 @@ async def _latest_curated_for_skill(db: AsyncSession, skill: Skill) -> CuratedSk
     if source_skill_id:
         stmt = stmt.where(CuratedSkill.source_skill_id == source_skill_id)
     stmt = stmt.order_by(CuratedSkill.created_at.desc())
-    candidates = (await db.execute(refresh_select_statement(stmt))).scalars().all()
+    candidates = cast(
+        list[CuratedSkill],
+        (await db.execute(refresh_select_statement(stmt))).scalars().all(),
+    )
 
     if not source_skill_id:
         candidates = [

@@ -260,7 +260,8 @@ class TestWorkspaceIterationReviewAgentProvider:
             )
         )
 
-        assert len(runner.calls) == 1
+        assert len(runner.calls) == 2
+        assert "Contract retry" in runner.calls[1]["user_prompt"]
         assert verdict.verdict == "needs_human_review"
         assert "did not submit iteration review" in verdict.summary
 
@@ -858,6 +859,7 @@ class TestVerifier:
         assert "Do not propose main-checkout" in prompt
         assert "Do not create next tasks whose only purpose is merging worker commits" in prompt
         assert "environment-configurable" in prompt
+        assert "Keep evidence inspection bounded" in prompt
 
     def test_verification_judge_payload_policy_requires_guidance_evidence(self) -> None:
         payload = json.loads(
@@ -1451,10 +1453,7 @@ class TestVerifier:
         assert spec["judge_verdict"] == "needs_rework"
         assert "drone_docker_build_stage_failed" in spec["failed_criteria"]
         assert spec["feedback_items"][0]["target_layer"] == "worker"
-        assert (
-            spec["feedback_items"][0]["failure_signature"]
-            == "drone-docker-build-stage-failed"
-        )
+        assert spec["feedback_items"][0]["failure_signature"] == "drone-docker-build-stage-failed"
 
     async def test_verifier_accepts_preflight_evidence_with_human_summary_separator(
         self,
@@ -1653,7 +1652,9 @@ class TestVerifier:
 
         assert rep.passed
         clean_result = next(
-            result for result in rep.results if result.criterion.spec["name"] == "clean_worktree_after_commit"
+            result
+            for result in rep.results
+            if result.criterion.spec["name"] == "clean_worktree_after_commit"
         )
         assert "ignored generated artifacts" in clean_result.message
 
@@ -2999,6 +3000,42 @@ class _VerificationJudgeRetryVerifier:
         )
 
 
+class _VerificationJudgeRetryWithGuardFailureVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={"name": "clean_worktree_after_commit"},
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=1.0,
+                    message="uncommitted changes remain after commit_ref: ?? test/",
+                ),
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={
+                            "name": "retryable_infrastructure_failure",
+                            "judge_verdict": "retry_infrastructure",
+                            "failed_criteria": ["workspace_verification_judge"],
+                            "required_next_action": "retry verification judge",
+                            "next_action_kind": "retry_same_node",
+                        },
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.5,
+                    message="judge verdict=retry_infrastructure; retry verification judge",
+                ),
+            ),
+        )
+
+
 class _PipelineRuntimeFailureWithJudgeRetryVerifier:
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
         return VerificationReport(
@@ -3538,9 +3575,7 @@ class _PipelineHumanPublishRequiredVerifier:
                                         "Drone docker deploy pipeline not triggered: worktree "
                                         "commit d9184e2 not yet on main branch."
                                     ),
-                                    "failure_signature": (
-                                        "drone_no_pipeline_for_worktree_commit"
-                                    ),
+                                    "failure_signature": ("drone_no_pipeline_for_worktree_commit"),
                                     "evidence_refs": [
                                         "commit_ref:d9184e2",
                                         "ci_pipeline:missing",
@@ -3555,6 +3590,102 @@ class _PipelineHumanPublishRequiredVerifier:
                     message=(
                         "judge verdict=blocked_human_required; platform harness must publish "
                         "the worktree branch to GitHub main"
+                    ),
+                ),
+            ),
+        )
+
+
+class _PipelineHumanPublishRequiredJudgeOnlyVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={
+                            "name": "workspace_verification_judge",
+                            "judge_verdict": "blocked_human_required",
+                            "failed_criteria": [
+                                (
+                                    "node_description: Sprint 1 feature commits must be "
+                                    "merged to memstack-source-publish/main"
+                                ),
+                                "node_description: trigger a new Drone pipeline build",
+                            ],
+                            "required_next_action": (
+                                "Platform harness must push the worktree branch to "
+                                "memstack-source-publish/main using a GITHUB_TOKEN, then "
+                                "trigger Drone."
+                            ),
+                            "next_action_kind": "human_required",
+                            "feedback_items": [
+                                {
+                                    "target_layer": "planner",
+                                    "feedback_kind": "stale_or_invalid_task_target",
+                                    "severity": "blocking",
+                                    "recommended_action": "revise_plan_node",
+                                    "summary": (
+                                        "Node description requires external GitHub merge and "
+                                        "Drone trigger that cannot be executed in sandbox."
+                                    ),
+                                    "failure_signature": "external_github_merge_not_executed",
+                                    "evidence_refs": ["commit_ref:d9184e2"],
+                                }
+                            ],
+                        },
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.9,
+                    message=(
+                        "judge verdict=blocked_human_required; platform harness must publish "
+                        "the worktree branch and trigger Drone"
+                    ),
+                ),
+            ),
+        )
+
+
+class _PipelineBlockedWorkerReportWithJudgeTimeoutVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={"name": "terminal_worker_report_completed"},
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=1.0,
+                    message=(
+                        "worker report type 'blocked' is not a completion report: "
+                        "Sandbox lacks GITHUB_TOKEN and DRONE_TOKEN required for "
+                        "external GitHub merge and Drone pipeline trigger. All locally "
+                        "verifiable work is complete and committed."
+                    ),
+                ),
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={
+                            "name": "retryable_infrastructure_failure",
+                            "judge_verdict": "retry_infrastructure",
+                            "failed_criteria": ["workspace_verification_judge"],
+                            "next_action_kind": "retry_same_node",
+                        },
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.5,
+                    message=(
+                        "judge verdict=retry_infrastructure; workspace verification "
+                        "judge timed out after 180s"
                     ),
                 ),
             ),
@@ -3692,9 +3823,7 @@ def test_reopen_done_nodes_with_failed_worktree_integration() -> None:
                 "verified_commit_ref": "abc1234",
                 "worktree_integration_attempt_id": "attempt-a",
                 "worktree_integration_status": "failed",
-                "worktree_integration_worktree_path": (
-                    "/workspace/.memstack/worktrees/attempt-a"
-                ),
+                "worktree_integration_worktree_path": ("/workspace/.memstack/worktrees/attempt-a"),
                 "worktree_integration_dirty_signature": None,
                 "worktree_integration_summary": (
                     "Exit code: 128\n"
@@ -4154,14 +4283,11 @@ class TestSupervisorTick:
         assert retried.intent is TaskIntent.IN_PROGRESS
         assert retried.execution is TaskExecution.DISPATCHED
         assert retried.current_attempt_id == "retry-a"
-        assert retried.metadata["terminal_attempt_retry_reason"] == (
-            "worktree_integration_failed"
-        )
+        assert retried.metadata["terminal_attempt_retry_reason"] == ("worktree_integration_failed")
         assert "worktree_integration_status" not in retried.metadata
-        assert [
-            (event_type, node_id)
-            for event_type, node_id, _payload in events
-        ] == [("worktree_integration_failed_done_node_reopened", "a")]
+        assert [(event_type, node_id) for event_type, node_id, _payload in events] == [
+            ("worktree_integration_failed_done_node_reopened", "a")
+        ]
 
     async def test_tick_preserves_repair_dependency_when_phase_barriers_repaired(self) -> None:
         repo = InMemoryPlanRepository()
@@ -4278,6 +4404,7 @@ class TestSupervisorTick:
         repo = InMemoryPlanRepository()
         plan = _plan_with_two_tasks()
         a = plan.nodes[PlanNodeId("a")]
+        b = plan.nodes[PlanNodeId("b")]
         plan.replace_node(
             replace(
                 a,
@@ -4298,9 +4425,21 @@ class TestSupervisorTick:
                 },
             )
         )
+        plan.replace_node(
+            replace(
+                b,
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-b",
+                    sequence=2,
+                    title="task b",
+                    base_ref="HEAD",
+                ),
+            )
+        )
         await repo.save(plan)
 
         dispatched: list[str] = []
+        dispatched_base_refs: list[str | None] = []
         events: list[tuple[str, str, dict[str, Any]]] = []
 
         async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
@@ -4314,6 +4453,9 @@ class TestSupervisorTick:
 
         async def dispatcher(_wid: str, _alloc: Any, node: PlanNode) -> str:
             dispatched.append(node.id)
+            dispatched_base_refs.append(
+                node.feature_checkpoint.base_ref if node.feature_checkpoint else None
+            )
             return f"attempt-{node.id}"
 
         async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
@@ -4344,10 +4486,13 @@ class TestSupervisorTick:
 
         assert report.allocations_made == 1
         assert dispatched == ["b"]
+        assert dispatched_base_refs == ["abc1234deadbeef"]
         reloaded = await repo.get_by_workspace("ws-1")
         assert reloaded is not None
         dispatched_node = reloaded.nodes[PlanNodeId("b")]
         assert dispatched_node.current_attempt_id == "attempt-b"
+        assert dispatched_node.feature_checkpoint is not None
+        assert dispatched_node.feature_checkpoint.base_ref == "abc1234deadbeef"
         for stale_key in (
             "dependency_invalidated_at",
             "dependency_invalidated_missing_ids",
@@ -4612,9 +4757,7 @@ class TestSupervisorTick:
         assert downstream.intent is TaskIntent.IN_PROGRESS
         assert downstream.execution is TaskExecution.RUNNING
         assert downstream.current_attempt_id == "attempt-b"
-        assert [
-            event for event in events if event[0] == "verification_feedback_disposition"
-        ] == [
+        assert [event for event in events if event[0] == "verification_feedback_disposition"] == [
             (
                 "verification_feedback_disposition",
                 "a",
@@ -4965,9 +5108,9 @@ class TestSupervisorTick:
         assert retry_node.metadata["retry_count"] == 1
         assert retry_node.metadata["retry_not_before"].endswith("Z")
         assert retry_node.metadata["last_verification_attempt_id"] == "attempt-a"
-        assert "retryable infrastructure failure" in retry_node.metadata[
-            "last_verification_summary"
-        ]
+        assert (
+            "retryable infrastructure failure" in retry_node.metadata["last_verification_summary"]
+        )
         assert retry_node.metadata["last_verification_passed"] is False
         retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
         assert len(retry_events) == 1
@@ -5038,9 +5181,82 @@ class TestSupervisorTick:
         assert retry_node.metadata["retry_count"] == 1
         assert retry_node.metadata["retry_not_before"].endswith("Z")
         assert retry_node.metadata["last_verification_judge_verdict"] == "retry_infrastructure"
+        assert retry_node.metadata["retry_verification_only"] is True
         retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
         assert len(retry_events) == 1
         assert retry_events[0][2]["retry_verification_only"] is True
+
+    async def test_verification_judge_retry_with_guard_failure_redispatches_node(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        from dataclasses import replace
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, alloc, node) -> str:  # type: ignore[no-untyped-def]
+            raise AssertionError("retry backoff should not redispatch in the same tick")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_VerificationJudgeRetryWithGuardFailureVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.allocations_made == 0
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        retry_node = reloaded.nodes[PlanNodeId("a")]
+        assert retry_node.intent is TaskIntent.TODO
+        assert retry_node.execution is TaskExecution.IDLE
+        assert retry_node.current_attempt_id is None
+        assert retry_node.metadata["retry_count"] == 1
+        assert retry_node.metadata["retry_not_before"].endswith("Z")
+        assert retry_node.metadata["last_verification_judge_verdict"] == "retry_infrastructure"
+        assert "retry_verification_only" not in retry_node.metadata
+        retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
+        assert len(retry_events) == 1
+        assert "retry_verification_only" not in retry_events[0][2]
 
     async def test_pipeline_runtime_failure_with_judge_retry_requests_pipeline(self) -> None:
         repo = InMemoryPlanRepository()
@@ -6778,6 +6994,143 @@ class TestSupervisorTick:
         assert node.execution is TaskExecution.IDLE
         assert node.metadata["pipeline_gate_status"] == "requested"
         assert node.metadata["verified_commit_ref"] == "d9184e2"
+
+    async def test_pipeline_gate_routes_judge_only_human_publish_gap_to_pipeline(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={
+                    "expected_artifacts": [
+                        "SANDBOX-PREVIEW-EVIDENCE.md updated",
+                        "new pipeline evidence",
+                    ],
+                },
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("judge-only publish gap should request pipeline, not a worker")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+                artifacts={"candidate_artifacts": ["commit_ref:d9184e2"]},
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_PipelineHumanPublishRequiredJudgeOnlyVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert any(event[0] == "pipeline_run_requested" for event in events)
+        assert not any(event[0] == "worker_launch" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.intent is TaskIntent.IN_PROGRESS
+        assert node.execution is TaskExecution.IDLE
+        assert node.metadata["pipeline_gate_status"] == "requested"
+        assert node.metadata["pipeline_required"] is True
+        assert node.metadata["verified_commit_ref"] == "d9184e2"
+
+    async def test_pipeline_gate_routes_blocked_publish_report_timeout_to_pipeline(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("blocked publish report should request pipeline, not a worker")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+                artifacts={"candidate_artifacts": ["commit_ref:2356af3"]},
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_PipelineBlockedWorkerReportWithJudgeTimeoutVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert any(event[0] == "pipeline_run_requested" for event in events)
+        assert not any(event[0] == "verification_retry_scheduled" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.intent is TaskIntent.IN_PROGRESS
+        assert node.execution is TaskExecution.IDLE
+        assert node.metadata["pipeline_gate_status"] == "requested"
+        assert node.metadata["verified_commit_ref"] == "2356af3"
 
     async def test_pipeline_gate_routes_embedded_ci_pipeline_marker_to_pipeline(self) -> None:
         repo = InMemoryPlanRepository()

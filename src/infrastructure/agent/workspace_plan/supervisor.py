@@ -543,6 +543,21 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                             detail=report.summary(),
                         ),
                     )
+                elif _verification_judge_retry_report_has_actionable_failures(report):
+                    retry_node = _node_with_retry_backoff(node, report)
+                    plan.replace_node(retry_node)
+                    await self._emit_event(
+                        errors,
+                        workspace_id,
+                        retry_node,
+                        "verification_retry_scheduled",
+                        {
+                            "attempt_id": report.attempt_id,
+                            "summary": report.summary(),
+                            "retry_count": retry_node.metadata.get("retry_count"),
+                            "retry_not_before": retry_node.metadata.get("retry_not_before"),
+                        },
+                    )
                 elif report.hard_fail:
                     failed_node = _node_with_verification_evidence(
                         node,
@@ -731,21 +746,22 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 alloc_node = plan.nodes.get(_pid(alloc.node_id))
                 if alloc_node is None:
                     continue
+                dispatch_node = _node_with_dependency_base_ref(plan, alloc_node)
                 try:
-                    attempt_id = await self._dispatcher(workspace_id, alloc, alloc_node)
+                    attempt_id = await self._dispatcher(workspace_id, alloc, dispatch_node)
                 except Exception as exc:
                     errors.append(f"dispatch({alloc_node.id}): {exc}")
                     continue
                 if not attempt_id:
                     continue
                 updated = _node_dispatched_with_fresh_attempt(
-                    alloc_node,
+                    dispatch_node,
                     assignee_agent_id=alloc.agent_id,
                     attempt_id=attempt_id,
                 )
                 try:
-                    transition_intent(alloc_node.intent, TaskIntent.IN_PROGRESS)
-                    transition_execution(alloc_node.execution, TaskExecution.DISPATCHED)
+                    transition_intent(dispatch_node.intent, TaskIntent.IN_PROGRESS)
+                    transition_execution(dispatch_node.execution, TaskExecution.DISPATCHED)
                 except Exception:
                     # If the node already moved (e.g. concurrent worker_report),
                     # skip. Single-writer means this is rare but possible when
@@ -1327,6 +1343,7 @@ def _node_protocol_evidence_refs(node: PlanNode) -> list[str]:
         "verification_evidence_refs",
         "candidate_verifications",
         "last_worker_report_verifications",
+        "retry_verification_only",
         "execution_verifications",
     ):
         refs.extend(_string_list(metadata.get(key)))
@@ -1785,8 +1802,7 @@ def _reopen_done_nodes_with_failed_worktree_integration(plan: Plan) -> list[Plan
             {
                 "last_verification_passed": False,
                 "last_verification_summary": (
-                    "accepted worktree integration failed after verification: "
-                    f"{previous_summary}"
+                    f"accepted worktree integration failed after verification: {previous_summary}"
                 ),
                 "terminal_attempt_retry_reason": "worktree_integration_failed",
                 "worktree_integration_failed_done_reopened_at": now.isoformat().replace(
@@ -1858,12 +1874,59 @@ def _dependency_commit_needs_integration(node: PlanNode) -> bool:
         and node.metadata.get("terminal_attempt_status") == "accepted"
         and node.metadata.get("worktree_integration_dirty_signature") is None
         and "commit_ref not found in attempt worktree"
-        in _metadata_text(node.metadata.get("worktree_integration_summary")).lower()
+        in (_metadata_text(node.metadata.get("worktree_integration_summary")) or "").lower()
     ):
         return False
     if _node_pipeline_published_commit(node, commit_ref=commit_ref):
         return False
     return status not in _SUCCESSFUL_WORKTREE_INTEGRATION_STATUSES
+
+
+def _node_with_dependency_base_ref(plan: Plan, node: PlanNode) -> PlanNode:
+    if node.feature_checkpoint is None or not node.depends_on:
+        return node
+    base_ref = _dependency_base_ref_for_dispatch(plan, node)
+    if not base_ref:
+        return node
+    feature = node.feature_checkpoint
+    if _commit_refs_match(feature.base_ref, base_ref):
+        return node
+    return replace(
+        node,
+        feature_checkpoint=replace(feature, base_ref=base_ref),
+        updated_at=datetime.now(UTC),
+    )
+
+
+def _dependency_base_ref_for_dispatch(plan: Plan, node: PlanNode) -> str | None:
+    candidates: list[tuple[datetime, str, str]] = []
+    for dep_id in sorted(node.depends_on, key=lambda item: item.value):
+        dependency = plan.nodes.get(dep_id)
+        if dependency is None or dependency.intent is not TaskIntent.DONE:
+            continue
+        commit_ref = _dependency_dispatch_commit_ref(dependency)
+        if not commit_ref:
+            continue
+        timestamp = dependency.completed_at or dependency.updated_at or dependency.created_at
+        candidates.append((timestamp, dep_id.value, commit_ref))
+    if not candidates:
+        return None
+    return max(candidates)[2]
+
+
+def _dependency_dispatch_commit_ref(node: PlanNode) -> str | None:
+    metadata = dict(node.metadata or {})
+    for key in (
+        "source_publish_commit_ref",
+        "worktree_integration_commit_ref",
+        "verified_commit_ref",
+    ):
+        commit_ref = _metadata_text(metadata.get(key))
+        if commit_ref:
+            return commit_ref
+    if node.feature_checkpoint is not None:
+        return _metadata_text(node.feature_checkpoint.commit_ref)
+    return None
 
 
 def _node_pipeline_published_commit(node: PlanNode, *, commit_ref: str) -> bool:
@@ -2082,9 +2145,37 @@ def _is_retryable_infrastructure_report(report: VerificationReport) -> bool:
 
 
 def _is_verification_judge_retry_report(report: VerificationReport) -> bool:
-    for result in report.results:
-        if not result.criterion.required or result.passed:
-            continue
+    failed_required = [
+        result for result in report.results if result.criterion.required and not result.passed
+    ]
+    if len(failed_required) != 1:
+        return False
+    result = failed_required[0]
+    if result.criterion.spec.get("name") != _RETRYABLE_INFRASTRUCTURE_CRITERION:
+        return False
+    if result.criterion.spec.get("judge_verdict") != "retry_infrastructure":
+        return False
+    next_action_kind = str(result.criterion.spec.get("next_action_kind") or "")
+    failed = set(_string_list(result.criterion.spec.get("failed_criteria")))
+    return next_action_kind == "retry_same_node" and "workspace_verification_judge" in failed
+
+
+def _verification_judge_retry_report_has_actionable_failures(
+    report: VerificationReport,
+) -> bool:
+    failed_required = [
+        result for result in report.results if result.criterion.required and not result.passed
+    ]
+    if len(failed_required) <= 1:
+        return False
+    return _has_verification_judge_retry_failure(failed_required) and any(
+        result.criterion.spec.get("name") != _RETRYABLE_INFRASTRUCTURE_CRITERION
+        for result in failed_required
+    )
+
+
+def _has_verification_judge_retry_failure(results: list[CriterionResult]) -> bool:
+    for result in results:
         if result.criterion.spec.get("name") != _RETRYABLE_INFRASTRUCTURE_CRITERION:
             continue
         if result.criterion.spec.get("judge_verdict") != "retry_infrastructure":
@@ -2367,22 +2458,31 @@ def _should_request_pipeline_from_report(node: PlanNode, report: VerificationRep
     pipeline_failures = [
         result for result in failed_required if result.criterion.kind in _PIPELINE_CRITERION_KINDS
     ]
-    if not pipeline_failures:
-        return False
     non_pipeline_failures = [
         result
         for result in failed_required
         if result.criterion.kind not in _PIPELINE_CRITERION_KINDS
     ]
+    if not pipeline_failures:
+        has_pipeline_bridge_failure = any(
+            _is_pipeline_only_judge_failure(result)
+            or _is_pipeline_trigger_infrastructure_failure(result)
+            or _is_pipeline_blocked_worker_report_failure(result)
+            for result in non_pipeline_failures
+        )
+        return has_pipeline_bridge_failure and all(
+            _is_pipeline_only_judge_failure(result)
+            or _is_pipeline_trigger_infrastructure_failure(result)
+            or _is_pipeline_blocked_worker_report_failure(result)
+            or _is_verification_judge_inconclusive_failure(result)
+            for result in non_pipeline_failures
+        )
     pipeline_missing_evidence = _pipeline_failures_are_missing_evidence(pipeline_failures)
     pipeline_runtime_retryable = _pipeline_failures_are_runtime_retryable(pipeline_failures)
     pipeline_can_request_run = pipeline_missing_evidence or pipeline_runtime_retryable
     return all(
         _is_pipeline_only_judge_failure(result)
-        or (
-            pipeline_missing_evidence
-            and _is_pipeline_missing_evidence_judge_failure(result)
-        )
+        or (pipeline_missing_evidence and _is_pipeline_missing_evidence_judge_failure(result))
         or _is_pipeline_trigger_infrastructure_failure(result)
         or (pipeline_can_request_run and _is_verification_judge_inconclusive_failure(result))
         for result in non_pipeline_failures
@@ -2477,10 +2577,12 @@ def _is_pipeline_only_judge_failure(result: CriterionResult) -> bool:
     )
     if not feedback_signatures:
         return failed_is_pipeline_only
-    feedback_signatures_match = feedback_items_are_pipeline_evidence_gaps or all(
+    feedback_signatures_match = all(
         _is_pipeline_failure_marker(item) for item in feedback_signatures
     )
-    return feedback_signatures_match and (not failed or failed_is_pipeline_only)
+    return (feedback_items_are_pipeline_evidence_gaps or feedback_signatures_match) and (
+        feedback_items_are_pipeline_evidence_gaps or not failed or failed_is_pipeline_only
+    )
 
 
 def _is_pipeline_missing_evidence_judge_failure(result: CriterionResult) -> bool:
@@ -2570,7 +2672,8 @@ def _is_pipeline_trigger_infrastructure_failure(result: CriterionResult) -> bool
         spec.get("summary"),
         spec.get("rationale"),
     ]
-    markers.extend(_string_list(spec.get("failed_criteria")))
+    strong_markers = _string_list(spec.get("failed_criteria"))
+    markers.extend(strong_markers)
 
     feedback_items = spec.get("feedback_items")
     if isinstance(feedback_items, list):
@@ -2587,11 +2690,47 @@ def _is_pipeline_trigger_infrastructure_failure(result: CriterionResult) -> bool
                 ]
             )
             markers.extend(_string_list(item.get("evidence_refs")))
+            strong_markers.extend(
+                str(value)
+                for value in (
+                    item.get("feedback_kind"),
+                    item.get("recommended_action"),
+                    item.get("failure_signature"),
+                )
+                if value
+            )
+            strong_markers.extend(_string_list(item.get("evidence_refs")))
 
     for evidence in result.evidence:
         markers.extend([evidence.kind, evidence.ref, evidence.note])
+        strong_markers.extend([evidence.kind, evidence.ref])
 
-    return any(_is_pipeline_failure_marker(marker) for marker in markers)
+    return any(_is_pipeline_failure_marker(marker) for marker in strong_markers) and any(
+        _is_pipeline_failure_marker(marker) for marker in markers
+    )
+
+
+def _is_pipeline_blocked_worker_report_failure(result: CriterionResult) -> bool:
+    spec = result.criterion.spec
+    if result.criterion.kind is not CriterionKind.CUSTOM:
+        return False
+    if spec.get("name") != "terminal_worker_report_completed":
+        return False
+    text = str(result.message or "").strip().lower()
+    if "worker report type 'blocked'" not in text and 'worker report type "blocked"' not in text:
+        return False
+    if not any(
+        token in text
+        for token in (
+            "github_token",
+            "drone_token",
+            "platform harness",
+            "external github merge",
+            "memstack-source-publish",
+        )
+    ):
+        return False
+    return _is_pipeline_failure_marker(text)
 
 
 def _is_pipeline_failure_marker(value: object) -> bool:
@@ -2606,6 +2745,10 @@ def _is_pipeline_failure_marker(value: object) -> bool:
         or marker.startswith("missing_drone_pipeline")
         or marker.startswith("harness_native_cicd")
         or marker.startswith("harness-native-cicd")
+        or "source_publish" in marker
+        or "source publish" in marker
+        or "source-publish" in marker
+        or "memstack-source-publish" in marker
         or "ci_pipeline" in marker
         or "ci-pipeline" in marker
         or "ci pipeline" in marker
@@ -2613,6 +2756,11 @@ def _is_pipeline_failure_marker(value: object) -> bool:
         or "drone" in marker
         or "harness-native ci" in marker
         or "harness-native-ci" in marker
+        or (
+            "github" in marker
+            and "main" in marker
+            and any(token in marker for token in ("merge", "merged", "publish", "push"))
+        )
     )
 
 
@@ -2723,6 +2871,7 @@ def _node_with_verification_retry_backoff(
     metadata["retry_count"] = retry_count
     metadata["retry_not_before"] = retry_at.isoformat().replace("+00:00", "Z")
     metadata["retry_last_reason"] = report.summary()
+    metadata["retry_verification_only"] = True
     return replace(
         evidenced,
         intent=TaskIntent.IN_PROGRESS,
@@ -2889,6 +3038,7 @@ def _node_with_verification_evidence(
     metadata["last_verification_passed"] = report.passed
     metadata["last_verification_hard_fail"] = report.hard_fail
     metadata["last_verification_ran_at"] = report.ran_at.isoformat().replace("+00:00", "Z")
+    metadata.pop("retry_verification_only", None)
     metadata.update(_judge_result_metadata(report))
     if report.attempt_id:
         metadata["last_verification_attempt_id"] = report.attempt_id

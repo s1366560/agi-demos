@@ -7,7 +7,7 @@
  * - Draggable resize support
  */
 
-import { useCallback, useEffect, memo, useMemo, useState } from 'react';
+import { useCallback, useEffect, memo, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -26,10 +26,8 @@ import { MultiAgentPanel } from './multiAgent/MultiAgentPanel';
 import { ResizeHandle } from './RightPanelComponents';
 import { TaskList } from './TaskList';
 import { TaskLanePanel } from './tasks/TaskLanePanel';
-import {
-  buildWorkspaceTaskPlanRows,
-  WorkspaceTaskPlanPanel,
-} from './workspace/WorkspaceTaskPlanPanel';
+import { WorkspaceTaskPlanPanel } from './workspace/WorkspaceTaskPlanPanel';
+import { buildWorkspaceTaskPlanRows } from './workspace/WorkspaceTaskPlanPanelModel';
 
 import type { WorkspacePlanSnapshot, WorkspaceTask } from '@/types/workspace';
 
@@ -302,7 +300,11 @@ export const RightPanel = memo<RightPanelProps>(
     const [workspaceLoading, setWorkspaceLoading] = useState(false);
     const [workspaceError, setWorkspaceError] = useState<string | null>(null);
     const [workspaceDataId, setWorkspaceDataId] = useState<string | null>(null);
-    const activeWorkspaceTasks = workspaceDataId === workspaceId ? workspaceTasks : [];
+    const workspaceRequestSeqRef = useRef(0);
+    const activeWorkspaceTasks = useMemo(
+      () => (workspaceDataId === workspaceId ? workspaceTasks : []),
+      [workspaceDataId, workspaceId, workspaceTasks]
+    );
     const activeWorkspaceSnapshot = workspaceDataId === workspaceId ? workspaceSnapshot : null;
     const activeWorkspaceLoading =
       isWorkspaceActive && (workspaceLoading || workspaceDataId !== workspaceId);
@@ -342,10 +344,10 @@ export const RightPanel = memo<RightPanelProps>(
     useEffect(() => {
       if (!workspaceId) return;
 
-      let cancelled = false;
+      const requestSeq = workspaceRequestSeqRef.current + 1;
+      workspaceRequestSeqRef.current = requestSeq;
 
       void Promise.resolve().then(async () => {
-        if (cancelled) return;
         setWorkspaceLoading(true);
         setWorkspaceError(null);
 
@@ -354,7 +356,7 @@ export const RightPanel = memo<RightPanelProps>(
           workspacePlanService.getSnapshot(workspaceId, { outboxLimit: 8, eventLimit: 20 }),
         ]);
 
-        if (cancelled) return;
+        if (workspaceRequestSeqRef.current !== requestSeq) return;
 
         setWorkspaceDataId(workspaceId);
         if (tasksResult.status === 'fulfilled') {
@@ -378,7 +380,7 @@ export const RightPanel = memo<RightPanelProps>(
       });
 
       return () => {
-        cancelled = true;
+        workspaceRequestSeqRef.current += 1;
       };
     }, [workspaceId]);
 

@@ -284,7 +284,7 @@ async def _workspace_projection_conversation(
             select(DBConversation).where(DBConversation.id == conversation_id)
         )
     )
-    conversation = result.scalar_one_or_none()
+    conversation = cast(DBConversation | None, result.scalar_one_or_none())
     if conversation is None:
         return None
     meta = _mapping_or_empty(conversation.meta)
@@ -310,7 +310,7 @@ async def _workspace_projection_node(
                 .limit(1)
             )
         )
-        node = result.scalar_one_or_none()
+        node = cast(PlanNodeModel | None, result.scalar_one_or_none())
         if node is not None:
             return node
     result = await session.execute(
@@ -321,7 +321,7 @@ async def _workspace_projection_node(
             ).limit(1)
         )
     )
-    return result.scalar_one_or_none()
+    return cast(PlanNodeModel | None, result.scalar_one_or_none())
 
 
 def _workspace_projection_actor_id(

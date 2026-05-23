@@ -95,6 +95,7 @@ class TestReActAgentRuntimeProfile:
             "workspace_report_blocked",
             "workspace_report_progress",
         }.issubset(workspace_profile.allow_tools)
+        assert "workspace_submit_planning_contract" not in workspace_profile.allow_tools
         assert "plugin_tool_exec" in workspace_profile.deny_tools
 
         tools = [

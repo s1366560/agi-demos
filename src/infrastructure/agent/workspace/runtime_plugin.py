@@ -117,9 +117,18 @@ def _build_workspace_task_harness_skills(
     ]
 
 
-def _is_workspace_runtime(payload: Mapping[str, Any]) -> bool:
-    """Backward-compat wrapper around :func:`is_workspace_conversation`."""
-    return is_workspace_conversation(payload)
+def _workspace_session_role(payload: Mapping[str, Any]) -> str:
+    runtime_context = payload.get("runtime_context")
+    if isinstance(runtime_context, Mapping):
+        role = runtime_context.get(WORKSPACE_SESSION_ROLE_KEY)
+        if isinstance(role, str):
+            return role
+    role = payload.get(WORKSPACE_SESSION_ROLE_KEY)
+    return role if isinstance(role, str) else ""
+
+
+def _is_workspace_worker_runtime(payload: Mapping[str, Any]) -> bool:
+    return _workspace_session_role(payload) == WORKSPACE_ROLE_WORKER
 
 
 def _append_instruction(
@@ -137,14 +146,10 @@ def _append_instruction(
 
 
 def _on_session_start(payload: Mapping[str, Any]) -> dict[str, Any]:
-    if not _is_workspace_runtime(payload):
+    if not is_workspace_conversation(payload):
         return dict(payload)
     updated = _append_instruction(payload, "session_instructions", _SESSION_INSTRUCTION)
-    runtime_context = payload.get("runtime_context")
-    if (
-        isinstance(runtime_context, Mapping)
-        and runtime_context.get(WORKSPACE_SESSION_ROLE_KEY) == WORKSPACE_ROLE_WORKER
-    ):
+    if _is_workspace_worker_runtime(payload):
         updated = _append_instruction(
             updated,
             "session_instructions",
@@ -154,13 +159,13 @@ def _on_session_start(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _before_response(payload: Mapping[str, Any]) -> dict[str, Any]:
-    if not _is_workspace_runtime(payload):
+    if not is_workspace_conversation(payload) or not _is_workspace_worker_runtime(payload):
         return dict(payload)
     return _append_instruction(payload, "response_instructions", _RESPONSE_INSTRUCTION)
 
 
 def _after_tool_execution(payload: Mapping[str, Any]) -> dict[str, Any]:
-    if not _is_workspace_runtime(payload):
+    if not is_workspace_conversation(payload) or not _is_workspace_worker_runtime(payload):
         return dict(payload)
     tool_name = str(payload.get("tool_name", "")).strip()
     if not tool_name:

@@ -9,6 +9,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy.orm.exc import StaleDataError
 
 from src.domain.model.workspace.wtp_envelope import WtpEnvelope, WtpVerb
 from src.infrastructure.agent.workspace import workspace_supervisor as sup_mod
@@ -280,6 +281,61 @@ class TestSupervisorDispatch:
         }
         assert node.metadata_json["progress_events"][-1]["summary"] == "halfway"
         assert fake_session.added[0].event_type == "worker_progress"
+
+    async def test_progress_verb_does_not_fallback_for_stale_attempt(self) -> None:
+        latest_node = SimpleNamespace(
+            id="node-latest",
+            plan_id="plan-1",
+            workspace_task_id="task-1",
+            current_attempt_id="attempt-2",
+            progress={"percent": 0, "confidence": 0.7, "note": ""},
+            metadata_json={},
+            updated_at=None,
+            created_at=None,
+        )
+
+        class NoAttemptMatchSession(_FakeSession):
+            async def execute(self, _stmt: Any) -> _FakeResult:
+                return _FakeResult(None)
+
+        fake_session = NoAttemptMatchSession(latest_node)
+
+        def fake_session_factory() -> NoAttemptMatchSession:
+            return fake_session
+
+        supervisor = WorkspaceSupervisor(None)
+
+        with patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            new=fake_session_factory,
+        ):
+            await supervisor._apply_progress(_progress_envelope())
+
+        assert fake_session.committed is False
+        assert latest_node.progress == {"percent": 0, "confidence": 0.7, "note": ""}
+        assert latest_node.metadata_json == {}
+
+    async def test_progress_verb_retries_deadlock_once(self) -> None:
+        supervisor = WorkspaceSupervisor(None)
+        persist = AsyncMock(side_effect=[RuntimeError("deadlock detected"), None])
+        supervisor._persist_progress_once = persist  # type: ignore[method-assign]
+
+        with patch.object(sup_mod.asyncio, "sleep", new=AsyncMock()) as sleep_mock:
+            await supervisor._apply_progress(_progress_envelope())
+
+        assert persist.await_count == 2
+        sleep_mock.assert_awaited_once()
+
+    async def test_progress_verb_retries_stale_node_once(self) -> None:
+        supervisor = WorkspaceSupervisor(None)
+        persist = AsyncMock(side_effect=[StaleDataError("row was replaced"), None])
+        supervisor._persist_progress_once = persist  # type: ignore[method-assign]
+
+        with patch.object(sup_mod.asyncio, "sleep", new=AsyncMock()) as sleep_mock:
+            await supervisor._apply_progress(_progress_envelope())
+
+        assert persist.await_count == 2
+        sleep_mock.assert_awaited_once()
 
     async def test_unparseable_entry_is_skipped(self) -> None:
         redis = _FakeRedis()

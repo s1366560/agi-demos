@@ -818,7 +818,6 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
             "workspace_submit_planning_contract",
             "workspace_submit_verification_judgment",
             "workspace_submit_iteration_review",
-            "workspace_submit_agent_decision",
         )
         for name in agent_tool_names:
             if name in registry:
@@ -834,10 +833,8 @@ def _add_workspace_planning_contract_tool(tools: dict[str, Any]) -> None:
     try:
         from src.infrastructure.agent.tools.define import get_registered_tools
         from src.infrastructure.agent.tools.workspace_plan_contract_tools import (
-            WORKSPACE_SUBMIT_AGENT_DECISION_TOOL_NAME,
             WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME,
             WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME,
-            workspace_submit_agent_decision_tool,
             workspace_submit_iteration_review_tool,
             workspace_submit_verification_judgment_tool,
         )
@@ -849,12 +846,10 @@ def _add_workspace_planning_contract_tool(tools: dict[str, Any]) -> None:
         _ = workspace_submit_planning_contract_tool
         _ = workspace_submit_verification_judgment_tool
         _ = workspace_submit_iteration_review_tool
-        _ = workspace_submit_agent_decision_tool
         fallback_tools = {
             WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME: workspace_submit_planning_contract_tool,
             WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME: workspace_submit_verification_judgment_tool,
             WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME: workspace_submit_iteration_review_tool,
-            WORKSPACE_SUBMIT_AGENT_DECISION_TOOL_NAME: workspace_submit_agent_decision_tool,
         }
         registry = get_registered_tools()
         for tool_name, fallback_tool in fallback_tools.items():

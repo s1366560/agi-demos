@@ -20,6 +20,8 @@ from src.infrastructure.agent.processor.processor import (
     SessionProcessor,
 )
 from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_CONTRACT,
+    WORKSPACE_SESSION_ROLE_KEY,
     WORKSPACE_TOOL_MODE_KEY,
     WORKSPACE_TOOL_MODE_TASK_LEDGER_ONLY,
 )
@@ -796,6 +798,43 @@ class TestEvaluateNoToolResultDelegation:
         )
         assert proc._last_process_result == ProcessorResult.STOP
 
+    @pytest.mark.asyncio
+    async def test_workspace_contract_text_only_turn_requires_submit_tool(self) -> None:
+        proc = self._build_processor_for_eval("Verification complete.")
+        proc.config.runtime_context = {
+            WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_CONTRACT,
+        }
+
+        events = [event async for event in proc._evaluate_no_tool_result("session-1", [])]
+
+        assert any(
+            isinstance(event, AgentStatusEvent)
+            and event.status == "workspace_contract_requires_submit_tool"
+            for event in events
+        )
+        assert proc._last_process_result == ProcessorResult.CONTINUE
+        assert (
+            SessionProcessor._WORKSPACE_CONTRACT_TOOL_REQUIRED_HINT
+            in proc._response_instructions
+        )
+
+    @pytest.mark.asyncio
+    async def test_workspace_contract_text_only_turn_stops_after_retry_budget(self) -> None:
+        proc = self._build_processor_for_eval("Verification complete.")
+        proc.config.runtime_context = {
+            WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_CONTRACT,
+        }
+        proc.config.max_no_progress_steps = 1
+
+        events = [event async for event in proc._evaluate_no_tool_result("session-1", [])]
+
+        assert any(
+            isinstance(event, AgentErrorEvent)
+            and event.code == "WORKSPACE_CONTRACT_TOOL_REQUIRED"
+            for event in events
+        )
+        assert proc._last_process_result == ProcessorResult.STOP
+
     def test_act_event_clears_tool_reminder_even_on_non_continue_result(self) -> None:
         proc = self._build_processor_for_eval("Need to inspect more state before finishing.")
         proc._response_instructions = [SessionProcessor._TOOL_USAGE_REMINDER, "keep me"]
@@ -831,6 +870,59 @@ class TestEvaluateNoToolResultDelegation:
         assert result == ProcessorResult.COMPLETE
         assert had_tool_calls is True
         assert proc._pending_completion_status == "goal_achieved:workspace_terminal_report"
+
+    def test_successful_workspace_contract_submission_completes_loop(self) -> None:
+        proc = self._build_processor_for_eval("Verification submitted.")
+
+        result, had_tool_calls = proc._classify_step_event(
+            AgentObserveEvent(
+                tool_name="workspace_submit_verification_judgment",
+                result=json.dumps({"captured": True, "verdict": "accepted"}),
+            ),
+            ProcessorResult.CONTINUE,
+            True,
+        )
+
+        assert result == ProcessorResult.COMPLETE
+        assert had_tool_calls is True
+        assert proc._pending_completion_status == "goal_achieved:workspace_contract_submitted"
+
+    def test_successful_workspace_contract_metadata_completes_loop(self) -> None:
+        proc = self._build_processor_for_eval("Verification submitted.")
+
+        result, had_tool_calls = proc._classify_step_event(
+            AgentObserveEvent(
+                tool_name="workspace_submit_verification_judgment",
+                result={
+                    "verification_judgment": {
+                        "verdict": "accepted",
+                        "rationale": "all evidence passed",
+                    }
+                },
+            ),
+            ProcessorResult.CONTINUE,
+            True,
+        )
+
+        assert result == ProcessorResult.COMPLETE
+        assert had_tool_calls is True
+        assert proc._pending_completion_status == "goal_achieved:workspace_contract_submitted"
+
+    def test_failed_workspace_contract_submission_does_not_complete_loop(self) -> None:
+        proc = self._build_processor_for_eval("Verification denied.")
+
+        result, had_tool_calls = proc._classify_step_event(
+            AgentObserveEvent(
+                tool_name="workspace_submit_verification_judgment",
+                result=json.dumps({"error": "invalid verification verdict"}),
+            ),
+            ProcessorResult.CONTINUE,
+            True,
+        )
+
+        assert result == ProcessorResult.CONTINUE
+        assert had_tool_calls is True
+        assert proc._pending_completion_status is None
 
     def test_failed_workspace_terminal_report_does_not_complete_loop(self) -> None:
         proc = self._build_processor_for_eval("Report failed.")

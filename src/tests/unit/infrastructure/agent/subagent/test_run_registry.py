@@ -488,8 +488,9 @@ class TestSubAgentRunRegistry:
 
         assert registry._lock_path == sqlite_path.with_suffix(".sqlite3.lock")
 
-    def test_postgres_repository_wiring_uses_shared_state(self, monkeypatch):
+    def test_postgres_repository_wiring_uses_shared_state(self, monkeypatch, tmp_path):
         shared_store = {}
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         class _FakePostgresRepository:
             def __init__(self, postgres_dsn: str) -> None:
@@ -532,7 +533,9 @@ class TestSubAgentRunRegistry:
         assert loaded.status == SubAgentRunStatus.COMPLETED
         assert loaded.summary == "done"
 
-    def test_postgres_repository_sync_configures_lock_path(self, monkeypatch):
+    def test_postgres_repository_sync_configures_lock_path(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
         class _FakePostgresRepository:
             def __init__(self, postgres_dsn: str) -> None:
                 self._postgres_dsn = postgres_dsn
@@ -559,7 +562,8 @@ class TestSubAgentRunRegistry:
 
         assert registry._lock_path is not None
         assert (
-            registry._lock_path.parent == Path.home() / ".cache" / "memstack" / "subagent-run-locks"
+            registry._lock_path.parent
+            == tmp_path / ".cache" / "memstack" / "subagent-run-locks"
         )
         assert registry._lock_path.name.startswith("postgres-")
 

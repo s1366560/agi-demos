@@ -211,7 +211,9 @@ class TestProgress:
 
     async def test_system_actor_progress_uses_local_fan_in(self, ctx, mock_orchestrator):
         with patch.object(
-            wtp_tools, "_publish_envelope_for_supervisor", new=AsyncMock()
+            wtp_tools,
+            "_publish_envelope_for_supervisor",
+            new=AsyncMock(return_value="stream-1"),
         ) as mock_publish:
             result = await wtp_tools.workspace_report_progress_tool.execute(
                 ctx,
@@ -225,7 +227,7 @@ class TestProgress:
         payload = json.loads(result.output)
         assert payload["ok"] is True
         assert payload["notification_status"] == "local_fan_in"
-        assert payload["message_id"].startswith("local:")
+        assert payload["message_id"] == "stream-1"
         mock_orchestrator.send_message.assert_not_awaited()
 
         published = mock_publish.await_args.args[0]
@@ -363,7 +365,11 @@ class TestComplete:
 
     async def test_system_actor_completion_applies_report_without_a2a(self, ctx, mock_orchestrator):
         with (
-            patch.object(wtp_tools, "_publish_envelope_for_supervisor", new=AsyncMock()),
+            patch.object(
+                wtp_tools,
+                "_publish_envelope_for_supervisor",
+                new=AsyncMock(return_value="stream-1"),
+            ),
             patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply,
         ):
             mock_apply.return_value = {"applied": True, "task_status": "in_review"}
@@ -383,6 +389,42 @@ class TestComplete:
         assert payload["applied_report"] == {"applied": True, "task_status": "in_review"}
         mock_orchestrator.send_message.assert_not_awaited()
         assert mock_apply.await_args.kwargs["leader_agent_id"] == WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+
+    async def test_system_actor_completion_errors_when_supervisor_only_publish_missing(
+        self,
+        ctx,
+        mock_orchestrator,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setenv("WORKSPACE_WTP_V1_ONLY", "1")
+        with (
+            patch.object(
+                wtp_tools,
+                "_publish_envelope_for_supervisor",
+                new=AsyncMock(return_value=None),
+            ),
+            patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply,
+        ):
+            result = await wtp_tools.workspace_report_complete_tool.execute(
+                ctx,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+                summary="All done",
+                verifications=["test_run:unit"],
+            )
+
+        assert result.is_error is True
+        payload = json.loads(result.output)
+        assert payload["ok"] is False
+        assert payload["notification_status"] == "local_fan_in_unavailable"
+        assert payload["error"] == "workspace supervisor fan-in unavailable"
+        assert payload["applied_report"] == {
+            "skipped_supervisor_only": True,
+            "reason": "WORKSPACE_WTP_V1_ONLY",
+        }
+        mock_orchestrator.send_message.assert_not_awaited()
+        mock_apply.assert_not_awaited()
 
     async def test_protected_test_node_rejects_failed_completion_evidence(
         self, ctx, mock_orchestrator
@@ -492,7 +534,11 @@ class TestComplete:
         }
 
         with (
-            patch.object(wtp_tools, "_publish_envelope_for_supervisor", new=AsyncMock()),
+            patch.object(
+                wtp_tools,
+                "_publish_envelope_for_supervisor",
+                new=AsyncMock(return_value="stream-1"),
+            ),
             patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply,
         ):
             mock_apply.return_value = {"applied": True, "task_status": "in_review"}
@@ -522,7 +568,11 @@ class TestComplete:
         }
 
         with (
-            patch.object(wtp_tools, "_publish_envelope_for_supervisor", new=AsyncMock()),
+            patch.object(
+                wtp_tools,
+                "_publish_envelope_for_supervisor",
+                new=AsyncMock(return_value="stream-1"),
+            ),
             patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply,
         ):
             mock_apply.return_value = {"applied": True, "task_status": "in_review"}
@@ -542,9 +592,50 @@ class TestComplete:
         assert result.is_error is False
         mock_apply.assert_awaited_once()
 
+    async def test_protected_test_node_ignores_prior_verification_ratio_in_summary(
+        self, ctx, mock_orchestrator
+    ):
+        ctx.runtime_context["workspace_verification_integrity"] = {
+            "iteration_phase": "test",
+            "protected_script_changes": True,
+        }
+
+        with (
+            patch.object(
+                wtp_tools,
+                "_publish_envelope_for_supervisor",
+                new=AsyncMock(return_value="stream-1"),
+            ),
+            patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply,
+        ):
+            mock_apply.return_value = {"applied": True, "task_status": "in_review"}
+            result = await wtp_tools.workspace_report_complete_tool.execute(
+                ctx,
+                task_id="task-1",
+                attempt_id="attempt-1",
+                leader_agent_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+                summary=(
+                    "Fixed the test-node protection tool issue from the prior review. "
+                    "The previous message said verification failed: 3/4 required criteria "
+                    "did not pass, but the current workspace service suite is clean."
+                ),
+                verifications=[
+                    "preflight:read-progress",
+                    "preflight:git-status",
+                    "test_run:workspace/service 22 passed 0 failed",
+                ],
+            )
+
+        assert result.is_error is False
+        mock_apply.assert_awaited_once()
+
     async def test_terminal_apply_failure_marks_tool_error(self, ctx, mock_orchestrator):
         with (
-            patch.object(wtp_tools, "_publish_envelope_for_supervisor", new=AsyncMock()),
+            patch.object(
+                wtp_tools,
+                "_publish_envelope_for_supervisor",
+                new=AsyncMock(return_value="stream-1"),
+            ),
             patch.object(wtp_tools, "_apply_terminal_report", new=AsyncMock()) as mock_apply,
         ):
             mock_apply.return_value = {
@@ -568,6 +659,31 @@ class TestComplete:
             "applied": False,
             "error": "apply_workspace_worker_report returned no task",
         }
+
+    def test_terminal_application_result_requires_current_attempt_metadata(self):
+        task = MagicMock()
+        task.status = "in_review"
+        task.metadata = {
+            "last_worker_report_attempt_id": "attempt-1",
+            "last_worker_report_type": "completed",
+        }
+
+        applied = wtp_tools._terminal_report_application_result(
+            task,
+            attempt_id="attempt-1",
+            report_type="completed",
+        )
+        stale = wtp_tools._terminal_report_application_result(
+            task,
+            attempt_id="attempt-2",
+            report_type="completed",
+        )
+
+        assert applied["applied"] is True
+        assert applied["attempt_id"] == "attempt-1"
+        assert stale["applied"] is False
+        assert stale["last_worker_report_attempt_id"] == "attempt-1"
+        assert stale["error"] == "terminal report was not recorded for the requested attempt"
 
 
 class TestBlocked:

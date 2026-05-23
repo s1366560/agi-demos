@@ -15,6 +15,10 @@ from src.infrastructure.agent.processor.goal_evaluator import (
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_CONTRACT,
+    WORKSPACE_SESSION_ROLE_KEY,
+)
 
 
 def create_todoread_tool(tasks: list[dict[str, Any]]) -> ToolDefinition:
@@ -392,6 +396,50 @@ class TestProcessorGoalCompletion:
         assert result.achieved is False
         assert result.source == "workspace_tasks"
         assert result.reason == "Workspace root goal task is not complete"
+
+    @pytest.mark.asyncio
+    async def test_workspace_contract_role_skips_root_goal_task_lookup(self) -> None:
+        evaluator = GoalEvaluator(
+            llm_client=None,
+            tools={},
+            runtime_context={
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "",
+                WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_CONTRACT,
+            },
+        )
+
+        result = await evaluator.evaluate_goal_completion(
+            session_id="session-1",
+            messages=[{"role": "user", "content": "verify node"}],
+        )
+
+        assert result.achieved is False
+        assert result.should_stop is False
+        assert result.source == "assistant_text"
+
+    @pytest.mark.asyncio
+    async def test_workspace_authority_empty_root_goal_marker_fails_closed(self) -> None:
+        evaluator = GoalEvaluator(
+            llm_client=None,
+            tools={},
+            runtime_context={
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "",
+            },
+        )
+
+        result = await evaluator.evaluate_goal_completion(
+            session_id="session-1",
+            messages=[{"role": "user", "content": "finish task"}],
+        )
+
+        assert result.achieved is False
+        assert result.should_stop is True
+        assert result.source == "workspace_tasks"
+        assert result.reason == "Workspace task authority markers are incomplete"
 
     @pytest.mark.asyncio
     async def test_workspace_authority_requires_goal_evidence(self) -> None:

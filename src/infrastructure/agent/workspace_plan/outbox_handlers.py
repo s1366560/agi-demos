@@ -890,7 +890,16 @@ async def _reconcile_plan_nodes_with_terminal_attempts(
     return changed
 
 
+def _node_waiting_for_verification_retry(node: PlanNode) -> bool:
+    return (
+        node.execution is TaskExecution.REPORTED
+        and dict(node.metadata or {}).get("retry_verification_only") is True
+    )
+
+
 def _reported_node_has_pipeline_result_pending_verification(node: PlanNode, status: str) -> bool:
+    if _node_waiting_for_verification_retry(node):
+        return True
     if _node_has_pipeline_gate_in_flight(node, status):
         return True
     if node.execution is not TaskExecution.REPORTED:
@@ -2685,6 +2694,8 @@ async def _same_conversation_repair_context(  # noqa: PLR0911
     leader_agent_id: str,
 ) -> dict[str, Any] | None:
     metadata = dict(node.metadata or {})
+    if metadata.get("retry_verification_only") is True:
+        return None
     next_action_kind = _mapping_string(metadata, "last_verification_judge_next_action_kind")
     if next_action_kind != "retry_same_node":
         return None
@@ -3398,6 +3409,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
                 workspace_metadata=workspace_metadata,
                 root_metadata=root_metadata,
                 node=node,
+                attempt_id=attempt_id,
                 current_attempt=current_attempt,
                 contract=contract,
             )
@@ -3454,8 +3466,12 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             plan_id=plan_id,
             node_id=node_id,
             attempt_id=attempt_id,
-            commit_ref=_pipeline_contract_commit_ref(contract)
-            or _pipeline_commit_ref(node, current_attempt=current_attempt),
+            commit_ref=_pipeline_run_commit_ref(
+                contract,
+                node=node,
+                current_attempt=current_attempt,
+                attempt_id=attempt_id,
+            ),
             provider=contract.provider,
             metadata={
                 "reason": payload.get("reason") or "pipeline_gate_required",
@@ -3668,9 +3684,29 @@ async def _prepare_drone_source_ref(
     workspace_metadata: Mapping[str, Any],
     root_metadata: Mapping[str, Any],
     node: PlanNode,
+    attempt_id: str | None,
     current_attempt: WorkspaceTaskSessionAttemptModel | None = None,
     contract: PipelineContractSpec,
 ) -> tuple[PipelineContractSpec, dict[str, Any], PipelineRunResult | None]:
+    source_control = _drone_source_control_config(
+        workspace_metadata=workspace_metadata,
+        provider_config=contract.provider_config,
+    )
+    branch = _drone_source_branch(source_control, contract.provider_config)
+    if not attempt_id:
+        provider_config = dict(contract.provider_config)
+        if branch and not _metadata_string(provider_config.get("branch")):
+            provider_config["branch"] = branch
+        metadata = _source_publish_metadata(
+            status="skipped",
+            reason="missing attempt_id; using remote branch head",
+            commit_ref=_pipeline_contract_commit_ref(contract),
+            branch=branch,
+            source_commit_ref=None,
+            token_env=_source_control_token_env(source_control),
+        )
+        return replace(contract, provider_config=provider_config), metadata, None
+
     commit_ref = _pipeline_commit_ref(node, current_attempt=current_attempt)
     if not commit_ref:
         return (
@@ -3701,11 +3737,6 @@ async def _prepare_drone_source_ref(
         )
         return contract, metadata, _source_publish_failure_result(reason, metadata=metadata)
 
-    source_control = _drone_source_control_config(
-        workspace_metadata=workspace_metadata,
-        provider_config=contract.provider_config,
-    )
-    branch = _drone_source_branch(source_control, contract.provider_config)
     if not branch:
         reason = "source_control.default_branch or delivery_cicd.drone.branch is required"
         metadata = _source_publish_metadata(
@@ -4036,6 +4067,17 @@ async def _publish_git_ref_from_temporary_worktree(
             timeout=180,
         )
         if push["exit_code"] != "0":
+            if _is_non_fast_forward_push_rejection(push):
+                retried = await _retry_temporary_worktree_push_after_non_fast_forward(
+                    worktree_path=worktree_path,
+                    candidate_ref=published_commit,
+                    remote=remote,
+                    branch=branch,
+                    env=env,
+                    default_reason=default_reason,
+                )
+                if retried is not None:
+                    return retried
             return {
                 "status": "failed",
                 "reason": _compact_git_error(push),
@@ -4057,6 +4099,54 @@ async def _publish_git_ref_from_temporary_worktree(
             if remove["exit_code"] != "0":
                 logger.warning("temporary source publish worktree cleanup failed: %s", remove)
         shutil.rmtree(temp_parent, ignore_errors=True)
+
+
+async def _retry_temporary_worktree_push_after_non_fast_forward(
+    *,
+    worktree_path: Path,
+    candidate_ref: str,
+    remote: str,
+    branch: str,
+    env: Mapping[str, str],
+    default_reason: str,
+) -> dict[str, str | None] | None:
+    retry_merge = await _merge_remote_branch_for_publish(
+        worktree_path=worktree_path,
+        candidate_ref=candidate_ref,
+        remote=remote,
+        branch=branch,
+        env=env,
+    )
+    if retry_merge.get("status") == "failed":
+        return {
+            "status": "failed",
+            "reason": str(
+                retry_merge.get("reason") or "remote branch merge failed after push rejection"
+            ),
+            "published_commit": candidate_ref,
+        }
+    retry_head = await _run_git_command(worktree_path, ("rev-parse", "HEAD"), env=env)
+    if retry_head["exit_code"] != "0":
+        return {
+            "status": "failed",
+            "reason": _compact_git_error(retry_head),
+            "published_commit": candidate_ref,
+        }
+    retried_commit = str(retry_head.get("stdout") or "").strip()
+    retry_push = await _run_git_command(
+        worktree_path,
+        ("push", remote, f"HEAD:refs/heads/{branch}"),
+        env=env,
+        timeout=180,
+    )
+    if retry_push["exit_code"] == "0":
+        retry_reason = str(retry_merge.get("reason") or default_reason)
+        return {
+            "status": "published",
+            "reason": f"{retry_reason}; retried after non-fast-forward push",
+            "published_commit": retried_commit,
+        }
+    return None
 
 
 async def _merge_remote_branch_for_publish(  # noqa: PLR0911
@@ -4221,31 +4311,12 @@ async def _candidate_publish_restore_path_states(
     remote_ref: str,
     env: Mapping[str, str],
 ) -> tuple[tuple[str, bool], ...]:
-    restore_paths: dict[str, bool] = dict(
-        await _candidate_publish_path_states(
-            worktree_path=worktree_path,
-            candidate_ref=candidate_ref,
-            remote_ref=remote_ref,
-            env=env,
-        )
-    )
-    candidate_paths = await _git_tracked_paths(
+    return await _candidate_publish_path_states(
         worktree_path=worktree_path,
-        ref=candidate_ref,
+        candidate_ref=candidate_ref,
+        remote_ref=remote_ref,
         env=env,
     )
-    if not candidate_paths:
-        return tuple(restore_paths.items())
-    drift_paths = await _git_diff_name_only_paths(
-        worktree_path=worktree_path,
-        left_ref=candidate_ref,
-        right_ref="HEAD",
-        env=env,
-    )
-    for path in drift_paths:
-        if path in candidate_paths:
-            restore_paths[path] = True
-    return tuple(restore_paths.items())
 
 
 async def _candidate_publish_path_states(
@@ -4273,43 +4344,6 @@ async def _candidate_publish_path_states(
     if diff["exit_code"] != "0":
         return ()
     return _parse_git_name_status_path_states(str(diff.get("stdout") or ""))
-
-
-async def _git_tracked_paths(
-    *,
-    worktree_path: Path,
-    ref: str,
-    env: Mapping[str, str],
-) -> set[str]:
-    tree = await _run_git_command(
-        worktree_path,
-        ("ls-tree", "-r", "-z", "--name-only", ref),
-        env=env,
-    )
-    if tree["exit_code"] != "0":
-        return set()
-    return set(_parse_git_z_paths(str(tree.get("stdout") or "")))
-
-
-async def _git_diff_name_only_paths(
-    *,
-    worktree_path: Path,
-    left_ref: str,
-    right_ref: str,
-    env: Mapping[str, str],
-) -> tuple[str, ...]:
-    diff = await _run_git_command(
-        worktree_path,
-        ("diff", "--name-only", "-z", left_ref, right_ref),
-        env=env,
-    )
-    if diff["exit_code"] != "0":
-        return ()
-    return _parse_git_z_paths(str(diff.get("stdout") or ""))
-
-
-def _parse_git_z_paths(raw: str) -> tuple[str, ...]:
-    return tuple(part for part in raw.split("\0") if part)
 
 
 def _parse_git_name_status_path_states(raw: str) -> tuple[tuple[str, bool], ...]:
@@ -5140,6 +5174,21 @@ def _pipeline_commit_ref(
     return _first_prefixed_ref(
         _merge_string_values(metadata.get("evidence_refs"), []), "commit_ref:"
     )
+
+
+def _pipeline_run_commit_ref(
+    contract: PipelineContractSpec,
+    *,
+    node: PlanNode,
+    current_attempt: WorkspaceTaskSessionAttemptModel | None = None,
+    attempt_id: str | None,
+) -> str | None:
+    contract_ref = _pipeline_contract_commit_ref(contract)
+    if contract_ref:
+        return contract_ref
+    if not attempt_id:
+        return None
+    return _pipeline_commit_ref(node, current_attempt=current_attempt)
 
 
 def _current_attempt_candidate_commit_ref(

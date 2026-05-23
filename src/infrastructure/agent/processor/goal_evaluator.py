@@ -22,6 +22,11 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_reposi
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import ToolInfo
 from src.infrastructure.agent.tools.result import ToolResult
+from src.infrastructure.agent.workspace.runtime_role_contract import (
+    WORKSPACE_ROLE_CONTRACT,
+    WORKSPACE_ROLE_WORKER,
+    WORKSPACE_SESSION_ROLE_KEY,
+)
 
 if TYPE_CHECKING:
     from ..core.message import Message
@@ -200,12 +205,20 @@ class GoalEvaluator:
         # Worker sessions are responsible only for their own task execution;
         # skip root goal evaluation to avoid circular dependency where root
         # status blocks workers and workers can't unblock root.
-        if self._runtime_context.get("workspace_session_role") == "worker":
+        if self._runtime_context.get(WORKSPACE_SESSION_ROLE_KEY) in {
+            WORKSPACE_ROLE_WORKER,
+            WORKSPACE_ROLE_CONTRACT,
+        }:
             return None
 
         workspace_id = self._runtime_context.get("workspace_id")
         root_goal_task_id = self._runtime_context.get("root_goal_task_id")
-        if not isinstance(workspace_id, str) or not isinstance(root_goal_task_id, str):
+        if (
+            not isinstance(workspace_id, str)
+            or not workspace_id.strip()
+            or not isinstance(root_goal_task_id, str)
+            or not root_goal_task_id.strip()
+        ):
             marker_result = GoalCheckResult(
                 achieved=False,
                 should_stop=True,

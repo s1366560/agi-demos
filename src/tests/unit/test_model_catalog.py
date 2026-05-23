@@ -403,7 +403,7 @@ class TestModelRegistryBackwardCompat:
         limits = get_model_limits("qwen-max")
         assert isinstance(limits, ModelLimits)
         assert limits.max_output_tokens == 8192
-        assert limits.context_window == 32768
+        assert limits.context_window == 131072
         assert limits.max_input_tokens is None  # catalog has no explicit input cap
 
     def test_get_model_limits_with_provider_prefix(self) -> None:
@@ -451,7 +451,7 @@ class TestModelRegistryBackwardCompat:
     def test_context_window_known_model(self) -> None:
         """Known model returns its context window."""
         ctx = get_model_context_window("deepseek-chat")
-        assert ctx == 128_000  # models.dev: DeepSeek V3 = 128K context
+        assert ctx == 1_000_000
 
     def test_context_window_unknown_model(self) -> None:
         """Unknown model returns default 128000."""
@@ -461,22 +461,22 @@ class TestModelRegistryBackwardCompat:
     def test_context_window_with_prefix(self) -> None:
         """Provider prefix is stripped."""
         ctx = get_model_context_window("deepseek/deepseek-chat")
-        assert ctx == 128_000
+        assert ctx == 1_000_000
 
     # -- get_model_max_input_tokens --
 
     def test_max_input_tokens_explicit_limit(self) -> None:
         """Model with catalog-derived input cap returns it."""
         result = get_model_max_input_tokens("qwen-max")
-        # catalog: context_length=32768, max_output_tokens=8192
-        # derived: 32768 - 8192 = 24576
-        assert result == 24576
+        # catalog: context_length=131072, max_output_tokens=8192
+        # derived: 131072 - 8192 = 122880
+        assert result == 122880
 
     def test_max_input_tokens_derived(self) -> None:
         """Model without explicit cap derives from context - output."""
         result = get_model_max_input_tokens("deepseek-chat", max_output_tokens=8192)
-        # context_window(128000) - 8192 = 119808
-        assert result == 119808
+        # context_window(1000000) - 8192 = 991808
+        assert result == 991808
 
     def test_max_input_tokens_positive(self) -> None:
         """Result is always >= 1."""
@@ -488,8 +488,8 @@ class TestModelRegistryBackwardCompat:
     def test_input_budget_known_ratio(self) -> None:
         """Model with known ratio applies it."""
         budget = get_model_input_budget("qwen-max")
-        # 24576 * 0.85 = 20889.6 -> 20889
-        assert budget == 20889
+        # 122880 * 0.85 = 104448
+        assert budget == 104448
 
     def test_input_budget_default_ratio(self) -> None:
         """Model without known ratio uses default 0.9."""

@@ -29,7 +29,10 @@ export function useWorkspaceConversations(
 
   const refresh = useCallback(async () => {
     if (!projectId || !workspaceId) {
+      activeKey.current = null;
       setConversations([]);
+      setLoading(false);
+      setError(null);
       return;
     }
     const key = `${projectId}|${workspaceId}`;
@@ -59,7 +62,7 @@ export function useWorkspaceConversations(
           typeof response.next_offset === 'number'
             ? response.next_offset
             : offset + pageItems.length;
-        hasMore = Boolean(response.has_more) && nextOffset > offset;
+        hasMore = response.has_more && nextOffset > offset;
         offset = nextOffset;
       }
 
@@ -67,7 +70,9 @@ export function useWorkspaceConversations(
         setConversations(items);
       }
     } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
+      if (activeKey.current === key) {
+        setError(err instanceof Error ? err : new Error(String(err)));
+      }
     } finally {
       if (activeKey.current === key) setLoading(false);
     }

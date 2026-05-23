@@ -54,6 +54,7 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
     require_workspace_session_role,
     runtime_context_string,
 )
+from src.infrastructure.agent.workspace.workspace_metadata_keys import LAST_WORKER_REPORT_ATTEMPT_ID
 from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
 
 logger = logging.getLogger(__name__)
@@ -69,17 +70,26 @@ _PARTIAL_TEST_BUCKET_RE = re.compile(
     r"\b[1-9]\d*\s+(?:tests?\s+)?partials?\b",
     re.IGNORECASE,
 )
+_CRITERIA_COUNT_CONTEXT_RE = re.compile(r"\b(?:required\s+)?criteria\b|\bcriterion\b")
 _FAILED_TEST_DISPOSITION_PREFIXES = (
     "contract_disposition:",
     "failed_test_disposition:",
     "known_failure_disposition:",
 )
-_TEST_EVIDENCE_HINTS = (
+_TEST_RESULT_CONTEXT_HINTS = (
     "test",
+    "test_run:",
     "suite",
-    "verification",
+    "spec",
+    "jest",
+    "vitest",
+    "pytest",
+    "playwright",
+    "e2e",
+    "unit",
     "pass",
     "passed",
+    "passing",
     "failed",
     "failing",
     "failure",
@@ -95,10 +105,7 @@ def _string_list(value: Any) -> list[str]:
 
 
 def _supervisor_only_terminal_path() -> bool:
-    """Phase 8: when ``WORKSPACE_WTP_V1_ONLY`` is truthy, skip the worker-tool-side
-    direct call to ``apply_workspace_worker_report`` and rely solely on the
-    supervisor fan-in path for terminal transitions.
-    """
+    """Return whether terminal state must be applied only by supervisor fan-in."""
     raw = os.getenv("WORKSPACE_WTP_V1_ONLY", "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
 
@@ -148,26 +155,53 @@ def _failed_completion_evidence(texts: list[str]) -> list[str]:
     failed: list[str] = []
     for text in texts:
         value = text.strip()
-        if not value:
-            continue
-        lower = value.lower()
-        has_test_context = any(hint in lower for hint in _TEST_EVIDENCE_HINTS)
-        if _FAILED_TEST_COUNT_RE.search(value) or (
-            has_test_context and _NONZERO_EXIT_RE.search(value)
-        ):
+        if value and _text_has_failed_completion_evidence(value):
             failed.append(value)
-            continue
-        if has_test_context:
-            if _PARTIAL_TEST_BUCKET_RE.search(value):
-                failed.append(value)
-                continue
-            for partial in _PARTIAL_TEST_COUNT_RE.finditer(value):
-                passed = int(partial.group(1))
-                total = int(partial.group(2))
-                if total > 0 and passed < total:
-                    failed.append(value)
-                    break
     return list(dict.fromkeys(failed))
+
+
+def _text_has_failed_completion_evidence(value: str) -> bool:
+    lower = value.lower()
+    if any(
+        _has_test_result_context_near(lower, match)
+        for match in _FAILED_TEST_COUNT_RE.finditer(value)
+    ):
+        return True
+    if any(
+        _has_test_result_context_near(lower, match) for match in _NONZERO_EXIT_RE.finditer(value)
+    ):
+        return True
+    if not any(hint in lower for hint in _TEST_RESULT_CONTEXT_HINTS):
+        return False
+    if _PARTIAL_TEST_BUCKET_RE.search(value):
+        return True
+    return any(
+        _is_failed_partial_test_count(lower, match)
+        for match in _PARTIAL_TEST_COUNT_RE.finditer(value)
+    )
+
+
+def _is_failed_partial_test_count(text: str, match: re.Match[str]) -> bool:
+    if _looks_like_verification_criteria_count(text, match):
+        return False
+    if not _has_test_result_context_near(text, match):
+        return False
+    passed = int(match.group(1))
+    total = int(match.group(2))
+    return total > 0 and passed < total
+
+
+def _has_test_result_context_near(text: str, match: re.Match[str]) -> bool:
+    start = max(0, match.start() - 60)
+    end = min(len(text), match.end() + 60)
+    window = text[start:end]
+    return any(hint in window for hint in _TEST_RESULT_CONTEXT_HINTS)
+
+
+def _looks_like_verification_criteria_count(text: str, match: re.Match[str]) -> bool:
+    start = max(0, match.start() - 40)
+    end = min(len(text), match.end() + 80)
+    return bool(_CRITERIA_COUNT_CONTEXT_RE.search(text[start:end]))
 
 
 def _has_failed_test_contract_disposition(texts: list[str]) -> bool:
@@ -296,12 +330,12 @@ def _enrich_envelope_for_supervisor(
     )
 
 
-async def _publish_envelope_for_supervisor(envelope: WtpEnvelope) -> None:
+async def _publish_envelope_for_supervisor(envelope: WtpEnvelope) -> str | None:
     from src.infrastructure.agent.workspace.workspace_supervisor import (
         publish_envelope_default,
     )
 
-    await publish_envelope_default(envelope)
+    return await publish_envelope_default(envelope)
 
 
 async def _send_envelope(
@@ -333,7 +367,10 @@ async def _send_envelope(
         logger.debug("workspace_wtp: envelope enrichment failed; publishing raw")
 
     if to_agent_id == WORKSPACE_PLAN_SYSTEM_ACTOR_ID:
-        await _publish_envelope_for_supervisor(enriched_envelope)
+        supervisor_entry_id = await _publish_envelope_for_supervisor(enriched_envelope)
+        supervisor_delivered = isinstance(supervisor_entry_id, str) and bool(
+            supervisor_entry_id.strip()
+        )
         await ctx.emit(
             AgentMessageSentEvent(
                 from_agent_id=sender_agent_ref,
@@ -346,16 +383,26 @@ async def _send_envelope(
         return ToolResult(
             output=json.dumps(
                 {
-                    "ok": True,
+                    "ok": supervisor_delivered,
                     "verb": envelope.verb.value,
-                    "message_id": f"local:{envelope.correlation_id}",
+                    "message_id": supervisor_entry_id
+                    if supervisor_delivered
+                    else f"local:{envelope.correlation_id}",
                     "task_id": envelope.task_id,
                     "attempt_id": envelope.attempt_id,
                     "correlation_id": envelope.correlation_id,
-                    "notification_status": "local_fan_in",
+                    "notification_status": "local_fan_in"
+                    if supervisor_delivered
+                    else "local_fan_in_unavailable",
+                    **(
+                        {}
+                        if supervisor_delivered
+                        else {"error": "workspace supervisor fan-in unavailable"}
+                    ),
                 },
                 indent=2,
             ),
+            is_error=not supervisor_delivered,
         )
 
     if _orchestrator is None:
@@ -477,9 +524,46 @@ async def _apply_terminal_report(
             "applied": False,
             "error": "apply_workspace_worker_report returned no task",
         }
+    return _terminal_report_application_result(
+        task,
+        attempt_id=attempt_id,
+        report_type=report_type,
+    )
+
+
+def _terminal_report_application_result(
+    task: object,
+    *,
+    attempt_id: str,
+    report_type: str,
+) -> dict[str, Any]:
+    metadata = getattr(task, "metadata", None)
+    task_status = getattr(task, "status", None)
+    if isinstance(metadata, dict):
+        report_attempt_id = metadata.get(LAST_WORKER_REPORT_ATTEMPT_ID)
+        recorded_report_type = metadata.get("last_worker_report_type")
+        if report_attempt_id == attempt_id and recorded_report_type == report_type:
+            return {
+                "applied": True,
+                "task_status": task_status,
+                "attempt_id": attempt_id,
+                "report_type": report_type,
+            }
+        return {
+            "applied": False,
+            "task_status": task_status,
+            "attempt_id": attempt_id,
+            "report_type": report_type,
+            "last_worker_report_attempt_id": report_attempt_id,
+            "last_worker_report_type": recorded_report_type,
+            "error": "terminal report was not recorded for the requested attempt",
+        }
     return {
-        "applied": True,
-        "task_status": getattr(task, "status", None),
+        "applied": False,
+        "task_status": task_status,
+        "attempt_id": attempt_id,
+        "report_type": report_type,
+        "error": "terminal report application result did not include task metadata",
     }
 
 
@@ -523,6 +607,13 @@ def _build_terminal_tool_result(
         output=json.dumps(enriched, indent=2),
         is_error=send_result.is_error,
     )
+
+
+def _supervisor_only_terminal_apply_result() -> dict[str, Any]:
+    return {
+        "skipped_supervisor_only": True,
+        "reason": "WORKSPACE_WTP_V1_ONLY",
+    }
 
 
 # --- Progress -----------------------------------------------------------------
@@ -720,7 +811,7 @@ async def workspace_report_complete_tool(
     send_result = await _send_envelope(ctx, envelope, to_agent_id=leader_agent_id)
 
     if _supervisor_only_terminal_path():
-        apply_result = {"skipped": True, "reason": "WORKSPACE_WTP_V1_ONLY"}
+        apply_result = _supervisor_only_terminal_apply_result()
     else:
         apply_result = await _apply_terminal_report(
             ctx,
@@ -807,7 +898,7 @@ async def workspace_report_blocked_tool(
 
     summary = reason if not evidence else f"{reason}\n\n{evidence}"
     if _supervisor_only_terminal_path():
-        apply_result = {"skipped": True, "reason": "WORKSPACE_WTP_V1_ONLY"}
+        apply_result = _supervisor_only_terminal_apply_result()
     else:
         apply_result = await _apply_terminal_report(
             ctx,

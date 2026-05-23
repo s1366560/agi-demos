@@ -295,10 +295,12 @@ class LiteLLMClient(LLMClient):
         """
         clamped_max_tokens = _clamp_max_tokens(model, max_tokens)
         normalized_messages = _sanitize_tool_call_adjacency(
-            self._trim_messages_to_input_limit(
-                model=model,
-                messages=messages,
-                max_tokens=clamped_max_tokens,
+            self._normalize_message_contents(
+                self._trim_messages_to_input_limit(
+                    model=model,
+                    messages=messages,
+                    max_tokens=clamped_max_tokens,
+                )
             )
         )
 
@@ -404,7 +406,6 @@ class LiteLLMClient(LLMClient):
         except Exception as e:
             logger.debug(f"Failed to estimate prompt tokens for {model}: {e}")
             return None
-
     @staticmethod
     def _estimate_message_chars(messages: list[dict[str, Any]]) -> int:
         """Estimate message size in characters for conservative fallback budgeting.
@@ -513,6 +514,48 @@ class LiteLLMClient(LLMClient):
         messages[target_idx]["content"] = self._truncate_text_middle(original, next_chars)
         return True
 
+    def _truncate_largest_messages_until_within_budget(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        input_limit: int,
+        token_count: int,
+    ) -> int:
+        """Shrink large message bodies while preserving conversation structure."""
+        for _ in range(8):
+            if token_count <= input_limit:
+                break
+            updated = self._truncate_largest_message(
+                messages=messages,
+                target_tokens=input_limit,
+                current_tokens=token_count,
+                prefer_non_system=True,
+            )
+            if not updated:
+                break
+            token_count = self._estimate_effective_input_tokens(model, messages)
+        return token_count
+
+    @staticmethod
+    def _oldest_trimmable_message_index(
+        messages: list[dict[str, Any]],
+        keep_system_prompt: bool,
+    ) -> int | None:
+        """Find the oldest message that can be dropped without losing the user anchor."""
+        protected_indexes: set[int] = set()
+        if keep_system_prompt and messages:
+            protected_indexes.add(0)
+
+        for idx in range(len(messages) - 1, -1, -1):
+            if messages[idx].get("role") == "user":
+                protected_indexes.add(idx)
+                break
+
+        for idx in range(len(messages)):
+            if idx not in protected_indexes:
+                return idx
+        return None
+
     def _trim_messages_to_input_limit(
         self,
         model: str,
@@ -532,10 +575,23 @@ class LiteLLMClient(LLMClient):
         min_messages = 2 if keep_system_prompt else 1
 
         while token_count > input_limit and len(trimmed) > min_messages:
-            del trimmed[1 if keep_system_prompt else 0]
+            drop_index = self._oldest_trimmable_message_index(
+                messages=trimmed,
+                keep_system_prompt=keep_system_prompt,
+            )
+            if drop_index is None:
+                break
+            del trimmed[drop_index]
             token_count = self._estimate_effective_input_tokens(model, trimmed)
 
-        # Last resort: try to trim system prompt content before deleting it
+        token_count = self._truncate_largest_messages_until_within_budget(
+            model=model,
+            messages=trimmed,
+            input_limit=input_limit,
+            token_count=token_count,
+        )
+
+        # Last resort: try to trim system prompt content before deleting it.
         if token_count > input_limit and keep_system_prompt and len(trimmed) > 1:
             system_content = trimmed[0].get("content", "")
             has_mandatory_skill = "<mandatory-skill" in str(system_content)
@@ -560,18 +616,12 @@ class LiteLLMClient(LLMClient):
                     token_count = self._estimate_effective_input_tokens(model, trimmed)
 
         # Final fallback: truncate largest remaining content until within budget.
-        truncate_attempts = 0
-        while token_count > input_limit and truncate_attempts < 8:
-            updated = self._truncate_largest_message(
-                messages=trimmed,
-                target_tokens=input_limit,
-                current_tokens=token_count,
-                prefer_non_system=True,
-            )
-            if not updated:
-                break
-            token_count = self._estimate_effective_input_tokens(model, trimmed)
-            truncate_attempts += 1
+        token_count = self._truncate_largest_messages_until_within_budget(
+            model=model,
+            messages=trimmed,
+            input_limit=input_limit,
+            token_count=token_count,
+        )
 
         if token_count > input_limit:
             logger.warning(
@@ -707,6 +757,25 @@ class LiteLLMClient(LLMClient):
             raise
 
     @staticmethod
+    def _normalize_message_content(content: Any) -> Any:
+        """Normalize nullable message content before provider submission."""
+        if content is None:
+            return ""
+        return content
+
+    @staticmethod
+    def _normalize_message_contents(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Return message copies with provider-valid content values."""
+        normalized: list[dict[str, Any]] = []
+        for message in messages:
+            message_copy = dict(message)
+            message_copy["content"] = LiteLLMClient._normalize_message_content(
+                message_copy.get("content", "")
+            )
+            normalized.append(message_copy)
+        return normalized
+
+    @staticmethod
     def _convert_message(m: Any) -> dict[str, Any]:
         """Convert a message to LiteLLM dict format, preserving tool-related fields.
 
@@ -718,7 +787,7 @@ class LiteLLMClient(LLMClient):
         if isinstance(m, dict):
             msg: dict[str, Any] = {
                 "role": m.get("role", "user"),
-                "content": m.get("content", ""),
+                "content": LiteLLMClient._normalize_message_content(m.get("content", "")),
             }
             if "tool_calls" in m:
                 msg["tool_calls"] = m["tool_calls"]
@@ -727,7 +796,7 @@ class LiteLLMClient(LLMClient):
             if "name" in m:
                 msg["name"] = m["name"]
             return msg
-        return {"role": m.role, "content": m.content}
+        return {"role": m.role, "content": LiteLLMClient._normalize_message_content(m.content)}
 
     @override
     async def generate(
