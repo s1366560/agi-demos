@@ -8,6 +8,7 @@ import type {
   TopologyNode,
   Workspace,
   WorkspaceAgent,
+  WorkspacePlan,
   WorkspaceTask,
   WorkspaceTaskStatus,
 } from '@/types/workspace';
@@ -93,6 +94,35 @@ const PRIORITY_RANK: Record<string, number> = {
 
 const TASK_STATUSES: WorkspaceTaskStatus[] = ['todo', 'in_progress', 'done', 'blocked'];
 
+function getPlanIntentCount(plan: WorkspacePlan, status: WorkspaceTaskStatus): number {
+  const count = plan.counts[`intent:${status}`];
+  if (typeof count === 'number') {
+    return count;
+  }
+  return plan.nodes.filter((node) => node.intent === status).length;
+}
+
+function buildTaskCounts(tasks: WorkspaceTask[], plan?: WorkspacePlan | null) {
+  if (plan && plan.nodes.length > 0) {
+    const totalTasks = plan.nodes.length;
+    return {
+      totalTasks,
+      todoTasks: getPlanIntentCount(plan, 'todo'),
+      inProgressTasks: getPlanIntentCount(plan, 'in_progress'),
+      completedTasks: getPlanIntentCount(plan, 'done'),
+      blockedTasks: getPlanIntentCount(plan, 'blocked'),
+    };
+  }
+
+  return {
+    totalTasks: tasks.length,
+    todoTasks: tasks.filter((task) => task.status === 'todo').length,
+    inProgressTasks: tasks.filter((task) => task.status === 'in_progress').length,
+    completedTasks: tasks.filter((task) => task.status === 'done').length,
+    blockedTasks: tasks.filter((task) => task.status === 'blocked').length,
+  };
+}
+
 function hasHexPosition(
   item: { hex_q?: number | undefined; hex_r?: number | undefined } | null | undefined
 ): item is { hex_q: number; hex_r: number } {
@@ -138,13 +168,13 @@ export function buildBlackboardStats(
   tasks: WorkspaceTask[],
   posts: BlackboardPost[],
   agents: WorkspaceAgent[],
-  topologyNodes: TopologyNode[]
+  topologyNodes: TopologyNode[],
+  plan?: WorkspacePlan | null
 ): BlackboardStats {
-  const totalTasks = tasks.length;
-  const todoTasks = tasks.filter((task) => task.status === 'todo').length;
-  const inProgressTasks = tasks.filter((task) => task.status === 'in_progress').length;
-  const completedTasks = tasks.filter((task) => task.status === 'done').length;
-  const blockedTasks = tasks.filter((task) => task.status === 'blocked').length;
+  const { totalTasks, todoTasks, inProgressTasks, completedTasks, blockedTasks } = buildTaskCounts(
+    tasks,
+    plan
+  );
   const pendingAdjudicationTasks = tasks.filter(hasPendingLeaderAdjudication).length;
   const activeAgents = agents.filter(
     (agent) => agent.is_active || agent.status === 'running' || agent.status === 'busy'

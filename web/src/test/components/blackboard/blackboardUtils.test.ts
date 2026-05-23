@@ -13,6 +13,7 @@ import type {
   TopologyNode,
   Workspace,
   WorkspaceAgent,
+  WorkspacePlan,
   WorkspaceTask,
 } from '@/types/workspace';
 
@@ -141,6 +142,62 @@ describe('blackboardUtils', () => {
     );
 
     expect(stats.pendingAdjudicationTasks).toBe(1);
+  });
+
+  it('uses durable plan intent counts before stale task projections', () => {
+    const plan: WorkspacePlan = {
+      id: 'plan-1',
+      workspace_id: 'ws-1',
+      goal_id: 'goal-1',
+      status: 'active',
+      created_at: '2026-03-30T08:00:00Z',
+      nodes: [],
+      counts: {
+        'intent:done': 12,
+        'intent:todo': 2,
+        'intent:in_progress': 0,
+        'intent:blocked': 0,
+      },
+    };
+
+    const stats = buildBlackboardStats(
+      [
+        { ...BASE_TASK, id: 'done-task', status: 'done' },
+        { ...BASE_TASK, id: 'stale-running-1', status: 'in_progress' },
+        { ...BASE_TASK, id: 'stale-running-2', status: 'in_progress' },
+      ],
+      [],
+      [],
+      [],
+      {
+        ...plan,
+        nodes: Array.from({ length: 14 }, (_, index) => ({
+          id: `node-${String(index)}`,
+          parent_id: null,
+          kind: 'task',
+          title: `Task ${String(index)}`,
+          description: '',
+          depends_on: [],
+          acceptance_criteria: [],
+          recommended_capabilities: [],
+          intent: index < 12 ? 'done' : 'todo',
+          execution: 'idle',
+          progress: { percent: index < 12 ? 100 : 0, confidence: 1, note: '' },
+          assignee_agent_id: null,
+          current_attempt_id: null,
+          workspace_task_id: null,
+          priority: index,
+          metadata: {},
+          created_at: '2026-03-30T08:00:00Z',
+        })),
+      }
+    );
+
+    expect(stats.totalTasks).toBe(14);
+    expect(stats.completedTasks).toBe(12);
+    expect(stats.todoTasks).toBe(2);
+    expect(stats.inProgressTasks).toBe(0);
+    expect(stats.completionRatio).toBe(86);
   });
 
   it('assigns fallback actor coordinates without colliding with the central blackboard', () => {

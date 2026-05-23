@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router-dom';
@@ -6,6 +6,8 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useWorkspaceStore } from '@/stores/workspace';
+
+import { workspacePlanService } from '@/services/workspaceService';
 
 import { useBlackboardPageActions } from '@/hooks/useBlackboardActions';
 import { useBlackboardLifecycle } from '@/hooks/useBlackboardLifecycle';
@@ -24,7 +26,12 @@ import type { BlackboardTab } from '@/components/blackboard/BlackboardTabBar';
 import { buildBlackboardStats } from '@/components/blackboard/blackboardUtils';
 import { CentralBlackboardContent } from '@/components/blackboard/CentralBlackboardContent';
 
-import type { Workspace, WorkspaceCollaborationMode, WorkspaceUseCase } from '@/types/workspace';
+import type {
+  Workspace,
+  WorkspaceCollaborationMode,
+  WorkspacePlan,
+  WorkspaceUseCase,
+} from '@/types/workspace';
 
 const DEFAULT_WORKSPACE_USE_CASE: WorkspaceUseCase = 'general';
 const DEFAULT_COLLABORATION_MODE: WorkspaceCollaborationMode = 'multi_agent_shared';
@@ -175,12 +182,41 @@ export function Blackboard() {
   );
   const workspaceUseCase = getWorkspaceUseCase(selectedWorkspace);
   const collaborationMode = getWorkspaceCollaborationMode(selectedWorkspace);
-  const shellStats = useMemo(
-    () => buildBlackboardStats(tasks, posts, agents, topologyNodes),
-    [agents, posts, tasks, topologyNodes]
-  );
   const planRefreshToken = useWorkspaceStore((state) =>
     selectedWorkspaceId ? (state.planRefreshCounters[selectedWorkspaceId] ?? 0) : 0
+  );
+  const [loadedStatsPlan, setLoadedStatsPlan] = useState<{
+    workspaceId: string;
+    plan: WorkspacePlan | null;
+  } | null>(null);
+  useEffect(() => {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+
+    let cancelled = false;
+    workspacePlanService
+      .getSnapshot(selectedWorkspaceId, { outboxLimit: 0, eventLimit: 0 })
+      .then((snapshot) => {
+        if (!cancelled) {
+          setLoadedStatsPlan({ workspaceId: selectedWorkspaceId, plan: snapshot.plan ?? null });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadedStatsPlan({ workspaceId: selectedWorkspaceId, plan: null });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedWorkspaceId, planRefreshToken]);
+  const statsPlan =
+    loadedStatsPlan?.workspaceId === selectedWorkspaceId ? loadedStatsPlan.plan : null;
+  const shellStats = useMemo(
+    () => buildBlackboardStats(tasks, posts, agents, topologyNodes, statsPlan),
+    [agents, posts, statsPlan, tasks, topologyNodes]
   );
   const agentWorkspacePath = useMemo(
     () =>
@@ -322,6 +358,7 @@ export function Blackboard() {
               topologyEdges={topologyEdges}
               activeTab={activeTab}
               onActiveTabChange={handleTabChange}
+              statsPlan={statsPlan}
               planRefreshToken={planRefreshToken}
               agentWorkspacePath={agentWorkspacePath}
               onLoadReplies={handleLoadReplies}

@@ -40,6 +40,7 @@ import type {
   TopologyNode,
   Workspace,
   WorkspaceAgent,
+  WorkspacePlan,
   WorkspaceTask,
 } from '@/types/workspace';
 
@@ -61,6 +62,7 @@ export interface CentralBlackboardContentProps {
   topologyEdges: TopologyEdge[];
   activeTab: BlackboardTab;
   onActiveTabChange: (nextTab: BlackboardTab) => void;
+  statsPlan?: WorkspacePlan | null | undefined;
   planRefreshToken?: number | undefined;
   agentWorkspacePath: string;
   onLoadReplies: (postId: string) => Promise<boolean>;
@@ -121,6 +123,7 @@ export function CentralBlackboardContent({
   topologyEdges,
   activeTab,
   onActiveTabChange,
+  statsPlan,
   planRefreshToken,
   agentWorkspacePath,
   onLoadReplies,
@@ -223,8 +226,8 @@ export function CentralBlackboardContent({
   });
 
   const stats = useMemo(
-    () => buildBlackboardStats(tasks, posts, agents, topologyNodes),
-    [agents, posts, tasks, topologyNodes]
+    () => buildBlackboardStats(tasks, posts, agents, topologyNodes, statsPlan),
+    [agents, posts, statsPlan, tasks, topologyNodes]
   );
   const notes = useMemo(
     () => buildBlackboardNotes(workspace, objectives, posts, tasks),

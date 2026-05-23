@@ -24,6 +24,7 @@ const {
   mockUnsubscribe,
   mockSubscribeWorkspace,
   mockListByProject,
+  mockGetPlanSnapshot,
   storeStateRef,
 } = vi.hoisted(() => {
   const mockUnsubscribe = vi.fn();
@@ -43,6 +44,7 @@ const {
     mockUnsubscribe,
     mockSubscribeWorkspace: vi.fn().mockReturnValue(mockUnsubscribe),
     mockListByProject: vi.fn().mockResolvedValue([]),
+    mockGetPlanSnapshot: vi.fn(),
     storeStateRef: { current: {} as Record<string, unknown> },
   };
 });
@@ -121,6 +123,9 @@ vi.mock('@/services/workspaceService', () => ({
   workspaceService: {
     listByProject: mockListByProject,
   },
+  workspacePlanService: {
+    getSnapshot: mockGetPlanSnapshot,
+  },
 }));
 
 vi.mock('@/services/unifiedEventService', () => ({
@@ -130,8 +135,15 @@ vi.mock('@/services/unifiedEventService', () => ({
 }));
 
 vi.mock('@/components/blackboard/CentralBlackboardContent', () => ({
-  CentralBlackboardContent: (props: { activeTab: string }) => (
-    <div data-testid="central-blackboard-content" data-active-tab={props.activeTab} />
+  CentralBlackboardContent: (props: {
+    activeTab: string;
+    statsPlan?: { counts?: Record<string, number> } | null;
+  }) => (
+    <div
+      data-testid="central-blackboard-content"
+      data-active-tab={props.activeTab}
+      data-stats-plan-done={String(props.statsPlan?.counts?.['intent:done'] ?? '')}
+    />
   ),
 }));
 
@@ -175,6 +187,42 @@ function makeWorkspaces(count = 2): Workspace[] {
   );
 }
 
+function makePlanSnapshot(counts: Record<string, number>) {
+  return {
+    workspace_id: 'ws-1',
+    plan: {
+      id: 'plan-1',
+      workspace_id: 'ws-1',
+      goal_id: 'goal-1',
+      status: 'active',
+      created_at: '2026-03-30T08:00:00Z',
+      counts,
+      nodes: Array.from({ length: 14 }, (_, index) => ({
+        id: `node-${String(index)}`,
+        parent_id: null,
+        kind: 'task',
+        title: `Task ${String(index)}`,
+        description: '',
+        depends_on: [],
+        acceptance_criteria: [],
+        recommended_capabilities: [],
+        intent: index < (counts['intent:done'] ?? 0) ? 'done' : 'todo',
+        execution: 'idle',
+        progress: { percent: 0, confidence: 1, note: '' },
+        assignee_agent_id: null,
+        current_attempt_id: null,
+        workspace_task_id: null,
+        priority: index,
+        metadata: {},
+        created_at: '2026-03-30T08:00:00Z',
+      })),
+    },
+    blackboard: [],
+    outbox: [],
+    events: [],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -201,6 +249,13 @@ describe('Blackboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storeStateRef.current = defaultStoreState();
+    mockGetPlanSnapshot.mockResolvedValue({
+      workspace_id: 'ws-1',
+      plan: null,
+      blackboard: [],
+      outbox: [],
+      events: [],
+    });
     (useParams as ReturnType<typeof vi.fn>).mockReturnValue({ tenantId: 't1', projectId: 'p1' });
     setupSearchParams();
   });
@@ -339,6 +394,42 @@ describe('Blackboard', () => {
     expect(screen.getByText('blackboard.summary.tasks')).toBeInTheDocument();
     expect(screen.getByText('blackboard.summary.activeAgents')).toBeInTheDocument();
     expect(screen.getByText('blackboard.summary.openThreads')).toBeInTheDocument();
+  });
+
+  it('prefers durable plan intent counts for summary metrics when task projections are stale', async () => {
+    const workspaces = makeWorkspaces(1);
+    mockListByProject.mockResolvedValue(workspaces);
+    mockGetPlanSnapshot.mockResolvedValue(
+      makePlanSnapshot({
+        'intent:done': 12,
+        'intent:todo': 2,
+        'intent:in_progress': 0,
+        'intent:blocked': 0,
+      })
+    );
+
+    storeStateRef.current = {
+      ...storeStateRef.current,
+      currentWorkspace: workspaces[0],
+      tasks: [
+        { id: 'task-1', status: 'done' },
+        { id: 'task-2', status: 'in_progress' },
+        { id: 'task-3', status: 'in_progress' },
+      ],
+    };
+    mockLoadWorkspaceSurface.mockResolvedValue(undefined);
+
+    renderBlackboard();
+
+    await waitFor(() => {
+      expect(screen.getByText('86%')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('central-blackboard-content')).toHaveAttribute(
+      'data-stats-plan-done',
+      '12'
+    );
+    expect(screen.queryByText('33%')).not.toBeInTheDocument();
   });
 
   // 6. Deep-links to a tab via ?tab= search param
