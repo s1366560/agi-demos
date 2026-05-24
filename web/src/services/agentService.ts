@@ -551,6 +551,7 @@ class AgentServiceImpl implements AgentService {
       app_model_context,
       image_attachments,
       agent_id,
+      mentions,
     } = request;
 
     if (!this.isConnected()) {
@@ -571,6 +572,7 @@ class AgentServiceImpl implements AgentService {
       app_model_context,
       image_attachments,
       agent_id,
+      mentions,
     });
 
     if (!sent) {

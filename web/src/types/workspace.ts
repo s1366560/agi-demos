@@ -959,6 +959,7 @@ export interface SendMessageRequest {
   content: string;
   sender_type?: string;
   parent_message_id?: string | null;
+  mentions?: string[] | undefined;
 }
 
 export interface MessageListResponse {

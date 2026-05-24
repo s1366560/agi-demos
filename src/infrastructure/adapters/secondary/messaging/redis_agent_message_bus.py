@@ -255,14 +255,9 @@ class RedisAgentMessageBusAdapter(AgentMessageBusPort):
             if isinstance(msg_id, bytes):
                 msg_id = msg_id.decode("utf-8")
 
-            raw_data = fields.get(b"data") or fields.get("data")
-            if isinstance(raw_data, bytes):
-                raw_data = raw_data.decode("utf-8")
-
-            if not raw_data:
+            data = self._decode_message_fields(fields)
+            if data is None:
                 return None
-
-            data = json.loads(raw_data)
 
             return AgentMessage(
                 message_id=data.get("message_id", ""),
@@ -283,11 +278,49 @@ class RedisAgentMessageBusAdapter(AgentMessageBusPort):
                 ),
                 metadata=data.get("metadata"),
                 parent_message_id=data.get("parent_message_id"),
+                stream_id=msg_id,
             )
 
         except Exception as e:
             logger.warning("[AgentMessageBus] Failed to parse message %s: %s", msg_id, e)
             return None
+
+    @staticmethod
+    def _decode_message_fields(fields: dict[Any, Any]) -> dict[str, Any] | None:
+        """Decode canonical data payloads and legacy raw-field stream entries."""
+
+        def _decode_value(value: object) -> object:
+            return value.decode("utf-8") if isinstance(value, bytes) else value
+
+        normalized: dict[str, object] = {
+            str(_decode_value(key)): _decode_value(value) for key, value in fields.items()
+        }
+        raw_data = normalized.get("data")
+        if isinstance(raw_data, str) and raw_data:
+            loaded = json.loads(raw_data)
+            if isinstance(loaded, dict):
+                metadata = loaded.get("metadata")
+                if isinstance(metadata, str):
+                    loaded["metadata"] = json.loads(metadata) if metadata else {}
+                return loaded
+            return None
+
+        if not normalized.get("message_id"):
+            return None
+
+        metadata = normalized.get("metadata")
+        if isinstance(metadata, str):
+            try:
+                normalized["metadata"] = json.loads(metadata) if metadata else {}
+            except json.JSONDecodeError:
+                normalized["metadata"] = {}
+        elif metadata is None:
+            normalized["metadata"] = {}
+
+        parent_message_id = normalized.get("parent_message_id")
+        if parent_message_id == "":
+            normalized["parent_message_id"] = None
+        return normalized
 
 
 def create_redis_agent_message_bus(

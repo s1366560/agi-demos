@@ -324,6 +324,7 @@ export interface MessageEventData {
   created_at?: string | undefined;
   artifacts?: ArtifactReference[] | undefined;
   metadata?: Record<string, unknown> | undefined;
+  mentions?: string[] | undefined;
 }
 
 /**

@@ -79,6 +79,12 @@ class SendMessageHandler(WebSocketMessageHandler):
         app_model_context = _sanitize_client_app_model_context(message.get("app_model_context"))
         image_attachments = message.get("image_attachments")
         agent_id = message.get("agent_id")
+        raw_mentions = message.get("mentions")
+        mentions = (
+            [m for m in raw_mentions if isinstance(m, str)]
+            if isinstance(raw_mentions, list)
+            else None
+        )
 
         if not all([conversation_id, user_message, project_id]):
             await context.send_error(
@@ -173,6 +179,7 @@ class SendMessageHandler(WebSocketMessageHandler):
                     app_model_context=app_model_context,
                     image_attachments=image_attachments,
                     agent_id=agent_id,
+                    mentions=mentions,
                 )
             )
             context.connection_manager.add_bridge_task(context.session_id, conversation_id, task)
@@ -329,6 +336,7 @@ async def stream_agent_to_websocket_with_fresh_session(
     app_model_context: dict[str, Any] | None = None,
     image_attachments: list[str] | None = None,
     agent_id: str | None = None,
+    mentions: list[str] | None = None,
 ) -> None:
     """Create a fresh DB-scoped agent service for the long-running stream."""
     async with context.fresh_db_context() as stream_context:
@@ -349,10 +357,11 @@ async def stream_agent_to_websocket_with_fresh_session(
             app_model_context=_sanitize_client_app_model_context(app_model_context),
             image_attachments=image_attachments,
             agent_id=agent_id,
+            mentions=mentions,
         )
 
 
-async def stream_agent_to_websocket(
+async def stream_agent_to_websocket(  # noqa: PLR0913
     agent_service: AgentService,
     context: MessageContext,
     conversation_id: str,
@@ -365,6 +374,7 @@ async def stream_agent_to_websocket(
     app_model_context: dict[str, Any] | None = None,
     image_attachments: list[str] | None = None,
     agent_id: str | None = None,
+    mentions: list[str] | None = None,
 ) -> None:
     """
     Stream agent events to WebSocket.
@@ -389,6 +399,7 @@ async def stream_agent_to_websocket(
             app_model_context=_sanitize_client_app_model_context(app_model_context),
             image_attachments=image_attachments,
             agent_id=agent_id,
+            mentions=mentions,
             api_auth_token=context.api_key,
         ):
             event_count += 1

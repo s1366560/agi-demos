@@ -24,6 +24,7 @@ def _build_service(
     agents: list[MagicMock] | None = None,
     members: list[MagicMock] | None = None,
     publisher: AsyncMock | None = AsyncMock(),
+    allow_legacy_text_mentions: bool = False,
 ) -> tuple[WorkspaceMessageService, AsyncMock, AsyncMock, AsyncMock]:
     message_repo = AsyncMock()
     member_repo = AsyncMock()
@@ -42,6 +43,7 @@ def _build_service(
         member_repo=member_repo,
         agent_repo=agent_repo,
         workspace_event_publisher=publisher,
+        allow_legacy_text_mentions=allow_legacy_text_mentions,
     )
     return service, message_repo, member_repo, agent_repo
 
@@ -63,7 +65,7 @@ class TestSendMessage:
         assert msg.content == "Hello team"
         assert msg.metadata == {"sender_name": "Alice"}
 
-    async def test_parses_agent_mentions(self) -> None:
+    async def test_uses_structured_agent_mentions(self) -> None:
         agents = [_make_agent("agent-abc", "CodeBot")]
         service, *_ = _build_service(agents=agents)
         msg = await service.send_message(
@@ -72,10 +74,11 @@ class TestSendMessage:
             sender_type=MessageSenderType.HUMAN,
             sender_name="Alice",
             content="Hey @CodeBot can you help?",
+            mentions=["agent-abc"],
         )
         assert msg.mentions == ["agent-abc"]
 
-    async def test_parses_multiple_mentions(self) -> None:
+    async def test_uses_multiple_structured_mentions(self) -> None:
         agents = [
             _make_agent("a1", "Bot-A"),
             _make_agent("a2", "Bot-B"),
@@ -87,10 +90,11 @@ class TestSendMessage:
             sender_type=MessageSenderType.HUMAN,
             sender_name="Alice",
             content="@Bot-A and @Bot-B please review",
+            mentions=["a1", "a2"],
         )
         assert set(msg.mentions) == {"a1", "a2"}
 
-    async def test_unknown_mention_ignored(self) -> None:
+    async def test_unstructured_text_mention_does_not_route_by_default(self) -> None:
         service, *_ = _build_service(agents=[], members=[])
         msg = await service.send_message(
             workspace_id="ws-1",
@@ -100,6 +104,19 @@ class TestSendMessage:
             content="Hey @nonexistent check this",
         )
         assert msg.mentions == []
+
+    async def test_unknown_structured_mention_rejected(self) -> None:
+        service, *_ = _build_service(agents=[], members=[])
+
+        with pytest.raises(ValueError, match="Unknown workspace mentions"):
+            await service.send_message(
+                workspace_id="ws-1",
+                sender_id="user-1",
+                sender_type=MessageSenderType.HUMAN,
+                sender_name="Alice",
+                content="Hey @nonexistent check this",
+                mentions=["nonexistent"],
+            )
 
     async def test_publishes_event(self) -> None:
         publisher = AsyncMock()
@@ -163,8 +180,23 @@ class TestSendMessage:
             sender_type=MessageSenderType.HUMAN,
             sender_name="Alice",
             content="@Bot hey @Bot again",
+            mentions=["a1", "a1"],
         )
         assert msg.mentions == ["a1"]
+
+    async def test_legacy_text_mentions_available_when_enabled(self) -> None:
+        agents = [_make_agent("agent-abc", "CodeBot")]
+        service, *_ = _build_service(agents=agents, allow_legacy_text_mentions=True)
+
+        msg = await service.send_message(
+            workspace_id="ws-1",
+            sender_id="user-1",
+            sender_type=MessageSenderType.HUMAN,
+            sender_name="Alice",
+            content="Hey @CodeBot can you help?",
+        )
+
+        assert msg.mentions == ["agent-abc"]
 
 
 @pytest.mark.unit

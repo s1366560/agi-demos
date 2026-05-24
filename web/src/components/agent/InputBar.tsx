@@ -46,7 +46,8 @@ interface InputBarProps {
     fileMetadata?: FileMetadata[],
     forcedSkillName?: string,
     forcedSubAgentName?: string,
-    imageAttachments?: string[]
+    imageAttachments?: string[],
+    mentions?: string[]
   ) => void;
   onAbort: () => void;
   isStreaming: boolean;
@@ -306,7 +307,8 @@ export const InputBar = memo<InputBarProps>(
         fileMetadataList.length > 0 ? fileMetadataList : undefined,
         selectedSkill?.name,
         selectedSubAgent || undefined,
-        imageAttachments
+        imageAttachments,
+        isSharedMode && selectedSubAgent ? [selectedSubAgent] : undefined
       );
       setContent('');
       resetSlash();
@@ -325,6 +327,7 @@ export const InputBar = memo<InputBarProps>(
       clearAll,
       selectedSkill,
       selectedSubAgent,
+      isSharedMode,
       isCameraOn,
       captureFrame,
       resetSlash,

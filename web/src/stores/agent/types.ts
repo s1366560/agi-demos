@@ -24,6 +24,8 @@ export interface AdditionalAgentHandlers {
   imageAttachments?: string[] | undefined;
   /** Target agent ID for multi-agent routing */
   agentId?: string | undefined;
+  /** Structured target agent IDs selected by the mention UI */
+  mentions?: string[] | undefined;
 }
 
 export interface LoadConversationsOptions {

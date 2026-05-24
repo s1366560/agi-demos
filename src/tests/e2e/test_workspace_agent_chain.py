@@ -62,6 +62,7 @@ def _build_test_env(agents: list[MagicMock], agent_responses: dict[str, list[str
         message_repo=message_repo,
         member_repo=member_repo,
         agent_repo=agent_repo,
+        allow_legacy_text_mentions=True,
     )
 
     def message_service_factory(db: Any, event_publisher: Any = None) -> WorkspaceMessageService:

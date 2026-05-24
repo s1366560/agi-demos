@@ -1422,6 +1422,63 @@ export function createStreamEventHandlers(
       }
     },
 
+    onSubAgentRunStarted: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      updateConversationState(handlerConversationId, {
+        timeline: appendSSEEventToTimeline(convState.timeline, event),
+        agentState: 'acting',
+      });
+    },
+
+    onSubAgentRunCompleted: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      updateConversationState(handlerConversationId, {
+        timeline: appendSSEEventToTimeline(convState.timeline, event),
+      });
+    },
+
+    onSubAgentRunFailed: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      updateConversationState(handlerConversationId, {
+        timeline: appendSSEEventToTimeline(convState.timeline, event),
+      });
+    },
+
+    onSubAgentSessionSpawned: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      updateConversationState(handlerConversationId, {
+        timeline: appendSSEEventToTimeline(convState.timeline, event),
+      });
+    },
+
+    onSubAgentSessionMessageSent: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      updateConversationState(handlerConversationId, {
+        timeline: appendSSEEventToTimeline(convState.timeline, event),
+      });
+    },
+
+    onSubAgentAnnounceRetry: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      updateConversationState(handlerConversationId, {
+        timeline: appendSSEEventToTimeline(convState.timeline, event),
+      });
+    },
+
+    onSubAgentAnnounceGiveup: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      updateConversationState(handlerConversationId, {
+        timeline: appendSSEEventToTimeline(convState.timeline, event),
+      });
+    },
+
     onSubAgentQueued: (event: AgentEvent<SubAgentQueuedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
@@ -1975,6 +2032,7 @@ export function createStreamEventHandlers(
       const data = event.data as Partial<AgentSpawnedEventData>;
       if (!data.agent_id) return;
       const agentNodes = new Map(convState.agentNodes);
+      const nodeKey = data.child_session_id ?? data.agent_id;
       const node: AgentNode = {
         agentId: data.agent_id,
         name: data.agent_name ?? null,
@@ -1989,13 +2047,18 @@ export function createStreamEventHandlers(
         createdAt: Date.now(),
         lastUpdateAt: Date.now(),
       };
-      agentNodes.set(data.agent_id, node);
-      if (data.parent_agent_id && agentNodes.has(data.parent_agent_id)) {
-        const parent = agentNodes.get(data.parent_agent_id);
-        if (parent) {
-          agentNodes.set(data.parent_agent_id, {
+      agentNodes.set(nodeKey, node);
+      const parentKey = data.parent_agent_id
+        ? Array.from(agentNodes.entries()).find(
+            ([key, value]) => key === data.parent_agent_id || value.agentId === data.parent_agent_id
+          )?.[0]
+        : undefined;
+      if (parentKey) {
+        const parent = agentNodes.get(parentKey);
+        if (parent && !parent.children.includes(nodeKey)) {
+          agentNodes.set(parentKey, {
             ...parent,
-            children: [...parent.children, data.agent_id],
+            children: [...parent.children, nodeKey],
             lastUpdateAt: Date.now(),
           });
         }
@@ -2013,9 +2076,15 @@ export function createStreamEventHandlers(
       const data = event.data as Partial<AgentCompletedEventData>;
       if (!data.agent_id) return;
       const agentNodes = new Map(convState.agentNodes);
-      const existing = agentNodes.get(data.agent_id);
+      const nodeKey =
+        (data.session_id ? data.session_id : undefined) ??
+        Array.from(agentNodes.entries()).find(
+          ([, value]) => value.agentId === data.agent_id
+        )?.[0] ??
+        data.agent_id;
+      const existing = agentNodes.get(nodeKey);
       if (existing) {
-        agentNodes.set(data.agent_id, {
+        agentNodes.set(nodeKey, {
           ...existing,
           status: data.success ? 'completed' : 'failed',
           result: data.result ?? null,
@@ -2030,15 +2099,35 @@ export function createStreamEventHandlers(
       });
     },
 
+    onAgentMessageSent: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      updateConversationState(handlerConversationId, {
+        timeline: appendSSEEventToTimeline(convState.timeline, event),
+      });
+    },
+
+    onAgentMessageReceived: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      updateConversationState(handlerConversationId, {
+        timeline: appendSSEEventToTimeline(convState.timeline, event),
+      });
+    },
+
     onAgentStopped: (event: AgentEvent<AgentStoppedEventData>) => {
       const { updateConversationState, getConversationState } = get();
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       const data = event.data;
       const agentNodes = new Map(convState.agentNodes);
-      const existing = agentNodes.get(data.agent_id);
+      const nodeKey =
+        Array.from(agentNodes.entries()).find(
+          ([, value]) => value.agentId === data.agent_id
+        )?.[0] ?? data.agent_id;
+      const existing = agentNodes.get(nodeKey);
       if (existing) {
-        agentNodes.set(data.agent_id, {
+        agentNodes.set(nodeKey, {
           ...existing,
           status: 'stopped',
           lastUpdateAt: Date.now(),

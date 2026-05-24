@@ -10,9 +10,9 @@ describe('agentService subagent session event routing', () => {
     routeToHandler(eventType, data, handler);
   };
 
-  it('routes subagent_announce_retry to onSubAgentStarted', () => {
-    const onSubAgentStarted = vi.fn();
-    const handler: AgentStreamHandler = { onSubAgentStarted };
+  it('routes subagent_announce_retry to its dedicated handler', () => {
+    const onSubAgentAnnounceRetry = vi.fn();
+    const handler: AgentStreamHandler = { onSubAgentAnnounceRetry };
 
     route(
       'subagent_announce_retry',
@@ -27,16 +27,16 @@ describe('agentService subagent session event routing', () => {
       handler
     );
 
-    expect(onSubAgentStarted).toHaveBeenCalledTimes(1);
-    const routed = onSubAgentStarted.mock.calls[0][0];
-    expect(routed.type).toBe('subagent_started');
-    expect(routed.data.subagent_id).toBe('run-1');
-    expect(routed.data.task).toContain('Retry 2');
+    expect(onSubAgentAnnounceRetry).toHaveBeenCalledTimes(1);
+    const routed = onSubAgentAnnounceRetry.mock.calls[0][0];
+    expect(routed.type).toBe('subagent_announce_retry');
+    expect(routed.data.run_id).toBe('run-1');
+    expect(routed.data.attempt).toBe(2);
   });
 
-  it('routes subagent_announce_giveup to onSubAgentFailed', () => {
-    const onSubAgentFailed = vi.fn();
-    const handler: AgentStreamHandler = { onSubAgentFailed };
+  it('routes subagent_announce_giveup to its dedicated handler', () => {
+    const onSubAgentAnnounceGiveup = vi.fn();
+    const handler: AgentStreamHandler = { onSubAgentAnnounceGiveup };
 
     route(
       'subagent_announce_giveup',
@@ -50,11 +50,11 @@ describe('agentService subagent session event routing', () => {
       handler
     );
 
-    expect(onSubAgentFailed).toHaveBeenCalledTimes(1);
-    const routed = onSubAgentFailed.mock.calls[0][0];
-    expect(routed.type).toBe('subagent_failed');
-    expect(routed.data.subagent_id).toBe('run-2');
-    expect(routed.data.error).toContain('Give up after 3 attempts');
+    expect(onSubAgentAnnounceGiveup).toHaveBeenCalledTimes(1);
+    const routed = onSubAgentAnnounceGiveup.mock.calls[0][0];
+    expect(routed.type).toBe('subagent_announce_giveup');
+    expect(routed.data.run_id).toBe('run-2');
+    expect(routed.data.attempts).toBe(3);
   });
 });
 
@@ -69,9 +69,9 @@ describe('agentService project-scoped subagent lifecycle routing', () => {
     handlers().clear();
   });
 
-  it('routes subagent_lifecycle spawned payload to onSubAgentStarted by data.conversation_id', () => {
-    const onSubAgentStarted = vi.fn();
-    handlers().set('conv-1', { onSubAgentStarted });
+  it('routes subagent_lifecycle spawned payload to onSubAgentSessionSpawned by data.conversation_id', () => {
+    const onSubAgentSessionSpawned = vi.fn();
+    handlers().set('conv-1', { onSubAgentSessionSpawned });
 
     handleMessage({
       type: 'subagent_lifecycle',
@@ -84,16 +84,15 @@ describe('agentService project-scoped subagent lifecycle routing', () => {
       },
     });
 
-    expect(onSubAgentStarted).toHaveBeenCalledTimes(1);
-    const routed = onSubAgentStarted.mock.calls[0][0];
-    expect(routed.type).toBe('subagent_started');
-    expect(routed.data.subagent_id).toBe('run-10');
-    expect(routed.data.task).toBe('Session spawned');
+    expect(onSubAgentSessionSpawned).toHaveBeenCalledTimes(1);
+    const routed = onSubAgentSessionSpawned.mock.calls[0][0];
+    expect(routed.type).toBe('subagent_session_spawned');
+    expect(routed.data.run_id).toBe('run-10');
   });
 
-  it('routes subagent_lifecycle spawning payload to onSubAgentStarted', () => {
-    const onSubAgentStarted = vi.fn();
-    handlers().set('conv-3', { onSubAgentStarted });
+  it('routes subagent_lifecycle spawning payload to onSubAgentRunStarted', () => {
+    const onSubAgentRunStarted = vi.fn();
+    handlers().set('conv-3', { onSubAgentRunStarted });
 
     handleMessage({
       type: 'subagent_lifecycle',
@@ -105,16 +104,16 @@ describe('agentService project-scoped subagent lifecycle routing', () => {
       },
     });
 
-    expect(onSubAgentStarted).toHaveBeenCalledTimes(1);
-    const routed = onSubAgentStarted.mock.calls[0][0];
-    expect(routed.type).toBe('subagent_started');
-    expect(routed.data.subagent_id).toBe('run-30');
+    expect(onSubAgentRunStarted).toHaveBeenCalledTimes(1);
+    const routed = onSubAgentRunStarted.mock.calls[0][0];
+    expect(routed.type).toBe('subagent_run_started');
+    expect(routed.data.run_id).toBe('run-30');
     expect(routed.data.task).toBe('Spawning detached session');
   });
 
-  it('routes subagent_lifecycle ended payload with non-completed status to onSubAgentFailed', () => {
-    const onSubAgentFailed = vi.fn();
-    handlers().set('conv-2', { onSubAgentFailed });
+  it('routes subagent_lifecycle ended payload with non-completed status to onSubAgentRunFailed', () => {
+    const onSubAgentRunFailed = vi.fn();
+    handlers().set('conv-2', { onSubAgentRunFailed });
 
     handleMessage({
       type: 'subagent_lifecycle',
@@ -127,10 +126,10 @@ describe('agentService project-scoped subagent lifecycle routing', () => {
       },
     });
 
-    expect(onSubAgentFailed).toHaveBeenCalledTimes(1);
-    const routed = onSubAgentFailed.mock.calls[0][0];
-    expect(routed.type).toBe('subagent_failed');
-    expect(routed.data.subagent_id).toBe('run-20');
+    expect(onSubAgentRunFailed).toHaveBeenCalledTimes(1);
+    const routed = onSubAgentRunFailed.mock.calls[0][0];
+    expect(routed.type).toBe('subagent_run_failed');
+    expect(routed.data.run_id).toBe('run-20');
     expect(routed.data.error).toContain('timed_out');
   });
 });

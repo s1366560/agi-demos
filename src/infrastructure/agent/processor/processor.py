@@ -33,6 +33,7 @@ from src.domain.events.agent_events import (
     AgentActDeltaEvent,
     AgentActEvent,
     AgentCompactNeededEvent,
+    AgentCompletedEvent,
     AgentCompleteEvent,
     AgentContextStatusEvent,
     AgentCostUpdateEvent,
@@ -41,6 +42,7 @@ from src.domain.events.agent_events import (
     AgentErrorEvent,
     AgentEventType,
     AgentMCPAppResultEvent,
+    AgentMessageReceivedEvent,
     AgentObserveEvent,
     AgentPermissionAskedEvent,
     AgentRetryEvent,
@@ -1500,17 +1502,16 @@ class SessionProcessor:
 
             events: list[ProcessorEvent] = []
             for msg in raw_messages:
+                cursor_id = msg.stream_id or msg.message_id
                 if msg.message_type != AgentMessageType.ANNOUNCE:
-                    self._last_announce_id = msg.message_id
+                    self._last_announce_id = cursor_id
                     continue
-
-                import json
 
                 try:
                     payload = AnnouncePayload.from_dict(json.loads(msg.content))
                 except (json.JSONDecodeError, KeyError, TypeError):
                     logger.warning("Failed to parse announce payload from %s", msg.message_id)
-                    self._last_announce_id = msg.message_id
+                    self._last_announce_id = cursor_id
                     continue
 
                 status = "completed successfully" if payload.success else "failed"
@@ -1526,7 +1527,27 @@ class SessionProcessor:
                     payload.session_id,
                     payload.success,
                 )
-                self._last_announce_id = msg.message_id
+                events.append(
+                    AgentMessageReceivedEvent(
+                        agent_id=msg.to_agent_id,
+                        agent_name=msg.to_agent_id,
+                        from_agent_id=payload.agent_id,
+                        from_agent_name=payload.agent_id,
+                        message_preview=result_summary[:200],
+                    )
+                )
+                events.append(
+                    AgentCompletedEvent(
+                        agent_id=payload.agent_id,
+                        agent_name=payload.agent_id,
+                        parent_agent_id=msg.to_agent_id,
+                        session_id=payload.session_id,
+                        result=result_summary,
+                        success=payload.success,
+                        artifacts=list(payload.artifacts),
+                    )
+                )
+                self._last_announce_id = cursor_id
             return events
         except Exception:
             logger.warning("Error polling agent announcements", exc_info=True)

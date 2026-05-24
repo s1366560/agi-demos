@@ -229,7 +229,8 @@ interface WorkspaceState {
     tenantId: string,
     projectId: string,
     workspaceId: string,
-    content: string
+    content: string,
+    mentions?: string[]
   ) => Promise<void>;
   handleChatEvent: (event: { type: string; data: Record<string, unknown> }) => void;
 
@@ -1260,9 +1261,10 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         }
       },
 
-      sendChatMessage: async (tenantId, projectId, workspaceId, content) => {
+      sendChatMessage: async (tenantId, projectId, workspaceId, content, mentions = []) => {
         const message = await workspaceChatService.sendMessage(tenantId, projectId, workspaceId, {
           content,
+          mentions,
         });
         set({ chatMessages: [...get().chatMessages, message] });
       },

@@ -115,7 +115,7 @@ class AnnounceService:
             try:
                 await self._redis.xadd(
                     stream_key,
-                    cast("dict[Any, Any]", message_data),
+                    cast("dict[Any, Any]", {"data": json.dumps(message_data, default=str)}),
                 )
                 logger.info(
                     "Published announce: agent=%s child_session=%s parent_session=%s success=%s",
@@ -217,7 +217,7 @@ class AnnounceService:
         agent_id: str,
         parent_session_id: str,
         announce_payload: dict[str, Any],
-    ) -> dict[str, str]:
+    ) -> dict[str, Any]:
         return {
             "message_id": str(uuid.uuid4()),
             "from_agent_id": agent_id,
@@ -226,6 +226,6 @@ class AnnounceService:
             "content": json.dumps(announce_payload),
             "message_type": "announce",
             "timestamp": datetime.now(UTC).isoformat(),
-            "metadata": json.dumps({"announce_payload": announce_payload}),
-            "parent_message_id": "",
+            "metadata": {"announce_payload": announce_payload},
+            "parent_message_id": None,
         }

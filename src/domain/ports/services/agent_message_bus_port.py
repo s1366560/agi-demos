@@ -51,6 +51,7 @@ class AgentMessage:
         timestamp: When the message was created
         metadata: Additional metadata
         parent_message_id: ID of the parent message (for threading)
+        stream_id: Transport cursor ID assigned by the backing stream.
     """
 
     message_id: str
@@ -62,6 +63,7 @@ class AgentMessage:
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] | None = None
     parent_message_id: str | None = None
+    stream_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -75,6 +77,7 @@ class AgentMessage:
             "timestamp": self.timestamp.isoformat(),
             "metadata": self.metadata or {},
             "parent_message_id": self.parent_message_id,
+            "stream_id": self.stream_id,
         }
 
     @classmethod
@@ -94,6 +97,7 @@ class AgentMessage:
             ),
             metadata=data.get("metadata"),
             parent_message_id=data.get("parent_message_id"),
+            stream_id=data.get("stream_id"),
         )
 
 

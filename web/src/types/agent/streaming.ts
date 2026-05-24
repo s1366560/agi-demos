@@ -43,10 +43,15 @@ import type {
   PermissionRepliedEventData,
   CostUpdateEventData,
   SandboxEventData,
+  SubAgentAnnounceGiveupEventData,
+  SubAgentAnnounceRetryEventData,
   SubAgentRoutedEventData,
+  SubAgentRunEventData,
   SubAgentStartedEventData,
   SubAgentCompletedEventData,
   SubAgentFailedEventData,
+  SubAgentSessionMessageSentEventData,
+  SubAgentSessionSpawnedEventData,
   SubAgentQueuedEventData,
   SubAgentKilledEventData,
   SubAgentSteeredEventData,
@@ -76,6 +81,8 @@ import type {
   A2UIActionAskedEventData,
   AgentSpawnedEventData,
   AgentCompletedEventData,
+  AgentMessageReceivedEventData,
+  AgentMessageSentEventData,
   AgentStoppedEventData,
   GraphRunStartedEventData,
   GraphRunCompletedEventData,
@@ -182,6 +189,21 @@ export interface AgentStreamHandler {
   onSubAgentStarted?: ((event: AgentEvent<SubAgentStartedEventData>) => void) | undefined;
   onSubAgentCompleted?: ((event: AgentEvent<SubAgentCompletedEventData>) => void) | undefined;
   onSubAgentFailed?: ((event: AgentEvent<SubAgentFailedEventData>) => void) | undefined;
+  onSubAgentRunStarted?: ((event: AgentEvent<SubAgentRunEventData>) => void) | undefined;
+  onSubAgentRunCompleted?: ((event: AgentEvent<SubAgentRunEventData>) => void) | undefined;
+  onSubAgentRunFailed?: ((event: AgentEvent<SubAgentRunEventData>) => void) | undefined;
+  onSubAgentSessionSpawned?:
+    | ((event: AgentEvent<SubAgentSessionSpawnedEventData>) => void)
+    | undefined;
+  onSubAgentSessionMessageSent?:
+    | ((event: AgentEvent<SubAgentSessionMessageSentEventData>) => void)
+    | undefined;
+  onSubAgentAnnounceRetry?:
+    | ((event: AgentEvent<SubAgentAnnounceRetryEventData>) => void)
+    | undefined;
+  onSubAgentAnnounceGiveup?:
+    | ((event: AgentEvent<SubAgentAnnounceGiveupEventData>) => void)
+    | undefined;
   onSubAgentQueued?: ((event: AgentEvent<SubAgentQueuedEventData>) => void) | undefined;
   onSubAgentKilled?: ((event: AgentEvent<SubAgentKilledEventData>) => void) | undefined;
   onSubAgentSteered?: ((event: AgentEvent<SubAgentSteeredEventData>) => void) | undefined;
@@ -200,6 +222,8 @@ export interface AgentStreamHandler {
   // Multi-agent lifecycle handlers (L4 layer)
   onAgentSpawned?: ((event: AgentEvent<AgentSpawnedEventData>) => void) | undefined;
   onAgentCompleted?: ((event: AgentEvent<AgentCompletedEventData>) => void) | undefined;
+  onAgentMessageSent?: ((event: AgentEvent<AgentMessageSentEventData>) => void) | undefined;
+  onAgentMessageReceived?: ((event: AgentEvent<AgentMessageReceivedEventData>) => void) | undefined;
   onAgentStopped?: ((event: AgentEvent<AgentStoppedEventData>) => void) | undefined;
   // Graph orchestration handlers (multi-agent DAG)
   onGraphRunStarted?: ((event: AgentEvent<GraphRunStartedEventData>) => void) | undefined;

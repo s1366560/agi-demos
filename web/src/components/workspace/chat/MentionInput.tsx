@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { WorkspaceMember, WorkspaceAgent } from '@/types/workspace';
 
 export interface MentionInputProps {
-  onSend: (content: string) => void;
+  onSend: (content: string, mentions: string[]) => void;
   members: WorkspaceMember[];
   agents: WorkspaceAgent[];
   disabled?: boolean;
@@ -15,6 +15,10 @@ type MentionOption = {
   id: string;
   type: 'broadcast' | 'human' | 'agent';
   name: string;
+};
+
+type SelectedMention = MentionOption & {
+  text: string;
 };
 
 export const MentionInput: React.FC<MentionInputProps> = ({
@@ -28,6 +32,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   const [showDropdown, setShowDropdown] = useState(false);
   const [filterText, setFilterText] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -36,12 +41,12 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     () => [
       { id: 'all', type: 'broadcast', name: 'all' },
       ...members.map((m) => ({
-        id: m.id,
+        id: m.user_id,
         type: 'human' as const,
         name: m.user_email || m.user_id,
       })),
       ...agents.map((a) => ({
-        id: a.id,
+        id: a.agent_id,
         type: 'agent' as const,
         name: a.display_name || a.agent_id,
       })),
@@ -83,8 +88,12 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (content.trim()) {
-        onSend(content.trim());
+        onSend(
+          content.trim(),
+          selectedMentions.map((mention) => mention.id)
+        );
         setContent('');
+        setSelectedMentions([]);
       }
     }
   };
@@ -92,6 +101,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setContent(val);
+    setSelectedMentions((prev) => prev.filter((mention) => val.includes(mention.text)));
 
     const cursorPosition = e.target.selectionStart;
     const textBeforeCursor = val.slice(0, cursorPosition);
@@ -106,7 +116,7 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     }
   };
 
-  const selectMention = (mention: { name: string }) => {
+  const selectMention = (mention: MentionOption) => {
     if (!textareaRef.current) return;
 
     const cursorPosition = textareaRef.current.selectionStart;
@@ -119,6 +129,10 @@ export const MentionInput: React.FC<MentionInputProps> = ({
     const newTextBeforeCursor = textBeforeCursor.replace(/@[\w-]*$/, `${mentionText} `);
 
     setContent(newTextBeforeCursor + textAfterCursor);
+    setSelectedMentions((prev) => [
+      ...prev.filter((selected) => selected.id !== mention.id),
+      { ...mention, text: mentionText },
+    ]);
     setShowDropdown(false);
 
     setTimeout(() => {

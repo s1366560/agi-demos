@@ -482,6 +482,11 @@ export type TimelineEvent =
   | SubAgentStartedTimelineEvent
   | SubAgentCompletedTimelineEvent
   | SubAgentFailedTimelineEvent
+  | SubAgentRunTimelineEvent
+  | SubAgentSessionSpawnedTimelineEvent
+  | SubAgentSessionMessageSentTimelineEvent
+  | SubAgentAnnounceRetryTimelineEvent
+  | SubAgentAnnounceGiveupTimelineEvent
   | ParallelStartedTimelineEvent
   | ParallelCompletedTimelineEvent
   | ChainStartedTimelineEvent
@@ -542,6 +547,52 @@ export interface SubAgentFailedTimelineEvent extends BaseTimelineEvent {
   type: 'subagent_failed';
   subagentId: string;
   subagentName?: string | undefined;
+  error: string;
+}
+
+export interface SubAgentRunTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_run_started' | 'subagent_run_completed' | 'subagent_run_failed';
+  subagentId: string;
+  subagentName: string;
+  task: string;
+  status: string;
+  summary?: string | null | undefined;
+  error?: string | null | undefined;
+  executionTimeMs?: number | undefined;
+  tokensUsed?: number | undefined;
+}
+
+export interface SubAgentSessionSpawnedTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_session_spawned';
+  conversationId: string;
+  subagentId: string;
+  subagentName: string;
+}
+
+export interface SubAgentSessionMessageSentTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_session_message_sent';
+  conversationId: string;
+  parentSubagentId: string;
+  subagentId: string;
+  subagentName: string;
+}
+
+export interface SubAgentAnnounceRetryTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_announce_retry';
+  conversationId: string;
+  subagentId: string;
+  subagentName: string;
+  attempt: number;
+  error: string;
+  nextDelayMs: number;
+}
+
+export interface SubAgentAnnounceGiveupTimelineEvent extends BaseTimelineEvent {
+  type: 'subagent_announce_giveup';
+  conversationId: string;
+  subagentId: string;
+  subagentName: string;
+  attempts: number;
   error: string;
 }
 

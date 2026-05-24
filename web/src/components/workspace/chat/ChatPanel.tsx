@@ -45,9 +45,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ tenantId, projectId, works
     prevMessageCount.current = messages.length;
   }, [messages.length]);
 
-  const handleSend = (content: string) => {
+  const handleSend = (content: string, mentions: string[]) => {
     if (content.trim()) {
-      void sendMessage(tenantId, projectId, workspaceId, content);
+      void sendMessage(tenantId, projectId, workspaceId, content, mentions);
     }
   };
 

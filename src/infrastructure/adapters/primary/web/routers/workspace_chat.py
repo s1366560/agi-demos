@@ -91,6 +91,7 @@ class SendMessageRequest(BaseModel):
     content: str = Field(..., min_length=1)
     sender_type: str = Field(default="human")
     parent_message_id: str | None = None
+    mentions: list[str] = Field(default_factory=list)
 
 
 class MessageResponse(BaseModel):
@@ -144,6 +145,7 @@ async def send_message(
             sender_name=current_user.email,
             content=payload.content,
             parent_message_id=payload.parent_message_id,
+            mentions=payload.mentions,
         )
         await db.commit()
 
@@ -233,6 +235,7 @@ def _fire_mention_routing(
             agent_repo=SqlWorkspaceAgentRepository(db),
             workspace_event_publisher=publisher,
             user_repo=SqlUserRepository(db),
+            allow_legacy_text_mentions=True,
         )
 
     mention_router = WorkspaceMentionRouter(

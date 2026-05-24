@@ -18,6 +18,13 @@ const SUBAGENT_EVENT_TYPES = new Set([
   'subagent_started',
   'subagent_completed',
   'subagent_failed',
+  'subagent_run_started',
+  'subagent_run_completed',
+  'subagent_run_failed',
+  'subagent_session_spawned',
+  'subagent_session_message_sent',
+  'subagent_announce_retry',
+  'subagent_announce_giveup',
   'subagent_queued',
   'subagent_killed',
   'subagent_steered',
@@ -134,6 +141,9 @@ export function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
 const TERMINAL_SUBAGENT_TYPES = new Set([
   'subagent_completed',
   'subagent_failed',
+  'subagent_run_completed',
+  'subagent_run_failed',
+  'subagent_announce_giveup',
   'subagent_killed',
   'subagent_depth_limited',
   'parallel_completed',
@@ -249,6 +259,60 @@ function buildSubAgentGroup(
         const d = ev;
         group.status = 'error';
         group.error = d.error;
+        break;
+      }
+      case 'subagent_run_started': {
+        const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
+        group.task = d.task;
+        break;
+      }
+      case 'subagent_run_completed': {
+        const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
+        group.status = 'success';
+        group.summary = d.summary || '';
+        group.tokensUsed = d.tokensUsed;
+        group.executionTimeMs = d.executionTimeMs;
+        break;
+      }
+      case 'subagent_run_failed': {
+        const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
+        group.status = 'error';
+        group.error = d.error || 'Unknown error';
+        break;
+      }
+      case 'subagent_session_spawned': {
+        const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
+        group.task = group.task || 'Session spawned';
+        break;
+      }
+      case 'subagent_session_message_sent': {
+        const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
+        group.task = group.task || `Follow-up sent from ${d.parentSubagentId}`;
+        break;
+      }
+      case 'subagent_announce_retry': {
+        const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
+        group.task = `Retry ${String(d.attempt)}: ${d.error}`;
+        break;
+      }
+      case 'subagent_announce_giveup': {
+        const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
+        group.status = 'error';
+        group.error = `Give up after ${String(d.attempts)} attempts: ${d.error}`;
         break;
       }
       case 'parallel_started': {

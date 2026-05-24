@@ -89,6 +89,8 @@ import type {
   ToolsetChangedEventData,
   AgentSpawnedEventData,
   AgentCompletedEventData,
+  AgentMessageReceivedEventData,
+  AgentMessageSentEventData,
   AgentStoppedEventData,
   GraphRunStartedEventData,
   GraphRunCompletedEventData,
@@ -138,10 +140,12 @@ export function routeSubagentLifecycleMessage(
 
   if (lifecycleType === 'subagent_spawning') {
     routeToHandler(
-      'subagent_started',
+      'subagent_run_started',
       {
-        subagent_id: runId,
+        conversation_id: conversationId,
+        run_id: runId,
         subagent_name: subagentName,
+        status: status || 'spawning',
         task: 'Spawning detached session',
       },
       handler
@@ -439,104 +443,32 @@ export function routeToHandler(
     case 'subagent_failed':
       handler.onSubAgentFailed?.(event as AgentEvent<SubAgentFailedEventData>);
       break;
-    case 'subagent_run_started': {
-      const data = event.data as SubAgentRunEventData;
-      handler.onSubAgentStarted?.({
-        ...event,
-        type: 'subagent_started',
-        data: {
-          subagent_id: data.run_id,
-          subagent_name: data.subagent_name,
-          task: data.task,
-        },
-      } as AgentEvent<SubAgentStartedEventData>);
+    case 'subagent_run_started':
+      handler.onSubAgentRunStarted?.(event as AgentEvent<SubAgentRunEventData>);
       break;
-    }
-    case 'subagent_run_completed': {
-      const data = event.data as SubAgentRunEventData;
-      handler.onSubAgentCompleted?.({
-        ...event,
-        type: 'subagent_completed',
-        data: {
-          subagent_id: data.run_id,
-          subagent_name: data.subagent_name,
-          summary: data.summary || '',
-          tokens_used: data.tokens_used ?? undefined,
-          execution_time_ms: data.execution_time_ms ?? undefined,
-          success: true,
-        },
-      } as AgentEvent<SubAgentCompletedEventData>);
+    case 'subagent_run_completed':
+      handler.onSubAgentRunCompleted?.(event as AgentEvent<SubAgentRunEventData>);
       break;
-    }
-    case 'subagent_run_failed': {
-      const data = event.data as SubAgentRunEventData;
-      handler.onSubAgentFailed?.({
-        ...event,
-        type: 'subagent_failed',
-        data: {
-          subagent_id: data.run_id,
-          subagent_name: data.subagent_name,
-          error: data.error || 'Unknown error',
-        },
-      } as AgentEvent<SubAgentFailedEventData>);
+    case 'subagent_run_failed':
+      handler.onSubAgentRunFailed?.(event as AgentEvent<SubAgentRunEventData>);
       break;
-    }
     case 'subagent_killed':
       handler.onSubAgentKilled?.(event as AgentEvent<SubAgentKilledEventData>);
       break;
-    case 'subagent_session_spawned': {
-      const data = event.data as SubAgentSessionSpawnedEventData;
-      handler.onSubAgentStarted?.({
-        ...event,
-        type: 'subagent_started',
-        data: {
-          subagent_id: data.run_id,
-          subagent_name: data.subagent_name,
-          task: 'Session spawned',
-        },
-      } as AgentEvent<SubAgentStartedEventData>);
+    case 'subagent_session_spawned':
+      handler.onSubAgentSessionSpawned?.(event as AgentEvent<SubAgentSessionSpawnedEventData>);
       break;
-    }
-    case 'subagent_session_message_sent': {
-      const data = event.data as SubAgentSessionMessageSentEventData;
-      handler.onSubAgentStarted?.({
-        ...event,
-        type: 'subagent_started',
-        data: {
-          subagent_id: data.run_id,
-          subagent_name: data.subagent_name,
-          task: `Follow-up sent from ${data.parent_run_id}`,
-        },
-      } as AgentEvent<SubAgentStartedEventData>);
+    case 'subagent_session_message_sent':
+      handler.onSubAgentSessionMessageSent?.(
+        event as AgentEvent<SubAgentSessionMessageSentEventData>
+      );
       break;
-    }
-    case 'subagent_announce_retry': {
-      const data = event.data as SubAgentAnnounceRetryEventData;
-      // Route to dedicated retry handler (no longer collapsed to started)
-      handler.onSubAgentStarted?.({
-        ...event,
-        type: 'subagent_started',
-        data: {
-          subagent_id: data.run_id,
-          subagent_name: data.subagent_name,
-          task: `Retry ${String(data.attempt)}: ${data.error}`,
-        },
-      } as AgentEvent<SubAgentStartedEventData>);
+    case 'subagent_announce_retry':
+      handler.onSubAgentAnnounceRetry?.(event as AgentEvent<SubAgentAnnounceRetryEventData>);
       break;
-    }
-    case 'subagent_announce_giveup': {
-      const data = event.data as SubAgentAnnounceGiveupEventData;
-      handler.onSubAgentFailed?.({
-        ...event,
-        type: 'subagent_failed',
-        data: {
-          subagent_id: data.run_id,
-          subagent_name: data.subagent_name,
-          error: `Give up after ${String(data.attempts)} attempts: ${data.error}`,
-        },
-      } as AgentEvent<SubAgentFailedEventData>);
+    case 'subagent_announce_giveup':
+      handler.onSubAgentAnnounceGiveup?.(event as AgentEvent<SubAgentAnnounceGiveupEventData>);
       break;
-    }
     case 'subagent_steered':
       handler.onSubAgentSteered?.(event as AgentEvent<SubAgentSteeredEventData>);
       break;
@@ -638,6 +570,12 @@ export function routeToHandler(
       break;
     case 'agent_completed':
       handler.onAgentCompleted?.(event as AgentEvent<AgentCompletedEventData>);
+      break;
+    case 'agent_message_sent':
+      handler.onAgentMessageSent?.(event as AgentEvent<AgentMessageSentEventData>);
+      break;
+    case 'agent_message_received':
+      handler.onAgentMessageReceived?.(event as AgentEvent<AgentMessageReceivedEventData>);
       break;
     case 'agent_stopped':
       handler.onAgentStopped?.(event as AgentEvent<AgentStoppedEventData>);

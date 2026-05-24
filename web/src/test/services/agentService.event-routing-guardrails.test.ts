@@ -92,6 +92,21 @@ describe('agentService event routing guardrails', () => {
     expect(onMemoryCaptured).toHaveBeenCalledTimes(1);
   });
 
+  it('routes multi-agent message events to dedicated handlers', () => {
+    const onAgentMessageSent = vi.fn();
+    const onAgentMessageReceived = vi.fn();
+    const handler: AgentStreamHandler = {
+      onAgentMessageSent,
+      onAgentMessageReceived,
+    };
+
+    route('agent_message_sent', { from_agent_id: 'a', to_agent_id: 'b' }, handler);
+    route('agent_message_received', { agent_id: 'b', from_agent_id: 'a' }, handler);
+
+    expect(onAgentMessageSent).toHaveBeenCalledTimes(1);
+    expect(onAgentMessageReceived).toHaveBeenCalledTimes(1);
+  });
+
   it('ignores unknown event types without throwing', () => {
     const handler: AgentStreamHandler = {};
     expect(() => route('unknown_event_type', {}, handler)).not.toThrow();

@@ -576,7 +576,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         fileMetadata?: FileMetadata[],
         forcedSkillName?: string,
         forcedSubAgentName?: string,
-        imageAttachments?: string[]
+        imageAttachments?: string[],
+        mentions?: string[]
       ) => {
         if (!projectId) return;
 
@@ -593,6 +594,7 @@ ${content}`;
           forcedSkillName,
           imageAttachments,
           agentId: activeAgentId,
+          mentions,
         });
         if (!conversationId && newId) {
           void navigate(`${basePath}/${newId}${navigationSuffix}`);

@@ -283,6 +283,7 @@ class AgentMessageEvent(AgentDomainEvent):
     attachment_ids: list[str] | None = None
     file_metadata: list[dict[str, Any]] | None = None
     forced_skill_name: str | None = None
+    mentions: list[str] | None = None
 
     def __init__(self, **data: Any) -> None:
         # Set event_type based on role

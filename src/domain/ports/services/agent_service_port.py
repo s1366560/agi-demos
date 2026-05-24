@@ -34,6 +34,7 @@ class AgentServicePort(ABC):
         app_model_context: dict[str, Any] | None = None,
         image_attachments: list[str] | None = None,
         agent_id: str | None = None,
+        mentions: list[str] | None = None,
         api_auth_token: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """

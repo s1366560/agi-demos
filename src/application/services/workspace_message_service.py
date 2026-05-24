@@ -35,12 +35,14 @@ class WorkspaceMessageService:
         workspace_event_publisher: Callable[[str, str, dict[str, Any]], Awaitable[None]]
         | None = None,
         user_repo: UserRepository | None = None,
+        allow_legacy_text_mentions: bool = False,
     ) -> None:
         self._message_repo = message_repo
         self._member_repo = member_repo
         self._agent_repo = agent_repo
         self._workspace_event_publisher = workspace_event_publisher
         self._user_repo = user_repo
+        self._allow_legacy_text_mentions = allow_legacy_text_mentions
 
     async def send_message(
         self,
@@ -50,8 +52,14 @@ class WorkspaceMessageService:
         sender_name: str,
         content: str,
         parent_message_id: str | None = None,
+        mentions: list[str] | None = None,
     ) -> WorkspaceMessage:
-        mention_ids = await self._resolve_mentions(workspace_id, content)
+        if mentions is not None:
+            mention_ids = await self._resolve_structured_mentions(workspace_id, mentions)
+        elif self._allow_legacy_text_mentions:
+            mention_ids = await self._resolve_legacy_text_mentions(workspace_id, content)
+        else:
+            mention_ids = []
 
         message = WorkspaceMessage(
             workspace_id=workspace_id,
@@ -102,7 +110,40 @@ class WorkspaceMessageService:
         all_messages = await self._message_repo.find_by_workspace(workspace_id, limit=500)
         return [m for m in all_messages if target_id in m.mentions][:limit]
 
-    async def _resolve_mentions(self, workspace_id: str, content: str) -> list[str]:
+    async def _resolve_structured_mentions(
+        self,
+        workspace_id: str,
+        mention_ids: list[str],
+    ) -> list[str]:
+        requested = [mention.strip() for mention in mention_ids if mention.strip()]
+        if not requested:
+            return []
+
+        agents = await self._agent_repo.find_by_workspace(workspace_id)
+        if any(mention.lower() == "all" for mention in requested):
+            return [agent.agent_id for agent in agents]
+
+        members = await self._member_repo.find_by_workspace(workspace_id)
+        valid_targets = {agent.agent_id for agent in agents}
+        valid_targets.update(member.user_id for member in members)
+
+        resolved: list[str] = []
+        seen: set[str] = set()
+        invalid: list[str] = []
+        for mention_id in requested:
+            if mention_id not in valid_targets:
+                invalid.append(mention_id)
+                continue
+            if mention_id not in seen:
+                resolved.append(mention_id)
+                seen.add(mention_id)
+
+        if invalid:
+            raise ValueError(f"Unknown workspace mentions: {', '.join(sorted(set(invalid)))}")
+
+        return resolved
+
+    async def _resolve_legacy_text_mentions(self, workspace_id: str, content: str) -> list[str]:
         raw_matches = _MENTION_RE.findall(content)
         if not raw_matches:
             return []

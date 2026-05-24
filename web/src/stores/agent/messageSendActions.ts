@@ -225,6 +225,7 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
               app_model_context: appCtx ?? undefined,
               image_attachments: additionalHandlers?.imageAttachments,
               agent_id: additionalHandlers?.agentId,
+              mentions: additionalHandlers?.mentions,
             },
             handler
           )
@@ -256,6 +257,7 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
             app_model_context: appCtx2 ?? undefined,
             image_attachments: additionalHandlers?.imageAttachments,
             agent_id: additionalHandlers?.agentId,
+            mentions: additionalHandlers?.mentions,
           },
           handler
         );

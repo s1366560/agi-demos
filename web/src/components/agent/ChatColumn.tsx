@@ -35,7 +35,8 @@ export interface ChatColumnProps {
     fileMetadata?: FileMetadata[],
     forcedSkillName?: string,
     forcedSubAgentName?: string,
-    imageAttachments?: string[]
+    imageAttachments?: string[],
+    mentions?: string[]
   ) => void;
   onAbort: () => void;
   isStreaming: boolean;

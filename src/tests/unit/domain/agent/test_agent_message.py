@@ -60,6 +60,7 @@ class TestAgentMessage:
         assert isinstance(msg.timestamp, datetime)
         assert msg.metadata is None
         assert msg.parent_message_id is None
+        assert msg.stream_id is None
 
     def test_create_message_with_metadata(self):
         meta = {"key": "value", "priority": 1}
@@ -85,6 +86,7 @@ class TestAgentMessage:
             "timestamp",
             "metadata",
             "parent_message_id",
+            "stream_id",
         }
         assert set(d.keys()) == expected_keys
 

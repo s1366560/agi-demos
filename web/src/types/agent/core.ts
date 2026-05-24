@@ -227,6 +227,8 @@ export interface ChatRequest {
   image_attachments?: string[] | undefined;
   /** Target agent ID for multi-agent routing */
   agent_id?: string | undefined;
+  /** Structured target agent IDs selected by the mention UI */
+  mentions?: string[] | undefined;
 }
 
 /**

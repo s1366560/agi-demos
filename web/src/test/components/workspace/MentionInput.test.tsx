@@ -45,7 +45,7 @@ describe('MentionInput', () => {
     fireEvent.change(input, { target: { value: 'Hello team' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    expect(onSend).toHaveBeenCalledWith('Hello team');
+    expect(onSend).toHaveBeenCalledWith('Hello team', []);
   });
 
   it('shows localized mention type labels in the mention dropdown', () => {
@@ -59,5 +59,17 @@ describe('MentionInput', () => {
     expect(screen.getByText('broadcast')).toBeInTheDocument();
     expect(screen.getByText('human')).toBeInTheDocument();
     expect(screen.getByText('agent')).toBeInTheDocument();
+  });
+
+  it('sends selected mention IDs separately from display text', () => {
+    const onSend = vi.fn();
+    render(<MentionInput members={members} agents={agents} onSend={onSend} />);
+
+    const input = screen.getByLabelText('Chat message input');
+    fireEvent.change(input, { target: { value: '@Pla' } });
+    fireEvent.click(screen.getByText('Planner'));
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSend).toHaveBeenCalledWith('@Planner', ['agent-1']);
   });
 });

@@ -64,13 +64,14 @@ class TestAnnounceService:
         await svc.publish_announce(**_CALL_KWARGS)
 
         call_args = redis.xadd.call_args[0]
-        message_data: dict[str, str] = call_args[1]
+        envelope: dict[str, str] = call_args[1]
+        message_data = json.loads(envelope["data"])
 
         assert message_data["from_agent_id"] == "agent-1"
         assert message_data["to_agent_id"] == ""
         assert message_data["session_id"] == "parent-sess"
         assert message_data["message_type"] == "announce"
-        assert message_data["parent_message_id"] == ""
+        assert message_data["parent_message_id"] is None
         assert "message_id" in message_data
         assert "timestamp" in message_data
 
@@ -83,7 +84,7 @@ class TestAnnounceService:
         assert content["metadata"]["event_count"] == 5
         assert content["metadata"]["execution_time_ms"] == 123.46
 
-        metadata = json.loads(message_data["metadata"])
+        metadata = message_data["metadata"]
         assert "announce_payload" in metadata
         assert metadata["announce_payload"] == content
 
@@ -99,7 +100,8 @@ class TestAnnounceService:
             success=True,
         )
 
-        content = json.loads(redis.xadd.call_args[0][1]["content"])
+        message_data = json.loads(redis.xadd.call_args[0][1]["data"])
+        content = json.loads(message_data["content"])
         assert len(content["result"]) == 500
 
     async def test_publish_announce_transient_error_retries(self) -> None:

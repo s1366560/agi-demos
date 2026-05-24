@@ -53,9 +53,19 @@ import type {
   ArtifactCreatedEventData,
   ArtifactCategory,
   SubAgentRoutedEventData,
+  SubAgentAnnounceGiveupEventData,
+  SubAgentAnnounceRetryEventData,
   SubAgentStartedEventData,
   SubAgentCompletedEventData,
+  SubAgentDepthLimitedEventData,
   SubAgentFailedEventData,
+  SubAgentKilledEventData,
+  SubAgentQueuedEventData,
+  SubAgentRunEventData,
+  SubAgentSessionMessageSentEventData,
+  SubAgentSessionSpawnedEventData,
+  SubAgentSessionUpdateEventData,
+  SubAgentSteeredEventData,
   ParallelStartedEventData,
   ParallelCompletedEventData,
   ChainStartedEventData,
@@ -69,6 +79,8 @@ import type {
   MemoryCapturedEventData,
   AgentSpawnedEventData,
   AgentCompletedEventData,
+  AgentMessageReceivedEventData,
+  AgentMessageSentEventData,
   AgentStoppedEventData,
   ArtifactsBatchEventData,
 } from '../types/agent';
@@ -746,6 +758,164 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
       };
     }
 
+    case 'subagent_run_started':
+    case 'subagent_run_completed':
+    case 'subagent_run_failed': {
+      const data = event.data as SubAgentRunEventData;
+      return {
+        id: generateTimelineEventId(event.type),
+        type: event.type,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        subagentId: data.run_id,
+        subagentName: data.subagent_name,
+        task: data.task,
+        status: data.status,
+        summary: data.summary,
+        error: data.error,
+        executionTimeMs: data.execution_time_ms ?? undefined,
+        tokensUsed: data.tokens_used ?? undefined,
+      } as TimelineEvent;
+    }
+
+    case 'subagent_session_spawned': {
+      const data = event.data as SubAgentSessionSpawnedEventData;
+      return {
+        id: generateTimelineEventId('subagent_session_spawned'),
+        type: 'subagent_session_spawned',
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        conversationId: data.conversation_id,
+        subagentId: data.run_id,
+        subagentName: data.subagent_name,
+      };
+    }
+
+    case 'subagent_session_message_sent': {
+      const data = event.data as SubAgentSessionMessageSentEventData;
+      return {
+        id: generateTimelineEventId('subagent_session_message_sent'),
+        type: 'subagent_session_message_sent',
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        conversationId: data.conversation_id,
+        parentSubagentId: data.parent_run_id,
+        subagentId: data.run_id,
+        subagentName: data.subagent_name,
+      };
+    }
+
+    case 'subagent_announce_retry': {
+      const data = event.data as SubAgentAnnounceRetryEventData;
+      return {
+        id: generateTimelineEventId('subagent_announce_retry'),
+        type: 'subagent_announce_retry',
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        conversationId: data.conversation_id,
+        subagentId: data.run_id,
+        subagentName: data.subagent_name,
+        attempt: data.attempt,
+        error: data.error,
+        nextDelayMs: data.next_delay_ms,
+      };
+    }
+
+    case 'subagent_announce_giveup': {
+      const data = event.data as SubAgentAnnounceGiveupEventData;
+      return {
+        id: generateTimelineEventId('subagent_announce_giveup'),
+        type: 'subagent_announce_giveup',
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        conversationId: data.conversation_id,
+        subagentId: data.run_id,
+        subagentName: data.subagent_name,
+        attempts: data.attempts,
+        error: data.error,
+      };
+    }
+
+    case 'subagent_queued': {
+      const data = event.data as SubAgentQueuedEventData;
+      return {
+        id: generateTimelineEventId('subagent_queued'),
+        type: 'subagent_queued' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        subagentId: data.subagent_id,
+        subagentName: data.subagent_name,
+        queuePosition: data.queue_position,
+        reason: data.reason,
+      };
+    }
+
+    case 'subagent_killed': {
+      const data = event.data as SubAgentKilledEventData;
+      return {
+        id: generateTimelineEventId('subagent_killed'),
+        type: 'subagent_killed' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        subagentId: data.subagent_id,
+        subagentName: data.subagent_name,
+        kill_reason: data.kill_reason,
+      };
+    }
+
+    case 'subagent_steered': {
+      const data = event.data as SubAgentSteeredEventData;
+      return {
+        id: generateTimelineEventId('subagent_steered'),
+        type: 'subagent_steered' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        subagentId: data.subagent_id,
+        subagentName: data.subagent_name,
+        instruction: data.instruction,
+      };
+    }
+
+    case 'subagent_depth_limited': {
+      const data = event.data as SubAgentDepthLimitedEventData;
+      return {
+        id: generateTimelineEventId('subagent_depth_limited'),
+        type: 'subagent_depth_limited' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        subagentName: data.subagent_name,
+        current_depth: data.current_depth,
+        max_depth: data.max_depth,
+        parentSubagentName: data.parent_subagent_name,
+      };
+    }
+
+    case 'subagent_session_update': {
+      const data = event.data as SubAgentSessionUpdateEventData;
+      return {
+        id: generateTimelineEventId('subagent_session_update'),
+        type: 'subagent_session_update' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        subagentId: data.subagent_id,
+        subagentName: data.subagent_name,
+        progress: data.progress,
+        statusMessage: data.status_message,
+        tokensUsed: data.tokens_used,
+        toolCallsCount: data.tool_calls_count,
+      };
+    }
+
     case 'parallel_started': {
       const data = event.data as ParallelStartedEventData;
       return {
@@ -979,6 +1149,38 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         result: data.result ?? null,
         success: data.success ?? false,
         artifacts: data.artifacts ?? [],
+      };
+    }
+
+    case 'agent_message_sent': {
+      const data = event.data as Partial<AgentMessageSentEventData>;
+      return {
+        id: generateTimelineEventId('agent_message_sent'),
+        type: 'agent_message_sent' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        fromAgentId: data.from_agent_id ?? '',
+        toAgentId: data.to_agent_id ?? '',
+        fromAgentName: data.from_agent_name ?? '',
+        toAgentName: data.to_agent_name ?? '',
+        messagePreview: data.message_preview ?? '',
+      };
+    }
+
+    case 'agent_message_received': {
+      const data = event.data as Partial<AgentMessageReceivedEventData>;
+      return {
+        id: generateTimelineEventId('agent_message_received'),
+        type: 'agent_message_received' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        agentId: data.agent_id ?? '',
+        agentName: data.agent_name ?? '',
+        fromAgentId: data.from_agent_id ?? '',
+        fromAgentName: data.from_agent_name ?? '',
+        messagePreview: data.message_preview ?? '',
       };
     }
 

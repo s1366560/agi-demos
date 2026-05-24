@@ -246,6 +246,7 @@ class AgentService(AgentServicePort):
         app_model_context: dict[str, Any] | None = None,
         image_attachments: list[str] | None = None,
         agent_id: str | None = None,
+        mentions: list[str] | None = None,
         api_auth_token: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
@@ -302,6 +303,7 @@ class AgentService(AgentServicePort):
                 attachment_ids=attachment_ids if attachment_ids else None,
                 file_metadata=file_metadata if file_metadata else None,
                 forced_skill_name=forced_skill_name if forced_skill_name else None,
+                mentions=mentions if mentions else None,
             )
 
             # Get next event time
