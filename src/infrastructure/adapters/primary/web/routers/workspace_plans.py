@@ -74,6 +74,7 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     PIPELINE_RUN_REQUESTED_EVENT,
     SUPERVISOR_TICK_EVENT,
     WORKER_LAUNCH_EVENT,
+    _accepted_attempt_projection_complete_for_node,
 )
 from src.infrastructure.i18n import gettext as _
 
@@ -1808,9 +1809,7 @@ def _iteration_actions(
     }
 
 
-def _next_iteration_action_reason(
-    *, is_terminal: bool, next_iteration_ready: bool
-) -> str | None:
+def _next_iteration_action_reason(*, is_terminal: bool, next_iteration_ready: bool) -> str | None:
     if is_terminal:
         return "The plan is already complete."
     if not next_iteration_ready:
@@ -2044,7 +2043,9 @@ def _iteration_next_action(  # noqa: PLR0911
     if delayed is not None:
         next_attempt_at = delayed.next_attempt_at
         if next_attempt_at is None:
-            return "A workspace retry is waiting for backoff. Use Retry now to continue immediately."
+            return (
+                "A workspace retry is waiting for backoff. Use Retry now to continue immediately."
+            )
         return (
             "A workspace retry is waiting for backoff until "
             f"{next_attempt_at.isoformat()}. Use Retry now on the delayed queue item "
@@ -3942,24 +3943,57 @@ async def _active_nodes_with_terminal_attempts(
         return []
     result = await session.execute(
         refresh_select_statement(
-            select(
-                WorkspaceTaskSessionAttemptModel.id,
-                WorkspaceTaskSessionAttemptModel.status,
-            ).where(WorkspaceTaskSessionAttemptModel.id.in_(attempt_ids_by_node_id.values()))
+            select(WorkspaceTaskSessionAttemptModel).where(
+                WorkspaceTaskSessionAttemptModel.id.in_(attempt_ids_by_node_id.values())
+            )
         )
     )
-    terminal_attempt_ids = {
-        attempt_id
-        for attempt_id, status in result.all()
-        if str(status or "").lower() in _TERMINAL_ATTEMPT_STATUSES
+    terminal_attempts_by_id = {
+        attempt.id: attempt
+        for attempt in result.scalars().all()
+        if str(attempt.status or "").lower() in _TERMINAL_ATTEMPT_STATUSES
     }
-    if not terminal_attempt_ids:
+    if not terminal_attempts_by_id:
         return []
-    return [
-        node
-        for node in plan.nodes.values()
-        if attempt_ids_by_node_id.get(node.id) in terminal_attempt_ids
-    ]
+    active_nodes: list[PlanNode] = []
+    for node in plan.nodes.values():
+        attempt_id = attempt_ids_by_node_id.get(node.id)
+        attempt = terminal_attempts_by_id.get(attempt_id or "")
+        if attempt is None:
+            continue
+        if await _node_has_stable_blocked_worktree_projection(
+            session=session,
+            plan=plan,
+            node=node,
+            attempt=attempt,
+        ):
+            continue
+        active_nodes.append(node)
+    return active_nodes
+
+
+async def _node_has_stable_blocked_worktree_projection(
+    *,
+    session: AsyncSession,
+    plan: Plan,
+    node: PlanNode,
+    attempt: WorkspaceTaskSessionAttemptModel,
+) -> bool:
+    metadata = dict(node.metadata or {})
+    if node.intent is not TaskIntent.DONE or node.execution is not TaskExecution.IDLE:
+        return False
+    if metadata.get("terminal_attempt_status") != "accepted":
+        return False
+    if metadata.get("worktree_integration_status") != "blocked_dirty_main":
+        return False
+    if not _metadata_string(metadata.get("worktree_integration_dirty_signature")):
+        return False
+    return await _accepted_attempt_projection_complete_for_node(
+        session=session,
+        workspace_id=plan.workspace_id,
+        node=node,
+        attempt=attempt,
+    )
 
 
 def _has_candidate_attempt_output(

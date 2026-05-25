@@ -1141,7 +1141,9 @@ async def test_request_replan_reactivates_completed_plan_for_failed_done_node(
     request = cast(
         Request,
         SimpleNamespace(
-            app=SimpleNamespace(state=SimpleNamespace(container=SimpleNamespace(redis_client=object())))
+            app=SimpleNamespace(
+                state=SimpleNamespace(container=SimpleNamespace(redis_client=object()))
+            )
         ),
     )
 
@@ -2349,6 +2351,180 @@ async def test_snapshot_recovery_enqueues_tick_for_done_node_with_blocked_integr
 
 
 @pytest.mark.asyncio
+async def test_snapshot_recovery_skips_stable_done_node_with_blocked_integration(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-stable-blocked-integration"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-api-stable-blocked-integration",
+                workspace_id=workspace_id,
+                title="Root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-stable-blocked-integration",
+                workspace_id=workspace_id,
+                title="Task",
+                description="",
+                created_by="plan-api-user",
+                status="done",
+                metadata_json={},
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-accepted-stable-blocked-integration",
+                workspace_task_id="workspace-task-stable-blocked-integration",
+                root_goal_task_id="root-api-stable-blocked-integration",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="accepted",
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    goal_node_id = PlanNodeId(value="goal-api")
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[goal_node_id] = replace(
+        plan.nodes[goal_node_id],
+        workspace_task_id="root-api-stable-blocked-integration",
+    )
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        intent=TaskIntent.DONE,
+        execution=TaskExecution.IDLE,
+        updated_at=datetime.now(UTC),
+        workspace_task_id="workspace-task-stable-blocked-integration",
+        current_attempt_id="attempt-accepted-stable-blocked-integration",
+        metadata={
+            "terminal_attempt_status": "accepted",
+            "last_verification_attempt_id": "attempt-accepted-stable-blocked-integration",
+            "last_verification_passed": True,
+            "verified_commit_ref": "abc1234",
+            "worktree_integration_status": "blocked_dirty_main",
+            "worktree_integration_dirty_signature": "dirty-sig",
+        },
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    projection_complete = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        workspace_plans,
+        "_accepted_attempt_projection_complete_for_node",
+        projection_complete,
+    )
+
+    recovered = await workspace_plans._recover_stale_attempts_for_snapshot(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        actor_id="plan-api-user",
+    )
+
+    assert recovered is False
+    projection_complete.assert_awaited_once()
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert outbox == []
+
+
+@pytest.mark.asyncio
+async def test_snapshot_recovery_retries_done_node_when_blocked_integration_changes(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-changed-blocked-integration"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-api-changed-blocked-integration",
+                workspace_id=workspace_id,
+                title="Root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-changed-blocked-integration",
+                workspace_id=workspace_id,
+                title="Task",
+                description="",
+                created_by="plan-api-user",
+                status="done",
+                metadata_json={},
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-accepted-changed-blocked-integration",
+                workspace_task_id="workspace-task-changed-blocked-integration",
+                root_goal_task_id="root-api-changed-blocked-integration",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="accepted",
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    goal_node_id = PlanNodeId(value="goal-api")
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[goal_node_id] = replace(
+        plan.nodes[goal_node_id],
+        workspace_task_id="root-api-changed-blocked-integration",
+    )
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        intent=TaskIntent.DONE,
+        execution=TaskExecution.IDLE,
+        updated_at=datetime.now(UTC),
+        workspace_task_id="workspace-task-changed-blocked-integration",
+        current_attempt_id="attempt-accepted-changed-blocked-integration",
+        metadata={
+            "terminal_attempt_status": "accepted",
+            "last_verification_attempt_id": "attempt-accepted-changed-blocked-integration",
+            "last_verification_passed": True,
+            "verified_commit_ref": "abc1234",
+            "worktree_integration_status": "blocked_dirty_main",
+            "worktree_integration_dirty_signature": "dirty-sig",
+        },
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    projection_complete = AsyncMock(return_value=False)
+    monkeypatch.setattr(
+        workspace_plans,
+        "_accepted_attempt_projection_complete_for_node",
+        projection_complete,
+    )
+
+    recovered = await workspace_plans._recover_stale_attempts_for_snapshot(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        actor_id="plan-api-user",
+    )
+
+    assert recovered is True
+    projection_complete.assert_awaited_once()
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    assert outbox[0].event_type == "supervisor_tick"
+    assert outbox[0].payload_json["operator_action"] == "snapshot_terminal_attempt_reconcile"
+    assert outbox[0].payload_json["terminal_attempt_node_ids"] == ["task-api"]
+
+
+@pytest.mark.asyncio
 async def test_snapshot_recovery_resumes_blocked_recovery_node_without_attempt(
     db_session: AsyncSession,
 ) -> None:
@@ -2656,7 +2832,9 @@ async def test_retry_workspace_plan_outbox_item_runs_delayed_pending_job_now(
     assert loaded.status == "pending"
     assert loaded.next_attempt_at is None
     assert loaded.metadata_json["operator_retry"]["previous_status"] == "pending"
-    assert loaded.metadata_json["operator_retry"]["previous_next_attempt_at"] == retry_at.isoformat()
+    assert (
+        loaded.metadata_json["operator_retry"]["previous_next_attempt_at"] == retry_at.isoformat()
+    )
     reloaded_plan = await SqlPlanRepository(db_session).get(plan.id)
     assert reloaded_plan is not None
     reloaded_task = reloaded_plan.nodes[PlanNodeId("task-api")]
