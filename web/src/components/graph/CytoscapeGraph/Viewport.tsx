@@ -408,7 +408,7 @@ export function CytoscapeGraphViewport({
   }
 
   return (
-    <div className="relative min-h-[420px] flex-1">
+    <div className="relative min-h-0 flex-1">
       {loading && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 dark:bg-slate-900/90">
           <div className="text-center">
@@ -443,7 +443,7 @@ export function CytoscapeGraphViewport({
 
       <div
         ref={containerRef}
-        className="h-full min-h-[420px] w-full"
+        className="h-full min-h-0 w-full"
         style={{ backgroundColor: currentTheme.background }}
       />
     </div>

@@ -39,6 +39,7 @@ import re
 import shlex
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -63,6 +64,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
 )
 from src.infrastructure.agent.workspace_plan.pipeline import (
     DRONE_PROVIDER,
+    PipelineContractSpec,
     build_pipeline_contract_from_metadata,
 )
 from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
@@ -107,6 +109,7 @@ _LATEST_PIPELINE_EVIDENCE_KEY = "latest_workspace_pipeline_evidence"
 _RECENT_PIPELINE_EVIDENCE_KEY = "recent_workspace_pipeline_evidence"
 _WORKSPACE_ROOT_OVERRIDE_MARKERS = ("worktree_path", "[feature-checkpoint]", "[worktree-setup]")
 _WORKER_VERIFICATION_INTEGRITY_PHASES = frozenset({"test", "review"})
+_DRONE_DEPLOY_CONTEXT_PHASES = frozenset({"deploy", "review"})
 _REPAIR_BRIEF_VERIFICATION_SCOPE_KEYS = (
     "allowed_write_scope",
     "allowed_verification_script_paths",
@@ -455,9 +458,7 @@ def _iter_repair_brief_verification_script_scope_paths(value: object) -> list[st
     if isinstance(value, Mapping):
         mapped = cast(Mapping[str, object], value)
         for key in _REPAIR_BRIEF_VERIFICATION_SCOPE_KEYS:
-            paths.extend(
-                _iter_repair_brief_verification_script_scope_paths(mapped.get(key))
-            )
+            paths.extend(_iter_repair_brief_verification_script_scope_paths(mapped.get(key)))
         return list(dict.fromkeys(paths))
     if isinstance(value, (list, tuple, set)):
         for item in cast(Iterable[object], value):
@@ -637,6 +638,7 @@ def _workspace_delivery_cicd_context(  # noqa: C901, PLR0915
     phase = None
     if isinstance(plan_node_metadata, Mapping):
         phase = _metadata_text(plan_node_metadata.get("iteration_phase"))
+    contract = _contract_with_phase_drone_deploy_context(contract, phase=phase)
     deploy = contract.deploy.to_json() if contract.deploy is not None else None
     services = contract.services_json()
     if isinstance(deploy, dict):
@@ -910,15 +912,30 @@ def _workspace_delivery_cicd_context(  # noqa: C901, PLR0915
     return context
 
 
+def _contract_with_phase_drone_deploy_context(
+    contract: PipelineContractSpec,
+    *,
+    phase: str | None,
+) -> PipelineContractSpec:
+    if contract.provider != DRONE_PROVIDER:
+        return contract
+    if not phase or phase.lower() not in _DRONE_DEPLOY_CONTEXT_PHASES:
+        return contract
+    deploy = contract.deploy
+    if deploy is None or deploy.enabled:
+        return contract
+    return replace(contract, deploy=replace(deploy, enabled=True))
+
+
 def _deploy_context_with_runner_hints(
     deploy: dict[str, Any],
     *,
     services: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
-    if str(deploy.get("mode") or "") != "docker":
-        return deploy
     docker = deploy.get("docker")
     if not isinstance(docker, Mapping):
+        return deploy
+    if str(deploy.get("mode") or "") != "docker" and not _has_docker_deploy_hints(docker):
         return deploy
 
     docker_context = dict(docker)
@@ -941,6 +958,20 @@ def _deploy_context_with_runner_hints(
     output = dict(deploy)
     output["docker"] = docker_context
     return output
+
+
+def _has_docker_deploy_hints(docker: Mapping[str, Any]) -> bool:
+    for key in (
+        "deploy_host_port",
+        "host_port",
+        "container_port",
+        "deploy_services",
+        "services",
+        "deploy_strategy",
+    ):
+        if docker.get(key) is not None:
+            return True
+    return False
 
 
 def _add_docker_registry_hints(
@@ -1485,7 +1516,7 @@ def _render_delivery_cicd_brief(context: Mapping[str, Any]) -> str:
 
     _append_delivery_drone_lines(lines, context.get("drone"))
     _append_delivery_deploy_lines(lines, context.get("deploy"))
-    _append_delivery_service_lines(lines, context.get("services"))
+    _append_delivery_service_lines(lines, context.get("services"), deploy=context.get("deploy"))
     _append_delivery_instruction_lines(lines, context.get("instructions"))
     return "\n".join(lines)
 
@@ -1665,7 +1696,12 @@ def _append_delivery_docker_service_lines(lines: list[str], docker: Mapping[str,
         lines.extend(rendered)
 
 
-def _append_delivery_service_lines(lines: list[str], services: object) -> None:
+def _append_delivery_service_lines(
+    lines: list[str],
+    services: object,
+    *,
+    deploy: object = None,
+) -> None:
     if not isinstance(services, list) or not services:
         return
     rendered: list[str] = []
@@ -1684,7 +1720,11 @@ def _append_delivery_service_lines(lines: list[str], services: object) -> None:
             parts.append(f"port: {internal_port}")
         if health_path:
             parts.append(f"health: `{health_path}`")
-        drone_health_url = _drone_runner_service_health_url(service)
+        deploy_service = _docker_deploy_service_for_display(service, deploy)
+        drone_health_url = _drone_runner_service_health_url(
+            service,
+            deploy_service=deploy_service,
+        )
         if drone_health_url:
             parts.append(f"Drone step health: `{drone_health_url}`")
         rendered.append("; ".join(parts))
@@ -1699,18 +1739,70 @@ def _metadata_display_value(value: object) -> str | None:
     return _metadata_text(value)
 
 
-def _drone_runner_service_health_url(service: Mapping[str, Any]) -> str | None:
+def _docker_deploy_service_for_display(
+    service: Mapping[str, Any],
+    deploy: object,
+) -> Mapping[str, Any] | None:
+    if not isinstance(deploy, Mapping):
+        return None
+    docker = deploy.get("docker")
+    if not isinstance(docker, Mapping):
+        return None
+    raw_services = docker.get("deploy_services")
+    if not isinstance(raw_services, list):
+        raw_services = docker.get("services")
+    if not isinstance(raw_services, list):
+        return None
+
+    service_id = (_metadata_text(service.get("service_id")) or "").lower()
+    service_name = (_metadata_text(service.get("name")) or "").lower()
+    for item in raw_services:
+        if not isinstance(item, Mapping):
+            continue
+        item_id = (
+            _metadata_text(item.get("service_id") or item.get("id") or item.get("name")) or ""
+        ).lower()
+        item_name = (_metadata_text(item.get("name")) or "").lower()
+        if item_id and item_id == service_id:
+            return item
+        if item_name and item_name == service_name:
+            return item
+    return None
+
+
+def _drone_runner_service_health_url(
+    service: Mapping[str, Any],
+    *,
+    deploy_service: Mapping[str, Any] | None = None,
+) -> str | None:
+    deploy_health_url = (
+        _metadata_text(deploy_service.get("deploy_health_url")) if deploy_service else None
+    )
+    if deploy_health_url:
+        return deploy_health_url
+    host_port = (
+        _positive_int_metadata(
+            deploy_service.get("deploy_host_port") or deploy_service.get("host_port")
+        )
+        if deploy_service
+        else None
+    )
     internal_port = service.get("internal_port")
-    if not isinstance(internal_port, int) or internal_port <= 0:
+    port = host_port or (internal_port if isinstance(internal_port, int) else None)
+    if not isinstance(port, int) or port <= 0:
         return None
     scheme = _metadata_text(service.get("internal_scheme")) or "http"
     if scheme not in {"http", "https"}:
         scheme = "http"
-    health_path = _metadata_text(service.get("health_path")) or "/"
+    health_path = (
+        (_metadata_text(deploy_service.get("health_path")) if deploy_service else None)
+        or _metadata_text(service.get("health_path"))
+        or "/"
+    )
     if health_path.startswith("http://") or health_path.startswith("https://"):
         return health_path
     normalized_path = health_path if health_path.startswith("/") else f"/{health_path}"
-    return f"{scheme}://host.docker.internal:{internal_port}{normalized_path}"
+    return f"{scheme}://host.docker.internal:{port}{normalized_path}"
 
 
 def _append_delivery_instruction_lines(lines: list[str], instructions: object) -> None:

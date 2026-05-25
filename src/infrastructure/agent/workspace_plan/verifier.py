@@ -1236,15 +1236,20 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             ),
             satisfied_guard_failures=result.satisfied_guard_failures,
             required_next_action=(
-                "Fix .drone.yml docker-deploy so `docker run -p` binds the host side to "
-                "docker.deploy_host_port from the workspace delivery context, not platform "
-                "reserved ports such as 8080, 3001, or 5001. If the host side is already "
-                "the workspace deploy port, treat `port is already allocated` as a stale "
-                "container/port-owner failure: print `docker ps -a` and `docker inspect "
-                "<container> --format '{{json .State}}'`, remove stale app containers from "
-                "old and current deploy names before retrying, keep the container-side port "
-                "matched to the Dockerfile/app, update the Drone health check to "
-                "docker.deploy_health_url, commit, and rerun Drone."
+                "Fix .drone.yml docker-deploy so `docker run -p` or `docker compose up` "
+                "does not bind reserved host ports directly. Bind app host ports to "
+                "docker.deploy_host_port from the workspace delivery context, and keep "
+                "dependency sidecars on the deploy network without publishing host ports "
+                "unless the contract explicitly requires them. Validate the effective "
+                "`docker compose config`; if an override uses `ports: []` but the rendered "
+                "config still publishes 3001/3000/5432/6379, replace it with a CI-only compose "
+                "file or explicit override syntax such as `ports: !override []` when supported. "
+                "If the host side is already the workspace deploy port, treat `port is already "
+                "allocated` as a stale container/port-owner failure: print `docker ps -a` and "
+                "`docker inspect <container> --format '{{json .State}}'`, remove stale app "
+                "containers and sidecar containers from old and current deploy names before "
+                "retrying, keep the container-side port matched to the Dockerfile/app, update "
+                "the Drone health check to docker.deploy_health_url, commit, and rerun Drone."
             ),
             next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
             repair_brief=result.repair_brief,
@@ -1941,14 +1946,27 @@ def _drone_docker_host_port_conflict_feedback(
     results: list[CriterionResult],
 ) -> WorkspaceVerificationFeedbackItem | None:
     text = "\n".join(result.message for result in results if result.message).lower()
-    if not (
-        "docker run" in text
-        and (
-            "port is already allocated" in text
-            or "bind for 0.0.0.0:" in text
-            or "failed programming external connectivity" in text
+    has_docker_deploy_invocation = any(
+        marker in text
+        for marker in (
+            "docker run",
+            "docker compose",
+            "docker-compose",
+            "compose up",
         )
-    ):
+    )
+    has_drone_deploy_stage = "drone build" in text and (
+        "workspace-ci/deploy" in text or ("failing stage" in text and "deploy" in text)
+    )
+    has_port_conflict = any(
+        marker in text
+        for marker in (
+            "port is already allocated",
+            "bind for 0.0.0.0:",
+            "failed programming external connectivity",
+        )
+    )
+    if not ((has_docker_deploy_invocation or has_drone_deploy_stage) and has_port_conflict):
         return None
     return WorkspaceVerificationFeedbackItem(
         target_layer=WorkspaceVerificationFeedbackTargetLayer.WORKER,
@@ -1956,15 +1974,21 @@ def _drone_docker_host_port_conflict_feedback(
         severity=WorkspaceVerificationFeedbackSeverity.BLOCKING,
         recommended_action=WorkspaceVerificationRecommendedAction.RETRY_WORKER,
         summary=(
-            "The deploy step could not bind the host port because Docker reports it is "
-            "already allocated. Confirm the host side uses docker.deploy_host_port, then "
-            "make the deploy step print `docker inspect <container> --format '{{json "
-            ".State}}'` and remove stale containers from old and current app names before "
-            "retrying the bind."
+            "The deploy step could not bind a host port because Docker reports it is "
+            "already allocated. Confirm app bindings use docker.deploy_host_port and "
+            "dependency sidecars do not publish reserved host ports through docker compose "
+            "unless required. If a CI compose override relies on `ports: []`, validate the "
+            "effective `docker compose config`; compose may keep inherited port bindings. Use "
+            "a CI-only compose file or an explicit override such as `ports: !override []` when "
+            "supported, and point health probes at the effective published port or the compose "
+            "network. Then print `docker inspect <container> --format '{{json .State}}'` and "
+            "remove stale containers from old and current app/sidecar names before retrying "
+            "the bind."
         ),
         evidence_refs=(
             "drone_error:docker_host_port_allocated",
             "drone_deploy:reserved_host_port",
+            "docker_compose:effective_ports_required",
         ),
         failure_signature="drone-docker-deploy-host-port-conflict",
     )
@@ -2825,9 +2849,25 @@ def _partial_test_summary_value(text: str) -> str | None:
         for match in _PARTIAL_TEST_SUMMARY_PATTERN.finditer(value):
             passed = int(match.group(1))
             total = int(match.group(2))
-            if total > 0 and passed < total:
+            if total > 0 and passed < total and _partial_test_ratio_has_local_cue(value, match):
                 return value
     return None
+
+
+def _partial_test_ratio_has_local_cue(value: str, match: re.Match[str]) -> bool:
+    before = value[max(0, match.start() - 48) : match.start()]
+    after = value[match.end() : min(len(value), match.end() + 48)].lstrip()
+    before_has_test_context = re.search(
+        r"\b(tests?|results?|e2e|playwright|pytest|vitest|jest|suites?)\b",
+        before,
+        re.I,
+    )
+    after_has_result_context = re.match(
+        r"(tests?|passed|pass(?:ed|ing)?|failed|failing|partials?|suites?)\b",
+        after,
+        re.I,
+    )
+    return bool(before_has_test_context or after_has_result_context)
 
 
 def _has_failed_test_contract_disposition(ctx: VerificationContext) -> bool:
@@ -3441,7 +3481,27 @@ def _stale_pipeline_result_for_current_report(ctx: VerificationContext) -> tuple
 
 def _current_report_commit_ref(ctx: VerificationContext) -> str | None:
     refs = _reported_commit_refs(ctx)
+    summary_ref = _summary_report_commit_ref(ctx.stdout, candidates=refs)
+    if summary_ref:
+        return summary_ref
     return refs[0] if refs else None
+
+
+def _summary_report_commit_ref(summary: object, *, candidates: list[str]) -> str | None:
+    if not isinstance(summary, str) or not candidates:
+        return None
+    candidate_by_lower = {candidate.lower(): candidate for candidate in candidates}
+    matching_tokens = [
+        match.group(1).lower()
+        for match in re.finditer(
+            r"(?<![0-9A-Fa-f])([0-9A-Fa-f]{7,40})(?![0-9A-Fa-f])",
+            summary,
+        )
+        if match.group(1).lower() in candidate_by_lower
+    ]
+    if not matching_tokens:
+        return None
+    return candidate_by_lower[matching_tokens[-1]]
 
 
 def _pipeline_result_commit_ref(ctx: VerificationContext) -> str | None:

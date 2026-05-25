@@ -224,6 +224,64 @@ async def test_fetch_finished_stream_attempts_recovers_without_terminal_event() 
     assert "latest_progress=bash completed: Total: 20 | Passed: 20 | Failed: 0" in summary
 
 
+@pytest.mark.asyncio
+async def test_fetch_finished_stream_attempts_defers_recent_transient_error() -> None:
+    now = datetime.now(UTC)
+    attempt = _make_attempt(attempt_id="att-rate-limited", conversation_id="conv-rate-limited")
+    attempt.created_at = now - timedelta(minutes=10)
+    attempt.updated_at = now - timedelta(minutes=10)
+    attempt_model = object()
+
+    class _ScalarResult:
+        def scalars(self) -> _ScalarResult:
+            return self
+
+        def all(self) -> list[object]:
+            return [attempt_model]
+
+    class _RowResult:
+        def one_or_none(self) -> Any:
+            return (
+                "error",
+                {"message": "Rate limit exceeded. Please wait a moment and try again."},
+                now - timedelta(seconds=30),
+            )
+
+    fake_session = MagicMock()
+    fake_session.execute = AsyncMock(side_effect=[_ScalarResult(), _RowResult()])
+    fake_redis = MagicMock()
+    fake_redis.get = AsyncMock(return_value="msg-finished")
+    fake_redis.exists = AsyncMock(return_value=0)
+    fake_repo = MagicMock()
+    fake_repo._to_domain.return_value = attempt
+
+    service = WorkspaceAttemptRecoveryService(
+        session_factory=lambda: _SessionContext(fake_session),
+        apply_report=AsyncMock(),
+        schedule_tick=MagicMock(),
+        stale_seconds=60,
+        transient_error_grace_seconds=300,
+    )
+
+    with (
+        patch(
+            "src.infrastructure.agent.workspace.workspace_attempt_recovery."
+            "SqlWorkspaceTaskSessionAttemptRepository",
+            return_value=fake_repo,
+        ),
+        patch(
+            "src.infrastructure.agent.workspace.workspace_attempt_recovery.get_redis_client",
+            AsyncMock(return_value=fake_redis),
+        ),
+    ):
+        recovered = await service._fetch_finished_stream_attempts(
+            older_than=now - timedelta(seconds=15)
+        )
+
+    assert recovered == []
+    assert fake_session.execute.await_count == 2
+
+
 def _make_service(
     *,
     stale_attempts: list[WorkspaceTaskSessionAttempt],
@@ -635,7 +693,7 @@ class TestStartupSweep:
         schedule_tick.assert_called_once_with("ws-1", "user-1")
 
     @pytest.mark.asyncio
-    async def test_finished_stream_recovery_runs_before_transient_error_grace(self) -> None:
+    async def test_finished_stream_recovery_runs_before_stale_sweep(self) -> None:
         att = _make_attempt(attempt_id="att-finished", workspace_task_id="task-1")
         service, apply_report, schedule_tick = _make_service(
             stale_attempts=[],
@@ -656,9 +714,8 @@ class TestStartupSweep:
             apply_report.assert_not_awaited()
             schedule_tick.assert_not_called()
 
-            # Exercise the real finished-stream recovery path separately: it must
-            # recover immediately once the actor-finished marker has already been
-            # validated by _fetch_finished_stream_attempts.
+            # Exercise the real finished-stream recovery path separately after
+            # _fetch_finished_stream_attempts has validated the finished marker.
             service._recover_finished_streams = (  # type: ignore[method-assign]
                 WorkspaceAttemptRecoveryService._recover_finished_streams.__get__(
                     service,

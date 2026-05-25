@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, patch
@@ -31,6 +33,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspaceTaskModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
+    SqlWorkspacePlanOutboxRepository,
+)
 from src.infrastructure.agent.core.react_agent_profile import AgentRuntimeProfile
 from src.infrastructure.agent.core.react_agent_tool_policy import (
     with_workspace_worker_tool_allowlist,
@@ -941,6 +946,81 @@ async def test_kickoff_worker_and_snapshot_api_flow_end_to_end(
     assert set(dispatched) == {("agent-1", node.id) for node in dispatched_nodes}
     assert snapshot.outbox[0].event_type == SUPERVISOR_TICK_EVENT
     assert snapshot.outbox[0].status == "completed"
+
+
+async def test_outbox_worker_does_not_preclaim_later_batch_items(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace(db_session)
+    await db_session.execute(delete(WorkspacePlanOutboxModel))
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    first = await repo.enqueue(
+        plan_id=None,
+        workspace_id="ws-abc",
+        event_type="slow_event",
+        payload={"workspace_id": "ws-abc"},
+    )
+    await db_session.commit()
+    second = await repo.enqueue(
+        plan_id=None,
+        workspace_id="ws-abc",
+        event_type="fast_event",
+        payload={"workspace_id": "ws-abc"},
+    )
+    created_at = datetime.now(UTC)
+    first.created_at = created_at
+    second.created_at = created_at + timedelta(milliseconds=1)
+    await db_session.commit()
+
+    first_handler_started = asyncio.Event()
+    release_first_handler = asyncio.Event()
+    observed_second_state: dict[str, str | None] = {}
+    handled: list[str] = []
+
+    async def slow_handler(
+        _item: WorkspacePlanOutboxModel,
+        session: AsyncSession,
+    ) -> None:
+        second_row = await session.get(WorkspacePlanOutboxModel, second.id)
+        assert second_row is not None
+        observed_second_state["status"] = second_row.status
+        observed_second_state["lease_owner"] = second_row.lease_owner
+        handled.append("slow_event")
+        first_handler_started.set()
+        await release_first_handler.wait()
+
+    async def fast_handler(
+        _item: WorkspacePlanOutboxModel,
+        _session: AsyncSession,
+    ) -> None:
+        handled.append("fast_event")
+
+    @asynccontextmanager
+    async def worker_session_factory() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=worker_session_factory,
+        handlers={"slow_event": slow_handler, "fast_event": fast_handler},
+        worker_id="bridge-worker",
+        batch_size=2,
+        lease_seconds=1,
+    )
+
+    run_task = asyncio.create_task(worker.run_once())
+    await asyncio.wait_for(first_handler_started.wait(), timeout=2)
+
+    assert observed_second_state == {"status": "pending", "lease_owner": None}
+
+    release_first_handler.set()
+    assert await asyncio.wait_for(run_task, timeout=2) == 2
+    assert handled == ["slow_event", "fast_event"]
+    first_row = await db_session.get(WorkspacePlanOutboxModel, first.id)
+    second_row = await db_session.get(WorkspacePlanOutboxModel, second.id)
+    assert first_row is not None
+    assert second_row is not None
+    assert first_row.status == "completed"
+    assert second_row.status == "completed"
 
 
 async def test_kickoff_swallows_orchestrator_failures() -> None:

@@ -654,8 +654,8 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
       : t('project.search.graph.showResultSubgraph', 'Show result subgraph');
 
     return (
-      <div className="flex h-full min-w-0 overflow-hidden bg-slate-50 font-sans text-slate-900 dark:bg-[#121520] dark:text-white">
-        <main className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-[#121520]">
+      <div className="flex h-full min-w-0 overflow-hidden bg-slate-50 font-sans text-slate-900 dark:bg-slate-950 dark:text-slate-50">
+        <main className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
           {/* Search Form */}
           {includeForm && (
             <SearchForm
@@ -681,6 +681,9 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               onConfigToggle={() => {
                 setIsConfigOpen(!isConfigOpen);
               }}
+              onMobileConfigOpen={() => {
+                setShowMobileConfig(true);
+              }}
               onHistoryToggle={() => {
                 setShowHistory(!showHistory);
               }}
@@ -694,7 +697,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
             />
           )}
 
-          <div className="flex min-w-0 flex-1 gap-4 overflow-hidden p-4 pt-2 sm:gap-6 sm:p-6">
+          <div className="flex min-w-0 flex-1 gap-4 overflow-hidden px-4 pb-4 pt-2 sm:px-6 sm:pb-6">
             {/* Config Sidebar */}
             {includeConfig && (
               <SearchConfig
@@ -739,11 +742,11 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               {/* Error Message */}
               {includeError && error && (
                 <div
-                  className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 flex items-center gap-2"
+                  className="flex items-center gap-2 rounded-md border border-error-border bg-error-bg p-3 text-status-text-error dark:border-error-border-dark dark:bg-error-bg-dark dark:text-status-text-error-dark"
                   data-testid="search-error"
                 >
-                  <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
-                  <span className="text-sm text-red-800 dark:text-red-400">{error}</span>
+                  <AlertCircle className="h-5 w-5" />
+                  <span className="text-sm">{error}</span>
                 </div>
               )}
 
@@ -751,22 +754,22 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
               {includeGraph && (
                 <section
                   className={`
-                min-w-0 bg-white dark:bg-[#1e212b] rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 relative overflow-hidden group transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out
-                ${isResultsCollapsed ? 'flex-1' : 'h-[55%]'}
+                group relative min-w-0 overflow-hidden rounded-md bg-white shadow-[0_0_0_1px_rgba(15,23,42,0.10)] transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out dark:bg-surface-dark dark:shadow-[0_0_0_1px_rgba(148,163,184,0.16)]
+                ${isResultsCollapsed ? 'flex-1' : 'h-[54%] min-h-[360px]'}
               `}
                 >
-                  <div className="absolute top-4 left-4 z-10 flex gap-2">
-                    <div className="flex gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                  <div className="absolute left-3 top-3 z-10 flex gap-2">
+                    <div className="flex gap-1 rounded-md border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                       <button
                         type="button"
                         onClick={() => {
                           setIsResultsCollapsed(!isResultsCollapsed);
                         }}
-                        className={`p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors ${isResultsCollapsed ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' : ''}`}
+                        className={`rounded p-1.5 text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 ${isResultsCollapsed ? 'bg-slate-100 text-slate-950 dark:bg-slate-800 dark:text-slate-50' : ''}`}
                         title={graphToggleLabel}
                         aria-label={graphToggleLabel}
                       >
-                        <Maximize className="w-4 h-4" />
+                        <Maximize className="h-4 w-4" />
                       </button>
                       {highlightNodeIds.length > 0 && (
                         <button
@@ -774,11 +777,11 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
                           onClick={() => {
                             setIsSubgraphMode(!isSubgraphMode);
                           }}
-                          className={`p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors ${isSubgraphMode ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' : ''}`}
+                          className={`rounded p-1.5 text-slate-600 transition-colors hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 ${isSubgraphMode ? 'bg-slate-100 text-slate-950 dark:bg-slate-800 dark:text-slate-50' : ''}`}
                           title={subgraphToggleLabel}
                           aria-label={subgraphToggleLabel}
                         >
-                          <Network className="w-4 h-4" />
+                          <Network className="h-4 w-4" />
                         </button>
                       )}
                     </div>

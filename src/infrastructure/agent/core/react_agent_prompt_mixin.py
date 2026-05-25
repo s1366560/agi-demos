@@ -395,9 +395,7 @@ class PromptMixin:
             else self.max_tokens
         )
         effective_max_steps = (
-            tenant_agent_config.max_work_plan_steps
-            if is_workspace_worker_runtime
-            else selected_agent.max_iterations
+            selected_agent.max_iterations
             if (
                 selected_agent is not None
                 and not is_builtin_sisyphus

@@ -45,6 +45,8 @@ _DOCKER_BUILD_STEP_SERVICE_RE = re.compile(
     r"(?:^|[-_/])docker[-_]?build[-_/](?P<service>[a-z0-9][a-z0-9_.-]*)$",
     re.I,
 )
+_DOCKER_HOST_TCP_RE = re.compile(r"\bDOCKER_HOST\s*=\s*tcp://", re.I)
+_HOST_DOCKER_SOCKET = "/var/run/docker.sock"
 _DOCKER_DEPLOY_CONTAINER_RUNNING_RE = re.compile(
     r"\bcontainer\s+[a-z0-9_.-]+\s+is\s+running\b",
     re.I,
@@ -587,9 +589,7 @@ async def _result_from_build(
     )
     deploy_state = _deploy_state(stage_results, config.deploy)
     deploy_validation_issues = (
-        _deploy_validation_issues(stage_results, config.deploy)
-        if deploy_state == "invalid"
-        else []
+        _deploy_validation_issues(stage_results, config.deploy) if deploy_state == "invalid" else []
     )
     if (
         config.deploy is not None
@@ -1369,17 +1369,19 @@ def _drone_yaml_preflight_failure(contract: PipelineContractSpec) -> PipelineRun
     except yaml.YAMLError as exc:
         return _configuration_failure(f"Drone build .drone.yml preflight failed; yaml: {exc}")
     command_issue = _first_non_string_drone_command(parsed)
+    issue: str | None = None
     if command_issue is not None:
         step_name, command_index, tag, preview = command_issue
-        return _configuration_failure(
+        issue = (
             "Drone build .drone.yml preflight failed; yaml: unmarshal errors: "
             f"step {step_name} commands[{command_index}] cannot unmarshal {tag} into string; "
             f"value={preview}"
         )
-    deploy_issue = _docker_deploy_yaml_coverage_issue(parsed, contract.deploy)
-    if deploy_issue is not None:
-        return _configuration_failure(deploy_issue)
-    return None
+    if issue is None:
+        issue = _docker_deploy_yaml_coverage_issue(parsed, contract.deploy)
+    if issue is None:
+        issue = _host_docker_deploy_yaml_boundary_issue(parsed, contract.deploy)
+    return _configuration_failure(issue) if issue is not None else None
 
 
 def _drone_preflight_code_root(contract: PipelineContractSpec) -> Path | None:
@@ -1448,12 +1450,173 @@ def _docker_deploy_yaml_coverage_issue(
     )
 
 
-def _drone_deploy_commands_text(parsed: object, *, deploy: PipelineDeploySpec) -> str:
-    commands: list[str] = []
+def _host_docker_deploy_yaml_boundary_issue(
+    parsed: object,
+    deploy: PipelineDeploySpec | None,
+) -> str | None:
+    if not _host_docker_deploy_boundary_required(deploy):
+        return None
+    assert deploy is not None
+    docker = deploy.docker
+    socket_path = _string(docker.get("runner_docker_socket")) or _HOST_DOCKER_SOCKET
+    volume_name = _string(docker.get("runner_docker_socket_volume")) or "docker-sock"
+    issue: str | None = None
+    if docker.get("trusted") is False:
+        issue = (
+            "Drone build .drone.yml preflight failed; host Docker deploy mounts host volumes, "
+            "which Drone only allows for trusted repositories. Remove docker.trusted=false "
+            "or use a non-host-Docker deploy design."
+        )
+    elif _drone_yaml_defines_dind_service(parsed):
+        issue = (
+            "Drone build .drone.yml preflight failed; host Docker deploy must use the "
+            "mounted Unix socket and must not define a docker:dind service, a service named "
+            "docker, or TCP DOCKER_HOST mode."
+        )
+    elif not _drone_yaml_has_host_socket_volume(parsed, name=volume_name, path=socket_path):
+        issue = (
+            "Drone build .drone.yml preflight failed; host Docker deploy requires a "
+            f"top-level host volume named {volume_name!r} with host.path={socket_path!r}. "
+            "The host path must be absolute and the repository must be trusted."
+        )
+
+    if issue is None:
+        issue = _host_docker_deploy_step_boundary_issue(
+            parsed,
+            deploy=deploy,
+            volume_name=volume_name,
+            socket_path=socket_path,
+        )
+    return issue
+
+
+def _host_docker_deploy_step_boundary_issue(
+    parsed: object,
+    *,
+    deploy: PipelineDeploySpec,
+    volume_name: str,
+    socket_path: str,
+) -> str | None:
+    for step in _drone_deploy_step_mappings(parsed, deploy=deploy):
+        step_name = _string(step.get("name")) or deploy.stage
+        if not _drone_step_mounts_volume(step, name=volume_name, path=socket_path):
+            return (
+                "Drone build .drone.yml preflight failed; host Docker deploy step "
+                f"{step_name!r} must mount volume {volume_name!r} at {socket_path!r}, "
+                "not at /var/run or a TCP DinD socket."
+            )
+        if _drone_step_sets_tcp_docker_host(step):
+            return (
+                "Drone build .drone.yml preflight failed; host Docker deploy step "
+                f"{step_name!r} sets DOCKER_HOST=tcp://... but this provider boundary "
+                "uses the mounted Unix socket /var/run/docker.sock."
+            )
+    return None
+
+
+def _host_docker_deploy_boundary_required(deploy: PipelineDeploySpec | None) -> bool:
+    if deploy is None or deploy.mode != "docker":
+        return False
+    docker = deploy.docker
+    if not isinstance(docker, Mapping):
+        return False
+    return bool(
+        docker.get("runner_docker_socket")
+        or docker.get("runner_docker_socket_volume")
+        or docker.get("host_docker")
+        or docker.get("host_docker_deploy")
+    )
+
+
+def _drone_yaml_has_host_socket_volume(parsed: object, *, name: str, path: str) -> bool:
+    for volume in _drone_top_level_volumes(parsed):
+        volume_name = _string(volume.get("name"))
+        raw_host = volume.get("host")
+        host = raw_host if isinstance(raw_host, Mapping) else {}
+        host_path = _string(host.get("path"))
+        if volume_name == name and host_path == path and host_path.startswith("/"):
+            return True
+    return False
+
+
+def _drone_step_mounts_volume(step: Mapping[str, Any], *, name: str, path: str) -> bool:
+    raw_volumes = step.get("volumes")
+    if not isinstance(raw_volumes, list):
+        return False
+    for volume in raw_volumes:
+        if not isinstance(volume, Mapping):
+            continue
+        if _string(volume.get("name")) == name and _string(volume.get("path")) == path:
+            return True
+    return False
+
+
+def _drone_step_sets_tcp_docker_host(step: Mapping[str, Any]) -> bool:
+    values: list[str] = []
+    raw_commands = step.get("commands")
+    if isinstance(raw_commands, list):
+        values.extend(command for command in raw_commands if isinstance(command, str))
+    raw_environment = step.get("environment")
+    if isinstance(raw_environment, Mapping):
+        values.extend(f"{key}={value}" for key, value in raw_environment.items())
+    elif isinstance(raw_environment, list):
+        values.extend(str(item) for item in raw_environment)
+    return any(_DOCKER_HOST_TCP_RE.search(value) is not None for value in values)
+
+
+def _drone_yaml_defines_dind_service(parsed: object) -> bool:
+    for service in _drone_service_mappings(parsed):
+        name = (_string(service.get("name")) or "").lower()
+        image = (_string(service.get("image")) or "").lower()
+        if name == "docker" or "docker:dind" in image or image.endswith("/docker:dind"):
+            return True
+    return False
+
+
+def _drone_deploy_step_mappings(
+    parsed: object,
+    *,
+    deploy: PipelineDeploySpec,
+) -> list[Mapping[str, Any]]:
+    steps: list[Mapping[str, Any]] = []
     for step_number, step in enumerate(_drone_step_mappings(parsed), 1):
         step_name = _string(step.get("name")) or f"step-{step_number}"
-        if not _is_deploy_label(step_name, deploy=deploy):
-            continue
+        if _is_deploy_label(step_name, deploy=deploy):
+            steps.append(step)
+    return steps
+
+
+def _drone_top_level_volumes(parsed: object) -> list[Mapping[str, Any]]:
+    if isinstance(parsed, Mapping):
+        raw_volumes = parsed.get("volumes")
+        if isinstance(raw_volumes, list):
+            return [volume for volume in raw_volumes if isinstance(volume, Mapping)]
+        return []
+    if isinstance(parsed, list):
+        output: list[Mapping[str, Any]] = []
+        for document in parsed:
+            output.extend(_drone_top_level_volumes(document))
+        return output
+    return []
+
+
+def _drone_service_mappings(parsed: object) -> list[Mapping[str, Any]]:
+    if isinstance(parsed, Mapping):
+        raw_services = parsed.get("services")
+        if isinstance(raw_services, list):
+            return [service for service in raw_services if isinstance(service, Mapping)]
+        return []
+    if isinstance(parsed, list):
+        output: list[Mapping[str, Any]] = []
+        for document in parsed:
+            output.extend(_drone_service_mappings(document))
+        return output
+    return []
+
+
+def _drone_deploy_commands_text(parsed: object, *, deploy: PipelineDeploySpec) -> str:
+    commands: list[str] = []
+    for step in _drone_deploy_step_mappings(parsed, deploy=deploy):
         raw_commands = step.get("commands")
         if not isinstance(raw_commands, list):
             continue

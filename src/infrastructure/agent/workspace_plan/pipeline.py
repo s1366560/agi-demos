@@ -11,7 +11,7 @@ import re
 import shlex
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -29,6 +29,7 @@ DEFAULT_PIPELINE_TIMEOUT_SECONDS = 600
 DEFAULT_PREVIEW_PORT = 3000
 DEFAULT_DRONE_DEPLOY_MODE = "cli"
 DEFAULT_DRONE_DEPLOY_STAGE = "deploy"
+DEFAULT_DOCKER_DEPLOY_HOST_PORT = 18080
 _EXIT_MARKER = "__MEMSTACK_PIPELINE_EXIT_CODE__="
 _EXIT_RE = re.compile(r"__MEMSTACK_PIPELINE_EXIT_CODE__=(\d+)")
 
@@ -380,12 +381,69 @@ def _docker_deploy_config_with_services(
             if service_id and service_id not in existing_ids:
                 existing.append(service)
                 existing_ids.add(service_id)
-        docker[existing_key] = existing
+        docker[existing_key] = _docker_deploy_services_with_host_ports(docker, existing)
         return docker
 
     if not docker.get("services"):
-        docker["deploy_services"] = deploy_services
+        docker["deploy_services"] = _docker_deploy_services_with_host_ports(
+            docker,
+            deploy_services,
+        )
     return docker
+
+
+def _docker_deploy_services_with_host_ports(
+    docker: Mapping[str, Any],
+    services: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    base_host_port = _positive_int(
+        docker.get("deploy_host_port") or docker.get("host_port"),
+        0,
+    )
+    if base_host_port <= 0:
+        return services
+    reserved_ports = _positive_int_set(docker.get("reserved_host_ports"))
+    used_host_ports: set[int] = set()
+    output: list[dict[str, Any]] = []
+    for index, service in enumerate(services):
+        item = dict(service)
+        host_port = _positive_int(item.get("deploy_host_port") or item.get("host_port"), 0)
+        if host_port <= 0 or host_port in reserved_ports or host_port in used_host_ports:
+            host_port = _next_available_host_port(
+                base_host_port + index,
+                reserved_ports=reserved_ports,
+                used_host_ports=used_host_ports,
+            )
+        used_host_ports.add(host_port)
+        item["deploy_host_port"] = host_port
+        item.setdefault("host_port", host_port)
+        container_port = _positive_int(
+            item.get("container_port") or item.get("internal_port") or item.get("port"),
+            0,
+        )
+        if container_port > 0:
+            item.setdefault("container_port", container_port)
+            item.setdefault("deploy_port_mapping", f"{host_port}:{container_port}")
+        output.append(item)
+    return output
+
+
+def _positive_int_set(value: object) -> set[int]:
+    if not isinstance(value, list | tuple | set):
+        return set()
+    return {parsed for item in value if (parsed := _positive_int(item, 0)) > 0}
+
+
+def _next_available_host_port(
+    start: int,
+    *,
+    reserved_ports: set[int],
+    used_host_ports: set[int],
+) -> int:
+    candidate = max(start, DEFAULT_DOCKER_DEPLOY_HOST_PORT)
+    while candidate in reserved_ports or candidate in used_host_ports:
+        candidate += 1
+    return candidate
 
 
 def _docker_deploy_service_from_pipeline_service(
@@ -616,6 +674,12 @@ _COMPOSE_FILE_NAMES = (
     "docker-compose.yaml",
     "docker-compose.yml",
 )
+_COMPOSE_OVERRIDE_FILE_NAMES = (
+    "compose.override.yaml",
+    "compose.override.yml",
+    "docker-compose.override.yaml",
+    "docker-compose.override.yml",
+)
 _INFRA_COMPOSE_SERVICE_IDS = frozenset(
     {
         "adminer",
@@ -638,6 +702,36 @@ _INFRA_COMPOSE_SERVICE_IDS = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class _ComposeTaggedValue:
+    tag: str
+    value: object
+
+
+class _ComposeLoader(yaml.SafeLoader):
+    """YAML loader that preserves Compose merge control tags."""
+
+
+def _compose_tag_constructor(
+    loader: yaml.SafeLoader,
+    tag_suffix: str,
+    node: yaml.Node,
+) -> _ComposeTaggedValue:
+    tag = f"!{tag_suffix}"
+    if isinstance(node, yaml.ScalarNode):
+        value = loader.construct_scalar(node)
+    elif isinstance(node, yaml.SequenceNode):
+        value = loader.construct_sequence(node)
+    elif isinstance(node, yaml.MappingNode):
+        value = loader.construct_mapping(node)
+    else:
+        value = None
+    return _ComposeTaggedValue(tag=tag, value=value)
+
+
+_ComposeLoader.add_multi_constructor("!", _compose_tag_constructor)
+
+
 def _readable_code_root(*candidates: str | Path | None) -> Path | None:
     for candidate in candidates:
         if candidate is None:
@@ -651,28 +745,152 @@ def _readable_code_root(*candidates: str | Path | None) -> Path | None:
 def _compose_application_service_specs(code_root: Path | None) -> list[PipelineServiceSpec]:
     if code_root is None:
         return []
-    for file_name in _COMPOSE_FILE_NAMES:
-        compose_path = code_root / file_name
-        if not compose_path.is_file():
+    parsed = _load_default_compose_model(code_root)
+    if parsed is None:
+        return []
+    raw_services = parsed.get("services")
+    if not isinstance(raw_services, Mapping):
+        return []
+    services: list[PipelineServiceSpec] = []
+    for index, (service_id, raw_service) in enumerate(raw_services.items(), start=1):
+        if not isinstance(service_id, str) or not isinstance(raw_service, Mapping):
             continue
-        try:
-            parsed = yaml.safe_load(compose_path.read_text(encoding="utf-8")) or {}
-        except (OSError, yaml.YAMLError):
-            return []
-        if not isinstance(parsed, Mapping):
-            return []
-        raw_services = parsed.get("services")
-        if not isinstance(raw_services, Mapping):
-            return []
-        services: list[PipelineServiceSpec] = []
-        for index, (service_id, raw_service) in enumerate(raw_services.items(), start=1):
-            if not isinstance(service_id, str) or not isinstance(raw_service, Mapping):
-                continue
-            service = _compose_service_spec(service_id, raw_service, index=index)
-            if service is not None:
-                services.append(service)
-        return services
-    return []
+        service = _compose_service_spec(service_id, raw_service, index=index)
+        if service is not None:
+            services.append(service)
+    return services
+
+
+def _load_default_compose_model(code_root: Path) -> Mapping[str, Any] | None:
+    base_path = _first_existing_file(code_root, _COMPOSE_FILE_NAMES)
+    if base_path is None:
+        return None
+    try:
+        parsed: object = _load_compose_yaml(base_path)
+        for override_path in _existing_files(code_root, _COMPOSE_OVERRIDE_FILE_NAMES):
+            override = _load_compose_yaml(override_path)
+            parsed = _merge_compose_value(parsed, override)
+    except (OSError, yaml.YAMLError):
+        return None
+    return parsed if isinstance(parsed, Mapping) else None
+
+
+def _first_existing_file(root: Path, names: tuple[str, ...]) -> Path | None:
+    for name in names:
+        path = root / name
+        if path.is_file():
+            return path
+    return None
+
+
+def _existing_files(root: Path, names: tuple[str, ...]) -> list[Path]:
+    return [path for name in names if (path := root / name).is_file()]
+
+
+def _load_compose_yaml(path: Path) -> object:
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=_ComposeLoader) or {}  # noqa: S506
+
+
+def _merge_compose_value(base: object, override: object, *, key: str | None = None) -> object:
+    if isinstance(override, _ComposeTaggedValue):
+        if override.tag == "!reset":
+            return _compose_reset_value(override.value)
+        if override.tag == "!override":
+            return override.value
+        override = override.value
+    if isinstance(base, _ComposeTaggedValue):
+        base = base.value
+
+    if isinstance(base, Mapping) and isinstance(override, Mapping):
+        merged: dict[str, Any] = {
+            str(base_key): base_value for base_key, base_value in base.items()
+        }
+        for override_key, override_value in override.items():
+            key_text = str(override_key)
+            merged[key_text] = _merge_compose_value(
+                merged.get(key_text),
+                override_value,
+                key=key_text,
+            )
+        return merged
+    if isinstance(base, list) and isinstance(override, list):
+        return _merge_compose_sequence(base, override, key=key)
+    return override
+
+
+def _compose_reset_value(value: object) -> object:
+    if isinstance(value, list):
+        return []
+    if isinstance(value, Mapping):
+        return {}
+    return None
+
+
+def _merge_compose_sequence(
+    base: list[object],
+    override: list[object],
+    *,
+    key: str | None,
+) -> list[object]:
+    if key == "ports":
+        return _merge_compose_unique_sequence(base, override, _compose_port_unique_key)
+    if key in {"volumes", "secrets", "configs"}:
+        return _merge_compose_unique_sequence(base, override, _compose_target_unique_key)
+    return [*base, *override]
+
+
+def _merge_compose_unique_sequence(
+    base: list[object],
+    override: list[object],
+    key_fn: Callable[[object], object | None],
+) -> list[object]:
+    merged = list(base)
+    key_to_index: dict[object, int] = {}
+    for index, item in enumerate(merged):
+        item_key = key_fn(item)
+        if item_key is not None:
+            key_to_index[item_key] = index
+    for item in override:
+        item_key = key_fn(item)
+        if item_key is not None and item_key in key_to_index:
+            merged[key_to_index[item_key]] = item
+        else:
+            if item_key is not None:
+                key_to_index[item_key] = len(merged)
+            merged.append(item)
+    return merged
+
+
+def _compose_port_unique_key(value: object) -> tuple[str, str, str, str] | None:
+    if isinstance(value, Mapping):
+        target = _string(value.get("target"))
+        published = _string(value.get("published")) or ""
+        protocol = _string(value.get("protocol")) or "tcp"
+        ip = _string(value.get("host_ip") or value.get("ip")) or ""
+        return (ip, target, published, protocol) if target else None
+    if not isinstance(value, str):
+        return None
+    port = value.strip()
+    if not port:
+        return None
+    without_protocol, _, protocol = port.partition("/")
+    protocol = protocol or "tcp"
+    parts = without_protocol.split(":")
+    target = parts[-1] if parts else ""
+    published = parts[-2] if len(parts) >= 2 else ""
+    ip = ":".join(parts[:-2]) if len(parts) > 2 else ""
+    return (ip, target, published, protocol) if target else None
+
+
+def _compose_target_unique_key(value: object) -> str | None:
+    if isinstance(value, Mapping):
+        return _string(value.get("target"))
+    if not isinstance(value, str):
+        return None
+    parts = value.split(":")
+    if len(parts) < 2:
+        return None
+    return parts[1].strip() or None
 
 
 def _compose_service_spec(

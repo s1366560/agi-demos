@@ -1693,9 +1693,7 @@ class SessionProcessor:
         if event_type == AgentEventType.ACT.value:
             self._reset_tool_usage_reminder_streak()
             return current_result, True
-        if event_type == AgentEventType.OBSERVE.value and self._is_terminal_workspace_report(
-            event
-        ):
+        if event_type == AgentEventType.OBSERVE.value and self._is_terminal_workspace_report(event):
             self._pending_completion_status = "goal_achieved:workspace_terminal_report"
             return ProcessorResult.COMPLETE, True
         if event_type == AgentEventType.OBSERVE.value and self._is_terminal_workspace_contract(
@@ -1732,15 +1730,17 @@ class SessionProcessor:
         else:
             payload = result
 
-        if (
-            not isinstance(payload, dict)
-            or payload.get("ok") is not True
-            or payload.get("error")
-        ):
+        if not isinstance(payload, dict) or payload.get("ok") is not True:
             return False
 
         applied_report = payload.get("applied_report")
-        return not (isinstance(applied_report, dict) and applied_report.get("applied") is False)
+        if isinstance(applied_report, dict):
+            applied = applied_report.get("applied")
+            if applied is False:
+                return False
+            if applied is True:
+                return True
+        return not payload.get("error")
 
     def _is_terminal_workspace_contract(self, event: ProcessorEvent) -> bool:
         """Return True when a workspace contract submission was durably captured."""

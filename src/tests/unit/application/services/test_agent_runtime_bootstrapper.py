@@ -250,6 +250,179 @@ async def test_start_chat_actor_local_workspace_worker_uses_subprocess(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_start_chat_actor_restores_workspace_runtime_from_persisted_session(
+    bootstrapper,
+    conversation,
+    tenant_agent_config,
+):
+    """Persisted workspace sessions should restore the selected agent and runtime context."""
+    conversation.agent_config = {"selected_agent_id": "workspace-worker-agent"}
+    conversation.workspace_id = "workspace-1"
+    conversation.linked_workspace_task_id = "task-1"
+    conversation.metadata = {
+        "workspace_id": "workspace-1",
+        "workspace_task_id": "task-1",
+        "linked_workspace_task_id": "task-1",
+        "root_goal_task_id": "root-1",
+        "attempt_id": "attempt-1",
+        "source": "workspace_worker_launch",
+        "workspace_llm_stage": "worker_launch",
+        "preferred_language": "zh-CN",
+    }
+    _, factory, encryption_service = _build_provider_mocks()
+    settings = SimpleNamespace(
+        agent_runtime_mode="local",
+        agent_max_tokens=4096,
+        agent_max_steps=20,
+    )
+    fake_config_module = _build_fake_module(
+        "src.configuration.config",
+        get_settings=lambda: settings,
+    )
+    fake_provider_module = _build_fake_module(
+        "src.infrastructure.llm.provider_factory",
+        get_ai_service_factory=lambda: factory,
+    )
+    fake_encryption_module = _build_fake_module(
+        "src.infrastructure.security.encryption_service",
+        get_encryption_service=lambda: encryption_service,
+    )
+
+    with (
+        patch.dict(
+            "sys.modules",
+            {
+                "src.configuration.config": fake_config_module,
+                "src.infrastructure.llm.provider_factory": fake_provider_module,
+                "src.infrastructure.security.encryption_service": fake_encryption_module,
+            },
+        ),
+        patch.object(
+            bootstrapper,
+            "_register_project_local",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            bootstrapper,
+            "_load_tenant_agent_config",
+            new_callable=AsyncMock,
+            return_value=tenant_agent_config,
+        ),
+        patch.object(
+            bootstrapper,
+            "_start_local_subprocess_chat",
+            new_callable=AsyncMock,
+        ) as subprocess_mock,
+    ):
+        actor_id = await bootstrapper.start_chat_actor(
+            conversation=conversation,
+            message_id="msg-1",
+            user_message="hello",
+            conversation_context=[],
+        )
+
+    assert actor_id == "agent:tenant-1:proj-1:default"
+    subprocess_mock.assert_awaited_once()
+    _conversation_id, config, request = subprocess_mock.call_args.args
+    assert config.max_steps == tenant_agent_config.max_work_plan_steps
+    assert request.agent_id == "workspace-worker-agent"
+    assert request.tenant_agent_config["max_work_plan_steps"] == (
+        tenant_agent_config.max_work_plan_steps
+    )
+    assert request.app_model_context["context_type"] == "workspace_worker_runtime"
+    assert "runtime_limits" not in request.app_model_context
+    assert request.app_model_context["workspace_session_role"] == "worker"
+    assert request.app_model_context["preferred_language"] == "zh-CN"
+    assert request.app_model_context["workspace_binding"] == {
+        "workspace_id": "workspace-1",
+        "root_goal_task_id": "root-1",
+        "workspace_task_id": "task-1",
+        "linked_workspace_task_id": "task-1",
+        "attempt_id": "attempt-1",
+        "current_attempt_id": "attempt-1",
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_start_chat_actor_restores_contract_runtime_without_hard_step_limit(
+    bootstrapper,
+    conversation,
+    tenant_agent_config,
+):
+    """Persisted contract sessions should be workspace-bound without forcing 8/16 steps."""
+    conversation.agent_config = {"selected_agent_id": "builtin:workspace-verifier"}
+    conversation.workspace_id = "workspace-1"
+    conversation.linked_workspace_task_id = "task-1"
+    conversation.metadata = {
+        "workspace_id": "workspace-1",
+        "linked_workspace_task_id": "task-1",
+        "workspace_llm_stage": "verification_judge",
+        "current_plan_node_id": "node-1",
+        "current_attempt_id": "attempt-1",
+    }
+    _, factory, encryption_service = _build_provider_mocks()
+    settings = SimpleNamespace(
+        agent_runtime_mode="local",
+        agent_max_tokens=4096,
+        agent_max_steps=20,
+    )
+    fake_config_module = _build_fake_module(
+        "src.configuration.config",
+        get_settings=lambda: settings,
+    )
+    fake_provider_module = _build_fake_module(
+        "src.infrastructure.llm.provider_factory",
+        get_ai_service_factory=lambda: factory,
+    )
+    fake_encryption_module = _build_fake_module(
+        "src.infrastructure.security.encryption_service",
+        get_encryption_service=lambda: encryption_service,
+    )
+
+    with (
+        patch.dict(
+            "sys.modules",
+            {
+                "src.configuration.config": fake_config_module,
+                "src.infrastructure.llm.provider_factory": fake_provider_module,
+                "src.infrastructure.security.encryption_service": fake_encryption_module,
+            },
+        ),
+        patch.object(
+            bootstrapper,
+            "_register_project_local",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            bootstrapper,
+            "_load_tenant_agent_config",
+            new_callable=AsyncMock,
+            return_value=tenant_agent_config,
+        ),
+        patch.object(
+            bootstrapper,
+            "_start_local_subprocess_chat",
+            new_callable=AsyncMock,
+        ) as subprocess_mock,
+    ):
+        await bootstrapper.start_chat_actor(
+            conversation=conversation,
+            message_id="msg-1",
+            user_message="hello",
+            conversation_context=[],
+        )
+
+    subprocess_mock.assert_awaited_once()
+    _conversation_id, config, request = subprocess_mock.call_args.args
+    assert config.max_steps == tenant_agent_config.max_work_plan_steps
+    assert request.agent_id == "builtin:workspace-verifier"
+    assert request.app_model_context["workspace_session_role"] == "contract"
+    assert "runtime_limits" not in request.app_model_context
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_local_workspace_subprocess_starts_new_session(bootstrapper, tmp_path):
     """Detached process sessions keep workspace workers alive across dev reloads."""
     request_path = tmp_path / "request.json"

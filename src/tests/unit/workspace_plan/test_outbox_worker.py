@@ -24,6 +24,9 @@ from sqlalchemy.ext.asyncio import (
 import src.infrastructure.agent.workspace_plan.outbox_handlers as outbox_handlers
 from src.domain.model.workspace.workspace import Workspace
 from src.domain.model.workspace.workspace_task import WorkspaceTask
+from src.domain.model.workspace.workspace_task_session_attempt import (
+    WorkspaceTaskSessionAttemptStatus,
+)
 from src.domain.model.workspace_plan import (
     AcceptanceCriterion,
     Capability,
@@ -47,6 +50,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Tenant as DBTenant,
     User as DBUser,
     WorkspaceAgentModel,
+    WorkspaceDeploymentModel,
     WorkspaceMemberModel,
     WorkspaceModel,
     WorkspacePipelineRunModel,
@@ -56,6 +60,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspaceTaskSessionAttemptModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_pipeline import (
+    SqlWorkspacePipelineRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
     SqlWorkspacePlanOutboxRepository,
 )
@@ -473,6 +480,152 @@ async def test_pipeline_handler_commits_running_state_before_drone_wait(
         release.set()
         await task
         await handler_session.commit()
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_handler_persists_drone_deployment_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine, session_maker = await _file_backed_outbox_session_maker(tmp_path)
+
+    class SuccessfulDroneProvider:
+        async def run(self, contract: PipelineContractSpec) -> outbox_handlers.PipelineRunResult:
+            _ = contract
+            return outbox_handlers.PipelineRunResult(
+                status="success",
+                reason="Drone build octo/my-evo#2 finished with status success",
+                stage_results=(
+                    outbox_handlers.PipelineStageResult(
+                        stage="workspace-ci/deploy",
+                        status="success",
+                        command="drone:workspace-ci/deploy",
+                        exit_code=0,
+                        stdout_preview="docker compose up -d web",
+                        metadata={"drone_step_kind": "deploy"},
+                    ),
+                ),
+                evidence_refs=("ci_pipeline:passed", "deployment:passed:docker"),
+                external_id="octo/my-evo#2",
+                external_url="http://localhost:8080/octo/my-evo/2",
+                deployment_status="deployed",
+                metadata={
+                    "external_provider": DRONE_PROVIDER,
+                    "deployment_status": "deployed",
+                    "deploy_validation": outbox_handlers.DRONE_DOCKER_DEPLOY_VALIDATION,
+                },
+            )
+
+    monkeypatch.setattr(outbox_handlers, "DronePipelineProvider", SuccessfulDroneProvider)
+
+    async with session_maker() as seed_session:
+        await _seed_workspace_only(seed_session)
+        workspace = await seed_session.get(WorkspaceModel, "workspace-1")
+        assert workspace is not None
+        workspace.metadata_json = {
+            "workspace_type": "software_development",
+            "code_context": {"sandbox_code_root": "/workspace/my-evo"},
+            "delivery_cicd": {
+                "provider": DRONE_PROVIDER,
+                "code_root": "/workspace/my-evo",
+                "auto_deploy": False,
+                "agent_managed": False,
+                "services": [
+                    {
+                        "service_id": "web",
+                        "name": "Web",
+                        "start_command": "npm run start",
+                        "internal_port": 8080,
+                        "path_prefix": "/",
+                        "health_path": "/health",
+                        "required": True,
+                    }
+                ],
+                "drone": {
+                    "repo": "octo/my-evo",
+                    "deploy": {
+                        "enabled": False,
+                        "mode": "cli",
+                        "stage": "deploy",
+                        "docker": {
+                            "deploy_host_port": 18080,
+                            "reserved_host_ports": [3000, 3001, 5001],
+                        },
+                    },
+                },
+            },
+        }
+        plan = Plan(
+            id="pipeline-plan-1",
+            workspace_id="workspace-1",
+            goal_id=PlanNodeId("pipeline-goal-1"),
+            status=PlanStatus.ACTIVE,
+        )
+        plan.add_node(
+            PlanNode(
+                id="pipeline-goal-1",
+                plan_id=plan.id,
+                parent_id=None,
+                kind=PlanNodeKind.GOAL,
+                title="Ship pipeline",
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="pipeline-node-1",
+                plan_id=plan.id,
+                parent_id=plan.goal_id,
+                kind=PlanNodeKind.TASK,
+                title="Run Drone",
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-pipeline-1",
+                metadata={"iteration_phase": "deploy"},
+            )
+        )
+        await SqlPlanRepository(seed_session).save(plan)
+        item = await SqlWorkspacePlanOutboxRepository(seed_session).enqueue(
+            plan_id=plan.id,
+            workspace_id="workspace-1",
+            event_type="pipeline_run_requested",
+            payload={
+                "workspace_id": "workspace-1",
+                "plan_id": plan.id,
+                "node_id": "pipeline-node-1",
+                "attempt_id": "attempt-pipeline-1",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+            },
+        )
+        item_id = item.id
+        await seed_session.commit()
+
+    handler = make_pipeline_run_requested_handler()
+    async with session_maker() as handler_session:
+        item = await handler_session.get(WorkspacePlanOutboxModel, item_id)
+        assert item is not None
+        await handler(item, handler_session)
+        await handler_session.commit()
+
+    async with session_maker() as inspect_session:
+        deployment = (await inspect_session.execute(select(WorkspaceDeploymentModel))).scalar_one()
+        assert deployment.provider == DRONE_PROVIDER
+        assert deployment.status == "running"
+        assert deployment.service_id is not None
+        assert deployment.service_id.startswith("ws-workspac-web-")
+        assert deployment.service_name == "Web"
+        assert deployment.port == 18080
+        assert deployment.preview_url == "http://localhost:18080/"
+        assert deployment.health_url == "http://localhost:18080/health"
+        assert deployment.metadata_json["deployment_status"] == "deployed"
+
+        visible_plan = await SqlPlanRepository(inspect_session).get("pipeline-plan-1")
+        assert visible_plan is not None
+        visible_node = visible_plan.nodes[PlanNodeId("pipeline-node-1")]
+        evidence_refs = visible_node.metadata["pipeline_evidence_refs"]
+        assert f"deployment:{deployment.service_id}:running" in evidence_refs
+        assert f"preview_url:{deployment.service_id}:http://localhost:18080/" in evidence_refs
 
     await engine.dispose()
 
@@ -1002,6 +1155,351 @@ async def test_pipeline_missing_evidence_retry_infra_keeps_attempt_pending_pipel
 
 
 @pytest.mark.asyncio
+async def test_pipeline_missing_evidence_judge_timeout_stays_pending_pipeline(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="exec-task-1",
+            workspace_id="workspace-1",
+            title="Execution task",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                WORKSPACE_PLAN_ID: "worker-plan-1",
+                WORKSPACE_PLAN_NODE_ID: "node-a",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                CURRENT_ATTEMPT_ID: "attempt-a",
+                PENDING_LEADER_ADJUDICATION: False,
+                "last_attempt_status": "awaiting_plan_verification",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-a",
+            workspace_task_id="exec-task-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="awaiting_leader_adjudication",
+            conversation_id="conversation-a",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="Committed deploy changes.",
+            candidate_verifications_json=["commit_ref:jkl3456", "test_run:npm test"],
+        )
+    )
+    await db_session.flush()
+    node = PlanNode(
+        id="node-a",
+        plan_id="worker-plan-1",
+        parent_id=PlanNodeId("goal-a"),
+        kind=PlanNodeKind.TASK,
+        title="Deploy feature",
+        workspace_task_id="exec-task-1",
+        current_attempt_id="attempt-a",
+        metadata={"pipeline_required": True},
+    )
+
+    await _project_verification_to_workspace_task(
+        db_session,
+        node,
+        {
+            "attempt_id": "attempt-a",
+            "passed": False,
+            "hard_fail": False,
+            "summary": (
+                "verification failed: missing harness-native CI pipeline evidence; "
+                "workspace verification judge timed out after 180s"
+            ),
+            "results": [
+                {
+                    "kind": "ci_pipeline",
+                    "name": None,
+                    "required": True,
+                    "passed": False,
+                    "confidence": 0.7,
+                    "message": "missing harness-native CI pipeline evidence",
+                    "evidence": [{"kind": "artifact", "ref": "commit_ref:jkl3456"}],
+                },
+                {
+                    "kind": "custom",
+                    "name": "retryable_infrastructure_failure",
+                    "judge_verdict": "retry_infrastructure",
+                    "next_action_kind": "retry_same_node",
+                    "failed_criteria": ["workspace_verification_judge"],
+                    "required_next_action": "retry verification judge",
+                    "required": True,
+                    "passed": False,
+                    "confidence": 0.5,
+                    "message": (
+                        "judge verdict=retry_infrastructure; workspace verification judge "
+                        "timed out after 180s; next_action=retry verification judge; "
+                        "next_action_kind=retry_same_node; failed=workspace_verification_judge; "
+                        "feedback_targets=runtime"
+                    ),
+                    "evidence": [],
+                },
+            ],
+        },
+    )
+    await db_session.flush()
+
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "attempt-a")
+    assert attempt is not None
+    assert attempt.status == "awaiting_leader_adjudication"
+    assert attempt.completed_at is None
+    assert attempt.adjudication_reason == "pipeline_gate_pending"
+    task = await db_session.get(WorkspaceTaskModel, "exec-task-1")
+    assert task is not None
+    assert task.status == "in_progress"
+    assert task.metadata_json["durable_plan_verdict"] == "pipeline_pending"
+    assert task.metadata_json["last_attempt_status"] == "awaiting_pipeline"
+    assert task.metadata_json["pipeline_candidate_commit_ref"] == "jkl3456"
+
+
+@pytest.mark.asyncio
+async def test_pending_pipeline_hard_fail_projection_stays_pipeline_pending(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="exec-task-1",
+            workspace_id="workspace-1",
+            title="Execution task",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                WORKSPACE_PLAN_ID: "worker-plan-1",
+                WORKSPACE_PLAN_NODE_ID: "node-a",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                CURRENT_ATTEMPT_ID: "attempt-a",
+                PENDING_LEADER_ADJUDICATION: False,
+                "last_attempt_status": "awaiting_pipeline",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-a",
+            workspace_task_id="exec-task-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="awaiting_leader_adjudication",
+            conversation_id="conversation-a",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="Committed deploy changes.",
+            candidate_verifications_json=["commit_ref:293a833", "test_run:npm test"],
+        )
+    )
+    await db_session.flush()
+    node = PlanNode(
+        id="node-a",
+        plan_id="worker-plan-1",
+        parent_id=PlanNodeId("goal-a"),
+        kind=PlanNodeKind.TASK,
+        title="Deploy feature",
+        workspace_task_id="exec-task-1",
+        current_attempt_id="attempt-a",
+        metadata={
+            "pipeline_required": True,
+            "pipeline_gate_status": "requested",
+            "pipeline_status": "requested",
+        },
+    )
+
+    await _project_verification_to_workspace_task(
+        db_session,
+        node,
+        {
+            "attempt_id": "attempt-a",
+            "passed": False,
+            "hard_fail": True,
+            "summary": (
+                "verification failed: missing harness-native CI pipeline evidence "
+                "for current commit 293a833"
+            ),
+            "results": [
+                {
+                    "kind": "ci_pipeline",
+                    "required": True,
+                    "passed": False,
+                    "confidence": 1.0,
+                    "message": (
+                        "missing harness-native CI pipeline evidence for current commit 293a833"
+                    ),
+                    "evidence": [{"kind": "artifact", "ref": "commit_ref:293a833"}],
+                },
+                {
+                    "kind": "custom",
+                    "name": "workspace_verification_judge",
+                    "judge_verdict": "blocked_human_required",
+                    "next_action_kind": "human_required",
+                    "required_next_action": "platform harness must trigger Drone",
+                    "feedback_items": [
+                        {
+                            "target_layer": "runtime",
+                            "feedback_kind": "runtime_infra_failure",
+                            "recommended_action": "escalate_human",
+                            "summary": (
+                                "Pipeline trigger blocked until Drone evidence exists for "
+                                "commit 293a833."
+                            ),
+                            "failure_signature": "missing_drone_pipeline_evidence_current_commit",
+                            "evidence_refs": ["commit_ref:293a833", "ci_pipeline:missing"],
+                        }
+                    ],
+                    "required": True,
+                    "passed": False,
+                    "confidence": 0.9,
+                    "message": "judge verdict=blocked_human_required; missing pipeline evidence",
+                    "evidence": [],
+                },
+            ],
+        },
+    )
+    await db_session.flush()
+
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "attempt-a")
+    assert attempt is not None
+    assert attempt.status == "awaiting_leader_adjudication"
+    assert attempt.completed_at is None
+    assert attempt.adjudication_reason == "pipeline_gate_pending"
+    task = await db_session.get(WorkspaceTaskModel, "exec-task-1")
+    assert task is not None
+    assert task.metadata_json["durable_plan_verdict"] == "pipeline_pending"
+    assert task.metadata_json["last_attempt_status"] == "awaiting_pipeline"
+
+
+@pytest.mark.asyncio
+async def test_worker_product_code_feedback_projection_is_not_pipeline_pending(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="exec-task-1",
+            workspace_id="workspace-1",
+            title="Execution task",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                WORKSPACE_PLAN_ID: "worker-plan-1",
+                WORKSPACE_PLAN_NODE_ID: "node-a",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                CURRENT_ATTEMPT_ID: "attempt-a",
+                PENDING_LEADER_ADJUDICATION: False,
+                "last_attempt_status": "awaiting_pipeline",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-a",
+            workspace_task_id="exec-task-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="awaiting_leader_adjudication",
+            conversation_id="conversation-a",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="Committed deploy changes.",
+            candidate_verifications_json=["commit_ref:0896747", "test_run:npm test"],
+        )
+    )
+    await db_session.flush()
+    node = PlanNode(
+        id="node-a",
+        plan_id="worker-plan-1",
+        parent_id=PlanNodeId("goal-a"),
+        kind=PlanNodeKind.TASK,
+        title="Deploy feature",
+        workspace_task_id="exec-task-1",
+        current_attempt_id="attempt-a",
+        metadata={
+            "pipeline_required": True,
+            "pipeline_gate_status": "running",
+            "pipeline_status": "running",
+        },
+    )
+
+    await _project_verification_to_workspace_task(
+        db_session,
+        node,
+        {
+            "attempt_id": "attempt-a",
+            "passed": False,
+            "hard_fail": True,
+            "summary": "verification failed: Drone deploy port conflict requires worker retry",
+            "results": [
+                {
+                    "kind": "ci_pipeline",
+                    "required": True,
+                    "passed": False,
+                    "confidence": 1.0,
+                    "message": "Drone deploy failed: bind for 0.0.0.0:3001 failed",
+                    "evidence": [{"kind": "artifact", "ref": "commit_ref:0896747"}],
+                },
+                {
+                    "kind": "custom",
+                    "name": "workspace_verification_judge",
+                    "judge_verdict": "needs_rework",
+                    "next_action_kind": "retry_same_node",
+                    "required_next_action": "worker must fix compose publishing",
+                    "feedback_items": [
+                        {
+                            "target_layer": "worker",
+                            "feedback_kind": "product_code_failure",
+                            "recommended_action": "retry_worker",
+                            "summary": (
+                                "Drone CI/CD evidence was captured after publish, but the "
+                                "worker must fix the deploy port binding."
+                            ),
+                            "failure_signature": "ci_pipeline_deploy_port_conflict",
+                            "evidence_refs": ["commit_ref:0896747", "ci_pipeline:failed"],
+                        }
+                    ],
+                    "required": True,
+                    "passed": False,
+                    "confidence": 0.9,
+                    "message": "judge verdict=needs_rework; worker retry required",
+                    "evidence": [],
+                },
+            ],
+        },
+    )
+    await db_session.flush()
+
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "attempt-a")
+    assert attempt is not None
+    assert attempt.status == WorkspaceTaskSessionAttemptStatus.BLOCKED.value
+    assert attempt.adjudication_reason != "pipeline_gate_pending"
+    task = await db_session.get(WorkspaceTaskModel, "exec-task-1")
+    assert task is not None
+    assert task.status == "blocked"
+    assert task.metadata_json["durable_plan_verdict"] == "blocked"
+    assert task.metadata_json["last_attempt_status"] == "blocked"
+
+
+@pytest.mark.asyncio
 async def test_retryable_worker_infrastructure_projection_terminalizes_attempt(
     db_session: AsyncSession,
 ) -> None:
@@ -1241,6 +1739,7 @@ async def test_worker_launch_handler_supplies_system_leader_when_payload_omits_l
             ),
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -1334,6 +1833,7 @@ async def test_worker_launch_handler_blocks_when_worktree_setup_fails(
             ),
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -1795,6 +2295,168 @@ def test_drone_contract_keeps_deploy_for_deploy_phase() -> None:
     assert "deploy_suppressed_for_phase" not in scoped.provider_config
 
 
+def test_drone_contract_enables_deploy_awareness_for_deploy_phase() -> None:
+    contract = PipelineContractSpec(
+        provider=DRONE_PROVIDER,
+        auto_deploy=False,
+        deploy=PipelineDeploySpec(enabled=False, mode="docker", required=True),
+        provider_config={"repo": "octo/hello"},
+    )
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        metadata={"iteration_phase": "deploy"},
+    )
+
+    scoped = outbox_handlers._pipeline_contract_for_node_phase(contract, node=node)
+
+    assert scoped.deploy is not None
+    assert scoped.deploy.enabled is True
+    assert scoped.deploy.mode == "docker"
+    assert "deploy_suppressed_for_phase" not in scoped.provider_config
+
+
+def test_running_pipeline_run_is_not_reflected_as_terminal_completion() -> None:
+    contract = PipelineContractSpec(provider=DRONE_PROVIDER)
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        metadata={"pipeline_status": "running"},
+    )
+    run = WorkspacePipelineRunModel(
+        id="run-1",
+        contract_id="contract-1",
+        workspace_id="workspace-1",
+        plan_id="plan-1",
+        node_id="node-deploy",
+        attempt_id="attempt-1",
+        commit_ref="9b3e7cc",
+        provider=DRONE_PROVIDER,
+        status="running",
+        metadata_json={"source_publish_source_commit_ref": "9b3e7cc"},
+    )
+
+    assert not outbox_handlers._can_reflect_existing_pipeline_run(
+        run=run,
+        contract=contract,
+        node=node,
+    )
+
+
+def test_pipeline_run_commit_match_uses_source_commit_metadata() -> None:
+    run = WorkspacePipelineRunModel(
+        id="run-1",
+        contract_id="contract-1",
+        workspace_id="workspace-1",
+        plan_id="plan-1",
+        node_id="node-deploy",
+        attempt_id="attempt-1",
+        commit_ref="published123",
+        provider=DRONE_PROVIDER,
+        status="running",
+        metadata_json={"source_publish_source_commit_ref": "be55379"},
+    )
+
+    assert outbox_handlers._pipeline_run_matches_requested_commit(
+        run,
+        requested_source_commit_ref="be55379",
+    )
+    assert not outbox_handlers._pipeline_run_matches_requested_commit(
+        run,
+        requested_source_commit_ref="9b3e7cc",
+    )
+
+
+@pytest.mark.asyncio
+async def test_supervisor_tick_recovers_orphaned_running_pipeline_request(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    plan = Plan(
+        id="pipeline-plan-1",
+        workspace_id="workspace-1",
+        goal_id=PlanNodeId("pipeline-goal-1"),
+        status=PlanStatus.ACTIVE,
+    )
+    plan.add_node(
+        PlanNode(
+            id="pipeline-goal-1",
+            plan_id=plan.id,
+            parent_id=None,
+            kind=PlanNodeKind.GOAL,
+            title="Ship pipeline",
+        )
+    )
+    plan.add_node(
+        PlanNode(
+            id="pipeline-node-1",
+            plan_id=plan.id,
+            parent_id=plan.goal_id,
+            kind=PlanNodeKind.TASK,
+            title="Run Drone",
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.IDLE,
+            current_attempt_id="attempt-pipeline-1",
+            metadata={"pipeline_status": "running", "pipeline_gate_status": "running"},
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    pipeline_repo = SqlWorkspacePipelineRepository(db_session)
+    contract = await pipeline_repo.ensure_contract(
+        workspace_id="workspace-1",
+        plan_id=plan.id,
+        provider=DRONE_PROVIDER,
+        code_root="/workspace/my-evo",
+        commands=[],
+    )
+    run = await pipeline_repo.create_run(
+        contract_id=contract.id,
+        workspace_id="workspace-1",
+        plan_id=plan.id,
+        node_id="pipeline-node-1",
+        attempt_id="attempt-pipeline-1",
+        commit_ref="9b3e7cc",
+        provider=DRONE_PROVIDER,
+        metadata={"source_publish_source_commit_ref": "9b3e7cc"},
+    )
+
+    changed = await outbox_handlers._recover_orphaned_running_pipeline_requests_after_tick(
+        session=db_session,
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+    )
+
+    assert changed
+    outbox_items = (
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel).where(
+                    WorkspacePlanOutboxModel.event_type == "pipeline_run_requested"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(outbox_items) == 1
+    assert outbox_items[0].payload_json["attempt_id"] == "attempt-pipeline-1"
+    assert outbox_items[0].payload_json["pipeline_run_id"] == run.id
+
+    changed_again = await outbox_handlers._recover_orphaned_running_pipeline_requests_after_tick(
+        session=db_session,
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+    )
+
+    assert not changed_again
+
+
 def test_pipeline_commit_ref_prefers_accepted_repair_commit_over_stale_feature() -> None:
     node = PlanNode(
         id="node-deploy",
@@ -1872,6 +2534,42 @@ def test_pipeline_commit_ref_uses_latest_current_attempt_report_commit() -> None
     )
 
     assert outbox_handlers._pipeline_commit_ref(node) == "13aeda8"
+
+
+def test_pipeline_commit_ref_prefers_summary_commit_when_artifacts_include_prior_commits() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        current_attempt_id="attempt-current",
+        execution=TaskExecution.REPORTED,
+    )
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-current",
+        workspace_task_id="task-1",
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=25,
+        status="awaiting_leader_adjudication",
+        conversation_id="conversation-current",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_summary=(
+            "Fixed Drone deploy stage port conflict. Platform harness must trigger "
+            "Drone pipeline on s1366560/my-evo at commit be55379."
+        ),
+        candidate_artifacts_json=[
+            "docker-compose.ci.yml",
+            ".drone.yml",
+            "commit_ref:be55379",
+            "commit_ref:9b3e7cc",
+        ],
+        candidate_verifications_json=["worker_report:completed"],
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node, current_attempt=attempt) == "be55379"
 
 
 def test_pipeline_commit_ref_prefers_verified_commit_over_repair_history() -> None:
@@ -1996,6 +2694,43 @@ def test_pipeline_commit_ref_uses_current_attempt_record_after_verifier_idle() -
     assert outbox_handlers._pipeline_commit_ref(node, current_attempt=attempt) == "c6b1e7d"
 
 
+def test_pipeline_commit_ref_prefers_newer_verification_commit_over_stale_artifact() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        current_attempt_id="attempt-current",
+        execution=TaskExecution.REPORTED,
+        metadata={"verified_commit_ref": "stale000"},
+    )
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-current",
+        workspace_task_id="task-1",
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=5,
+        status="awaiting_leader_adjudication",
+        conversation_id="conversation-current",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_summary="done",
+        candidate_artifacts_json=[
+            "docker-compose.override.yml",
+            "commit_ref:63285ad",
+        ],
+        candidate_verifications_json=[
+            "preflight:git-status",
+            "commit_ref:63285ad",
+            "commit_ref:293a833",
+            "worker_report:completed",
+        ],
+    )
+
+    assert outbox_handlers._pipeline_commit_ref(node, current_attempt=attempt) == "293a833"
+
+
 def test_pipeline_commit_ref_ignores_nonmatching_attempt_record() -> None:
     node = PlanNode(
         id="node-deploy",
@@ -2090,7 +2825,9 @@ def test_pipeline_run_commit_ref_does_not_reuse_stale_node_ref_without_attempt()
         ),
         metadata={"evidence_refs": ["commit_ref:stale123"]},
     )
-    contract = PipelineContractSpec(provider=DRONE_PROVIDER, provider_config={"repo": "octo/my-evo"})
+    contract = PipelineContractSpec(
+        provider=DRONE_PROVIDER, provider_config={"repo": "octo/my-evo"}
+    )
 
     assert (
         outbox_handlers._pipeline_run_commit_ref(
@@ -2148,7 +2885,9 @@ async def test_prepare_drone_source_ref_skips_publish_without_attempt_id(
             commit_ref="stale123",
         ),
     )
-    contract = PipelineContractSpec(provider=DRONE_PROVIDER, provider_config={"repo": "octo/my-evo"})
+    contract = PipelineContractSpec(
+        provider=DRONE_PROVIDER, provider_config={"repo": "octo/my-evo"}
+    )
 
     scoped_contract, metadata, result = await outbox_handlers._prepare_drone_source_ref(
         workspace=workspace,
@@ -2652,8 +3391,7 @@ async def test_publish_git_ref_to_source_control_keeps_remote_drift_outside_cand
     assert publish["status"] == "published"
     assert publish["reason"] == "merged remote branch before publish"
     assert (
-        git(remote, "show", "refs/heads/main:.drone.yml")
-        == "commands:\n"
+        git(remote, "show", "refs/heads/main:.drone.yml") == "commands:\n"
         "  - docker network rm workspace-deploy 2>/dev/null || true\n"
         "  - docker network create workspace-deploy"
     )
@@ -2854,6 +3592,156 @@ def test_first_prefixed_ref_accepts_artifact_wrapped_commit_ref() -> None:
 
     assert _first_prefixed_ref(refs, "commit_ref:") == "edd6b848"
     assert _first_prefixed_ref(refs, "git_diff_summary:") == "1 file changed"
+
+
+@pytest.mark.asyncio
+async def test_done_repair_disposition_projects_workspace_task(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    original_task_id = "task-repair-disposition-original"
+    repair_task_id = "task-repair-disposition-repair"
+    repair_attempt_id = "attempt-repair-disposition"
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id=original_task_id,
+                workspace_id="workspace-1",
+                title="Original task accepted through repair",
+                description="Original task whose plan node was accepted by repair evidence.",
+                created_by="worker-user-1",
+                status="in_progress",
+                priority=0,
+                metadata_json={
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    ROOT_GOAL_TASK_ID: "root-task-1",
+                },
+            ),
+            WorkspaceTaskModel(
+                id=repair_task_id,
+                workspace_id="workspace-1",
+                title="Repair task",
+                description="Repair alternative accepted by the verifier.",
+                created_by="worker-user-1",
+                status="done",
+                priority=0,
+                metadata_json={
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    ROOT_GOAL_TASK_ID: "root-task-1",
+                },
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id=repair_attempt_id,
+                workspace_task_id=repair_task_id,
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=1,
+                status="accepted",
+                conversation_id="conversation-repair-disposition",
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+                candidate_summary="Repair alternative completed the original criteria.",
+                candidate_artifacts_json=["commit_ref:abc1234", "changed_file:src/example.py"],
+                candidate_verifications_json=["test_run:uv run pytest src/tests/unit -q"],
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    plan = Plan(
+        id="repair-disposition-plan-1",
+        workspace_id="workspace-1",
+        goal_id=PlanNodeId("repair-disposition-root"),
+        status=PlanStatus.ACTIVE,
+    )
+    plan.add_node(
+        PlanNode(
+            id="repair-disposition-root",
+            plan_id=plan.id,
+            parent_id=None,
+            kind=PlanNodeKind.GOAL,
+            title="Root",
+        )
+    )
+    plan.add_node(
+        PlanNode(
+            id="original-node",
+            plan_id=plan.id,
+            parent_id=plan.goal_id,
+            kind=PlanNodeKind.TASK,
+            title="Original accepted by repair",
+            workspace_task_id=original_task_id,
+            intent=TaskIntent.DONE,
+            execution=TaskExecution.IDLE,
+            metadata={
+                "last_verification_passed": True,
+                "last_verification_summary": "Repair alternative satisfies original task.",
+                "verification_feedback_disposition": "accepted_via_repair_alternative",
+                "accepted_repair_node_id": "repair-node",
+                "accepted_repair_evidence_refs": [
+                    "commit_ref:abc1234",
+                    "git_diff_summary:1 file changed",
+                    "test_run:uv run pytest src/tests/unit -q",
+                    "worker_report:completed",
+                ],
+            },
+        )
+    )
+    plan.add_node(
+        PlanNode(
+            id="repair-node",
+            plan_id=plan.id,
+            parent_id=plan.goal_id,
+            kind=PlanNodeKind.TASK,
+            title="Repair accepted",
+            workspace_task_id=repair_task_id,
+            intent=TaskIntent.DONE,
+            execution=TaskExecution.IDLE,
+            current_attempt_id=repair_attempt_id,
+            feature_checkpoint=FeatureCheckpoint(
+                feature_id="feature-repair-disposition",
+                sequence=1,
+                title="Repair accepted",
+                commit_ref="abc1234",
+            ),
+            metadata={
+                "last_verification_passed": True,
+                "last_verification_attempt_id": repair_attempt_id,
+                "verification_evidence_refs": [
+                    "commit_ref:abc1234",
+                    "test_run:uv run pytest src/tests/unit -q",
+                    "worker_report:completed",
+                ],
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+
+    changed = await outbox_handlers._project_done_idle_disposition_nodes_after_tick(
+        session=db_session,
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+    )
+
+    assert changed is True
+    db_session.expire_all()
+    projected_task = await db_session.get(WorkspaceTaskModel, original_task_id)
+    assert projected_task is not None
+    assert projected_task.status == "done"
+    assert projected_task.completed_at is not None
+    assert projected_task.blocker_reason is None
+    assert projected_task.metadata_json["durable_plan_verdict"] == "accepted"
+    assert projected_task.metadata_json["last_attempt_status"] == "accepted"
+    assert projected_task.metadata_json["last_attempt_id"] == repair_attempt_id
+    handoff = projected_task.metadata_json["handoff_package"]
+    assert handoff["git_head"] == "abc1234"
+    assert "uv run pytest src/tests/unit -q" in handoff["test_commands"]
+
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    original = loaded.nodes[PlanNodeId("original-node")]
+    assert original.metadata["workspace_task_projection_status"] == "done"
+    assert original.metadata["workspace_task_projected_at"]
 
 
 @pytest.mark.asyncio
@@ -3820,6 +4708,7 @@ async def test_worker_launch_handler_defers_when_active_worker_capacity_reached(
             WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree)
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -3952,6 +4841,7 @@ async def test_worker_launch_handler_skips_terminal_stale_attempt_before_capacit
             WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree)
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -4049,6 +4939,7 @@ async def test_worker_launch_handler_skips_attempt_when_task_current_attempt_cha
             WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree)
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -4115,6 +5006,7 @@ async def test_supervisor_tick_handler_advances_sql_plan_from_outbox(
             )
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -4183,6 +5075,7 @@ async def test_supervisor_tick_releases_node_when_current_attempt_is_missing(
             )
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -4295,6 +5188,7 @@ async def test_supervisor_tick_reconciles_reported_attempt_before_verification(
             )
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -4442,6 +5336,7 @@ async def test_supervisor_tick_enqueues_followup_after_post_terminal_reconcile(
             )
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -4536,6 +5431,7 @@ async def test_supervisor_tick_releases_in_progress_idle_node_with_rejected_atte
             )
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -4816,6 +5712,7 @@ async def test_supervisor_tick_releases_done_node_with_rejected_attempt(
             )
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -4932,6 +5829,7 @@ async def test_supervisor_tick_persists_terminal_reconcile_before_later_dispatch
             )
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -5073,6 +5971,7 @@ async def test_supervisor_tick_uses_accepted_attempt_when_current_attempt_was_pa
             )
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -5225,6 +6124,7 @@ async def test_supervisor_tick_retries_parent_done_attempt_that_already_has_outp
             )
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -5355,6 +6255,7 @@ async def test_supervisor_tick_rejects_stale_parent_done_accepted_attempt(
             )
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -5772,6 +6673,7 @@ async def test_supervisor_tick_releases_blocked_node_with_terminal_attempt(
             )
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -5832,6 +6734,7 @@ async def test_supervisor_tick_handler_leader_builds_team_when_only_leader_is_bo
             ),
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -5939,6 +6842,7 @@ async def test_supervisor_tick_handler_uses_system_actor_without_attempt_leader_
             ),
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -6061,6 +6965,7 @@ async def test_supervisor_tick_handler_launches_real_worker_and_verifies_report(
             ),
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -6281,6 +7186,7 @@ async def test_dispatch_after_operator_replan_cancels_stale_active_attempt(
             WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree),
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -6547,6 +7453,7 @@ async def test_retry_same_node_dispatches_same_conversation_repair_turn(
             WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree),
         },
         worker_id="worker-a",
+        batch_size=1,
     )
 
     assert await worker.run_once() == 1
@@ -6670,6 +7577,7 @@ async def test_handoff_resume_handler_running_current_attempt_respects_force_sch
             WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree),
         },
         worker_id="worker-a",
+        batch_size=1,
     )
     assert await worker.run_once() == 1
     assert await worker.run_once() == 1
@@ -6710,6 +7618,7 @@ async def test_handoff_resume_handler_running_current_attempt_respects_force_sch
         session_factory=_session_factory(db_session),
         handlers={HANDOFF_RESUME_EVENT: make_handoff_resume_handler()},
         worker_id="worker-b",
+        batch_size=1,
     )
     assert await resume_worker.run_once() == 1
 
@@ -6776,6 +7685,7 @@ async def test_handoff_resume_handler_creates_fresh_attempt_and_worker_launch(  
             WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree),
         },
         worker_id="worker-a",
+        batch_size=1,
     )
     assert await worker.run_once() == 1
     assert await worker.run_once() == 1
@@ -6828,6 +7738,7 @@ async def test_handoff_resume_handler_creates_fresh_attempt_and_worker_launch(  
         session_factory=_session_factory(db_session),
         handlers={HANDOFF_RESUME_EVENT: make_handoff_resume_handler()},
         worker_id="worker-b",
+        batch_size=1,
     )
     assert await resume_worker.run_once() == 1
 

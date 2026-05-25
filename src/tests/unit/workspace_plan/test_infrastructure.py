@@ -2342,6 +2342,44 @@ class TestVerifier:
         assert len(judge.requests) == 1
         assert not judge.requests[0].guard_failures
 
+    async def test_failed_test_guard_ignores_deploy_port_mapping_ratio(self) -> None:
+        judge = _RecordingVerificationJudge(
+            WorkspaceVerificationJudgeResult(
+                verdict=WorkspaceVerificationJudgeVerdict.ACCEPTED,
+                rationale="deploy repair evidence is green",
+                confidence=0.9,
+            )
+        )
+        verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+        node = _leaf_node(title="Validate Drone CI/CD pipeline")
+
+        rep = await verifier.verify(
+            VerificationContext(
+                workspace_id="ws",
+                node=node,
+                attempt_id="attempt-current",
+                artifacts={
+                    "last_worker_report_type": "completed",
+                    "last_worker_report_summary": (
+                        "Validated Drone deploy repair. Root cause of build #185 failure: "
+                        "old shell quotes. Fixed port mapping with workspace contract "
+                        "(18080/18081), updated e2e-test E2E_BASE_URL, and backend "
+                        "77 tests (6 suites) passing."
+                    ),
+                    "candidate_verifications": [
+                        "preflight:read-progress",
+                        "preflight:git-status",
+                        "test_run:backend 77 tests passed (6 suites)",
+                    ],
+                },
+            )
+        )
+
+        assert rep.passed
+        assert "failed_test_evidence" not in rep.summary()
+        assert len(judge.requests) == 1
+        assert not judge.requests[0].guard_failures
+
     async def test_current_attempt_checkpoint_ignores_aggregated_task_evidence(
         self,
     ) -> None:
@@ -3443,6 +3481,67 @@ class _PipelineWorkerActionFailureVerifier:
         )
 
 
+class _PipelineWorkerActionDeployPortConflictVerifier:
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CI_PIPELINE,
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.7,
+                    message=(
+                        "harness-native CI pipeline failed: Drone build #162 failed in "
+                        "workspace-ci/deploy: Bind for 0.0.0.0:5432 failed: port is already "
+                        "allocated"
+                    ),
+                ),
+                CriterionResult(
+                    criterion=AcceptanceCriterion(
+                        kind=CriterionKind.CUSTOM,
+                        spec={
+                            "name": "workspace_verification_judge",
+                            "failed_criteria": [
+                                "ci_pipeline",
+                                "drone_docker_deploy_host_port_conflict",
+                            ],
+                            "feedback_items": [
+                                {
+                                    "target_layer": "worker",
+                                    "feedback_kind": "product_code_failure",
+                                    "severity": "blocking",
+                                    "recommended_action": "retry_worker",
+                                    "summary": (
+                                        "Confirm app bindings use docker.deploy_host_port and "
+                                        "dependency sidecars do not publish reserved host ports "
+                                        "through docker compose unless required."
+                                    ),
+                                    "failure_signature": ("drone-docker-deploy-host-port-conflict"),
+                                    "evidence_refs": [
+                                        "drone_error:docker_host_port_allocated",
+                                        "drone_deploy:reserved_host_port",
+                                    ],
+                                }
+                            ],
+                        },
+                        required=True,
+                    ),
+                    passed=False,
+                    confidence=0.7,
+                    message=(
+                        "judge verdict=needs_rework; Drone docker-deploy failed because the "
+                        "host-side Docker port mapping collided with a platform service port; "
+                        "feedback_targets=worker"
+                    ),
+                ),
+            ),
+        )
+
+
 class _PipelineOnlyJudgeFailureWithoutFeedbackVerifier:
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
         return VerificationReport(
@@ -4502,6 +4601,125 @@ class TestSupervisorTick:
             "dependency_invalidated_previous_execution",
         ):
             assert stale_key not in dispatched_node.metadata
+        assert not [
+            event for event in events if event[0] == "dispatch_deferred_dependency_projection"
+        ]
+
+    async def test_tick_dispatches_repair_dependency_from_blocked_dirty_main_commit(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                depends_on=frozenset({PlanNodeId("repair-a")}),
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-a",
+                    sequence=2,
+                    title="task a",
+                    base_ref="HEAD",
+                ),
+                metadata={
+                    "blocked_by_repair_node_id": "repair-a",
+                    "pipeline_required": True,
+                    "pipeline_gate_status": "requested",
+                },
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="repair-a",
+                plan_id=plan.id,
+                parent_id=plan.goal_id,
+                kind=PlanNodeKind.TASK,
+                title="Repair task a",
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                current_attempt_id="attempt-repair-a",
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-repair-a",
+                    sequence=1,
+                    title="Repair task a",
+                    worktree_path="/workspace/.memstack/worktrees/attempt-repair-a",
+                    commit_ref="abc1234",
+                ),
+                metadata={
+                    "repair_for_node_id": "a",
+                    "repair_source": "verification_judge_create_repair_node",
+                    "source_verification_judge_next_action_kind": "create_repair_node",
+                    "last_verification_judge_verdict": "accepted",
+                    "last_verification_passed": True,
+                    "terminal_attempt_status": "accepted",
+                    "verified_commit_ref": "abc1234",
+                    "worktree_integration_commit_ref": "abc1234",
+                    "worktree_integration_status": "blocked_dirty_main",
+                    "verification_evidence_refs": [
+                        "commit_ref:abc1234",
+                        "test_run:uv run pytest src/tests/unit -q",
+                        "worker_report:completed",
+                    ],
+                },
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        dispatched_base_refs: list[str | None] = []
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="C",
+                    capabilities=frozenset({"codegen", "web_search"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, _alloc: Any, node: PlanNode) -> str:
+            dispatched.append(node.id)
+            dispatched_base_refs.append(
+                node.feature_checkpoint.base_ref if node.feature_checkpoint else None
+            )
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.allocations_made == 1
+        assert dispatched == ["a"]
+        assert dispatched_base_refs == ["abc1234"]
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        dispatched_node = reloaded.nodes[PlanNodeId("a")]
+        assert dispatched_node.current_attempt_id == "attempt-a"
+        assert dispatched_node.feature_checkpoint is not None
+        assert dispatched_node.feature_checkpoint.base_ref == "abc1234"
         assert not [
             event for event in events if event[0] == "dispatch_deferred_dependency_projection"
         ]
@@ -6863,6 +7081,72 @@ class TestSupervisorTick:
         assert node.metadata.get("last_verification_judge_next_action_kind") is None
         assert node.metadata["verified_commit_ref"] == "abc1234"
 
+    async def test_pipeline_gate_does_not_rerun_deploy_port_conflict_worker_feedback(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={"pipeline_required": True, "pipeline_gate_status": "failed"},
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("worker-actionable deploy feedback must not rerun Drone first")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+                artifacts={"candidate_artifacts": ["commit_ref:e4d6339"]},
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_PipelineWorkerActionDeployPortConflictVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert not any(event[0] == "pipeline_run_requested" for event in events)
+        assert any(event[0] == "verification_feedback_routed" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.execution is TaskExecution.IDLE
+        assert node.metadata["verified_commit_ref"] == "e4d6339"
+
     async def test_pipeline_gate_routes_retry_infra_drone_trigger_to_pipeline(self) -> None:
         repo = InMemoryPlanRepository()
         plan = _plan_with_two_tasks()
@@ -6994,6 +7278,76 @@ class TestSupervisorTick:
         assert node.execution is TaskExecution.IDLE
         assert node.metadata["pipeline_gate_status"] == "requested"
         assert node.metadata["verified_commit_ref"] == "d9184e2"
+
+    async def test_pipeline_gate_pending_human_required_gap_does_not_block_node(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={
+                    "pipeline_required": True,
+                    "pipeline_gate_status": "requested",
+                    "pipeline_status": "requested",
+                },
+            )
+        )
+        await repo.save(plan)
+
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("pending pipeline gate should not dispatch a worker")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid,
+                node=node,
+                attempt_id=node.current_attempt_id,
+                artifacts={"candidate_artifacts": ["commit_ref:d9184e2"]},
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_PipelineHumanPublishRequiredVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.nodes_blocked == 0
+        assert not any(event[0] == "pipeline_run_requested" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.intent is TaskIntent.IN_PROGRESS
+        assert node.execution is TaskExecution.REPORTED
+        assert node.metadata["pipeline_gate_status"] == "requested"
+        assert node.metadata["last_verification_hard_fail"] is False
 
     async def test_pipeline_gate_routes_judge_only_human_publish_gap_to_pipeline(self) -> None:
         repo = InMemoryPlanRepository()

@@ -431,6 +431,13 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                             "reason": "pipeline_criterion_missing",
                         },
                     )
+                elif _should_wait_for_pending_pipeline_from_report(node, report):
+                    waiting_node = _node_with_pending_pipeline_gate(
+                        node,
+                        report,
+                        artifacts=ctx.artifacts,
+                    )
+                    plan.replace_node(waiting_node)
                 elif (
                     repair_alternative := _completed_repair_alternative_for_original_report(
                         plan, node, report
@@ -1850,6 +1857,12 @@ def _dependency_blocking_ids(plan: Plan, node: PlanNode) -> list[str]:
             blocking.append(dep_id.value)
             continue
         if _dependency_commit_needs_integration(dependency):
+            if _repair_dependency_can_seed_downstream_worktree(
+                dependency_id=dep_id,
+                repair_dependency=repair_dependency,
+                dependency=dependency,
+            ):
+                continue
             blocking.append(dep_id.value)
     return blocking
 
@@ -1859,6 +1872,22 @@ def _repair_blocking_dependency_id(node: PlanNode) -> PlanNodeId | None:
     if isinstance(repair_id, str) and repair_id.strip():
         return PlanNodeId(repair_id.strip())
     return None
+
+
+def _repair_dependency_can_seed_downstream_worktree(
+    *,
+    dependency_id: PlanNodeId,
+    repair_dependency: PlanNodeId | None,
+    dependency: PlanNode,
+) -> bool:
+    if repair_dependency is None or dependency_id != repair_dependency:
+        return False
+    if (
+        _metadata_text(dependency.metadata.get("worktree_integration_status"))
+        != "blocked_dirty_main"
+    ):
+        return False
+    return bool(_dependency_dispatch_commit_ref(dependency))
 
 
 def _dependency_commit_needs_integration(node: PlanNode) -> bool:
@@ -2489,6 +2518,52 @@ def _should_request_pipeline_from_report(node: PlanNode, report: VerificationRep
     )
 
 
+def _should_wait_for_pending_pipeline_from_report(
+    node: PlanNode,
+    report: VerificationReport,
+) -> bool:
+    if not _node_requires_pipeline_gate(node):
+        return False
+    if _pipeline_gate_status(node) not in {"requested", "running"}:
+        return False
+    failed_required = report.failed_required
+    return bool(failed_required) and all(
+        _is_pending_pipeline_gate_failure(result) for result in failed_required
+    )
+
+
+def _is_pending_pipeline_gate_failure(result: CriterionResult) -> bool:
+    if result.criterion.kind in _PIPELINE_CRITERION_KINDS:
+        return _pipeline_failures_are_missing_evidence(
+            [result]
+        ) or _pipeline_failures_are_runtime_retryable([result])
+    if result.criterion.kind is not CriterionKind.CUSTOM:
+        return False
+    if _is_pipeline_only_judge_failure(result) or _is_pipeline_missing_evidence_judge_failure(
+        result
+    ):
+        return True
+    spec = result.criterion.spec
+    feedback_items = spec.get("feedback_items")
+    if isinstance(feedback_items, list) and feedback_items:
+        return all(
+            isinstance(item, Mapping) and _feedback_item_is_pipeline_evidence_gap(item)
+            for item in feedback_items
+        )
+    markers: list[object] = [
+        result.message,
+        spec.get("required_next_action"),
+        spec.get("failure_signature"),
+        spec.get("summary"),
+        spec.get("rationale"),
+    ]
+    markers.extend(_string_list(spec.get("failed_criteria")))
+    normalized = "\n".join(str(marker).lower() for marker in markers if marker)
+    return _is_pipeline_failure_marker(normalized) and (
+        "missing" in normalized or "evidence" in normalized or "trigger" in normalized
+    )
+
+
 def _pipeline_failures_are_missing_evidence(results: list[CriterionResult]) -> bool:
     return any(
         "missing harness-native ci pipeline evidence" in str(result.message or "").lower()
@@ -2618,6 +2693,15 @@ def _feedback_items_require_worker_retry(feedback_items: list[object]) -> bool:
 
 
 def _feedback_item_is_pipeline_evidence_gap(item: Mapping[str, object]) -> bool:
+    target_layer = str(item.get("target_layer") or "").strip().lower()
+    feedback_kind = str(item.get("feedback_kind") or "").strip().lower()
+    recommended_action = str(item.get("recommended_action") or "").strip().lower()
+    if (
+        target_layer == "worker"
+        or feedback_kind == "product_code_failure"
+        or recommended_action == "retry_worker"
+    ):
+        return False
     markers = [
         item.get("feedback_kind"),
         item.get("recommended_action"),
@@ -2829,6 +2913,36 @@ def _node_with_pipeline_request(node: PlanNode, report: VerificationReport) -> P
         node,
         intent=TaskIntent.IN_PROGRESS,
         execution=TaskExecution.IDLE,
+        metadata=metadata,
+        updated_at=datetime.now(UTC),
+    )
+
+
+def _node_with_pending_pipeline_gate(
+    node: PlanNode,
+    report: VerificationReport,
+    *,
+    artifacts: Mapping[str, Any] | None = None,
+) -> PlanNode:
+    evidenced = _node_with_verification_evidence(node, report, artifacts=artifacts)
+    metadata = dict(evidenced.metadata)
+    metadata.update(
+        {
+            "pipeline_required": True,
+            "pipeline_provider": metadata.get("pipeline_provider") or "sandbox_native",
+            "pipeline_status": metadata.get("pipeline_status") or "requested",
+            "pipeline_gate_status": metadata.get("pipeline_gate_status") or "requested",
+            "last_verification_summary": report.summary(),
+            "last_verification_passed": False,
+            "last_verification_hard_fail": False,
+        }
+    )
+    if report.attempt_id:
+        metadata["last_verification_attempt_id"] = report.attempt_id
+    return replace(
+        evidenced,
+        intent=TaskIntent.IN_PROGRESS,
+        execution=TaskExecution.REPORTED,
         metadata=metadata,
         updated_at=datetime.now(UTC),
     )

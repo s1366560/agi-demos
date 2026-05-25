@@ -148,37 +148,38 @@ export const SearchConfig = memo<SearchConfigProps>(
 
         <aside
           className={`
-                fixed inset-y-0 right-0 z-50 w-80 bg-slate-50 dark:bg-[#121520] lg:bg-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out lg:relative lg:transform-none lg:z-0 flex flex-col gap-6 shrink-0 h-full
+                fixed inset-y-0 right-0 z-50 w-80 bg-slate-50 dark:bg-slate-950 lg:relative lg:z-0 lg:h-full lg:w-[300px] lg:shrink-0 lg:transform-none lg:bg-transparent transition-[color,background-color,border-color,box-shadow,opacity,transform,width] duration-300 ease-in-out
                 ${showMobileConfig ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
                 ${!isConfigOpen ? 'lg:w-0 lg:overflow-hidden lg:opacity-0 lg:p-0' : ''}
             `}
         >
-          <div className="flex-1 flex flex-col gap-5 p-5 bg-white dark:bg-[#1e212b] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-y-auto custom-scrollbar h-full">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 shrink-0">
-              <h2 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                <Sliders className="w-5 h-5 text-blue-600" />
+          <div className="flex h-full flex-1 flex-col overflow-hidden rounded-md bg-white shadow-[0_0_0_1px_rgba(15,23,42,0.10)] dark:bg-surface-dark dark:shadow-[0_0_0_1px_rgba(148,163,184,0.16)]">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-950 dark:text-slate-50">
+                <Sliders className="h-4 w-4 text-slate-500" />
                 {t('project.search.config.title')}
               </h2>
               <div className="flex items-center gap-2">
-                <span className="text-2xs px-1.5 py-0.5 bg-blue-600/10 text-blue-600 rounded font-medium">
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                   {t('project.search.config.advanced')}
                 </span>
                 <button
                   type="button"
                   onClick={onMobileConfigClose}
                   aria-label={t('common.close')}
-                  className="lg:hidden p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 transition-colors"
+                  className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-slate-800 dark:hover:text-slate-50 lg:hidden"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
             </div>
 
-            {/* Internal Tabs */}
-            <ConfigTabSelector currentTab={configTab} onTabChange={onConfigTabChange} />
+            <div className="border-b border-slate-200 p-3 dark:border-slate-800">
+              <ConfigTabSelector currentTab={configTab} onTabChange={onConfigTabChange} />
+            </div>
 
             {/* Tab Content */}
-            <div className="flex-1 flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-1">
+            <div className="custom-scrollbar flex flex-1 flex-col gap-5 overflow-y-auto p-4">
               {searchMode === 'semantic' && configTab === 'params' && (
                 <SemanticSearchParams
                   retrievalMode={retrievalMode}
@@ -247,15 +248,15 @@ const ConfigTabSelector = memo<ConfigTabSelectorProps>(({ currentTab, onTabChang
   const { t } = useTranslation();
 
   return (
-    <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0">
+    <div className="flex shrink-0 rounded-md border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950/30">
       <button
         type="button"
         onClick={() => {
           onTabChange('params');
         }}
-        className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center justify-center gap-1.5 ${currentTab === 'params' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+        className={`flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-[color,background-color,border-color,box-shadow,opacity] ${currentTab === 'params' ? 'bg-white text-slate-950 shadow-[0_0_0_1px_rgba(15,23,42,0.08)] dark:bg-slate-800 dark:text-slate-50' : 'text-slate-500 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-50'}`}
       >
-        <Sliders className="w-3.5 h-3.5" />
+        <Sliders className="h-3.5 w-3.5" />
         {t('project.search.config.params')}
       </button>
       <button
@@ -263,9 +264,9 @@ const ConfigTabSelector = memo<ConfigTabSelectorProps>(({ currentTab, onTabChang
         onClick={() => {
           onTabChange('filters');
         }}
-        className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center justify-center gap-1.5 ${currentTab === 'filters' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+        className={`flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-[color,background-color,border-color,box-shadow,opacity] ${currentTab === 'filters' ? 'bg-white text-slate-950 shadow-[0_0_0_1px_rgba(15,23,42,0.08)] dark:bg-slate-800 dark:text-slate-50' : 'text-slate-500 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-50'}`}
       >
-        <Filter className="w-3.5 h-3.5" />
+        <Filter className="h-3.5 w-3.5" />
         {t('project.search.config.filters')}
       </button>
     </div>
@@ -328,16 +329,16 @@ const RetrievalModeSelector = memo<{
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+      <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
         {t('project.search.params.retrieval_mode')}
       </label>
-      <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex">
+      <div className="flex rounded-md border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950/30">
         <button
           type="button"
           onClick={() => {
             onChange('hybrid');
           }}
-          className={`flex-1 py-2 px-2 rounded-md shadow-sm text-xs font-semibold transition-[color,background-color,border-color,box-shadow,opacity,transform] ${value === 'hybrid' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+          className={`flex-1 rounded px-2 py-2 text-xs font-medium transition-[color,background-color,border-color,box-shadow,opacity] ${value === 'hybrid' ? 'bg-white text-slate-950 shadow-[0_0_0_1px_rgba(15,23,42,0.08)] dark:bg-slate-800 dark:text-slate-50' : 'text-slate-500 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-50'}`}
         >
           {t('project.search.params.hybrid')}
         </button>
@@ -346,7 +347,7 @@ const RetrievalModeSelector = memo<{
           onClick={() => {
             onChange('nodeDistance');
           }}
-          className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-[color,background-color,border-color,box-shadow,opacity,transform] ${value === 'nodeDistance' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+          className={`flex-1 rounded px-2 py-2 text-xs font-medium transition-[color,background-color,border-color,box-shadow,opacity] ${value === 'nodeDistance' ? 'bg-white text-slate-950 shadow-[0_0_0_1px_rgba(15,23,42,0.08)] dark:bg-slate-800 dark:text-slate-50' : 'text-slate-500 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-50'}`}
         >
           {t('project.search.params.node_distance')}
         </button>
@@ -362,7 +363,7 @@ const StrategySelector = memo<{ value: string; onChange: (value: string) => void
 
     return (
       <div className="flex flex-col gap-2">
-        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+        <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
           {t('project.search.params.strategy')}
         </label>
         <div className="relative">
@@ -372,7 +373,7 @@ const StrategySelector = memo<{ value: string; onChange: (value: string) => void
             onChange={(e) => {
               onChange(e.target.value);
             }}
-            className="w-full text-xs py-2.5 pl-3 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-slate-700 dark:text-slate-200 appearance-none shadow-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+            className="w-full cursor-pointer appearance-none rounded-md border border-slate-200 bg-slate-50 py-2.5 pl-3 pr-8 text-xs text-slate-700 shadow-sm transition-colors hover:bg-slate-100 focus:border-slate-400 focus:ring-1 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <option value="COMBINED_HYBRID_SEARCH_RRF">
               {t('project.search.options.strategies.COMBINED_HYBRID_SEARCH_RRF')}
@@ -408,17 +409,17 @@ const FocalNodeInput = memo<{
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+        <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
           {t('project.search.params.focal_node')}
         </label>
         <div className="relative">
           <HelpCircle
-            className="w-4 h-4 text-slate-400 cursor-help hover:text-blue-600"
+            className="h-4 w-4 cursor-help text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
             onMouseEnter={onShowTooltip}
             onMouseLeave={onHideTooltip}
           />
           {showTooltip && (
-            <div className="absolute right-0 top-6 w-64 p-2 bg-slate-900 dark:bg-slate-700 text-white text-xs rounded-lg shadow-lg z-50">
+            <div className="absolute right-0 top-6 z-50 w-64 rounded-md bg-slate-950 p-2 text-xs text-white shadow-lg dark:bg-slate-700">
               <p className="font-semibold mb-1">{t('project.search.params.focal_tooltip.title')}</p>
               <p>{t('project.search.params.focal_tooltip.desc')}</p>
             </div>
@@ -428,7 +429,7 @@ const FocalNodeInput = memo<{
       <div className="relative group">
         <input
           aria-label={t('project.search.params.focal_node')}
-          className="w-full text-xs py-2.5 pl-9 pr-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-slate-700 dark:text-slate-200 placeholder-slate-400 transition-shadow disabled:opacity-50"
+          className="w-full rounded-md border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-xs text-slate-700 transition-shadow placeholder:text-slate-400 focus:border-slate-400 focus:ring-1 focus:ring-slate-400 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200"
           placeholder={t('project.search.params.focalPlaceholder', 'e.g. node-1234-uuid...')}
           type="text"
           value={value}
@@ -437,7 +438,7 @@ const FocalNodeInput = memo<{
           }}
           disabled={disabled}
         />
-        <Network className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+        <Network className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400 transition-colors group-focus-within:text-slate-700 dark:group-focus-within:text-slate-200" />
       </div>
     </div>
   );
@@ -450,7 +451,7 @@ const CrossEncoderSelector = memo<{ value: string; onChange: (value: string) => 
 
     return (
       <div className="flex flex-col gap-2">
-        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+        <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
           {t('project.search.params.cross_encoder')}
         </label>
         <div className="relative">
@@ -460,7 +461,7 @@ const CrossEncoderSelector = memo<{ value: string; onChange: (value: string) => 
             onChange={(e) => {
               onChange(e.target.value);
             }}
-            className="w-full text-xs py-2.5 pl-3 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-slate-700 dark:text-slate-200 appearance-none shadow-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+            className="w-full cursor-pointer appearance-none rounded-md border border-slate-200 bg-slate-50 py-2.5 pl-3 pr-8 text-xs text-slate-700 shadow-sm transition-colors hover:bg-slate-100 focus:border-slate-400 focus:ring-1 focus:ring-slate-400 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <option value="openai">{t('project.search.options.cross_encoders.openai')}</option>
             <option value="gemini">{t('project.search.options.cross_encoders.gemini')}</option>
@@ -490,7 +491,7 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
     return (
       <>
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
             {t('project.search.params.max_depth')}
           </label>
           <div className="flex items-center gap-2">
@@ -501,11 +502,11 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
               }}
               aria-label={t('project.search.params.decrease_max_depth', 'Decrease max depth')}
               title={t('project.search.params.decrease_max_depth', 'Decrease max depth')}
-              className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="rounded-md border border-slate-200 bg-slate-50 p-2 text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               <Minus className="w-4 h-4" />
             </button>
-            <span className="flex-1 text-center font-bold text-slate-900 dark:text-white">
+            <span className="flex-1 text-center font-semibold text-slate-950 dark:text-slate-50">
               {maxDepth}
             </span>
             <button
@@ -515,7 +516,7 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
               }}
               aria-label={t('project.search.params.increase_max_depth', 'Increase max depth')}
               title={t('project.search.params.increase_max_depth', 'Increase max depth')}
-              className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              className="rounded-md border border-slate-200 bg-slate-50 p-2 text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               <Plus className="w-4 h-4" />
             </button>
@@ -523,7 +524,7 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
         </div>
 
         <div className="flex flex-col gap-2">
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
             {t('project.search.params.relationship_types')}
           </label>
           <div className="flex flex-wrap gap-1.5">
@@ -534,10 +535,10 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
                 onClick={() => {
                   onToggleRelationshipType(rel);
                 }}
-                className={`px-2 py-1 rounded-md text-2xs font-medium transition-colors ${
+                className={`rounded px-2 py-1 text-2xs font-medium transition-colors ${
                   relationshipTypes.includes(rel)
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    ? 'bg-slate-950 text-white dark:bg-slate-50 dark:text-slate-950'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800'
                 }`}
               >
                 {rel}

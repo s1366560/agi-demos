@@ -880,6 +880,93 @@ class TestBuildBrief:
         assert "Address the listed verification failures" in brief
         assert "## Workspace checkpoint and worktree" not in brief
 
+    def test_deploy_phase_exposes_disabled_drone_deploy_context(self) -> None:
+        task = _make_task()
+        workspace_metadata = {
+            "sandbox_code_root": "/workspace/my-evo",
+            "delivery_cicd": {
+                "provider": "drone",
+                "code_root": "/workspace/my-evo",
+                "auto_deploy": False,
+                "services": [
+                    {
+                        "service_id": "backend",
+                        "name": "evomap-backend",
+                        "start_command": "docker compose up -d backend",
+                        "internal_port": 3001,
+                        "health_path": "/health",
+                        "required": True,
+                    },
+                    {
+                        "service_id": "frontend",
+                        "name": "evomap-frontend",
+                        "start_command": "docker compose up -d frontend",
+                        "internal_port": 3000,
+                        "health_path": "/",
+                        "required": True,
+                    },
+                ],
+                "drone": {
+                    "repo": "s1366560/my-evo",
+                    "branch": "main",
+                    "deploy": {
+                        "enabled": False,
+                        "mode": "cli",
+                        "stage": "deploy",
+                        "docker": {
+                            "deploy_host_port": 18080,
+                            "deploy_strategy": "local_build",
+                            "reserved_host_ports": [3000, 3001, 5001],
+                        },
+                    },
+                },
+            },
+        }
+
+        deploy_brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-deploy",
+            leader_agent_id="L",
+            workspace_metadata=workspace_metadata,
+            plan_node_metadata={"iteration_phase": "deploy"},
+        )
+        deploy_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-deploy",
+            leader_agent_id="L",
+            workspace_metadata=workspace_metadata,
+            plan_node_metadata={"iteration_phase": "deploy"},
+        )
+        implement_brief = wl._build_worker_brief(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-impl",
+            leader_agent_id="L",
+            workspace_metadata=workspace_metadata,
+            plan_node_metadata={"iteration_phase": "implement"},
+        )
+
+        assert deploy_context["delivery_cicd"]["deploy"]["enabled"] is True
+        assert "Deploy mode: cli" in deploy_brief
+        assert "Deploy stage: `deploy`" in deploy_brief
+        assert "Docker deploy host port: `18080`" in deploy_brief
+        assert "Docker deploy services:" in deploy_brief
+        assert "backend (evomap-backend)" in deploy_brief
+        assert "port: `18080:3001`" in deploy_brief
+        assert "frontend (evomap-frontend)" in deploy_brief
+        assert "port: `18081:3000`" in deploy_brief
+        assert "Drone step health: `http://host.docker.internal:18080/health`" in deploy_brief
+        assert "Drone step health: `http://host.docker.internal:18081/`" in deploy_brief
+        assert "Drone step health: `http://host.docker.internal:3001/health`" not in deploy_brief
+        assert "Drone step health: `http://host.docker.internal:3000/`" not in deploy_brief
+        assert "Reserved Docker host ports: 3000, 3001, 5001" in deploy_brief
+        deploy_services = deploy_context["delivery_cicd"]["deploy"]["docker"]["deploy_services"]
+        assert deploy_services[0]["deploy_port_mapping"] == "18080:3001"
+        assert deploy_services[1]["deploy_port_mapping"] == "18081:3000"
+        assert "Deploy mode: cli" not in implement_brief
+
     def test_includes_drone_docker_delivery_contract(self) -> None:
         task = _make_task()
         workspace_metadata = {
@@ -991,7 +1078,7 @@ class TestBuildBrief:
             "my-evo-app (my-evo Application)",
             "docker run -p 8080:8080 localhost:5001/my-evo",
             "health: `/api/health`",
-            "Drone step health: `http://host.docker.internal:8080/api/health`",
+            "Drone step health: `http://host.docker.internal:18080/api/health`",
             "do not use localhost",
             "sandbox worker may not have DRONE_TOKEN",
             "platform harness can trigger and verify Drone",

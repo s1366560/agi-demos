@@ -401,6 +401,133 @@ steps:
 
 
 @pytest.mark.asyncio
+async def test_drone_pipeline_provider_preflights_host_docker_socket_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    (tmp_path / ".drone.yml").write_text(
+        """
+kind: pipeline
+type: docker
+name: workspace-ci
+steps:
+  - name: deploy
+    image: docker:27-cli
+    commands:
+      - docker run -d --name my-evo-app my-evo:drone-docker-e2e
+""".lstrip(),
+        encoding="utf-8",
+    )
+    client = _FakeDroneClient({"number": 42, "status": "success"})
+
+    result = await DronePipelineProvider(client=client, sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            code_root=str(tmp_path),
+            provider_config={"repo": "octo/hello", "branch": "main"},
+            deploy=PipelineDeploySpec(
+                enabled=True,
+                mode="docker",
+                docker={
+                    "runner_docker_socket": "/var/run/docker.sock",
+                    "runner_docker_socket_volume": "docker-sock",
+                    "deploy_services": [
+                        {
+                            "service_id": "my-evo-app",
+                            "container_name": "my-evo-app",
+                            "required": True,
+                        },
+                    ],
+                },
+            ),
+        )
+    )
+
+    assert result.status == "failed"
+    assert "host Docker deploy requires a top-level host volume" in result.reason
+    assert "/var/run/docker.sock" in result.reason
+    assert "drone:configuration_failed" in result.evidence_refs
+    assert client.created == []
+
+
+@pytest.mark.asyncio
+async def test_drone_pipeline_provider_accepts_host_docker_socket_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    (tmp_path / ".drone.yml").write_text(
+        """
+kind: pipeline
+type: docker
+name: workspace-ci
+steps:
+  - name: deploy
+    image: docker:27-cli
+    volumes:
+      - name: docker-sock
+        path: /var/run/docker.sock
+    commands:
+      - docker run -d --name my-evo-app my-evo:drone-docker-e2e
+volumes:
+  - name: docker-sock
+    host:
+      path: /var/run/docker.sock
+""".lstrip(),
+        encoding="utf-8",
+    )
+    client = _FakeDroneClient(
+        {
+            "number": 42,
+            "status": "success",
+            "stages": [
+                {
+                    "name": "workspace-ci",
+                    "status": "success",
+                    "steps": [{"name": "deploy", "status": "success", "exit_code": 0}],
+                }
+            ],
+        },
+        logs={
+            ("workspace-ci", "deploy"): [
+                {"out": "docker run -d --name my-evo-app my-evo:drone-docker-e2e\n"}
+            ],
+        },
+    )
+
+    result = await DronePipelineProvider(client=client, sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            code_root=str(tmp_path),
+            provider_config={"repo": "octo/hello", "branch": "main"},
+            deploy=PipelineDeploySpec(
+                enabled=True,
+                mode="docker",
+                docker={
+                    "runner_docker_socket": "/var/run/docker.sock",
+                    "runner_docker_socket_volume": "docker-sock",
+                    "deploy_services": [
+                        {
+                            "service_id": "my-evo-app",
+                            "container_name": "my-evo-app",
+                            "required": True,
+                        },
+                    ],
+                },
+            ),
+        )
+    )
+
+    assert result.status == "success"
+    assert result.deployment_status == "deployed"
+    assert result.metadata["deploy_validation"] == DRONE_DOCKER_DEPLOY_VALIDATION
+    assert client.created
+
+
+@pytest.mark.asyncio
 async def test_drone_pipeline_provider_stops_timed_out_build(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -738,8 +865,7 @@ async def test_drone_pipeline_provider_rejects_deploy_missing_built_image_withou
         "docker deployment semantics"
     )
     assert (
-        "missing built image deploy references: my-evo-frontend:drone-docker-e2e"
-        in result.reason
+        "missing built image deploy references: my-evo-frontend:drone-docker-e2e" in result.reason
     )
     assert "deploy_validation_issues" in result.metadata
     assert "deployment:invalid:docker" in result.evidence_refs
@@ -1902,6 +2028,107 @@ services:
     assert [service["service_id"] for service in contract.deploy.docker["deploy_services"]] == [
         "backend",
         "frontend",
+    ]
+
+
+def test_drone_contract_merges_default_compose_override_services(
+    tmp_path: Any,
+) -> None:
+    (tmp_path / "docker-compose.yml").write_text(
+        """
+services:
+  backend:
+    build: .
+    ports:
+      - "3001:3001"
+""".strip(),
+        encoding="utf-8",
+    )
+    (tmp_path / "docker-compose.override.yml").write_text(
+        """
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "provider": "drone",
+                "drone": {
+                    "repo": "octo/my-evo",
+                    "deploy": {
+                        "enabled": True,
+                        "mode": "docker",
+                        "docker": {"image": "localhost:5001/my-evo"},
+                    },
+                },
+            }
+        },
+        fallback_code_root="/workspace/my-evo",
+        fallback_host_code_root=tmp_path,
+    )
+
+    assert [service.service_id for service in contract.services] == ["backend", "frontend"]
+    assert contract.deploy is not None
+    assert [service["service_id"] for service in contract.deploy.docker["deploy_services"]] == [
+        "backend",
+        "frontend",
+    ]
+
+
+def test_drone_contract_honors_compose_override_ports_replacement(
+    tmp_path: Any,
+) -> None:
+    (tmp_path / "compose.yaml").write_text(
+        """
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "3001:3001"
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+""".strip(),
+        encoding="utf-8",
+    )
+    (tmp_path / "compose.override.yaml").write_text(
+        """
+services:
+  frontend:
+    ports: !override []
+""".strip(),
+        encoding="utf-8",
+    )
+
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "provider": "drone",
+                "drone": {
+                    "repo": "octo/my-evo",
+                    "deploy": {
+                        "enabled": True,
+                        "mode": "docker",
+                        "docker": {"image": "localhost:5001/my-evo"},
+                    },
+                },
+            }
+        },
+        fallback_code_root="/workspace/my-evo",
+        fallback_host_code_root=tmp_path,
+    )
+
+    assert [service.service_id for service in contract.services] == ["backend"]
+    assert contract.deploy is not None
+    assert [service["service_id"] for service in contract.deploy.docker["deploy_services"]] == [
+        "backend"
     ]
 
 

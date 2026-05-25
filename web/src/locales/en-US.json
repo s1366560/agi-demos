@@ -3595,6 +3595,9 @@
       "saveChanges": "Save Changes"
     },
     "search": {
+      "eyebrow": "Knowledge retrieval",
+      "title": "Deep Search",
+      "subtitle": "Search memory, traverse graph context, and inspect matching subgraphs.",
       "options": {
         "strategies": {
           "COMBINED_HYBRID_SEARCH_RRF": "Combined Hybrid (RRF)",
@@ -3834,6 +3837,7 @@
         }
       },
       "entities": {
+        "eyebrow": "Knowledge graph",
         "title": "Project Entities",
         "subtitle": "Explore and manage entities in the knowledge graph",
         "refresh": "Refresh Entities",
@@ -3841,8 +3845,15 @@
         "error": "Failed to load entities",
         "empty": "No entities found",
         "empty_filter": "No entities match your filters",
+        "empty_hint": "Entities appear here after memories are indexed.",
+        "metrics": {
+          "total": "Total",
+          "visible": "Visible",
+          "types": "Types"
+        },
         "filter": {
           "type": "Entity Type",
+          "type_options": "Entity type options",
           "all_types": "All Types",
           "search_placeholder": "Search entities...",
           "sort_by": "Sort by",
@@ -4035,6 +4046,7 @@
       "operationalStatus": "Operational"
     },
     "memories": {
+      "eyebrow": "Project knowledge",
       "title": "Memories",
       "subtitle": "Store and retrieve project knowledge",
       "addMemory": "Add Memory",
@@ -4051,6 +4063,11 @@
         "image": "Image",
         "video": "Video"
       },
+      "metrics": {
+        "total": "Total",
+        "active": "Active",
+        "indexing": "Indexing"
+      },
       "actions": {
         "reprocess": "Reprocess"
       },
@@ -4064,6 +4081,7 @@
       },
       "filter": {
         "label": "Filter",
+        "summary": "{{shown}} of {{total}} shown",
         "all_types": "All Types",
         "all_status": "All Status",
         "date_range": "Date Range"
@@ -4086,7 +4104,7 @@
       },
       "empty": {
         "title": "No memories found",
-        "subtitle": "Get started by creating your first memory",
+        "subtitle": "Create a memory to start indexing project knowledge.",
         "create_button": "Create Memory"
       },
       "new": {

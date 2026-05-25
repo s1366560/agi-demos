@@ -210,11 +210,13 @@ async def _project_verification_to_workspace_task(
     test_commands = [
         ref.removeprefix("test_run:") for ref in evidence_refs if ref.startswith("test_run:")
     ]
-    retry_verification_only = _verification_payload_requests_verification_retry(payload)
     pipeline_pending = (
         _node_requires_pipeline_gate(node)
         and not (_verification_payload_has_pipeline_success(evidence_refs))
         and (passed or _verification_payload_waiting_for_pipeline_gate(payload))
+    ) or _verification_payload_waiting_for_requested_pipeline_gate(node, payload)
+    retry_verification_only = (
+        not pipeline_pending and _verification_payload_requests_verification_retry(payload)
     )
 
     if attempt_id:
@@ -312,10 +314,138 @@ def _verification_payload_waiting_for_pipeline_gate(payload: dict[str, Any]) -> 
         } and (
             _pipeline_missing_evidence_message(message)
             or _pipeline_gate_pending_judge_message(message)
+            or _verification_judge_retry_runtime_message(message)
         ):
             continue
         return False
     return pipeline_missing
+
+
+def _verification_payload_waiting_for_requested_pipeline_gate(
+    node: PlanNode,
+    payload: dict[str, Any],
+) -> bool:
+    if not _node_requires_pipeline_gate(node):
+        return False
+    if _pipeline_gate_status(node) not in {"requested", "running"}:
+        return False
+    raw_results_obj = payload.get("results")
+    if not isinstance(raw_results_obj, list):
+        return False
+    failed_results = [
+        cast(Mapping[str, object], item)
+        for item in raw_results_obj
+        if isinstance(item, Mapping) and bool(item.get("required")) and not bool(item.get("passed"))
+    ]
+    return bool(failed_results) and all(
+        _verification_result_is_pending_pipeline_gate_failure(result) for result in failed_results
+    )
+
+
+def _pipeline_gate_status(node: PlanNode) -> str:
+    value = node.metadata.get("pipeline_status") or node.metadata.get("pipeline_gate_status")
+    return value.strip().lower() if isinstance(value, str) else ""
+
+
+def _verification_result_is_pending_pipeline_gate_failure(
+    result: Mapping[str, object],
+) -> bool:
+    kind = str(result.get("kind") or "")
+    message = str(result.get("message") or "")
+    if kind in _PIPELINE_PAYLOAD_KINDS:
+        return _pipeline_missing_evidence_message(message) or _pipeline_gate_pending_judge_message(
+            message
+        )
+    feedback_items = result.get("feedback_items")
+    if isinstance(feedback_items, list) and feedback_items:
+        return all(
+            isinstance(item, Mapping) and _feedback_item_is_pipeline_evidence_gap(item)
+            for item in feedback_items
+        )
+    markers: list[object] = [
+        message,
+        result.get("required_next_action"),
+        result.get("name"),
+        result.get("judge_verdict"),
+        result.get("next_action_kind"),
+    ]
+    normalized = "\n".join(str(marker).lower() for marker in markers if marker)
+    if _verification_judge_retry_runtime_message(normalized):
+        return True
+    return _is_pipeline_failure_marker(normalized) and (
+        "missing" in normalized or "evidence" in normalized or "trigger" in normalized
+    )
+
+
+def _feedback_item_is_pipeline_evidence_gap(item: Mapping[str, object]) -> bool:
+    target_layer = str(item.get("target_layer") or "").strip().lower()
+    feedback_kind = str(item.get("feedback_kind") or "").strip().lower()
+    recommended_action = str(item.get("recommended_action") or "").strip().lower()
+    if (
+        target_layer == "worker"
+        or feedback_kind == "product_code_failure"
+        or recommended_action == "retry_worker"
+    ):
+        return False
+    markers = [
+        item.get("feedback_kind"),
+        item.get("recommended_action"),
+        item.get("summary"),
+        item.get("failure_signature"),
+    ]
+    evidence_refs = item.get("evidence_refs")
+    if isinstance(evidence_refs, list):
+        markers.extend(evidence_refs)
+    normalized = "\n".join(str(marker).lower() for marker in markers if marker)
+    if not any(
+        token in normalized
+        for token in ("evidence", "not triggered", "not yet on main", "publish", "trigger")
+    ):
+        return False
+    return _is_pipeline_failure_marker(normalized) and any(
+        token in normalized
+        for token in (
+            "missing",
+            "not captured",
+            "not found",
+            "required",
+            "not triggered",
+            "not yet on main",
+            "publish",
+            "trigger",
+        )
+    )
+
+
+def _is_pipeline_failure_marker(value: object) -> bool:
+    marker = value.strip().lower() if isinstance(value, str) else ""
+    return bool(marker) and (
+        marker.startswith("ci_pipeline")
+        or marker.startswith("ci_")
+        or marker.startswith("ci-")
+        or marker.startswith("pipeline_")
+        or marker.startswith("pipeline-")
+        or marker.startswith("missing_ci_evidence")
+        or marker.startswith("missing_drone_pipeline")
+        or marker.startswith("harness_native_cicd")
+        or marker.startswith("harness-native-cicd")
+        or "source_publish" in marker
+        or "source publish" in marker
+        or "source-publish" in marker
+        or "memstack-source-publish" in marker
+        or "ci_pipeline" in marker
+        or "ci-pipeline" in marker
+        or "ci pipeline" in marker
+        or "ci/cd" in marker
+        or "drone" in marker
+        or "harness-native ci" in marker
+        or "harness-native-ci" in marker
+        or (
+            "github" in marker
+            and "main" in marker
+            and any(token in marker for token in ("merge", "merged", "publish", "push"))
+        )
+    )
 
 
 def _pipeline_missing_evidence_message(message: str) -> bool:
@@ -332,6 +462,15 @@ def _pipeline_gate_pending_judge_message(message: str) -> bool:
         "pipeline" in normalized
         and "missing" in normalized
         and "evidence" in normalized
+        and "next_action_kind=retry_same_node" in normalized
+    )
+
+
+def _verification_judge_retry_runtime_message(message: str) -> bool:
+    normalized = " ".join(message.lower().split())
+    return (
+        "judge verdict=retry_infrastructure" in normalized
+        and "workspace_verification_judge" in normalized
         and "next_action_kind=retry_same_node" in normalized
     )
 

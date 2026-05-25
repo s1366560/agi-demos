@@ -91,19 +91,23 @@ class WorkspacePlanOutboxWorker:
         Returns the number of claimed items. Tests and one-shot maintenance jobs
         can use this without starting a background task.
         """
-        async with self._session_factory() as session:
-            repo = SqlWorkspacePlanOutboxRepository(session)
-            claimed = await repo.claim_due(
-                limit=self._batch_size,
-                lease_owner=self._worker_id,
-                lease_seconds=self._lease_seconds,
-            )
-            claimed_ids = [item.id for item in claimed]
-            await session.commit()
-
-        for outbox_id in claimed_ids:
+        claimed_count = 0
+        for _ in range(self._batch_size):
+            async with self._session_factory() as session:
+                repo = SqlWorkspacePlanOutboxRepository(session)
+                claimed = await repo.claim_due(
+                    limit=1,
+                    lease_owner=self._worker_id,
+                    lease_seconds=self._lease_seconds,
+                )
+                claimed_ids = [item.id for item in claimed]
+                await session.commit()
+            if not claimed_ids:
+                break
+            claimed_count += len(claimed_ids)
+            outbox_id = claimed_ids[0]
             await self._process_claimed(outbox_id)
-        return len(claimed_ids)
+        return claimed_count
 
     async def _poll_loop(self) -> None:
         try:

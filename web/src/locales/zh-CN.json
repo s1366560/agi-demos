@@ -3606,6 +3606,9 @@
       "saveChanges": "保存更改"
     },
     "search": {
+      "eyebrow": "知识检索",
+      "title": "深度搜索",
+      "subtitle": "检索记忆，遍历图谱上下文，并检查匹配子图。",
       "options": {
         "strategies": {
           "COMBINED_HYBRID_SEARCH_RRF": "混合搜索 (RRF)",
@@ -3845,6 +3848,7 @@
         }
       },
       "entities": {
+        "eyebrow": "知识图谱",
         "title": "项目实体",
         "subtitle": "探索和管理知识图谱中的实体",
         "refresh": "刷新实体",
@@ -3852,8 +3856,15 @@
         "error": "加载实体失败",
         "empty": "未找到实体",
         "empty_filter": "没有符合筛选条件的实体",
+        "empty_hint": "记忆完成索引后，实体会显示在这里。",
+        "metrics": {
+          "total": "总数",
+          "visible": "当前显示",
+          "types": "类型"
+        },
         "filter": {
           "type": "实体类型",
+          "type_options": "实体类型选项",
           "all_types": "所有类型",
           "search_placeholder": "搜索实体...",
           "sort_by": "排序",
@@ -4046,6 +4057,7 @@
       "operationalStatus": "运行中"
     },
     "memories": {
+      "eyebrow": "项目知识",
       "title": "记忆库",
       "subtitle": "存储和检索项目知识",
       "addMemory": "添加记忆",
@@ -4062,6 +4074,11 @@
         "image": "图片",
         "video": "视频"
       },
+      "metrics": {
+        "total": "总数",
+        "active": "已启用",
+        "indexing": "处理中"
+      },
       "actions": {
         "reprocess": "重新处理"
       },
@@ -4075,6 +4092,7 @@
       },
       "filter": {
         "label": "筛选",
+        "summary": "显示 {{shown}} / {{total}} 条",
         "all_types": "所有类型",
         "all_status": "所有状态",
         "date_range": "日期范围"
@@ -4097,7 +4115,7 @@
       },
       "empty": {
         "title": "未找到记忆",
-        "subtitle": "开始创建您的第一个记忆",
+        "subtitle": "创建记忆后开始索引项目知识。",
         "create_button": "创建记忆"
       },
       "new": {

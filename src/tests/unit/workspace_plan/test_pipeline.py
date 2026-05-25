@@ -405,6 +405,54 @@ async def test_verifier_uses_latest_attempt_commit_when_report_contains_history(
 
 
 @pytest.mark.asyncio
+async def test_verifier_prefers_summary_commit_when_artifacts_include_prior_commits() -> None:
+    verifier = AcceptanceCriterionVerifier()
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "pipeline_gate_status": "failed",
+            "source_publish_commit_ref": "be553799a480",
+            "source_publish_source_commit_ref": "be55379",
+            "pipeline_last_summary": "Drone build #170 failed in workspace-ci/deploy",
+            "pipeline_evidence_refs": ["ci_pipeline:failed", "pipeline_run:failed:drone-170"],
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-25",
+            stdout=(
+                "Fixed Drone deploy stage port conflict. Platform harness must trigger "
+                "Drone pipeline on s1366560/my-evo at commit be55379."
+            ),
+            artifacts={
+                "candidate_artifacts": [
+                    "docker-compose.ci.yml",
+                    ".drone.yml",
+                    "commit_ref:be55379",
+                    "commit_ref:9b3e7cc",
+                ],
+                "candidate_verifications": ["worker_report:completed"],
+            },
+        )
+    )
+
+    assert not report.passed
+    pipeline_results = [
+        result for result in report.results if result.criterion.kind is CriterionKind.CI_PIPELINE
+    ]
+    assert pipeline_results
+    assert all(
+        "previous pipeline evidence belongs" not in result.message for result in pipeline_results
+    )
+    assert any("workspace-ci/deploy" in result.message for result in pipeline_results)
+
+
+@pytest.mark.asyncio
 async def test_verifier_hides_stale_pipeline_metadata_from_judge() -> None:
     judge = _FakeVerificationJudge(
         WorkspaceVerificationJudgeResult(
@@ -882,10 +930,7 @@ async def test_verifier_routes_drone_invalid_deploy_semantics_to_worker() -> Non
         "align the docker run --name/service name"
         in (judge_result.criterion.spec["required_next_action"])
     )
-    assert (
-        "my-evo-app"
-        in (judge_result.criterion.spec["required_next_action"])
-    )
+    assert "my-evo-app" in (judge_result.criterion.spec["required_next_action"])
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-docker-deploy-missing-required-service"
     assert "did not observe required docker service coverage" in feedback["summary"]
@@ -1049,11 +1094,123 @@ async def test_verifier_routes_docker_host_port_conflict_to_worker() -> None:
     assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
     assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
     assert "docker.deploy_host_port" in judge_result.criterion.spec["required_next_action"]
+    assert "docker compose config" in judge_result.criterion.spec["required_next_action"]
+    assert "ports: !override []" in judge_result.criterion.spec["required_next_action"]
     assert "stale app containers" in judge_result.criterion.spec["required_next_action"]
     assert "docker inspect <container>" in judge_result.criterion.spec["required_next_action"]
     assert feedback["target_layer"] == "worker"
     assert feedback["failure_signature"] == "drone-docker-deploy-host-port-conflict"
     assert "stale containers" in feedback["summary"]
+    assert "docker compose config" in feedback["summary"]
+    assert "docker_compose:effective_ports_required" in feedback["evidence_refs"]
+
+
+@pytest.mark.asyncio
+async def test_verifier_routes_docker_compose_port_conflict_to_worker() -> None:
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+            rationale="docker compose failed",
+            failed_criteria=("ci_pipeline",),
+            required_next_action="retry infrastructure",
+            confidence=0.8,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "pipeline_last_summary": (
+                "Drone build s1366560/my-evo#156 finished with status failure; "
+                "failing stage workspace-ci/deploy exited 1; "
+                "+ docker compose down -v --remove-orphans 2>/dev/null || true; "
+                "+ docker compose up -d db redis; "
+                "Error response from daemon: failed to set up container networking: "
+                "driver failed programming external connectivity on endpoint evomap-redis: "
+                "Bind for 0.0.0.0:6379 failed: port is already allocated"
+            ),
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            stdout="worker completed",
+        )
+    )
+
+    judge_result = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "workspace_verification_judge"
+    )
+    feedback = judge_result.criterion.spec["feedback_items"][0]
+    assert not report.passed
+    assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
+    assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
+    assert "docker compose up" in judge_result.criterion.spec["required_next_action"]
+    assert "dependency sidecars" in judge_result.criterion.spec["required_next_action"]
+    assert feedback["target_layer"] == "worker"
+    assert feedback["failure_signature"] == "drone-docker-deploy-host-port-conflict"
+    assert "dependency sidecars" in feedback["summary"]
+    assert "docker compose config" in feedback["summary"]
+
+
+@pytest.mark.asyncio
+async def test_verifier_routes_drone_deploy_failure_signal_port_conflict_to_worker() -> None:
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+            rationale="judge timed out",
+            failed_criteria=("workspace_verification_judge",),
+            required_next_action="retry judge",
+            confidence=0.8,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "pipeline_last_summary": (
+                "Drone build s1366560/my-evo#165 finished with status failure; "
+                "failing stage workspace-ci/deploy exited 1; failure_signals:\n"
+                "Error response from daemon: failed to set up container networking: "
+                "driver failed programming external connectivity on endpoint evomap-backend "
+                "(abc123): Bind for 0.0.0.0:3001 failed: port is already allocated"
+            ),
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            stdout="worker completed",
+        )
+    )
+
+    judge_result = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "workspace_verification_judge"
+    )
+    feedback = judge_result.criterion.spec["feedback_items"][0]
+    assert not report.passed
+    assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
+    assert feedback["target_layer"] == "worker"
+    assert feedback["failure_signature"] == "drone-docker-deploy-host-port-conflict"
+    assert "docker compose config" in feedback["summary"]
 
 
 @pytest.mark.asyncio
@@ -2302,6 +2459,53 @@ def test_pipeline_contract_supports_multiple_services() -> None:
         "frontend",
         "admin",
     ]
+
+
+def test_drone_deploy_contract_expands_service_host_ports_from_top_level_docker_config() -> None:
+    contract = build_pipeline_contract_from_metadata(
+        workspace_metadata={
+            "delivery_cicd": {
+                "provider": "drone",
+                "services": [
+                    {
+                        "service_id": "backend",
+                        "name": "Backend",
+                        "start_command": "docker compose up -d backend",
+                        "internal_port": 3001,
+                        "health_path": "/health",
+                    },
+                    {
+                        "service_id": "frontend",
+                        "name": "Frontend",
+                        "start_command": "docker compose up -d frontend",
+                        "internal_port": 3000,
+                        "health_path": "/",
+                    },
+                ],
+                "drone": {
+                    "repo": "s1366560/my-evo",
+                    "deploy": {
+                        "enabled": False,
+                        "mode": "cli",
+                        "stage": "deploy",
+                        "docker": {
+                            "deploy_host_port": 18080,
+                            "reserved_host_ports": [3000, 3001, 5001],
+                        },
+                    },
+                },
+            }
+        },
+        fallback_code_root="/workspace/app",
+    )
+
+    assert contract.deploy is not None
+    deploy_services = contract.deploy.docker["deploy_services"]
+    assert [service["service_id"] for service in deploy_services] == ["backend", "frontend"]
+    assert deploy_services[0]["deploy_host_port"] == 18080
+    assert deploy_services[0]["deploy_port_mapping"] == "18080:3001"
+    assert deploy_services[1]["deploy_host_port"] == 18081
+    assert deploy_services[1]["deploy_port_mapping"] == "18081:3000"
 
 
 def test_service_deploy_stage_reuses_already_healthy_preview_service() -> None:

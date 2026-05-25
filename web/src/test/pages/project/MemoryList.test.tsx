@@ -98,9 +98,9 @@ describe('MemoryList', () => {
     expect(screen.getByTestId('memory-list-horizontal-scroll')).toHaveClass('overflow-x-auto');
     expect(screen.getByTestId('memory-list-vertical-scroll')).toHaveClass(
       'overflow-y-auto',
-      'min-w-[920px]'
+      'min-w-[960px]'
     );
-    expect(document.querySelector('table')).toHaveClass('min-w-[920px]');
+    expect(document.querySelector('table')).toHaveClass('min-w-[960px]');
   });
 
   it('displays processing status badges correctly', async () => {
@@ -258,9 +258,7 @@ describe('MemoryList', () => {
       expect(screen.getByText('Document Memory')).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByLabelText('Memory type'), {
-      target: { value: 'document' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Document' }));
 
     expect(screen.queryByText('Text Memory')).not.toBeInTheDocument();
     expect(screen.getByText('Document Memory')).toBeInTheDocument();

@@ -176,6 +176,15 @@ def _finished_stream_recovery_summary(
     return f"{base}: {'; '.join(details)}"
 
 
+def _finished_stream_event_details(
+    latest_event: tuple[str, object, datetime] | None,
+    attempt: WorkspaceTaskSessionAttempt,
+) -> tuple[str, object, datetime]:
+    if latest_event is None:
+        return "none", {}, attempt.updated_at or attempt.created_at
+    return latest_event
+
+
 def _append_recovery_progress_context(summary: str, progress_summary: str | None) -> str:
     progress = (progress_summary or "").replace("\r", "\n").strip()
     if not progress:
@@ -498,13 +507,7 @@ class WorkspaceAttemptRecoveryService:
         )
 
     async def _recover_finished_streams(self, *, workspace_id: str | None = None) -> int:
-        """Recover attempts whose actor stream already ended without a WTP report.
-
-        Transient provider errors are normally given a longer grace window so an
-        alive worker can self-recover. The Redis ``agent:finished`` marker means
-        the actor execution has already exited, so waiting on that grace just
-        leaves the workspace node stuck in ``running``.
-        """
+        """Recover attempts whose actor stream already ended without a WTP report."""
         older_than = datetime.now(UTC) - timedelta(seconds=self._finished_stream_grace_seconds)
         finished_attempts = await self._fetch_finished_stream_attempts(
             older_than=older_than,
@@ -594,12 +597,28 @@ class WorkspaceAttemptRecoveryService:
                     conversation_id=conversation_id,
                     attempt_created_at=attempt.created_at,
                 )
-                if latest_event is None:
-                    event_type = "none"
-                    event_data: object = {}
-                    event_created_at = attempt.updated_at or attempt.created_at
-                else:
-                    event_type, event_data, event_created_at = latest_event
+                event_type, event_data, event_created_at = _finished_stream_event_details(
+                    latest_event,
+                    attempt,
+                )
+                if str(event_type or "").lower() == "error" and _should_defer_error_event_recovery(
+                    event_data=event_data,
+                    event_created_at=event_created_at,
+                    now=now,
+                    transient_error_grace_seconds=self._transient_error_grace_seconds,
+                ):
+                    logger.info(
+                        "workspace_attempt_recovery.defer_transient_finished_stream",
+                        extra={
+                            "event": ("workspace_attempt_recovery.defer_transient_finished_stream"),
+                            "attempt_id": attempt.id,
+                            "workspace_task_id": attempt.workspace_task_id,
+                            "workspace_id": attempt.workspace_id,
+                            "error_event_created_at": event_created_at.isoformat(),
+                            "transient_error_grace_seconds": (self._transient_error_grace_seconds),
+                        },
+                    )
+                    continue
                 if not _should_recover_finished_stream(
                     finished_message_id=finished_message_id,
                     running_exists=running_exists,

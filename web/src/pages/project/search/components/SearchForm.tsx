@@ -13,6 +13,8 @@ import {
   Mic,
   Network,
   Grid,
+  ArrowUpDown,
+  Filter,
   MessageSquare,
   Download,
   PanelRightClose,
@@ -42,6 +44,7 @@ interface SearchFormProps {
   onSearch: () => void;
   onVoiceSearch: () => void;
   onConfigToggle: () => void;
+  onMobileConfigOpen?: (() => void) | undefined;
   onHistoryToggle: () => void;
   onHistoryItemClick: (item: { query: string; mode: string }) => void;
   onExportResults?: (() => void) | undefined;
@@ -68,6 +71,7 @@ export const SearchForm = memo<SearchFormProps>(
     onSearch,
     onVoiceSearch,
     onConfigToggle,
+    onMobileConfigOpen,
     onHistoryToggle,
     onHistoryItemClick,
     onExportResults,
@@ -104,16 +108,56 @@ export const SearchForm = memo<SearchFormProps>(
     }, [searchMode, t]);
 
     return (
-      <header className="flex flex-col gap-4 px-6 pt-6 pb-2 shrink-0">
+      <header className="flex shrink-0 flex-col gap-4 px-4 pb-2 pt-5 sm:px-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+              <Network className="h-4 w-4" aria-hidden="true" />
+              <span>{t('project.search.eyebrow', 'Knowledge retrieval')}</span>
+            </div>
+            <h1 className="text-[22px] font-semibold leading-7 text-slate-950 dark:text-slate-50">
+              {t('project.search.title', 'Deep Search')}
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+              {t(
+                'project.search.subtitle',
+                'Search memory, traverse graph context, and inspect matching subgraphs.'
+              )}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {searchHistory.length > 0 && (
+              <HistoryButton
+                showHistory={showHistory}
+                count={searchHistory.length}
+                onClick={onHistoryToggle}
+              />
+            )}
+            {onExportResults && (
+              <button
+                type="button"
+                onClick={onExportResults}
+                disabled={!canExportResults}
+                aria-label={t('project.search.actions.export')}
+                title={t('project.search.actions.export')}
+                className="inline-flex h-9 w-9 items-center justify-center rounded border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:hover:text-slate-50 dark:focus-visible:ring-slate-50/10"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Search Mode Selector */}
-        <div className="flex flex-wrap gap-2 items-center">
+        <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-md border border-slate-200 bg-white p-1 shadow-[0_0_0_1px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950/30">
           <SearchModeButton
             mode="semantic"
             currentMode={searchMode}
             onClick={() => {
               onSearchModeChange('semantic');
             }}
-            icon={<Search className="w-4 h-4" />}
+            icon={<Search className="h-4 w-4" />}
             label={t('project.search.modes.semantic')}
           />
           <SearchModeButton
@@ -122,7 +166,7 @@ export const SearchForm = memo<SearchFormProps>(
             onClick={() => {
               onSearchModeChange('graphTraversal');
             }}
-            icon={<Network className="w-4 h-4" />}
+            icon={<Network className="h-4 w-4" />}
             label={t('project.search.modes.graph')}
           />
           <SearchModeButton
@@ -131,7 +175,7 @@ export const SearchForm = memo<SearchFormProps>(
             onClick={() => {
               onSearchModeChange('temporal');
             }}
-            icon={<Grid className="w-4 h-4" />}
+            icon={<ArrowUpDown className="h-4 w-4" />}
             label={t('project.search.modes.temporal')}
           />
           <SearchModeButton
@@ -140,7 +184,7 @@ export const SearchForm = memo<SearchFormProps>(
             onClick={() => {
               onSearchModeChange('faceted');
             }}
-            icon={<Network className="w-4 h-4" />}
+            icon={<Filter className="h-4 w-4" />}
             label={t('project.search.modes.faceted')}
           />
           <SearchModeButton
@@ -149,31 +193,9 @@ export const SearchForm = memo<SearchFormProps>(
             onClick={() => {
               onSearchModeChange('community');
             }}
-            icon={<Grid className="w-4 h-4" />}
+            icon={<Grid className="h-4 w-4" />}
             label={t('project.search.modes.community')}
           />
-          <div className="flex-1"></div>
-
-          {/* Search History & Export */}
-          {searchHistory.length > 0 && (
-            <HistoryButton
-              showHistory={showHistory}
-              count={searchHistory.length}
-              onClick={onHistoryToggle}
-            />
-          )}
-          {onExportResults && (
-            <button
-              type="button"
-              onClick={onExportResults}
-              disabled={!canExportResults}
-              aria-label={t('project.search.actions.export')}
-              title={t('project.search.actions.export')}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600/40 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-white"
-            >
-              <Download className="h-4 w-4" />
-            </button>
-          )}
         </div>
 
         {/* Search History Dropdown */}
@@ -181,21 +203,32 @@ export const SearchForm = memo<SearchFormProps>(
           <SearchHistoryDropdown history={searchHistory} onItemClick={onHistoryItemClick} />
         )}
 
-        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-          <div className="flex-1 w-full flex gap-3">
+        <div className="flex flex-col items-start justify-between gap-4 rounded-md border border-slate-200 bg-white p-2 shadow-[0_0_0_1px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950/30 md:flex-row md:items-center">
+          <div className="flex w-full flex-1 gap-2">
+            {onMobileConfigOpen && (
+              <button
+                type="button"
+                onClick={onMobileConfigOpen}
+                aria-label={t('project.search.config.title')}
+                title={t('project.search.config.title')}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded border border-slate-200 text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:hover:text-slate-50 lg:hidden"
+              >
+                <PanelRightOpen className="h-4 w-4" />
+              </button>
+            )}
             <label className="flex-1 relative group">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                 {searchMode === 'graphTraversal' ? (
-                  <Network className="w-5 h-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                  <Network className="h-4 w-4 text-slate-400 transition-colors group-focus-within:text-slate-950 dark:group-focus-within:text-slate-50" />
                 ) : searchMode === 'community' ? (
-                  <Grid className="w-5 h-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                  <Grid className="h-4 w-4 text-slate-400 transition-colors group-focus-within:text-slate-950 dark:group-focus-within:text-slate-50" />
                 ) : (
-                  <Search className="w-5 h-5 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                  <Search className="h-4 w-4 text-slate-400 transition-colors group-focus-within:text-slate-950 dark:group-focus-within:text-slate-50" />
                 )}
               </div>
               <input
                 aria-label={getInputLabel()}
-                className="block w-full pl-10 pr-12 py-3 bg-white dark:bg-[#1e212b] border border-transparent focus:border-blue-600/50 ring-0 focus:ring-4 focus:ring-blue-600/10 rounded-xl text-sm placeholder-slate-400 text-slate-900 dark:text-white shadow-sm transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+                className="block h-10 w-full rounded border border-transparent bg-transparent pl-10 pr-12 text-sm text-slate-950 outline-none transition-[color,background-color,border-color,box-shadow,opacity] placeholder:text-slate-400 focus:border-slate-300 focus:bg-slate-50 focus:ring-2 focus:ring-slate-950/10 dark:text-slate-50 dark:focus:border-slate-700 dark:focus:bg-slate-900/50 dark:focus:ring-slate-50/10"
                 placeholder={getPlaceholder()}
                 type="text"
                 value={getInputValue()}
@@ -215,14 +248,14 @@ export const SearchForm = memo<SearchFormProps>(
               {(searchMode === 'semantic' ||
                 searchMode === 'temporal' ||
                 searchMode === 'faceted') && (
-                <div className="absolute inset-y-0 right-0 pr-2 flex items-center">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-2">
                   <button
                     type="button"
                     onClick={onVoiceSearch}
-                    className={`p-1.5 rounded-lg transition-colors ${
+                    className={`rounded p-1.5 transition-colors ${
                       isListening
                         ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 animate-pulse motion-reduce:animate-none'
-                        : 'text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        : 'text-slate-400 hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-slate-800 dark:hover:text-slate-50'
                     }`}
                     title={
                       isListening
@@ -239,30 +272,30 @@ export const SearchForm = memo<SearchFormProps>(
               type="button"
               onClick={onSearch}
               disabled={loading}
-              className="h-[46px] px-6 bg-blue-600 hover:bg-blue-600/90 text-white text-sm font-semibold rounded-lg shadow-md shadow-blue-600/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity] shrink-0 disabled:opacity-50"
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded bg-slate-950 px-5 text-sm font-semibold text-white transition-[color,background-color,border-color,box-shadow,opacity] hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-950/20 disabled:opacity-50 dark:bg-slate-50 dark:text-slate-950 dark:hover:bg-slate-200 dark:focus:ring-slate-50/20"
             >
               <span>
                 {loading
                   ? t('project.search.actions.searching')
                   : t('project.search.actions.retrieve')}
               </span>
-              <Search className="w-5 h-5" />
+              <Search className="h-4 w-4" />
             </button>
             <div className="hidden lg:flex items-center">
               <button
                 type="button"
                 onClick={onConfigToggle}
-                className={`p-3 h-[46px] rounded-lg transition-colors border ${
+                className={`inline-flex h-10 w-10 items-center justify-center rounded border transition-colors ${
                   isConfigOpen
-                    ? 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    : 'border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                    ? 'border-transparent text-slate-400 hover:bg-slate-100 hover:text-slate-950 dark:hover:bg-slate-800 dark:hover:text-slate-50'
+                    : 'border-slate-300 bg-slate-100 text-slate-950 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50'
                 }`}
                 title={isConfigOpen ? 'Collapse Config' : 'Expand Config'}
               >
                 {isConfigOpen ? (
-                  <PanelRightClose className="w-5 h-5" />
+                  <PanelRightClose className="h-4 w-4" />
                 ) : (
-                  <PanelRightOpen className="w-5 h-5" />
+                  <PanelRightOpen className="h-4 w-4" />
                 )}
               </button>
             </div>
@@ -288,10 +321,10 @@ const SearchModeButton = memo<SearchModeButtonProps>(
     <button
       type="button"
       onClick={onClick}
-      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,box-shadow,opacity] flex items-center gap-2 ${
+      className={`inline-flex h-9 shrink-0 items-center gap-2 rounded px-3 text-sm font-medium transition-[color,background-color,border-color,box-shadow,opacity] focus:outline-none focus:ring-2 focus:ring-slate-950/10 dark:focus:ring-slate-50/10 ${
         mode === currentMode
-          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-          : 'bg-white dark:bg-[#1e212b] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+          ? 'bg-slate-950 text-white shadow-[0_0_0_1px_rgba(15,23,42,0.08)] dark:bg-slate-50 dark:text-slate-950'
+          : 'text-slate-500 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-50'
       }`}
     >
       {icon}
@@ -314,13 +347,13 @@ const HistoryButton = memo<HistoryButtonProps>(({ showHistory, count, onClick })
     <button
       type="button"
       onClick={onClick}
-      className={`px-3 py-2 rounded-lg text-xs font-semibold transition-[color,background-color,border-color,box-shadow,opacity,transform] flex items-center gap-1.5 ${
+      className={`inline-flex h-9 items-center gap-1.5 rounded border px-3 text-xs font-medium transition-[color,background-color,border-color,box-shadow,opacity] ${
         showHistory
-          ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
-          : 'bg-white dark:bg-[#1e212b] text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+          ? 'border-slate-300 bg-slate-100 text-slate-950 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-50'
+          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:hover:text-slate-50'
       }`}
     >
-      <MessageSquare className="w-3.5 h-3.5" />
+      <MessageSquare className="h-3.5 w-3.5" />
       {t('project.search.actions.history')} ({count})
     </button>
   );
@@ -336,8 +369,8 @@ const SearchHistoryDropdown = memo<SearchHistoryDropdownProps>(({ history, onIte
   const { t } = useTranslation();
 
   return (
-    <div className="bg-white dark:bg-[#1e212b] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg p-3 max-h-64 overflow-y-auto">
-      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+    <div className="max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-white p-2 shadow-[0_8px_24px_-16px_rgba(15,23,42,0.30)] dark:border-slate-800 dark:bg-slate-950">
+      <div className="mb-2 px-2 text-xs font-medium text-slate-500 dark:text-slate-400">
         {t('project.search.actions.recent')}
       </div>
       {history.map((item, idx) => (
@@ -347,10 +380,10 @@ const SearchHistoryDropdown = memo<SearchHistoryDropdownProps>(({ history, onIte
           onClick={() => {
             onItemClick(item);
           }}
-          className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-between group"
+          className="group flex w-full items-center justify-between rounded px-3 py-2 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-900"
         >
           <div className="flex flex-col">
-            <span className="text-sm text-slate-900 dark:text-white truncate max-w-md">
+            <span className="max-w-md truncate text-sm text-slate-950 dark:text-slate-50">
               {item.query}
             </span>
             <span className="text-xs text-slate-500 capitalize">{item.mode}</span>

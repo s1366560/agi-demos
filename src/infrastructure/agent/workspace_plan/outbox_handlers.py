@@ -327,6 +327,15 @@ def make_supervisor_tick_handler(
                 )
                 if reconciled_terminal_attempt or reconciled_reported_attempt:
                     await session.commit()
+                recovered_pipeline_requests = (
+                    await _recover_orphaned_running_pipeline_requests_after_tick(
+                        session=session,
+                        plan_id=item.plan_id,
+                        workspace_id=workspace_id,
+                    )
+                )
+                if recovered_pipeline_requests:
+                    await session.commit()
             resolved_agent_pool = agent_pool
             if resolved_agent_pool is None:
                 await _ensure_leader_execution_team(
@@ -359,11 +368,22 @@ def make_supervisor_tick_handler(
             report = await orchestrator.tick_once(workspace_id)
             if report.errors:
                 raise RuntimeError("; ".join(report.errors))
-            if item.plan_id and await _project_done_idle_accepted_attempts_after_tick(
-                session=session,
-                plan_id=item.plan_id,
-                workspace_id=workspace_id,
-            ):
+            projected_done_nodes = False
+            if item.plan_id:
+                projected_done_nodes = await _project_done_idle_accepted_attempts_after_tick(
+                    session=session,
+                    plan_id=item.plan_id,
+                    workspace_id=workspace_id,
+                )
+                projected_done_nodes = (
+                    await _project_done_idle_disposition_nodes_after_tick(
+                        session=session,
+                        plan_id=item.plan_id,
+                        workspace_id=workspace_id,
+                    )
+                    or projected_done_nodes
+                )
+            if projected_done_nodes:
                 await _enqueue_followup_supervisor_tick_after_terminal_reconcile(
                     session=session,
                     item=item,
@@ -461,6 +481,160 @@ async def _project_done_idle_accepted_attempts_after_tick(
     return changed
 
 
+_PROJECTABLE_DONE_DISPOSITIONS = frozenset(
+    {
+        "accepted_via_repair_alternative",
+        "superseded_by_completed_repair_alternative",
+    }
+)
+
+
+async def _project_done_idle_disposition_nodes_after_tick(
+    *,
+    session: AsyncSession,
+    plan_id: str,
+    workspace_id: str,
+) -> bool:
+    """Project verifier-disposed DONE nodes that do not have their own accepted attempt.
+
+    Repair-alternative acceptance can close the original plan node without
+    accepting a new attempt for that original node. The blackboard reads the
+    linked workspace task row, so keep that row in sync with the plan verdict.
+    """
+
+    repo = SqlPlanRepository(session)
+    plan = await repo.get(plan_id)
+    if plan is None or plan.workspace_id != workspace_id:
+        return False
+
+    now = datetime.now(UTC)
+    changed = False
+    for node in list(plan.nodes.values()):
+        if not _node_has_projectable_done_disposition(plan, node):
+            continue
+        task = await session.get(WorkspaceTaskModel, node.workspace_task_id)
+        if task is None or task.workspace_id != workspace_id or task.status == "done":
+            continue
+
+        metadata = dict(node.metadata or {})
+        evidence_refs = _done_disposition_evidence_refs(plan, node)
+        summary = (
+            _metadata_string(metadata.get("last_verification_summary"))
+            or "accepted by durable plan disposition"
+        )
+        await _project_verification_to_task(
+            db=session,
+            task=task,
+            attempt_id=_done_disposition_attempt_id(plan, node),
+            passed=True,
+            hard_fail=False,
+            summary=summary,
+            evidence_refs=evidence_refs,
+            commit_ref=_done_disposition_commit_ref(plan, node, evidence_refs),
+            git_diff_summary=_first_prefixed_ref(evidence_refs, "git_diff_summary:"),
+            test_commands=[
+                ref.removeprefix("test_run:")
+                for ref in evidence_refs
+                if ref.startswith("test_run:")
+            ],
+            now=now,
+        )
+        metadata["workspace_task_projection_status"] = "done"
+        metadata["workspace_task_projected_at"] = now.isoformat().replace("+00:00", "Z")
+        plan.replace_node(replace(node, metadata=metadata, updated_at=now))
+        changed = True
+
+    if changed:
+        await repo.save(plan)
+    return changed
+
+
+def _node_has_projectable_done_disposition(plan: Plan, node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    if not (
+        node.intent is TaskIntent.DONE
+        and node.execution is TaskExecution.IDLE
+        and bool(node.workspace_task_id)
+        and metadata.get("last_verification_passed") is True
+        and metadata.get("verification_feedback_disposition") in _PROJECTABLE_DONE_DISPOSITIONS
+        and bool(metadata.get("accepted_repair_node_id"))
+    ):
+        return False
+    repair_node = _accepted_repair_node(plan, node)
+    repair_metadata = dict(repair_node.metadata or {}) if repair_node is not None else {}
+    return (
+        repair_node is not None
+        and repair_node.intent is TaskIntent.DONE
+        and repair_node.execution is TaskExecution.IDLE
+        and repair_metadata.get("last_verification_passed") is True
+    )
+
+
+def _done_disposition_evidence_refs(plan: Plan, node: PlanNode) -> list[str]:
+    metadata = dict(node.metadata or {})
+    refs = _merge_string_values(metadata.get("verification_evidence_refs"), [])
+    refs = _merge_string_values(metadata.get("accepted_repair_evidence_refs"), refs)
+    refs = _merge_string_values(metadata.get("evidence_refs"), refs)
+    refs = _merge_string_values(metadata.get("execution_verifications"), refs)
+    refs = _merge_string_values(metadata.get("last_worker_report_verifications"), refs)
+    repair_node = _accepted_repair_node(plan, node)
+    if repair_node is not None:
+        repair_metadata = dict(repair_node.metadata or {})
+        refs = _merge_string_values(repair_metadata.get("verification_evidence_refs"), refs)
+        refs = _merge_string_values(repair_metadata.get("evidence_refs"), refs)
+        refs = _merge_string_values(repair_metadata.get("execution_verifications"), refs)
+        refs = _merge_string_values(repair_metadata.get("last_worker_report_verifications"), refs)
+    return refs
+
+
+def _done_disposition_attempt_id(plan: Plan, node: PlanNode) -> str | None:
+    if node.current_attempt_id:
+        return node.current_attempt_id
+    metadata = dict(node.metadata or {})
+    attempt_id = _metadata_string(metadata.get("last_verification_attempt_id"))
+    if attempt_id:
+        return attempt_id
+    repair_node = _accepted_repair_node(plan, node)
+    if repair_node is not None and repair_node.current_attempt_id:
+        return repair_node.current_attempt_id
+    if repair_node is None:
+        return None
+    repair_metadata = dict(repair_node.metadata or {})
+    return _metadata_string(repair_metadata.get("last_verification_attempt_id"))
+
+
+def _done_disposition_commit_ref(
+    plan: Plan,
+    node: PlanNode,
+    evidence_refs: list[str],
+) -> str | None:
+    metadata = dict(node.metadata or {})
+    commit_ref = (
+        _first_prefixed_ref(evidence_refs, "commit_ref:")
+        or _metadata_string(metadata.get("worktree_integration_commit_ref"))
+        or _metadata_string(metadata.get("verified_commit_ref"))
+        or _feature_checkpoint_commit_ref(node)
+    )
+    if commit_ref:
+        return commit_ref
+    repair_node = _accepted_repair_node(plan, node)
+    if repair_node is None:
+        return None
+    repair_metadata = dict(repair_node.metadata or {})
+    return (
+        _metadata_string(repair_metadata.get("worktree_integration_commit_ref"))
+        or _metadata_string(repair_metadata.get("verified_commit_ref"))
+        or _feature_checkpoint_commit_ref(repair_node)
+    )
+
+
+def _accepted_repair_node(plan: Plan, node: PlanNode) -> PlanNode | None:
+    repair_node_id = dict(node.metadata or {}).get("accepted_repair_node_id")
+    if not isinstance(repair_node_id, str) or not repair_node_id.strip():
+        return None
+    return plan.nodes.get(PlanNodeId(repair_node_id.strip()))
+
+
 async def _enqueue_followup_supervisor_tick_after_terminal_reconcile(
     *,
     session: AsyncSession,
@@ -501,6 +675,110 @@ async def _enqueue_followup_supervisor_tick_after_terminal_reconcile(
             "previous_outbox_id": item.id,
         },
     )
+
+
+async def _recover_orphaned_running_pipeline_requests_after_tick(
+    *,
+    session: AsyncSession,
+    plan_id: str,
+    workspace_id: str,
+) -> bool:
+    plan = await SqlPlanRepository(session).get(plan_id)
+    if plan is None or plan.workspace_id != workspace_id:
+        return False
+
+    pipeline_repo = SqlWorkspacePipelineRepository(session)
+    outbox_repo = SqlWorkspacePlanOutboxRepository(session)
+    event_repo = SqlWorkspacePlanEventRepository(session)
+    changed = False
+    for node in plan.nodes.values():
+        if not _node_has_running_pipeline_gate(node) or not node.current_attempt_id:
+            continue
+        node_id = str(node.id)
+        attempt_id = str(node.current_attempt_id)
+        latest = await pipeline_repo.latest_run_for_node(
+            plan_id=plan_id,
+            node_id=node_id,
+            attempt_id=attempt_id,
+        )
+        if latest is None or latest.status != "running":
+            continue
+        if await _has_active_pipeline_request_outbox(
+            session=session,
+            workspace_id=workspace_id,
+            plan_id=plan_id,
+            node_id=node_id,
+            attempt_id=attempt_id,
+        ):
+            continue
+        _ = await outbox_repo.enqueue(
+            plan_id=plan_id,
+            workspace_id=workspace_id,
+            event_type=PIPELINE_RUN_REQUESTED_EVENT,
+            payload={
+                "workspace_id": workspace_id,
+                "plan_id": plan_id,
+                "node_id": node_id,
+                "attempt_id": attempt_id,
+                "pipeline_run_id": latest.id,
+                "reason": "recover_orphaned_running_pipeline",
+            },
+            metadata={
+                "source": "workspace_plan.supervisor_tick.pipeline_running_recovery",
+                "pipeline_run_id": latest.id,
+            },
+        )
+        _ = await event_repo.append(
+            plan_id=plan_id,
+            workspace_id=workspace_id,
+            node_id=node_id,
+            attempt_id=attempt_id,
+            event_type="pipeline_run_poll_recovery_queued",
+            source="workspace_plan_supervisor_tick",
+            actor_id=WORKSPACE_PLAN_SYSTEM_ACTOR_ID,
+            payload={
+                "reason": "running pipeline had no active outbox poller",
+                "pipeline_run_id": latest.id,
+            },
+        )
+        changed = True
+    return changed
+
+
+def _node_has_running_pipeline_gate(node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    statuses = {
+        (_metadata_string(metadata.get("pipeline_status")) or "").lower(),
+        (_metadata_string(metadata.get("pipeline_gate_status")) or "").lower(),
+    }
+    return "running" in statuses
+
+
+async def _has_active_pipeline_request_outbox(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan_id: str,
+    node_id: str,
+    attempt_id: str,
+) -> bool:
+    result = await session.execute(
+        select(WorkspacePlanOutboxModel)
+        .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
+        .where(WorkspacePlanOutboxModel.plan_id == plan_id)
+        .where(WorkspacePlanOutboxModel.event_type == PIPELINE_RUN_REQUESTED_EVENT)
+        .where(WorkspacePlanOutboxModel.status.in_(("pending", "processing", "failed")))
+        .order_by(WorkspacePlanOutboxModel.created_at.desc())
+        .limit(50)
+    )
+    for item in result.scalars().all():
+        payload = dict(item.payload_json or {})
+        if (
+            _payload_string(payload, "node_id") == node_id
+            and _payload_string(payload, "attempt_id") == attempt_id
+        ):
+            return True
+    return False
 
 
 async def _run_controller_action(
@@ -1094,17 +1372,6 @@ def _first_prefixed_ref(refs: Iterable[str], prefix: str) -> str | None:
         if ref.startswith(artifact_prefix):
             return ref.removeprefix(artifact_prefix)
     return None
-
-
-def _last_prefixed_ref(refs: Iterable[str], prefix: str) -> str | None:
-    matched: str | None = None
-    artifact_prefix = f"artifact:{prefix}"
-    for ref in refs:
-        if ref.startswith(prefix):
-            matched = ref.removeprefix(prefix)
-        elif ref.startswith(artifact_prefix):
-            matched = ref.removeprefix(artifact_prefix)
-    return matched
 
 
 def _accepted_attempt_evidence_metadata(
@@ -3316,7 +3583,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
 ) -> WorkspacePlanOutboxHandler:
     """Build a handler that runs harness-native CI/CD in the project sandbox."""
 
-    async def _handle(  # noqa: C901, PLR0912, PLR0915
+    async def _handle(  # noqa: C901, PLR0911, PLR0912, PLR0915
         item: WorkspacePlanOutboxModel,
         session: AsyncSession,
     ) -> None:
@@ -3397,6 +3664,12 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             )
             return
 
+        requested_source_commit_ref = _pipeline_run_commit_ref(
+            contract,
+            node=node,
+            current_attempt=current_attempt,
+            attempt_id=attempt_id,
+        )
         source_publish_result: PipelineRunResult | None = None
         source_publish_metadata: dict[str, Any] = {}
         if contract.provider == DRONE_PROVIDER:
@@ -3413,6 +3686,10 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
                 current_attempt=current_attempt,
                 contract=contract,
             )
+            requested_source_commit_ref = (
+                _commit_ref_token(source_publish_metadata.get("source_publish_source_commit_ref"))
+                or requested_source_commit_ref
+            )
 
         pipeline_repo = SqlWorkspacePipelineRepository(session)
         latest = await pipeline_repo.latest_run_for_node(
@@ -3420,6 +3697,44 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             node_id=node_id,
             attempt_id=attempt_id,
         )
+        if latest is not None and latest.status == "running":
+            if _pipeline_run_matches_requested_commit(
+                latest,
+                requested_source_commit_ref=requested_source_commit_ref,
+            ):
+                await _mark_pipeline_running(
+                    session=session, plan=plan, node=node, run_id=latest.id
+                )
+                await session.commit()
+                if contract.provider == DRONE_PROVIDER:
+                    await _run_drone_pipeline(
+                        session=session,
+                        pipeline_repo=pipeline_repo,
+                        plan=plan,
+                        node=node,
+                        run=latest,
+                        contract=contract,
+                        workspace_id=workspace_id,
+                        plan_id=plan_id,
+                        node_id=node_id,
+                    )
+                    return
+            else:
+                stale_source_commit_ref = _pipeline_run_source_commit_ref(latest)
+                await pipeline_repo.finish_run(
+                    latest,
+                    status="failed",
+                    reason=(
+                        "stale pipeline run source commit "
+                        f"{stale_source_commit_ref or 'unknown'} superseded by "
+                        f"{requested_source_commit_ref or 'unknown'}"
+                    ),
+                    metadata={
+                        "stale_pipeline_run": True,
+                        "stale_source_commit_ref": stale_source_commit_ref,
+                        "superseded_by_source_commit_ref": requested_source_commit_ref,
+                    },
+                )
         if latest is not None and _can_reflect_existing_pipeline_run(
             run=latest,
             contract=contract,
@@ -4644,6 +4959,18 @@ async def _persist_external_pipeline_result(
             **result_metadata,
         },
     )
+    evidence_refs.extend(
+        await _persist_external_pipeline_deployments(
+            pipeline_repo=pipeline_repo,
+            contract=contract,
+            node=node,
+            run=run,
+            result=result,
+            workspace_id=workspace_id,
+            plan_id=plan_id,
+            node_id=node_id,
+        )
+    )
     await _finish_pipeline_on_node(
         session=session,
         plan=plan,
@@ -4669,6 +4996,227 @@ async def _persist_external_pipeline_result(
         },
         metadata={"source": f"workspace_plan.{contract.provider}_pipeline_run_completed"},
     )
+
+
+async def _persist_external_pipeline_deployments(
+    *,
+    pipeline_repo: SqlWorkspacePipelineRepository,
+    contract: PipelineContractSpec,
+    node: PlanNode,
+    run: WorkspacePipelineRunModel,
+    result: PipelineRunResult,
+    workspace_id: str,
+    plan_id: str,
+    node_id: str,
+) -> list[str]:
+    status = _external_pipeline_deployment_status(result)
+    if contract.deploy is None or not contract.deploy.enabled or status is None:
+        return []
+
+    specs = _external_pipeline_deployment_specs(contract, result)
+    if not specs:
+        return []
+
+    evidence_refs: list[str] = []
+    base_metadata = {
+        "pipeline_status": result.status,
+        "deployment_status": result.deployment_status,
+        "external_provider": contract.provider,
+        "external_id": result.external_id,
+        "external_url": result.external_url,
+        "deploy_mode": contract.deploy.mode,
+        "deploy_stage": contract.deploy.stage,
+        "deploy_service_count": len(specs),
+    }
+    for spec in specs:
+        await pipeline_repo.upsert_deployment(
+            workspace_id=workspace_id,
+            plan_id=plan_id,
+            node_id=node_id,
+            pipeline_run_id=run.id,
+            provider=contract.provider,
+            status=status,
+            command=_external_pipeline_deployment_command(contract),
+            pid=result.deployment_pid,
+            port=spec["port"],
+            preview_url=spec["preview_url"],
+            health_url=spec["health_url"],
+            rollback_ref=_pipeline_commit_ref(node),
+            log_ref=result.external_url,
+            service_id=spec["service_id"],
+            service_name=spec["service_name"],
+            service_url=spec["service_url"],
+            required=bool(spec["required"]),
+            metadata={
+                **base_metadata,
+                "deploy_service_id": spec["service_id"],
+                "deploy_service_name": spec["service_name"],
+            },
+        )
+        service_id = spec["service_id"]
+        if service_id:
+            evidence_refs.append(f"deployment:{service_id}:{status}")
+            if spec["preview_url"]:
+                evidence_refs.append(f"preview_url:{service_id}:{spec['preview_url']}")
+        else:
+            evidence_refs.append(f"deployment:{status}")
+            if spec["preview_url"]:
+                evidence_refs.append(f"preview_url:{spec['preview_url']}")
+    return evidence_refs
+
+
+def _external_pipeline_deployment_status(result: PipelineRunResult) -> str | None:
+    deployment_status = (result.deployment_status or "").strip().lower()
+    if deployment_status == "deployed":
+        return "running"
+    if deployment_status in {"failed", "invalid", "missing"}:
+        return "failed"
+    return None
+
+
+def _external_pipeline_deployment_specs(
+    contract: PipelineContractSpec,
+    result: PipelineRunResult,
+) -> list[dict[str, Any]]:
+    if contract.services:
+        docker_services = _external_pipeline_docker_deploy_services(contract)
+        return [
+            _external_pipeline_deployment_spec_for_service(
+                service,
+                result=result,
+                docker_services=docker_services,
+            )
+            for service in contract.services
+        ]
+    return [_external_pipeline_default_deployment_spec(contract, result)]
+
+
+def _external_pipeline_docker_deploy_services(
+    contract: PipelineContractSpec,
+) -> list[Mapping[str, Any]]:
+    deploy = contract.deploy
+    if deploy is None:
+        return []
+    raw = deploy.docker.get("deploy_services")
+    if not isinstance(raw, list):
+        raw = deploy.docker.get("services")
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, Mapping)]
+
+
+def _external_pipeline_deployment_spec_for_service(
+    service: PipelineServiceSpec,
+    *,
+    result: PipelineRunResult,
+    docker_services: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    docker_service = _external_pipeline_docker_service_for_pipeline_service(
+        service,
+        docker_services,
+    )
+    host_port = _metadata_optional_int(
+        docker_service.get("deploy_host_port") or docker_service.get("host_port")
+    )
+    preview_url = result.preview_url
+    if preview_url is None and host_port is not None:
+        preview_url = _external_pipeline_localhost_url(
+            host_port=host_port,
+            path=_metadata_string(docker_service.get("path_prefix")) or service.path_prefix,
+            scheme=_metadata_string(docker_service.get("internal_scheme"))
+            or service.internal_scheme,
+        )
+    health_url = (
+        result.health_url
+        or _metadata_string(docker_service.get("deploy_health_url"))
+        or (
+            _external_pipeline_localhost_url(
+                host_port=host_port,
+                path=_metadata_string(docker_service.get("health_path")) or service.health_path,
+                scheme=_metadata_string(docker_service.get("internal_scheme"))
+                or service.internal_scheme,
+            )
+            if host_port is not None
+            else service.internal_health_url
+        )
+    )
+    return {
+        "service_id": service.service_id,
+        "service_name": service.name,
+        "port": host_port or service.internal_port,
+        "preview_url": preview_url,
+        "health_url": health_url,
+        "service_url": preview_url,
+        "required": service.required,
+    }
+
+
+def _external_pipeline_docker_service_for_pipeline_service(
+    service: PipelineServiceSpec,
+    docker_services: list[Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    service_id = service.service_id.lower()
+    service_name = service.name.lower()
+    for item in docker_services:
+        item_id = (
+            _metadata_string(item.get("service_id") or item.get("id") or item.get("name")) or ""
+        ).lower()
+        item_name = (_metadata_string(item.get("name")) or "").lower()
+        if item_id and (item_id == service_id or item_id in service_id):
+            return item
+        if item_name and item_name == service_name:
+            return item
+    return {}
+
+
+def _external_pipeline_default_deployment_spec(
+    contract: PipelineContractSpec,
+    result: PipelineRunResult,
+) -> dict[str, Any]:
+    deploy = contract.deploy
+    docker = deploy.docker if deploy is not None else {}
+    host_port = _metadata_optional_int(docker.get("deploy_host_port") or docker.get("host_port"))
+    preview_url = result.preview_url
+    if preview_url is None and host_port is not None:
+        preview_url = _external_pipeline_localhost_url(host_port=host_port, path="/")
+    health_url = result.health_url or _metadata_string(docker.get("deploy_health_url"))
+    return {
+        "service_id": deploy.target if deploy is not None else None,
+        "service_name": deploy.target if deploy is not None else None,
+        "port": host_port,
+        "preview_url": preview_url,
+        "health_url": health_url,
+        "service_url": preview_url,
+        "required": deploy.required if deploy is not None else True,
+    }
+
+
+def _external_pipeline_deployment_command(contract: PipelineContractSpec) -> str:
+    deploy = contract.deploy
+    if deploy is None:
+        return f"{contract.provider}:pipeline"
+    return f"{contract.provider}:{deploy.stage}:{deploy.mode}"
+
+
+def _external_pipeline_localhost_url(
+    *,
+    host_port: int,
+    path: str,
+    scheme: str = "http",
+) -> str:
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    return f"{scheme}://localhost:{host_port}{normalized_path}"
+
+
+def _metadata_optional_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str) and value.strip().isdigit():
+        parsed = int(value.strip())
+        return parsed if parsed > 0 else None
+    return None
 
 
 async def _pipeline_root_metadata(
@@ -4719,7 +5267,7 @@ def _can_reflect_existing_pipeline_run(
     node: PlanNode,
 ) -> bool:
     if run.status == "running":
-        return True
+        return False
     if run.status != "success":
         return False
     if _requires_drone_docker_deploy_validation(contract):
@@ -4729,6 +5277,25 @@ def _can_reflect_existing_pipeline_run(
     return not _requires_preview_deployment(contract) or _node_has_required_deployment_health(
         node,
         contract=contract,
+    )
+
+
+def _pipeline_run_matches_requested_commit(
+    run: WorkspacePipelineRunModel,
+    *,
+    requested_source_commit_ref: str | None,
+) -> bool:
+    requested = _commit_ref_token(requested_source_commit_ref)
+    if not requested:
+        return True
+    actual = _pipeline_run_source_commit_ref(run)
+    return bool(actual and _git_commit_refs_match(actual, requested))
+
+
+def _pipeline_run_source_commit_ref(run: WorkspacePipelineRunModel) -> str | None:
+    metadata = dict(run.metadata_json or {})
+    return _commit_ref_token(metadata.get("source_publish_source_commit_ref")) or _commit_ref_token(
+        getattr(run, "commit_ref", None)
     )
 
 
@@ -4757,6 +5324,8 @@ def _pipeline_contract_for_node_phase(
         return contract
     phase = _metadata_string(dict(node.metadata or {}).get("iteration_phase"))
     if phase in _DRONE_DEPLOY_PHASES:
+        if not contract.deploy.enabled:
+            return replace(contract, deploy=replace(contract.deploy, enabled=True))
         return contract
     provider_config = dict(contract.provider_config)
     provider_config["deploy_suppressed_for_phase"] = phase or "unknown"
@@ -5198,19 +5767,73 @@ def _current_attempt_candidate_commit_ref(
     current_attempt_id = str(node.current_attempt_id or "").strip()
     if not current_attempt_id or attempt is None or str(attempt.id) != current_attempt_id:
         return None
-    refs: list[str] = []
-    for domain_field, model_field in (
-        ("candidate_verifications", "candidate_verifications_json"),
-        ("candidate_artifacts", "candidate_artifacts_json"),
-    ):
-        refs.extend(
-            _attempt_list_field(
-                attempt,
-                domain_field=domain_field,
-                model_field=model_field,
-            )
-        )
-    return _last_prefixed_ref(refs, "commit_ref:")
+    verification_refs = _attempt_list_field(
+        attempt,
+        domain_field="candidate_verifications",
+        model_field="candidate_verifications_json",
+    )
+    artifact_refs = _attempt_list_field(
+        attempt,
+        domain_field="candidate_artifacts",
+        model_field="candidate_artifacts_json",
+    )
+    return _preferred_report_commit_ref(
+        verification_refs=verification_refs,
+        artifact_refs=artifact_refs,
+        summary=getattr(attempt, "candidate_summary", None),
+    )
+
+
+def _preferred_report_commit_ref(
+    *,
+    verification_refs: list[str],
+    artifact_refs: list[str],
+    summary: object = None,
+) -> str | None:
+    verification_commits = _prefixed_ref_values(verification_refs, "commit_ref:")
+    artifact_commits = _prefixed_ref_values(artifact_refs, "commit_ref:")
+    summary_commit = _summary_report_commit_ref(
+        summary,
+        candidates=[*verification_commits, *artifact_commits],
+    )
+    if summary_commit:
+        return summary_commit
+    if len(verification_commits) > 1:
+        return verification_commits[-1]
+    if len(artifact_commits) > 1:
+        return artifact_commits[-1]
+    if verification_commits:
+        return verification_commits[-1]
+    if artifact_commits:
+        return artifact_commits[-1]
+    return None
+
+
+def _summary_report_commit_ref(
+    summary: object,
+    *,
+    candidates: list[str],
+) -> str | None:
+    if not isinstance(summary, str) or not candidates:
+        return None
+    candidate_by_lower = {candidate.lower(): candidate for candidate in candidates}
+    matching_tokens = [
+        match.group(1).lower()
+        for match in re.finditer(r"(?<![0-9A-Fa-f])([0-9A-Fa-f]{7,40})(?![0-9A-Fa-f])", summary)
+        if match.group(1).lower() in candidate_by_lower
+    ]
+    if not matching_tokens:
+        return None
+    return candidate_by_lower[matching_tokens[-1]]
+
+
+def _prefixed_ref_values(refs: list[str], prefix: str) -> list[str]:
+    values: list[str] = []
+    for ref in refs:
+        value = _prefixed_ref(ref, prefix)
+        if value:
+            values.append(value)
+    return values
 
 
 def _current_attempt_report_commit_ref(
@@ -5230,15 +5853,23 @@ def _current_attempt_report_commit_ref(
         and node.execution is not TaskExecution.REPORTED
     ):
         return None
-    refs: list[str] = []
+    verification_refs: list[str] = []
     for key in (
         "candidate_verifications",
-        "candidate_artifacts",
         "last_worker_report_verifications",
+    ):
+        verification_refs.extend(_merge_string_values(metadata.get(key), []))
+    artifact_refs: list[str] = []
+    for key in (
+        "candidate_artifacts",
         "last_worker_report_artifacts",
     ):
-        refs.extend(_merge_string_values(metadata.get(key), []))
-    return _last_prefixed_ref(refs, "commit_ref:")
+        artifact_refs.extend(_merge_string_values(metadata.get(key), []))
+    return _preferred_report_commit_ref(
+        verification_refs=verification_refs,
+        artifact_refs=artifact_refs,
+        summary=metadata.get("last_worker_report_summary"),
+    )
 
 
 def _pipeline_contract_commit_ref(contract: PipelineContractSpec) -> str | None:

@@ -119,24 +119,24 @@ export const SearchResults = memo<SearchResultsProps>(
     return (
       <section
         className={`
-            flex flex-col gap-3 min-h-0 min-w-0 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out
+            flex min-h-0 min-w-0 flex-col gap-3 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300 ease-in-out
             ${isResultsCollapsed ? 'h-10 overflow-hidden' : 'flex-1'}
         `}
       >
         <div
-          className="flex shrink-0 cursor-pointer select-none flex-col gap-2 rounded-lg p-1 px-1 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 sm:flex-row sm:items-center sm:justify-between"
+          className="flex shrink-0 cursor-pointer select-none flex-col gap-2 rounded-md px-1 py-1 transition-colors hover:bg-slate-100/70 dark:hover:bg-slate-900/70 sm:flex-row sm:items-center sm:justify-between"
           onClick={onResultsCollapseToggle}
         >
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <div
               className={`transition-transform duration-300 ${isResultsCollapsed ? '-rotate-90' : 'rotate-0'}`}
             >
-              <ChevronDown className="w-4 h-4 text-slate-400" />
+              <ChevronDown className="h-4 w-4 text-slate-400" />
             </div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">
+            <h2 className="text-base font-semibold text-slate-950 dark:text-slate-50">
               {t('project.search.results.title')}
             </h2>
-            <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
               {results.length} {t('project.search.results.items')}
             </span>
           </div>
@@ -146,7 +146,7 @@ export const SearchResults = memo<SearchResultsProps>(
               e.stopPropagation();
             }}
           >
-            <div className="flex items-center bg-white dark:bg-[#1e212b] border border-slate-200 dark:border-slate-800 rounded-lg p-0.5">
+            <div className="flex items-center rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-800 dark:bg-slate-950/30">
               <button
                 type="button"
                 aria-label={t('project.search.actions.view_grid')}
@@ -154,9 +154,9 @@ export const SearchResults = memo<SearchResultsProps>(
                 onClick={() => {
                   onViewModeChange('grid');
                 }}
-                className={`p-1.5 rounded shadow-sm transition-colors ${viewMode === 'grid' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
+                className={`rounded p-1.5 shadow-sm transition-colors ${viewMode === 'grid' ? 'bg-slate-100 text-slate-950 dark:bg-slate-800 dark:text-slate-50' : 'text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-900'}`}
               >
-                <Grid className="w-4 h-4" />
+                <Grid className="h-4 w-4" />
               </button>
               <button
                 type="button"
@@ -165,9 +165,9 @@ export const SearchResults = memo<SearchResultsProps>(
                 onClick={() => {
                   onViewModeChange('list');
                 }}
-                className={`p-1.5 rounded shadow-sm transition-colors ${viewMode === 'list' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'}`}
+                className={`rounded p-1.5 shadow-sm transition-colors ${viewMode === 'list' ? 'bg-slate-100 text-slate-950 dark:bg-slate-800 dark:text-slate-50' : 'text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-900'}`}
               >
-                <List className="w-4 h-4" />
+                <List className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -177,10 +177,12 @@ export const SearchResults = memo<SearchResultsProps>(
           className={`custom-scrollbar flex-1 overflow-y-auto pr-1 ${isResultsCollapsed ? 'opacity-0' : 'opacity-100'} transition-opacity duration-200`}
         >
           <div
-            className={`gap-4 pb-4 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'flex flex-col'}`}
+            className={`gap-3 pb-4 ${viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'flex flex-col'}`}
           >
             {/* Empty state for completed searches with no matches */}
             {results.length === 0 && !loading && <EmptyResultView viewMode={viewMode} />}
+
+            {results.length === 0 && loading && <LoadingResultView viewMode={viewMode} />}
 
             {/* Dynamic Results */}
             {results.map((result, index) => {
@@ -240,28 +242,28 @@ const SearchResultCard = memo<SearchResultCardProps>(
       <div
         onClick={onClick}
         className={`
-                bg-white dark:bg-[#1e212b] rounded-xl shadow-sm border transition-[color,background-color,border-color,box-shadow,opacity,transform] group hover:shadow-md hover:shadow-blue-600/5 cursor-pointer
+                group cursor-pointer rounded-md border bg-white shadow-[0_0_0_1px_rgba(15,23,42,0.04)] transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:bg-slate-50 dark:bg-surface-dark dark:hover:bg-slate-900/60
                 ${
                   isSelected
-                    ? 'border-blue-600 dark:border-blue-500 ring-1 ring-blue-600 dark:ring-blue-500'
-                    : 'border-slate-200 dark:border-slate-800 hover:border-blue-600/40 dark:hover:border-blue-600/40'
+                    ? 'border-slate-950 ring-1 ring-slate-950 dark:border-slate-50 dark:ring-slate-50'
+                    : 'border-slate-200 hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700'
                 }
-                ${viewMode === 'grid' ? 'p-4 flex flex-col h-full' : 'p-3 flex items-start gap-4'}
+                ${viewMode === 'grid' ? 'flex h-full flex-col p-4' : 'flex items-start gap-4 p-3'}
             `}
       >
         <div
           className={`flex ${viewMode === 'grid' ? 'items-start justify-between mb-3' : 'shrink-0'}`}
         >
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+            <div className="rounded-md bg-slate-100 p-2 text-slate-600 dark:bg-slate-900 dark:text-slate-400">
               {getIconForType(result.metadata.type || 'document')}
             </div>
             {viewMode === 'grid' && (
               <div className="flex flex-col">
-                <span className="text-2xs font-bold text-slate-400 uppercase tracking-wide">
+                <span className="text-2xs font-medium uppercase tracking-wide text-slate-400">
                   {result.metadata.type || t('project.search.results.resultType', 'Result')}
                 </span>
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
                   {result.source}
                 </span>
               </div>
@@ -281,7 +283,7 @@ const SearchResultCard = memo<SearchResultCardProps>(
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors line-clamp-1">
+            <h3 className="line-clamp-1 text-sm font-semibold text-slate-950 transition-colors group-hover:text-slate-700 dark:text-slate-50 dark:group-hover:text-slate-200">
               {result.metadata.name || t('project.search.results.untitled')}
             </h3>
             {viewMode === 'list' && (
@@ -307,12 +309,12 @@ const SearchResultCard = memo<SearchResultCardProps>(
             <NodeIdCopyButton uuid={result.metadata.uuid} copiedId={copiedId} onCopyId={onCopyId} />
           )}
 
-          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-3 line-clamp-2">
+          <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
             {result.content}
           </p>
 
           <div
-            className={`flex items-center justify-between ${viewMode === 'grid' ? 'mt-auto pt-3 border-t border-slate-50 dark:border-slate-800' : ''}`}
+            className={`flex items-center justify-between ${viewMode === 'grid' ? 'mt-auto border-t border-slate-100 pt-3 dark:border-slate-800' : ''}`}
           >
             <div className="flex gap-2">
               {result.metadata.tags &&
@@ -320,7 +322,7 @@ const SearchResultCard = memo<SearchResultCardProps>(
                 result.metadata.tags.map((tag: string, i: number) => (
                   <span
                     key={i}
-                    className="text-2xs text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded"
+                    className="rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-medium text-slate-400 dark:bg-slate-900"
                   >
                     #{tag}
                   </span>
@@ -348,7 +350,7 @@ const NodeIdCopyButton = memo<NodeIdCopyButtonProps>(({ uuid, copiedId, onCopyId
 
   return (
     <div
-      className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-2xs text-slate-500 font-mono hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors group/id"
+      className="group/id flex items-center gap-1.5 rounded bg-slate-100 px-2 py-0.5 font-mono text-2xs text-slate-500 transition-colors hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800"
       onClick={(e) => {
         onCopyId(uuid, e);
       }}
@@ -358,7 +360,7 @@ const NodeIdCopyButton = memo<NodeIdCopyButtonProps>(({ uuid, copiedId, onCopyId
       {copiedId === uuid ? (
         <Check className="w-3 h-3 text-emerald-500" />
       ) : (
-        <Copy className="w-3 h-3 hover:text-blue-600 opacity-0 group-hover/id:opacity-100 transition-opacity" />
+        <Copy className="h-3 w-3 opacity-0 transition-opacity hover:text-slate-950 group-hover/id:opacity-100 dark:hover:text-slate-50" />
       )}
     </div>
   );
@@ -371,14 +373,14 @@ const EmptyResultView = memo<{ viewMode: 'grid' | 'list' }>(({ viewMode }) => {
   return (
     <div
       className={`
-        flex min-h-56 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center shadow-sm dark:border-slate-800 dark:bg-[#1e212b]
+        flex min-h-56 flex-col items-center justify-center rounded-md border border-dashed border-slate-200 bg-white px-6 py-10 text-center shadow-[0_0_0_1px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-surface-dark
         ${viewMode === 'grid' ? 'col-span-full' : ''}
     `}
     >
-      <div className="mb-4 rounded-lg bg-slate-50 p-3 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+      <div className="mb-4 rounded-md bg-slate-100 p-3 text-slate-400 dark:bg-slate-900 dark:text-slate-500">
         <Target className="h-6 w-6" />
       </div>
-      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+      <h3 className="text-sm font-semibold text-slate-950 dark:text-slate-50">
         {t('project.search.results.empty_title')}
       </h3>
       <p className="mt-2 max-w-md text-sm leading-6 text-slate-500 dark:text-slate-400">
@@ -388,3 +390,18 @@ const EmptyResultView = memo<{ viewMode: 'grid' | 'list' }>(({ viewMode }) => {
   );
 });
 EmptyResultView.displayName = 'EmptyResultView';
+
+const LoadingResultView = memo<{ viewMode: 'grid' | 'list' }>(({ viewMode }) => (
+  <div
+    className={`rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-surface-dark ${
+      viewMode === 'grid' ? 'col-span-full' : ''
+    }`}
+  >
+    <div className="space-y-3">
+      <div className="h-4 w-40 animate-pulse rounded bg-slate-200 motion-reduce:animate-none dark:bg-slate-800" />
+      <div className="h-3 w-full animate-pulse rounded bg-slate-100 motion-reduce:animate-none dark:bg-slate-900" />
+      <div className="h-3 w-2/3 animate-pulse rounded bg-slate-100 motion-reduce:animate-none dark:bg-slate-900" />
+    </div>
+  </div>
+));
+LoadingResultView.displayName = 'LoadingResultView';

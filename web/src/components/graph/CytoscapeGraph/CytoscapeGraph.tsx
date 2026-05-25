@@ -357,7 +357,7 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
   if (hasSubComponents && !isLegacy) {
     return (
       <GraphContext.Provider value={contextValue}>
-        <div className="relative flex h-full min-h-[420px] flex-col">
+        <div className="relative flex h-full min-h-[420px] flex-col overflow-hidden">
           {controlsChild && <ControlsComponent setCyInstance={setCyInstance} />}
           {viewportChild && (
             <CytoscapeGraphViewport
@@ -458,8 +458,11 @@ function GraphLegend({ includeCommunities }: GraphLegendProps) {
   const theme = THEME_COLORS[computedTheme];
 
   return (
-    <div className="border-t border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+    <div
+      className="shrink-0 border-t border-slate-200 bg-white px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800"
+      data-testid="cytoscape-graph-legend"
+    >
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
         <div className="flex items-center gap-2">
           <div
             className="w-4 h-4 rounded-full"

@@ -577,7 +577,9 @@ class TestEvaluateNoToolResultDelegation:
         assert proc._response_instructions == ["keep me"]
 
     @pytest.mark.asyncio
-    async def test_process_step_consumes_tool_reminder_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_process_step_consumes_tool_reminder_once(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         captured_messages: list[dict[str, Any]] = []
 
         async def fake_generate(_self: Any, messages: list[dict[str, Any]], **_kwargs: Any):
@@ -602,7 +604,9 @@ class TestEvaluateNoToolResultDelegation:
         proc._step_count = 2
         proc._response_instructions = [SessionProcessor._TOOL_USAGE_REMINDER, "keep me"]
 
-        events = [ev async for ev in proc._process_step("session-1", [{"role": "user", "content": "hi"}])]
+        events = [
+            ev async for ev in proc._process_step("session-1", [{"role": "user", "content": "hi"}])
+        ]
 
         assert events
         assert any(
@@ -627,7 +631,9 @@ class TestEvaluateNoToolResultDelegation:
             fake_generate,
         )
 
-        proc = SessionProcessor(config=ProcessorConfig(model="test-model", max_attempts=0), tools=[])
+        proc = SessionProcessor(
+            config=ProcessorConfig(model="test-model", max_attempts=0), tools=[]
+        )
         proc._step_count = 2
         proc._response_instructions = [SessionProcessor._TOOL_USAGE_REMINDER, "keep me"]
 
@@ -653,7 +659,9 @@ class TestEvaluateNoToolResultDelegation:
             fake_generate,
         )
 
-        proc = SessionProcessor(config=ProcessorConfig(model="test-model", max_attempts=0), tools=[])
+        proc = SessionProcessor(
+            config=ProcessorConfig(model="test-model", max_attempts=0), tools=[]
+        )
         proc._step_count = 2
         proc._response_instructions = [SessionProcessor._TOOL_USAGE_REMINDER, "keep me"]
 
@@ -693,13 +701,17 @@ class TestEvaluateNoToolResultDelegation:
             fake_generate,
         )
 
-        proc = SessionProcessor(config=ProcessorConfig(model="test-model", max_attempts=1), tools=[])
+        proc = SessionProcessor(
+            config=ProcessorConfig(model="test-model", max_attempts=1), tools=[]
+        )
         proc.retry_policy.is_retryable = MagicMock(return_value=True)
         proc.retry_policy.calculate_delay = MagicMock(return_value=0)
         proc._step_count = 2
         proc._response_instructions = [SessionProcessor._TOOL_USAGE_REMINDER, "keep me"]
 
-        events = [ev async for ev in proc._process_step("session-1", [{"role": "user", "content": "hi"}])]
+        events = [
+            ev async for ev in proc._process_step("session-1", [{"role": "user", "content": "hi"}])
+        ]
 
         assert events
         assert len(captured_calls) == 2
@@ -779,8 +791,7 @@ class TestEvaluateNoToolResultDelegation:
         )
         assert proc._last_process_result == ProcessorResult.CONTINUE
         assert (
-            SessionProcessor._WORKSPACE_TERMINAL_REPORT_REQUIRED_HINT
-            in proc._response_instructions
+            SessionProcessor._WORKSPACE_TERMINAL_REPORT_REQUIRED_HINT in proc._response_instructions
         )
 
     @pytest.mark.asyncio
@@ -814,8 +825,7 @@ class TestEvaluateNoToolResultDelegation:
         )
         assert proc._last_process_result == ProcessorResult.CONTINUE
         assert (
-            SessionProcessor._WORKSPACE_CONTRACT_TOOL_REQUIRED_HINT
-            in proc._response_instructions
+            SessionProcessor._WORKSPACE_CONTRACT_TOOL_REQUIRED_HINT in proc._response_instructions
         )
 
     @pytest.mark.asyncio
@@ -829,8 +839,7 @@ class TestEvaluateNoToolResultDelegation:
         events = [event async for event in proc._evaluate_no_tool_result("session-1", [])]
 
         assert any(
-            isinstance(event, AgentErrorEvent)
-            and event.code == "WORKSPACE_CONTRACT_TOOL_REQUIRED"
+            isinstance(event, AgentErrorEvent) and event.code == "WORKSPACE_CONTRACT_TOOL_REQUIRED"
             for event in events
         )
         assert proc._last_process_result == ProcessorResult.STOP
@@ -860,6 +869,31 @@ class TestEvaluateNoToolResultDelegation:
                     {
                         "ok": True,
                         "applied_report": {"applied": True},
+                    }
+                ),
+            ),
+            ProcessorResult.CONTINUE,
+            True,
+        )
+
+        assert result == ProcessorResult.COMPLETE
+        assert had_tool_calls is True
+        assert proc._pending_completion_status == "goal_achieved:workspace_terminal_report"
+
+    def test_applied_workspace_terminal_report_with_notification_error_completes_loop(
+        self,
+    ) -> None:
+        proc = self._build_processor_for_eval("Report done.")
+
+        result, had_tool_calls = proc._classify_step_event(
+            AgentObserveEvent(
+                tool_name="workspace_report_complete",
+                result=json.dumps(
+                    {
+                        "ok": True,
+                        "error": "workspace supervisor fan-in unavailable",
+                        "applied_report": {"applied": True, "report_type": "completed"},
+                        "notification_status": "failed",
                     }
                 ),
             ),

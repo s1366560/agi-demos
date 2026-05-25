@@ -32,10 +32,124 @@ logger = logging.getLogger(__name__)
 _background_tasks: set[asyncio.Task[Any]] = set()
 _LOCAL_SUBPROCESS_REQUEST_DIR = "MEMSTACK_LOCAL_AGENT_REQUEST_DIR"
 _LOCAL_CHAT_WORKER_MODULE = "src.infrastructure.agent.actor.local_chat_worker"
+_WORKSPACE_RUNTIME_CONTEXT_TYPE = "workspace_worker_runtime"
+_WORKSPACE_CONTRACT_STAGES = frozenset(
+    {
+        "planner",
+        "verification_judge",
+        "iteration_review",
+    }
+)
+_WORKSPACE_WORKER_STAGES = frozenset({"worker_launch"})
 
 
 def _safe_request_file_name(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in value)
+
+
+def _non_empty_string(value: object) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _conversation_metadata(conversation: Conversation) -> dict[str, Any]:
+    metadata = getattr(conversation, "metadata", None)
+    return dict(metadata) if isinstance(metadata, dict) else {}
+
+
+def _selected_agent_id_from_conversation(conversation: Conversation) -> str | None:
+    agent_config = getattr(conversation, "agent_config", None)
+    if not isinstance(agent_config, dict):
+        return None
+    return _non_empty_string(agent_config.get("selected_agent_id"))
+
+
+def _workspace_session_role_from_metadata(metadata: dict[str, Any]) -> str:
+    from src.infrastructure.agent.workspace.runtime_role_contract import (
+        WORKSPACE_ROLE_CONTRACT,
+        WORKSPACE_ROLE_LEADER,
+        WORKSPACE_ROLE_WORKER,
+    )
+
+    explicit_role = _non_empty_string(metadata.get("workspace_session_role"))
+    if explicit_role:
+        return explicit_role
+    stage = _non_empty_string(metadata.get("workspace_llm_stage"))
+    if stage in _WORKSPACE_CONTRACT_STAGES:
+        return WORKSPACE_ROLE_CONTRACT
+    if stage in _WORKSPACE_WORKER_STAGES:
+        return WORKSPACE_ROLE_WORKER
+    return (
+        WORKSPACE_ROLE_WORKER if metadata.get("linked_workspace_task_id") else WORKSPACE_ROLE_LEADER
+    )
+
+
+def _workspace_context_from_conversation(
+    conversation: Conversation,
+) -> dict[str, Any] | None:
+    """Rebuild server-owned workspace runtime context from a persisted session."""
+    from src.infrastructure.agent.workspace.runtime_role_contract import (
+        WORKSPACE_SESSION_ROLE_KEY,
+    )
+    from src.infrastructure.agent.workspace.workspace_metadata_keys import PREFERRED_LANGUAGE
+
+    metadata = _conversation_metadata(conversation)
+    workspace_id = _non_empty_string(getattr(conversation, "workspace_id", None)) or (
+        _non_empty_string(metadata.get("workspace_id"))
+    )
+    if workspace_id is None:
+        return None
+
+    linked_task_id = _non_empty_string(
+        getattr(conversation, "linked_workspace_task_id", None)
+    ) or _non_empty_string(metadata.get("linked_workspace_task_id"))
+    root_goal_task_id = _non_empty_string(metadata.get("root_goal_task_id"))
+    attempt_id = _non_empty_string(metadata.get("attempt_id")) or _non_empty_string(
+        metadata.get("current_attempt_id")
+    )
+
+    binding: dict[str, Any] = {"workspace_id": workspace_id}
+    if root_goal_task_id:
+        binding["root_goal_task_id"] = root_goal_task_id
+    if linked_task_id:
+        binding["workspace_task_id"] = linked_task_id
+        binding["linked_workspace_task_id"] = linked_task_id
+    if attempt_id:
+        binding["attempt_id"] = attempt_id
+        binding["current_attempt_id"] = attempt_id
+    current_plan_node_id = _non_empty_string(metadata.get("current_plan_node_id"))
+    if current_plan_node_id:
+        binding["current_plan_node_id"] = current_plan_node_id
+    leader_agent_id = _non_empty_string(metadata.get("leader_agent_id"))
+    if leader_agent_id:
+        binding["leader_agent_id"] = leader_agent_id
+
+    context: dict[str, Any] = {
+        "context_type": _WORKSPACE_RUNTIME_CONTEXT_TYPE,
+        WORKSPACE_SESSION_ROLE_KEY: _workspace_session_role_from_metadata(metadata),
+        "workspace_binding": binding,
+    }
+    preferred_language = _non_empty_string(metadata.get(PREFERRED_LANGUAGE))
+    if preferred_language:
+        context[PREFERRED_LANGUAGE] = preferred_language
+    return context
+
+
+def _merge_workspace_context_from_conversation(
+    conversation: Conversation,
+    app_model_context: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Preserve explicit request context, else restore workspace context from the session."""
+    if isinstance(app_model_context, dict):
+        if app_model_context.get("context_type") == _WORKSPACE_RUNTIME_CONTEXT_TYPE:
+            return dict(app_model_context)
+        base_context = dict(app_model_context)
+    else:
+        base_context = {}
+
+    workspace_context = _workspace_context_from_conversation(conversation)
+    if workspace_context is None:
+        return base_context or None
+    return {**base_context, **workspace_context}
 
 
 class AgentRuntimeBootstrapper:
@@ -204,9 +318,16 @@ class AgentRuntimeBootstrapper:
 
         settings = get_settings()
         agent_mode = "default"
+        resolved_app_model_context = _merge_workspace_context_from_conversation(
+            conversation,
+            app_model_context,
+        )
+        resolved_agent_id = (
+            agent_id or _selected_agent_id_from_conversation(conversation) or BUILTIN_SISYPHUS_ID
+        )
         runtime_mode = self._resolve_runtime_mode(
             configured_mode=settings.agent_runtime_mode,
-            app_model_context=app_model_context,
+            app_model_context=resolved_app_model_context,
             conversation_id=conversation.id,
         )
         tenant_agent_config = await self._load_tenant_agent_config(conversation.tenant_id)
@@ -255,9 +376,9 @@ class AgentRuntimeBootstrapper:
             forced_skill_name=forced_skill_name,
             context_summary_data=context_summary_data,
             plan_mode=conversation.is_in_plan_mode,
-            app_model_context=app_model_context,
+            app_model_context=resolved_app_model_context,
             image_attachments=image_attachments,
-            agent_id=agent_id or BUILTIN_SISYPHUS_ID,
+            agent_id=resolved_agent_id,
             tenant_agent_config=tenant_agent_config.to_dict(),
             parent_session_id=parent_session_id,
             preferred_language=preferred_language
@@ -268,7 +389,7 @@ class AgentRuntimeBootstrapper:
 
         if runtime_mode == "local":
             await self._register_project_local(conversation.tenant_id, conversation.project_id)
-            if self._is_workspace_worker_runtime(app_model_context):
+            if self._is_workspace_worker_runtime(resolved_app_model_context):
                 await self._start_local_subprocess_chat(conversation.id, config, chat_request)
                 logger.info(
                     "[AgentService] Using local subprocess execution "
