@@ -102,12 +102,12 @@ async def _ensure_objective_root_task(
     workspace_id: str,
     current_user: User,
     objective: CyberObjective,
-) -> None:
+) -> list[tuple[str, str]]:
     container = get_container_with_db(request, db)
     task_repo = container.workspace_task_repository()
     existing_task = await task_repo.find_root_by_objective_id(workspace_id, objective.id)
     if existing_task is not None:
-        return
+        return []
 
     command_service = _get_workspace_task_command_service(request, db)
     event_publisher = _get_workspace_task_event_publisher(request)
@@ -130,7 +130,7 @@ async def _ensure_objective_root_task(
             "Failed to publish auto-projected objective workspace task events",
             extra={"workspace_id": workspace_id, "objective_id": objective.id, "task_id": task.id},
         )
-    _ = command_service.consume_pending_autonomy_ticks()
+    return command_service.consume_pending_autonomy_ticks()
 
 
 async def _auto_trigger_objective_execution(
@@ -141,14 +141,17 @@ async def _auto_trigger_objective_execution(
     current_user: User,
     objective: CyberObjective,
 ) -> None:
-    await _ensure_objective_root_task(
+    pending_ticks = await _ensure_objective_root_task(
         request=request,
         db=db,
         workspace_id=workspace_id,
         current_user=current_user,
         objective=objective,
     )
-    schedule_autonomy_tick(workspace_id, current_user.id)
+    if not pending_ticks:
+        pending_ticks = [(workspace_id, current_user.id)]
+    for tick_workspace_id, tick_actor_user_id in pending_ticks:
+        schedule_autonomy_tick(tick_workspace_id, tick_actor_user_id)
 
 
 @router.post(

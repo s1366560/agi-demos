@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams, useSearchParams } from 'react-router-dom';
@@ -7,6 +7,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { useWorkspaceStore } from '@/stores/workspace';
 
+import { unifiedEventService } from '@/services/unifiedEventService';
 import { workspacePlanService } from '@/services/workspaceService';
 
 import { useBlackboardPageActions } from '@/hooks/useBlackboardActions';
@@ -18,6 +19,7 @@ import {
   syncBlackboardTabSearchParam,
 } from '@/pages/project/blackboardRouteUtils';
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
+import { logger } from '@/utils/logger';
 
 import { BlackboardDashboardHeader } from '@/components/blackboard/BlackboardDashboardHeader';
 import { BlackboardErrorBoundary } from '@/components/blackboard/BlackboardErrorBoundary';
@@ -229,6 +231,66 @@ export function Blackboard() {
   );
 
   useBlackboardSSE(selectedWorkspaceId);
+
+  const hasSeenWorkspaceSocketConnectedRef = useRef(false);
+  const shouldRefreshWorkspaceOnReconnectRef = useRef(false);
+  const reconnectRefreshInFlightRef = useRef(false);
+
+  useEffect(() => {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+
+    hasSeenWorkspaceSocketConnectedRef.current = false;
+    shouldRefreshWorkspaceOnReconnectRef.current = false;
+    reconnectRefreshInFlightRef.current = false;
+    let cancelled = false;
+
+    const refreshCanonicalWorkspaceSurface = () => {
+      if (reconnectRefreshInFlightRef.current) {
+        return;
+      }
+      reconnectRefreshInFlightRef.current = true;
+      logger.debug('[Blackboard] Refetching workspace surface after websocket reconnect', {
+        workspaceId: selectedWorkspaceId,
+      });
+      void handleRetrySurface()
+        .catch((error: unknown) => {
+          logger.warn('[Blackboard] Reconnect workspace refetch failed', {
+            workspaceId: selectedWorkspaceId,
+            error,
+          });
+        })
+        .finally(() => {
+          if (!cancelled) {
+            reconnectRefreshInFlightRef.current = false;
+          }
+        });
+    };
+
+    const unsubscribeStatus = unifiedEventService.onStatusChange((status) => {
+      if (status === 'connected') {
+        if (shouldRefreshWorkspaceOnReconnectRef.current) {
+          shouldRefreshWorkspaceOnReconnectRef.current = false;
+          refreshCanonicalWorkspaceSurface();
+        }
+        hasSeenWorkspaceSocketConnectedRef.current = true;
+        return;
+      }
+
+      if (
+        hasSeenWorkspaceSocketConnectedRef.current &&
+        (status === 'disconnected' || status === 'error')
+      ) {
+        shouldRefreshWorkspaceOnReconnectRef.current = true;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribeStatus();
+    };
+  }, [handleRetrySurface, selectedWorkspaceId]);
 
   const {
     handleCreatePost,

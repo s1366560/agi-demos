@@ -1021,6 +1021,21 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                     actor_user_id=ctx.user_id,
                     reason=f"todowrite.workspace_authority.{action}.dispatch",
                 )
+                try:
+                    from src.infrastructure.agent.workspace.worker_launch_drain import (
+                        enqueue_pending_worker_launches_to_outbox,
+                    )
+
+                    _ = await enqueue_pending_worker_launches_to_outbox(
+                        command_service,
+                        session,
+                    )
+                except Exception:
+                    logger.warning(
+                        "todowrite.workspace_authority worker_launch_enqueue_failed",
+                        exc_info=True,
+                    )
+                    raise
                 await session.commit()
                 try:
                     from src.application.services.workspace_task_event_publisher import (
@@ -1035,17 +1050,6 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
                 except Exception:
                     logger.warning(
                         "todowrite.workspace_authority publish_pending_events failed",
-                        exc_info=True,
-                    )
-                try:
-                    from src.infrastructure.agent.workspace.worker_launch_drain import (
-                        drain_pending_worker_launches_to_outbox,
-                    )
-
-                    _ = await drain_pending_worker_launches_to_outbox(command_service, session)
-                except Exception:
-                    logger.warning(
-                        "todowrite.workspace_authority worker_launch_drain failed",
                         exc_info=True,
                     )
                 all_tasks = await task_repo.find_by_root_goal_task_id(

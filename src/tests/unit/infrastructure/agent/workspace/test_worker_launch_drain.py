@@ -99,6 +99,51 @@ class TestDrainPendingWorkerLaunches:
         assert item.metadata_json["source"] == "workspace.worker_launch_drain"
 
     @pytest.mark.asyncio
+    async def test_async_drain_preserves_plan_node_and_attempt_payload(
+        self,
+        db_session: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        await _seed_workspace(db_session, project=test_project_db, user=test_user)
+        command_service = WorkspaceTaskCommandService(AsyncMock())
+        task = _FakeTask(
+            id="wt-plan",
+            workspace_id="workspace-1",
+            assignee_agent_id="agent-1",
+            metadata={
+                "workspace_plan_id": "plan-1",
+                "workspace_plan_node_id": "node-1",
+                "current_attempt_id": "attempt-1",
+            },
+        )
+        command_service._pending_worker_launches.append((task, "user-1", "leader-1"))
+
+        fired = await worker_launch_drain.drain_pending_worker_launches_to_outbox(
+            command_service,
+            db_session,
+        )
+
+        assert fired == 1
+        item = (
+            (
+                await db_session.execute(
+                    select(WorkspacePlanOutboxModel).where(
+                        WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT
+                    )
+                )
+            )
+            .scalars()
+            .one()
+        )
+        assert item.plan_id == "plan-1"
+        assert item.payload_json["task_id"] == "wt-plan"
+        assert item.payload_json["node_id"] == "node-1"
+        assert item.payload_json["attempt_id"] == "attempt-1"
+        assert item.payload_json["worker_agent_id"] == "agent-1"
+        assert item.metadata_json["source"] == "workspace.worker_launch_drain"
+
+    @pytest.mark.asyncio
     async def test_async_drain_raises_when_outbox_enqueue_fails(
         self,
         db_session: AsyncSession,

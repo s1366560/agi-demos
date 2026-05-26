@@ -118,9 +118,15 @@ class TestWorkerSessionHealLimit:
             "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
             lambda **kwargs: scheduled.append(kwargs["task"].id),
         )
+        db = MagicMock()
+        db.execute = AsyncMock(
+            return_value=SimpleNamespace(scalar_one_or_none=lambda: None),
+        )
+        db.commit = AsyncMock()
+        db.rollback = AsyncMock()
 
         healed = await wlb._heal_assigned_execution_tasks_without_sessions(
-            db=MagicMock(),
+            db=db,
             task_repo=task_repo,
             workspace_id="ws-1",
             root_task_id="root-1",
@@ -133,11 +139,12 @@ class TestWorkerSessionHealLimit:
         assert attempt_repo.find_active_by_workspace_task_id.await_count == 2
 
     @pytest.mark.asyncio
-    async def test_skips_durable_plan_projected_children(
+    async def test_heals_durable_plan_projected_children_through_launch_outbox(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         child = SimpleNamespace(
             id="plan-child",
+            workspace_id="ws-1",
             assignee_agent_id="worker-1",
             archived_at=None,
             status=WorkspaceTaskStatus.IN_PROGRESS,
@@ -152,6 +159,15 @@ class TestWorkerSessionHealLimit:
         attempt_repo = MagicMock()
         attempt_repo.find_active_by_workspace_task_id = AsyncMock(return_value=None)
         scheduled: list[str] = []
+        enqueued: list[dict[str, object]] = []
+
+        class _FakeOutboxRepository:
+            def __init__(self, _db: object) -> None:
+                pass
+
+            async def enqueue(self, **kwargs: object) -> object:
+                enqueued.append(kwargs)
+                return SimpleNamespace(id="outbox-1")
 
         monkeypatch.setattr(
             "src.infrastructure.adapters.secondary.persistence."
@@ -160,8 +176,89 @@ class TestWorkerSessionHealLimit:
             lambda _db: attempt_repo,
         )
         monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence."
+            "sql_workspace_plan_outbox.SqlWorkspacePlanOutboxRepository",
+            _FakeOutboxRepository,
+        )
+        monkeypatch.setattr(
             "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
             lambda **kwargs: scheduled.append(kwargs["task"].id),
+        )
+        db = MagicMock()
+        db.execute = AsyncMock(
+            return_value=SimpleNamespace(scalar_one_or_none=lambda: None),
+        )
+        db.commit = AsyncMock()
+        db.rollback = AsyncMock()
+
+        healed = await wlb._heal_assigned_execution_tasks_without_sessions(
+            db=db,
+            task_repo=task_repo,
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id="leader-1",
+            actor_user_id="user-1",
+        )
+
+        assert healed == 1
+        assert scheduled == []
+        attempt_repo.find_active_by_workspace_task_id.assert_awaited_once_with("plan-child")
+        assert len(enqueued) == 1
+        item = enqueued[0]
+        assert item["plan_id"] == "plan-1"
+        assert item["workspace_id"] == "ws-1"
+        assert item["event_type"] == "worker_launch"
+        assert item["payload"] == {
+            "workspace_id": "ws-1",
+            "task_id": "plan-child",
+            "worker_agent_id": "worker-1",
+            "actor_user_id": "user-1",
+            "leader_agent_id": "leader-1",
+            "node_id": "node-1",
+        }
+
+    @pytest.mark.asyncio
+    async def test_durable_plan_projected_child_with_active_attempt_is_not_requeued(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        child = SimpleNamespace(
+            id="plan-child",
+            workspace_id="ws-1",
+            assignee_agent_id="worker-1",
+            archived_at=None,
+            status=WorkspaceTaskStatus.IN_PROGRESS,
+            metadata={
+                "task_role": "execution_task",
+                "workspace_plan_id": "plan-1",
+                "workspace_plan_node_id": "node-1",
+            },
+        )
+        task_repo = MagicMock()
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[child])
+        attempt_repo = MagicMock()
+        attempt_repo.find_active_by_workspace_task_id = AsyncMock(
+            return_value=SimpleNamespace(id="attempt-1")
+        )
+        enqueued: list[dict[str, object]] = []
+
+        class _FakeOutboxRepository:
+            def __init__(self, _db: object) -> None:
+                pass
+
+            async def enqueue(self, **kwargs: object) -> object:
+                enqueued.append(kwargs)
+                return SimpleNamespace(id="outbox-1")
+
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence."
+            "sql_workspace_task_session_attempt_repository."
+            "SqlWorkspaceTaskSessionAttemptRepository",
+            lambda _db: attempt_repo,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence."
+            "sql_workspace_plan_outbox.SqlWorkspacePlanOutboxRepository",
+            _FakeOutboxRepository,
         )
 
         healed = await wlb._heal_assigned_execution_tasks_without_sessions(
@@ -174,8 +271,8 @@ class TestWorkerSessionHealLimit:
         )
 
         assert healed == 0
-        assert scheduled == []
-        attempt_repo.find_active_by_workspace_task_id.assert_not_awaited()
+        attempt_repo.find_active_by_workspace_task_id.assert_awaited_once_with("plan-child")
+        assert enqueued == []
 
 
 class TestScheduleAutonomyTick:
@@ -300,15 +397,169 @@ class TestWorkerReportHook:
         durable_gate_idx = source.index("_durable_plan_allows_root_auto_complete", ready_idx)
         assert ready_idx < durable_gate_idx < kickoff_idx
 
-    def test_auto_complete_reconciles_durable_plan_before_commit(self) -> None:
-        """Root completion must reconcile the V2 projection before publish/commit."""
+    def test_auto_complete_commits_before_publish(self) -> None:
+        """Root completion must commit durable task truth before UI publish."""
         import inspect
 
         source = inspect.getsource(wlb._try_auto_complete_root)
         reconcile_idx = source.index("_safe_reconcile_durable_plan_after_root_auto_complete")
         publish_idx = source.index("publisher = WorkspaceTaskEventPublisher")
         commit_idx = source.index("await db.commit()")
-        assert reconcile_idx < publish_idx < commit_idx
+        assert reconcile_idx < commit_idx < publish_idx
+
+    @pytest.mark.asyncio
+    async def test_auto_complete_publishes_only_after_successful_commit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        events: list[str] = []
+
+        class _FakeCommandService:
+            def __init__(self, _task_service: object) -> None:
+                self.pending_events = ["event-1"]
+
+            def consume_pending_events(self) -> list[str]:
+                events.append("consume_events")
+                pending = list(self.pending_events)
+                self.pending_events.clear()
+                return pending
+
+        command_service: _FakeCommandService | None = None
+
+        def _command_service_factory(task_service: object) -> _FakeCommandService:
+            nonlocal command_service
+            command_service = _FakeCommandService(task_service)
+            return command_service
+
+        class _FakeOrchestrator:
+            async def auto_complete_ready_root(self, **_kwargs: object) -> object:
+                events.append("auto_complete")
+                return SimpleNamespace(status=SimpleNamespace(value="done"))
+
+        class _FakePublisher:
+            def __init__(self, _redis: object) -> None:
+                pass
+
+            async def publish_pending_events(self, pending: list[str]) -> None:
+                events.append(f"publish:{pending!r}")
+
+        class _FakeDb:
+            async def commit(self) -> None:
+                events.append("commit")
+
+        monkeypatch.setattr(wlb, "_durable_plan_allows_root_auto_complete", AsyncMock(return_value=True))
+        monkeypatch.setattr(
+            wlb,
+            "_safe_reconcile_durable_plan_after_root_auto_complete",
+            AsyncMock(side_effect=lambda **_kwargs: events.append("reconcile")),
+        )
+        monkeypatch.setattr(wlb, "_mark_cooldown", AsyncMock(side_effect=lambda *_args: events.append("cooldown")))
+        monkeypatch.setattr(wlb, "get_redis_client", AsyncMock(return_value=object()))
+        monkeypatch.setattr(
+            "src.application.services.workspace_task_command_service.WorkspaceTaskCommandService",
+            _command_service_factory,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.agent.workspace.orchestrator.WorkspaceAutonomyOrchestrator",
+            _FakeOrchestrator,
+        )
+        monkeypatch.setattr(
+            "src.application.services.workspace_task_event_publisher.WorkspaceTaskEventPublisher",
+            _FakePublisher,
+        )
+
+        outcome = await wlb._try_auto_complete_root(
+            db=_FakeDb(),  # type: ignore[arg-type]
+            container=SimpleNamespace(workspace_task_repository=lambda: object()),
+            task_service=MagicMock(),
+            workspace_id="ws-1",
+            current_user=SimpleNamespace(id="user-1"),
+            root_task=SimpleNamespace(id="root-1"),
+            leader_agent_id="leader-1",
+        )
+
+        assert outcome is not None
+        assert command_service is not None
+        assert events.index("commit") < events.index("consume_events")
+        assert events.index("commit") < events.index("publish:['event-1']")
+
+    @pytest.mark.asyncio
+    async def test_auto_complete_commit_failure_does_not_publish_or_consume_events(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        events: list[str] = []
+
+        class _FakeCommandService:
+            def __init__(self, _task_service: object) -> None:
+                self.pending_events = ["event-1"]
+
+            def consume_pending_events(self) -> list[str]:
+                events.append("consume_events")
+                pending = list(self.pending_events)
+                self.pending_events.clear()
+                return pending
+
+        command_service: _FakeCommandService | None = None
+
+        def _command_service_factory(task_service: object) -> _FakeCommandService:
+            nonlocal command_service
+            command_service = _FakeCommandService(task_service)
+            return command_service
+
+        class _FakeOrchestrator:
+            async def auto_complete_ready_root(self, **_kwargs: object) -> object:
+                return SimpleNamespace(status=SimpleNamespace(value="done"))
+
+        class _FakePublisher:
+            def __init__(self, _redis: object) -> None:
+                pass
+
+            async def publish_pending_events(self, _pending: list[str]) -> None:
+                events.append("publish")
+
+        class _FakeDb:
+            async def commit(self) -> None:
+                events.append("commit")
+                raise RuntimeError("commit failed")
+
+            async def rollback(self) -> None:
+                events.append("rollback")
+
+        monkeypatch.setattr(wlb, "_durable_plan_allows_root_auto_complete", AsyncMock(return_value=True))
+        monkeypatch.setattr(
+            wlb,
+            "_safe_reconcile_durable_plan_after_root_auto_complete",
+            AsyncMock(return_value=None),
+        )
+        monkeypatch.setattr(wlb, "_mark_cooldown", AsyncMock())
+        monkeypatch.setattr(wlb, "get_redis_client", AsyncMock(return_value=object()))
+        monkeypatch.setattr(
+            "src.application.services.workspace_task_command_service.WorkspaceTaskCommandService",
+            _command_service_factory,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.agent.workspace.orchestrator.WorkspaceAutonomyOrchestrator",
+            _FakeOrchestrator,
+        )
+        monkeypatch.setattr(
+            "src.application.services.workspace_task_event_publisher.WorkspaceTaskEventPublisher",
+            _FakePublisher,
+        )
+
+        outcome = await wlb._try_auto_complete_root(
+            db=_FakeDb(),  # type: ignore[arg-type]
+            container=SimpleNamespace(workspace_task_repository=lambda: object()),
+            task_service=MagicMock(),
+            workspace_id="ws-1",
+            current_user=SimpleNamespace(id="user-1"),
+            root_task=SimpleNamespace(id="root-1"),
+            leader_agent_id="leader-1",
+        )
+
+        assert outcome is None
+        assert command_service is not None
+        assert command_service.pending_events == ["event-1"]
+        assert "consume_events" not in events
+        assert "publish" not in events
 
     def test_durable_plan_children_absorb_tick_without_leader_message(self) -> None:
         """Once V2 has projected tasks, the tick must not invoke legacy routing."""

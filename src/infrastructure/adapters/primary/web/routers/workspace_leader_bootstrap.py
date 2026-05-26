@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from fastapi import Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_agent_autonomy import is_goal_root_task
@@ -17,8 +18,9 @@ from src.configuration.di_container import DIContainer
 from src.domain.model.workspace.workspace_task import WorkspaceTask, WorkspaceTaskStatus
 from src.infrastructure.adapters.primary.web.routers.agent.utils import get_container_with_db
 from src.infrastructure.adapters.primary.web.startup.container import get_app_container
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.models import User, WorkspacePlanOutboxModel
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_ID,
@@ -35,6 +37,7 @@ _REMEDIATION_STATUSES_NEEDING_PROGRESS = frozenset({"replan_required", "ready_fo
 _NON_OPEN_ROOT_STATUSES = frozenset({"done", "blocked"})
 _WORKER_SESSION_HEAL_MAX_PER_TICK_ENV = "WORKSPACE_AUTONOMY_MAX_WORKER_SESSION_HEAL_PER_TICK"
 _DEFAULT_WORKER_SESSION_HEAL_MAX_PER_TICK = 2
+_WORKER_LAUNCH_OUTBOX_RECOVERY_STATUSES = frozenset({"pending", "processing", "failed"})
 
 _AUTO_TICK_ENV = "WORKSPACE_AUTONOMY_AUTO_TICK_ENABLED"
 _AUTO_COMPLETE_ENV = "WORKSPACE_AUTONOMY_AUTO_COMPLETE_ENABLED"
@@ -244,6 +247,255 @@ def _is_direct_worker_session_heal_candidate(child: object) -> bool:
     )
 
 
+def _durable_plan_worker_launch_recovery_metadata(
+    child: object,
+) -> tuple[str, str] | None:
+    """Return plan/node IDs when a projected execution child needs outbox recovery."""
+
+    worker_agent_id = getattr(child, "assignee_agent_id", None)
+    status_value = getattr(getattr(child, "status", None), "value", getattr(child, "status", None))
+    metadata = getattr(child, "metadata", None) or {}
+    if (
+        not worker_agent_id
+        or getattr(child, "archived_at", None) is not None
+        or status_value in {WorkspaceTaskStatus.DONE.value, WorkspaceTaskStatus.BLOCKED.value}
+        or not isinstance(metadata, dict)
+        or metadata.get("task_role") not in _EXECUTION_TASK_ROLES
+    ):
+        return None
+    plan_id = metadata.get(WORKSPACE_PLAN_ID)
+    node_id = metadata.get(WORKSPACE_PLAN_NODE_ID)
+    return (
+        (plan_id, node_id)
+        if isinstance(plan_id, str) and plan_id and isinstance(node_id, str) and node_id
+        else None
+    )
+
+
+async def _has_recoverable_worker_launch_outbox(
+    *,
+    db: AsyncSession,
+    workspace_id: str,
+    task_id: str,
+    plan_id: str,
+    node_id: str,
+) -> bool:
+    """Return whether a pending/running/retryable worker-launch outbox already exists."""
+
+    from src.infrastructure.agent.workspace_plan.outbox_handlers import WORKER_LAUNCH_EVENT
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(WorkspacePlanOutboxModel.id)
+            .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
+            .where(WorkspacePlanOutboxModel.plan_id == plan_id)
+            .where(WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT)
+            .where(WorkspacePlanOutboxModel.status.in_(_WORKER_LAUNCH_OUTBOX_RECOVERY_STATUSES))
+            .where(WorkspacePlanOutboxModel.payload_json["task_id"].as_string() == task_id)
+            .where(WorkspacePlanOutboxModel.payload_json["node_id"].as_string() == node_id)
+            .limit(1)
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def _enqueue_durable_plan_worker_launch_recovery(
+    *,
+    db: AsyncSession,
+    child: WorkspaceTask,
+    plan_id: str,
+    node_id: str,
+    worker_agent_id: str,
+    actor_user_id: str,
+    leader_agent_id: str | None,
+) -> None:
+    """Recover a missing V2 worker launch through the durable plan outbox."""
+
+    from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
+        SqlWorkspacePlanOutboxRepository,
+    )
+    from src.infrastructure.agent.workspace_plan.outbox_handlers import WORKER_LAUNCH_EVENT
+
+    payload: dict[str, Any] = {
+        "workspace_id": child.workspace_id,
+        "node_id": node_id,
+        "task_id": child.id,
+        "worker_agent_id": worker_agent_id,
+        "actor_user_id": actor_user_id,
+    }
+    if leader_agent_id:
+        payload["leader_agent_id"] = leader_agent_id
+    await SqlWorkspacePlanOutboxRepository(db).enqueue(
+        plan_id=plan_id,
+        workspace_id=child.workspace_id,
+        event_type=WORKER_LAUNCH_EVENT,
+        payload=payload,
+        metadata={"source": "workspace.autonomy_tick.worker_launch_recovery"},
+    )
+
+
+async def _try_recover_durable_plan_worker_launch(
+    *,
+    db: AsyncSession,
+    attempt_repo: Any,  # noqa: ANN401
+    child: WorkspaceTask,
+    workspace_id: str,
+    root_task_id: str,
+    plan_id: str,
+    node_id: str,
+    worker_agent_id: str,
+    actor_user_id: str,
+    leader_agent_id: str | None,
+) -> bool:
+    try:
+        active_attempt = await attempt_repo.find_active_by_workspace_task_id(child.id)
+    except Exception:
+        logger.warning(
+            "autonomy_tick.worker_session_heal.attempt_lookup_failed",
+            exc_info=True,
+            extra={
+                "event": "autonomy_tick.worker_session_heal.attempt_lookup_failed",
+                "workspace_id": workspace_id,
+                "task_id": child.id,
+            },
+        )
+        return False
+    if active_attempt is not None:
+        return False
+
+    try:
+        if await _has_recoverable_worker_launch_outbox(
+            db=db,
+            workspace_id=workspace_id,
+            task_id=child.id,
+            plan_id=plan_id,
+            node_id=node_id,
+        ):
+            return False
+        await _enqueue_durable_plan_worker_launch_recovery(
+            db=db,
+            child=child,
+            plan_id=plan_id,
+            node_id=node_id,
+            worker_agent_id=worker_agent_id,
+            actor_user_id=actor_user_id,
+            leader_agent_id=leader_agent_id,
+        )
+        logger.info(
+            "autonomy_tick.worker_launch_recovery.enqueued",
+            extra={
+                "event": "autonomy_tick.worker_launch_recovery.enqueued",
+                "workspace_id": workspace_id,
+                "root_task_id": root_task_id,
+                "task_id": child.id,
+                "plan_id": plan_id,
+                "node_id": node_id,
+            },
+        )
+        return True
+    except Exception:
+        logger.warning(
+            "autonomy_tick.worker_launch_recovery.enqueue_failed",
+            exc_info=True,
+            extra={
+                "event": "autonomy_tick.worker_launch_recovery.enqueue_failed",
+                "workspace_id": workspace_id,
+                "root_task_id": root_task_id,
+                "task_id": child.id,
+                "plan_id": plan_id,
+                "node_id": node_id,
+            },
+        )
+        return False
+
+
+async def _try_schedule_direct_worker_session_heal(
+    *,
+    attempt_repo: Any,  # noqa: ANN401
+    worker_launch_mod: Any,  # noqa: ANN401
+    child: WorkspaceTask,
+    workspace_id: str,
+    worker_agent_id: str,
+    actor_user_id: str,
+    leader_agent_id: str | None,
+) -> bool:
+    try:
+        active_attempt = await attempt_repo.find_active_by_workspace_task_id(child.id)
+    except Exception:
+        logger.warning(
+            "autonomy_tick.worker_session_heal.attempt_lookup_failed",
+            exc_info=True,
+            extra={
+                "event": "autonomy_tick.worker_session_heal.attempt_lookup_failed",
+                "workspace_id": workspace_id,
+                "task_id": child.id,
+            },
+        )
+        return False
+    if active_attempt is not None:
+        return False
+
+    try:
+        worker_launch_mod.schedule_worker_session(
+            workspace_id=workspace_id,
+            task=child,
+            worker_agent_id=worker_agent_id,
+            actor_user_id=actor_user_id,
+            leader_agent_id=leader_agent_id,
+        )
+        return True
+    except Exception:
+        logger.warning(
+            "autonomy_tick.worker_session_heal.schedule_failed",
+            exc_info=True,
+            extra={
+                "event": "autonomy_tick.worker_session_heal.schedule_failed",
+                "workspace_id": workspace_id,
+                "task_id": child.id,
+                "worker_agent_id": worker_agent_id,
+            },
+        )
+        return False
+
+
+async def _commit_durable_worker_launch_recoveries(
+    *,
+    db: AsyncSession,
+    workspace_id: str,
+    root_task_id: str,
+    recovery_count: int,
+) -> bool:
+    if recovery_count <= 0:
+        return True
+    try:
+        await db.commit()
+        return True
+    except Exception:
+        try:
+            await db.rollback()
+        except Exception:
+            logger.warning(
+                "autonomy_tick.worker_launch_recovery.rollback_failed",
+                exc_info=True,
+                extra={
+                    "event": "autonomy_tick.worker_launch_recovery.rollback_failed",
+                    "workspace_id": workspace_id,
+                    "root_task_id": root_task_id,
+                },
+            )
+        logger.warning(
+            "autonomy_tick.worker_launch_recovery.commit_failed",
+            exc_info=True,
+            extra={
+                "event": "autonomy_tick.worker_launch_recovery.commit_failed",
+                "workspace_id": workspace_id,
+                "root_task_id": root_task_id,
+                "recovery_count": recovery_count,
+            },
+        )
+        return False
+
+
 async def _heal_assigned_execution_tasks_without_sessions(
     *,
     db: AsyncSession,
@@ -286,52 +538,56 @@ async def _heal_assigned_execution_tasks_without_sessions(
     attempt_repo = SqlWorkspaceTaskSessionAttemptRepository(db)
     max_heals = _worker_session_heal_max_per_tick()
     healed = 0
+    durable_recoveries = 0
     for child in children:
         if healed >= max_heals:
             break
         worker_agent_id = getattr(child, "assignee_agent_id", None)
-        if not _is_direct_worker_session_heal_candidate(child):
-            continue
         if not isinstance(worker_agent_id, str) or not worker_agent_id.strip():
             continue
         worker_agent_id = worker_agent_id.strip()
 
-        try:
-            active_attempt = await attempt_repo.find_active_by_workspace_task_id(child.id)
-        except Exception:
-            logger.warning(
-                "autonomy_tick.worker_session_heal.attempt_lookup_failed",
-                exc_info=True,
-                extra={
-                    "event": "autonomy_tick.worker_session_heal.attempt_lookup_failed",
-                    "workspace_id": workspace_id,
-                    "task_id": child.id,
-                },
-            )
-            continue
-        if active_attempt is not None:
-            continue
-
-        try:
-            worker_launch_mod.schedule_worker_session(
+        durable_plan_launch = _durable_plan_worker_launch_recovery_metadata(child)
+        if durable_plan_launch is not None:
+            plan_id, node_id = durable_plan_launch
+            recovered = await _try_recover_durable_plan_worker_launch(
+                db=db,
+                attempt_repo=attempt_repo,
+                child=child,
                 workspace_id=workspace_id,
-                task=child,
+                root_task_id=root_task_id,
+                plan_id=plan_id,
+                node_id=node_id,
                 worker_agent_id=worker_agent_id,
                 actor_user_id=actor_user_id,
                 leader_agent_id=leader_agent_id,
             )
+            if recovered:
+                healed += 1
+                durable_recoveries += 1
+            continue
+
+        if not _is_direct_worker_session_heal_candidate(child):
+            continue
+
+        if await _try_schedule_direct_worker_session_heal(
+            attempt_repo=attempt_repo,
+            worker_launch_mod=worker_launch_mod,
+            child=child,
+            workspace_id=workspace_id,
+            worker_agent_id=worker_agent_id,
+            actor_user_id=actor_user_id,
+            leader_agent_id=leader_agent_id,
+        ):
             healed += 1
-        except Exception:
-            logger.warning(
-                "autonomy_tick.worker_session_heal.schedule_failed",
-                exc_info=True,
-                extra={
-                    "event": "autonomy_tick.worker_session_heal.schedule_failed",
-                    "workspace_id": workspace_id,
-                    "task_id": child.id,
-                    "worker_agent_id": worker_agent_id,
-                },
-            )
+
+    if not await _commit_durable_worker_launch_recoveries(
+        db=db,
+        workspace_id=workspace_id,
+        root_task_id=root_task_id,
+        recovery_count=durable_recoveries,
+    ):
+        healed -= durable_recoveries
 
     if healed:
         logger.info(
@@ -597,6 +853,32 @@ async def _try_auto_complete_root(
     )
 
     try:
+        await db.commit()
+    except Exception:
+        try:
+            await db.rollback()
+        except Exception:
+            logger.warning(
+                "autonomy_tick.auto_complete_rollback_failed",
+                exc_info=True,
+                extra={
+                    "event": "autonomy_tick.auto_complete_rollback_failed",
+                    "workspace_id": workspace_id,
+                    "root_task_id": root_task.id,
+                },
+            )
+        logger.warning(
+            "autonomy_tick.auto_complete_commit_failed",
+            exc_info=True,
+            extra={
+                "event": "autonomy_tick.auto_complete_commit_failed",
+                "workspace_id": workspace_id,
+                "root_task_id": root_task.id,
+            },
+        )
+        return None
+
+    try:
         publisher = WorkspaceTaskEventPublisher(await get_redis_client())
         await publisher.publish_pending_events(command_service.consume_pending_events())
     except Exception:
@@ -610,7 +892,6 @@ async def _try_auto_complete_root(
             },
         )
 
-    await db.commit()
     await _mark_cooldown(workspace_id, root_task.id)
     logger.info(
         "autonomy_tick.auto_completed",

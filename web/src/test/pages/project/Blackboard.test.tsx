@@ -23,11 +23,15 @@ const {
   mockErrorFn,
   mockUnsubscribe,
   mockSubscribeWorkspace,
+  mockOnStatusChange,
+  statusListeners,
   mockListByProject,
   mockGetPlanSnapshot,
   storeStateRef,
 } = vi.hoisted(() => {
   const mockUnsubscribe = vi.fn();
+  const statusListeners: Array<(status: 'connecting' | 'connected' | 'disconnected' | 'error') => void> =
+    [];
   return {
     mockLoadWorkspaceSurface: vi.fn().mockResolvedValue(undefined),
     mockClearSelectedHex: vi.fn(),
@@ -43,6 +47,19 @@ const {
     mockErrorFn: vi.fn(),
     mockUnsubscribe,
     mockSubscribeWorkspace: vi.fn().mockReturnValue(mockUnsubscribe),
+    mockOnStatusChange: vi.fn(
+      (listener: (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void) => {
+        statusListeners.push(listener);
+        listener('disconnected');
+        return vi.fn(() => {
+          const index = statusListeners.indexOf(listener);
+          if (index >= 0) {
+            statusListeners.splice(index, 1);
+          }
+        });
+      }
+    ),
+    statusListeners,
     mockListByProject: vi.fn().mockResolvedValue([]),
     mockGetPlanSnapshot: vi.fn(),
     storeStateRef: { current: {} as Record<string, unknown> },
@@ -131,6 +148,7 @@ vi.mock('@/services/workspaceService', () => ({
 vi.mock('@/services/unifiedEventService', () => ({
   unifiedEventService: {
     subscribeWorkspace: mockSubscribeWorkspace,
+    onStatusChange: mockOnStatusChange,
   },
 }));
 
@@ -248,6 +266,7 @@ function renderBlackboard(options: { initialEntries?: string[] } = {}) {
 describe('Blackboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    statusListeners.length = 0;
     storeStateRef.current = defaultStoreState();
     mockGetPlanSnapshot.mockResolvedValue({
       workspace_id: 'ws-1',
@@ -474,6 +493,44 @@ describe('Blackboard', () => {
     unmount();
 
     expect(mockUnsubscribe).toHaveBeenCalled();
+  });
+
+  it('refetches canonical workspace surface once after websocket reconnect', async () => {
+    const workspaces = makeWorkspaces(1);
+    mockListByProject.mockResolvedValue(workspaces);
+
+    storeStateRef.current = {
+      ...storeStateRef.current,
+      currentWorkspace: workspaces[0],
+    };
+    mockLoadWorkspaceSurface.mockResolvedValue(undefined);
+
+    renderBlackboard();
+
+    await waitFor(() => {
+      expect(mockLoadWorkspaceSurface).toHaveBeenCalledTimes(1);
+    });
+    expect(mockOnStatusChange).toHaveBeenCalled();
+
+    await act(async () => {
+      statusListeners.forEach((listener) => {
+        listener('connected');
+      });
+    });
+    expect(mockLoadWorkspaceSurface).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      statusListeners.forEach((listener) => {
+        listener('disconnected');
+        listener('connected');
+        listener('connected');
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockLoadWorkspaceSurface).toHaveBeenCalledTimes(2);
+    });
+    expect(mockLoadWorkspaceSurface).toHaveBeenLastCalledWith('t1', 'p1', 'ws-1');
   });
 
   // 8. Error state rendering when workspace loading fails

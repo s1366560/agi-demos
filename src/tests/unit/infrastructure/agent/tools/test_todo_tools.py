@@ -461,6 +461,128 @@ class TestTodoWriteTool:
         assert any(event["type"] == "task_list_updated" for event in pending)
 
     @pytest.mark.asyncio
+    async def test_workspace_add_worker_launch_enqueue_failure_prevents_commit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import src.infrastructure.agent.tools.todo_tools as todo_tools_module
+
+        commit_calls = 0
+
+        class _DummySession:
+            async def __aenter__(self) -> _DummySession:
+                return self
+
+            async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+                return False
+
+            async def commit(self) -> None:
+                nonlocal commit_calls
+                commit_calls += 1
+
+        created: list[WorkspaceTask] = []
+
+        class _FakeCommandService:
+            def __init__(self, task_service: Any) -> None:
+                _ = task_service
+                self._pending_worker_launches: list[tuple[WorkspaceTask, str, str | None]] = []
+
+            async def create_task(self, **kwargs: Any) -> WorkspaceTask:
+                task = WorkspaceTask(
+                    id=f"wt-{len(created) + 1}",
+                    workspace_id=kwargs["workspace_id"],
+                    title=kwargs["title"],
+                    created_by=kwargs["actor_user_id"],
+                    assignee_agent_id="worker-agent-1",
+                    status=WorkspaceTaskStatus.TODO,
+                    priority=kwargs["priority"],
+                    metadata=kwargs["metadata"],
+                )
+                created.append(task)
+                self._pending_worker_launches.append((task, kwargs["actor_user_id"], "leader-1"))
+                return task
+
+            def consume_pending_events(self) -> list[Any]:
+                return []
+
+            def consume_pending_worker_launches(
+                self,
+            ) -> list[tuple[WorkspaceTask, str, str | None]]:
+                pending = list(self._pending_worker_launches)
+                self._pending_worker_launches.clear()
+                return pending
+
+        class _FakeWorkspaceRepo:
+            def __init__(self, session: Any) -> None:
+                _ = session
+
+            async def find_by_root_goal_task_id(
+                self, workspace_id: str, root_goal_task_id: str
+            ) -> list[Any]:
+                _ = root_goal_task_id
+                return [
+                    WorkspaceTask(
+                        id=task.id,
+                        workspace_id=workspace_id,
+                        title=task.title,
+                        created_by=task.created_by,
+                        assignee_agent_id=task.assignee_agent_id,
+                        status=task.status,
+                        priority=task.priority,
+                        metadata={**(task.metadata or {}), "root_goal_task_id": "root-1"},
+                    )
+                    for task in created
+                ]
+
+        async def _fake_dispatch(**kwargs: Any) -> dict[str, Any]:
+            assert [task.id for task in kwargs["created_tasks"]] == ["wt-1"]
+            return {"dispatched": True, "assigned_count": 1, "started_count": 0}
+
+        async def _raise_enqueue(*_args: Any, **_kwargs: Any) -> int:
+            raise RuntimeError("outbox down")
+
+        monkeypatch.setattr(todo_tools_module, "_todowrite_session_factory", lambda: _DummySession())
+        monkeypatch.setattr(todo_tools_module, "WorkspaceTaskService", lambda **kwargs: object())
+        monkeypatch.setattr(
+            todo_tools_module,
+            "_dispatch_created_workspace_tasks",
+            _fake_dispatch,
+        )
+        monkeypatch.setattr(
+            "src.application.services.workspace_task_command_service.WorkspaceTaskCommandService",
+            _FakeCommandService,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository."
+            "SqlWorkspaceTaskRepository",
+            _FakeWorkspaceRepo,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.agent.workspace.worker_launch_drain."
+            "enqueue_pending_worker_launches_to_outbox",
+            _raise_enqueue,
+        )
+
+        ctx = _make_ctx(
+            conversation_id="conv-persisted",
+            user_id="user-1",
+            runtime_context={
+                "task_authority": "workspace",
+                "workspace_id": "ws-1",
+                "root_goal_task_id": "root-1",
+                "selected_agent_id": "leader-1",
+            },
+        )
+
+        with pytest.raises(RuntimeError, match="outbox down"):
+            await todowrite_tool.execute(
+                ctx,
+                action="add",
+                todos=[{"content": "Task A", "status": "pending", "priority": "high"}],
+            )
+
+        assert commit_calls == 0
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("action", ["add", "replace"])
     async def test_worker_scope_rejects_structural_workspace_task_writes(
         self,
