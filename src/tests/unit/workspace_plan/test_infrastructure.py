@@ -4724,6 +4724,126 @@ class TestSupervisorTick:
             event for event in events if event[0] == "dispatch_deferred_dependency_projection"
         ]
 
+    async def test_tick_dispatches_followup_repair_from_blocked_dirty_main_commit(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        original = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                original,
+                depends_on=frozenset({PlanNodeId("repair-b")}),
+                metadata={"blocked_by_repair_node_id": "repair-b"},
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="repair-a",
+                plan_id=plan.id,
+                parent_id=plan.goal_id,
+                kind=PlanNodeKind.TASK,
+                title="First repair",
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                current_attempt_id="attempt-repair-a",
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-repair-a",
+                    sequence=1,
+                    title="First repair",
+                    worktree_path="/workspace/.memstack/worktrees/attempt-repair-a",
+                    commit_ref="stale-integration-ref",
+                ),
+                metadata={
+                    "repair_for_node_id": "a",
+                    "repair_source": "verification_judge_create_repair_node",
+                    "last_verification_passed": True,
+                    "terminal_attempt_status": "accepted",
+                    "verified_commit_ref": "verified123",
+                    "worktree_integration_commit_ref": "stale-integration-ref",
+                    "worktree_integration_status": "blocked_dirty_main",
+                    "verification_evidence_refs": ["commit_ref:verified123"],
+                },
+            )
+        )
+        plan.add_node(
+            PlanNode(
+                id="repair-b",
+                plan_id=plan.id,
+                parent_id=plan.goal_id,
+                kind=PlanNodeKind.TASK,
+                title="Follow-up repair",
+                intent=TaskIntent.TODO,
+                execution=TaskExecution.IDLE,
+                depends_on=frozenset({PlanNodeId("repair-a")}),
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-repair-b",
+                    sequence=2,
+                    title="Follow-up repair",
+                    base_ref="HEAD",
+                ),
+                metadata={
+                    "repair_for_node_id": "a",
+                    "repair_source": "verification_judge_create_repair_node",
+                    "source_verification_judge_next_action_kind": "create_repair_node",
+                },
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        dispatched_base_refs: list[str | None] = []
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="C",
+                    capabilities=frozenset({"codegen", "web_search"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, _alloc: Any, node: PlanNode) -> str:
+            dispatched.append(node.id)
+            dispatched_base_refs.append(
+                node.feature_checkpoint.base_ref if node.feature_checkpoint else None
+            )
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.allocations_made == 1
+        assert dispatched == ["repair-b"]
+        assert dispatched_base_refs == ["verified123"]
+        assert not [
+            event for event in events if event[0] == "dispatch_deferred_dependency_projection"
+        ]
+
     async def test_tick_invalidates_active_downstream_node_when_dependency_regresses(
         self,
     ) -> None:

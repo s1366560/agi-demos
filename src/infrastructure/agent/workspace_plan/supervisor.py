@@ -1858,6 +1858,7 @@ def _dependency_blocking_ids(plan: Plan, node: PlanNode) -> list[str]:
             continue
         if _dependency_commit_needs_integration(dependency):
             if _repair_dependency_can_seed_downstream_worktree(
+                node=node,
                 dependency_id=dep_id,
                 repair_dependency=repair_dependency,
                 dependency=dependency,
@@ -1876,18 +1877,27 @@ def _repair_blocking_dependency_id(node: PlanNode) -> PlanNodeId | None:
 
 def _repair_dependency_can_seed_downstream_worktree(
     *,
+    node: PlanNode,
     dependency_id: PlanNodeId,
     repair_dependency: PlanNodeId | None,
     dependency: PlanNode,
 ) -> bool:
-    if repair_dependency is None or dependency_id != repair_dependency:
-        return False
     if (
         _metadata_text(dependency.metadata.get("worktree_integration_status"))
         != "blocked_dirty_main"
     ):
         return False
-    return bool(_dependency_dispatch_commit_ref(dependency))
+    if not _dependency_dispatch_commit_ref(dependency):
+        return False
+    if repair_dependency is not None and dependency_id == repair_dependency:
+        return True
+    return _nodes_repair_same_original(node, dependency)
+
+
+def _nodes_repair_same_original(node: PlanNode, dependency: PlanNode) -> bool:
+    node_repair_for = _metadata_text(node.metadata.get("repair_for_node_id"))
+    dependency_repair_for = _metadata_text(dependency.metadata.get("repair_for_node_id"))
+    return bool(node_repair_for and node_repair_for == dependency_repair_for)
 
 
 def _dependency_commit_needs_integration(node: PlanNode) -> bool:
@@ -1945,6 +1955,10 @@ def _dependency_base_ref_for_dispatch(plan: Plan, node: PlanNode) -> str | None:
 
 def _dependency_dispatch_commit_ref(node: PlanNode) -> str | None:
     metadata = dict(node.metadata or {})
+    if _metadata_text(metadata.get("worktree_integration_status")) == "blocked_dirty_main":
+        commit_ref = _metadata_text(metadata.get("verified_commit_ref"))
+        if commit_ref:
+            return commit_ref
     for key in (
         "source_publish_commit_ref",
         "worktree_integration_commit_ref",
