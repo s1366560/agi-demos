@@ -444,6 +444,13 @@ class WorkspaceMentionRouter:
                 parent_message_id=parent_message_id,
             )
             await db.commit()
+            try:
+                await message_service.publish_pending_events()
+            except Exception:
+                logger.exception(
+                    "Failed to publish workspace mention response event",
+                    extra={"workspace_id": workspace_id, "agent_id": agent.agent_id},
+                )
 
         # Trigger agent-to-agent mention routing if within depth limit
         if agent_message.mentions and chain_depth < _MAX_MENTION_CHAIN_DEPTH:

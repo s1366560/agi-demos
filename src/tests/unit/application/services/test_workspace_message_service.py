@@ -128,6 +128,8 @@ class TestSendMessage:
             sender_name="Alice",
             content="Hello",
         )
+        publisher.assert_not_awaited()
+        await service.publish_pending_events()
         publisher.assert_awaited_once()
         call_args = publisher.call_args
         assert call_args[0][0] == "ws-1"
@@ -136,6 +138,22 @@ class TestSendMessage:
         message = payload["message"]
         assert message["sender_id"] == "user-1"
         assert message["content"] == "Hello"
+
+    async def test_publish_pending_events_keeps_queue_when_publish_fails(self) -> None:
+        publisher = AsyncMock(side_effect=RuntimeError("redis down"))
+        service, *_ = _build_service(publisher=publisher)
+        await service.send_message(
+            workspace_id="ws-1",
+            sender_id="user-1",
+            sender_type=MessageSenderType.HUMAN,
+            sender_name="Alice",
+            content="Hello",
+        )
+
+        with pytest.raises(RuntimeError, match="redis down"):
+            await service.publish_pending_events()
+
+        assert len(service.consume_pending_events()) == 1
 
     async def test_no_publisher_does_not_raise(self) -> None:
         service, *_ = _build_service(publisher=None)

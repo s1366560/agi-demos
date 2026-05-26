@@ -81,6 +81,7 @@ def _build_router(
             content=kwargs.get("content", "")
         )
     )
+    message_service.publish_pending_events = AsyncMock()
 
     events = stream_events or [{"type": "complete", "data": {"content": "Agent response"}}]
 
@@ -170,6 +171,7 @@ class TestRouterTriggerAgent:
         assert call_kwargs["sender_id"] == "agent-1"
         assert call_kwargs["sender_type"] == MessageSenderType.AGENT
         assert call_kwargs["content"] == "Agent response"
+        mocks["message_service"].publish_pending_events.assert_awaited_once()
 
     @patch(
         "src.configuration.factories.create_llm_client",

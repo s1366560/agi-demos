@@ -74,6 +74,25 @@ async def drain_pending_worker_launches_to_outbox(
         raise
 
 
+async def enqueue_pending_worker_launches_to_outbox(
+    command_service: WorkspaceTaskCommandService,
+    session: AsyncSession,
+) -> int:
+    """Durably enqueue queued worker launches in the caller's transaction.
+
+    HTTP mutation routes call this before their commit so task state and the
+    worker launch outbox row succeed or roll back together.
+    """
+
+    pending = _consume_pending_worker_launches(command_service)
+    launchable = [entry for entry in pending if _worker_agent_id(entry[0])]
+    if not launchable:
+        return 0
+    for task, actor_user_id, leader_agent_id in launchable:
+        await _enqueue_worker_launch(session, task, actor_user_id, leader_agent_id)
+    return len(launchable)
+
+
 def _consume_pending_worker_launches(
     command_service: WorkspaceTaskCommandService,
 ) -> list[PendingWorkerLaunch]:
@@ -147,4 +166,4 @@ def _mapping_string(payload: dict[str, Any], key: str) -> str | None:
     return None
 
 
-__all__ = ["drain_pending_worker_launches_to_outbox"]
+__all__ = ["drain_pending_worker_launches_to_outbox", "enqueue_pending_worker_launches_to_outbox"]

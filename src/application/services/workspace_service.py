@@ -40,6 +40,35 @@ def _serialize_workspace_agent_event(agent: WorkspaceAgent) -> dict[str, Any]:
     }
 
 
+def _serialize_workspace_event(workspace: Workspace) -> dict[str, Any]:
+    return {
+        "id": workspace.id,
+        "tenant_id": workspace.tenant_id,
+        "project_id": workspace.project_id,
+        "name": workspace.name,
+        "created_by": workspace.created_by,
+        "description": workspace.description,
+        "is_archived": workspace.is_archived,
+        "metadata": workspace.metadata,
+        "office_status": workspace.office_status,
+        "hex_layout_config": workspace.hex_layout_config,
+        "created_at": workspace.created_at.isoformat(),
+        "updated_at": workspace.updated_at.isoformat() if workspace.updated_at else None,
+    }
+
+
+def _serialize_workspace_member_event(member: WorkspaceMember) -> dict[str, Any]:
+    return {
+        "id": member.id,
+        "workspace_id": member.workspace_id,
+        "user_id": member.user_id,
+        "role": member.role.value,
+        "invited_by": member.invited_by,
+        "created_at": member.created_at.isoformat(),
+        "updated_at": member.updated_at.isoformat() if member.updated_at else None,
+    }
+
+
 def _resolve_hex_target(hex_q: int | None, hex_r: int | None) -> tuple[int, int] | None:
     if hex_q is None and hex_r is None:
         return None
@@ -163,18 +192,11 @@ class WorkspaceService:
         )
         await self._workspace_member_repo.save(owner_member)
 
-        if self._workspace_event_publisher is not None:
-            await self._workspace_event_publisher(
-                saved_workspace.id,
-                "workspace_member_joined",
-                {
-                    "workspace_id": saved_workspace.id,
-                    "member_id": owner_member.id,
-                    "user_id": owner_member.user_id,
-                    "role": owner_member.role.value,
-                    "invited_by": owner_member.invited_by,
-                },
-            )
+        self._queue_workspace_event(
+            saved_workspace.id,
+            "workspace_member_joined",
+            self._member_event_payload(owner_member),
+        )
         return saved_workspace
 
     async def get_workspace(self, workspace_id: str, actor_user_id: str) -> Workspace:
@@ -190,22 +212,13 @@ class WorkspaceService:
         limit: int = 50,
         offset: int = 0,
     ) -> list[Workspace]:
-        workspaces = await self._workspace_repo.find_by_project(
+        return await self._workspace_repo.find_visible_by_project_for_user(
             tenant_id=tenant_id,
             project_id=project_id,
+            user_id=actor_user_id,
             limit=limit,
             offset=offset,
         )
-
-        visible: list[Workspace] = []
-        for workspace in workspaces:
-            member = await self._workspace_member_repo.find_by_workspace_and_user(
-                workspace_id=workspace.id,
-                user_id=actor_user_id,
-            )
-            if member is not None:
-                visible.append(workspace)
-        return visible
 
     async def update_workspace(
         self,
@@ -234,17 +247,17 @@ class WorkspaceService:
             workspace.metadata = dict(metadata)
         workspace.updated_at = datetime.now(UTC)
         updated = await self._workspace_repo.save(workspace)
-        if self._workspace_event_publisher is not None:
-            await self._workspace_event_publisher(
-                workspace.id,
-                "workspace_updated",
-                {
-                    "workspace_id": workspace.id,
-                    "name": workspace.name,
-                    "is_archived": workspace.is_archived,
-                    "updated_by": actor_user_id,
-                },
-            )
+        self._queue_workspace_event(
+            updated.id,
+            "workspace_updated",
+            {
+                "workspace_id": updated.id,
+                "workspace": _serialize_workspace_event(updated),
+                "name": updated.name,
+                "is_archived": updated.is_archived,
+                "updated_by": actor_user_id,
+            },
+        )
         return updated
 
     async def delete_workspace(self, workspace_id: str, actor_user_id: str) -> bool:
@@ -256,12 +269,13 @@ class WorkspaceService:
             error_message="Only workspace owner can delete workspace",
         )
         deleted = await self._workspace_repo.delete(workspace.id)
-        if deleted and self._workspace_event_publisher is not None:
-            await self._workspace_event_publisher(
+        if deleted:
+            self._queue_workspace_event(
                 workspace.id,
                 "workspace_deleted",
                 {
                     "workspace_id": workspace.id,
+                    "workspace": _serialize_workspace_event(workspace),
                     "deleted_by": actor_user_id,
                 },
             )
@@ -299,18 +313,11 @@ class WorkspaceService:
             updated_at=datetime.now(UTC),
         )
         saved_member = await self._workspace_member_repo.save(member)
-        if self._workspace_event_publisher is not None:
-            await self._workspace_event_publisher(
-                workspace.id,
-                "workspace_member_joined",
-                {
-                    "workspace_id": workspace.id,
-                    "member_id": saved_member.id,
-                    "user_id": saved_member.user_id,
-                    "role": saved_member.role.value,
-                    "invited_by": saved_member.invited_by,
-                },
-            )
+        self._queue_workspace_event(
+            workspace.id,
+            "workspace_member_joined",
+            self._member_event_payload(saved_member),
+        )
         return saved_member
 
     async def list_members(
@@ -353,10 +360,21 @@ class WorkspaceService:
             and new_role != WorkspaceRole.OWNER
         ):
             raise ValueError("Cannot change your own owner role")
+        if target_member.role == WorkspaceRole.OWNER and new_role != WorkspaceRole.OWNER:
+            await self._ensure_owner_can_be_removed_or_demoted(workspace.id)
 
         target_member.role = new_role
         target_member.updated_at = datetime.now(UTC)
-        return await self._workspace_member_repo.save(target_member)
+        saved_member = await self._workspace_member_repo.save(target_member)
+        self._queue_workspace_event(
+            workspace.id,
+            "workspace_member_updated",
+            {
+                **self._member_event_payload(saved_member),
+                "updated_by": actor_user_id,
+            },
+        )
+        return saved_member
 
     async def remove_member(
         self,
@@ -374,15 +392,15 @@ class WorkspaceService:
         member = await self._require_membership(workspace_id=workspace.id, user_id=target_user_id)
         if member.role == WorkspaceRole.OWNER and actor_user_id != target_user_id:
             raise ValueError("Only an owner can remove themselves from owner role")
+        if member.role == WorkspaceRole.OWNER:
+            await self._ensure_owner_can_be_removed_or_demoted(workspace.id)
         deleted = await self._workspace_member_repo.delete(member.id)
-        if deleted and self._workspace_event_publisher is not None:
-            await self._workspace_event_publisher(
+        if deleted:
+            self._queue_workspace_event(
                 workspace.id,
                 "workspace_member_left",
                 {
-                    "workspace_id": workspace.id,
-                    "member_id": member.id,
-                    "user_id": target_user_id,
+                    **self._member_event_payload(member),
                     "removed_by": actor_user_id,
                 },
             )
@@ -614,6 +632,25 @@ class WorkspaceService:
         if workspace is None:
             raise ValueError(f"Workspace {workspace_id} not found")
         return workspace
+
+    def _member_event_payload(self, member: WorkspaceMember) -> dict[str, Any]:
+        serialized_member = _serialize_workspace_member_event(member)
+        return {
+            "workspace_id": member.workspace_id,
+            "member_id": member.id,
+            "user_id": member.user_id,
+            "role": member.role.value,
+            "invited_by": member.invited_by,
+            "member": serialized_member,
+        }
+
+    async def _ensure_owner_can_be_removed_or_demoted(self, workspace_id: str) -> None:
+        owner_count = await self._workspace_member_repo.count_by_workspace_and_role(
+            workspace_id=workspace_id,
+            role=WorkspaceRole.OWNER,
+        )
+        if owner_count <= 1:
+            raise ValueError("Cannot remove or demote the last workspace owner")
 
     async def _require_membership(self, workspace_id: str, user_id: str) -> WorkspaceMember:
         member = await self._workspace_member_repo.find_by_workspace_and_user(

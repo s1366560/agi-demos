@@ -1,6 +1,6 @@
 """SQLAlchemy repository for WorkspaceMember persistence."""
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.workspace_member import WorkspaceMember
@@ -38,7 +38,9 @@ class SqlWorkspaceMemberRepository(
             .offset(offset)
             .limit(limit)
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         rows = result.scalars().all()
         return [m for row in rows if (m := self._to_domain(row)) is not None]
 
@@ -51,9 +53,27 @@ class SqlWorkspaceMemberRepository(
             WorkspaceMemberModel.workspace_id == workspace_id,
             WorkspaceMemberModel.user_id == user_id,
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         row = result.scalar_one_or_none()
         return self._to_domain(row) if row else None
+
+    async def count_by_workspace_and_role(
+        self,
+        workspace_id: str,
+        role: WorkspaceRole,
+    ) -> int:
+        query = (
+            select(func.count())
+            .select_from(WorkspaceMemberModel)
+            .where(
+                WorkspaceMemberModel.workspace_id == workspace_id,
+                WorkspaceMemberModel.role == role.value,
+            )
+        )
+        result = await self._session.execute(refresh_select_statement(query))
+        return int(result.scalar_one())
 
     def _to_domain(self, db_member: WorkspaceMemberModel | None) -> WorkspaceMember | None:
         if db_member is None:

@@ -9,7 +9,10 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
     BaseRepository,
     refresh_select_statement,
 )
-from src.infrastructure.adapters.secondary.persistence.models import WorkspaceModel
+from src.infrastructure.adapters.secondary.persistence.models import (
+    WorkspaceMemberModel,
+    WorkspaceModel,
+)
 
 
 class SqlWorkspaceRepository(BaseRepository[Workspace, WorkspaceModel], WorkspaceRepository):
@@ -35,7 +38,36 @@ class SqlWorkspaceRepository(BaseRepository[Workspace, WorkspaceModel], Workspac
             .offset(offset)
             .limit(limit)
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
+        rows = result.scalars().all()
+        return [w for row in rows if (w := self._to_domain(row)) is not None]
+
+    async def find_visible_by_project_for_user(
+        self,
+        tenant_id: str,
+        project_id: str,
+        user_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Workspace]:
+        query = (
+            select(WorkspaceModel)
+            .join(
+                WorkspaceMemberModel,
+                WorkspaceMemberModel.workspace_id == WorkspaceModel.id,
+            )
+            .where(WorkspaceModel.tenant_id == tenant_id)
+            .where(WorkspaceModel.project_id == project_id)
+            .where(WorkspaceMemberModel.user_id == user_id)
+            .order_by(WorkspaceModel.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         rows = result.scalars().all()
         return [w for row in rows if (w := self._to_domain(row)) is not None]
 
@@ -54,9 +86,7 @@ class SqlWorkspaceRepository(BaseRepository[Workspace, WorkspaceModel], Workspac
             metadata=db_workspace.metadata_json or {},
             office_status=db_workspace.office_status,
             hex_layout_config=db_workspace.hex_layout_config_json or {},
-            default_blocking_categories=list(
-                db_workspace.default_blocking_categories_json or ()
-            ),
+            default_blocking_categories=list(db_workspace.default_blocking_categories_json or ()),
             created_at=db_workspace.created_at,
             updated_at=db_workspace.updated_at,
         )

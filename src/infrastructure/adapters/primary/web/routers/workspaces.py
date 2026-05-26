@@ -83,6 +83,20 @@ def _map_error(exc: Exception) -> HTTPException:
     )
 
 
+async def _publish_pending_workspace_events(
+    workspace_service: WorkspaceService,
+    *,
+    workspace_id: str,
+) -> None:
+    try:
+        await workspace_service.publish_pending_events()
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace events",
+            extra={"workspace_id": workspace_id},
+        )
+
+
 def _ensure_workspace_scope(workspace: Workspace, tenant_id: str, project_id: str) -> None:
     if workspace.tenant_id != tenant_id or workspace.project_id != project_id:
         raise ValueError("Workspace not found")
@@ -759,10 +773,11 @@ async def create_workspace(
             metadata=_compose_workspace_metadata(payload),
         )
         await db.commit()
-        return _to_workspace_response(workspace)
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
+    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace.id)
+    return _to_workspace_response(workspace)
 
 
 @router.get("", response_model=list[WorkspaceResponse])
@@ -831,10 +846,11 @@ async def update_workspace(
             metadata=payload.metadata,
         )
         await db.commit()
-        return _to_workspace_response(updated)
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
+    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
+    return _to_workspace_response(updated)
 
 
 @router.delete("/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -860,6 +876,7 @@ async def delete_workspace(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
+    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
 
 
 @router.get("/{workspace_id}/members", response_model=list[WorkspaceMemberResponse])
@@ -931,10 +948,11 @@ async def add_workspace_member(
             role=payload.role,
         )
         await db.commit()
-        return _to_member_response(member)
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
+    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
+    return _to_member_response(member)
 
 
 @router.patch("/{workspace_id}/members/{user_id}", response_model=WorkspaceMemberResponse)
@@ -961,10 +979,11 @@ async def update_workspace_member(
             new_role=payload.role,
         )
         await db.commit()
-        return _to_member_response(member)
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
+    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
+    return _to_member_response(member)
 
 
 @router.delete("/{workspace_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -992,6 +1011,7 @@ async def remove_workspace_member(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
+    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
 
 
 @router.get("/{workspace_id}/agents", response_model=list[WorkspaceAgentResponse])
@@ -1060,12 +1080,7 @@ async def bind_workspace_agent(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
-    try:
-        await workspace_service.publish_pending_events()
-    except Exception:
-        logger.exception(
-            "Failed to publish workspace agent bind event", extra={"workspace_id": workspace_id}
-        )
+    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
     return _to_agent_response(binding)
 
 
@@ -1103,13 +1118,7 @@ async def update_workspace_agent(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
-    try:
-        await workspace_service.publish_pending_events()
-    except Exception:
-        logger.exception(
-            "Failed to publish workspace agent update event",
-            extra={"workspace_id": workspace_id, "workspace_agent_id": workspace_agent_id},
-        )
+    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
     return _to_agent_response(binding)
 
 
@@ -1140,10 +1149,4 @@ async def delete_workspace_agent(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
-    try:
-        await workspace_service.publish_pending_events()
-    except Exception:
-        logger.exception(
-            "Failed to publish workspace agent unbind event",
-            extra={"workspace_id": workspace_id, "workspace_agent_id": workspace_agent_id},
-        )
+    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)

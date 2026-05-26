@@ -50,6 +50,7 @@ describe('useBlackboardSSE', () => {
     expect(classifyWorkspaceEventType('blackboard_reply_updated')).toBe('blackboard');
     expect(classifyWorkspaceEventType('workspace_message_created')).toBe('chat');
     expect(classifyWorkspaceEventType('workspace_member_joined')).toBe('member');
+    expect(classifyWorkspaceEventType('workspace_member_updated')).toBe('member');
     expect(classifyWorkspaceEventType('workspace_updated')).toBe('lifecycle');
     expect(classifyWorkspaceEventType('workspace_agent_bound')).toBe('agent_binding');
     expect(classifyWorkspaceEventType('workspace.topology.agent_moved')).toBe('topology');

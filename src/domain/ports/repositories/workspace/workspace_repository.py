@@ -25,5 +25,16 @@ class WorkspaceRepository(ABC):
         """List workspaces for a project under tenant scope."""
 
     @abstractmethod
+    async def find_visible_by_project_for_user(
+        self,
+        tenant_id: str,
+        project_id: str,
+        user_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Workspace]:
+        """List project workspaces where the user is a workspace member."""
+
+    @abstractmethod
     async def delete(self, workspace_id: str) -> bool:
         """Delete workspace by ID."""

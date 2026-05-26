@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 from src.domain.model.workspace.workspace_member import WorkspaceMember
+from src.domain.model.workspace.workspace_role import WorkspaceRole
 
 
 class WorkspaceMemberRepository(ABC):
@@ -30,6 +31,14 @@ class WorkspaceMemberRepository(ABC):
         user_id: str,
     ) -> WorkspaceMember | None:
         """Find a user's membership in a workspace."""
+
+    @abstractmethod
+    async def count_by_workspace_and_role(
+        self,
+        workspace_id: str,
+        role: WorkspaceRole,
+    ) -> int:
+        """Count members with a role in a workspace."""
 
     @abstractmethod
     async def delete(self, member_id: str) -> bool:

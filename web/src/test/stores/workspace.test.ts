@@ -454,6 +454,103 @@ describe('workspace store', () => {
     ]);
   });
 
+  it('handleMemberEvent applies structured joined, updated, and left payloads', () => {
+    useWorkspaceStore.setState({
+      members: [
+        {
+          id: 'wm-1',
+          workspace_id: 'ws-1',
+          user_id: 'user-1',
+          role: 'viewer',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+      ] as any,
+    });
+
+    useWorkspaceStore.getState().handleMemberEvent({
+      type: 'workspace_member_joined',
+      data: {
+        member: {
+          id: 'wm-2',
+          workspace_id: 'ws-1',
+          user_id: 'user-2',
+          role: 'editor',
+          created_at: '2026-03-30T10:01:00Z',
+        },
+      },
+    });
+    useWorkspaceStore.getState().handleMemberEvent({
+      type: 'workspace_member_updated',
+      data: {
+        member: {
+          id: 'wm-1',
+          workspace_id: 'ws-1',
+          user_id: 'user-1',
+          role: 'owner',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+      },
+    });
+    useWorkspaceStore.getState().handleMemberEvent({
+      type: 'workspace_member_left',
+      data: {
+        member: {
+          id: 'wm-2',
+          workspace_id: 'ws-1',
+          user_id: 'user-2',
+          role: 'editor',
+          created_at: '2026-03-30T10:01:00Z',
+        },
+        member_id: 'wm-2',
+      },
+    });
+
+    expect(useWorkspaceStore.getState().members).toEqual([
+      expect.objectContaining({ id: 'wm-1', role: 'owner' }),
+    ]);
+  });
+
+  it('handleWorkspaceLifecycleEvent applies structured workspace payload', () => {
+    useWorkspaceStore.setState({
+      workspaces: [
+        {
+          id: 'ws-1',
+          tenant_id: 't-1',
+          project_id: 'p-1',
+          name: 'Old',
+          created_by: 'u-1',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+      ] as any,
+      currentWorkspace: {
+        id: 'ws-1',
+        tenant_id: 't-1',
+        project_id: 'p-1',
+        name: 'Old',
+        created_by: 'u-1',
+        created_at: '2026-03-30T10:00:00Z',
+      } as any,
+    });
+
+    useWorkspaceStore.getState().handleWorkspaceLifecycleEvent({
+      type: 'workspace_updated',
+      data: {
+        workspace: {
+          id: 'ws-1',
+          tenant_id: 't-1',
+          project_id: 'p-1',
+          name: 'Renamed',
+          created_by: 'u-1',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+        workspace_id: 'ws-1',
+      },
+    });
+
+    expect(useWorkspaceStore.getState().workspaces[0]?.name).toBe('Renamed');
+    expect(useWorkspaceStore.getState().currentWorkspace?.name).toBe('Renamed');
+  });
+
   it('loadReplies lets canonical API reply data win over earlier live payloads', async () => {
     useWorkspaceStore.setState({
       currentWorkspace: {

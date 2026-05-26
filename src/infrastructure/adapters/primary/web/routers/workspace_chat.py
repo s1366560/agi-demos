@@ -148,6 +148,13 @@ async def send_message(
             mentions=payload.mentions,
         )
         await db.commit()
+        try:
+            await service.publish_pending_events()
+        except Exception:
+            logger.exception(
+                "Failed to publish workspace chat events",
+                extra={"workspace_id": workspace_id},
+            )
 
         if message.mentions:
             _fire_mention_routing(
@@ -193,9 +200,7 @@ def _fire_mention_routing(
         SqlWorkspaceMessageRepository,
     )
 
-    container = (
-        request.app.state.container if request is not None else get_app_container()
-    )
+    container = request.app.state.container if request is not None else get_app_container()
     if container is None:
         return
     redis_client = container.redis_client

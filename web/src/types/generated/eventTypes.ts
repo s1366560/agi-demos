@@ -1,6 +1,6 @@
 /**
  * Auto-generated event types from Python.
- * Generated at: 2026-05-21T09:28:20.386359Z
+ * Generated at: 2026-05-26T00:14:19.081922Z
  *
  * DO NOT EDIT MANUALLY - run `make generate-event-types` to regenerate.
  */
@@ -145,6 +145,7 @@ export type AgentEventType =
   | 'blackboard_directory_deleted'
   | 'workspace_updated'
   | 'workspace_deleted'
+  | 'workspace_member_updated'
   | 'workspace_member_left'
   | 'workspace_agent_bound'
   | 'workspace_agent_unbound'
@@ -175,12 +176,12 @@ export type AgentEventType =
 
 // Delta events (not persisted)
 export const DELTA_EVENT_TYPES: AgentEventType[] = [
-  'text_delta',
-  'text_end',
-  'thought_delta',
   'text_start',
-  'thought_start',
+  'text_end',
+  'text_delta',
+  'thought_delta',
   'act_delta',
+  'thought_start',
 ];
 
 // Terminal events (stream completion)
@@ -188,12 +189,12 @@ export const TERMINAL_EVENT_TYPES: AgentEventType[] = ['cancelled', 'error', 'co
 
 // HITL events (require user response)
 export const HITL_EVENT_TYPES: AgentEventType[] = [
-  'a2ui_action_asked',
-  'permission_asked',
-  'decision_asked',
-  'elicitation_asked',
   'clarification_asked',
+  'decision_asked',
+  'a2ui_action_asked',
   'env_var_requested',
+  'elicitation_asked',
+  'permission_asked',
 ];
 
 // Helper functions
@@ -346,6 +347,7 @@ export const EVENT_CATEGORIES: Record<AgentEventType, EventCategory> = {
   blackboard_directory_deleted: 'agent',
   workspace_updated: 'agent',
   workspace_deleted: 'agent',
+  workspace_member_updated: 'agent',
   workspace_member_left: 'agent',
   workspace_agent_bound: 'agent',
   workspace_agent_unbound: 'agent',
@@ -516,6 +518,7 @@ export const ALL_EVENT_TYPES: AgentEventType[] = [
   'blackboard_directory_deleted',
   'workspace_updated',
   'workspace_deleted',
+  'workspace_member_updated',
   'workspace_member_left',
   'workspace_agent_bound',
   'workspace_agent_unbound',

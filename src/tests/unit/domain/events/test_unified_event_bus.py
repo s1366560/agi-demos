@@ -8,6 +8,7 @@ import asyncio
 import pytest
 
 from src.domain.events.envelope import EventEnvelope
+from src.domain.events.serialization import EventSerializer
 from src.domain.events.types import AgentEventType
 from src.domain.ports.services.unified_event_bus_port import (
     EventWithMetadata,
@@ -19,6 +20,27 @@ from src.infrastructure.adapters.secondary.messaging.event_router import (
     EventRouter,
     HandlerRegistration,
 )
+from src.infrastructure.adapters.secondary.messaging.redis_unified_event_bus import (
+    RedisUnifiedEventBusAdapter,
+)
+
+
+class _RedisStreamSubscribeFake:
+    def __init__(self, stream_key: str, fields: dict[bytes, bytes]) -> None:
+        self._stream_key = stream_key
+        self._fields = fields
+        self.scan_calls = 0
+        self.xread_calls = 0
+
+    async def scan(self, *, cursor: int, match: str, count: int):
+        self.scan_calls += 1
+        if self.scan_calls == 1:
+            return 0, []
+        return 0, [self._stream_key]
+
+    async def xread(self, streams, *, count: int, block: int):
+        self.xread_calls += 1
+        return [(self._stream_key, [("1-0", self._fields)])]
 
 
 class TestRoutingKey:
@@ -122,6 +144,39 @@ class TestSubscriptionOptions:
         assert opts.consumer_group == "workers"
         assert opts.consumer_name == "worker-1"
         assert opts.batch_size == 50
+
+
+class TestRedisUnifiedEventBusSubscription:
+    @pytest.mark.asyncio
+    async def test_direct_subscription_waits_for_stream_created_after_subscribe(self) -> None:
+        envelope = EventEnvelope.wrap(
+            event_type=AgentEventType.WORKSPACE_UPDATED,
+            payload={"workspace_id": "ws-1"},
+        )
+        serializer = EventSerializer(auto_migrate=True)
+        fields = {
+            b"event_id": envelope.event_id.encode(),
+            b"event_type": envelope.event_type.encode(),
+            b"schema_version": envelope.schema_version.encode(),
+            b"data": serializer.serialize(envelope).encode(),
+            b"timestamp": envelope.timestamp.encode(),
+            b"routing_key": b"workspace:ws-1:workspace_updated",
+        }
+        redis = _RedisStreamSubscribeFake("events:workspace:ws-1:workspace_updated", fields)
+        adapter = RedisUnifiedEventBusAdapter(redis_client=redis)  # type: ignore[arg-type]
+
+        subscription = adapter.subscribe(
+            "workspace:ws-1:*",
+            SubscriptionOptions(batch_size=1, block_ms=1),
+        )
+        try:
+            event = await asyncio.wait_for(anext(subscription), timeout=1)
+        finally:
+            await subscription.aclose()
+
+        assert redis.scan_calls >= 2
+        assert event.envelope.event_type == AgentEventType.WORKSPACE_UPDATED.value
+        assert event.routing_key == "workspace:ws-1:workspace_updated"
 
 
 class TestEventRouter:

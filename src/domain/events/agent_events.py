@@ -107,6 +107,7 @@ __all__ = [
     "WorkspaceGoalMaterializedEvent",
     "WorkspaceMemberJoinedEvent",
     "WorkspaceMemberLeftEvent",
+    "WorkspaceMemberUpdatedEvent",
     "WorkspaceMessageCreatedEvent",
     "WorkspaceTaskAssignedEvent",
     "WorkspaceTaskCreatedEvent",
@@ -1544,6 +1545,16 @@ class WorkspaceMemberLeftEvent(AgentDomainEvent):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class WorkspaceMemberUpdatedEvent(AgentDomainEvent):
+    """Event: A member's workspace role or metadata changed."""
+
+    event_type: AgentEventType = AgentEventType.WORKSPACE_MEMBER_UPDATED
+    workspace_id: str
+    member_id: str
+    member_role: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 # =========================================================================
 # Multi-agent conversation participant events (Track B, P2-3 phase-2)
 # =========================================================================
@@ -2094,6 +2105,7 @@ def get_event_type_docstring() -> str:
         GraphHandoffEvent,
         WorkspaceMemberJoinedEvent,
         WorkspaceMemberLeftEvent,
+        WorkspaceMemberUpdatedEvent,
         WorkspaceUpdatedEvent,
         WorkspaceDeletedEvent,
         WorkspaceAgentBoundEvent,

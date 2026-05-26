@@ -73,7 +73,11 @@ export function useWorkspaceWebSocket({
         type,
         data: message.data as Record<string, unknown>,
       });
-    } else if (type === 'workspace_member_joined' || type === 'workspace_member_left') {
+    } else if (
+      type === 'workspace_member_joined' ||
+      type === 'workspace_member_updated' ||
+      type === 'workspace_member_left'
+    ) {
       store.handleMemberEvent({
         type,
         data: message.data as Record<string, unknown>,

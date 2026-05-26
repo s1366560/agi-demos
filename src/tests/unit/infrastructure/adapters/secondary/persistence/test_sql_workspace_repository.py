@@ -6,7 +6,10 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.workspace import Workspace
-from src.infrastructure.adapters.secondary.persistence.models import Project as DBProject
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Project as DBProject,
+    WorkspaceMemberModel,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
     SqlWorkspaceRepository,
 )
@@ -96,6 +99,61 @@ class TestSqlWorkspaceRepository:
         assert "ws-c" not in ids
         assert all(item.tenant_id == "tenant-1" for item in items)
         assert all(item.project_id == "project-1" for item in items)
+
+    @pytest.mark.asyncio
+    async def test_find_visible_by_project_for_user_paginates_after_membership_filter(
+        self, v2_workspace_repo: SqlWorkspaceRepository
+    ) -> None:
+        older_visible = make_workspace("ws-visible-old", name="Visible Old")
+        inaccessible = make_workspace("ws-hidden", name="Hidden")
+        newest_visible = make_workspace("ws-visible-new", name="Visible New")
+        older_visible.created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        inaccessible.created_at = datetime(2026, 1, 2, tzinfo=UTC)
+        newest_visible.created_at = datetime(2026, 1, 3, tzinfo=UTC)
+        await v2_workspace_repo.save(older_visible)
+        await v2_workspace_repo.save(inaccessible)
+        await v2_workspace_repo.save(newest_visible)
+        v2_workspace_repo._session.add_all(
+            [
+                WorkspaceMemberModel(
+                    id="wm-visible-new",
+                    workspace_id="ws-visible-new",
+                    user_id="user-1",
+                    role="viewer",
+                    invited_by="user-1",
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
+                ),
+                WorkspaceMemberModel(
+                    id="wm-visible-old",
+                    workspace_id="ws-visible-old",
+                    user_id="user-1",
+                    role="viewer",
+                    invited_by="user-1",
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
+                ),
+            ]
+        )
+        await v2_workspace_repo._session.flush()
+
+        first_page = await v2_workspace_repo.find_visible_by_project_for_user(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            user_id="user-1",
+            limit=1,
+            offset=0,
+        )
+        second_page = await v2_workspace_repo.find_visible_by_project_for_user(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            user_id="user-1",
+            limit=1,
+            offset=1,
+        )
+
+        assert [item.id for item in first_page] == ["ws-visible-new"]
+        assert [item.id for item in second_page] == ["ws-visible-old"]
 
     @pytest.mark.asyncio
     async def test_save_updates_existing_workspace(

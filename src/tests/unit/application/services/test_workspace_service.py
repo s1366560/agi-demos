@@ -94,6 +94,7 @@ def mock_workspace_repo() -> MagicMock:
     repo.save = AsyncMock()
     repo.find_by_id = AsyncMock(return_value=None)
     repo.find_by_project = AsyncMock(return_value=[])
+    repo.find_visible_by_project_for_user = AsyncMock(return_value=[])
     repo.delete = AsyncMock(return_value=True)
     return repo
 
@@ -105,6 +106,7 @@ def mock_member_repo() -> MagicMock:
     repo.find_by_id = AsyncMock(return_value=None)
     repo.find_by_workspace = AsyncMock(return_value=[])
     repo.find_by_workspace_and_user = AsyncMock(return_value=None)
+    repo.count_by_workspace_and_role = AsyncMock(return_value=1)
     repo.delete = AsyncMock(return_value=True)
     return repo
 
@@ -234,6 +236,34 @@ class TestWorkspaceLifecycle:
                 actor_user_id="editor-1",
             )
 
+    @pytest.mark.unit
+    async def test_list_workspaces_delegates_visible_pagination_to_repository(
+        self,
+        workspace_service,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+    ) -> None:
+        workspace = _make_workspace()
+        mock_workspace_repo.find_visible_by_project_for_user.return_value = [workspace]
+
+        result = await workspace_service.list_workspaces(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            actor_user_id="user-1",
+            limit=25,
+            offset=10,
+        )
+
+        assert result == [workspace]
+        mock_workspace_repo.find_visible_by_project_for_user.assert_awaited_once_with(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            user_id="user-1",
+            limit=25,
+            offset=10,
+        )
+        mock_member_repo.find_by_workspace_and_user.assert_not_awaited()
+
 
 class TestWorkspaceMemberManagement:
     @pytest.mark.unit
@@ -258,8 +288,13 @@ class TestWorkspaceMemberManagement:
             role=WorkspaceRole.EDITOR,
         )
 
+        workspace_event_publisher.assert_not_awaited()
+        await workspace_service_with_events.publish_pending_events()
         assert workspace_event_publisher.await_count == 1
         assert workspace_event_publisher.await_args.args[1] == "workspace_member_joined"
+        payload = workspace_event_publisher.await_args.args[2]
+        assert payload["member"]["user_id"] == "user-2"
+        assert payload["member"]["role"] == "editor"
 
     @pytest.mark.unit
     async def test_add_member_requires_owner_role(
@@ -321,6 +356,80 @@ class TestWorkspaceMemberManagement:
                 target_user_id="owner-1",
                 new_role=WorkspaceRole.EDITOR,
             )
+
+    @pytest.mark.unit
+    async def test_update_member_role_blocks_last_owner_demote_by_another_owner(
+        self,
+        workspace_service,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+    ) -> None:
+        target_owner = _make_member("target-owner", WorkspaceRole.OWNER)
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.side_effect = [
+            _make_member("owner-1", WorkspaceRole.OWNER),
+            target_owner,
+        ]
+        mock_member_repo.count_by_workspace_and_role.return_value = 1
+
+        with pytest.raises(ValueError, match="last workspace owner"):
+            await workspace_service.update_member_role(
+                workspace_id="ws-1",
+                actor_user_id="owner-1",
+                target_user_id="target-owner",
+                new_role=WorkspaceRole.EDITOR,
+            )
+
+    @pytest.mark.unit
+    async def test_remove_member_blocks_last_owner_self_remove(
+        self,
+        workspace_service,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+    ) -> None:
+        owner = _make_member("owner-1", WorkspaceRole.OWNER)
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.side_effect = [owner, owner]
+        mock_member_repo.count_by_workspace_and_role.return_value = 1
+
+        with pytest.raises(ValueError, match="last workspace owner"):
+            await workspace_service.remove_member(
+                workspace_id="ws-1",
+                actor_user_id="owner-1",
+                target_user_id="owner-1",
+            )
+
+        mock_member_repo.delete.assert_not_awaited()
+
+    @pytest.mark.unit
+    async def test_update_member_role_queues_member_updated_event(
+        self,
+        workspace_service_with_events,
+        workspace_event_publisher: AsyncMock,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+    ) -> None:
+        target = _make_member("user-2", WorkspaceRole.VIEWER, member_id="wm-user-2")
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.side_effect = [
+            _make_member("owner-1", WorkspaceRole.OWNER),
+            target,
+        ]
+        mock_member_repo.save.side_effect = lambda member: member
+
+        await workspace_service_with_events.update_member_role(
+            workspace_id="ws-1",
+            actor_user_id="owner-1",
+            target_user_id="user-2",
+            new_role=WorkspaceRole.EDITOR,
+        )
+
+        workspace_event_publisher.assert_not_awaited()
+        await workspace_service_with_events.publish_pending_events()
+        assert workspace_event_publisher.await_args.args[1] == "workspace_member_updated"
+        payload = workspace_event_publisher.await_args.args[2]
+        assert payload["member"]["id"] == "wm-user-2"
+        assert payload["member"]["role"] == "editor"
 
     @pytest.mark.unit
     async def test_list_members_requires_existing_membership(
@@ -492,12 +601,16 @@ class TestWorkspaceEventPublishing:
             created_by="owner-1",
         )
 
+        workspace_event_publisher.assert_not_awaited()
+        await workspace_service_with_events.publish_pending_events()
         assert workspace_event_publisher.await_count == 1
         call_args = workspace_event_publisher.await_args.args
         assert call_args[1] == "workspace_member_joined"
         payload = call_args[2]
         assert payload["user_id"] == "owner-1"
         assert payload["role"] == "owner"
+        assert payload["member"]["user_id"] == "owner-1"
+        assert payload["member"]["role"] == "owner"
 
     @pytest.mark.unit
     async def test_update_workspace_publishes_workspace_updated_event(
@@ -521,12 +634,16 @@ class TestWorkspaceEventPublishing:
             name="Renamed",
         )
 
+        workspace_event_publisher.assert_not_awaited()
+        await workspace_service_with_events.publish_pending_events()
         assert workspace_event_publisher.await_count == 1
         call_args = workspace_event_publisher.await_args.args
         assert call_args[1] == "workspace_updated"
         payload = call_args[2]
         assert payload["workspace_id"] == "ws-1"
         assert payload["updated_by"] == "editor-1"
+        assert payload["workspace"]["id"] == "ws-1"
+        assert payload["workspace"]["name"] == "Renamed"
 
     @pytest.mark.unit
     async def test_delete_workspace_publishes_workspace_deleted_event(
@@ -548,6 +665,8 @@ class TestWorkspaceEventPublishing:
             actor_user_id="owner-1",
         )
 
+        workspace_event_publisher.assert_not_awaited()
+        await workspace_service_with_events.publish_pending_events()
         assert workspace_event_publisher.await_count == 1
         call_args = workspace_event_publisher.await_args.args
         assert call_args[1] == "workspace_deleted"
@@ -599,12 +718,16 @@ class TestWorkspaceEventPublishing:
             target_user_id="user-2",
         )
 
+        workspace_event_publisher.assert_not_awaited()
+        await workspace_service_with_events.publish_pending_events()
         assert workspace_event_publisher.await_count == 1
         call_args = workspace_event_publisher.await_args.args
         assert call_args[1] == "workspace_member_left"
         payload = call_args[2]
         assert payload["user_id"] == "user-2"
         assert payload["removed_by"] == "owner-1"
+        assert payload["member"]["id"] == "wm-user-2"
+        assert payload["member"]["user_id"] == "user-2"
 
     @pytest.mark.unit
     async def test_bind_agent_new_queues_agent_bound_event_until_publish(

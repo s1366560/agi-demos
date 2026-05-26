@@ -464,6 +464,11 @@ async def create_workspace_task(
             estimated_effort=body.estimated_effort,
             blocker_reason=body.blocker_reason,
         )
+        from src.infrastructure.agent.workspace.worker_launch_drain import (
+            enqueue_pending_worker_launches_to_outbox,
+        )
+
+        _ = await enqueue_pending_worker_launches_to_outbox(service, db)
         await db.commit()
     except Exception as exc:
         await db.rollback()
@@ -488,18 +493,6 @@ async def create_workspace_task(
                 exc_info=True,
                 extra={"workspace_id": tick_workspace_id},
             )
-    try:
-        from src.infrastructure.agent.workspace.worker_launch_drain import (
-            drain_pending_worker_launches_to_outbox,
-        )
-
-        _ = await drain_pending_worker_launches_to_outbox(service, db)
-    except Exception:
-        logger.warning(
-            "worker_launch drain failed after direct workspace task creation",
-            exc_info=True,
-            extra={"workspace_id": workspace_id},
-        )
     return _to_response(task)
 
 
@@ -712,6 +705,11 @@ async def assign_workspace_task_to_agent(
                 _resolve_preferred_language(body.preferred_language, current_user),
             ),
         )
+        from src.infrastructure.agent.workspace.worker_launch_drain import (
+            enqueue_pending_worker_launches_to_outbox,
+        )
+
+        _ = await enqueue_pending_worker_launches_to_outbox(service, db)
         await db.commit()
     except Exception as exc:
         await db.rollback()
@@ -721,18 +719,6 @@ async def assign_workspace_task_to_agent(
     except Exception:
         logger.exception(
             "Failed to publish workspace task events",
-            extra={"workspace_id": workspace_id, "task_id": task_id},
-        )
-    try:
-        from src.infrastructure.agent.workspace.worker_launch_drain import (
-            drain_pending_worker_launches_to_outbox,
-        )
-
-        _ = await drain_pending_worker_launches_to_outbox(service, db)
-    except Exception:
-        logger.warning(
-            "worker_launch drain failed after direct workspace task assign",
-            exc_info=True,
             extra={"workspace_id": workspace_id, "task_id": task_id},
         )
     return _to_response(task)

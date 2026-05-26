@@ -121,3 +121,26 @@ class TestDrainPendingWorkerLaunches:
                 command_service,
                 db_session,
             )
+
+    @pytest.mark.asyncio
+    async def test_transactional_enqueue_does_not_commit_caller_transaction(
+        self,
+        db_session: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        await _seed_workspace(db_session, project=test_project_db, user=test_user)
+        commit = AsyncMock()
+        monkeypatch.setattr(db_session, "commit", commit)
+        command_service = WorkspaceTaskCommandService(AsyncMock())
+        task = _FakeTask(id="wt-queued", workspace_id="workspace-1", assignee_agent_id="agent-1")
+        command_service._pending_worker_launches.append((task, "user-1", "leader-1"))
+
+        fired = await worker_launch_drain.enqueue_pending_worker_launches_to_outbox(
+            command_service,
+            db_session,
+        )
+
+        assert fired == 1
+        commit.assert_not_awaited()

@@ -43,6 +43,28 @@ class WorkspaceMessageService:
         self._workspace_event_publisher = workspace_event_publisher
         self._user_repo = user_repo
         self._allow_legacy_text_mentions = allow_legacy_text_mentions
+        self._pending_events: list[tuple[str, str, dict[str, Any]]] = []
+
+    def consume_pending_events(self) -> list[tuple[str, str, dict[str, Any]]]:
+        pending_events = list(self._pending_events)
+        self._pending_events.clear()
+        return pending_events
+
+    async def publish_pending_events(self) -> None:
+        if self._workspace_event_publisher is None:
+            self._pending_events.clear()
+            return
+        for workspace_id, event_name, payload in self._pending_events:
+            await self._workspace_event_publisher(workspace_id, event_name, payload)
+        self._pending_events.clear()
+
+    def _queue_workspace_event(
+        self,
+        workspace_id: str,
+        event_name: str,
+        payload: dict[str, Any],
+    ) -> None:
+        self._pending_events.append((workspace_id, event_name, payload))
 
     async def send_message(
         self,
@@ -72,24 +94,23 @@ class WorkspaceMessageService:
         )
         saved = await self._message_repo.save(message)
 
-        if self._workspace_event_publisher is not None:
-            await self._workspace_event_publisher(
-                workspace_id,
-                "workspace_message_created",
-                {
-                    "message": {
-                        "id": saved.id,
-                        "workspace_id": workspace_id,
-                        "sender_id": sender_id,
-                        "sender_type": sender_type.value,
-                        "content": content,
-                        "mentions": mention_ids,
-                        "parent_message_id": parent_message_id,
-                        "metadata": saved.metadata,
-                        "created_at": saved.created_at.isoformat(),
-                    }
-                },
-            )
+        self._queue_workspace_event(
+            workspace_id,
+            "workspace_message_created",
+            {
+                "message": {
+                    "id": saved.id,
+                    "workspace_id": workspace_id,
+                    "sender_id": sender_id,
+                    "sender_type": sender_type.value,
+                    "content": content,
+                    "mentions": mention_ids,
+                    "parent_message_id": parent_message_id,
+                    "metadata": saved.metadata,
+                    "created_at": saved.created_at.isoformat(),
+                }
+            },
+        )
 
         return saved
 

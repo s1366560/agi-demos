@@ -63,7 +63,11 @@ export function classifyWorkspaceEventType(type: string): WorkspaceEventChannel 
   if (type === 'workspace_message_created') {
     return 'chat';
   }
-  if (type === 'workspace_member_joined' || type === 'workspace_member_left') {
+  if (
+    type === 'workspace_member_joined' ||
+    type === 'workspace_member_updated' ||
+    type === 'workspace_member_left'
+  ) {
     return 'member';
   }
   if (type === 'workspace_updated' || type === 'workspace_deleted') {

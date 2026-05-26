@@ -116,3 +116,39 @@ class TestSqlWorkspaceMemberRepository:
         deleted = await v2_workspace_member_repo.delete("wm-del")
         assert deleted is True
         assert await v2_workspace_member_repo.find_by_id("wm-del") is None
+
+    @pytest.mark.asyncio
+    async def test_count_by_workspace_and_role(
+        self, v2_workspace_member_repo: SqlWorkspaceMemberRepository
+    ) -> None:
+        await v2_workspace_member_repo.save(
+            make_member(
+                "wm-owner-1",
+                workspace_id="workspace-count",
+                user_id="owner-1",
+                role=WorkspaceRole.OWNER,
+            )
+        )
+        await v2_workspace_member_repo.save(
+            make_member(
+                "wm-owner-2",
+                workspace_id="workspace-count",
+                user_id="owner-2",
+                role=WorkspaceRole.OWNER,
+            )
+        )
+        await v2_workspace_member_repo.save(
+            make_member(
+                "wm-viewer",
+                workspace_id="workspace-count",
+                user_id="viewer-1",
+                role=WorkspaceRole.VIEWER,
+            )
+        )
+
+        assert (
+            await v2_workspace_member_repo.count_by_workspace_and_role(
+                "workspace-count", WorkspaceRole.OWNER
+            )
+            == 2
+        )

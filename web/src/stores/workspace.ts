@@ -1158,12 +1158,21 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const { type, data } = event;
         if (type === 'workspace_member_joined') {
           const member = data.member as WorkspaceMember | undefined;
-          if (member && !get().members.some((m) => m.id === member.id)) {
-            set({ members: [...get().members, member] });
+          if (member) {
+            set((state) => ({ members: upsertById(state.members, member) }));
+          }
+        } else if (type === 'workspace_member_updated') {
+          const member = data.member as WorkspaceMember | undefined;
+          if (member) {
+            set((state) => ({ members: upsertById(state.members, member) }));
           }
         } else if (type === 'workspace_member_left') {
-          const memberId = data.member_id as string;
-          set({ members: get().members.filter((m) => m.id !== memberId) });
+          const member = data.member as WorkspaceMember | undefined;
+          const memberId = typeof data.member_id === 'string' ? data.member_id : member?.id;
+          const userId = typeof data.user_id === 'string' ? data.user_id : member?.user_id;
+          set({
+            members: get().members.filter((m) => m.id !== memberId && m.user_id !== userId),
+          });
         }
       },
 

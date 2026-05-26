@@ -251,13 +251,21 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         """Direct subscription without consumer group."""
         stream_keys = await self._get_matching_streams(pattern)
         if not stream_keys:
-            logger.debug(f"[UnifiedEventBus] No streams match pattern: {pattern}")
-            return
+            logger.debug(
+                "[UnifiedEventBus] No streams match pattern yet; waiting for creation: %s",
+                pattern,
+            )
 
         last_ids: dict[str, str] = dict.fromkeys(stream_keys, "$")
 
         while self._active_subscriptions.get(subscription_id, False):
             try:
+                if not last_ids:
+                    await self._add_new_matching_streams(pattern, last_ids, start_id="0")
+                    if not last_ids:
+                        await asyncio.sleep(max(opts.block_ms, 100) / 1000)
+                        continue
+
                 streams = await self._redis.xread(
                     last_ids,  # type: ignore[arg-type]
                     count=opts.batch_size,
@@ -265,10 +273,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                 )
 
                 if not streams:
-                    new_streams = await self._get_matching_streams(pattern)
-                    for key in new_streams:
-                        if key not in last_ids:
-                            last_ids[key] = "0"
+                    await self._add_new_matching_streams(pattern, last_ids, start_id="0")
                     continue
 
                 for stream_name, msg_id, fields in self._iter_decoded_messages(streams):
@@ -283,6 +288,18 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
             except Exception as e:
                 logger.error(f"[UnifiedEventBus] Subscribe error: {e}")
                 raise EventSubscribeError(str(e), pattern=pattern) from e
+
+    async def _add_new_matching_streams(
+        self,
+        pattern: str,
+        last_ids: dict[str, str],
+        *,
+        start_id: str,
+    ) -> None:
+        new_streams = await self._get_matching_streams(pattern)
+        for key in new_streams:
+            if key not in last_ids:
+                last_ids[key] = start_id
 
     async def _subscribe_with_consumer_group(
         self,
@@ -503,11 +520,14 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         stream_key = self._get_stream_key(routing_key)
 
         try:
-            return cast(int, await self._redis.xtrim(
-                stream_key,
-                maxlen=max_length,
-                approximate=approximate,
-            ))
+            return cast(
+                int,
+                await self._redis.xtrim(
+                    stream_key,
+                    maxlen=max_length,
+                    approximate=approximate,
+                ),
+            )
         except redis.RedisError as e:
             logger.error(f"Failed to trim stream {stream_key}: {e}")
             return 0
