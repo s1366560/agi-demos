@@ -34,6 +34,11 @@ from src.domain.ports.services.iteration_review_port import (
 )
 from src.domain.ports.services.task_allocator_port import WorkspaceAgent
 from src.domain.ports.services.verifier_port import VerificationContext
+from src.domain.ports.services.workspace_supervisor_decision_port import (
+    WorkspaceSupervisorDecisionAction,
+    WorkspaceSupervisorDecisionRequest,
+    WorkspaceSupervisorDecisionResult,
+)
 from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationFeedbackItem,
     WorkspaceVerificationFeedbackKind,
@@ -2992,6 +2997,19 @@ class _AlwaysPassVerifier:
         )
 
 
+@dataclass
+class _StaticSupervisorDecisionProvider:
+    result: WorkspaceSupervisorDecisionResult
+    requests: list[WorkspaceSupervisorDecisionRequest] = field(default_factory=list)
+
+    async def decide(
+        self,
+        request: WorkspaceSupervisorDecisionRequest,
+    ) -> WorkspaceSupervisorDecisionResult:
+        self.requests.append(request)
+        return self.result
+
+
 class _RetryableInfrastructureVerifier:
     async def verify(self, ctx: VerificationContext) -> VerificationReport:
         return VerificationReport(
@@ -4063,6 +4081,152 @@ def _supervisor_for_iteration_review(
 
 
 class TestSupervisorTick:
+    async def test_tick_applies_agent_supervisor_accept_decision(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-a",
+                    sequence=2,
+                    expected_artifacts=("artifact://a",),
+                ),
+            )
+        )
+        await repo.save(plan)
+
+        provider = _StaticSupervisorDecisionProvider(
+            WorkspaceSupervisorDecisionResult(
+                action=WorkspaceSupervisorDecisionAction.ACCEPT_NODE,
+                rationale="verifier failure is already resolved by the linked attempt",
+                confidence=0.9,
+            )
+        )
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("accepted reported node should not redispatch")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node, attempt_id=node.current_attempt_id)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_RetryableInfrastructureVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            supervisor_decision_provider=provider,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.nodes_completed == 1
+        assert provider.requests
+        assert provider.requests[0].workspace_id == "ws-1"
+        assert provider.requests[0].attempt_id == "attempt-a"
+        assert WorkspaceSupervisorDecisionAction.ACCEPT_NODE in provider.requests[0].allowed_actions
+        assert provider.requests[0].node_snapshot["feature_checkpoint"] == {
+            "feature_id": "feature-a",
+            "sequence": 2,
+            "expected_artifacts": ["artifact://a"],
+        }
+        assert any(event[0] == "supervisor_decision_completed" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.intent is TaskIntent.DONE
+        assert node.execution is TaskExecution.IDLE
+
+    async def test_tick_does_not_human_block_without_explicit_agent_payload(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+            )
+        )
+        await repo.save(plan)
+
+        provider = _StaticSupervisorDecisionProvider(
+            WorkspaceSupervisorDecisionResult(
+                action=WorkspaceSupervisorDecisionAction.MARK_BLOCKED_HUMAN,
+                rationale="operator review may be needed",
+                confidence=0.8,
+                event_payload={"human_required": False},
+            )
+        )
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("reported node should be retried, not dispatched immediately")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node, attempt_id=node.current_attempt_id)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_RetryableInfrastructureVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            supervisor_decision_provider=provider,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.nodes_blocked == 0
+        assert any(event[0] == "supervisor_decision_human_block_downgraded" for event in events)
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.intent is TaskIntent.TODO
+        assert node.execution is TaskExecution.IDLE
+        assert node.metadata["last_supervisor_decision_action"] == "mark_blocked_human"
+
     async def test_tick_dispatches_ready_and_verifies_reported(self) -> None:
         repo = InMemoryPlanRepository()
         plan = _plan_with_two_tasks()

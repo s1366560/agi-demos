@@ -24,6 +24,9 @@ BUILTIN_WORKSPACE_VERIFIER_DISPLAY_NAME = "Workspace Verifier"
 BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID = f"{BUILTIN_AGENT_NAMESPACE}:workspace-iteration-reviewer"
 BUILTIN_WORKSPACE_ITERATION_REVIEWER_NAME = "workspace-iteration-reviewer"
 BUILTIN_WORKSPACE_ITERATION_REVIEWER_DISPLAY_NAME = "Workspace Iteration Reviewer"
+BUILTIN_WORKSPACE_SUPERVISOR_ID = f"{BUILTIN_AGENT_NAMESPACE}:workspace-supervisor"
+BUILTIN_WORKSPACE_SUPERVISOR_NAME = "workspace-supervisor"
+BUILTIN_WORKSPACE_SUPERVISOR_DISPLAY_NAME = "Workspace Supervisor"
 DEFAULT_AGENT_TO_AGENT_ALLOWLIST = (
     BUILTIN_SISYPHUS_ID,
     BUILTIN_SISYPHUS_NAME,
@@ -170,6 +173,33 @@ Review rules:
 - Findings must be evidence-backed and may include file, line, category, severity, confidence, description, suggestion, and concrete_evidence.
 """
 
+_BUILTIN_WORKSPACE_SUPERVISOR_SYSTEM_PROMPT = """You are builtin:workspace-supervisor, the read-only supervisor decision agent for durable workspace plan ticks.
+
+Supervisor decision mode is active. You are forbidden from implementing, editing files, mutating task state,
+starting services, installing dependencies, or reporting completion through worker tools.
+
+Your only successful terminal action is one call to:
+workspace_submit_supervisor_decision(action, rationale, confidence, feedback_items, retry_not_before_seconds, repair_brief, event_payload).
+
+Required workflow:
+1. Read the provided supervisor decision payload. Use read, grep, glob, or bounded bash only if the payload references evidence that must be inspected before choosing the next action.
+2. Choose exactly one allowed action for the durable supervisor tick.
+3. Call workspace_submit_supervisor_decision exactly once. Do not end the turn in prose.
+
+Decision rules:
+- Do not re-verify implementation quality from scratch. Treat the workspace verifier judgment, verification report, guard failures, feedback items, and structural signals as the evidence surface.
+- Use accept_node only when the verifier/judge evidence proves the node is accepted and no required pipeline or repair gate remains.
+- Use request_pipeline when verification requires harness-native pipeline evidence that has not been requested yet.
+- Use wait_pipeline when a required pipeline is already pending or running and the correct next step is to wait for its result.
+- Use retry_same_node when the same worker/node contract can produce missing evidence or repair the issue.
+- Use create_repair_node or replan_node when the verifier/judge feedback says the current node cannot fix the issue inside its own contract.
+- Use dispose_node only for stale, obsolete, superseded, nonexistent, or no-longer-applicable node targets.
+- Use mark_blocked_human only for human-only credentials, permissions, irreversible external deployment or spend, legal/compliance/product approval, or unsafe destructive action.
+- Use noop only when the structural state should not change in this tick.
+- Never convert worker/report/runtime failures into human blockers unless human-only authority is explicit in the provided evidence.
+- Keep feedback_items concise and structured enough for audit and UI display.
+"""
+
 def is_builtin_agent_id(agent_id: str | None) -> bool:
     """Return whether an agent id refers to a built-in agent."""
     return bool(agent_id and agent_id.startswith(f"{BUILTIN_AGENT_NAMESPACE}:"))
@@ -183,6 +213,7 @@ def is_builtin_agent_name(name: str | None) -> bool:
         BUILTIN_WORKSPACE_PLANNER_NAME,
         BUILTIN_WORKSPACE_VERIFIER_NAME,
         BUILTIN_WORKSPACE_ITERATION_REVIEWER_NAME,
+        BUILTIN_WORKSPACE_SUPERVISOR_NAME,
     }
 
 
@@ -192,6 +223,7 @@ def is_builtin_workspace_contract_agent_id(agent_id: str | None) -> bool:
         BUILTIN_WORKSPACE_PLANNER_ID,
         BUILTIN_WORKSPACE_VERIFIER_ID,
         BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID,
+        BUILTIN_WORKSPACE_SUPERVISOR_ID,
     }
 
 
@@ -387,6 +419,56 @@ def build_builtin_workspace_iteration_reviewer_agent(
     )
 
 
+def build_builtin_workspace_supervisor_agent(
+    tenant_id: str,
+    *,
+    project_id: str | None = None,
+) -> Agent:
+    """Create the built-in workspace supervisor decision agent."""
+    now = datetime.now(UTC)
+    return Agent(
+        id=BUILTIN_WORKSPACE_SUPERVISOR_ID,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        name=BUILTIN_WORKSPACE_SUPERVISOR_NAME,
+        display_name=BUILTIN_WORKSPACE_SUPERVISOR_DISPLAY_NAME,
+        system_prompt=_BUILTIN_WORKSPACE_SUPERVISOR_SYSTEM_PROMPT,
+        trigger=AgentTrigger(
+            description="Read-only workspace supervisor that chooses durable tick actions.",
+            keywords=["workspace", "supervisor", "decision", "tick"],
+        ),
+        model=AgentModel.INHERIT,
+        temperature=0.0,
+        max_tokens=8192,
+        max_iterations=8,
+        allowed_tools=[
+            "read",
+            "grep",
+            "glob",
+            "bash",
+            "workspace_submit_supervisor_decision",
+        ],
+        allowed_skills=[],
+        allowed_mcp_servers=[],
+        can_spawn=False,
+        max_spawn_depth=0,
+        agent_to_agent_enabled=False,
+        discoverable=False,
+        source=AgentSource.BUILTIN,
+        enabled=True,
+        created_at=now,
+        updated_at=now,
+        metadata={
+            "builtin_key": "workspace_supervisor",
+            "prompt_builder": "workspace_supervisor",
+            "runtime_plugin": "workspace_supervisor",
+            "role": "workspace_supervisor",
+            "contract_tool": "workspace_submit_supervisor_decision",
+            MAX_ITERATIONS_EXPLICIT_METADATA_KEY: False,
+        },
+    )
+
+
 def get_builtin_agent_by_id(
     agent_id: str,
     tenant_id: str,
@@ -402,6 +484,11 @@ def get_builtin_agent_by_id(
         return build_builtin_workspace_verifier_agent(tenant_id=tenant_id, project_id=project_id)
     if agent_id == BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID:
         return build_builtin_workspace_iteration_reviewer_agent(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+    if agent_id == BUILTIN_WORKSPACE_SUPERVISOR_ID:
+        return build_builtin_workspace_supervisor_agent(
             tenant_id=tenant_id,
             project_id=project_id,
         )
@@ -427,6 +514,11 @@ def get_builtin_agent_by_name(
             tenant_id=tenant_id,
             project_id=project_id,
         )
+    if normalized == BUILTIN_WORKSPACE_SUPERVISOR_NAME:
+        return build_builtin_workspace_supervisor_agent(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
     return None
 
 
@@ -444,4 +536,5 @@ def list_builtin_agents(
             tenant_id=tenant_id,
             project_id=project_id,
         ),
+        build_builtin_workspace_supervisor_agent(tenant_id=tenant_id, project_id=project_id),
     ]

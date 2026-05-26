@@ -319,6 +319,14 @@ describe('TenantChatSidebar', () => {
         status: 'idle',
         workspace_id: 'ws-current',
       },
+      {
+        id: 'workspace-contract:supervisor-decision:tenant-1:project-1:ws-current:plan-1:abc',
+        title: 'Workspace Supervisor Decision - node-b2768f4c07e7',
+        created_at: '2026-04-17T00:00:00.000Z',
+        status: 'active',
+        workspace_id: 'ws-current',
+        linked_workspace_task_id: 'node-b2768f4c07e7',
+      },
     ];
 
     render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
@@ -330,13 +338,17 @@ describe('TenantChatSidebar', () => {
       'true'
     );
     expect(screen.getAllByText('Workspace Alpha')).toHaveLength(1);
-    expect(screen.getAllByText('Fix Drone deploy pipeline')).toHaveLength(1);
+    expect(screen.getAllByText('Fix Drone deploy pipeline')).toHaveLength(2);
     expect(screen.getByText('Workspace task')).toBeInTheDocument();
     expect(screen.getByText('Verifier')).toBeInTheDocument();
+    expect(screen.getByText('Supervisor')).toBeInTheDocument();
     expect(screen.getByText('Chat')).toBeInTheDocument();
-    expect(screen.getAllByText('just now')).toHaveLength(2);
+    expect(screen.getAllByText('just now')).toHaveLength(3);
     expect(
       screen.queryByText('Workspace Verification Gate - node-b2768f4c07e7')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Workspace Supervisor Decision - node-b2768f4c07e7')
     ).not.toBeInTheDocument();
     expect(screen.queryByText('node-b2768f4c07e7')).not.toBeInTheDocument();
 
@@ -348,6 +360,7 @@ describe('TenantChatSidebar', () => {
     expect(screen.queryByText('Fix Drone deploy pipeline')).not.toBeInTheDocument();
     expect(screen.queryByText('Workspace task')).not.toBeInTheDocument();
     expect(screen.queryByText('Verifier')).not.toBeInTheDocument();
+    expect(screen.queryByText('Supervisor')).not.toBeInTheDocument();
     expect(screen.queryByText('Chat')).not.toBeInTheDocument();
   });
 

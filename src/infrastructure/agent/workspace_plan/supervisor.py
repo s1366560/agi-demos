@@ -67,6 +67,12 @@ from src.domain.ports.services.verifier_port import (
     VerificationContext,
     VerifierPort,
 )
+from src.domain.ports.services.workspace_supervisor_decision_port import (
+    WorkspaceSupervisorDecisionAction,
+    WorkspaceSupervisorDecisionPort,
+    WorkspaceSupervisorDecisionRequest,
+    WorkspaceSupervisorDecisionResult,
+)
 from src.domain.ports.services.workspace_supervisor_port import (
     TickReport,
     WorkspaceSupervisorPort,
@@ -143,6 +149,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         progress_sink: ProgressSink | None = None,
         event_sink: PlanEventSink | None = None,
         iteration_reviewer: IterationReviewPort | None = None,
+        supervisor_decision_provider: WorkspaceSupervisorDecisionPort | None = None,
         heartbeat_seconds: float = 10.0,
         max_dispatches_per_tick: int = 2,
     ) -> None:
@@ -160,6 +167,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         self._progress_sink = progress_sink
         self._event_sink = event_sink
         self._iteration_reviewer = iteration_reviewer
+        self._supervisor_decision_provider = supervisor_decision_provider
         self._heartbeat = heartbeat_seconds
         self._max_dispatches_per_tick = max_dispatches_per_tick
 
@@ -339,6 +347,21 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                         },
                     )
                 verifies_ran += 1
+                handled_by_agent, completed_by_agent, blocked_by_agent = (
+                    await self._apply_agent_supervisor_decision(
+                        workspace_id=workspace_id,
+                        plan=plan,
+                        node=node,
+                        report=report,
+                        ctx=ctx,
+                        feedback_items=feedback_items,
+                        errors=errors,
+                    )
+                )
+                if handled_by_agent:
+                    nodes_done += completed_by_agent
+                    nodes_blocked += blocked_by_agent
+                    continue
                 if report.passed:
                     if _should_request_pipeline_after_verification(node, ctx.artifacts):
                         evidenced_node = _node_with_verification_evidence(
@@ -801,6 +824,177 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
             nodes_blocked=nodes_blocked,
             errors=tuple(errors),
         )
+
+    async def _apply_agent_supervisor_decision(  # noqa: PLR0911
+        self,
+        *,
+        workspace_id: str,
+        plan: Plan,
+        node: PlanNode,
+        report: VerificationReport,
+        ctx: VerificationContext,
+        feedback_items: list[dict[str, Any]],
+        errors: list[str],
+    ) -> tuple[bool, int, int]:
+        if self._supervisor_decision_provider is None:
+            return False, 0, 0
+
+        request = _supervisor_decision_request(
+            workspace_id=workspace_id,
+            plan=plan,
+            node=node,
+            report=report,
+            ctx=ctx,
+            feedback_items=feedback_items,
+        )
+        try:
+            decision = await self._supervisor_decision_provider.decide(request)
+        except Exception as exc:
+            errors.append(f"supervisor_decision({node.id}): {exc}")
+            decision = WorkspaceSupervisorDecisionResult(
+                action=WorkspaceSupervisorDecisionAction.RETRY_SAME_NODE,
+                rationale="supervisor decision provider failed; retrying same node",
+                confidence=0.2,
+                feedback_items=(
+                    {
+                        "target_layer": "runtime",
+                        "recommended_action": "retry_infra",
+                        "summary": str(exc),
+                        "failure_signature": "workspace_supervisor_decision_failed",
+                    },
+                ),
+            )
+
+        await self._emit_event(
+            errors,
+            workspace_id,
+            node,
+            "supervisor_decision_completed",
+            _supervisor_decision_payload(decision),
+        )
+
+        action = decision.action
+        if action is WorkspaceSupervisorDecisionAction.NOOP:
+            return True, 0, 0
+
+        if action is WorkspaceSupervisorDecisionAction.ACCEPT_NODE:
+            accepted_node = _node_with_verification_evidence(
+                node,
+                report,
+                artifacts=ctx.artifacts,
+            )
+            plan.replace_node(
+                _force_intent(
+                    _force_execution(accepted_node, TaskExecution.IDLE),
+                    TaskIntent.DONE,
+                )
+            )
+            return True, 1, 0
+
+        if action is WorkspaceSupervisorDecisionAction.REQUEST_PIPELINE:
+            evidenced_node = _node_with_verification_evidence(
+                node,
+                report,
+                artifacts=ctx.artifacts,
+            )
+            plan.replace_node(_node_with_pipeline_request(evidenced_node, report))
+            return True, 0, 0
+
+        if action is WorkspaceSupervisorDecisionAction.WAIT_PIPELINE:
+            plan.replace_node(
+                _node_with_pending_pipeline_gate(
+                    node,
+                    report,
+                    artifacts=ctx.artifacts,
+                )
+            )
+            return True, 0, 0
+
+        if action is WorkspaceSupervisorDecisionAction.RETRY_SAME_NODE:
+            retry_node = (
+                _node_with_verification_retry_backoff(node, report)
+                if _is_verification_judge_retry_report(report)
+                else _node_with_retry_backoff(node, report)
+            )
+            retry_node = _node_with_supervisor_decision_retry_override(
+                retry_node,
+                decision,
+            )
+            plan.replace_node(retry_node)
+            return True, 0, 0
+
+        if action in {
+            WorkspaceSupervisorDecisionAction.CREATE_REPAIR_NODE,
+            WorkspaceSupervisorDecisionAction.REPLAN_NODE,
+        }:
+            evidenced_node = _node_with_verification_evidence(
+                node,
+                report,
+                artifacts=ctx.artifacts,
+            )
+            plan.replace_node(
+                _node_with_supervisor_decision_repair_brief(evidenced_node, decision)
+            )
+            await self._planner.replan(
+                plan,
+                ReplanTrigger(
+                    kind="verification_failed",
+                    node_id=evidenced_node.id,
+                    detail=decision.rationale or report.summary(),
+                ),
+            )
+            return True, 0, 0
+
+        if action is WorkspaceSupervisorDecisionAction.DISPOSE_NODE:
+            disposed_node = _node_with_verification_feedback_disposition(
+                node,
+                report,
+                artifacts=ctx.artifacts,
+                disposition=_supervisor_decision_disposition(decision),
+            )
+            plan.replace_node(
+                _force_intent(
+                    _force_execution(disposed_node, TaskExecution.IDLE),
+                    TaskIntent.DONE,
+                    summary=decision.rationale or report.summary(),
+                )
+            )
+            return True, 1, 0
+
+        if action is WorkspaceSupervisorDecisionAction.MARK_BLOCKED_HUMAN:
+            if _supervisor_decision_allows_human_block(decision):
+                failed_node = _node_with_verification_evidence(
+                    node,
+                    report,
+                    artifacts=ctx.artifacts,
+                )
+                plan.replace_node(
+                    _force_intent(
+                        _force_execution(failed_node, TaskExecution.IDLE),
+                        TaskIntent.BLOCKED,
+                        summary=decision.rationale or report.summary(),
+                    )
+                )
+                return True, 0, 1
+            retry_node = _node_with_retry_backoff(node, report)
+            retry_node = _node_with_supervisor_decision_retry_override(
+                retry_node,
+                decision,
+            )
+            plan.replace_node(retry_node)
+            await self._emit_event(
+                errors,
+                workspace_id,
+                retry_node,
+                "supervisor_decision_human_block_downgraded",
+                {
+                    "summary": "human block decision lacked explicit human-required evidence",
+                    "rationale": decision.rationale,
+                },
+            )
+            return True, 0, 0
+
+        return True, 0, 0
 
     async def _handle_completed_progress(  # noqa: PLR0911
         self,
@@ -3064,6 +3258,175 @@ def _verification_payload(report: VerificationReport) -> dict[str, Any]:
             for result in report.results
         ],
     }
+
+
+def _supervisor_decision_request(
+    *,
+    workspace_id: str,
+    plan: Plan,
+    node: PlanNode,
+    report: VerificationReport,
+    ctx: VerificationContext,
+    feedback_items: list[dict[str, Any]],
+) -> WorkspaceSupervisorDecisionRequest:
+    return WorkspaceSupervisorDecisionRequest(
+        workspace_id=workspace_id,
+        plan_id=plan.id,
+        node_id=node.id,
+        attempt_id=report.attempt_id or ctx.attempt_id or node.current_attempt_id,
+        linked_workspace_task_id=node.workspace_task_id or plan.goal_node.workspace_task_id,
+        node_snapshot=_supervisor_decision_node_snapshot(node),
+        verification_report={
+            **_verification_payload(report),
+            "feedback_items": feedback_items,
+            "judge_metadata": _judge_result_metadata(report),
+        },
+        structural_signals={
+            "report_passed": report.passed,
+            "report_hard_fail": report.hard_fail,
+            "requires_pipeline_gate": _node_requires_pipeline_gate(node),
+            "pipeline_gate_status": _pipeline_gate_status(node),
+            "has_pipeline_success": _node_has_pipeline_success(node, ctx.artifacts),
+            "retry_count": node.metadata.get("retry_count"),
+            "retry_not_before": node.metadata.get("retry_not_before"),
+        },
+        allowed_actions=tuple(WorkspaceSupervisorDecisionAction),
+        recent_metadata=_supervisor_decision_recent_metadata(node),
+    )
+
+
+def _supervisor_decision_node_snapshot(node: PlanNode) -> dict[str, Any]:
+    return {
+        "id": node.id,
+        "title": node.title,
+        "description": node.description,
+        "kind": node.kind.value,
+        "intent": node.intent.value,
+        "execution": node.execution.value,
+        "workspace_task_id": node.workspace_task_id,
+        "current_attempt_id": node.current_attempt_id,
+        "assignee_agent_id": node.assignee_agent_id,
+        "depends_on": [dep.value for dep in node.depends_on],
+        "acceptance_criteria": [
+            {
+                "kind": criterion.kind.value,
+                "required": criterion.required,
+                "description": criterion.description,
+                "spec": criterion.spec,
+            }
+            for criterion in node.acceptance_criteria
+        ],
+        "feature_checkpoint": _feature_checkpoint_payload(node),
+    }
+
+
+def _feature_checkpoint_payload(node: PlanNode) -> dict[str, Any] | None:
+    checkpoint = node.feature_checkpoint
+    if checkpoint is None:
+        return None
+    return {
+        "feature_id": checkpoint.feature_id,
+        "sequence": checkpoint.sequence,
+        "expected_artifacts": list(checkpoint.expected_artifacts),
+    }
+
+
+def _supervisor_decision_recent_metadata(node: PlanNode) -> dict[str, Any]:
+    metadata = dict(node.metadata or {})
+    keys = (
+        "candidate_artifacts",
+        "candidate_verifications",
+        "current_repair_turn",
+        "last_verification_feedback_items",
+        "last_verification_judge_confidence",
+        "last_verification_judge_failed_criteria",
+        "last_verification_judge_next_action_kind",
+        "last_verification_judge_rationale",
+        "last_verification_judge_repair_brief",
+        "last_verification_judge_required_next_action",
+        "last_verification_judge_verdict",
+        "pipeline_run_id",
+        "pipeline_status",
+        "retry_last_reason",
+        "terminal_worker_report_completed",
+    )
+    return {key: metadata[key] for key in keys if key in metadata}
+
+
+def _supervisor_decision_payload(
+    decision: WorkspaceSupervisorDecisionResult,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "action": decision.action.value,
+        "rationale": decision.rationale,
+        "confidence": decision.confidence,
+        "feedback_items": list(decision.feedback_items),
+    }
+    if decision.retry_not_before_seconds is not None:
+        payload["retry_not_before_seconds"] = decision.retry_not_before_seconds
+    if decision.repair_brief:
+        payload["repair_brief"] = dict(decision.repair_brief)
+    if decision.event_payload:
+        payload["event_payload"] = dict(decision.event_payload)
+    return payload
+
+
+def _node_with_supervisor_decision_retry_override(
+    node: PlanNode,
+    decision: WorkspaceSupervisorDecisionResult,
+) -> PlanNode:
+    metadata = dict(node.metadata or {})
+    metadata["last_supervisor_decision_action"] = decision.action.value
+    metadata["last_supervisor_decision_rationale"] = decision.rationale
+    metadata["last_supervisor_decision_confidence"] = decision.confidence
+    if decision.feedback_items:
+        metadata["last_supervisor_decision_feedback_items"] = list(decision.feedback_items)
+    if decision.retry_not_before_seconds is not None:
+        retry_at = datetime.now(UTC) + timedelta(seconds=decision.retry_not_before_seconds)
+        metadata["retry_not_before"] = retry_at.isoformat().replace("+00:00", "Z")
+    return replace(node, metadata=metadata, updated_at=datetime.now(UTC))
+
+
+def _node_with_supervisor_decision_repair_brief(
+    node: PlanNode,
+    decision: WorkspaceSupervisorDecisionResult,
+) -> PlanNode:
+    metadata = dict(node.metadata or {})
+    metadata["last_supervisor_decision_action"] = decision.action.value
+    metadata["last_supervisor_decision_rationale"] = decision.rationale
+    metadata["last_supervisor_decision_confidence"] = decision.confidence
+    if decision.repair_brief:
+        metadata["last_supervisor_decision_repair_brief"] = dict(decision.repair_brief)
+    if decision.feedback_items:
+        metadata["last_supervisor_decision_feedback_items"] = list(decision.feedback_items)
+    return replace(node, metadata=metadata, updated_at=datetime.now(UTC))
+
+
+def _supervisor_decision_disposition(
+    decision: WorkspaceSupervisorDecisionResult,
+) -> str:
+    disposition = decision.event_payload.get("disposition")
+    if isinstance(disposition, str) and disposition.strip():
+        return disposition.strip()[:120]
+    return "supervisor_agent_disposed_node"
+
+
+def _supervisor_decision_allows_human_block(
+    decision: WorkspaceSupervisorDecisionResult,
+) -> bool:
+    if decision.event_payload.get("human_required") is True:
+        return True
+    for item in decision.feedback_items:
+        if not isinstance(item, Mapping):
+            continue
+        target_layer = str(item.get("target_layer") or "").strip()
+        recommended_action = str(item.get("recommended_action") or "").strip()
+        next_action = str(item.get("next_action") or "").strip()
+        if target_layer == "human":
+            return True
+        if recommended_action == "escalate_human" or next_action == "human_required":
+            return True
+    return False
 
 
 def _verification_feedback_items(report: VerificationReport) -> list[dict[str, Any]]:

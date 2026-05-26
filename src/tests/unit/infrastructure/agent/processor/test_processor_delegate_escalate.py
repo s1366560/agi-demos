@@ -942,6 +942,27 @@ class TestEvaluateNoToolResultDelegation:
         assert had_tool_calls is True
         assert proc._pending_completion_status == "goal_achieved:workspace_contract_submitted"
 
+    def test_successful_workspace_supervisor_decision_completes_loop(self) -> None:
+        proc = self._build_processor_for_eval("Supervisor decision submitted.")
+
+        result, had_tool_calls = proc._classify_step_event(
+            AgentObserveEvent(
+                tool_name="workspace_submit_supervisor_decision",
+                result={
+                    "supervisor_decision": {
+                        "action": "request_pipeline",
+                        "rationale": "Drone pipeline evidence is required.",
+                    }
+                },
+            ),
+            ProcessorResult.CONTINUE,
+            True,
+        )
+
+        assert result == ProcessorResult.COMPLETE
+        assert had_tool_calls is True
+        assert proc._pending_completion_status == "goal_achieved:workspace_contract_submitted"
+
     def test_failed_workspace_contract_submission_does_not_complete_loop(self) -> None:
         proc = self._build_processor_for_eval("Verification denied.")
 

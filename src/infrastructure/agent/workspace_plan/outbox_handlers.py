@@ -63,6 +63,9 @@ from src.domain.ports.services.task_allocator_port import (
     WorkspaceAgent as AllocatorAgent,
 )
 from src.domain.ports.services.verifier_port import VerificationContext
+from src.domain.ports.services.workspace_supervisor_decision_port import (
+    WorkspaceSupervisorDecisionPort,
+)
 from src.domain.ports.services.workspace_supervisor_port import TickReport
 from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgePort,
@@ -146,6 +149,10 @@ from src.infrastructure.agent.workspace_plan.supervisor import (
     AttemptContextProvider,
     Dispatcher,
     ProgressSink,
+)
+from src.infrastructure.agent.workspace_plan.supervisor_decision import (
+    UnavailableWorkspaceSupervisorDecisionProvider,
+    WorkspaceSupervisorAgentDecisionProvider,
 )
 from src.infrastructure.agent.workspace_plan.system_actor import (
     LEGACY_SISYPHUS_AGENT_ID,
@@ -360,6 +367,11 @@ def make_supervisor_tick_handler(
                     root_task_id=_payload_string(payload, "root_task_id"),
                 ),
                 verification_judge=await _make_sql_verification_judge(
+                    session=session,
+                    workspace_id=workspace_id,
+                    root_task_id=_payload_string(payload, "root_task_id"),
+                ),
+                supervisor_decision_provider=await _make_sql_supervisor_decision_provider(
                     session=session,
                     workspace_id=workspace_id,
                     root_task_id=_payload_string(payload, "root_task_id"),
@@ -865,6 +877,39 @@ async def _make_sql_verification_judge(
             extra={"workspace_id": workspace_id},
         )
         return UnavailableWorkspaceVerificationJudge("workspace verification judge is unavailable")
+
+
+async def _make_sql_supervisor_decision_provider(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    root_task_id: str | None,
+) -> WorkspaceSupervisorDecisionPort | None:
+    workspace = await SqlWorkspaceRepository(session).find_by_id(workspace_id)
+    if workspace is None:
+        return None
+    root_metadata: Mapping[str, Any] | None = None
+    if root_task_id:
+        root_task = await SqlWorkspaceTaskRepository(session).find_by_id(root_task_id)
+        if root_task is not None and root_task.workspace_id == workspace_id:
+            root_metadata = root_task.metadata
+    if resolve_workspace_type(root_metadata, workspace.metadata) != "software_development":
+        return None
+    try:
+        return WorkspaceSupervisorAgentDecisionProvider(
+            tenant_id=workspace.tenant_id,
+            project_id=workspace.project_id,
+            linked_workspace_task_id=root_task_id,
+        )
+    except Exception:
+        logger.warning(
+            "workspace_plan.supervisor_decision_provider_unavailable",
+            exc_info=True,
+            extra={"workspace_id": workspace_id},
+        )
+        return UnavailableWorkspaceSupervisorDecisionProvider(
+            "workspace supervisor decision agent is unavailable"
+        )
 
 
 def _software_iteration_task_budget() -> int:

@@ -100,6 +100,7 @@ async def ensure_workspace_llm_conversation(
                     _ = await repo.save(existing)
 
             await db.commit()
+            await _invalidate_conversation_list_cache(workspace.project_id or project_id)
             return True
     except Exception:
         logger.warning(
@@ -112,6 +113,24 @@ async def ensure_workspace_llm_conversation(
             exc_info=True,
         )
         return False
+
+
+async def _invalidate_conversation_list_cache(project_id: str) -> None:
+    """Keep background workspace sessions visible in cached conversation lists."""
+    try:
+        from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+
+        redis_client = await get_redis_client()
+        for prefix in ("conv_list:", "conv_count:"):
+            keys = await redis_client.keys(f"{prefix}{project_id}:*")
+            if keys:
+                await redis_client.delete(*keys)
+    except Exception:
+        logger.debug(
+            "workspace_llm_session.cache_invalidation_failed",
+            extra={"project_id": project_id},
+            exc_info=True,
+        )
 
 
 __all__ = ["ensure_workspace_llm_conversation"]

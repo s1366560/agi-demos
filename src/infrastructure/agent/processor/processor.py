@@ -372,6 +372,7 @@ class SessionProcessor:
             "workspace_submit_planning_contract",
             "workspace_submit_verification_judgment",
             "workspace_submit_iteration_review",
+            "workspace_submit_supervisor_decision",
         }
     )
 
@@ -1775,6 +1776,7 @@ class SessionProcessor:
                 "planning_contract",
                 "verification_judgment",
                 "iteration_review",
+                "supervisor_decision",
             )
         )
 

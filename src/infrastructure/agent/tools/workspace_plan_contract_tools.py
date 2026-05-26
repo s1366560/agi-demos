@@ -7,6 +7,9 @@ from typing import Any
 
 from src.domain.model.review.review_finding import ReviewSeverity
 from src.domain.ports.services.iteration_review_port import IterationReviewDecision
+from src.domain.ports.services.workspace_supervisor_decision_port import (
+    WorkspaceSupervisorDecisionAction,
+)
 from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationFeedbackKind,
     WorkspaceVerificationFeedbackSeverity,
@@ -17,6 +20,7 @@ from src.domain.ports.services.workspace_verification_judge_port import (
 )
 from src.infrastructure.agent.sisyphus.builtin_agent import (
     BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID,
+    BUILTIN_WORKSPACE_SUPERVISOR_ID,
     BUILTIN_WORKSPACE_VERIFIER_ID,
 )
 from src.infrastructure.agent.tools.context import ToolContext
@@ -31,6 +35,7 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
 
 WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME = "workspace_submit_verification_judgment"
 WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME = "workspace_submit_iteration_review"
+WORKSPACE_SUBMIT_SUPERVISOR_DECISION_TOOL_NAME = "workspace_submit_supervisor_decision"
 
 _VALID_VERIFICATION_VERDICTS = {item.value for item in WorkspaceVerificationJudgeVerdict}
 _VALID_VERIFICATION_NEXT_ACTION_KINDS = {item.value for item in WorkspaceVerificationNextActionKind}
@@ -45,6 +50,7 @@ _VALID_VERIFICATION_RECOMMENDED_ACTIONS = {
     item.value for item in WorkspaceVerificationRecommendedAction
 }
 _VALID_REVIEW_VERDICTS = {"complete_goal", "continue_next_iteration", "needs_human_review"}
+_VALID_SUPERVISOR_ACTIONS = {item.value for item in WorkspaceSupervisorDecisionAction}
 _VALID_PHASES = {"research", "plan", "implement", "test", "deploy", "review"}
 _VALID_SEVERITIES = {item.value for item in ReviewSeverity}
 
@@ -203,6 +209,31 @@ WORKSPACE_ITERATION_REVIEW_TOOL_PARAMETERS: dict[str, Any] = {
         },
     },
     "required": ["verdict", "confidence", "summary"],
+    "additionalProperties": False,
+}
+
+WORKSPACE_SUPERVISOR_DECISION_TOOL_PARAMETERS: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "action": {"type": "string", "enum": sorted(_VALID_SUPERVISOR_ACTIONS)},
+        "rationale": {"type": "string"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "feedback_items": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {"type": "object", "additionalProperties": True},
+        },
+        "retry_not_before_seconds": {"type": ["integer", "null"], "minimum": 0},
+        "repair_brief": {
+            "type": "object",
+            "additionalProperties": True,
+        },
+        "event_payload": {
+            "type": "object",
+            "additionalProperties": True,
+        },
+    },
+    "required": ["action", "rationale", "confidence"],
     "additionalProperties": False,
 }
 
@@ -384,6 +415,62 @@ async def workspace_submit_iteration_review_tool(
     )
 
 
+@tool_define(
+    name=WORKSPACE_SUBMIT_SUPERVISOR_DECISION_TOOL_NAME,
+    description=(
+        "Terminal workspace supervisor tool. The builtin workspace supervisor decision "
+        "agent calls this exactly once to choose the durable plan tick's next action."
+    ),
+    parameters=WORKSPACE_SUPERVISOR_DECISION_TOOL_PARAMETERS,
+    permission=None,
+    category="workspace",
+)
+async def workspace_submit_supervisor_decision_tool(
+    ctx: ToolContext,
+    *,
+    action: str,
+    rationale: str,
+    confidence: float,
+    feedback_items: list[dict[str, Any]] | None = None,
+    retry_not_before_seconds: int | None = None,
+    repair_brief: dict[str, Any] | None = None,
+    event_payload: dict[str, Any] | None = None,
+) -> ToolResult:
+    error = _require_builtin_agent(
+        ctx,
+        expected_agent_id=BUILTIN_WORKSPACE_SUPERVISOR_ID,
+        tool_name=WORKSPACE_SUBMIT_SUPERVISOR_DECISION_TOOL_NAME,
+    )
+    if error:
+        return _deny(
+            error, selected_agent_id=runtime_context_string(ctx, "selected_agent_id") or None
+        )
+    if action not in _VALID_SUPERVISOR_ACTIONS:
+        return _deny(f"invalid supervisor action: {action}")
+    rationale_clean = str(rationale or "").strip()
+    if not rationale_clean:
+        return _deny("rationale cannot be empty")
+    confidence_value = _confidence_in_range(confidence)
+    if confidence_value is None:
+        return _deny("confidence must be a number in [0,1]")
+    payload: dict[str, Any] = {
+        "action": action,
+        "rationale": rationale_clean,
+        "confidence": confidence_value,
+        "feedback_items": _bounded_dict_list(feedback_items or [], limit=8),
+    }
+    if retry_not_before_seconds is not None:
+        payload["retry_not_before_seconds"] = max(0, int(retry_not_before_seconds))
+    if isinstance(repair_brief, dict) and repair_brief:
+        payload["repair_brief"] = _bounded_jsonable(repair_brief)
+    if isinstance(event_payload, dict) and event_payload:
+        payload["event_payload"] = _bounded_jsonable(event_payload)
+    return ToolResult(
+        output=json.dumps({"captured": True, "action": action}, ensure_ascii=False),
+        metadata={"supervisor_decision": payload},
+    )
+
+
 def _string_list(value: object, *, limit: int) -> list[str]:
     if isinstance(value, str):
         items = [value]
@@ -395,6 +482,25 @@ def _string_list(value: object, *, limit: int) -> list[str]:
     return list(dict.fromkeys(cleaned))[:limit]
 
 
+def _bounded_dict_list(value: list[Any], *, limit: int) -> list[dict[str, Any]]:
+    return [_bounded_jsonable(item) for item in value[:limit] if isinstance(item, dict)]
+
+
+def _bounded_jsonable(value: Any, *, max_items: int = 20) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key)[:128]: _bounded_jsonable(item, max_items=max_items)
+            for key, item in list(value.items())[:max_items]
+        }
+    if isinstance(value, list):
+        return [_bounded_jsonable(item, max_items=max_items) for item in value[:max_items]]
+    if isinstance(value, str):
+        return value[:4000]
+    if isinstance(value, int | float | bool) or value is None:
+        return value
+    return str(value)[:4000]
+
+
 def _confidence(value: object) -> float:
     if not isinstance(value, int | float | str):
         return 0.0
@@ -403,6 +509,18 @@ def _confidence(value: object) -> float:
     except ValueError:
         return 0.0
     return max(0.0, min(parsed, 1.0))
+
+
+def _confidence_in_range(value: object) -> float | None:
+    if not isinstance(value, int | float | str):
+        return None
+    try:
+        parsed = float(value)
+    except ValueError:
+        return None
+    if not 0.0 <= parsed <= 1.0:
+        return None
+    return parsed
 
 
 def _normalize_next_tasks(value: list[Any]) -> list[dict[str, Any]]:
@@ -462,8 +580,11 @@ def _normalize_findings(value: list[Any]) -> list[dict[str, Any]]:
 __all__ = [
     "WORKSPACE_ITERATION_REVIEW_TOOL_PARAMETERS",
     "WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME",
+    "WORKSPACE_SUBMIT_SUPERVISOR_DECISION_TOOL_NAME",
     "WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME",
+    "WORKSPACE_SUPERVISOR_DECISION_TOOL_PARAMETERS",
     "WORKSPACE_VERIFICATION_JUDGMENT_TOOL_PARAMETERS",
     "workspace_submit_iteration_review_tool",
+    "workspace_submit_supervisor_decision_tool",
     "workspace_submit_verification_judgment_tool",
 ]

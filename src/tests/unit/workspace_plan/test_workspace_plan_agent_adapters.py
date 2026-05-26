@@ -9,12 +9,17 @@ from typing import Any
 import pytest
 
 from src.domain.ports.services.iteration_review_port import IterationReviewContext
+from src.domain.ports.services.workspace_supervisor_decision_port import (
+    WorkspaceSupervisorDecisionAction,
+    WorkspaceSupervisorDecisionRequest,
+)
 from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgeRequest,
 )
 from src.infrastructure.agent.sisyphus.builtin_agent import (
     BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID,
     BUILTIN_WORKSPACE_PLANNER_ID,
+    BUILTIN_WORKSPACE_SUPERVISOR_ID,
     BUILTIN_WORKSPACE_VERIFIER_ID,
 )
 from src.infrastructure.agent.workspace.contract_agent_runtime import (
@@ -32,6 +37,9 @@ from src.infrastructure.agent.workspace_plan.iteration_review import (
     RuntimeWorkspaceIterationReviewAgentTurnRunner,
     WorkspaceIterationReviewAgentProvider,
     _iteration_review_from_event,
+)
+from src.infrastructure.agent.workspace_plan.supervisor_decision import (
+    WorkspaceSupervisorAgentDecisionProvider,
 )
 from src.infrastructure.agent.workspace_plan.verification_judge import (
     RuntimeWorkspaceVerifierAgentTurnRunner,
@@ -94,6 +102,35 @@ class _SequentialReviewRunner:
             "event_count": 1786,
             "observed_tools": ["bash", "glob", "read", "grep"],
             "review_submitted": False,
+        }
+        if not self.payloads:
+            return None
+        return self.payloads.pop(0)
+
+
+@dataclass
+class _SupervisorDecisionRunner:
+    payload: dict[str, Any] | None
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    async def run_decision_turn(self, **kwargs: Any) -> dict[str, Any] | None:
+        self.calls.append(kwargs)
+        return self.payload
+
+
+@dataclass
+class _SequentialSupervisorDecisionRunner:
+    payloads: list[dict[str, Any] | None]
+    calls: list[dict[str, Any]] = field(default_factory=list)
+    last_diagnostics: dict[str, Any] = field(default_factory=dict)
+
+    async def run_decision_turn(self, **kwargs: Any) -> dict[str, Any] | None:
+        self.calls.append(kwargs)
+        self.last_diagnostics = {
+            "conversation_id": "supervisor-conversation",
+            "event_count": 42,
+            "observed_tools": ["read"],
+            "decision_submitted": False,
         }
         if not self.payloads:
             return None
@@ -352,6 +389,85 @@ async def test_verifier_agent_judge_retries_missing_contract_submission() -> Non
     assert result.verdict.value == "accepted"
     assert result.next_action_kind.value == "none"
     assert result.confidence == 0.91
+
+
+async def test_supervisor_agent_decision_provider_submits_structured_action() -> None:
+    runner = _SupervisorDecisionRunner(
+        {
+            "action": "request_pipeline",
+            "rationale": "Verifier requires harness-native pipeline evidence.",
+            "confidence": 0.87,
+            "feedback_items": [
+                {
+                    "target_layer": "runtime",
+                    "recommended_action": "retry_infra",
+                    "summary": "Pipeline gate is missing.",
+                }
+            ],
+        }
+    )
+    provider = WorkspaceSupervisorAgentDecisionProvider(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        turn_runner=runner,
+    )
+
+    result = await provider.decide(
+        WorkspaceSupervisorDecisionRequest(
+            workspace_id="ws-1",
+            plan_id="plan-1",
+            node_id="node-1",
+            attempt_id="attempt-1",
+            linked_workspace_task_id="task-1",
+            node_snapshot={"title": "Deploy"},
+            verification_report={"passed": False},
+            allowed_actions=tuple(WorkspaceSupervisorDecisionAction),
+        )
+    )
+
+    assert runner.calls[0]["supervisor_agent"].id == BUILTIN_WORKSPACE_SUPERVISOR_ID
+    assert runner.calls[0]["linked_workspace_task_id"] == "task-1"
+    assert "workspace_submit_supervisor_decision" in runner.calls[0]["user_prompt"]
+    assert result.action is WorkspaceSupervisorDecisionAction.REQUEST_PIPELINE
+    assert result.confidence == 0.87
+    assert result.feedback_items[0]["target_layer"] == "runtime"
+
+
+async def test_supervisor_agent_decision_provider_retries_missing_contract_submission() -> None:
+    runner = _SequentialSupervisorDecisionRunner(
+        [
+            None,
+            {
+                "action": "retry_same_node",
+                "rationale": "Same node can collect missing evidence.",
+                "confidence": 0.73,
+            },
+        ]
+    )
+    provider = WorkspaceSupervisorAgentDecisionProvider(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        turn_runner=runner,
+    )
+
+    result = await provider.decide(
+        WorkspaceSupervisorDecisionRequest(
+            workspace_id="ws-1",
+            plan_id="plan-1",
+            node_id="node-1",
+            attempt_id="attempt-1",
+            linked_workspace_task_id="task-1",
+            allowed_actions=tuple(WorkspaceSupervisorDecisionAction),
+        )
+    )
+
+    assert len(runner.calls) == 2
+    retry_prompt = runner.calls[1]["user_prompt"]
+    assert "Contract retry" in retry_prompt
+    assert "did not call workspace_submit_supervisor_decision" in retry_prompt
+    assert '"event_count": 42' in retry_prompt
+    assert result.action is WorkspaceSupervisorDecisionAction.RETRY_SAME_NODE
+    assert result.confidence == 0.73
 
 
 async def test_verifier_agent_judge_uses_fallback_linked_task_in_prompts() -> None:

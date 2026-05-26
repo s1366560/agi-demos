@@ -23,6 +23,9 @@ from src.domain.model.workspace_plan import PlanNode
 from src.domain.ports.services.iteration_review_port import IterationReviewPort
 from src.domain.ports.services.task_allocator_port import Allocation, WorkspaceAgent
 from src.domain.ports.services.verifier_port import VerificationContext
+from src.domain.ports.services.workspace_supervisor_decision_port import (
+    WorkspaceSupervisorDecisionPort,
+)
 from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgePort,
 )
@@ -840,6 +843,7 @@ def build_default_orchestrator(
     decomposer: TaskDecomposerProtocol | None = None,
     iteration_reviewer: IterationReviewPort | None = None,
     verification_judge: WorkspaceVerificationJudgePort | None = None,
+    supervisor_decision_provider: WorkspaceSupervisorDecisionPort | None = None,
 ) -> WorkspaceOrchestrator:
     """Wire a default, side-effect-free :class:`WorkspaceOrchestrator`.
 
@@ -864,6 +868,7 @@ def build_default_orchestrator(
         dispatcher=_noop_dispatcher,
         attempt_context=_default_attempt_context,
         iteration_reviewer=iteration_reviewer,
+        supervisor_decision_provider=supervisor_decision_provider,
         heartbeat_seconds=cfg.heartbeat_seconds,
         max_dispatches_per_tick=cfg.max_dispatches_per_tick,
     )
@@ -891,6 +896,7 @@ def build_sql_orchestrator(
     event_sink: PlanEventSink | None = None,
     iteration_reviewer: IterationReviewPort | None = None,
     verification_judge: WorkspaceVerificationJudgePort | None = None,
+    supervisor_decision_provider: WorkspaceSupervisorDecisionPort | None = None,
 ) -> WorkspaceOrchestrator:
     """Wire a SQL-backed Workspace V2 orchestrator.
 
@@ -918,6 +924,7 @@ def build_sql_orchestrator(
         progress_sink=progress_sink,
         event_sink=event_sink or _make_sql_plan_event_sink(db),
         iteration_reviewer=iteration_reviewer,
+        supervisor_decision_provider=supervisor_decision_provider,
         heartbeat_seconds=cfg.heartbeat_seconds,
         max_dispatches_per_tick=cfg.max_dispatches_per_tick,
     )

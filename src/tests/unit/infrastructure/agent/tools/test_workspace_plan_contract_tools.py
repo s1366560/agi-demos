@@ -8,6 +8,7 @@ import pytest
 
 from src.infrastructure.agent.sisyphus.builtin_agent import (
     BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID,
+    BUILTIN_WORKSPACE_SUPERVISOR_ID,
     BUILTIN_WORKSPACE_VERIFIER_ID,
 )
 from src.infrastructure.agent.tools import workspace_plan_contract_tools as plan_contract_tools
@@ -180,3 +181,73 @@ async def test_iteration_review_captures_next_tasks_and_findings() -> None:
     assert payload["verdict"] == "continue_next_iteration"
     assert payload["next_tasks"][0]["id"] == "browser-proof"
     assert payload["findings"][0]["severity"] == "WARNING"
+
+
+async def test_supervisor_decision_rejects_non_supervisor_agent() -> None:
+    result = await plan_contract_tools.workspace_submit_supervisor_decision_tool.execute(
+        _ctx(selected_agent_id=BUILTIN_WORKSPACE_VERIFIER_ID),
+        action="retry_same_node",
+        rationale="Runtime decision must be retried.",
+        confidence=0.7,
+    )
+
+    assert result.is_error is True
+    assert BUILTIN_WORKSPACE_SUPERVISOR_ID in json.loads(result.output)["error"]
+
+
+async def test_supervisor_decision_requires_rationale() -> None:
+    result = await plan_contract_tools.workspace_submit_supervisor_decision_tool.execute(
+        _ctx(selected_agent_id=BUILTIN_WORKSPACE_SUPERVISOR_ID),
+        action="retry_same_node",
+        rationale="",
+        confidence=0.7,
+    )
+
+    assert result.is_error is True
+    assert "rationale" in json.loads(result.output)["error"]
+
+
+async def test_supervisor_decision_rejects_confidence_out_of_range() -> None:
+    result = await plan_contract_tools.workspace_submit_supervisor_decision_tool.execute(
+        _ctx(selected_agent_id=BUILTIN_WORKSPACE_SUPERVISOR_ID),
+        action="retry_same_node",
+        rationale="Runtime decision must be retried.",
+        confidence=1.5,
+    )
+
+    assert result.is_error is True
+    assert "confidence" in json.loads(result.output)["error"]
+
+
+async def test_supervisor_decision_captures_structured_payload() -> None:
+    result = await plan_contract_tools.workspace_submit_supervisor_decision_tool.execute(
+        _ctx(selected_agent_id=BUILTIN_WORKSPACE_SUPERVISOR_ID),
+        action="create_repair_node",
+        rationale="Verifier feedback requires a separate repair node.",
+        confidence=0.86,
+        feedback_items=[
+            {
+                "target_layer": "planner",
+                "recommended_action": "create_repair_node",
+                "summary": "Protected test infrastructure needs a scoped repair.",
+            }
+        ],
+        repair_brief={"failed_items": ["protected test path"]},
+        event_payload={"disposition": "needs_separate_repair"},
+    )
+
+    assert result.is_error is False
+    assert result.metadata["supervisor_decision"] == {
+        "action": "create_repair_node",
+        "rationale": "Verifier feedback requires a separate repair node.",
+        "confidence": 0.86,
+        "feedback_items": [
+            {
+                "target_layer": "planner",
+                "recommended_action": "create_repair_node",
+                "summary": "Protected test infrastructure needs a scoped repair.",
+            }
+        ],
+        "repair_brief": {"failed_items": ["protected test path"]},
+        "event_payload": {"disposition": "needs_separate_repair"},
+    }

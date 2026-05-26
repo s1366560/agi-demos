@@ -2260,7 +2260,21 @@ def _drone_docker_deploy_runtime_env_failure_feedback(
 
 def _missing_runtime_config_fields(results: list[CriterionResult]) -> tuple[str, ...]:
     text = "\n".join(result.message for result in results if result.message)
-    matches = re.findall(r"missing field [`'\"]?([A-Za-z_][A-Za-z0-9_]*)[`'\"]?", text)
+    matches: list[str] = []
+    cursor = 0
+    marker = "missing field"
+    while True:
+        marker_index = text.find(marker, cursor)
+        if marker_index < 0:
+            break
+        cursor = marker_index + len(marker)
+        while cursor < len(text) and text[cursor] in " `'\":":
+            cursor += 1
+        start = cursor
+        while cursor < len(text) and (text[cursor].isalnum() or text[cursor] == "_"):
+            cursor += 1
+        if cursor > start and (text[start].isalpha() or text[start] == "_"):
+            matches.append(text[start:cursor])
     return tuple(dict.fromkeys(matches))
 
 

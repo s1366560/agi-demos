@@ -132,6 +132,7 @@ function cleanWorkspaceTitle(title: string): string {
   return title
     .replace(/^Workspace Worker\s*-\s*/i, '')
     .replace(/^Workspace Verification Gate\s*-\s*/i, '')
+    .replace(/^Workspace Supervisor Decision\s*-\s*/i, '')
     .replace(/^Workspace Chat\s*-\s*/i, '')
     .replace(/^Workspace\s+/i, '')
     .trim();
@@ -141,7 +142,7 @@ function isOpaqueTaskTitle(title: string): boolean {
   return (
     /^node-[a-z0-9._-]+$/i.test(title) ||
     /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(title) ||
-    /^(worker|verifier|architect|builder|chat|workspace)$/i.test(title)
+    /^(worker|verifier|supervisor|architect|builder|chat|workspace)$/i.test(title)
   );
 }
 
@@ -191,6 +192,12 @@ function workspaceRoleLabel(
   }
   if (/^workspace verification gate\s*-/i.test(title) || id.startsWith('workspace-verifier:')) {
     return t('agent.sidebar.workspaceRole.verifier', 'Verifier');
+  }
+  if (
+    /^workspace supervisor decision\s*-/i.test(title) ||
+    id.startsWith('workspace-contract:supervisor-decision:')
+  ) {
+    return t('agent.sidebar.workspaceRole.supervisor', 'Supervisor');
   }
   if (id.startsWith('workspace-architect:') || /architect/i.test(title)) {
     return t('agent.sidebar.workspaceRole.architect', 'Architect');
