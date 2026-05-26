@@ -60,7 +60,7 @@ def test_workspace_runtime_forwarded_fields_ignores_empty_or_invalid_values() ->
     assert forwarded == {}
 
 
-def test_workspace_runtime_limit_overrides_accepts_positive_ints_only() -> None:
+def test_workspace_runtime_limit_overrides_keeps_max_steps_under_agent_config() -> None:
     assert _workspace_runtime_limit_overrides(
         {
             WORKSPACE_SESSION_ROLE_KEY: WORKSPACE_ROLE_CONTRACT,
@@ -70,7 +70,7 @@ def test_workspace_runtime_limit_overrides_accepts_positive_ints_only() -> None:
                 "ignored": 1,
             },
         }
-    ) == {"max_steps": 8, "max_tokens": 8192}
+    ) == {"max_tokens": 8192}
 
     assert (
         _workspace_runtime_limit_overrides(

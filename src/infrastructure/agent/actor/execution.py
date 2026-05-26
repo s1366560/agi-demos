@@ -120,6 +120,14 @@ async def _resolve_chat_runtime_overrides(
     llm_overrides: dict[str, Any] | None = None
     model_override: str | None = None
 
+    if _is_workspace_runtime_context(request.app_model_context):
+        logger.info(
+            "[ActorExecution] Ignoring conversation LLM overrides for workspace runtime "
+            "conversation %s so the selected agent definition remains authoritative",
+            request.conversation_id,
+        )
+        return None, None
+
     persisted_config = await _load_persisted_agent_config(request.conversation_id)
     if persisted_config:
         raw_persisted_model = persisted_config.get("llm_model_override")
@@ -143,6 +151,16 @@ async def _resolve_chat_runtime_overrides(
         model_override = "auto"
 
     return llm_overrides, model_override
+
+
+def _is_workspace_runtime_context(app_model_context: dict[str, Any] | None) -> bool:
+    """Return True when this turn is governed by workspace agent configuration."""
+    if not isinstance(app_model_context, dict):
+        return False
+    if app_model_context.get("context_type") == "workspace_worker_runtime":
+        return True
+    workspace_binding = app_model_context.get("workspace_binding")
+    return isinstance(workspace_binding, dict) and bool(workspace_binding.get("workspace_id"))
 
 
 # Flush accumulated events to DB every N seconds during streaming,

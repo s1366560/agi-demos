@@ -119,12 +119,9 @@ def _workspace_runtime_limit_overrides(
     if not isinstance(raw_limits, Mapping):
         return {}
     limits: dict[str, int] = {}
-    for key in ("max_steps", "max_tokens"):
-        value = raw_limits.get(key)
-        if isinstance(value, bool):
-            continue
-        if isinstance(value, int) and value > 0:
-            limits[key] = value
+    value = raw_limits.get("max_tokens")
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        limits["max_tokens"] = value
     return limits
 
 
@@ -1436,9 +1433,6 @@ class StreamMixin:
         if runtime_limits:
             runtime_profile = replace(
                 runtime_profile,
-                effective_max_steps=runtime_limits.get(
-                    "max_steps", runtime_profile.effective_max_steps
-                ),
                 effective_max_tokens=runtime_limits.get(
                     "max_tokens", runtime_profile.effective_max_tokens
                 ),

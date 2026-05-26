@@ -187,7 +187,6 @@ class RuntimeWorkspaceIterationReviewAgentTurnRunner:
                 "iteration_index": iteration_index,
             },
             "runtime_limits": {
-                "max_steps": self._max_steps,
                 "max_tokens": self._max_tokens,
             },
             "llm_overrides": {"max_tokens": self._max_tokens},

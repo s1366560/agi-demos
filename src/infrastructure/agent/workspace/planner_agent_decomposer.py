@@ -182,11 +182,6 @@ class RuntimeWorkspacePlannerAgentTurnRunner:
                 "contract_only": contract_only,
             },
             "runtime_limits": {
-                "max_steps": _planner_turn_max_steps(
-                    planner_agent,
-                    fallback=self._max_steps,
-                    prefer_agent_limit=contract_only,
-                ),
                 "max_tokens": self._max_tokens,
             },
             "llm_overrides": {"max_tokens": self._max_tokens},
@@ -629,18 +624,6 @@ def _code_context(
         if isinstance(raw, Mapping):
             return dict(raw)
     return {}
-
-
-def _planner_turn_max_steps(
-    planner_agent: Agent,
-    *,
-    fallback: int,
-    prefer_agent_limit: bool,
-) -> int:
-    raw_max_iterations = getattr(planner_agent, "max_iterations", None)
-    if prefer_agent_limit and isinstance(raw_max_iterations, int) and raw_max_iterations > 0:
-        return raw_max_iterations
-    return fallback
 
 
 def _planning_contract_metadata(payload: Mapping[str, Any]) -> dict[str, Any]:

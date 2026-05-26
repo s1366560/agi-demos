@@ -451,10 +451,7 @@ async def test_runtime_workspace_planner_uses_stream_chat_v2_with_actor_user(
     )
     assert stream_calls[0]["app_model_context"]["workspace_binding"]["workspace_id"] == "ws-1"
     assert stream_calls[0]["app_model_context"]["code_context"] == {"repo": "agi-demos"}
-    assert stream_calls[0]["app_model_context"]["runtime_limits"] == {
-        "max_steps": 1,
-        "max_tokens": 8192,
-    }
+    assert stream_calls[0]["app_model_context"]["runtime_limits"] == {"max_tokens": 8192}
     assert stream_calls[0]["app_model_context"]["llm_overrides"] == {"max_tokens": 8192}
 
 
@@ -593,10 +590,7 @@ async def test_runtime_workspace_verifier_persists_linked_workspace_task(
         stream_calls[0]["app_model_context"][WORKSPACE_SESSION_ROLE_KEY]
         == WORKSPACE_ROLE_CONTRACT
     )
-    assert stream_calls[0]["app_model_context"]["runtime_limits"] == {
-        "max_steps": 8,
-        "max_tokens": 8192,
-    }
+    assert stream_calls[0]["app_model_context"]["runtime_limits"] == {"max_tokens": 8192}
     assert (
         stream_calls[0]["app_model_context"]["workspace_binding"]["linked_workspace_task_id"]
         == "task-1"
@@ -856,10 +850,7 @@ async def test_runtime_iteration_reviewer_persists_linked_workspace_task(
         stream_calls[0]["app_model_context"][WORKSPACE_SESSION_ROLE_KEY]
         == WORKSPACE_ROLE_CONTRACT
     )
-    assert stream_calls[0]["app_model_context"]["runtime_limits"] == {
-        "max_steps": 16,
-        "max_tokens": 8192,
-    }
+    assert stream_calls[0]["app_model_context"]["runtime_limits"] == {"max_tokens": 8192}
     assert (
         stream_calls[0]["app_model_context"]["workspace_binding"]["linked_workspace_task_id"]
         == "root-task-1"

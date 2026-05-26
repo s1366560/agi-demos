@@ -98,6 +98,98 @@ async def test_publish_event_to_stream_redacts_sensitive_tool_output() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_resolve_chat_runtime_overrides_ignores_workspace_worker_overrides() -> None:
+    """Workspace workers must use the selected agent definition as runtime authority."""
+    request = ProjectChatRequest(
+        conversation_id="workspace-worker-conv",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+        app_model_context={
+            "context_type": "workspace_worker_runtime",
+            "llm_model_override": "openai/gpt-override",
+            "llm_overrides": {"temperature": 1.8, "max_tokens": 128},
+        },
+    )
+
+    with patch.object(
+        execution,
+        "_load_persisted_agent_config",
+        new=AsyncMock(
+            return_value={
+                "llm_model_override": "openai/persisted",
+                "llm_overrides": {"temperature": 1.5},
+            }
+        ),
+    ) as load_persisted:
+        llm_overrides, model_override = await execution._resolve_chat_runtime_overrides(request)
+
+    assert llm_overrides is None
+    assert model_override is None
+    load_persisted.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_resolve_chat_runtime_overrides_ignores_workspace_binding_overrides() -> None:
+    """Workspace leader turns with a binding also keep agent config authoritative."""
+    request = ProjectChatRequest(
+        conversation_id="workspace-leader-conv",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+        app_model_context={
+            "workspace_binding": {"workspace_id": "workspace-1"},
+            "llm_model_override": "openai/gpt-override",
+            "llm_overrides": {"temperature": 1.8, "max_tokens": 128},
+        },
+    )
+
+    with patch.object(
+        execution,
+        "_load_persisted_agent_config",
+        new=AsyncMock(return_value={"llm_model_override": "openai/persisted"}),
+    ) as load_persisted:
+        llm_overrides, model_override = await execution._resolve_chat_runtime_overrides(request)
+
+    assert llm_overrides is None
+    assert model_override is None
+    load_persisted.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_resolve_chat_runtime_overrides_keeps_non_workspace_overrides() -> None:
+    """Normal chat sessions still support persisted and app-provided LLM overrides."""
+    request = ProjectChatRequest(
+        conversation_id="normal-conv",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+        app_model_context={
+            "llm_model_override": "openai/request-model",
+            "llm_overrides": {"temperature": 0.4, "max_tokens": 512},
+        },
+    )
+
+    with patch.object(
+        execution,
+        "_load_persisted_agent_config",
+        new=AsyncMock(
+            return_value={
+                "llm_model_override": "openai/persisted",
+                "llm_overrides": {"temperature": 1.5},
+            }
+        ),
+    ):
+        llm_overrides, model_override = await execution._resolve_chat_runtime_overrides(request)
+
+    assert llm_overrides == {"temperature": 0.4, "max_tokens": 512}
+    assert model_override == "openai/request-model"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_execute_project_chat_passes_abort_signal() -> None:
     """execute_project_chat should forward abort_signal into agent.execute_chat."""
     agent = _FakeAgent()

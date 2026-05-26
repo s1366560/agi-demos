@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from src.domain.model.agent.agent_definition import Agent
+from src.domain.model.agent.agent_definition import (
+    MAX_ITERATIONS_EXPLICIT_METADATA_KEY,
+    Agent,
+)
 from src.domain.model.agent.agent_source import AgentSource
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger
 
@@ -279,6 +282,7 @@ def build_builtin_workspace_planner_agent(
             "runtime_plugin": "workspace_planner",
             "role": "workspace_planner",
             "contract_tool": "workspace_submit_planning_contract",
+            MAX_ITERATIONS_EXPLICIT_METADATA_KEY: False,
         },
     )
 
@@ -328,6 +332,7 @@ def build_builtin_workspace_verifier_agent(
             "runtime_plugin": "workspace_verifier",
             "role": "workspace_verifier",
             "contract_tool": "workspace_submit_verification_judgment",
+            MAX_ITERATIONS_EXPLICIT_METADATA_KEY: False,
         },
     )
 
@@ -377,6 +382,7 @@ def build_builtin_workspace_iteration_reviewer_agent(
             "runtime_plugin": "workspace_iteration_reviewer",
             "role": "workspace_iteration_reviewer",
             "contract_tool": "workspace_submit_iteration_review",
+            MAX_ITERATIONS_EXPLICIT_METADATA_KEY: False,
         },
     )
 
