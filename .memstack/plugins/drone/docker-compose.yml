@@ -1,0 +1,43 @@
+services:
+  drone-server:
+    image: drone/drone:2
+    container_name: memstack-drone-server
+    profiles:
+      - drone
+    ports:
+      - "${DRONE_SERVER_PORT:-8080}:80"
+    volumes:
+      - drone_data:/data
+    environment:
+      DRONE_GITHUB_SERVER: ${DRONE_GITHUB_SERVER:-https://github.com}
+      DRONE_GITHUB_CLIENT_ID: ${DRONE_GITHUB_CLIENT_ID:-}
+      DRONE_GITHUB_CLIENT_SECRET: ${DRONE_GITHUB_CLIENT_SECRET:-}
+      DRONE_GITLAB_SERVER: ${DRONE_GITLAB_SERVER:-}
+      DRONE_GITLAB_CLIENT_ID: ${DRONE_GITLAB_CLIENT_ID:-}
+      DRONE_GITLAB_CLIENT_SECRET: ${DRONE_GITLAB_CLIENT_SECRET:-}
+      DRONE_RPC_SECRET: ${DRONE_RPC_SECRET:-memstack-drone-rpc-secret}
+      DRONE_SERVER_HOST: ${DRONE_SERVER_HOST:-localhost:8080}
+      DRONE_SERVER_PROTO: ${DRONE_SERVER_PROTO:-http}
+      DRONE_USER_CREATE: ${DRONE_USER_CREATE:-username:memstack,admin:true}
+    restart: unless-stopped
+
+  drone-runner-docker:
+    image: drone/drone-runner-docker:1
+    container_name: memstack-drone-runner-docker
+    profiles:
+      - drone
+    depends_on:
+      - drone-server
+    ports:
+      - "${DRONE_RUNNER_PORT:-3001}:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DRONE_RPC_PROTO: ${DRONE_RPC_PROTO:-http}
+      DRONE_RPC_HOST: ${DRONE_RPC_HOST:-drone-server}
+      DRONE_RPC_SECRET: ${DRONE_RPC_SECRET:-memstack-drone-rpc-secret}
+      DRONE_RUNNER_CAPACITY: ${DRONE_RUNNER_CAPACITY:-2}
+      DRONE_RUNNER_NAME: ${DRONE_RUNNER_NAME:-memstack-local-runner}
+    restart: unless-stopped
+volumes:
+  drone_data:

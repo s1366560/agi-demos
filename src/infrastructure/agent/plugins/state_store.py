@@ -72,7 +72,7 @@ class PluginStateStore:
         """Persist plugin enabled status."""
         return self.update_plugin(plugin_name, enabled=enabled, tenant_id=tenant_id)
 
-    def update_plugin(
+    def update_plugin(  # noqa: PLR0913 - plugin state updates preserve existing keyword API.
         self,
         plugin_name: str,
         *,
@@ -86,6 +86,7 @@ class PluginStateStore:
         channels: list[str] | None = None,
         providers: list[str] | None = None,
         skills: list[str] | None = None,
+        manifest_metadata: dict[str, Any] | None = None,
         tenant_id: str | None = None,
     ) -> dict[str, Any]:
         """Create or update plugin metadata entry."""
@@ -117,6 +118,7 @@ class PluginStateStore:
                 current["providers"] = _normalize_string_list(providers)
             if skills is not None:
                 current["skills"] = _normalize_string_list(skills)
+            _apply_manifest_metadata(current, manifest_metadata)
             current["updated_at"] = datetime.now(UTC).isoformat()
             plugins[plugin_name] = current
             self._write_state(state)
@@ -220,4 +222,61 @@ def _normalize_string_list(value: Any) -> list[str]:
             clean = item.strip()
             if clean:
                 normalized.append(clean)
+    return normalized
+
+
+def _normalize_string_list_map(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, list[str]] = {}
+    for key, items in value.items():
+        if not isinstance(key, str):
+            continue
+        clean_key = key.strip()
+        clean_items = _normalize_string_list(items)
+        if clean_key and clean_items:
+            normalized[clean_key] = clean_items
+    return normalized
+
+
+def _apply_manifest_metadata(current: dict[str, Any], metadata: dict[str, Any] | None) -> None:
+    if metadata is None:
+        return
+    contracts = metadata.get("contracts")
+    if contracts is not None:
+        current["contracts"] = _normalize_string_list_map(contracts)
+    activation = metadata.get("activation")
+    if isinstance(activation, dict):
+        current["activation"] = dict(activation)
+    command_aliases = metadata.get("command_aliases")
+    if isinstance(command_aliases, list):
+        current["command_aliases"] = [
+            dict(item) for item in command_aliases if isinstance(item, dict)
+        ]
+    tool_metadata = metadata.get("tool_metadata")
+    if isinstance(tool_metadata, dict):
+        current["tool_metadata"] = _normalize_object_map(tool_metadata)
+    hook_metadata = metadata.get("hook_metadata")
+    if isinstance(hook_metadata, dict):
+        current["hook_metadata"] = _normalize_object_map(hook_metadata)
+    config_schema = metadata.get("config_schema")
+    if isinstance(config_schema, dict):
+        current["config_schema"] = dict(config_schema)
+    config_ui_hints = metadata.get("config_ui_hints")
+    if isinstance(config_ui_hints, dict):
+        current["config_ui_hints"] = dict(config_ui_hints)
+    env_vars = metadata.get("env_vars")
+    if env_vars is not None:
+        current["env_vars"] = _normalize_string_list_map(env_vars)
+
+
+def _normalize_object_map(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, dict[str, Any]] = {}
+    for key, item in value.items():
+        if isinstance(key, str) and isinstance(item, dict):
+            clean_key = key.strip()
+            if clean_key:
+                normalized[clean_key] = dict(item)
     return normalized

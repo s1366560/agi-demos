@@ -17,6 +17,16 @@ def test_update_plugin_persists_manifest_metadata_lists(tmp_path) -> None:
         channels=[" feishu ", "", "feishu"],
         providers=["provider-a"],
         skills=["skill-a", "skill-b"],
+        manifest_metadata={
+            "contracts": {"tools": ["tool-a", ""], "providers": ["provider-a"]},
+            "activation": {"onStartup": False},
+            "command_aliases": [{"name": "demo", "kind": "runtime-slash"}],
+            "tool_metadata": {"tool-a": {"optional": True}},
+            "hook_metadata": {"before_tool_call": {"timeoutMs": 1000}},
+            "config_schema": {"type": "object"},
+            "config_ui_hints": {"apiKey": {"sensitive": True}},
+            "env_vars": {"provider-a": ["API_KEY", ""]},
+        },
     )
 
     plugin_state = store.get_plugin("demo-plugin")
@@ -25,6 +35,17 @@ def test_update_plugin_persists_manifest_metadata_lists(tmp_path) -> None:
     assert plugin_state["channels"] == ["feishu", "feishu"]
     assert plugin_state["providers"] == ["provider-a"]
     assert plugin_state["skills"] == ["skill-a", "skill-b"]
+    assert plugin_state["contracts"] == {
+        "tools": ["tool-a"],
+        "providers": ["provider-a"],
+    }
+    assert plugin_state["activation"] == {"onStartup": False}
+    assert plugin_state["command_aliases"] == [{"name": "demo", "kind": "runtime-slash"}]
+    assert plugin_state["tool_metadata"] == {"tool-a": {"optional": True}}
+    assert plugin_state["hook_metadata"] == {"before_tool_call": {"timeoutMs": 1000}}
+    assert plugin_state["config_schema"] == {"type": "object"}
+    assert plugin_state["config_ui_hints"] == {"apiKey": {"sensitive": True}}
+    assert plugin_state["env_vars"] == {"provider-a": ["API_KEY"]}
 
 
 @pytest.mark.unit

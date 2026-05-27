@@ -466,8 +466,11 @@ describe('StatusTab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'blackboard.planRunListView' }));
     expect(screen.queryByTestId('execution-dag-graph')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'blackboard.planRunGraphView' })).toBeInTheDocument();
-    expect(screen.getByText('blackboard.iterationLedgerTitle')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'blackboard.iterationLedgerTitle' }));
+    expect(screen.getAllByText('blackboard.iterationLedgerTitle').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('blackboard.iterationTasksTitle')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'web/src/App.tsx' }));
+    expect(screen.getByText(/blackboard.iterationOutputPreviewTitle/)).toBeInTheDocument();
     expect(screen.getAllByText('artifact.spec').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Iteration 1').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('active').length).toBeGreaterThanOrEqual(1);

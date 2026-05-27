@@ -36,6 +36,7 @@ COMPOSE_OBS ?= docker-compose.observability.yml
 COMPOSE_CMD ?= docker compose -f $(COMPOSE_BASE)
 COMPOSE_ALL ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_ACTOR)
 COMPOSE_RAY_DEV_CMD ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_RAY_DEV)
+COMPOSE_DRONE ?= docker compose -f $(COMPOSE_BASE) -f .memstack/plugins/drone/docker-compose.yml
 
 help: ## Show this help message
 	@echo "MemStack Development Commands"
@@ -698,18 +699,18 @@ docker-down: ## Stop all Docker services
 
 drone-up: ## Start optional Drone server and Docker runner
 	@echo " Starting Drone CI services..."
-	@$(COMPOSE_CMD) --profile drone up -d drone-server drone-runner-docker
+	@$(COMPOSE_DRONE) --profile drone up -d drone-server drone-runner-docker
 	@echo " Drone services started"
 	@echo "   Drone UI/API: http://localhost:$${DRONE_SERVER_PORT:-8080}"
 	@echo "   Runner dashboard: http://localhost:$${DRONE_RUNNER_PORT:-3001}"
 
 drone-down: ## Stop optional Drone services
 	@echo " Stopping Drone CI services..."
-	@$(COMPOSE_CMD) --profile drone stop drone-runner-docker drone-server
+	@$(COMPOSE_DRONE) --profile drone stop drone-runner-docker drone-server
 	@echo " Drone services stopped"
 
 drone-logs: ## Follow Drone service logs
-	@$(COMPOSE_CMD) --profile drone logs -f drone-server drone-runner-docker
+	@$(COMPOSE_DRONE) --profile drone logs -f drone-server drone-runner-docker
 
 ray-up: ## Start Ray cluster (production mode - uses built images)
 	@echo " Starting Ray cluster (production mode)..."

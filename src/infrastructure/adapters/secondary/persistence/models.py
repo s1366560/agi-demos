@@ -195,6 +195,33 @@ class Tenant(Base):
     projects: Mapped[list["Project"]] = relationship(
         back_populates="tenant", cascade="all, delete-orphan"
     )
+    plugin_configs: Mapped[list["PluginConfigModel"]] = relationship(
+        back_populates="tenant", cascade="all, delete-orphan"
+    )
+
+
+class PluginConfigModel(IdGeneratorMixin, Base):
+    """Tenant-scoped configuration for a runtime plugin."""
+
+    __tablename__ = "plugin_configs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    plugin_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    tenant: Mapped["Tenant"] = relationship(back_populates="plugin_configs")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "plugin_name", name="uq_plugin_configs_tenant_plugin"),
+        Index("ix_plugin_configs_tenant_plugin", "tenant_id", "plugin_name"),
+    )
 
 
 class Project(Base):
@@ -3487,6 +3514,83 @@ class WorkspacePipelineStageRunModel(Base):
     __table_args__ = (
         Index("ix_workspace_pipeline_stage_runs_run", "run_id"),
         Index("ix_workspace_pipeline_stage_runs_workspace_status", "workspace_id", "status"),
+    )
+
+
+class CicdPipelineRunModel(Base):
+    """One tenant/project-scoped CI/CD run triggered from an ordinary chat."""
+
+    __tablename__ = "cicd_pipeline_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    repository: Mapped[str] = mapped_column(String(255), nullable=False)
+    branch: Mapped[str | None] = mapped_column(String, nullable=True)
+    commit_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    external_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_cicd_pipeline_runs_tenant_project_created", "tenant_id", "project_id", "created_at"
+        ),
+        Index("ix_cicd_pipeline_runs_conversation_created", "conversation_id", "created_at"),
+        Index("ix_cicd_pipeline_runs_repository_created", "repository", "created_at"),
+        Index("ix_cicd_pipeline_runs_status", "status"),
+    )
+
+
+class CicdPipelineStageRunModel(Base):
+    """Stage-level result inside an ordinary-chat CI/CD run."""
+
+    __tablename__ = "cicd_pipeline_stage_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("cicd_pipeline_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    stage: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    command: Mapped[str | None] = mapped_column(Text, nullable=True)
+    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stdout_preview: Mapped[str | None] = mapped_column(Text, nullable=True)
+    stderr_preview: Mapped[str | None] = mapped_column(Text, nullable=True)
+    log_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    artifact_refs_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_cicd_pipeline_stage_runs_run", "run_id"),
+        Index("ix_cicd_pipeline_stage_runs_status", "status"),
     )
 
 

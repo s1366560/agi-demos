@@ -100,6 +100,32 @@ class PluginSDK:
             overwrite=overwrite,
         )
 
+    def on(
+        self,
+        hook_name: str,
+        handler: PluginHookHandler,
+        *,
+        priority: int = 100,
+        timeout_ms: int | None = None,
+        hook_family: str | None = None,
+        display_name: str | None = None,
+        description: str | None = None,
+        default_enabled: bool = True,
+        overwrite: bool = False,
+    ) -> None:
+        """Register an OpenClaw-style typed plugin hook."""
+        self._api.on(
+            hook_name,
+            handler,
+            priority=priority,
+            timeout_ms=timeout_ms,
+            hook_family=hook_family,
+            display_name=display_name,
+            description=description,
+            default_enabled=default_enabled,
+            overwrite=overwrite,
+        )
+
     def register_command(
         self,
         command_name: str,
@@ -186,9 +212,21 @@ class PluginSDK:
             overwrite=overwrite,
         )
 
-    def register_config_schema(self, schema: dict[str, Any]) -> None:
+    def register_config_schema(
+        self,
+        schema: dict[str, Any],
+        *,
+        config_ui_hints: dict[str, Any] | None = None,
+        defaults: dict[str, Any] | None = None,
+        secret_paths: list[str] | None = None,
+    ) -> None:
         """Register a config schema for this plugin."""
-        self._api.register_config_schema(schema)
+        self._api.register_config_schema(
+            schema,
+            config_ui_hints=config_ui_hints,
+            defaults=defaults,
+            secret_paths=secret_paths,
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle shorthand

@@ -394,7 +394,10 @@ async def test_pipeline_handler_commits_running_state_before_drone_wait(
                 metadata={"external_provider": DRONE_PROVIDER, "drone_build_number": "1"},
             )
 
-    monkeypatch.setattr(outbox_handlers, "DronePipelineProvider", BlockingDroneProvider)
+    async def _require_provider(_provider: str) -> BlockingDroneProvider:
+        return BlockingDroneProvider()
+
+    monkeypatch.setattr(outbox_handlers, "require_pipeline_provider", _require_provider)
 
     async with session_maker() as seed_session:
         await _seed_workspace_only(seed_session)
@@ -518,7 +521,10 @@ async def test_pipeline_handler_persists_drone_deployment_snapshot(
                 },
             )
 
-    monkeypatch.setattr(outbox_handlers, "DronePipelineProvider", SuccessfulDroneProvider)
+    async def _require_provider(_provider: str) -> SuccessfulDroneProvider:
+        return SuccessfulDroneProvider()
+
+    monkeypatch.setattr(outbox_handlers, "require_pipeline_provider", _require_provider)
 
     async with session_maker() as seed_session:
         await _seed_workspace_only(seed_session)

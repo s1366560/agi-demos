@@ -1,0 +1,72 @@
+{
+  "id": "drone-pipeline-plugin",
+  "kind": "pipeline_provider",
+  "name": "Drone Pipeline Plugin",
+  "description": "Local Drone pipeline provider, CI/CD tool factory, and optional infrastructure assets.",
+  "version": "1.0.0",
+  "channels": [],
+  "providers": ["drone"],
+  "skills": ["drone"],
+  "contracts": {
+    "tools": ["cicd_run_pipeline"],
+    "skills": ["drone"],
+    "commands": ["drone"],
+    "services": ["drone:defaults", "drone:secret_paths"]
+  },
+  "activation": {
+    "onStartup": false,
+    "onTools": ["cicd_run_pipeline"],
+    "onCommands": ["drone"]
+  },
+  "commandAliases": [
+    {
+      "name": "drone",
+      "kind": "runtime-slash",
+      "description": "Run or inspect a Drone CI/CD pipeline through cicd_run_pipeline.",
+      "tool": "cicd_run_pipeline"
+    }
+  ],
+  "toolMetadata": {
+    "cicd_run_pipeline": {
+      "description": "Trigger and optionally wait for a repository-scoped Drone pipeline run.",
+      "requiresRepository": true,
+      "sideEffects": ["external_ci_run"]
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "drone_server_env": {
+        "type": "string",
+        "default": "DRONE_SERVER"
+      },
+      "drone_token_env": {
+        "type": "string",
+        "default": "DRONE_TOKEN"
+      },
+      "poll_interval_seconds": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 5
+      }
+    }
+  },
+  "uiHints": {
+    "drone_server_env": {
+      "label": "Drone Server Env",
+      "placeholder": "DRONE_SERVER"
+    },
+    "drone_token_env": {
+      "label": "Drone Token Env",
+      "placeholder": "DRONE_TOKEN",
+      "sensitive": true
+    },
+    "poll_interval_seconds": {
+      "label": "Poll Interval Seconds"
+    }
+  },
+  "providerAuthEnvVars": {
+    "drone": ["DRONE_SERVER", "DRONE_TOKEN"]
+  }
+}

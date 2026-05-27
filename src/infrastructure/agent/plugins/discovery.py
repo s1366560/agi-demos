@@ -40,6 +40,14 @@ class DiscoveredPlugin:
     channels: tuple[str, ...] = ()
     providers: tuple[str, ...] = ()
     skills: tuple[str, ...] = ()
+    contracts: dict[str, tuple[str, ...]] | None = None
+    activation: dict[str, Any] | None = None
+    command_aliases: tuple[dict[str, Any], ...] = ()
+    tool_metadata: dict[str, dict[str, Any]] | None = None
+    hook_metadata: dict[str, dict[str, Any]] | None = None
+    config_schema: dict[str, Any] | None = None
+    config_ui_hints: dict[str, Any] | None = None
+    env_vars: dict[str, tuple[str, ...]] | None = None
 
 
 def discover_plugins(
@@ -129,6 +137,18 @@ def _discover_builtin_plugins(
                 channels=manifest_metadata.channels if manifest_metadata else (),
                 providers=manifest_metadata.providers if manifest_metadata else (),
                 skills=manifest_metadata.skills if manifest_metadata else (),
+                contracts=dict(manifest_metadata.contracts) if manifest_metadata else None,
+                activation=dict(manifest_metadata.activation) if manifest_metadata else None,
+                command_aliases=manifest_metadata.command_aliases if manifest_metadata else (),
+                tool_metadata=dict(manifest_metadata.tool_metadata) if manifest_metadata else None,
+                hook_metadata=dict(manifest_metadata.hook_metadata) if manifest_metadata else None,
+                config_schema=dict(manifest_metadata.config_schema)
+                if manifest_metadata and manifest_metadata.config_schema
+                else None,
+                config_ui_hints=dict(manifest_metadata.config_ui_hints)
+                if manifest_metadata and manifest_metadata.config_ui_hints
+                else None,
+                env_vars=dict(manifest_metadata.env_vars) if manifest_metadata else None,
             )
         )
         seen_names.add(plugin_name)
@@ -274,6 +294,18 @@ def _discover_single_local_plugin(
             channels=manifest_metadata.channels if manifest_metadata else (),
             providers=manifest_metadata.providers if manifest_metadata else (),
             skills=manifest_metadata.skills if manifest_metadata else (),
+            contracts=dict(manifest_metadata.contracts) if manifest_metadata else None,
+            activation=dict(manifest_metadata.activation) if manifest_metadata else None,
+            command_aliases=manifest_metadata.command_aliases if manifest_metadata else (),
+            tool_metadata=dict(manifest_metadata.tool_metadata) if manifest_metadata else None,
+            hook_metadata=dict(manifest_metadata.hook_metadata) if manifest_metadata else None,
+            config_schema=dict(manifest_metadata.config_schema)
+            if manifest_metadata and manifest_metadata.config_schema
+            else None,
+            config_ui_hints=dict(manifest_metadata.config_ui_hints)
+            if manifest_metadata and manifest_metadata.config_ui_hints
+            else None,
+            env_vars=dict(manifest_metadata.env_vars) if manifest_metadata else None,
         )
     )
     seen_names.add(plugin_name)
@@ -405,6 +437,18 @@ def _discover_single_entrypoint_plugin(
             channels=manifest_metadata.channels if manifest_metadata else (),
             providers=manifest_metadata.providers if manifest_metadata else (),
             skills=manifest_metadata.skills if manifest_metadata else (),
+            contracts=dict(manifest_metadata.contracts) if manifest_metadata else None,
+            activation=dict(manifest_metadata.activation) if manifest_metadata else None,
+            command_aliases=manifest_metadata.command_aliases if manifest_metadata else (),
+            tool_metadata=dict(manifest_metadata.tool_metadata) if manifest_metadata else None,
+            hook_metadata=dict(manifest_metadata.hook_metadata) if manifest_metadata else None,
+            config_schema=dict(manifest_metadata.config_schema)
+            if manifest_metadata and manifest_metadata.config_schema
+            else None,
+            config_ui_hints=dict(manifest_metadata.config_ui_hints)
+            if manifest_metadata and manifest_metadata.config_ui_hints
+            else None,
+            env_vars=dict(manifest_metadata.env_vars) if manifest_metadata else None,
         )
     )
     seen_names.add(plugin_name)

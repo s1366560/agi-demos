@@ -154,7 +154,12 @@ describe('TenantHeader', () => {
       />
     );
 
-    expect(container.querySelector('nav')).toHaveClass('overflow-hidden', 'mr-2');
+    expect(container.querySelector('nav')).toHaveClass(
+      'hidden',
+      'xl:flex',
+      'overflow-hidden',
+      'mr-2'
+    );
     expect(screen.getByRole('button', { name: 'Search' }).parentElement).toHaveClass('flex-none');
   });
 
@@ -186,9 +191,7 @@ describe('TenantHeader', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/tenant/tenant-1/project/project-1/advanced-search'
-    );
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/project/project-1/advanced-search');
   });
 
   it('opens the notification dropdown from the header action', () => {

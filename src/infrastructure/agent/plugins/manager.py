@@ -65,6 +65,17 @@ class PluginRuntimeManager:
             )
             self._last_discovered = discovered
 
+            for plugin in discovered:
+                if plugin.contracts:
+                    self._registry.register_plugin_contracts(plugin.name, plugin.contracts)
+                if plugin.config_schema:
+                    self._registry.register_config_schema(
+                        plugin.name,
+                        plugin.config_schema,
+                        config_ui_hints=plugin.config_ui_hints,
+                        secret_paths=_flatten_env_vars(plugin.env_vars),
+                    )
+
             setup_diagnostics = await self._loader.load_plugins(
                 [plugin.plugin for plugin in discovered]
             )
@@ -132,6 +143,38 @@ class PluginRuntimeManager:
                         state_entry.get("skills"),
                         plugin.skills,
                     ),
+                    "contracts": _coalesce_string_list_map(
+                        state_entry.get("contracts"),
+                        plugin.contracts,
+                    ),
+                    "activation": _coalesce_dict(
+                        state_entry.get("activation"),
+                        plugin.activation,
+                    ),
+                    "command_aliases": _coalesce_object_list(
+                        state_entry.get("command_aliases"),
+                        plugin.command_aliases,
+                    ),
+                    "tool_metadata": _coalesce_nested_dict(
+                        state_entry.get("tool_metadata"),
+                        plugin.tool_metadata,
+                    ),
+                    "hook_metadata": _coalesce_nested_dict(
+                        state_entry.get("hook_metadata"),
+                        plugin.hook_metadata,
+                    ),
+                    "config_schema": _coalesce_dict(
+                        state_entry.get("config_schema"),
+                        plugin.config_schema,
+                    ),
+                    "config_ui_hints": _coalesce_dict(
+                        state_entry.get("config_ui_hints"),
+                        plugin.config_ui_hints,
+                    ),
+                    "env_vars": _coalesce_string_list_map(
+                        state_entry.get("env_vars"),
+                        plugin.env_vars,
+                    ),
                     "enabled": bool(state_entry.get("enabled", True)),
                     "discovered": True,
                 }
@@ -157,6 +200,38 @@ class PluginRuntimeManager:
                     "channels": list(normalize_string_list(state_entry.get("channels"))),
                     "providers": list(normalize_string_list(state_entry.get("providers"))),
                     "skills": list(normalize_string_list(state_entry.get("skills"))),
+                    "contracts": _coalesce_string_list_map(
+                        state_entry.get("contracts"),
+                        None,
+                    ),
+                    "activation": _coalesce_dict(
+                        state_entry.get("activation"),
+                        None,
+                    ),
+                    "command_aliases": _coalesce_object_list(
+                        state_entry.get("command_aliases"),
+                        None,
+                    ),
+                    "tool_metadata": _coalesce_nested_dict(
+                        state_entry.get("tool_metadata"),
+                        None,
+                    ),
+                    "hook_metadata": _coalesce_nested_dict(
+                        state_entry.get("hook_metadata"),
+                        None,
+                    ),
+                    "config_schema": _coalesce_dict(
+                        state_entry.get("config_schema"),
+                        None,
+                    ),
+                    "config_ui_hints": _coalesce_dict(
+                        state_entry.get("config_ui_hints"),
+                        None,
+                    ),
+                    "env_vars": _coalesce_string_list_map(
+                        state_entry.get("env_vars"),
+                        None,
+                    ),
                     "enabled": bool(state_entry.get("enabled", True)),
                     "discovered": False,
                 }
@@ -275,6 +350,7 @@ class PluginRuntimeManager:
                     channels=record.get("channels"),
                     providers=record.get("providers"),
                     skills=record.get("skills"),
+                    manifest_metadata=_extract_manifest_metadata(record),
                 )
 
             return {
@@ -389,6 +465,7 @@ class PluginRuntimeManager:
             channels=previous_state.get("channels"),
             providers=previous_state.get("providers"),
             skills=previous_state.get("skills"),
+            manifest_metadata=_extract_manifest_metadata(previous_state),
         )
 
 
@@ -439,6 +516,77 @@ def _coalesce_string_list(preferred: Any, fallback: Any) -> list[str]:
     if preferred_list:
         return preferred_list
     return list(normalize_string_list(fallback))
+
+
+def _coalesce_string_list_map(
+    preferred: Any,
+    fallback: dict[str, tuple[str, ...]] | None,
+) -> dict[str, list[str]]:
+    if isinstance(preferred, dict):
+        normalized = {
+            key: list(normalize_string_list(items))
+            for key, items in preferred.items()
+            if isinstance(key, str) and normalize_string_list(items)
+        }
+        if normalized:
+            return normalized
+    return {key: list(items) for key, items in (fallback or {}).items()}
+
+
+def _coalesce_dict(preferred: Any, fallback: dict[str, Any] | None) -> dict[str, Any]:
+    if isinstance(preferred, dict) and preferred:
+        return dict(preferred)
+    return dict(fallback or {})
+
+
+def _coalesce_nested_dict(
+    preferred: Any,
+    fallback: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    if isinstance(preferred, dict):
+        normalized = {
+            key: dict(value)
+            for key, value in preferred.items()
+            if isinstance(key, str) and isinstance(value, dict)
+        }
+        if normalized:
+            return normalized
+    return {key: dict(value) for key, value in (fallback or {}).items()}
+
+
+def _coalesce_object_list(
+    preferred: Any,
+    fallback: tuple[dict[str, Any], ...] | None,
+) -> list[dict[str, Any]]:
+    if isinstance(preferred, list):
+        normalized = [dict(item) for item in preferred if isinstance(item, dict)]
+        if normalized:
+            return normalized
+    return [dict(item) for item in fallback or ()]
+
+
+def _flatten_env_vars(value: dict[str, tuple[str, ...]] | None) -> list[str]:
+    env_vars: list[str] = []
+    for names in (value or {}).values():
+        env_vars.extend(names)
+    return sorted(set(env_vars))
+
+
+def _extract_manifest_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: payload.get(key)
+        for key in (
+            "contracts",
+            "activation",
+            "command_aliases",
+            "tool_metadata",
+            "hook_metadata",
+            "config_schema",
+            "config_ui_hints",
+            "env_vars",
+        )
+        if payload.get(key) is not None
+    }
 
 
 def _serialize_diagnostic(diagnostic: PluginDiagnostic) -> dict[str, Any]:

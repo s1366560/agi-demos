@@ -40,12 +40,13 @@ class AgentPluginLoader:
                     "on_load", plugin_names=[plugin_name]
                 )
                 diagnostics.extend(lifecycle_diags)
-                # Validate plugin config if schema was registered during setup
-                config_diagnostics = self._registry.validate_config(
-                    plugin_name,
-                    getattr(plugin, "config", None) or {},
-                )
-                diagnostics.extend(config_diagnostics)
+                plugin_config = getattr(plugin, "config", None)
+                if isinstance(plugin_config, dict):
+                    config_diagnostics = self._registry.validate_config(
+                        plugin_name,
+                        plugin_config,
+                    )
+                    diagnostics.extend(config_diagnostics)
             except Exception as exc:
                 # Plugin setup errors are isolated to keep the rest of plugins loadable.
                 diagnostics.append(

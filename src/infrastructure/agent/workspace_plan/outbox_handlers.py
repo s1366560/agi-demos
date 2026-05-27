@@ -121,7 +121,6 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_ID,
     WORKSPACE_PLAN_NODE_ID,
 )
-from src.infrastructure.agent.workspace_plan.drone import DronePipelineProvider
 from src.infrastructure.agent.workspace_plan.factory import (
     _project_verification_to_task,
     build_sql_orchestrator,
@@ -142,6 +141,10 @@ from src.infrastructure.agent.workspace_plan.pipeline import (
     PipelineStageResult,
     SandboxNativePipelineProvider,
     build_pipeline_contract_from_metadata,
+)
+from src.infrastructure.agent.workspace_plan.pipeline_provider_registry import (
+    PipelineProviderUnavailableError,
+    require_pipeline_provider,
 )
 from src.infrastructure.agent.workspace_plan.run_controller import WorkspaceRunController
 from src.infrastructure.agent.workspace_plan.supervisor import (
@@ -4894,7 +4897,11 @@ async def _run_drone_pipeline(
     node_id: str,
 ) -> None:
     try:
-        result = await DronePipelineProvider().run(contract)
+        provider = await require_pipeline_provider(contract.provider)
+        result = await provider.run(contract)
+    except PipelineProviderUnavailableError as exc:
+        logger.warning("workspace drone pipeline provider unavailable: %s", exc)
+        result = _drone_provider_unavailable_result(exc)
     except Exception as exc:
         logger.exception("workspace drone pipeline provider failed")
         result = _drone_provider_exception_result(exc)
@@ -4909,6 +4916,35 @@ async def _run_drone_pipeline(
         workspace_id=workspace_id,
         plan_id=plan_id,
         node_id=node_id,
+    )
+
+
+def _drone_provider_unavailable_result(exc: PipelineProviderUnavailableError) -> PipelineRunResult:
+    message = str(exc).strip() or f"pipeline provider plugin is not enabled: {DRONE_PROVIDER}"
+    metadata = {
+        "external_provider": DRONE_PROVIDER,
+        "plugin_unavailable": True,
+        "provider": exc.provider,
+    }
+    return PipelineRunResult(
+        status="failed",
+        reason=message,
+        stage_results=(
+            PipelineStageResult(
+                stage="drone_plugin",
+                status="failed",
+                command="plugin:resolve",
+                exit_code=1,
+                stdout_preview="",
+                stderr_preview=message,
+                metadata=metadata,
+            ),
+        ),
+        evidence_refs=("ci_pipeline:failed", "drone:plugin_unavailable"),
+        metadata={
+            **metadata,
+            "provider_error": message,
+        },
     )
 
 

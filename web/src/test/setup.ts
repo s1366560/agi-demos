@@ -465,6 +465,12 @@ const commonTranslations: Record<string, string> = {
   // Tenant Plugin Hub
   'tenant.pluginHub.configModal.appIdPlaceholder': 'cli_xxx',
   'tenant.pluginHub.configModal.webhookUrlPlaceholder': 'https://your-domain.com/webhook',
+  'tenant.pluginHub.pluginsList.capabilities': 'Capabilities',
+  'tenant.pluginHub.pluginsList.capabilityTools': 'Tools',
+  'tenant.pluginHub.pluginsList.capabilitySkills': 'Skills',
+  'tenant.pluginHub.pluginsList.capabilityCommands': 'Commands',
+  'tenant.pluginHub.pluginsList.capabilityHooks': 'Hooks',
+  'tenant.pluginHub.pluginsList.noCapabilities': 'No declared capabilities',
 
   // Agent HITL center
   'agent.hitl.center.aria': 'Pending HITL requests',

@@ -157,12 +157,12 @@ class PluginRuntimeApi:
         settings_schema: dict[str, Any] | None = None,
         overwrite: bool = False,
     ) -> None:
-        """Register a named runtime hook handler.
+        """Register a named internal runtime hook handler.
 
         Args:
             hook_name: Hook point name (see ``WELL_KNOWN_HOOKS`` for documented names).
             handler: Async or sync callable invoked when the hook fires.
-            priority: Numeric priority -- lower values run first.  Default ``100``.
+            priority: Numeric priority -- higher values run first.  Default ``100``.
             overwrite: Allow replacing an existing handler from this plugin.
         """
         self._registry.register_hook(
@@ -176,6 +176,40 @@ class PluginRuntimeApi:
             default_enabled=default_enabled,
             default_settings=default_settings,
             settings_schema=settings_schema,
+            overwrite=overwrite,
+        )
+
+    def on(
+        self,
+        hook_name: str,
+        handler: PluginHookHandler,
+        *,
+        priority: int = 100,
+        timeout_ms: int | None = None,
+        hook_family: str | None = None,
+        display_name: str | None = None,
+        description: str | None = None,
+        default_enabled: bool = True,
+        overwrite: bool = False,
+    ) -> None:
+        """Register an OpenClaw-style typed plugin hook.
+
+        This is the preferred API for plugin-owned middleware/policy hooks.
+        ``register_hook`` remains available for compatibility with the older
+        internal hook naming surface.
+        """
+        default_settings: dict[str, Any] = {}
+        if timeout_ms is not None:
+            default_settings["timeout_ms"] = int(timeout_ms)
+        self.register_hook(
+            hook_name,
+            handler,
+            hook_family=hook_family,
+            priority=priority,
+            display_name=display_name,
+            description=description,
+            default_enabled=default_enabled,
+            default_settings=default_settings or None,
             overwrite=overwrite,
         )
 
@@ -232,9 +266,22 @@ class PluginRuntimeApi:
         """Register a lifecycle hook handler for this plugin."""
         self._registry.register_lifecycle_hook(self._plugin_name, event, handler)
 
-    def register_config_schema(self, schema: dict[str, Any]) -> None:
+    def register_config_schema(
+        self,
+        schema: dict[str, Any],
+        *,
+        config_ui_hints: dict[str, Any] | None = None,
+        defaults: dict[str, Any] | None = None,
+        secret_paths: list[str] | None = None,
+    ) -> None:
         """Register a JSON Schema for validating this plugin's configuration."""
-        self._registry.register_config_schema(self._plugin_name, schema)
+        self._registry.register_config_schema(
+            self._plugin_name,
+            schema,
+            config_ui_hints=config_ui_hints,
+            defaults=defaults,
+            secret_paths=secret_paths,
+        )
 
     def register_sandbox_tool_factory(
         self,
@@ -274,7 +321,6 @@ class PluginRuntimeApi:
         if isinstance(result, RTDeps):
             return result
         return None
-
 
     def register_subagent_resolver_factory(
         self,

@@ -107,7 +107,7 @@ const OPERATOR_REASON_LIMIT = 500;
 const DEFAULT_NODE_ACTION_REASON = 'operator action from central blackboard';
 const DEFAULT_RETRY_ACTION_REASON = 'operator retry from central blackboard';
 type DetailTabId = 'story' | 'evidence' | 'runs' | 'review' | 'blocker';
-type DagViewMode = 'graph' | 'list';
+type DagViewMode = 'graph' | 'list' | 'iterations';
 
 const DETAIL_TABS: Array<{ id: DetailTabId; label: string }> = [
   { id: 'story', label: 'Story' },
@@ -229,6 +229,17 @@ function taskFromPlanNode(node: WorkspacePlanNode, workspaceId: string): Workspa
   };
 }
 
+function CompactMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="truncate text-[10px] font-semibold uppercase text-text-muted">{label}</dt>
+      <dd className="mt-1 truncate text-sm font-semibold tabular-nums text-text-primary dark:text-text-inverse">
+        {value}
+      </dd>
+    </div>
+  );
+}
+
 function IterationLoopPanel({
   iteration,
   isActionPending,
@@ -287,17 +298,17 @@ function IterationLoopPanel({
             </p>
           )}
         </div>
-        <div className="flex shrink-0 flex-wrap items-start gap-2">
-          <StatBadge
+        <dl className="grid shrink-0 grid-cols-3 gap-4 rounded-md border border-border-light bg-surface-muted px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
+          <CompactMetric
             label="Sprint tasks"
             value={`${String(iteration.task_count)}/${String(iteration.task_budget)}`}
           />
-          <StatBadge label="Loop" value={iteration.loop_label} />
-          <StatBadge
+          <CompactMetric label="Loop" value={iteration.loop_label} />
+          <CompactMetric
             label="Completed"
             value={`${String(iteration.completed_iterations.length)}/${String(iteration.max_iterations)}`}
           />
-        </div>
+        </dl>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -718,59 +729,32 @@ function WorkbenchStatusBar({
 
   return (
     <div className="border-t border-border-separator bg-surface-muted/60 px-4 py-3 dark:border-border-dark dark:bg-background-dark/30">
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
-        <div className="min-w-0 rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
-          <div className="text-[10px] font-semibold uppercase text-text-secondary dark:text-text-muted">
-            Code root
-          </div>
-          <div className="mt-1 truncate font-mono text-xs text-text-primary dark:text-text-inverse">
-            {delivery?.code_root || 'not configured'}
-          </div>
-        </div>
-        <div className="min-w-0 rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
-          <div className="text-[10px] font-semibold uppercase text-text-secondary dark:text-text-muted">
-            Iteration
-          </div>
-          <div className="mt-1 truncate text-xs font-medium text-text-primary dark:text-text-inverse">
-            {iteration
+      <dl className="grid gap-x-5 gap-y-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        <CompactMetric label="Code root" value={delivery?.code_root || 'not configured'} />
+        <CompactMetric
+          label="Iteration"
+          value={
+            iteration
               ? `${String(iteration.current_iteration)} · ${iteration.loop_status}`
-              : 'not started'}
-          </div>
-        </div>
-        <div className="min-w-0 rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
-          <div className="text-[10px] font-semibold uppercase text-text-secondary dark:text-text-muted">
-            Active phase
-          </div>
-          <div className="mt-1 truncate text-xs font-medium text-text-primary dark:text-text-inverse">
-            {iteration?.active_phase_label ?? 'n/a'}
-          </div>
-        </div>
-        <div className="min-w-0 rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
-          <div className="text-[10px] font-semibold uppercase text-text-secondary dark:text-text-muted">
-            Queue
-          </div>
-          <div className="mt-1 truncate text-xs font-medium text-text-primary dark:text-text-inverse">
-            {String(outbox.length)} jobs{failedQueue > 0 ? ` · ${String(failedQueue)} failed` : ''}
-          </div>
-        </div>
-        <div className="min-w-0 rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
-          <div className="text-[10px] font-semibold uppercase text-text-secondary dark:text-text-muted">
-            Pipeline
-          </div>
-          <div className="mt-1 truncate text-xs font-medium text-text-primary dark:text-text-inverse">
-            {delivery?.run_assessment?.status ?? delivery?.latest_run?.status ?? 'none'}
-          </div>
-        </div>
-        <div className="min-w-0 rounded-md border border-border-light bg-surface-light px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
-          <div className="text-[10px] font-semibold uppercase text-text-secondary dark:text-text-muted">
-            Preview
-          </div>
-          <div className="mt-1 truncate text-xs font-medium text-text-primary dark:text-text-inverse">
-            {String(healthyServices)} / {String(serviceTotal)}
-            {isStale ? ` · updated ${formatRelative(lastUpdatedAt)}` : ''}
-          </div>
-        </div>
-      </div>
+              : 'not started'
+          }
+        />
+        <CompactMetric label="Active phase" value={iteration?.active_phase_label ?? 'n/a'} />
+        <CompactMetric
+          label="Queue"
+          value={`${String(outbox.length)} jobs${failedQueue > 0 ? ` · ${String(failedQueue)} failed` : ''}`}
+        />
+        <CompactMetric
+          label="Pipeline"
+          value={delivery?.run_assessment?.status ?? delivery?.latest_run?.status ?? 'none'}
+        />
+        <CompactMetric
+          label="Preview"
+          value={`${String(healthyServices)} / ${String(serviceTotal)}${
+            isStale ? ` · updated ${formatRelative(lastUpdatedAt)}` : ''
+          }`}
+        />
+      </dl>
     </div>
   );
 }
@@ -1591,38 +1575,41 @@ export function PlanRunSnapshotSection({
 
       {plan && (
         <div className="border-t border-border-separator dark:border-border-dark">
-          <div className="flex flex-wrap gap-2 px-4 py-3">
-            <StatBadge label={t('blackboard.planRunStatus', 'Plan status')} value={plan.status} />
-            <StatBadge label={t('blackboard.planRunStage', 'Stage')} value={stage} />
-            <StatBadge
+          <dl className="grid gap-x-5 gap-y-3 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-8">
+            <CompactMetric
+              label={t('blackboard.planRunStatus', 'Plan status')}
+              value={plan.status}
+            />
+            <CompactMetric label={t('blackboard.planRunStage', 'Stage')} value={stage} />
+            <CompactMetric
               label={t('blackboard.planRunCompleted', 'Done')}
               value={`${String(completedUnits)} / ${String(totalCompletionUnits)}`}
             />
-            <StatBadge
+            <CompactMetric
               label={t('blackboard.planRunCompletion', 'Completion')}
               value={`${String(completion)}%`}
             />
             {rootGoal && (
-              <StatBadge
+              <CompactMetric
                 label={t('blackboard.planRunRootStatus', 'Root')}
                 value={rootGoal.status}
               />
             )}
             {rootGoal?.evidence_grade && (
-              <StatBadge
+              <CompactMetric
                 label={t('blackboard.planRunEvidenceGrade', 'Evidence')}
                 value={rootGoal.evidence_grade}
               />
             )}
-            <StatBadge
+            <CompactMetric
               label={t('blackboard.planRunQueue', 'Queue')}
               value={String(outbox.length)}
             />
-            <StatBadge
+            <CompactMetric
               label={t('blackboard.planRunEvents', 'Events')}
               value={String(events.length)}
             />
-          </div>
+          </dl>
           {rootGoalNeedsClosure(snapshot) && rootGoal?.completion_blocker_reason && (
             <div className="border-t border-warning-border bg-warning-bg px-4 py-3 text-sm text-status-text-warning dark:border-warning-border-dark dark:bg-warning-bg-dark dark:text-status-text-warning-dark">
               {rootGoal.completion_blocker_reason}
@@ -1640,52 +1627,6 @@ export function PlanRunSnapshotSection({
             isActionPending={isActionPending}
             onAction={(actionId) => void runIterationAction(actionId)}
           />
-          <PlanRunIterationLedger
-            runs={iterationRuns}
-            selectedIndex={selectedIterationRun?.index ?? null}
-            selectedNodeId={selectedNode?.id ?? null}
-            onSelectIteration={(index) => {
-              setSelectedIterationIndex(index);
-              closeSelectedTask();
-            }}
-            onSelectNode={(nodeId) => {
-              setSelectedNodeId(nodeId);
-              closeSelectedTask();
-            }}
-            onOpenTask={(taskId, nodeId) => {
-              if (nodeId) {
-                setSelectedNodeId(nodeId);
-              }
-              setSelectedTaskExperience(null);
-              setSelectedTaskSession(null);
-              setTaskExperienceError(null);
-              setSelectedTaskId(taskId);
-            }}
-            taskInspector={
-              selectedTask ? (
-                <div
-                  ref={taskInspectorRef}
-                  className="scroll-mt-24 overflow-hidden rounded-md border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark"
-                >
-                  <TaskExperiencePanel
-                    task={selectedTask}
-                    agents={agents}
-                    experience={selectedTaskExperience}
-                    executionSession={selectedTaskSession}
-                    loading={isTaskExperienceLoading}
-                    recoveryActionLoading={isTaskRecoveryPending}
-                    error={taskExperienceError}
-                    onRecoveryAction={(action) => {
-                      void runTaskRecoveryAction(action);
-                    }}
-                    onClose={closeSelectedTask}
-                    embedded
-                    className="max-h-[calc(100vh-160px)] overflow-y-auto"
-                  />
-                </div>
-              ) : null
-            }
-          />
           <DeliveryPanel
             delivery={delivery}
             isActionPending={isActionPending}
@@ -1695,8 +1636,8 @@ export function PlanRunSnapshotSection({
             onOpenPreview={(previewUrl, serviceId) => void openPreview(previewUrl, serviceId)}
           />
 
-          <div className="grid min-h-[520px] xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)]">
-            <div className="min-w-0 border-t border-border-separator dark:border-border-dark xl:border-t-0">
+          <div className="grid min-h-[520px] 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)]">
+            <div className="min-w-0 border-t border-border-separator dark:border-border-dark 2xl:border-t-0">
               <div className="border-b border-border-separator px-4 py-3 dark:border-border-dark">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
@@ -1713,7 +1654,7 @@ export function PlanRunSnapshotSection({
                         dagViewMode === 'graph'
                           ? 'bg-surface-light text-text-primary shadow-sm dark:bg-surface-dark dark:text-text-inverse'
                           : 'text-text-secondary hover:text-text-primary dark:text-text-muted dark:hover:text-text-inverse'
-                      }`}
+                      } whitespace-nowrap`}
                     >
                       <GitBranch className="h-3.5 w-3.5" aria-hidden />
                       {t('blackboard.planRunGraphView', 'Graph')}
@@ -1727,10 +1668,24 @@ export function PlanRunSnapshotSection({
                         dagViewMode === 'list'
                           ? 'bg-surface-light text-text-primary shadow-sm dark:bg-surface-dark dark:text-text-inverse'
                           : 'text-text-secondary hover:text-text-primary dark:text-text-muted dark:hover:text-text-inverse'
-                      }`}
+                      } whitespace-nowrap`}
                     >
                       <ListTodo className="h-3.5 w-3.5" aria-hidden />
                       {t('blackboard.planRunListView', 'List')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDagViewMode('iterations');
+                      }}
+                      className={`inline-flex h-8 items-center gap-1.5 rounded px-2.5 text-xs font-medium transition-colors ${
+                        dagViewMode === 'iterations'
+                          ? 'bg-surface-light text-text-primary shadow-sm dark:bg-surface-dark dark:text-text-inverse'
+                          : 'text-text-secondary hover:text-text-primary dark:text-text-muted dark:hover:text-text-inverse'
+                      } whitespace-nowrap`}
+                    >
+                      <Repeat2 className="h-3.5 w-3.5" aria-hidden />
+                      {t('blackboard.iterationLedgerTitle', 'Iteration ledger')}
                     </button>
                   </div>
                 </div>
@@ -1777,7 +1732,30 @@ export function PlanRunSnapshotSection({
                 </div>
               </div>
 
-              {dagViewMode === 'graph' && executionDagModel ? (
+              {dagViewMode === 'iterations' ? (
+                <PlanRunIterationLedger
+                  runs={iterationRuns}
+                  selectedIndex={selectedIterationRun?.index ?? null}
+                  selectedNodeId={selectedNode?.id ?? null}
+                  onSelectIteration={(index) => {
+                    setSelectedIterationIndex(index);
+                    closeSelectedTask();
+                  }}
+                  onSelectNode={(nodeId) => {
+                    setSelectedNodeId(nodeId);
+                    closeSelectedTask();
+                  }}
+                  onOpenTask={(taskId, nodeId) => {
+                    if (nodeId) {
+                      setSelectedNodeId(nodeId);
+                    }
+                    setSelectedTaskExperience(null);
+                    setSelectedTaskSession(null);
+                    setTaskExperienceError(null);
+                    setSelectedTaskId(taskId);
+                  }}
+                />
+              ) : dagViewMode === 'graph' && executionDagModel ? (
                 <div className="p-3">
                   <ExecutionDagGraph
                     model={executionDagModel}
@@ -1811,9 +1789,31 @@ export function PlanRunSnapshotSection({
               )}
             </div>
 
-            <aside className="min-w-0 border-t border-border-separator dark:border-border-dark xl:border-l xl:border-t-0">
+            <aside className="min-w-0 border-t border-border-separator dark:border-border-dark 2xl:border-l 2xl:border-t-0">
               {selectedNode ? (
                 <div className="flex min-h-full flex-col">
+                  {selectedTask && (
+                    <div
+                      ref={taskInspectorRef}
+                      className="border-b border-border-separator dark:border-border-dark"
+                    >
+                      <TaskExperiencePanel
+                        task={selectedTask}
+                        agents={agents}
+                        experience={selectedTaskExperience}
+                        executionSession={selectedTaskSession}
+                        loading={isTaskExperienceLoading}
+                        recoveryActionLoading={isTaskRecoveryPending}
+                        error={taskExperienceError}
+                        onRecoveryAction={(action) => {
+                          void runTaskRecoveryAction(action);
+                        }}
+                        onClose={closeSelectedTask}
+                        embedded
+                        className="max-h-[calc(100vh-160px)] overflow-y-auto"
+                      />
+                    </div>
+                  )}
                   <div className="border-b border-border-separator px-4 py-4 dark:border-border-dark">
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">

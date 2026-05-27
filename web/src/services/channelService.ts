@@ -11,6 +11,9 @@ import type {
   PluginActionResponse,
   ChannelPluginCatalog,
   ChannelPluginConfigSchema,
+  PluginConfigRecord,
+  PluginConfigSchema,
+  UpdatePluginConfigRequest,
 } from '@/types/channel';
 
 const BASE_URL = '/channels';
@@ -62,6 +65,32 @@ export const channelService = {
 
   async reloadTenantPlugins(tenantId: string): Promise<PluginActionResponse> {
     return httpClient.post<PluginActionResponse>(`${BASE_URL}/tenants/${tenantId}/plugins/reload`);
+  },
+
+  async getTenantPluginConfigSchema(
+    tenantId: string,
+    pluginName: string
+  ): Promise<PluginConfigSchema> {
+    return httpClient.get<PluginConfigSchema>(
+      `${BASE_URL}/tenants/${tenantId}/plugins/${pluginName}/config-schema`
+    );
+  },
+
+  async getTenantPluginConfig(tenantId: string, pluginName: string): Promise<PluginConfigRecord> {
+    return httpClient.get<PluginConfigRecord>(
+      `${BASE_URL}/tenants/${tenantId}/plugins/${pluginName}/config`
+    );
+  },
+
+  async updateTenantPluginConfig(
+    tenantId: string,
+    pluginName: string,
+    data: UpdatePluginConfigRequest
+  ): Promise<PluginConfigRecord> {
+    return httpClient.put<PluginConfigRecord>(
+      `${BASE_URL}/tenants/${tenantId}/plugins/${pluginName}/config`,
+      data
+    );
   },
 
   async listPlugins(projectId: string): Promise<RuntimePluginList> {

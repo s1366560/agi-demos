@@ -271,8 +271,8 @@ export function CentralBlackboardContent({
 
   return (
     <>
-      <div className="flex flex-col rounded-lg border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark md:min-h-0 md:flex-1 md:flex-row md:overflow-hidden">
-        <div className="md:hidden">
+      <div className="flex flex-col rounded-lg border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark lg:min-h-0 lg:flex-1 lg:flex-row lg:overflow-hidden">
+        <div className="lg:hidden">
           <BlackboardTabBar
             activeTab={activeTab}
             onTabChange={onActiveTabChange}
@@ -281,7 +281,7 @@ export function CentralBlackboardContent({
             tabSummaries={tabSummaries}
           />
         </div>
-        <aside className="hidden shrink-0 md:flex md:min-h-0 md:w-56 lg:w-60">
+        <aside className="hidden shrink-0 lg:flex lg:min-h-0 lg:w-60">
           <BlackboardTabBar
             activeTab={activeTab}
             onTabChange={onActiveTabChange}

@@ -482,6 +482,7 @@
     "iterationLedgerTotal": "{{count}} iterations",
     "iterationLedgerSelected": "Selected {{index}}",
     "iterationLedgerAria": "Iteration ledger",
+    "iterationLedgerEmpty": "No iteration ledger entries are available for this plan run.",
     "iterationLabel": "Iteration {{index}}",
     "iterationMetricTasks": "Tasks",
     "iterationMetricOutputs": "Outputs",
@@ -531,6 +532,7 @@
     "iterationOutputPipelines": "Pipelines",
     "iterationOutputBlackboard": "Blackboard",
     "iterationOutputEmpty": "none",
+    "iterationOutputPreviewTitle": "Preview",
     "iterationActivityTitle": "Activity",
     "iterationActivityWorker": "Worker",
     "iterationActivityVerifier": "Verifier",
@@ -3102,6 +3104,13 @@
         "uninstallDescription": "This only supports package-managed plugins.",
         "plugin": "Plugin",
         "source": "Source",
+        "capabilities": "Capabilities",
+        "capabilityTools": "Tools",
+        "capabilitySkills": "Skills",
+        "capabilityCommands": "Commands",
+        "capabilityHooks": "Hooks",
+        "noCapabilities": "No declared capabilities",
+        "configurePlugin": "Configure {{name}}",
         "local": "local",
         "toolOnly": "Tool-only plugin",
         "noPluginsInstalled": "No plugins installed yet"
@@ -3171,6 +3180,10 @@
         "domainPlaceholder": "feishu / lark / custom",
         "description": "Description",
         "descriptionPlaceholder": "Optional description"
+      },
+      "pluginConfigModal": {
+        "title": "Configure {{name}}",
+        "noConfig": "This plugin does not declare configurable settings."
       },
       "messages": {
         "loadProjectsFailed": "Failed to load projects",

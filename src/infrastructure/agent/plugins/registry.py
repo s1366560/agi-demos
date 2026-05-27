@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import inspect
 import logging
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from threading import RLock
 from typing import Any
@@ -66,9 +66,7 @@ PluginLifecycleHandler = Callable[[], None | Awaitable[None]]
 # A resolver factory receives a build context and returns a ``Resolver`` (or
 # an awaitable that resolves to one).  Plugins register these factories via
 # ``PluginRuntimeApi.register_subagent_resolver_factory()``.
-SubAgentResolverFactory = Callable[
-    ["SubAgentResolverBuildContext"], Any | Awaitable[Any]
-]
+SubAgentResolverFactory = Callable[["SubAgentResolverBuildContext"], Any | Awaitable[Any]]
 
 LIFECYCLE_EVENTS: frozenset[str] = frozenset(
     {
@@ -179,6 +177,7 @@ class SubAgentResolverBuildContext:
     tenant_id: str
     project_id: str
 
+
 @dataclass(frozen=True)
 class ChannelTypeConfigMetadata:
     """Configuration metadata registered for one channel type."""
@@ -220,6 +219,17 @@ class PluginConfigSchema:
 
     plugin_name: str
     schema: dict[str, Any]
+    config_ui_hints: dict[str, Any] | None = None
+    defaults: dict[str, Any] | None = None
+    secret_paths: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PluginCapabilityContracts:
+    """Manifest-declared capability ownership for one plugin."""
+
+    plugin_name: str
+    contracts: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -296,6 +306,27 @@ class AgentPluginRegistry:
         self._config_schemas: dict[str, PluginConfigSchema] = {}
         self._sandbox_tool_factories: dict[str, list[PluginToolFactory]] = {}
         self._subagent_resolver_factories: dict[str, SubAgentResolverFactory] = {}
+        self._plugin_contracts: dict[str, PluginCapabilityContracts] = {}
+
+    def register_plugin_contracts(
+        self,
+        plugin_name: str,
+        contracts: Mapping[str, Sequence[str]],
+    ) -> None:
+        """Register manifest-declared capability contracts for one plugin."""
+        normalized_contracts = _normalize_contract_map(contracts)
+        if not normalized_contracts:
+            return
+        with self._lock:
+            self._plugin_contracts[plugin_name] = PluginCapabilityContracts(
+                plugin_name=plugin_name,
+                contracts=normalized_contracts,
+            )
+
+    def list_plugin_contracts(self) -> dict[str, PluginCapabilityContracts]:
+        """Return manifest-declared plugin capability contracts."""
+        with self._lock:
+            return dict(self._plugin_contracts)
 
     def register_tool_factory(
         self,
@@ -330,6 +361,7 @@ class AgentPluginRegistry:
                 self._sandbox_tool_factories[plugin_name] = [factory]
             else:
                 self._sandbox_tool_factories.setdefault(plugin_name, []).append(factory)
+
     def register_skill_factory(
         self,
         plugin_name: str,
@@ -394,6 +426,7 @@ class AgentPluginRegistry:
         normalized_name = (name or "").strip().lower()
         if not normalized_name:
             raise ValueError("name is required")
+        self._require_declared_contract(plugin_name, "cli_commands", normalized_name)
         command = PluginCliCommand(
             plugin_name=plugin_name,
             name=normalized_name,
@@ -441,6 +474,7 @@ class AgentPluginRegistry:
         normalized_channel_type = (channel_type or "").strip().lower()
         if not normalized_channel_type:
             raise ValueError("channel_type is required")
+        self._require_declared_contract(plugin_name, "channels", normalized_channel_type)
 
         with self._lock:
             if normalized_channel_type in self._channel_adapter_factories and not overwrite:
@@ -482,12 +516,13 @@ class AgentPluginRegistry:
             plugin_name: Owning plugin identifier.
             hook_name: Hook point name (see ``WELL_KNOWN_HOOKS`` for documented names).
             handler: Async or sync callable invoked when the hook fires.
-            priority: Numeric priority -- lower values run first.  Default ``100``.
+            priority: Numeric priority -- higher values run first.  Default ``100``.
             overwrite: Allow replacing an existing handler from the same plugin.
         """
         normalized_hook_name = _normalize_hook_name(hook_name)
         if not normalized_hook_name:
             raise ValueError("hook_name is required")
+        self._require_declared_contract(plugin_name, "hooks", normalized_hook_name)
         resolved_hook_family = _infer_hook_family(hook_family or normalized_hook_name)
         with self._lock:
             bucket = self._hook_handlers.setdefault(normalized_hook_name, {})
@@ -528,6 +563,7 @@ class AgentPluginRegistry:
         normalized_name = (command_name or "").strip().lower()
         if not normalized_name:
             raise ValueError("command_name is required")
+        self._require_declared_contract(plugin_name, "commands", normalized_name)
         with self._lock:
             if normalized_name in self._commands and not overwrite:
                 existing_plugin = self._commands[normalized_name][0]
@@ -549,6 +585,7 @@ class AgentPluginRegistry:
         normalized_name = (service_name or "").strip().lower()
         if not normalized_name:
             raise ValueError("service_name is required")
+        self._require_declared_contract(plugin_name, "services", normalized_name)
         with self._lock:
             if normalized_name in self._services and not overwrite:
                 existing_plugin = self._services[normalized_name][0]
@@ -570,6 +607,7 @@ class AgentPluginRegistry:
         normalized_name = (provider_name or "").strip().lower()
         if not normalized_name:
             raise ValueError("provider_name is required")
+        self._require_declared_contract(plugin_name, "providers", normalized_name)
         with self._lock:
             if normalized_name in self._providers and not overwrite:
                 existing_plugin = self._providers[normalized_name][0]
@@ -638,9 +676,9 @@ class AgentPluginRegistry:
             if override_hook_name != normalized_name:
                 continue
             override = dict(raw_override)
-            executor_kind = str(
-                override.get("executor_kind", HookExecutorKind.BUILTIN.value)
-            ).strip().lower()
+            executor_kind = (
+                str(override.get("executor_kind", HookExecutorKind.BUILTIN.value)).strip().lower()
+            )
             plugin_name = str(override.get("plugin_name", "")).strip().lower()
             if executor_kind == HookExecutorKind.BUILTIN.value:
                 if plugin_name:
@@ -708,9 +746,13 @@ class AgentPluginRegistry:
                     hook_family=str(
                         override.get(
                             "hook_family",
-                            metadata.hook_family if metadata is not None else _infer_hook_family(normalized_name),
+                            metadata.hook_family
+                            if metadata is not None
+                            else _infer_hook_family(normalized_name),
                         )
-                    ).strip().lower(),
+                    )
+                    .strip()
+                    .lower(),
                     executor_kind=str(
                         override.get(
                             "executor_kind",
@@ -718,7 +760,9 @@ class AgentPluginRegistry:
                             if metadata is not None
                             else HookExecutorKind.BUILTIN.value,
                         )
-                    ).strip().lower(),
+                    )
+                    .strip()
+                    .lower(),
                     source_ref=(
                         str(override["source_ref"]).strip()
                         if override.get("source_ref") is not None
@@ -736,9 +780,10 @@ class AgentPluginRegistry:
 
         for override in custom_entries:
             raw_priority = override.get("priority")
-            plugin_name = str(override.get("plugin_name", "")).strip() or str(
-                override.get("source_ref", "custom-hook")
-            ).strip()
+            plugin_name = (
+                str(override.get("plugin_name", "")).strip()
+                or str(override.get("source_ref", "custom-hook")).strip()
+            )
             entries.append(
                 _ResolvedHookEntry(
                     entry_type="custom",
@@ -747,16 +792,18 @@ class AgentPluginRegistry:
                     priority=int(raw_priority) if raw_priority is not None else 100,
                     hook_family=str(
                         override.get("hook_family") or _infer_hook_family(normalized_name)
-                    ).strip().lower(),
-                    executor_kind=str(
-                        override.get("executor_kind", HookExecutorKind.BUILTIN.value)
-                    ).strip().lower(),
+                    )
+                    .strip()
+                    .lower(),
+                    executor_kind=str(override.get("executor_kind", HookExecutorKind.BUILTIN.value))
+                    .strip()
+                    .lower(),
                     source_ref=str(override.get("source_ref", "")).strip() or None,
                     entrypoint=str(override.get("entrypoint", "")).strip() or None,
                     effective_settings=self._build_effective_settings(None, override),
                 )
             )
-        return sorted(entries, key=lambda item: item.priority)
+        return sorted(entries, key=lambda item: item.priority, reverse=True)
 
     @staticmethod
     def _build_hook_payload(
@@ -853,6 +900,7 @@ class AgentPluginRegistry:
                 f"Unknown lifecycle event '{normalized_event}'. "
                 f"Expected one of: {sorted(LIFECYCLE_EVENTS)}"
             )
+        self._require_declared_contract(plugin_name, "lifecycle_hooks", normalized_event)
         with self._lock:
             bucket = self._lifecycle_hooks.setdefault(normalized_event, {})
             bucket[plugin_name] = handler
@@ -927,7 +975,9 @@ class AgentPluginRegistry:
         )
 
         current_payload = dict(payload or {})
-        tenant_id = str(current_payload.get("tenant_id")) if current_payload.get("tenant_id") else None
+        tenant_id = (
+            str(current_payload.get("tenant_id")) if current_payload.get("tenant_id") else None
+        )
         diagnostics: list[PluginDiagnostic] = []
         for entry in ordered_entries:
             plugin_name = entry.plugin_name
@@ -1074,6 +1124,19 @@ class AgentPluginRegistry:
                     )
                     continue
                 for tool_name, tool_impl in produced.items():
+                    if not self._is_declared_by_contract(plugin_name, "tools", str(tool_name)):
+                        diagnostics.append(
+                            PluginDiagnostic(
+                                plugin_name=plugin_name,
+                                code="plugin_contract_violation",
+                                message=(
+                                    "Skipped undeclared tool from manifest contracts.tools: "
+                                    f"{tool_name}"
+                                ),
+                                level="error",
+                            )
+                        )
+                        continue
                     if tool_name in context.base_tools or tool_name in plugin_tools:
                         diagnostics.append(
                             PluginDiagnostic(
@@ -1143,12 +1206,29 @@ class AgentPluginRegistry:
                         )
                     )
                     continue
-                plugin_skills.extend(produced)
+                declared_skills: list[dict[str, Any]] = []
+                for skill in produced:
+                    skill_name = skill.get("name") if isinstance(skill, dict) else None
+                    if not self._is_declared_by_contract(plugin_name, "skills", str(skill_name)):
+                        diagnostics.append(
+                            PluginDiagnostic(
+                                plugin_name=plugin_name,
+                                code="plugin_contract_violation",
+                                message=(
+                                    "Skipped undeclared skill from manifest contracts.skills: "
+                                    f"{skill_name}"
+                                ),
+                                level="error",
+                            )
+                        )
+                        continue
+                    declared_skills.append(skill)
+                plugin_skills.extend(declared_skills)
                 diagnostics.append(
                     PluginDiagnostic(
                         plugin_name=plugin_name,
                         code="plugin_skills_loaded",
-                        message=f"Registered {len(produced)} plugin skill(s)",
+                        message=f"Registered {len(declared_skills)} plugin skill(s)",
                         level="info",
                     )
                 )
@@ -1314,8 +1394,17 @@ class AgentPluginRegistry:
             self._config_schemas.clear()
             self._sandbox_tool_factories.clear()
             self._subagent_resolver_factories.clear()
+            self._plugin_contracts.clear()
 
-    def register_config_schema(self, plugin_name: str, schema: dict[str, Any]) -> None:
+    def register_config_schema(
+        self,
+        plugin_name: str,
+        schema: dict[str, Any],
+        *,
+        config_ui_hints: dict[str, Any] | None = None,
+        defaults: dict[str, Any] | None = None,
+        secret_paths: list[str] | None = None,
+    ) -> None:
         """Register a JSON Schema for validating a plugin's configuration."""
         if not isinstance(schema, dict) or not schema:
             raise ValueError("schema must be a non-empty dict")
@@ -1323,6 +1412,11 @@ class AgentPluginRegistry:
             self._config_schemas[plugin_name] = PluginConfigSchema(
                 plugin_name=plugin_name,
                 schema=dict(schema),
+                config_ui_hints=dict(config_ui_hints)
+                if isinstance(config_ui_hints, dict)
+                else None,
+                defaults=dict(defaults) if isinstance(defaults, dict) else None,
+                secret_paths=[path for path in secret_paths or [] if isinstance(path, str)],
             )
 
     def validate_config(self, plugin_name: str, config: dict[str, Any]) -> list[PluginDiagnostic]:
@@ -1354,6 +1448,27 @@ class AgentPluginRegistry:
             )
         return diagnostics
 
+    def _is_declared_by_contract(self, plugin_name: str, family: str, name: str) -> bool:
+        """Return whether a capability is allowed by an optional manifest contract."""
+        with self._lock:
+            contract = self._plugin_contracts.get(plugin_name)
+        if contract is None:
+            return True
+        declared = contract.contracts.get(family)
+        if not declared:
+            return True
+        normalized_name = (name or "").strip().lower()
+        if not normalized_name:
+            return False
+        return normalized_name in {item.lower() for item in declared}
+
+    def _require_declared_contract(self, plugin_name: str, family: str, name: str) -> None:
+        if self._is_declared_by_contract(plugin_name, family, name):
+            return
+        raise ValueError(
+            f"Plugin {plugin_name} must declare contracts.{family} for capability: {name}"
+        )
+
     def list_config_schemas(self) -> dict[str, PluginConfigSchema]:
         """Return a snapshot of registered config schemas."""
         with self._lock:
@@ -1361,6 +1476,35 @@ class AgentPluginRegistry:
 
 
 _global_plugin_registry = AgentPluginRegistry()
+
+
+def _normalize_contract_map(
+    contracts: Mapping[str, Sequence[str]],
+) -> dict[str, tuple[str, ...]]:
+    normalized: dict[str, tuple[str, ...]] = {}
+    for raw_family, raw_names in contracts.items():
+        family = _normalize_contract_family(raw_family)
+        if not family:
+            continue
+        if isinstance(raw_names, str):
+            raw_names = (raw_names,)
+        names = tuple(item.strip() for item in raw_names if isinstance(item, str) and item.strip())
+        if names:
+            normalized[family] = names
+    return normalized
+
+
+def _normalize_contract_family(value: Any) -> str:
+    family = (str(value) or "").strip()
+    aliases = {
+        "clicommands": "cli_commands",
+        "cli-commands": "cli_commands",
+        "cli_commands": "cli_commands",
+        "lifecyclehooks": "lifecycle_hooks",
+        "lifecycle-hooks": "lifecycle_hooks",
+        "lifecycle_hooks": "lifecycle_hooks",
+    }
+    return aliases.get(family.lower(), family.lower())
 
 
 def _register_builtin_hooks() -> None:
@@ -1381,9 +1525,8 @@ def _register_builtin_hooks() -> None:
         register_builtin_workspace_plugin(_global_plugin_registry)
     if not any(entry.plugin_name == "sisyphus-runtime" for entry in hook_catalog):
         register_builtin_sisyphus_plugin(_global_plugin_registry)
-    if (
-        get_settings().agent_memory_runtime_mode != "disabled"
-        and not any(entry.plugin_name == "memory-runtime" for entry in hook_catalog)
+    if get_settings().agent_memory_runtime_mode != "disabled" and not any(
+        entry.plugin_name == "memory-runtime" for entry in hook_catalog
     ):
         register_builtin_memory_plugin(_global_plugin_registry)
     if not any(entry.plugin_name == "skill-evolution" for entry in hook_catalog):

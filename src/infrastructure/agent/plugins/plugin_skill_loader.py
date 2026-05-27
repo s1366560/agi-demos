@@ -107,6 +107,19 @@ def load_plugin_skills_from_markdown(
                     project_id=project_id,
                 )
                 if skill is not None:
+                    if not _is_declared_skill(plugin, skill.name):
+                        all_diagnostics.append(
+                            PluginDiagnostic(
+                                plugin_name=plugin.name,
+                                code="plugin_contract_violation",
+                                message=(
+                                    "Skipped undeclared SKILL.md skill from "
+                                    f"manifest contracts.skills: {skill.name}"
+                                ),
+                                level="error",
+                            )
+                        )
+                        continue
                     all_skills.append(skill)
                     logger.debug(
                         "Loaded plugin SKILL.md '%s' from plugin '%s' at %s",
@@ -132,6 +145,14 @@ def load_plugin_skills_from_markdown(
         )
 
     return all_skills, all_diagnostics
+
+
+def _is_declared_skill(plugin: DiscoveredPlugin, skill_name: str) -> bool:
+    contracts = plugin.contracts or {}
+    declared = contracts.get("skills")
+    if not declared:
+        return True
+    return skill_name.strip().lower() in {item.strip().lower() for item in declared}
 
 
 def _resolve_plugin_dir(plugin: DiscoveredPlugin) -> Path | None:

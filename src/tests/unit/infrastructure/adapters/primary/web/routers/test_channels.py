@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,10 +20,13 @@ from src.infrastructure.adapters.primary.web.routers.channels import (
     ChannelConfigCreate,
     ChannelConfigResponse,
     ChannelConfigUpdate,
+    PluginConfigUpdateRequest,
     create_config,
     enable_tenant_plugin,
     get_project_channel_plugin_schema,
     get_tenant_channel_plugin_schema,
+    get_tenant_plugin_config,
+    get_tenant_plugin_config_schema,
     list_all_connection_status,
     list_project_channel_plugin_catalog,
     list_tenant_channel_plugin_catalog,
@@ -35,6 +38,7 @@ from src.infrastructure.adapters.primary.web.routers.channels import (
     to_response,
     uninstall_tenant_plugin,
     update_config,
+    update_tenant_plugin_config,
     verify_project_access,
 )
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
@@ -1037,6 +1041,16 @@ class TestTenantPluginEndpoints:
             "channels": ["feishu"],
             "providers": ["feishu"],
             "skills": ["channel-send"],
+            "contracts": {"channels": ["feishu"], "hooks": ["before_tool_call"]},
+            "activation": {"onStartup": False, "onChannels": ["feishu"]},
+            "command_aliases": [
+                {"name": "feishu", "kind": "runtime-slash", "cliCommand": "feishu"}
+            ],
+            "tool_metadata": {"feishu_send": {"description": "Send Feishu message"}},
+            "hook_metadata": {"before_tool_call": {"timeoutMs": 1000}},
+            "config_schema": {"type": "object"},
+            "config_ui_hints": {"app_secret": {"sensitive": True}},
+            "env_vars": {"feishu": ["FEISHU_APP_ID"]},
             "enabled": True,
             "discovered": True,
             "channel_types": ["feishu"],
@@ -1065,6 +1079,24 @@ class TestTenantPluginEndpoints:
         assert response.items[0].channels == ["feishu"]
         assert response.items[0].providers == ["feishu"]
         assert response.items[0].skills == ["channel-send"]
+        assert response.items[0].contracts == {
+            "channels": ["feishu"],
+            "hooks": ["before_tool_call"],
+        }
+        assert response.items[0].activation == {
+            "onStartup": False,
+            "onChannels": ["feishu"],
+        }
+        assert response.items[0].command_aliases == [
+            {"name": "feishu", "kind": "runtime-slash", "cliCommand": "feishu"}
+        ]
+        assert response.items[0].tool_metadata == {
+            "feishu_send": {"description": "Send Feishu message"}
+        }
+        assert response.items[0].hook_metadata == {"before_tool_call": {"timeoutMs": 1000}}
+        assert response.items[0].config_schema == {"type": "object"}
+        assert response.items[0].config_ui_hints == {"app_secret": {"sensitive": True}}
+        assert response.items[0].env_vars == {"feishu": ["FEISHU_APP_ID"]}
 
     @pytest.mark.asyncio
     async def test_reload_tenant_plugins_includes_channel_reload_plan(self, mock_db_session):
@@ -1166,6 +1198,449 @@ class TestTenantPluginEndpoints:
         assert response.manifest_id == "feishu-channel-plugin"
         assert response.providers == ["feishu"]
         assert response.skills == ["channel-send"]
+
+    @pytest.mark.asyncio
+    async def test_tenant_plugin_config_schema_endpoint_returns_generic_schema(
+        self, mock_db_session
+    ):
+        """Generic plugin schema endpoint should return registered config schema metadata."""
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        schema_entry = SimpleNamespace(
+            schema={"type": "object", "required": ["api_key"]},
+            config_ui_hints={"api_key": {"sensitive": True}},
+            defaults={"mode": "safe"},
+            secret_paths=["api_key"],
+        )
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_tenant_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels._load_runtime_plugins",
+                new=AsyncMock(
+                    return_value=(
+                        [
+                            {
+                                "name": "demo-plugin",
+                                "source": "local",
+                                "package": None,
+                                "version": "0.1.0",
+                                "kind": "tool",
+                                "manifest_id": "demo-plugin",
+                                "providers": ["demo"],
+                                "skills": ["demo-skill"],
+                                "enabled": True,
+                                "discovered": True,
+                            }
+                        ],
+                        [],
+                        {},
+                    )
+                ),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
+            ) as mock_get_registry,
+        ):
+            mock_registry = MagicMock()
+            mock_registry.list_config_schemas.return_value = {"demo-plugin": schema_entry}
+            mock_get_registry.return_value = mock_registry
+
+            response = await get_tenant_plugin_config_schema(
+                tenant_id="tenant-1",
+                plugin_name="demo-plugin",
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        assert response.plugin_name == "demo-plugin"
+        assert response.schema_supported is True
+        assert response.config_schema == {"type": "object", "required": ["api_key"]}
+        assert response.config_ui_hints == {"api_key": {"sensitive": True}}
+        assert response.defaults == {"mode": "safe"}
+        assert response.secret_paths == ["api_key"]
+
+    @pytest.mark.asyncio
+    async def test_tenant_plugin_config_masks_secret_values(self, mock_db_session):
+        """Generic plugin config reads should mask declared secret paths."""
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        stored_config = SimpleNamespace(
+            id="plugin-config-1",
+            tenant_id="tenant-1",
+            plugin_name="demo-plugin",
+            config={"api_key": "encrypted-secret", "mode": "safe"},
+            created_at=datetime.utcnow(),
+            updated_at=None,
+        )
+        schema_entry = SimpleNamespace(
+            schema={"type": "object"},
+            config_ui_hints=None,
+            defaults=None,
+            secret_paths=["api_key"],
+        )
+        repo = MagicMock()
+        repo.get_by_tenant_and_plugin = AsyncMock(return_value=stored_config)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_tenant_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels._load_runtime_plugins",
+                new=AsyncMock(return_value=([{"name": "demo-plugin", "source": "local"}], [], {})),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
+            ) as mock_get_registry,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.PluginConfigRepository",
+                return_value=repo,
+            ),
+        ):
+            mock_registry = MagicMock()
+            mock_registry.list_config_schemas.return_value = {"demo-plugin": schema_entry}
+            mock_get_registry.return_value = mock_registry
+
+            response = await get_tenant_plugin_config(
+                tenant_id="tenant-1",
+                plugin_name="demo-plugin",
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        assert response.config["api_key"] == "__MEMSTACK_SECRET_UNCHANGED__"
+        assert response.config["mode"] == "safe"
+
+    @pytest.mark.asyncio
+    async def test_tenant_plugin_config_read_adapts_to_current_schema(self, mock_db_session):
+        """Generic plugin config reads should hide fields removed by a newer plugin schema."""
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        stored_config = SimpleNamespace(
+            id="plugin-config-1",
+            tenant_id="tenant-1",
+            plugin_name="demo-plugin",
+            config={"mode": "safe", "old_field": "stale"},
+            created_at=datetime.utcnow(),
+            updated_at=None,
+        )
+        schema_entry = SimpleNamespace(
+            schema={
+                "type": "object",
+                "properties": {"mode": {"type": "string"}},
+                "additionalProperties": False,
+            },
+            config_ui_hints=None,
+            defaults=None,
+            secret_paths=[],
+        )
+        repo = MagicMock()
+        repo.get_by_tenant_and_plugin = AsyncMock(return_value=stored_config)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_tenant_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels._load_runtime_plugins",
+                new=AsyncMock(return_value=([{"name": "demo-plugin", "source": "local"}], [], {})),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
+            ) as mock_get_registry,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.PluginConfigRepository",
+                return_value=repo,
+            ),
+        ):
+            mock_registry = MagicMock()
+            mock_registry.list_config_schemas.return_value = {"demo-plugin": schema_entry}
+            mock_get_registry.return_value = mock_registry
+
+            response = await get_tenant_plugin_config(
+                tenant_id="tenant-1",
+                plugin_name="demo-plugin",
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        assert response.config == {"mode": "safe"}
+
+    @pytest.mark.asyncio
+    async def test_update_tenant_plugin_config_validates_and_preserves_secret(
+        self, mock_db_session
+    ):
+        """Generic plugin config update should validate schema and preserve sentinel secrets."""
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        existing = SimpleNamespace(
+            id="plugin-config-1",
+            tenant_id="tenant-1",
+            plugin_name="demo-plugin",
+            config={"api_key": "encrypted-old", "mode": "safe"},
+            created_at=datetime.utcnow(),
+            updated_at=None,
+        )
+        saved = SimpleNamespace(
+            id="plugin-config-1",
+            tenant_id="tenant-1",
+            plugin_name="demo-plugin",
+            config={"api_key": "encrypted-old", "mode": "fast"},
+            created_at=datetime.utcnow(),
+            updated_at=None,
+        )
+        schema_entry = SimpleNamespace(
+            schema={
+                "type": "object",
+                "properties": {
+                    "api_key": {"type": "string"},
+                    "mode": {"type": "string", "enum": ["safe", "fast"]},
+                },
+                "required": ["api_key", "mode"],
+            },
+            config_ui_hints=None,
+            defaults=None,
+            secret_paths=["api_key"],
+        )
+        repo = MagicMock()
+        repo.get_by_tenant_and_plugin = AsyncMock(return_value=existing)
+        repo.upsert = AsyncMock(return_value=saved)
+        encryption_service = MagicMock()
+        encryption_service.decrypt.return_value = "old-secret"
+        encryption_service.encrypt.return_value = "encrypted-old"
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_tenant_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels._load_runtime_plugins",
+                new=AsyncMock(return_value=([{"name": "demo-plugin", "source": "local"}], [], {})),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
+            ) as mock_get_registry,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.PluginConfigRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_encryption_service",
+                return_value=encryption_service,
+            ),
+        ):
+            mock_registry = MagicMock()
+            mock_registry.list_config_schemas.return_value = {"demo-plugin": schema_entry}
+            mock_get_registry.return_value = mock_registry
+
+            response = await update_tenant_plugin_config(
+                tenant_id="tenant-1",
+                plugin_name="demo-plugin",
+                data=PluginConfigUpdateRequest(
+                    config={
+                        "api_key": "__MEMSTACK_SECRET_UNCHANGED__",
+                        "mode": "fast",
+                    }
+                ),
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        repo.upsert.assert_awaited_once()
+        saved_payload = repo.upsert.await_args.kwargs["config"]
+        assert saved_payload == {"api_key": "encrypted-old", "mode": "fast"}
+        assert response.config["api_key"] == "__MEMSTACK_SECRET_UNCHANGED__"
+
+    @pytest.mark.asyncio
+    async def test_update_tenant_plugin_config_prunes_removed_schema_fields(self, mock_db_session):
+        """Generic plugin config update should drop stale fields from older plugin versions."""
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        existing = SimpleNamespace(
+            id="plugin-config-1",
+            tenant_id="tenant-1",
+            plugin_name="demo-plugin",
+            config={"mode": "safe", "old_field": "stale", "branch": "main"},
+            created_at=datetime.utcnow(),
+            updated_at=None,
+        )
+        saved = SimpleNamespace(
+            id="plugin-config-1",
+            tenant_id="tenant-1",
+            plugin_name="demo-plugin",
+            config={"mode": "fast"},
+            created_at=datetime.utcnow(),
+            updated_at=None,
+        )
+        schema_entry = SimpleNamespace(
+            schema={
+                "type": "object",
+                "properties": {"mode": {"type": "string", "enum": ["safe", "fast"]}},
+                "additionalProperties": False,
+            },
+            config_ui_hints=None,
+            defaults={"mode": "safe"},
+            secret_paths=[],
+        )
+        repo = MagicMock()
+        repo.get_by_tenant_and_plugin = AsyncMock(return_value=existing)
+        repo.upsert = AsyncMock(return_value=saved)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_tenant_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels._load_runtime_plugins",
+                new=AsyncMock(return_value=([{"name": "demo-plugin", "source": "local"}], [], {})),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
+            ) as mock_get_registry,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.PluginConfigRepository",
+                return_value=repo,
+            ),
+        ):
+            mock_registry = MagicMock()
+            mock_registry.list_config_schemas.return_value = {"demo-plugin": schema_entry}
+            mock_get_registry.return_value = mock_registry
+
+            response = await update_tenant_plugin_config(
+                tenant_id="tenant-1",
+                plugin_name="demo-plugin",
+                data=PluginConfigUpdateRequest(config={"mode": "fast", "old_field": "stale"}),
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        repo.upsert.assert_awaited_once()
+        assert repo.upsert.await_args.kwargs["config"] == {"mode": "fast"}
+        assert response.config == {"mode": "fast"}
+
+    @pytest.mark.asyncio
+    async def test_update_tenant_plugin_config_builds_response_before_commit(self, mock_db_session):
+        """Generic plugin config update should not access ORM attributes after commit."""
+
+        class ExpiringConfig:
+            def __init__(self) -> None:
+                self.id = "plugin-config-1"
+                self.tenant_id = "tenant-1"
+                self.plugin_name = "demo-plugin"
+                self.config = {"mode": "fast"}
+                self.created_at = datetime.utcnow()
+                self._committed = False
+
+            @property
+            def updated_at(self):
+                if self._committed:
+                    raise AssertionError("updated_at accessed after commit")
+                return None
+
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        saved = ExpiringConfig()
+        schema_entry = SimpleNamespace(
+            schema={
+                "type": "object",
+                "properties": {"mode": {"type": "string", "enum": ["safe", "fast"]}},
+                "additionalProperties": False,
+            },
+            config_ui_hints=None,
+            defaults=None,
+            secret_paths=[],
+        )
+        repo = MagicMock()
+        repo.get_by_tenant_and_plugin = AsyncMock(return_value=None)
+        repo.upsert = AsyncMock(return_value=saved)
+
+        async def mark_committed() -> None:
+            saved._committed = True
+
+        mock_db_session.commit = AsyncMock(side_effect=mark_committed)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_tenant_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels._load_runtime_plugins",
+                new=AsyncMock(return_value=([{"name": "demo-plugin", "source": "local"}], [], {})),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
+            ) as mock_get_registry,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.PluginConfigRepository",
+                return_value=repo,
+            ),
+        ):
+            mock_registry = MagicMock()
+            mock_registry.list_config_schemas.return_value = {"demo-plugin": schema_entry}
+            mock_get_registry.return_value = mock_registry
+
+            response = await update_tenant_plugin_config(
+                tenant_id="tenant-1",
+                plugin_name="demo-plugin",
+                data=PluginConfigUpdateRequest(config={"mode": "fast"}),
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        assert response.config == {"mode": "fast"}
+        assert saved._committed is True
+
+    @pytest.mark.asyncio
+    async def test_update_tenant_plugin_config_rejects_invalid_schema(self, mock_db_session):
+        """Generic plugin config update should reject invalid schema-backed values."""
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        schema_entry = SimpleNamespace(
+            schema={
+                "type": "object",
+                "properties": {"mode": {"type": "string", "enum": ["safe", "fast"]}},
+                "required": ["mode"],
+            },
+            config_ui_hints=None,
+            defaults=None,
+            secret_paths=[],
+        )
+        repo = MagicMock()
+        repo.get_by_tenant_and_plugin = AsyncMock(return_value=None)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_tenant_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels._load_runtime_plugins",
+                new=AsyncMock(return_value=([{"name": "demo-plugin", "source": "local"}], [], {})),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry"
+            ) as mock_get_registry,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.PluginConfigRepository",
+                return_value=repo,
+            ),
+        ):
+            mock_registry = MagicMock()
+            mock_registry.list_config_schemas.return_value = {"demo-plugin": schema_entry}
+            mock_get_registry.return_value = mock_registry
+
+            with pytest.raises(HTTPException) as exc_info:
+                await update_tenant_plugin_config(
+                    tenant_id="tenant-1",
+                    plugin_name="demo-plugin",
+                    data=PluginConfigUpdateRequest(config={"mode": "broken"}),
+                    db=mock_db_session,
+                    current_user=current_user,
+                )
+
+        assert getattr(exc_info.value, "status_code", None) == 422
 
     @pytest.mark.asyncio
     async def test_list_tenant_channel_catalog(self, mock_db_session):

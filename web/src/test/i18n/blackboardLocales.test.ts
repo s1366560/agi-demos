@@ -46,6 +46,8 @@ const BLACKBOARD_PRODUCT_KEYS = [
   'blackboard.planRunHistoryReadOnlyAction',
   'blackboard.iterationLedgerTitle',
   'blackboard.iterationLedgerDescription',
+  'blackboard.iterationLedgerEmpty',
+  'blackboard.iterationOutputPreviewTitle',
   'blackboard.iterationTasksTitle',
   'blackboard.iterationOutputsTitle',
   'blackboard.iterationActivityTitle',

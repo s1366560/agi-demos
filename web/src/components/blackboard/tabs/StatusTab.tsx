@@ -26,7 +26,6 @@ import { PresenceBar } from '@/components/workspace/presence/PresenceBar';
 import { DerivedSurfaceBadge } from '../DerivedSurfaceBadge';
 import { EmptyState } from '../EmptyState';
 import { HostedProjectionBadge } from '../HostedProjectionBadge';
-import { StatBadge } from '../StatBadge';
 
 import { PlanRunSnapshotSection } from './PlanRunSnapshotSection';
 
@@ -216,65 +215,57 @@ export function StatusTab({
   );
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-md border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark-alt">
-        <div className="flex flex-col gap-3 border-b border-border-light px-4 py-4 dark:border-border-dark xl:flex-row xl:items-start xl:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="rounded-md border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark-alt xl:col-span-2">
+        <div className="flex flex-col gap-3 px-4 py-3 2xl:flex-row 2xl:items-center">
+          <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 2xl:w-60">
+            <h3 className="text-base font-semibold text-text-primary dark:text-text-inverse">
               {t('blackboard.statusOverviewTitle', 'Status and presence')}
             </h3>
-            <div className="mt-2">
-              <DerivedSurfaceBadge
-                labelKey="blackboard.statusOverviewDerivedHint"
-                fallbackLabel="workspace execution summary"
-              />
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <StatBadge
-              label={t('blackboard.executionDiagnosticsTitle', 'Execution diagnostics')}
-              value={String(diagnosticsSignalCount)}
-            />
-            <StatBadge
-              label={t('blackboard.metrics.pendingAdjudication', 'Pending adjudication')}
-              value={String(stats.pendingAdjudicationTasks)}
+            <DerivedSurfaceBadge
+              labelKey="blackboard.statusOverviewDerivedHint"
+              fallbackLabel="workspace execution summary"
             />
           </div>
-        </div>
-        <div className="flex flex-wrap gap-px bg-border-light dark:bg-border-dark">
-          {statusMetrics.map((metric) => (
-            <StatusMetricCell key={metric.key} metric={metric} />
-          ))}
+          <dl className="grid min-w-0 flex-1 gap-x-5 gap-y-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+            {statusMetrics.map((metric) => (
+              <StatusMetricCell key={metric.key} metric={metric} />
+            ))}
+          </dl>
         </div>
       </section>
 
-      <PlanRunSnapshotSection
-        workspaceId={workspaceId}
-        tenantId={tenantId}
-        projectId={projectId}
-        agents={agents}
-        tasks={tasks}
-        refreshToken={planRefreshToken}
-      />
+      <div className="min-w-0">
+        <PlanRunSnapshotSection
+          workspaceId={workspaceId}
+          tenantId={tenantId}
+          projectId={projectId}
+          agents={agents}
+          tasks={tasks}
+          refreshToken={planRefreshToken}
+        />
+      </div>
 
-      <ExecutionDiagnosticsSection
-        diagnosticsError={diagnosticsError}
-        diagnosticsSignalCount={diagnosticsSignalCount}
-        diagnosticsSignals={diagnosticsSignals}
-      />
+      <aside className="min-w-0 space-y-4">
+        <ExecutionDiagnosticsSection
+          diagnosticsError={diagnosticsError}
+          diagnosticsSignalCount={diagnosticsSignalCount}
+          diagnosticsSignals={diagnosticsSignals}
+        />
 
-      <PendingAdjudicationSection
-        agents={agents}
-        pendingAdjudicationTasks={pendingAdjudicationTasks}
-        projectId={projectId}
-        statsPendingAdjudicationTasks={stats.pendingAdjudicationTasks}
-        tenantId={tenantId}
-        workspaceId={workspaceId}
-      />
+        <PendingAdjudicationSection
+          agents={agents}
+          pendingAdjudicationTasks={pendingAdjudicationTasks}
+          projectId={projectId}
+          statsPendingAdjudicationTasks={stats.pendingAdjudicationTasks}
+          tenantId={tenantId}
+          workspaceId={workspaceId}
+        />
 
-      <PresenceBar workspaceId={workspaceId} />
+        <PresenceBar workspaceId={workspaceId} />
 
-      <AgentStatusSection agents={agents} statusBadgeTone={statusBadgeTone} />
+        <AgentStatusSection agents={agents} statusBadgeTone={statusBadgeTone} />
+      </aside>
     </div>
   );
 }
@@ -282,7 +273,7 @@ export function StatusTab({
 function StatusMetricCell({ metric }: { metric: StatusMetric }) {
   const Icon = metric.icon;
   return (
-    <div className="min-w-0 flex-grow basis-full bg-surface-light px-3 py-3 dark:bg-surface-dark-alt sm:basis-[calc(50%-1px)] xl:basis-[calc(25%-1px)] 2xl:basis-[calc(14.285%-1px)]">
+    <div className="min-w-0">
       <dt className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-text-muted dark:text-text-muted">
         <Icon
           size={14}
@@ -291,8 +282,8 @@ function StatusMetricCell({ metric }: { metric: StatusMetric }) {
         />
         <span className="truncate">{metric.label}</span>
       </dt>
-      <dd className="mt-2">
-        <div className="text-xl font-semibold tabular-nums text-text-primary dark:text-text-inverse">
+      <dd className="mt-2 min-w-0">
+        <div className="text-base font-semibold tabular-nums text-text-primary dark:text-text-inverse">
           {metric.value}
         </div>
         <div className="mt-1 truncate text-xs text-text-secondary dark:text-text-muted">
@@ -322,7 +313,7 @@ function ExecutionDiagnosticsSection({
 
   return (
     <section className="rounded-md border border-border-light bg-surface-light p-4 dark:border-border-dark dark:bg-surface-dark-alt">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold text-text-primary dark:text-text-inverse">
             {t('blackboard.executionDiagnosticsTitle', 'Execution diagnostics')}
@@ -334,20 +325,9 @@ function ExecutionDiagnosticsSection({
             />
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <StatBadge
-            label={t('blackboard.executionDiagnosticsBlockers', 'Blockers')}
-            value={String(diagnosticsSignals.blockers.length)}
-          />
-          <StatBadge
-            label={t('blackboard.executionDiagnosticsEvidenceGaps', 'Evidence gaps')}
-            value={String(diagnosticsSignals.evidenceGaps.length)}
-          />
-          <StatBadge
-            label={t('blackboard.executionDiagnosticsToolFailures', 'Tool failures')}
-            value={String(diagnosticsSignals.toolFailures.length)}
-          />
-        </div>
+        <span className="rounded border border-border-light bg-surface-muted px-2 py-1 text-xs font-semibold tabular-nums text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+          {String(diagnosticsSignalCount)}
+        </span>
       </div>
 
       {diagnosticsError ? (
@@ -364,7 +344,7 @@ function ExecutionDiagnosticsSection({
           </EmptyState>
         </div>
       ) : (
-        <div className="mt-4 grid gap-3 xl:grid-cols-3">
+        <div className="mt-4 grid gap-3">
           <DiagnosticsList
             title={t('blackboard.executionDiagnosticsBlockers', 'Blockers')}
             emptyLabel={t('blackboard.executionDiagnosticsNoBlockers', 'No blockers')}
@@ -426,7 +406,7 @@ function PendingAdjudicationSection({
             />
           </div>
         </div>
-        <span className="rounded-full border border-info-border bg-info-bg px-3 py-1 text-xs font-semibold text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
+        <span className="rounded border border-info-border bg-info-bg px-2 py-1 text-xs font-semibold text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark">
           {String(statsPendingAdjudicationTasks)}
         </span>
       </div>
@@ -539,7 +519,7 @@ function AgentStatusSection({
         </div>
       ) : (
         <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full table-fixed border-collapse text-sm">
+          <table className="min-w-[520px] table-fixed border-collapse text-sm">
             <thead>
               <tr className="border-b border-border-light text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted dark:border-border-dark dark:text-text-muted">
                 <th className="w-[42%] px-0 py-2 pr-4">

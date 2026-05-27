@@ -85,9 +85,24 @@ export interface RuntimePlugin {
   source: string;
   package?: string | undefined;
   version?: string | undefined;
+  kind?: string | undefined;
+  manifest_id?: string | undefined;
+  manifest_path?: string | undefined;
+  channels?: string[] | undefined;
+  providers?: string[] | undefined;
+  skills?: string[] | undefined;
+  contracts?: Record<string, string[]> | undefined;
+  activation?: Record<string, unknown> | undefined;
+  command_aliases?: Array<Record<string, unknown>> | undefined;
+  tool_metadata?: Record<string, Record<string, unknown>> | undefined;
+  hook_metadata?: Record<string, Record<string, unknown>> | undefined;
+  config_schema?: Record<string, unknown> | undefined;
+  config_ui_hints?: Record<string, unknown> | undefined;
+  env_vars?: Record<string, string[]> | undefined;
   enabled: boolean;
   discovered: boolean;
   channel_types: string[];
+  schema_supported?: boolean | undefined;
 }
 
 export interface RuntimePluginList {
@@ -180,6 +195,56 @@ export interface ChannelPluginConfigSchema {
     | undefined;
   defaults?: Record<string, unknown> | undefined;
   secret_paths: string[];
+}
+
+export type PluginConfigValue = Record<string, unknown>;
+
+export interface PluginConfigSchema {
+  plugin_name: string;
+  source?: string | null | undefined;
+  package?: string | null | undefined;
+  version?: string | null | undefined;
+  kind?: string | null | undefined;
+  manifest_id?: string | null | undefined;
+  providers: string[];
+  skills: string[];
+  enabled: boolean;
+  discovered: boolean;
+  schema_supported: boolean;
+  config_schema?:
+    | {
+        type?: string | undefined;
+        properties?: Record<string, ChannelPluginSchemaProperty> | undefined;
+        required?: string[] | undefined;
+      }
+    | undefined;
+  config_ui_hints?:
+    | Record<
+        string,
+        {
+          label?: string | undefined;
+          help?: string | undefined;
+          placeholder?: string | undefined;
+          sensitive?: boolean | undefined;
+          advanced?: boolean | undefined;
+        }
+      >
+    | undefined;
+  defaults?: PluginConfigValue | undefined;
+  secret_paths: string[];
+}
+
+export interface PluginConfigRecord {
+  id?: string | null | undefined;
+  tenant_id: string;
+  plugin_name: string;
+  config: PluginConfigValue;
+  created_at?: string | null | undefined;
+  updated_at?: string | null | undefined;
+}
+
+export interface UpdatePluginConfigRequest {
+  config: PluginConfigValue;
 }
 
 export interface ChannelConfigList {

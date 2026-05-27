@@ -15,6 +15,9 @@ vi.mock('@/services/channelService', () => ({
     listTenantPlugins: vi.fn(),
     listTenantChannelPluginCatalog: vi.fn(),
     getTenantChannelPluginSchema: vi.fn(),
+    getTenantPluginConfigSchema: vi.fn(),
+    getTenantPluginConfig: vi.fn(),
+    updateTenantPluginConfig: vi.fn(),
     installTenantPlugin: vi.fn(),
     enableTenantPlugin: vi.fn(),
     disableTenantPlugin: vi.fn(),
@@ -53,6 +56,14 @@ describe('PluginHub', () => {
           enabled: true,
           discovered: true,
           channel_types: ['feishu'],
+          contracts: {
+            tools: ['feishu_send'],
+            skills: ['feishu'],
+            commands: ['feishu'],
+            hooks: ['before_tool_execution', 'after_response'],
+          },
+          command_aliases: [{ name: 'feishu', kind: 'runtime-slash' }],
+          schema_supported: true,
         },
       ],
       diagnostics: [],
@@ -108,6 +119,45 @@ describe('PluginHub', () => {
       defaults: {},
       secret_paths: ['app_secret'],
     });
+    vi.mocked(channelService.getTenantPluginConfigSchema).mockResolvedValue({
+      plugin_name: 'feishu-channel-plugin',
+      source: 'local',
+      package: 'memstack-plugin-feishu',
+      version: '0.1.0',
+      enabled: true,
+      discovered: true,
+      schema_supported: true,
+      providers: [],
+      skills: [],
+      config_schema: {
+        type: 'object',
+        properties: {
+          api_key: { type: 'string', title: 'API Key' },
+          enabled_feature: { type: 'boolean', title: 'Enabled Feature' },
+          retries: { type: 'integer', title: 'Retries', minimum: 1, maximum: 5 },
+          mode: { type: 'string', title: 'Mode', enum: ['fast', 'safe'] },
+        },
+        required: ['api_key'],
+      },
+      config_ui_hints: {
+        api_key: { label: 'API Key', sensitive: true },
+      },
+      defaults: { enabled_feature: true, retries: 2, mode: 'safe' },
+      secret_paths: ['api_key'],
+    });
+    vi.mocked(channelService.getTenantPluginConfig).mockResolvedValue({
+      id: 'plugin-config-1',
+      tenant_id: 'tenant-1',
+      plugin_name: 'feishu-channel-plugin',
+      config: { api_key: '__MEMSTACK_SECRET_UNCHANGED__', mode: 'fast' },
+      created_at: '2026-01-01T00:00:00Z',
+    });
+    vi.mocked(channelService.updateTenantPluginConfig).mockResolvedValue({
+      id: 'plugin-config-1',
+      tenant_id: 'tenant-1',
+      plugin_name: 'feishu-channel-plugin',
+      config: { api_key: '__MEMSTACK_SECRET_UNCHANGED__', mode: 'safe' },
+    });
     vi.mocked(channelService.reloadTenantPlugins).mockResolvedValue({
       success: true,
       message: 'Plugin runtime reloaded',
@@ -136,6 +186,10 @@ describe('PluginHub', () => {
     await waitFor(() => {
       expect(channelService.listTenantPlugins).toHaveBeenCalledWith('tenant-1');
       expect(screen.getByText('feishu-channel-plugin')).toBeInTheDocument();
+      expect(screen.getByText('Tools: 1')).toBeInTheDocument();
+      expect(screen.getByText('Skills: 1')).toBeInTheDocument();
+      expect(screen.getByText('Commands: 1')).toBeInTheDocument();
+      expect(screen.getByText('Hooks: 2')).toBeInTheDocument();
       expect(screen.getByText('Support Channel')).toBeInTheDocument();
     });
   });
@@ -175,5 +229,41 @@ describe('PluginHub', () => {
     expect(await screen.findByText('active tools: 2')).toBeInTheDocument();
     expect(screen.getByText('registered tools: 3')).toBeInTheDocument();
     expect(screen.getByText('channels: 1')).toBeInTheDocument();
+  });
+
+  it('opens generic plugin config modal and saves schema-backed config', async () => {
+    render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=project-1' });
+
+    const configureButton = await screen.findByRole('button', {
+      name: 'tenant.pluginHub.pluginsList.configurePlugin',
+    });
+    fireEvent.click(configureButton);
+
+    await waitFor(() => {
+      expect(channelService.getTenantPluginConfigSchema).toHaveBeenCalledWith(
+        'tenant-1',
+        'feishu-channel-plugin'
+      );
+      expect(screen.getByText('API Key')).toBeInTheDocument();
+      expect(screen.getByText('Enabled Feature')).toBeInTheDocument();
+      expect(screen.getByText('Retries')).toBeInTheDocument();
+      expect(screen.getByText('Mode')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('OK'));
+
+    await waitFor(() => {
+      expect(channelService.updateTenantPluginConfig).toHaveBeenCalledWith(
+        'tenant-1',
+        'feishu-channel-plugin',
+        {
+          config: expect.objectContaining({
+            enabled_feature: true,
+            retries: 2,
+            mode: 'fast',
+          }),
+        }
+      );
+    });
   });
 });

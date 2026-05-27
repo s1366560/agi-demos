@@ -482,6 +482,7 @@
     "iterationLedgerTotal": "{{count}} 轮迭代",
     "iterationLedgerSelected": "已选第 {{index}} 轮",
     "iterationLedgerAria": "迭代账本",
+    "iterationLedgerEmpty": "此计划运行暂无迭代账本记录。",
     "iterationLabel": "第 {{index}} 轮",
     "iterationMetricTasks": "任务",
     "iterationMetricOutputs": "产物",
@@ -531,6 +532,7 @@
     "iterationOutputPipelines": "流水线",
     "iterationOutputBlackboard": "黑板",
     "iterationOutputEmpty": "无",
+    "iterationOutputPreviewTitle": "预览",
     "iterationActivityTitle": "交互",
     "iterationActivityWorker": "Worker",
     "iterationActivityVerifier": "Verifier",
@@ -3260,6 +3262,13 @@
         "uninstallDescription": "仅支持由包管理的插件。",
         "plugin": "插件",
         "source": "来源",
+        "capabilities": "能力",
+        "capabilityTools": "工具",
+        "capabilitySkills": "技能",
+        "capabilityCommands": "命令",
+        "capabilityHooks": "Hook",
+        "noCapabilities": "未声明能力",
+        "configurePlugin": "配置 {{name}}",
         "local": "本地",
         "toolOnly": "仅工具插件",
         "noPluginsInstalled": "还未安装任何插件"
@@ -3329,6 +3338,10 @@
         "domainPlaceholder": "feishu / lark / custom",
         "description": "描述",
         "descriptionPlaceholder": "可选描述"
+      },
+      "pluginConfigModal": {
+        "title": "配置 {{name}}",
+        "noConfig": "该插件未声明可配置项。"
       },
       "messages": {
         "loadProjectsFailed": "加载项目失败",

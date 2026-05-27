@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -30,7 +30,6 @@ interface PlanRunIterationLedgerProps {
   onSelectIteration: (index: number) => void;
   onSelectNode: (nodeId: string) => void;
   onOpenTask: (taskId: string, nodeId?: string) => void;
-  taskInspector?: ReactNode;
 }
 
 export function PlanRunIterationLedger({
@@ -40,11 +39,19 @@ export function PlanRunIterationLedger({
   onSelectIteration,
   onSelectNode,
   onOpenTask,
-  taskInspector,
 }: PlanRunIterationLedgerProps) {
   const { t } = useTranslation();
   if (runs.length === 0) {
-    return null;
+    return (
+      <div className="p-3">
+        <div className="rounded-md border border-dashed border-border-light bg-surface-muted px-4 py-8 text-center text-sm text-text-secondary dark:border-border-dark dark:bg-surface-dark/40 dark:text-text-muted">
+          {t(
+            'blackboard.iterationLedgerEmpty',
+            'No iteration ledger entries are available for this plan run.'
+          )}
+        </div>
+      </div>
+    );
   }
   const selectedRun = runs.find((run) => run.index === selectedIndex) ?? runs.at(-1) ?? runs[0];
   if (!selectedRun) {
@@ -52,7 +59,7 @@ export function PlanRunIterationLedger({
   }
 
   return (
-    <section className="border-t border-border-separator px-4 py-4 dark:border-border-dark">
+    <div className="p-3">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
@@ -146,13 +153,12 @@ export function PlanRunIterationLedger({
           />
         </div>
         <div className="min-w-0 space-y-4">
-          {taskInspector}
           <IterationRunHealth run={selectedRun} />
           <IterationOutputList run={selectedRun} />
           <IterationActivityTimeline run={selectedRun} />
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -487,6 +493,7 @@ function IterationRunHealth({ run }: { run: WorkspacePlanIterationRun }) {
 
 function IterationOutputList({ run }: { run: WorkspacePlanIterationRun }) {
   const { t } = useTranslation();
+  const [preview, setPreview] = useState<{ label: string; value: string } | null>(null);
   const groups = [
     {
       key: 'commits',
@@ -530,17 +537,45 @@ function IterationOutputList({ run }: { run: WorkspacePlanIterationRun }) {
       </div>
       <div className="mt-3 space-y-2">
         {groups.map((group) => (
-          <OutputGroup key={group.key} label={group.label} items={group.items} />
+          <OutputGroup
+            key={group.key}
+            label={group.label}
+            items={group.items}
+            selectedValue={preview?.value ?? null}
+            onPreview={(value) => {
+              setPreview({ label: group.label, value });
+            }}
+          />
         ))}
       </div>
+      {preview && (
+        <div className="mt-3 rounded-md border border-info-border bg-info-bg p-3 dark:border-info-border-dark dark:bg-info-bg-dark">
+          <div className="text-[11px] font-semibold uppercase text-status-text-info dark:text-status-text-info-dark">
+            {t('blackboard.iterationOutputPreviewTitle', 'Preview')} · {preview.label}
+          </div>
+          <pre className="mt-2 max-h-28 whitespace-pre-wrap break-all rounded border border-border-light bg-surface-light p-2 font-mono text-[11px] leading-4 text-text-secondary dark:border-border-dark dark:bg-surface-dark dark:text-text-muted">
+            {preview.value}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }
 
-function OutputGroup({ label, items }: { label: string; items: string[] }) {
+function OutputGroup({
+  label,
+  items,
+  selectedValue,
+  onPreview,
+}: {
+  label: string;
+  items: string[];
+  selectedValue: string | null;
+  onPreview: (item: string) => void;
+}) {
   const { t } = useTranslation();
   return (
-    <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 text-xs">
+    <div className="grid grid-cols-[88px_minmax(0,1fr)] gap-2 text-xs sm:grid-cols-[92px_minmax(0,1fr)]">
       <span className="text-text-muted">{label}</span>
       {items.length === 0 ? (
         <span className="text-[11px] text-text-muted">
@@ -549,13 +584,21 @@ function OutputGroup({ label, items }: { label: string; items: string[] }) {
       ) : (
         <div className="flex min-w-0 flex-wrap gap-1">
           {items.slice(0, 8).map((item) => (
-            <span
+            <button
               key={item}
-              className="max-w-full truncate rounded border border-border-light bg-surface-muted px-2 py-0.5 font-mono text-[10px] text-text-secondary dark:border-border-dark dark:bg-background-dark/35 dark:text-text-muted"
+              type="button"
+              onClick={() => {
+                onPreview(item);
+              }}
+              className={`max-w-full truncate rounded border px-2 py-0.5 text-left font-mono text-[10px] transition-colors ${
+                selectedValue === item
+                  ? 'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark'
+                  : 'border-border-light bg-surface-muted text-text-secondary hover:border-info-border hover:bg-info-bg dark:border-border-dark dark:bg-background-dark/35 dark:text-text-muted dark:hover:border-info-border-dark dark:hover:bg-info-bg-dark'
+              }`}
               title={item}
             >
               {item}
-            </span>
+            </button>
           ))}
         </div>
       )}

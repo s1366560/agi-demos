@@ -9,6 +9,8 @@ from typing import Any, cast
 import pytest
 
 from src.infrastructure.agent.workspace_plan.drone import (
+    DroneCliClient,
+    DroneCliUnavailableError,
     DronePipelineConfig,
     DronePipelineProvider,
     DroneRepositoryNotFoundError,
@@ -153,6 +155,60 @@ class _FakeDroneClient:
 
 
 @pytest.mark.asyncio
+async def test_drone_cli_client_uses_official_env_and_build_commands() -> None:
+    calls: list[tuple[tuple[str, ...], Mapping[str, str]]] = []
+
+    async def runner(args: tuple[str, ...], env: Mapping[str, str]) -> dict[str, str]:
+        calls.append((args, env))
+        if args[:3] == ("drone", "build", "create"):
+            return {"stdout": '{"number": 42, "status": "pending"}', "stderr": "", "returncode": "0"}
+        if args[:3] == ("drone", "build", "info"):
+            return {"stdout": '{"number": 42, "status": "success"}', "stderr": "", "returncode": "0"}
+        if args[:3] == ("drone", "log", "view"):
+            return {"stdout": "default/test log\n", "stderr": "", "returncode": "0"}
+        return {"stdout": "", "stderr": "unexpected command", "returncode": "1"}
+
+    client = DroneCliClient(
+        server_url="https://drone.example.test",
+        token="test-token",
+        runner=runner,
+    )
+
+    created = await client.create_build(
+        owner="octo",
+        repo="hello",
+        branch="main",
+        commit="abc123",
+        params={"MEMSTACK_WORKSPACE_ID": "ws-1"},
+    )
+    build = await client.get_build(owner="octo", repo="hello", build_number=42)
+    logs = await client.get_logs(
+        owner="octo",
+        repo="hello",
+        build_number=42,
+        stage="default",
+        step="test",
+    )
+
+    assert created == {"number": 42, "status": "pending"}
+    assert build == {"number": 42, "status": "success"}
+    assert logs == [{"out": "default/test log\n"}]
+    assert calls[0][0] == (
+        "drone",
+        "build",
+        "create",
+        "octo/hello",
+        "--branch=main",
+        "--commit=abc123",
+        "--param=MEMSTACK_WORKSPACE_ID=ws-1",
+        "--format",
+        "{{ json . }}",
+    )
+    assert calls[0][1]["DRONE_SERVER"] == "https://drone.example.test"
+    assert calls[0][1]["DRONE_TOKEN"] == "test-token"
+
+
+@pytest.mark.asyncio
 async def test_drone_pipeline_provider_records_successful_build(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -188,12 +244,107 @@ async def test_drone_pipeline_provider_records_successful_build(
     )
 
     assert result.status == "success"
+
+
+@pytest.mark.asyncio
+async def test_drone_pipeline_provider_falls_back_to_http_when_cli_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    provider_globals = DronePipelineProvider.run.__globals__
+    http_clients: list[_FakeDroneClient] = []
+
+    class _MissingCliClient:
+        def __init__(self, **_kwargs: Any) -> None:
+            pass
+
+        async def get_repo(self, *, owner: str, repo: str) -> Mapping[str, Any]:
+            raise DroneCliUnavailableError("Drone CLI executable not found: drone")
+
+    class _FallbackHttpClient(_FakeDroneClient):
+        def __init__(self, **_kwargs: Any) -> None:
+            super().__init__(
+                {
+                    "number": 42,
+                    "status": "success",
+                    "stages": [
+                        {
+                            "name": "default",
+                            "status": "success",
+                            "steps": [
+                                {"name": "test", "status": "success", "exit_code": 0},
+                            ],
+                        }
+                    ],
+                }
+            )
+            http_clients.append(self)
+
+    monkeypatch.setitem(provider_globals, "DroneCliClient", _MissingCliClient)
+    monkeypatch.setitem(provider_globals, "HttpDroneClient", _FallbackHttpClient)
+
+    result = await DronePipelineProvider(sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            provider_config={"repo": "octo/hello", "branch": "main"},
+            code_root="/workspace",
+            stages=(),
+        )
+    )
+
+    assert result.status == "success"
+    assert result.metadata["drone_client"] == "http_fallback"
+    assert len(http_clients) == 1
+    assert http_clients[0].created == [
+        {
+            "owner": "octo",
+            "repo": "hello",
+            "branch": "main",
+            "commit": None,
+            "params": {},
+        }
+    ]
     assert result.external_id == "octo/hello#42"
     assert result.external_url == "https://drone.example.test/octo/hello/42"
     assert "ci_pipeline:passed" in result.evidence_refs
     assert result.stage_results[0].stage == "default/test"
     assert result.stage_results[0].stdout_preview == "default/test log"
-    assert client.created[0]["params"] == {"MEMSTACK_WORKSPACE_ID": "ws-1"}
+
+
+@pytest.mark.asyncio
+async def test_drone_pipeline_provider_preserves_skipped_step_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    client = _FakeDroneClient(
+        {
+            "number": 42,
+            "status": "failure",
+            "stages": [
+                {
+                    "name": "default",
+                    "status": "failure",
+                    "steps": [
+                        {"name": "test", "status": "failure", "exit_code": 1},
+                        {"name": "deploy", "status": "skipped", "exit_code": 0},
+                    ],
+                }
+            ],
+        }
+    )
+
+    result = await DronePipelineProvider(client=client, sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            provider_config={"repo": "octo/hello", "branch": "main"},
+        )
+    )
+
+    statuses = {stage.stage: stage.status for stage in result.stage_results}
+    assert statuses["default/test"] == "failed"
+    assert statuses["default/deploy"] == "skipped"
 
 
 @pytest.mark.asyncio
@@ -1791,6 +1942,7 @@ async def test_drone_pipeline_provider_reports_configuration_failure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Any,
 ) -> None:
+    monkeypatch.delenv("DRONE_SERVER", raising=False)
     monkeypatch.delenv("DRONE_SERVER_URL", raising=False)
     monkeypatch.delenv("DRONE_TOKEN", raising=False)
     monkeypatch.setenv("MEMSTACK_DRONE_DOTENV_PATH", str(tmp_path / "missing.env"))
@@ -1800,7 +1952,7 @@ async def test_drone_pipeline_provider_reports_configuration_failure(
     )
 
     assert result.status == "failed"
-    assert "DRONE_SERVER_URL" in (result.reason or "")
+    assert "DRONE_SERVER" in (result.reason or "")
     assert "drone:configuration_failed" in result.evidence_refs
 
 
@@ -1828,6 +1980,22 @@ def test_drone_config_uses_structured_server_environment_fallback(
     )
 
     assert config.server_url == "http://localhost:8080"
+    assert config.token == "test-token"
+
+
+def test_drone_config_prefers_cli_environment_names(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER", "https://drone-cli.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    monkeypatch.setenv("MEMSTACK_DRONE_DOTENV_PATH", str(tmp_path / "missing.env"))
+
+    config = DronePipelineConfig.from_contract(
+        PipelineContractSpec(provider=DRONE_PROVIDER, provider_config={"repo": "octo/hello"})
+    )
+
+    assert config.server_url == "https://drone-cli.example.test"
     assert config.token == "test-token"
 
 

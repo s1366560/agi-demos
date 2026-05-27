@@ -62,6 +62,52 @@ async def test_ensure_loaded_registers_discovered_plugins(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_ensure_loaded_registers_manifest_contracts_and_config(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """ensure_loaded should seed registry with manifest control-plane declarations."""
+
+    class _Plugin:
+        name = "demo-plugin"
+
+        @staticmethod
+        def setup(_api) -> None:
+            return None
+
+    registry = AgentPluginRegistry()
+    manager = PluginRuntimeManager(
+        registry=registry, state_store=PluginStateStore(base_path=tmp_path)
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.manager.discover_plugins",
+        lambda **_kwargs: (
+            [
+                DiscoveredPlugin(
+                    name="demo-plugin",
+                    plugin=_Plugin(),
+                    source="local",
+                    contracts={"tools": ("demo_tool",)},
+                    config_schema={"type": "object"},
+                    config_ui_hints={"apiKey": {"sensitive": True}},
+                    env_vars={"demo-provider": ("DEMO_API_KEY",)},
+                )
+            ],
+            [],
+        ),
+    )
+
+    await manager.ensure_loaded()
+
+    assert registry.list_plugin_contracts()["demo-plugin"].contracts == {"tools": ("demo_tool",)}
+    config_schema = registry.list_config_schemas()["demo-plugin"]
+    assert config_schema.schema == {"type": "object"}
+    assert config_schema.config_ui_hints == {"apiKey": {"sensitive": True}}
+    assert config_schema.secret_paths == ["DEMO_API_KEY"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_ensure_loaded_passes_manifest_strict_flag(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -189,6 +235,14 @@ def test_list_plugins_includes_state_only_entries(
         "channels": [],
         "providers": [],
         "skills": [],
+        "contracts": {},
+        "activation": {},
+        "command_aliases": [],
+        "tool_metadata": {},
+        "hook_metadata": {},
+        "config_schema": {},
+        "config_ui_hints": {},
+        "env_vars": {},
         "enabled": False,
         "discovered": False,
     }
@@ -252,6 +306,16 @@ def test_list_plugins_includes_manifest_metadata(
                     channels=("feishu",),
                     providers=("demo-provider",),
                     skills=("demo-skill",),
+                    contracts={"tools": ("demo_tool",), "providers": ("demo-provider",)},
+                    activation={"onStartup": False},
+                    command_aliases=(
+                        {"name": "demo", "kind": "runtime-slash", "cliCommand": "demo"},
+                    ),
+                    tool_metadata={"demo_tool": {"optional": True}},
+                    hook_metadata={"before_tool_call": {"timeoutMs": 1000}},
+                    config_schema={"type": "object"},
+                    config_ui_hints={"apiKey": {"sensitive": True}},
+                    env_vars={"demo-provider": ("DEMO_API_KEY",)},
                 )
             ],
             [],
@@ -265,6 +329,19 @@ def test_list_plugins_includes_manifest_metadata(
     assert plugins[0]["channels"] == ["feishu"]
     assert plugins[0]["providers"] == ["demo-provider"]
     assert plugins[0]["skills"] == ["demo-skill"]
+    assert plugins[0]["contracts"] == {
+        "tools": ["demo_tool"],
+        "providers": ["demo-provider"],
+    }
+    assert plugins[0]["activation"] == {"onStartup": False}
+    assert plugins[0]["command_aliases"] == [
+        {"name": "demo", "kind": "runtime-slash", "cliCommand": "demo"}
+    ]
+    assert plugins[0]["tool_metadata"] == {"demo_tool": {"optional": True}}
+    assert plugins[0]["hook_metadata"] == {"before_tool_call": {"timeoutMs": 1000}}
+    assert plugins[0]["config_schema"] == {"type": "object"}
+    assert plugins[0]["config_ui_hints"] == {"apiKey": {"sensitive": True}}
+    assert plugins[0]["env_vars"] == {"demo-provider": ["DEMO_API_KEY"]}
 
 
 @pytest.mark.unit

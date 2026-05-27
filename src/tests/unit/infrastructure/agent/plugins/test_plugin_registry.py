@@ -25,6 +25,26 @@ def test_register_tool_factory_rejects_duplicate_plugin_name() -> None:
 
 
 @pytest.mark.unit
+def test_register_plugin_contracts_exposes_manifest_capability_ownership() -> None:
+    """Registry should retain manifest-first capability contracts."""
+    registry = AgentPluginRegistry()
+
+    registry.register_plugin_contracts(
+        "plugin-a",
+        {
+            "tools": ["tool_a"],
+            "providers": ["provider-a"],
+        },
+    )
+
+    contracts = registry.list_plugin_contracts()["plugin-a"]
+    assert contracts.contracts == {
+        "tools": ("tool_a",),
+        "providers": ("provider-a",),
+    }
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_build_tools_collects_tools_and_conflict_diagnostics() -> None:
     """Registry should collect plugin tools and report name conflicts."""
@@ -49,6 +69,35 @@ async def test_build_tools_collects_tools_and_conflict_diagnostics() -> None:
     assert "plugin_tool" in plugin_tools
     assert "shared_tool" not in plugin_tools
     assert any(d.code == "tool_name_conflict" for d in diagnostics)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_build_tools_enforces_manifest_contracts_when_declared() -> None:
+    """Declared tool contracts should prevent accidental runtime surface drift."""
+    registry = AgentPluginRegistry()
+    registry.register_plugin_contracts("plugin-a", {"tools": ["declared_tool"]})
+    registry.register_tool_factory(
+        "plugin-a",
+        lambda _ctx: {
+            "declared_tool": SimpleNamespace(name="declared_tool"),
+            "surprise_tool": SimpleNamespace(name="surprise_tool"),
+        },
+    )
+
+    plugin_tools, diagnostics = await registry.build_tools(
+        PluginToolBuildContext(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            base_tools={},
+        )
+    )
+
+    assert set(plugin_tools) == {"declared_tool"}
+    assert any(
+        item.code == "plugin_contract_violation" and "surprise_tool" in item.message
+        for item in diagnostics
+    )
 
 
 @pytest.mark.unit
@@ -101,6 +150,16 @@ def test_register_channel_adapter_factory_persists_channel_metadata() -> None:
     assert metadata.config_ui_hints == {"app_id": {"label": "App ID"}}
     assert metadata.defaults == {"connection_mode": "websocket"}
     assert metadata.secret_paths == ["app_secret"]
+
+
+@pytest.mark.unit
+def test_register_channel_adapter_factory_enforces_manifest_contract() -> None:
+    """Channel registration must match manifest contracts when a contract is present."""
+    registry = AgentPluginRegistry()
+    registry.register_plugin_contracts("plugin-a", {"channels": ["feishu"]})
+
+    with pytest.raises(ValueError, match="contracts.channels"):
+        registry.register_channel_adapter_factory("plugin-a", "slack", lambda _ctx: object())
 
 
 @pytest.mark.unit
@@ -222,6 +281,35 @@ async def test_build_skills_collects_skills_and_diagnostics() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_build_skills_enforces_manifest_contracts_when_declared() -> None:
+    """Skill contracts should filter factory output to manifest-declared skills."""
+    registry = AgentPluginRegistry()
+    registry.register_plugin_contracts("plugin-a", {"skills": ["declared-skill"]})
+    registry.register_skill_factory(
+        "plugin-a",
+        lambda _ctx: [
+            {"name": "declared-skill", "description": "Allowed", "tools": ["tool"]},
+            {"name": "surprise-skill", "description": "Blocked", "tools": ["tool"]},
+        ],
+    )
+
+    skills, diagnostics = await registry.build_skills(
+        PluginSkillBuildContext(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            agent_mode="default",
+        )
+    )
+
+    assert [skill["name"] for skill in skills] == ["declared-skill"]
+    assert any(
+        item.code == "plugin_contract_violation" and "surprise-skill" in item.message
+        for item in diagnostics
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_build_skills_handles_factory_failure_gracefully() -> None:
     """A failing skill factory should produce a diagnostic but not crash."""
     registry = AgentPluginRegistry()
@@ -320,7 +408,7 @@ def test_get_plugin_registry_skips_memory_runtime_when_globally_disabled(
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_notify_hook_respects_priority_ordering() -> None:
-    """Handlers with lower priority should execute before higher priority."""
+    """Handlers with higher priority should execute before lower priority."""
     registry = AgentPluginRegistry()
     execution_order: list[str] = []
 
@@ -333,14 +421,14 @@ async def test_notify_hook_respects_priority_ordering() -> None:
     async def _handler_c(payload):
         execution_order.append("c")
 
-    # Register with explicit priorities: c(10), a(50), b(200)
+    # Register with explicit priorities: b(200), a(50), c(10)
     registry.register_hook("plugin-c", "test_hook", _handler_c, priority=10)
     registry.register_hook("plugin-a", "test_hook", _handler_a, priority=50)
     registry.register_hook("plugin-b", "test_hook", _handler_b, priority=200)
 
     await registry.notify_hook("test_hook", payload={"key": "value"})
 
-    assert execution_order == ["c", "a", "b"]
+    assert execution_order == ["b", "a", "c"]
 
 
 @pytest.mark.unit
@@ -365,7 +453,7 @@ async def test_notify_hook_default_priority_is_100() -> None:
 
     await registry.notify_hook("test_hook")
 
-    assert execution_order == ["early", "default", "late"]
+    assert execution_order == ["late", "default", "early"]
 
 
 @pytest.mark.unit
@@ -508,6 +596,36 @@ def test_register_hook_with_priority_via_runtime_api() -> None:
 
 
 @pytest.mark.unit
+def test_runtime_api_on_registers_typed_hook_metadata() -> None:
+    """PluginRuntimeApi.on() should expose the OpenClaw-style typed hook API."""
+    from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
+
+    registry = AgentPluginRegistry()
+    api = PluginRuntimeApi("my-plugin", registry=registry)
+
+    async def _handler(payload: dict) -> dict:
+        return payload
+
+    api.on(
+        "before_tool_execution",
+        _handler,
+        priority=250,
+        timeout_ms=1500,
+        description="Gate tool execution",
+    )
+
+    hooks = registry.list_hooks()
+    assert hooks["before_tool_execution"]["my-plugin"] == (250, _handler)
+    metadata = registry.list_hook_catalog()[0]
+    assert metadata.plugin_name == "my-plugin"
+    assert metadata.hook_name == "before_tool_execution"
+    assert metadata.hook_family == "policy"
+    assert metadata.default_priority == 250
+    assert metadata.default_settings == {"timeout_ms": 1500}
+    assert metadata.description == "Gate tool execution"
+
+
+@pytest.mark.unit
 def test_register_http_route_stores_route_metadata() -> None:
     """HTTP route registration should persist method, path, handler, summary, and tags."""
     registry = AgentPluginRegistry()
@@ -634,6 +752,18 @@ def test_register_cli_command_stores_command_metadata() -> None:
 
 
 @pytest.mark.unit
+def test_register_cli_command_enforces_manifest_contracts_when_declared() -> None:
+    """CLI command registration should respect contracts.cliCommands."""
+    registry = AgentPluginRegistry()
+    registry.register_plugin_contracts("plugin-a", {"cliCommands": ["allowed"]})
+
+    registry.register_cli_command("plugin-a", "allowed", lambda _: None)
+
+    with pytest.raises(ValueError, match="contracts.cli_commands"):
+        registry.register_cli_command("plugin-a", "blocked", lambda _: None)
+
+
+@pytest.mark.unit
 def test_register_cli_command_rejects_duplicate_name_per_plugin() -> None:
     """Duplicate CLI command name for same plugin should raise ValueError."""
     registry = AgentPluginRegistry()
@@ -724,6 +854,18 @@ def test_register_lifecycle_hook_stores_handler() -> None:
     hooks = registry.list_lifecycle_hooks()
     assert "on_load" in hooks
     assert hooks["on_load"]["plugin-a"] is _handler
+
+
+@pytest.mark.unit
+def test_register_lifecycle_hook_enforces_manifest_contracts_when_declared() -> None:
+    """Lifecycle hook registration should respect contracts.lifecycleHooks."""
+    registry = AgentPluginRegistry()
+    registry.register_plugin_contracts("plugin-a", {"lifecycleHooks": ["on_load"]})
+
+    registry.register_lifecycle_hook("plugin-a", "on_load", lambda: None)
+
+    with pytest.raises(ValueError, match="contracts.lifecycle_hooks"):
+        registry.register_lifecycle_hook("plugin-a", "on_disable", lambda: None)
 
 
 @pytest.mark.unit

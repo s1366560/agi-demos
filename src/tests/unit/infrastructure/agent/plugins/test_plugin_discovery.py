@@ -217,7 +217,16 @@ def test_discover_plugins_loads_local_manifest_metadata(tmp_path) -> None:
             '"version":"0.2.0",'
             '"channels":["feishu"],'
             '"providers":["demo-provider"],'
-            '"skills":["demo-skill"]'
+            '"skills":["demo-skill"],'
+            '"contracts":{"channels":["feishu"],"providers":["demo-provider"],'
+            '"tools":["demo_tool"],"hooks":["before_tool_call"],"commands":["demo"]},'
+            '"activation":{"onStartup":false,"onCommands":["demo"]},'
+            '"commandAliases":[{"name":"demo","kind":"runtime-slash","cliCommand":"demo"}],'
+            '"toolMetadata":{"demo_tool":{"optional":true}},'
+            '"hookMetadata":{"before_tool_call":{"timeoutMs":1000}},'
+            '"configSchema":{"type":"object"},'
+            '"uiHints":{"apiKey":{"sensitive":true}},'
+            '"providerAuthEnvVars":{"demo-provider":["DEMO_API_KEY"]}'
             "}"
         ),
         encoding="utf-8",
@@ -238,6 +247,22 @@ def test_discover_plugins_loads_local_manifest_metadata(tmp_path) -> None:
     assert plugin.channels == ("feishu",)
     assert plugin.providers == ("demo-provider",)
     assert plugin.skills == ("demo-skill",)
+    assert plugin.contracts == {
+        "channels": ("feishu",),
+        "providers": ("demo-provider",),
+        "tools": ("demo_tool",),
+        "hooks": ("before_tool_call",),
+        "commands": ("demo",),
+    }
+    assert plugin.activation == {"onStartup": False, "onCommands": ["demo"]}
+    assert plugin.command_aliases == (
+        {"name": "demo", "kind": "runtime-slash", "cliCommand": "demo"},
+    )
+    assert plugin.tool_metadata == {"demo_tool": {"optional": True}}
+    assert plugin.hook_metadata == {"before_tool_call": {"timeoutMs": 1000}}
+    assert plugin.config_schema == {"type": "object"}
+    assert plugin.config_ui_hints == {"apiKey": {"sensitive": True}}
+    assert plugin.env_vars == {"demo-provider": ("DEMO_API_KEY",)}
     assert diagnostics == []
 
 

@@ -243,7 +243,7 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
           </div>
 
           {/* Center: Nav tabs */}
-          <nav className="hidden md:flex items-center gap-0.5 flex-1 min-w-0 ml-4 mr-2 overflow-hidden">
+          <nav className="hidden xl:flex items-center gap-0.5 flex-1 min-w-0 ml-4 mr-2 overflow-hidden">
             {visibleNav.map((item) => (
               <NavLink
                 key={item.id}
