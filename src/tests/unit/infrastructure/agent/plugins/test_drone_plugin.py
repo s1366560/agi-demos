@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
@@ -16,6 +19,15 @@ from src.infrastructure.agent.workspace_plan.pipeline_provider_registry import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+def _tool_context() -> SimpleNamespace:
+    return SimpleNamespace(
+        conversation_id="conversation-1",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+    )
 
 
 def test_discover_plugins_loads_local_drone_manifest() -> None:
@@ -39,13 +51,15 @@ async def test_drone_plugin_registers_pipeline_provider_and_tool() -> None:
         include_builtins=False,
         include_entrypoints=False,
     )
-    drone_plugin = next(
-        plugin.plugin for plugin in discovered if plugin.name == "drone-pipeline-plugin"
+    drone_discovery = next(
+        plugin for plugin in discovered if plugin.name == "drone-pipeline-plugin"
     )
+    drone_plugin = drone_discovery.plugin
     registry = AgentPluginRegistry()
 
     diagnostics = await AgentPluginLoader(registry=registry).load_plugins([drone_plugin])
     provider = registry.get_provider("pipeline:drone")
+    infrastructure = registry.get_service("drone:infrastructure")
     tools, tool_diagnostics = await registry.build_tools(
         PluginToolBuildContext(
             tenant_id="tenant-1",
@@ -57,6 +71,18 @@ async def test_drone_plugin_registers_pipeline_provider_and_tool() -> None:
     assert diagnostics == []
     assert provider is not None
     assert provider.__name__ == "DronePipelineProvider"
+    assert infrastructure == {
+        "compose_tool": "docker_compose",
+        "compose_files": ["docker-compose.yml"],
+        "client_workdir": str(Path(drone_discovery.manifest_path).parent),
+        "project_name": "memstack-drone",
+        "profiles": ["drone"],
+        "services": ["drone-server", "drone-runner-docker"],
+        "check_args": ["ps", "--format", "json"],
+        "start_args": ["up", "-d", "drone-server", "drone-runner-docker"],
+        "stop_args": ["stop", "drone-runner-docker", "drone-server"],
+        "logs_args": ["logs", "--tail", "100", "drone-server", "drone-runner-docker"],
+    }
     assert "cicd_run_pipeline" in tools
     assert tools["cicd_run_pipeline"]._plugin_origin == "drone-pipeline-plugin"
     tool_schema = tools["cicd_run_pipeline"].parameters
@@ -64,6 +90,58 @@ async def test_drone_plugin_registers_pipeline_provider_and_tool() -> None:
     assert "repo" in tool_schema["properties"]
     assert "workspace_id" not in tool_schema["properties"]
     assert any(diagnostic.plugin_name == "drone-pipeline-plugin" for diagnostic in tool_diagnostics)
+
+
+async def test_drone_infrastructure_uses_docker_compose_plugin_contract() -> None:
+    discovered, _diagnostics = discover_plugins(
+        state_store=PluginStateStore(),
+        include_builtins=False,
+        include_entrypoints=False,
+    )
+    selected = [
+        plugin.plugin
+        for plugin in discovered
+        if plugin.name in {"drone-pipeline-plugin", "docker-compose-plugin"}
+    ]
+    registry = AgentPluginRegistry()
+
+    diagnostics = await AgentPluginLoader(registry=registry).load_plugins(selected)
+    tools, tool_diagnostics = await registry.build_tools(
+        PluginToolBuildContext(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            base_tools={},
+        )
+    )
+    infrastructure = registry.get_service("drone:infrastructure")
+    result = await tools[infrastructure["compose_tool"]].execute(
+        _tool_context(),
+        compose_args=infrastructure["check_args"],
+        client_workdir=infrastructure["client_workdir"],
+        workdir=infrastructure["client_workdir"],
+        compose_files=infrastructure["compose_files"],
+        project_name=infrastructure["project_name"],
+        profiles=infrastructure["profiles"],
+        dry_run=True,
+    )
+    payload = json.loads(result.output)
+
+    assert diagnostics == []
+    assert not any(item.level == "error" for item in tool_diagnostics)
+    assert result.is_error is False
+    assert payload["command"] == [
+        "docker",
+        "compose",
+        "-f",
+        str(Path(infrastructure["client_workdir"]) / "docker-compose.yml"),
+        "-p",
+        "memstack-drone",
+        "--profile",
+        "drone",
+        "ps",
+        "--format",
+        "json",
+    ]
 
 
 async def test_drone_plugin_config_schema_matches_workspace_drone_form() -> None:

@@ -203,9 +203,7 @@ class DronePipelineConfig:
             raise DroneConfigurationError(f"{DRONE_SERVER_ENV} is required for Drone CI/CD")
 
         token_env = (
-            _string(raw.get("drone_token_env"))
-            or _string(raw.get("token_env"))
-            or DRONE_TOKEN_ENV
+            _string(raw.get("drone_token_env")) or _string(raw.get("token_env")) or DRONE_TOKEN_ENV
         )
         token = _config_env(token_env)
         if not token:

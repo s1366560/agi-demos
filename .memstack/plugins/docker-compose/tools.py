@@ -204,6 +204,33 @@ def _resolve_path(value: str | None, *, default: str | None = None) -> Path:
     return raw_path.resolve()
 
 
+def _path_is_under(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
+
+
+def _path_mappings_from_items(items: list[dict[str, str]] | None) -> list[tuple[Path, Path]]:
+    mappings: list[tuple[Path, Path]] = []
+    for item in items or []:
+        container_path = item.get("container_path")
+        daemon_path = item.get("daemon_path")
+        if not container_path or not daemon_path:
+            raise ValueError("path_mappings entries require container_path and daemon_path")
+        mappings.append(
+            (
+                Path(container_path).expanduser().resolve(),
+                Path(daemon_path).expanduser().resolve(),
+            )
+        )
+    return mappings
+
+
+def _map_path_from_container(path: Path, mappings: list[tuple[Path, Path]]) -> Path | None:
+    for container_root, daemon_root in mappings:
+        if _path_is_under(path, container_root):
+            return daemon_root / path.relative_to(container_root)
+    return None
+
+
 def _resolve_existing_dir(value: str | None, *, label: str, default: str | None = None) -> Path:
     resolved = _resolve_path(value, default=default)
     if not resolved.exists() or not resolved.is_dir():
@@ -231,15 +258,27 @@ def _resolve_workdirs(
     *,
     workdir: str | None,
     client_workdir: str | None,
+    path_mappings: list[dict[str, str]] | None,
     allowed_project_roots: list[str] | None,
     allowed_client_roots: list[str] | None,
 ) -> tuple[Path, Path]:
     requested_workdir = _resolve_path(workdir)
-    resolved_client = _resolve_existing_dir(
-        client_workdir or os.environ.get("MEMSTACK_DOCKER_COMPOSE_CLIENT_WORKDIR"),
-        label="client_workdir",
-        default=str(requested_workdir),
+    client_mapping_candidates = _path_mappings_from_items(
+        path_mappings if path_mappings is not None else _read_path_mappings_env()
     )
+    raw_client_workdir = client_workdir or os.environ.get("MEMSTACK_DOCKER_COMPOSE_CLIENT_WORKDIR")
+    if raw_client_workdir:
+        resolved_client = _resolve_existing_dir(
+            raw_client_workdir,
+            label="client_workdir",
+        )
+    else:
+        resolved_client = _resolve_path(str(requested_workdir))
+        if not resolved_client.exists() or not resolved_client.is_dir():
+            mapped_client = _map_path_from_container(requested_workdir, client_mapping_candidates)
+            if mapped_client is None or not mapped_client.exists() or not mapped_client.is_dir():
+                raise ValueError(f"client_workdir must be an existing directory: {resolved_client}")
+            resolved_client = mapped_client
     _enforce_allowed_roots(
         requested_workdir,
         allowed_roots=allowed_project_roots,
@@ -252,13 +291,22 @@ def _resolve_workdirs(
     return requested_workdir, resolved_client
 
 
-def _resolve_compose_files(workdir: Path, compose_files: list[str] | None) -> list[str]:
+def _resolve_compose_files(
+    workdir: Path,
+    compose_files: list[str] | None,
+    *,
+    path_mappings: list[tuple[Path, Path]],
+) -> list[str]:
     resolved: list[str] = []
     for item in compose_files or []:
         file_path = Path(item).expanduser()
         if not file_path.is_absolute():
             file_path = workdir / file_path
         final_path = file_path.resolve()
+        if not final_path.exists() or not final_path.is_file():
+            mapped_file = _map_path_from_container(final_path, path_mappings)
+            if mapped_file is not None:
+                final_path = mapped_file.resolve()
         if not final_path.exists() or not final_path.is_file():
             raise ValueError(f"compose file must exist: {final_path}")
         resolved.append(str(final_path))
@@ -343,10 +391,6 @@ def _truncate(value: str, limit: int) -> str:
     return value[:limit] + f"\n... <truncated {len(value) - limit} chars>"
 
 
-def _path_is_under(path: Path, root: Path) -> bool:
-    return path == root or root in path.parents
-
-
 def _rewrite_bind_sources(value: object, *, path_mappings: list[tuple[Path, Path]]) -> int:
     rewrites = 0
     if isinstance(value, dict):
@@ -399,18 +443,7 @@ def _resolve_path_mappings(
     requested_workdir: Path,
 ) -> list[tuple[Path, Path]]:
     raw_mappings = path_mappings if path_mappings is not None else _read_path_mappings_env()
-    resolved: list[tuple[Path, Path]] = []
-    for item in raw_mappings:
-        container_path = item.get("container_path")
-        daemon_path = item.get("daemon_path")
-        if not container_path or not daemon_path:
-            raise ValueError("path_mappings entries require container_path and daemon_path")
-        resolved.append(
-            (
-                Path(container_path).expanduser().resolve(),
-                Path(daemon_path).expanduser().resolve(),
-            )
-        )
+    resolved = _path_mappings_from_items(raw_mappings)
 
     resolved_daemon_workdir = (
         daemon_workdir
@@ -515,10 +548,22 @@ async def docker_compose_tool(  # noqa: PLR0913
         requested_workdir, resolved_client_workdir = _resolve_workdirs(
             workdir=workdir,
             client_workdir=client_workdir,
+            path_mappings=path_mappings,
             allowed_project_roots=allowed_project_roots,
             allowed_client_roots=allowed_client_roots,
         )
-        resolved_files = _resolve_compose_files(resolved_client_workdir, compose_files)
+        resolved_path_mappings = _resolve_path_mappings(
+            path_mappings=path_mappings,
+            daemon_workdir=daemon_workdir,
+            host_workdir=host_workdir,
+            container_workdir=container_workdir,
+            requested_workdir=requested_workdir,
+        )
+        resolved_files = _resolve_compose_files(
+            resolved_client_workdir,
+            compose_files,
+            path_mappings=resolved_path_mappings,
+        )
         resolved_host = docker_host or os.environ.get("MEMSTACK_DOCKER_COMPOSE_DOCKER_HOST")
         resolved_context = docker_context or os.environ.get("MEMSTACK_DOCKER_COMPOSE_CONTEXT")
         allow_host_socket = (
@@ -533,13 +578,6 @@ async def docker_compose_tool(  # noqa: PLR0913
             docker_host=resolved_host,
             docker_context=resolved_context,
             allow_host_socket_from_sandbox=allow_host_socket,
-        )
-        resolved_path_mappings = _resolve_path_mappings(
-            path_mappings=path_mappings,
-            daemon_workdir=daemon_workdir,
-            host_workdir=host_workdir,
-            container_workdir=container_workdir,
-            requested_workdir=requested_workdir,
         )
 
         command = _build_command(

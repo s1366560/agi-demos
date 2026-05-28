@@ -121,6 +121,45 @@ async def test_docker_compose_plugin_applies_tenant_config_defaults(
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_docker_compose_plugin_maps_workspace_paths_to_host_repo_by_default() -> None:
+    registry = AgentPluginRegistry()
+    plugin_module = _load_plugin_module("plugin.py", "test_docker_compose_plugin_workspace_map")
+    drone_compose = Path(".memstack/plugins/drone/docker-compose.yml").resolve()
+    expected_repo_root = Path(".").resolve()
+
+    diagnostics = await AgentPluginLoader(registry=registry).load_plugins([plugin_module.plugin])
+    tools, build_diagnostics = await registry.build_tools(
+        PluginToolBuildContext(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            base_tools={},
+        )
+    )
+    result = await tools["docker_compose"].execute(
+        _tool_context(),
+        compose_args=["config"],
+        workdir="/workspace/.memstack/plugins/drone",
+        compose_files=["/workspace/.memstack/plugins/drone/docker-compose.yml"],
+        dry_run=True,
+    )
+    payload = json.loads(result.output)
+
+    assert diagnostics == []
+    assert not any(item.level == "error" for item in build_diagnostics)
+    assert result.is_error is False
+    assert payload["requested_workdir"] == "/workspace/.memstack/plugins/drone"
+    assert payload["client_workdir"] == str(expected_repo_root / ".memstack/plugins/drone")
+    assert payload["command"] == [
+        "docker",
+        "compose",
+        "-f",
+        str(drone_compose),
+        "config",
+    ]
+
+
+@pytest.mark.unit
 def test_docker_compose_plugin_schema_exposes_remote_daemon_path_settings() -> None:
     plugin_module = _load_plugin_module("plugin.py", "test_docker_compose_plugin_schema")
 
@@ -353,3 +392,33 @@ async def test_docker_compose_maps_sandbox_client_and_remote_daemon_paths(
     assert payload["rewritten_bind_mounts"] == 1
     assert stdout_payload["cwd"] == str(tmp_path)
     assert stdout_payload["volume"]["source"] == "/srv/remote/project/data"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_docker_compose_maps_absolute_sandbox_compose_file_to_client_path(
+    tmp_path: Path,
+) -> None:
+    tools_module = _load_plugin_module("tools.py", "test_docker_compose_tools_abs_map")
+    compose_file = tmp_path / "docker-compose.yml"
+    compose_file.write_text("services: {}\n", encoding="utf-8")
+
+    result = await tools_module.docker_compose_tool.execute(
+        _tool_context(),
+        compose_args=["config"],
+        workdir="/workspace/project",
+        compose_files=["/workspace/project/docker-compose.yml"],
+        path_mappings=[{"container_path": "/workspace/project", "daemon_path": str(tmp_path)}],
+        dry_run=True,
+    )
+    payload = json.loads(result.output)
+
+    assert result.is_error is False
+    assert payload["client_workdir"] == str(tmp_path)
+    assert payload["command"] == [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "config",
+    ]

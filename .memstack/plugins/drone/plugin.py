@@ -78,6 +78,19 @@ DRONE_PLUGIN_DEFAULTS = {
 
 DRONE_PLUGIN_SECRET_PATHS: list[str] = []
 
+DRONE_INFRASTRUCTURE_SERVICE = {
+    "compose_tool": "docker_compose",
+    "compose_files": ["docker-compose.yml"],
+    "client_workdir": str(_PLUGIN_DIR),
+    "project_name": "memstack-drone",
+    "profiles": ["drone"],
+    "services": ["drone-server", "drone-runner-docker"],
+    "check_args": ["ps", "--format", "json"],
+    "start_args": ["up", "-d", "drone-server", "drone-runner-docker"],
+    "stop_args": ["stop", "drone-runner-docker", "drone-server"],
+    "logs_args": ["logs", "--tail", "100", "drone-server", "drone-runner-docker"],
+}
+
 
 class DronePipelinePlugin:
     name = "drone-pipeline-plugin"
@@ -100,6 +113,7 @@ class DronePipelinePlugin:
         )
         api.register_service("drone:defaults", DRONE_PLUGIN_DEFAULTS)
         api.register_service("drone:secret_paths", DRONE_PLUGIN_SECRET_PATHS)
+        api.register_service("drone:infrastructure", DRONE_INFRASTRUCTURE_SERVICE)
 
 
 plugin = DronePipelinePlugin()

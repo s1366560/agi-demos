@@ -43,6 +43,11 @@ Do not rely on plugin-level default repository or default branch values. The rep
 
 ## Local Drone Notes
 
+- Drone infrastructure is declared by the `drone:infrastructure` plugin service.
+- Use the `docker_compose` tool from the Docker Compose plugin to inspect, start,
+  stop, and read logs for `.memstack/plugins/drone/docker-compose.yml`. Do not
+  rely on Makefile targets or ad hoc shell `docker compose` commands for Drone
+  infrastructure checks in agent sessions.
 - Local Docker deploys that mount the host Docker socket require the Drone repository to be trusted.
 - For host Docker socket deploys, mount `/var/run/docker.sock` at the pipeline top level rather than relying on Docker-in-Docker service networking.
 - For the local insecure registry in this dev stack, prefer `127.0.0.1:5001` in image names used by Docker push and pull. Avoid `host.docker.internal:5001` unless the Docker daemon is explicitly configured for that registry host.

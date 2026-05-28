@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from src.infrastructure.agent.tools.define import ToolInfo
 
 _PLUGIN_DIR = Path(__file__).resolve().parent
+_MEMSTACK_DIR = _PLUGIN_DIR.parents[1]
+_REPO_DIR = _MEMSTACK_DIR.parent
 
 
 def _load_sibling(module_file: str) -> ModuleType:
@@ -98,9 +100,14 @@ DOCKER_COMPOSE_DEFAULTS = {
     "allow_host_socket_from_sandbox": False,
     "default_timeout_seconds": 600,
     "output_limit_chars": 40000,
-    "allowed_project_roots": [],
-    "allowed_client_roots": [],
-    "path_mappings": [],
+    "allowed_project_roots": ["/workspace", str(_REPO_DIR)],
+    "allowed_client_roots": [str(_REPO_DIR)],
+    "path_mappings": [
+        {
+            "container_path": "/workspace",
+            "daemon_path": str(_REPO_DIR),
+        }
+    ],
 }
 
 _CONFIG_TO_TOOL_KWARGS = {
@@ -140,10 +147,12 @@ async def _load_tenant_config(context: PluginToolBuildContext) -> dict[str, Any]
 def _configured_tool(compose_tool: ToolInfo, config: dict[str, Any]) -> ToolInfo:
     from src.infrastructure.agent.tools.define import ToolInfo
 
+    merged_config = dict(DOCKER_COMPOSE_DEFAULTS)
+    merged_config.update(config)
     defaults = {
         tool_key: value
         for config_key, tool_key in _CONFIG_TO_TOOL_KWARGS.items()
-        if (value := config.get(config_key)) not in (None, "", [])
+        if (value := merged_config.get(config_key)) not in (None, "", [])
     }
 
     async def execute(ctx: ToolContext, **kwargs: object) -> object:

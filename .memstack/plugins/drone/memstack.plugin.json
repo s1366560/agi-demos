@@ -11,7 +11,7 @@
     "tools": ["cicd_run_pipeline"],
     "skills": ["drone"],
     "commands": ["drone"],
-    "services": ["drone:defaults", "drone:secret_paths"]
+    "services": ["drone:defaults", "drone:secret_paths", "drone:infrastructure"]
   },
   "activation": {
     "onStartup": false,
