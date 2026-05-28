@@ -130,47 +130,46 @@ export function BlackboardDashboardHeader({
   );
 
   return (
-    <header className="border-b border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark">
-      <div className="flex flex-col gap-4 px-3 py-4 sm:px-4 lg:px-5">
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(260px,420px)_auto] xl:items-start">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-text-muted dark:text-text-muted">
-                {t('blackboard.dashboardEyebrow', 'Workspace dashboard')}
-              </span>
-              <span className="inline-flex min-h-6 items-center gap-1.5 rounded-full border border-success-border bg-success-bg px-2 text-[10px] font-semibold uppercase text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark">
-                <Radio size={11} aria-hidden="true" />
-                {t('blackboard.liveSync', 'Live sync')}
-              </span>
-            </div>
-            <h1 className="mt-2 truncate text-xl font-semibold text-text-primary dark:text-text-inverse">
+    <header
+      className="border-b border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark"
+      data-testid="blackboard-dashboard-header"
+    >
+      <div className="flex flex-col gap-1 px-3 py-1.5 sm:px-4 lg:px-5">
+        <div className="grid gap-1.5 xl:grid-cols-[minmax(0,1fr)_minmax(220px,320px)_auto] xl:items-center">
+          <div
+            className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-text-muted dark:text-text-muted"
+            title={t(
+              'blackboard.shellHint',
+              'Blackboard hosts collaboration and projected workspace views; execution authority remains on tasks, attempts, and runtime.'
+            )}
+          >
+            <span className="hidden text-[10px] font-semibold uppercase tracking-wide text-text-muted dark:text-text-muted 2xl:inline-flex">
+              {t('blackboard.dashboardEyebrow', 'Workspace dashboard')}
+            </span>
+            <span className="inline-flex h-5 items-center gap-1 rounded border border-success-border bg-success-bg px-1.5 text-[9px] font-semibold uppercase text-status-text-success dark:border-success-border-dark dark:bg-success-bg-dark dark:text-status-text-success-dark">
+              <Radio size={10} aria-hidden="true" />
+              {t('blackboard.liveSync', 'Live sync')}
+            </span>
+            <h1 className="truncate text-base font-semibold leading-5 text-text-primary dark:text-text-inverse">
               {t('blackboard.title', 'Blackboard')}
             </h1>
-            <p className="mt-1 truncate text-sm text-text-secondary dark:text-text-muted">
+            <span className="min-w-0 max-w-[15rem] truncate text-xs text-text-secondary dark:text-text-muted">
               {selectedWorkspace?.name ??
                 t(
                   'blackboard.modalSubtitle',
                   'Shared goals, tasks, discussions, and topology for the active workspace.'
                 )}
-            </p>
+            </span>
             {selectedWorkspace && (
-              <div className="mt-3 flex flex-wrap gap-2">
+              <>
                 <HeaderBadge>{workspaceUseCaseLabel}</HeaderBadge>
                 <HeaderBadge>{collaborationModeLabel}</HeaderBadge>
-              </div>
+              </>
             )}
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-text-muted dark:text-text-muted">
-              <SensingSurfaceBadge
-                labelKey="blackboard.shellSensingHint"
-                fallbackLabel="workspace shell sync"
-              />
-              <span className="min-w-0">
-                {t(
-                  'blackboard.shellHint',
-                  'Blackboard hosts collaboration and projected workspace views; execution authority remains on tasks, attempts, and runtime.'
-                )}
-              </span>
-            </div>
+            <SensingSurfaceBadge
+              labelKey="blackboard.shellSensingHint"
+              fallbackLabel="workspace shell sync"
+            />
           </div>
 
           <div className="flex w-full items-center xl:min-w-0">
@@ -183,7 +182,7 @@ export function BlackboardDashboardHeader({
               onChange={(event) => {
                 onWorkspaceChange(event.target.value || null);
               }}
-              className="min-h-10 w-full rounded-md border border-border-light bg-surface-light px-3 text-sm normal-case tracking-normal text-text-primary transition-colors duration-150 focus:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse"
+              className="h-8 w-full rounded-md border border-border-light bg-surface-light px-2.5 text-xs normal-case tracking-normal text-text-primary transition-colors duration-150 focus:border-primary/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse"
             >
               {workspaces.map((workspace) => (
                 <option
@@ -201,21 +200,24 @@ export function BlackboardDashboardHeader({
             {selectedWorkspaceId ? (
               <Link
                 to={agentWorkspacePath}
-                className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border-light bg-surface-light px-4 text-sm font-medium text-text-primary transition-colors duration-150 hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse xl:w-auto"
+                className="inline-flex h-8 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-primary transition-colors duration-150 hover:border-primary/30 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-inverse xl:w-auto"
               >
                 {t('blackboard.openInAgentWorkspace', 'Open in Agent Workspace')}
-                <ArrowUpRight size={15} aria-hidden="true" />
+                <ArrowUpRight size={13} aria-hidden="true" />
               </Link>
             ) : (
-              <span className="inline-flex min-h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border border-border-light px-4 text-sm font-medium text-text-muted dark:border-border-dark dark:text-text-muted xl:w-auto">
+              <span className="inline-flex h-8 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-border-light px-2.5 text-xs font-medium text-text-muted dark:border-border-dark dark:text-text-muted xl:w-auto">
                 {t('blackboard.openInAgentWorkspace', 'Open in Agent Workspace')}
-                <ArrowUpRight size={15} aria-hidden="true" />
+                <ArrowUpRight size={13} aria-hidden="true" />
               </span>
             )}
           </div>
         </div>
 
-        <dl className="grid overflow-hidden rounded-md border border-border-light bg-border-light dark:border-border-dark dark:bg-border-dark sm:grid-cols-2 xl:grid-cols-6">
+        <dl
+          className="grid overflow-hidden rounded-md border border-border-light bg-border-light dark:border-border-dark dark:bg-border-dark sm:grid-cols-2 xl:grid-cols-6"
+          data-testid="blackboard-dashboard-metrics"
+        >
           {metrics.map((metric) => (
             <DashboardMetricCell key={metric.key} metric={metric} />
           ))}
@@ -227,7 +229,7 @@ export function BlackboardDashboardHeader({
 
 function HeaderBadge({ children }: { children: string }) {
   return (
-    <span className="inline-flex min-h-7 items-center rounded-md border border-border-light bg-surface-muted px-2.5 text-xs font-medium text-text-secondary dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-muted">
+    <span className="inline-flex h-5 items-center rounded border border-border-light bg-surface-muted px-1.5 text-[9px] font-medium text-text-secondary dark:border-border-dark dark:bg-surface-dark-alt dark:text-text-muted">
       {children}
     </span>
   );
@@ -236,16 +238,16 @@ function HeaderBadge({ children }: { children: string }) {
 function DashboardMetricCell({ metric }: { metric: DashboardMetric }) {
   const Icon = metric.icon;
   return (
-    <div className="min-w-0 bg-surface-light px-3 py-3 dark:bg-surface-dark-alt">
-      <dt className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-text-muted dark:text-text-muted">
-        <Icon size={14} aria-hidden="true" className={`shrink-0 ${metricToneClass[metric.tone]}`} />
+    <div className="min-w-0 bg-surface-light px-2.5 py-1 dark:bg-surface-dark-alt">
+      <dt className="flex items-center gap-1 text-[9px] font-medium uppercase leading-3 tracking-wide text-text-muted dark:text-text-muted">
+        <Icon size={11} aria-hidden="true" className={`shrink-0 ${metricToneClass[metric.tone]}`} />
         <span className="truncate">{metric.label}</span>
       </dt>
-      <dd className="mt-2 min-w-0">
-        <div className="text-xl font-semibold tabular-nums text-text-primary dark:text-text-inverse">
+      <dd className="flex min-w-0 items-baseline gap-1.5">
+        <div className="shrink-0 text-sm font-semibold tabular-nums leading-4 text-text-primary dark:text-text-inverse">
           {metric.value}
         </div>
-        <div className="mt-1 truncate text-xs text-text-secondary dark:text-text-muted">
+        <div className="min-w-0 truncate text-[10px] leading-3 text-text-secondary dark:text-text-muted">
           {metric.detail}
         </div>
       </dd>

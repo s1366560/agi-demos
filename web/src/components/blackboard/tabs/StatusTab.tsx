@@ -215,8 +215,8 @@ export function StatusTab({
   );
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section className="rounded-md border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark-alt xl:col-span-2">
+    <div className="grid gap-5" data-testid="blackboard-status-layout">
+      <section className="rounded-md border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark-alt">
         <div className="flex flex-col gap-3 px-4 py-3 2xl:flex-row 2xl:items-center">
           <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 2xl:w-60">
             <h3 className="text-base font-semibold text-text-primary dark:text-text-inverse">

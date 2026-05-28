@@ -205,148 +205,129 @@ export const ProjectOverview: React.FC = () => {
     stats.storage_limit > 0 ? clampPercent((stats.storage_used / stats.storage_limit) * 100) : 0;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
-      {/* Page Title & Greeting */}
-      <div className="flex flex-col gap-1">
-        <h2 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-          {t('project.overview.title')}
-        </h2>
-        <p className="text-slate-500 dark:text-slate-400">
-          {t('project.overview.subtitle', { name: project?.name || 'Project' })}
-        </p>
-      </div>
+    <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_336px]">
+        <div className="min-w-0 space-y-6">
+          <section className="rounded-md bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.08)] dark:bg-neutral-950 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12)]">
+            <div className="grid gap-6 border-b border-neutral-200 px-5 py-5 dark:border-neutral-800 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+              <div className="min-w-0">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#0070f3]" />
+                  {t('project.memories.eyebrow')}
+                </div>
+                <h2 className="text-3xl font-semibold tracking-[-0.04em] text-neutral-950 dark:text-neutral-50">
+                  {t('project.overview.title')}
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-500 dark:text-neutral-400">
+                  {t('project.overview.subtitle', { name: project?.name || 'Project' })}
+                </p>
+              </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Stat Card 1 */}
-        <div className="bg-surface-light dark:bg-surface-dark p-5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between h-32 hover:border-primary/50 transition-colors group">
-          <div className="flex justify-between items-start">
-            <div className="flex flex-col">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                {t('common.stats.totalMemories')}
-              </span>
-              <span className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                {stats.memory_count}
-              </span>
-            </div>
-            <div className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-md group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
-              <Brain size={16} />
-            </div>
-          </div>
-          <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-            <span>{t('project.overview.storedInDb')}</span>
-          </div>
-        </div>
+              <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[520px]">
+                <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+                    {t('common.stats.totalMemories')}
+                    <Brain size={14} className="text-neutral-400" />
+                  </div>
+                  <div className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
+                    {stats.memory_count}
+                  </div>
+                  <div className="mt-1 text-xs text-neutral-500">
+                    {t('project.overview.storedInDb')}
+                  </div>
+                </div>
 
-        {/* Stat Card 2 */}
-        <div className="bg-surface-light dark:bg-surface-dark p-5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between h-32 hover:border-primary/50 transition-colors group">
-          <div className="flex justify-between items-start">
-            <div className="flex flex-col">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                {t('common.stats.storageUsed')}
-              </span>
-              <span className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                {formatStorage(stats.storage_used)}
-              </span>
-            </div>
-            <div className="p-2 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-md group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30 transition-colors">
-              <Cloud size={16} />
-            </div>
-          </div>
-          <div className="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
-            <div
-              className="bg-purple-500 h-full rounded-full"
-              style={{ width: `${storageQuotaPercent.toString()}%` }}
-            ></div>
-          </div>
-          <span className="text-xs text-slate-500 mt-1">
-            {t('project.overview.quotaUsage', {
-              percent: Math.round(storageQuotaPercent),
-            })}
-          </span>
-        </div>
+                <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+                    {t('common.stats.storageUsed')}
+                    <Cloud size={14} className="text-neutral-400" />
+                  </div>
+                  <div className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
+                    {formatStorage(stats.storage_used)}
+                  </div>
+                  <div className="mt-2 h-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+                    <div
+                      className="h-full rounded-full bg-neutral-950 dark:bg-neutral-50"
+                      style={{ width: `${storageQuotaPercent.toString()}%` }}
+                    />
+                  </div>
+                  <div className="mt-1 text-xs text-neutral-500">
+                    {t('project.overview.quotaUsage', {
+                      percent: Math.round(storageQuotaPercent),
+                    })}
+                  </div>
+                </div>
 
-        {/* Stat Card 3 */}
-        <div className="bg-surface-light dark:bg-surface-dark p-5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between h-32 hover:border-primary/50 transition-colors group">
-          <div className="flex justify-between items-start">
-            <div className="flex flex-col">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                {t('common.stats.activeNodes')}
-              </span>
-              <span className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                {stats.active_nodes}
-              </span>
-            </div>
-            <div className="p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-md group-hover:bg-amber-100 dark:group-hover:bg-amber-900/30 transition-colors">
-              <Network size={16} />
-            </div>
-          </div>
-          <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-            <CheckCircle size={16} className="text-green-500" style={{ fontSize: '16px' }} />
-            <span>{t('project.overview.operational')}</span>
-          </div>
-        </div>
+                <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+                    {t('common.stats.activeNodes')}
+                    <Network size={14} className="text-neutral-400" />
+                  </div>
+                  <div className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
+                    {stats.active_nodes}
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5 text-xs text-neutral-500">
+                    <CheckCircle size={13} className="text-[#0070f3]" />
+                    {t('project.overview.operationalStatus')}
+                  </div>
+                </div>
 
-        {/* Stat Card 4 */}
-        <div className="bg-surface-light dark:bg-surface-dark p-5 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between h-32 hover:border-primary/50 transition-colors group">
-          <div className="flex justify-between items-start">
-            <div className="flex flex-col">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                {t('common.stats.collaborators')}
-              </span>
-              <span className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                {stats.collaborators}
-              </span>
+                <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+                    {t('common.stats.collaborators')}
+                    <Users size={14} className="text-neutral-400" />
+                  </div>
+                  <div className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-neutral-950 dark:text-neutral-50">
+                    {stats.collaborators}
+                  </div>
+                  <div className="mt-1 text-xs text-neutral-500">
+                    {t('project.overview.projectMembers')}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-md group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/30 transition-colors">
-              <Users size={16} />
-            </div>
-          </div>
-          <div className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-            <span>{t('project.overview.projectMembers')}</span>
-          </div>
-        </div>
-      </div>
+          </section>
 
-      {/* Main Content Split */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Active Memories Table (2/3 width) */}
-        <div className="lg:col-span-2 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              {t('project.overview.activeMemories')}
-            </h3>
-            <Link
-              to={`${projectBasePath}/memories`}
-              className="text-sm text-primary font-medium hover:text-primary/80"
-            >
-              {t('common.actions.viewAll')}
-            </Link>
-          </div>
-          <div className="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm overflow-hidden">
+          <section className="overflow-hidden rounded-md bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.08)] dark:bg-neutral-950 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12)]">
+            <div className="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4 dark:border-neutral-800 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-base font-semibold tracking-[-0.02em] text-neutral-950 dark:text-neutral-50">
+                  {t('project.overview.activeMemories')}
+                </h3>
+                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                  {t('project.overview.storedInDb')}
+                </p>
+              </div>
+              <Link
+                to={`${projectBasePath}/memories`}
+                className="inline-flex h-8 items-center justify-center rounded-md border border-neutral-200 px-3 text-sm font-medium text-neutral-900 transition-colors hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 dark:border-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-900 dark:focus:ring-neutral-600 dark:focus:ring-offset-neutral-950"
+              >
+                {t('common.actions.viewAll')}
+              </Link>
+            </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+              <table className="min-w-[760px] w-full text-left text-sm">
+                <thead className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900">
                   <tr>
-                    <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
+                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
                       {t('common.forms.name')}
                     </th>
-                    <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
+                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
                       {t('common.forms.type')}
                     </th>
-                    <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400">
+                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
                       {t('common.forms.status')}
                     </th>
-                    <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400 text-right">
+                    <th className="px-5 py-3 text-right text-[11px] font-medium uppercase tracking-wide text-neutral-500">
                       {t('project.memories.size')}
                     </th>
-                    <th className="px-6 py-3 font-semibold text-slate-500 dark:text-slate-400"></th>
+                    <th className="px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-neutral-500"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                   {memories.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
+                      <td colSpan={5} className="px-5 py-12 text-center text-sm text-neutral-500">
                         {t('project.memories.noMemories')}
                       </td>
                     </tr>
@@ -360,24 +341,24 @@ export const ProjectOverview: React.FC = () => {
                           onClick={() => {
                             void navigate(`${projectBasePath}/memory/${memory.id}`);
                           }}
-                          className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer"
+                          className="group cursor-pointer transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-900"
                         >
-                          <td className="px-6 py-3">
+                          <td className="px-5 py-3">
                             <div className="flex items-center gap-3">
-                              <div className="p-2 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-500 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400">
                                 {memory.content_type === 'image' ? (
-                                  <ImageIcon size={20} />
+                                  <ImageIcon size={16} />
                                 ) : memory.content_type === 'video' ? (
-                                  <Film size={20} />
+                                  <Film size={16} />
                                 ) : (
-                                  <FileText size={20} />
+                                  <FileText size={16} />
                                 )}
                               </div>
-                              <div>
-                                <div className="font-medium text-slate-900 dark:text-white">
+                              <div className="min-w-0">
+                                <div className="truncate font-medium text-neutral-950 dark:text-neutral-50">
                                   {memoryTitle}
                                 </div>
-                                <div className="text-xs text-slate-500">
+                                <div className="text-xs text-neutral-500">
                                   {t('common.time.updated', {
                                     time: formatDate(memory.updated_at || memory.created_at),
                                   })}
@@ -385,21 +366,21 @@ export const ProjectOverview: React.FC = () => {
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-3 text-slate-600 dark:text-slate-300 capitalize">
+                          <td className="px-5 py-3 capitalize text-neutral-600 dark:text-neutral-300">
                             {memory.content_type}
                           </td>
-                          <td className="px-6 py-3">
+                          <td className="px-5 py-3">
                             <span
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${status.color}`}
+                              className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${status.color}`}
                             >
                               <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`}></span>
                               {status.label}
                             </span>
                           </td>
-                          <td className="px-6 py-3 text-slate-600 dark:text-slate-300 text-right font-mono">
+                          <td className="px-5 py-3 text-right font-mono text-neutral-600 dark:text-neutral-300">
                             {formatStorage(memory.content.length)}
                           </td>
-                          <td className="px-6 py-3 text-right">
+                          <td className="px-5 py-3 text-right">
                             <LazyDropdown
                               menu={{
                                 items: [
@@ -439,9 +420,9 @@ export const ProjectOverview: React.FC = () => {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                 }}
-                                className="text-slate-400 hover:text-primary p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+                                className="rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-950 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-50"
                               >
-                                <MoreVertical size={16} style={{ fontSize: '20px' }} />
+                                <MoreVertical size={16} />
                               </button>
                             </LazyDropdown>
                           </td>
@@ -452,74 +433,78 @@ export const ProjectOverview: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-surface-dark flex justify-center">
+            <div className="flex justify-center border-t border-neutral-200 bg-neutral-50 px-5 py-3 dark:border-neutral-800 dark:bg-neutral-900">
               <Link
                 to={`${projectBasePath}/memories`}
-                className="text-xs font-medium text-slate-500 hover:text-primary flex items-center gap-1"
+                className="flex items-center gap-1 text-xs font-medium text-neutral-500 transition-colors hover:text-neutral-950 dark:hover:text-neutral-50"
               >
-                {t('common.actions.showMore')}{' '}
-                <ChevronDown size={16} style={{ fontSize: '16px' }} />
+                {t('common.actions.showMore')} <ChevronDown size={14} />
               </Link>
             </div>
-          </div>
+          </section>
         </div>
 
-        {/* Right Column: Team & Activity (1/3 width) */}
-        <div className="flex flex-col gap-6">
-          {/* Team Card */}
-          <div className="bg-surface-light dark:bg-surface-dark border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wide">
+        <aside className="grid gap-4 md:grid-cols-2 2xl:flex 2xl:flex-col">
+          <section className="rounded-md bg-white p-5 shadow-[0_0_0_1px_rgba(0,0,0,0.08)] dark:bg-neutral-950 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12)]">
+            <div className="mb-5 flex items-center justify-between">
+              <h3 className="text-sm font-semibold tracking-[-0.01em] text-neutral-950 dark:text-neutral-50">
                 {t('project.overview.projectTeam')}
               </h3>
               <Link
                 to={`${projectBasePath}/settings`}
                 aria-label={t('project.overview.projectTeam')}
-                className="p-1 text-slate-400 hover:text-primary rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-950 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-neutral-50"
               >
-                <Users size={16} style={{ fontSize: '20px' }} />
+                <Users size={16} />
               </Link>
             </div>
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-full">
-                  <Users size={16} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">
-                    {stats.collaborators} {t('common.stats.members')}
-                  </p>
-                  <p className="text-xs text-slate-500">{t('project.overview.collaborating')}</p>
-                </div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-950 text-white dark:bg-neutral-50 dark:text-neutral-950">
+                <Users size={16} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-neutral-950 dark:text-neutral-50">
+                  {stats.collaborators} {t('common.stats.members')}
+                </p>
+                <p className="mt-0.5 text-xs text-neutral-500">
+                  {t('project.overview.collaborating')}
+                </p>
               </div>
             </div>
-          </div>
+          </section>
 
-          {/* Quick Actions / Activity */}
-          <div className="bg-primary text-white rounded-lg shadow-lg p-5 relative overflow-hidden group">
-            <div className="relative z-10">
-              <h3 className="text-sm font-bold uppercase tracking-wide mb-3">
+          <section className="rounded-md bg-neutral-950 p-5 text-white shadow-[0_0_0_1px_rgba(0,0,0,0.08)] dark:bg-neutral-50 dark:text-neutral-950">
+            <div className="mb-5 flex items-center justify-between">
+              <h3 className="text-sm font-semibold tracking-[-0.01em]">
                 {t('common.stats.systemStatus')}
               </h3>
-              <div className="flex items-start gap-3 mb-4">
-                <div className="p-1.5 bg-white/20 rounded">
-                  <Bot size={16} style={{ fontSize: '20px' }} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{t('project.overview.autoIndexing')}</p>
-                  <p className="text-xs text-blue-100 mt-1">{t('project.overview.systemReady')}</p>
-                </div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-white/80 dark:bg-neutral-950/10 dark:text-neutral-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#0070f3]" />
+                {t('project.overview.operationalStatus')}
+              </span>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/10 dark:bg-neutral-950/10">
+                <Bot size={16} />
               </div>
-              <div className="w-full bg-blue-900/50 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-white h-full rounded-full w-full"></div>
-              </div>
-              <div className="flex justify-between text-2xs mt-1 text-blue-200">
-                <span>{t('project.overview.status')}</span>
-                <span>{t('project.overview.operationalStatus')}</span>
+              <div>
+                <p className="text-sm font-medium">{t('project.overview.autoIndexing')}</p>
+                <p className="mt-1 text-xs leading-5 text-white/60 dark:text-neutral-600">
+                  {t('project.overview.systemReady')}
+                </p>
               </div>
             </div>
-          </div>
-        </div>
+            <div className="mt-5">
+              <div className="h-1 overflow-hidden rounded-full bg-white/15 dark:bg-neutral-950/15">
+                <div className="h-full w-full rounded-full bg-white dark:bg-neutral-950" />
+              </div>
+              <div className="mt-2 flex justify-between text-[11px] text-white/55 dark:text-neutral-600">
+                <span>{t('project.overview.status')}</span>
+                <span>{t('project.overview.operational')}</span>
+              </div>
+            </div>
+          </section>
+        </aside>
       </div>
 
       {/* Delete Confirmation Modal */}

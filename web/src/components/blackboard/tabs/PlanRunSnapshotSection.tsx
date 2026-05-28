@@ -104,6 +104,8 @@ interface PlanRunSnapshotSectionProps {
 }
 
 const OPERATOR_REASON_LIMIT = 500;
+const COLLAPSIBLE_TEXT_THRESHOLD = 96;
+const FEEDBACK_PREVIEW_LIMIT = 2;
 const DEFAULT_NODE_ACTION_REASON = 'operator action from central blackboard';
 const DEFAULT_RETRY_ACTION_REASON = 'operator retry from central blackboard';
 type DetailTabId = 'story' | 'evidence' | 'runs' | 'review' | 'blocker';
@@ -240,6 +242,52 @@ function CompactMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function CollapsibleTextBlock({
+  children,
+  collapsedLines = 'line-clamp-3',
+  toneClassName = 'text-text-secondary dark:text-text-muted',
+}: {
+  children?: string | null | undefined;
+  collapsedLines?: string;
+  toneClassName?: string;
+}) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const text = children?.trim();
+
+  if (!text) {
+    return null;
+  }
+
+  const canToggle = text.length > COLLAPSIBLE_TEXT_THRESHOLD;
+
+  return (
+    <div className="min-w-0">
+      <p
+        className={`break-words text-xs leading-5 ${toneClassName} ${
+          canToggle && !expanded ? collapsedLines : ''
+        }`}
+      >
+        {text}
+      </p>
+      {canToggle && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          className="mt-1 text-xs font-medium text-status-text-info hover:underline dark:text-status-text-info-dark"
+          onClick={() => {
+            setExpanded((current) => !current);
+          }}
+        >
+          {expanded
+            ? t('blackboard.collapseText', 'Collapse')
+            : t('blackboard.expandText', 'Expand')}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function IterationLoopPanel({
   iteration,
   isActionPending,
@@ -250,6 +298,7 @@ function IterationLoopPanel({
   onAction: (actionId: 'pause_auto_loop' | 'resume_auto_loop' | 'trigger_next_iteration') => void;
 }) {
   const { t } = useTranslation();
+  const [showAllFeedback, setShowAllFeedback] = useState(false);
 
   if (!iteration) {
     return null;
@@ -264,41 +313,41 @@ function IterationLoopPanel({
       : iteration.loop_status === 'paused' || iteration.loop_status === 'suspended'
         ? 'text-status-text-warning'
         : 'text-status-text-info';
+  const feedbackItems = showAllFeedback
+    ? iteration.feedback_items
+    : iteration.feedback_items.slice(0, FEEDBACK_PREVIEW_LIMIT);
+  const hiddenFeedbackItemCount = Math.max(
+    0,
+    iteration.feedback_items.length - FEEDBACK_PREVIEW_LIMIT
+  );
+  const hasHiddenFeedbackItems = iteration.feedback_items.length > FEEDBACK_PREVIEW_LIMIT;
 
   return (
     <div className="border-t border-border-separator px-4 py-4 dark:border-border-dark">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
-            <Repeat2 className="h-4 w-4" aria-hidden />
-            Iteration {iteration.current_iteration}
+      <div className="grid gap-3">
+        <div className="min-w-0 max-w-3xl">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+              <Repeat2 className="h-4 w-4 shrink-0" aria-hidden />
+              <span className="truncate">Iteration {iteration.current_iteration}</span>
+            </div>
+            <span className={`text-xs font-medium uppercase ${statusTone}`}>
+              {iteration.loop_status}
+            </span>
           </div>
           <div className="mt-2 text-sm font-medium text-text-primary dark:text-text-inverse">
             {iteration.active_phase_label}
           </div>
-          <div className={`mt-1 text-xs font-medium uppercase ${statusTone}`}>
-            {iteration.loop_status}
-          </div>
-          {iteration.current_sprint_goal && (
-            <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
-              {iteration.current_sprint_goal}
-            </p>
-          )}
-          <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
-            {iteration.next_action}
-          </p>
-          {iteration.review_summary && (
-            <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
-              {iteration.review_summary}
-            </p>
-          )}
-          {iteration.stop_reason && (
-            <p className="mt-1 break-words text-xs leading-5 text-status-text-warning dark:text-status-text-warning-dark">
+          <div className="mt-2 space-y-2">
+            <CollapsibleTextBlock>{iteration.current_sprint_goal}</CollapsibleTextBlock>
+            <CollapsibleTextBlock>{iteration.next_action}</CollapsibleTextBlock>
+            <CollapsibleTextBlock>{iteration.review_summary}</CollapsibleTextBlock>
+            <CollapsibleTextBlock toneClassName="text-status-text-warning dark:text-status-text-warning-dark">
               {iteration.stop_reason}
-            </p>
-          )}
+            </CollapsibleTextBlock>
+          </div>
         </div>
-        <dl className="grid shrink-0 grid-cols-3 gap-4 rounded-md border border-border-light bg-surface-muted px-3 py-2 dark:border-border-dark dark:bg-surface-dark">
+        <dl className="grid min-w-0 grid-cols-1 gap-3 rounded-md border border-border-light bg-surface-muted px-3 py-2 sm:grid-cols-3 dark:border-border-dark dark:bg-surface-dark">
           <CompactMetric
             label="Sprint tasks"
             value={`${String(iteration.task_count)}/${String(iteration.task_budget)}`}
@@ -368,9 +417,11 @@ function IterationLoopPanel({
         </p>
       )}
 
-      <div className="mt-4 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-2">
         {iteration.phases.map((phase) => {
           const isActive = phase.id === iteration.active_phase;
+          const gateStatus = phase.gate_status?.status ?? 'pending';
+          const missingSummary = compactList(phase.missing_artifacts, 'none');
           return (
             <div
               key={phase.id}
@@ -383,11 +434,12 @@ function IterationLoopPanel({
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-xs font-semibold">{phase.label}</span>
                 <span
-                  className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${gateTone(
-                    phase.gate_status?.status
+                  className={`min-w-0 max-w-[8.25rem] shrink truncate rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${gateTone(
+                    gateStatus
                   )}`}
+                  title={gateStatus}
                 >
-                  {phase.gate_status?.status ?? 'pending'}
+                  {gateStatus}
                 </span>
               </div>
               <div className="mt-1 flex items-center justify-between gap-2">
@@ -413,8 +465,11 @@ function IterationLoopPanel({
                 {phase.running > 0 ? ` · ${String(phase.running)} active` : ''}
                 {phase.blocked > 0 ? ` · ${String(phase.blocked)} blocked` : ''}
               </div>
-              <div className="mt-1 line-clamp-2 break-words text-[11px] leading-4 text-text-secondary dark:text-text-muted">
-                Missing: {compactList(phase.missing_artifacts, 'none')}
+              <div
+                className="mt-1 line-clamp-2 break-words text-[11px] leading-4 text-text-secondary dark:text-text-muted"
+                title={`Missing: ${missingSummary}`}
+              >
+                Missing: {missingSummary}
               </div>
             </div>
           );
@@ -422,7 +477,7 @@ function IterationLoopPanel({
       </div>
 
       {(iteration.deliverables.length > 0 || iteration.feedback_items.length > 0) && (
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(18rem,1fr))] gap-3">
           {iteration.deliverables.length > 0 && (
             <div className="min-w-0 rounded-md border border-border-light bg-surface-light p-3 dark:border-border-dark dark:bg-surface-dark">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
@@ -447,13 +502,32 @@ function IterationLoopPanel({
                 <AlertTriangle className="h-4 w-4" aria-hidden />
                 Feedback
               </div>
-              <ul className="mt-2 space-y-1 text-xs leading-5">
-                {iteration.feedback_items.map((item) => (
-                  <li key={item} className="break-words">
-                    {item}
+              <ul className="mt-2 space-y-2">
+                {feedbackItems.map((item) => (
+                  <li key={item}>
+                    <CollapsibleTextBlock
+                      collapsedLines="line-clamp-5"
+                      toneClassName="text-status-text-warning dark:text-status-text-warning-dark"
+                    >
+                      {item}
+                    </CollapsibleTextBlock>
                   </li>
                 ))}
               </ul>
+              {hasHiddenFeedbackItems && (
+                <button
+                  type="button"
+                  aria-expanded={showAllFeedback}
+                  className="mt-2 text-xs font-medium text-status-text-warning hover:underline dark:text-status-text-warning-dark"
+                  onClick={() => {
+                    setShowAllFeedback((current) => !current);
+                  }}
+                >
+                  {showAllFeedback
+                    ? t('blackboard.collapseText', 'Collapse')
+                    : `${t('blackboard.expandText', 'Expand')} (${String(hiddenFeedbackItemCount)})`}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -524,19 +598,26 @@ function DeliveryPanel({
       : delivery.status === 'failed' || delivery.status === 'unhealthy'
         ? 'text-status-text-error'
         : 'text-status-text-info';
+  const runSummary = `Provider ${delivery.provider}${
+    run ? ` · run ${shortId(run.id)} · ${run.status}` : ' · no pipeline run yet'
+  }`;
+  const deliveryMeta = `${delivery.agent_managed ? 'Agent managed' : 'Manual'} · ${
+    delivery.contract_source
+  } · ${String(Math.round(delivery.contract_confidence * 100))}% confidence`;
 
   return (
     <div className="border-t border-border-separator px-4 py-4 dark:border-border-dark">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
-            <PackageCheck className="h-4 w-4" aria-hidden />
-            Delivery / CI/CD
+      <div className="grid gap-3">
+        <div className="min-w-0 max-w-3xl">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <div className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
+              <PackageCheck className="h-4 w-4 shrink-0" aria-hidden />
+              <span className="truncate">Delivery / CI/CD</span>
+            </div>
+            <span className={`text-xs font-semibold uppercase ${tone}`}>{delivery.status}</span>
           </div>
-          <div className={`mt-2 text-xs font-semibold uppercase ${tone}`}>{delivery.status}</div>
           <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
-            Provider {delivery.provider}
-            {run ? ` · run ${shortId(run.id)} · ${run.status}` : ' · no pipeline run yet'}
+            {runSummary}
           </p>
           {run?.external_url && (
             <a
@@ -550,26 +631,26 @@ function DeliveryPanel({
             </a>
           )}
           {delivery.code_root && (
-            <p className="mt-1 break-all font-mono text-[11px] leading-5 text-text-secondary dark:text-text-muted">
+            <p className="mt-1 line-clamp-2 break-all font-mono text-[11px] leading-5 text-text-secondary dark:text-text-muted">
               {delivery.code_root}
             </p>
           )}
           <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
-            {delivery.agent_managed ? 'Agent managed' : 'Manual'} · {delivery.contract_source} ·{' '}
-            {Math.round(delivery.contract_confidence * 100)}% confidence
+            {deliveryMeta}
           </p>
           {delivery.run_assessment?.summary && (
-            <p className="mt-1 break-words text-xs leading-5 text-text-secondary dark:text-text-muted">
-              {delivery.run_assessment.summary}
-            </p>
+            <CollapsibleTextBlock>{delivery.run_assessment.summary}</CollapsibleTextBlock>
           )}
           {run?.reason && (
-            <p className="mt-1 break-words text-xs leading-5 text-status-text-warning dark:text-status-text-warning-dark">
+            <CollapsibleTextBlock
+              collapsedLines="line-clamp-4"
+              toneClassName="text-status-text-warning dark:text-status-text-warning-dark"
+            >
               {run.reason}
-            </p>
+            </CollapsibleTextBlock>
           )}
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <dl className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4">
           <StatBadge label="Pipeline" value={run?.status ?? 'none'} />
           <StatBadge
             label="Assessment"
@@ -577,6 +658,8 @@ function DeliveryPanel({
           />
           <StatBadge label="Health" value={deployment?.status ?? 'none'} />
           <StatBadge label="Restarts" value={String(deployment?.restart_count ?? 0)} />
+        </dl>
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             className="inline-flex h-8 items-center gap-1 rounded border border-border-light bg-surface-light px-2.5 text-xs font-medium text-text-secondary hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt"
@@ -608,10 +691,15 @@ function DeliveryPanel({
           <div className="font-semibold uppercase">
             {t('blackboard.planRunWarnings', 'Warnings')}
           </div>
-          <ul className="mt-1 space-y-1">
+          <ul className="mt-1 space-y-2">
             {delivery.warnings?.map((warning) => (
-              <li key={warning} className="break-words">
-                {warning}
+              <li key={warning}>
+                <CollapsibleTextBlock
+                  collapsedLines="line-clamp-4"
+                  toneClassName="text-status-text-warning dark:text-status-text-warning-dark"
+                >
+                  {warning}
+                </CollapsibleTextBlock>
               </li>
             ))}
           </ul>
@@ -1636,8 +1724,8 @@ export function PlanRunSnapshotSection({
             onOpenPreview={(previewUrl, serviceId) => void openPreview(previewUrl, serviceId)}
           />
 
-          <div className="grid min-h-[520px] 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.78fr)]">
-            <div className="min-w-0 border-t border-border-separator dark:border-border-dark 2xl:border-t-0">
+          <div className="grid min-h-[620px]" data-testid="plan-run-dag-workspace">
+            <div className="min-w-0 border-t border-border-separator dark:border-border-dark">
               <div className="border-b border-border-separator px-4 py-3 dark:border-border-dark">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase text-text-secondary dark:text-text-muted">
@@ -1756,7 +1844,7 @@ export function PlanRunSnapshotSection({
                   }}
                 />
               ) : dagViewMode === 'graph' && executionDagModel ? (
-                <div className="p-3">
+                <div className="p-2 sm:p-3">
                   <ExecutionDagGraph
                     model={executionDagModel}
                     selectedNodeId={selectedNode?.id ?? null}
@@ -1764,7 +1852,8 @@ export function PlanRunSnapshotSection({
                     onNodeSelect={(nodeId) => {
                       setSelectedNodeId(nodeId);
                     }}
-                    minHeight={520}
+                    minHeight={640}
+                    fitToWidth
                   />
                 </div>
               ) : filteredNodes.length > 0 ? (
@@ -1789,7 +1878,7 @@ export function PlanRunSnapshotSection({
               )}
             </div>
 
-            <aside className="min-w-0 border-t border-border-separator dark:border-border-dark 2xl:border-l 2xl:border-t-0">
+            <aside className="min-w-0 border-t border-border-separator dark:border-border-dark">
               {selectedNode ? (
                 <div className="flex min-h-full flex-col">
                   {selectedTask && (

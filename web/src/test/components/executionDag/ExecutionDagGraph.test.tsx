@@ -53,6 +53,52 @@ describe('ExecutionDagGraph', () => {
     expect(screen.getByText('Worker A')).toBeInTheDocument();
   });
 
+  it('can fit the graph SVG to the available panel width', () => {
+    render(<ExecutionDagGraph model={model} fitToWidth />);
+
+    const graph = screen.getByTestId('execution-dag-graph');
+    expect(graph).toHaveAttribute('data-fit-to-width', 'true');
+    expect(screen.getByTestId('execution-dag-svg')).toHaveClass('w-full');
+  });
+
+  it('renders graph interaction tools and an overview map', () => {
+    render(<ExecutionDagGraph model={model} selectedNodeId="task-1" fitToWidth />);
+
+    expect(screen.getByLabelText('Graph tools')).toBeInTheDocument();
+    expect(screen.getByLabelText('Zoom out')).toBeInTheDocument();
+    expect(screen.getByLabelText('Zoom level')).toBeInTheDocument();
+    expect(screen.getByLabelText('Zoom in')).toBeInTheDocument();
+    expect(screen.getByLabelText('Fit width')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Actual size')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reset view')).toBeInTheDocument();
+    expect(screen.getByLabelText('Drag to pan')).toBeInTheDocument();
+    expect(screen.getByLabelText('Center selected node')).toBeEnabled();
+    expect(screen.getByLabelText('Center current or root node')).toBeInTheDocument();
+    expect(screen.getByLabelText('Toggle overview map')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Download SVG')).toBeInTheDocument();
+    expect(screen.getByTestId('execution-dag-minimap')).toBeInTheDocument();
+  });
+
+  it('supports zoom, pan mode, overview toggle, and keyboard shortcuts', () => {
+    render(<ExecutionDagGraph model={model} fitToWidth />);
+
+    const graph = screen.getByTestId('execution-dag-graph');
+    fireEvent.click(screen.getByLabelText('Zoom in'));
+    expect(graph).not.toHaveAttribute('data-fit-to-width');
+
+    fireEvent.click(screen.getByLabelText('Fit width'));
+    expect(graph).toHaveAttribute('data-fit-to-width', 'true');
+
+    fireEvent.click(screen.getByLabelText('Drag to pan'));
+    expect(screen.getByLabelText('Drag to pan')).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByLabelText('Toggle overview map'));
+    expect(screen.queryByTestId('execution-dag-minimap')).not.toBeInTheDocument();
+
+    fireEvent.keyDown(graph, { key: '-' });
+    expect(graph).not.toHaveAttribute('data-fit-to-width');
+  });
+
   it('supports click and keyboard node selection', () => {
     const onNodeSelect = vi.fn();
     render(<ExecutionDagGraph model={model} onNodeSelect={onNodeSelect} />);

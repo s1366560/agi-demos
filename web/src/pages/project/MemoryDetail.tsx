@@ -4,15 +4,18 @@ import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 
 import {
+  Database,
   Download,
   FileEdit,
   FileText,
+  GitBranch,
   History,
   Loader2,
   Network,
   Pencil,
   RefreshCw,
   Share2,
+  Tag,
   Trash2,
 } from 'lucide-react';
 
@@ -47,6 +50,18 @@ function buildMemoryExportFilename(memory: Memory): string {
     .replace(/[^\w.-]+/g, '-')
     .replace(/^-+|-+$/g, '');
   return `${safeName || 'memory'}.json`;
+}
+
+function getProcessingStatusClass(status: Memory['processing_status']): string {
+  if (status === 'FAILED') {
+    return 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300';
+  }
+
+  if (status === 'COMPLETED') {
+    return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300';
+  }
+
+  return 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300';
 }
 
 export const MemoryDetail: React.FC = () => {
@@ -236,6 +251,14 @@ export const MemoryDetail: React.FC = () => {
     }
   };
 
+  const metadataTags = getMemoryMetadataTags(memory.metadata);
+  const tabs: Array<{ id: typeof activeTab; label: string }> = [
+    { id: 'content', label: t('project.memories.detail.tabs.content') },
+    { id: 'metadata', label: t('project.memories.detail.tabs.metadata') },
+    { id: 'raw', label: t('project.memories.detail.tabs.raw') },
+    { id: 'tasks', label: t('project.memories.detail.tabs.tasks') },
+  ];
+
   return (
     <div className="flex h-full overflow-hidden">
       {deleteModalOpen && (
@@ -265,45 +288,40 @@ export const MemoryDetail: React.FC = () => {
           projectId={projectId}
         />
       )}
-      {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        {/* Top Navigation Bar (Breadcrumbs + Toolbar) */}
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200 bg-surface-light px-6 dark:border-slate-800 dark:bg-surface-dark">
-          {/* Breadcrumbs */}
-          <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
+        <header className="sticky top-0 z-10 flex min-h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 dark:border-slate-800 dark:bg-surface-dark">
+          <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap">
             <Link
               to={projectBasePath}
-              className="text-slate-500 hover:text-primary text-sm font-medium transition-colors"
+              className="text-sm font-medium text-slate-500 transition-colors hover:text-slate-950 dark:text-slate-400 dark:hover:text-white"
             >
               {t('common.project')}
             </Link>
             <span className="text-slate-400 text-sm">/</span>
             <Link
               to={`${projectBasePath}/memories`}
-              className="text-slate-500 hover:text-primary text-sm font-medium transition-colors"
+              className="text-sm font-medium text-slate-500 transition-colors hover:text-slate-950 dark:text-slate-400 dark:hover:text-white"
             >
               {t('project.memories.title')}
             </Link>
             <span className="text-slate-400 text-sm">/</span>
-            <div className="flex items-center gap-2">
-              <span className="text-slate-900 dark:text-white text-sm font-medium truncate max-w-50">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="max-w-[18rem] truncate text-sm font-medium text-slate-950 dark:text-white">
                 {memory.title || t('common.untitled')}
               </span>
               <span
-                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                className={`h-2 w-2 rounded-full ${
                   memory.processing_status === 'FAILED'
-                    ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                    ? 'bg-red-500'
                     : memory.processing_status === 'COMPLETED'
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                      : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                      ? 'bg-emerald-500'
+                      : 'bg-amber-500'
                 }`}
-              >
-                {memory.processing_status}
-              </span>
+                title={memory.processing_status}
+              />
             </div>
           </div>
-          {/* Toolbar Actions */}
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
               onClick={() => {
@@ -322,7 +340,7 @@ export const MemoryDetail: React.FC = () => {
                 memory.processing_status === 'PROCESSING' ||
                 memory.processing_status === 'PENDING'
                   ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
-                  : 'text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'
               }`}
               title={t('project.memories.actions.reprocess', {
                 defaultValue: 'Reprocess',
@@ -340,7 +358,7 @@ export const MemoryDetail: React.FC = () => {
                 setEditModalOpen(true);
               }}
               aria-label={t('common.edit', 'Edit')}
-              className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+              className="rounded-lg p-2 text-slate-500 transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
               title={t('common.edit', 'Edit')}
             >
               <Pencil size={20} />
@@ -351,7 +369,7 @@ export const MemoryDetail: React.FC = () => {
                 setDeleteModalOpen(true);
               }}
               aria-label={t('common.delete', 'Delete')}
-              className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+              className="rounded-lg p-2 text-slate-500 transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               title={t('common.delete', 'Delete')}
             >
               <Trash2 size={20} />
@@ -363,7 +381,7 @@ export const MemoryDetail: React.FC = () => {
               onClick={() => {
                 void handleShare();
               }}
-              className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+              className="rounded-lg p-2 text-slate-500 transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
               title={t('memory.detail.shareTitle', 'Share')}
             >
               <Share2 size={20} />
@@ -372,7 +390,7 @@ export const MemoryDetail: React.FC = () => {
               type="button"
               aria-label={t('memory.detail.downloadAria')}
               onClick={handleExport}
-              className="p-2 text-slate-500 hover:text-primary hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 rounded-lg transition-[color,background-color,border-color,box-shadow,opacity,transform]"
+              className="rounded-lg p-2 text-slate-500 transition-[color,background-color,border-color,box-shadow,opacity,transform] hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
               title={t('memory.detail.exportTitle', 'Export')}
             >
               <Download size={20} />
@@ -380,44 +398,46 @@ export const MemoryDetail: React.FC = () => {
           </div>
         </header>
 
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark">
-          <div className="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-8">
-            {/* Memory Card */}
-            <div className="bg-white dark:bg-surface-dark rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-              {/* Profile Header Section */}
-              <div className="p-6 md:p-8 pb-0">
-                <div className="flex min-w-0 flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-                  <div className="flex min-w-0 items-center gap-5">
-                    <div className="relative shrink-0">
-                      <div className="bg-center bg-no-repeat bg-cover rounded-full h-16 w-16 md:h-20 md:w-20 ring-4 ring-slate-50 dark:ring-slate-800 shadow-sm bg-slate-200 flex items-center justify-center text-slate-400">
-                        <FileText size={28} />
-                      </div>
-                      <div className="absolute bottom-0 right-0 rounded-full border border-slate-100 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                        <div
-                          className={`rounded-full h-3 w-3 ${memory.status === 'DISABLED' ? 'bg-red-500' : 'bg-green-500'}`}
-                          title={
-                            memory.status === 'DISABLED'
-                              ? t('common.status.unavailable')
-                              : t('common.status.available')
-                          }
-                        ></div>
-                      </div>
+        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-background-dark">
+          <div className="mx-auto grid max-w-7xl gap-4 p-4 md:gap-5 md:p-5 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+            <section className="min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-surface-dark">
+              <div className="border-b border-slate-200 px-4 py-5 dark:border-slate-800 md:px-6">
+                <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="flex min-w-0 gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                      <FileText size={22} />
                     </div>
-                    <div className="flex min-w-0 flex-col justify-center gap-1">
-                      <h1 className="break-words text-2xl font-bold leading-tight tracking-tight text-slate-900 dark:text-white md:text-3xl">
+                    <div className="min-w-0">
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase ${getProcessingStatusClass(memory.processing_status)}`}
+                        >
+                          {memory.processing_status}
+                        </span>
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase ${
+                            memory.status === 'DISABLED'
+                              ? 'border-red-200 bg-white text-red-700 dark:border-red-900/60 dark:bg-slate-950 dark:text-red-300'
+                              : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200'
+                          }`}
+                        >
+                          {memory.status === 'DISABLED'
+                            ? t('common.status.unavailable')
+                            : t('common.status.available')}
+                        </span>
+                      </div>
+                      <h1 className="max-w-4xl break-words text-2xl font-semibold leading-tight text-slate-950 dark:text-white md:text-3xl">
                         {memory.title || t('common.untitled')}
                       </h1>
-                      <p className="text-slate-500 dark:text-slate-400 text-sm md:text-base font-normal flex items-center gap-2 flex-wrap">
-                        <span>
-                          {t('project.memories.detail.type')}:{' '}
-                          <span className="text-slate-900 dark:text-slate-200 font-medium capitalize">
-                            {memory.content_type}
-                          </span>
+                      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-500 dark:text-slate-400">
+                        <span className="capitalize">
+                          {t('project.memories.detail.type')}: {memory.content_type}
                         </span>
-                        <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
                         <span>{formatDateOnly(memory.created_at)}</span>
-                      </p>
+                        <span>
+                          {t('memory.detail.version', { defaultValue: 'Version' })} {memory.version}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <button
@@ -425,25 +445,63 @@ export const MemoryDetail: React.FC = () => {
                     onClick={() => {
                       setEditModalOpen(true);
                     }}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm shadow-primary/20 transition-colors hover:bg-primary-dark md:w-auto"
+                    className="inline-flex h-9 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-slate-950 px-3.5 text-sm font-medium text-white transition-colors hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200 max-lg:w-full"
                   >
-                    <FileEdit size={18} />
+                    <FileEdit size={16} />
                     {t('project.memories.detail.edit_memory')}
                   </button>
                 </div>
+
+                <div className="mt-5 grid grid-cols-2 border border-slate-200 dark:border-slate-800 lg:grid-cols-4">
+                  <div className="border-r border-slate-200 p-4 dark:border-slate-800">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase text-slate-500">
+                      <Database size={14} />
+                      {t('project.memories.detail.type')}
+                    </div>
+                    <div className="mt-2 text-sm font-semibold capitalize text-slate-950 dark:text-white">
+                      {memory.content_type}
+                    </div>
+                  </div>
+                  <div className="border-r border-slate-200 p-4 dark:border-slate-800">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase text-slate-500">
+                      <Network size={14} />
+                      {t('memory.detail.entities', { defaultValue: 'Entities' })}
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-slate-950 dark:text-white">
+                      {memory.entities.length}
+                    </div>
+                  </div>
+                  <div className="border-r border-t border-slate-200 p-4 dark:border-slate-800 lg:border-t-0">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase text-slate-500">
+                      <GitBranch size={14} />
+                      {t('memory.detail.relationships', { defaultValue: 'Relations' })}
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-slate-950 dark:text-white">
+                      {memory.relationships.length}
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-200 p-4 dark:border-slate-800 lg:border-t-0">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase text-slate-500">
+                      <History size={14} />
+                      {t('memory.detail.created', { defaultValue: 'Created' })}
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-slate-950 dark:text-white">
+                      {formatDateOnly(memory.created_at)}
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Processing Progress Card */}
               {(processingProgress ||
                 memory.processing_status === 'PENDING' ||
                 memory.processing_status === 'PROCESSING') && (
-                <div className="mx-6 md:mx-8 mt-6 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-4">
+                <div className="border-b border-slate-200 bg-slate-50 px-4 py-4 dark:border-slate-800 dark:bg-slate-900/60 md:px-6">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="rounded-full bg-indigo-100 dark:bg-indigo-900/50 p-2">
+                      <div className="rounded-md border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-950">
                         <Loader2
                           size={20}
-                          className="text-indigo-600 dark:text-indigo-400 animate-spin motion-reduce:animate-none"
+                          className="animate-spin text-slate-700 motion-reduce:animate-none dark:text-slate-200"
                         />
                       </div>
                       <div>
@@ -460,111 +518,77 @@ export const MemoryDetail: React.FC = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+                      <div className="text-lg font-bold text-slate-950 dark:text-white">
                         {processingProgress?.progress ?? 0}%
                       </div>
                     </div>
                   </div>
-                  {/* Progress Bar */}
-                  <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
                     <div
-                      className="h-full bg-indigo-600 transition-[width] duration-300 ease-out dark:bg-indigo-400"
+                      className="h-full bg-slate-950 transition-[width] duration-300 ease-out dark:bg-white"
                       style={{ width: `${String(processingProgress?.progress ?? 0)}%` }}
                     />
                   </div>
                 </div>
               )}
 
-              {/* Tabs */}
-              <div className="mt-8 px-6 md:px-8 border-b border-slate-200 dark:border-slate-800">
-                <div className="flex gap-8 overflow-x-auto">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab('content');
-                    }}
-                    className={`relative flex items-center justify-center pb-4 font-semibold text-sm tracking-wide transition-colors ${
-                      activeTab === 'content'
-                        ? 'text-primary border-b-2 border-primary'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                    }`}
-                  >
-                    {t('project.memories.detail.tabs.content')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab('metadata');
-                    }}
-                    className={`relative flex items-center justify-center pb-4 font-semibold text-sm tracking-wide transition-colors ${
-                      activeTab === 'metadata'
-                        ? 'text-primary border-b-2 border-primary'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                    }`}
-                  >
-                    {t('project.memories.detail.tabs.metadata')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab('raw');
-                    }}
-                    className={`relative flex items-center justify-center pb-4 font-semibold text-sm tracking-wide transition-colors ${
-                      activeTab === 'raw'
-                        ? 'text-primary border-b-2 border-primary'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                    }`}
-                  >
-                    {t('project.memories.detail.tabs.raw')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab('tasks');
-                    }}
-                    className={`relative flex items-center justify-center pb-4 font-semibold text-sm tracking-wide transition-colors ${
-                      activeTab === 'tasks'
-                        ? 'text-primary border-b-2 border-primary'
-                        : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
-                    }`}
-                  >
-                    {t('project.memories.detail.tabs.tasks')}
-                  </button>
+              <div className="border-b border-slate-200 px-4 dark:border-slate-800 md:px-6">
+                <div className="flex gap-1 overflow-x-auto py-3">
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(tab.id);
+                      }}
+                      className={`h-8 rounded-md px-3 text-sm font-medium transition-colors ${
+                        activeTab === tab.id
+                          ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
               </div>
-              {/* Content Body */}
-              <div className="p-6 md:p-8 text-slate-800 dark:text-slate-200 leading-relaxed text-base md:text-lg min-h-[300px]">
+
+              <div className="min-h-[360px] p-4 text-base leading-7 text-slate-800 dark:text-slate-200 md:p-6">
                 {activeTab === 'content' && (
-                  <div className="prose dark:prose-invert max-w-none whitespace-pre-wrap">
+                  <div className="max-w-4xl whitespace-pre-wrap text-[15px] leading-7">
                     {memory.content || t('project.memories.detail.no_content')}
                   </div>
                 )}
                 {activeTab === 'metadata' && (
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                      <span className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                  <div className="grid gap-3 text-sm md:grid-cols-2">
+                    <div className="rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                      <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">
                         {t('project.memories.detail.metadata.id')}
                       </span>
-                      <span className="font-mono break-all">{memory.id}</span>
+                      <span className="break-all font-mono text-slate-900 dark:text-slate-100">
+                        {memory.id}
+                      </span>
                     </div>
-                    <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                      <span className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                    <div className="rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                      <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">
                         {t('project.memories.detail.type')}
                       </span>
-                      <span className="capitalize">{memory.content_type}</span>
+                      <span className="capitalize text-slate-900 dark:text-slate-100">
+                        {memory.content_type}
+                      </span>
                     </div>
-                    <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg col-span-2">
-                      <span className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                    <div className="rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900 md:col-span-2">
+                      <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">
                         {t('project.memories.detail.metadata.custom')}
                       </span>
-                      <pre className="text-xs font-mono overflow-auto">
+                      <pre className="overflow-auto text-xs font-mono leading-6 text-slate-800 dark:text-slate-200">
                         {JSON.stringify(memory.metadata, null, 2)}
                       </pre>
                     </div>
                   </div>
                 )}
                 {activeTab === 'raw' && (
-                  <div className="bg-slate-900 text-slate-200 p-4 rounded-lg font-mono text-xs overflow-auto">
+                  <div className="overflow-auto rounded-md bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-200">
                     <pre>{JSON.stringify(memory, null, 2)}</pre>
                   </div>
                 )}
@@ -572,53 +596,102 @@ export const MemoryDetail: React.FC = () => {
                   <TaskList entityId={memoryId} entityType="memory" embedded />
                 )}
               </div>
-              {/* Footer / Activity Snippet */}
-              <div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-4 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/50 dark:text-slate-400 md:px-6">
                 <div className="flex items-center gap-2">
                   <History size={16} />
                   {t('common.created_at')} {formatDateTime(memory.created_at)}
                 </div>
                 <div>ID: {memory.id.slice(0, 12)}...</div>
               </div>
-            </div>
-            {/* Spacer for bottom scroll */}
-            <div className="h-10"></div>
+            </section>
+
+            <aside className="grid gap-4 md:grid-cols-2 2xl:sticky 2xl:top-20 2xl:flex 2xl:flex-col 2xl:self-start">
+              <section className="rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-surface-dark">
+                <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+                  <h2 className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-700 dark:text-slate-200">
+                    <Network size={15} />
+                    {t('project.memories.detail.sidebar.knowledge_context')}
+                  </h2>
+                </div>
+                <div className="space-y-5 p-4">
+                  <div>
+                    <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+                      <Tag size={14} />
+                      {t('project.memories.detail.sidebar.tags')}
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {metadataTags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                      {metadataTags.length === 0 && (
+                        <span className="text-xs text-slate-500">
+                          {t('project.memories.detail.sidebar.no_tags')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 divide-x divide-slate-200 border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+                    <div className="p-3">
+                      <div className="text-xs text-slate-500">
+                        {t('memory.detail.entities', { defaultValue: 'Entities' })}
+                      </div>
+                      <div className="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">
+                        {memory.entities.length}
+                      </div>
+                    </div>
+                    <div className="p-3">
+                      <div className="text-xs text-slate-500">
+                        {t('memory.detail.relationships', { defaultValue: 'Relations' })}
+                      </div>
+                      <div className="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">
+                        {memory.relationships.length}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-md border border-slate-200 bg-white p-4 text-sm dark:border-slate-800 dark:bg-surface-dark">
+                <h2 className="mb-4 text-xs font-semibold uppercase text-slate-500">
+                  {t('memory.detail.record', { defaultValue: 'Record' })}
+                </h2>
+                <dl className="space-y-3">
+                  <div>
+                    <dt className="text-xs text-slate-500">ID</dt>
+                    <dd className="mt-1 break-all font-mono text-xs text-slate-800 dark:text-slate-200">
+                      {memory.id}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-xs text-slate-500">
+                      {t('memory.detail.created', { defaultValue: 'Created' })}
+                    </dt>
+                    <dd className="text-xs text-slate-800 dark:text-slate-200">
+                      {formatDateTime(memory.created_at)}
+                    </dd>
+                  </div>
+                  {memory.updated_at && (
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-xs text-slate-500">
+                        {t('memory.detail.updated', { defaultValue: 'Updated' })}
+                      </dt>
+                      <dd className="text-xs text-slate-800 dark:text-slate-200">
+                        {formatDateTime(memory.updated_at)}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </section>
+            </aside>
           </div>
         </div>
       </main>
-
-      {/* Right Sidebar: Context */}
-      <aside className="w-80 bg-surface-light dark:bg-surface-dark border-l border-slate-200 dark:border-slate-800 hidden xl:flex flex-col flex-shrink-0 z-10">
-        <div className="p-5 border-b border-slate-200 dark:border-slate-800">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-            <Network size={18} className="text-primary" />
-            {t('project.memories.detail.sidebar.knowledge_context')}
-          </h2>
-        </div>
-        <div className="overflow-y-auto flex-1 p-5 flex flex-col gap-6">
-          {/* Tags */}
-          <div className="flex flex-col gap-3">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              {t('project.memories.detail.sidebar.tags')}
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {getMemoryMetadataTags(memory.metadata).map((tag) => (
-                <span
-                  key={tag}
-                  className="px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer transition-colors dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                >
-                  #{tag}
-                </span>
-              ))}
-              {getMemoryMetadataTags(memory.metadata).length === 0 && (
-                <span className="text-xs text-slate-500">
-                  {t('project.memories.detail.sidebar.no_tags')}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      </aside>
     </div>
   );
 };

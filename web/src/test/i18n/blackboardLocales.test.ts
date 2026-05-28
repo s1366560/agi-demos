@@ -38,6 +38,8 @@ const BLACKBOARD_PRODUCT_KEYS = [
   'blackboard.planRunPlanNextManual',
   'blackboard.planRunPlanNextManualHint',
   'blackboard.planRunIterationLimitHint',
+  'blackboard.expandText',
+  'blackboard.collapseText',
   'blackboard.planRunGoalHistory',
   'blackboard.planRunCurrentGoal',
   'blackboard.planRunHistoricalGoal',

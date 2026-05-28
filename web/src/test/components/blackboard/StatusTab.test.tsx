@@ -361,7 +361,8 @@ describe('StatusTab', () => {
         loop_status: 'active',
         max_iterations: 1,
         completed_iterations: [],
-        current_sprint_goal: 'Ship the autonomous plan increment.',
+        current_sprint_goal:
+          'Finalize workspace persistence tests and obtain live Drone E2E pipeline evidence; validate the full CI/CD pipeline end-to-end in the production harness.',
         review_summary: 'Review requested implementation evidence.',
         stop_reason: '',
         active_phase: 'implement',
@@ -404,14 +405,19 @@ describe('StatusTab', () => {
           { id: 'review', label: 'Review', total: 0, done: 0, running: 0, blocked: 0, progress: 0 },
         ],
         deliverables: ['artifact.spec'],
-        feedback_items: ['Add browser verification before completing the goal.'],
+        feedback_items: [
+          'Add browser verification before completing the goal.',
+          'Verification failed: required criteria did not pass and the workspace needs additional CI/CD evidence before the iteration can be accepted as complete.',
+          'Additional feedback should stay hidden until the operator expands the feedback list.',
+        ],
         history: [
           {
             iteration_index: 1,
             verdict: 'continue_next_iteration',
             summary: 'Review requested implementation evidence.',
             confidence: 0.82,
-            next_sprint_goal: 'Ship the autonomous plan increment.',
+            next_sprint_goal:
+              'Finalize workspace persistence tests and obtain live Drone E2E pipeline evidence; validate the full CI/CD pipeline end-to-end in the production harness.',
             created_at: '2026-04-29T00:00:00Z',
           },
         ],
@@ -430,6 +436,73 @@ describe('StatusTab', () => {
           trigger_next_iteration: {
             enabled: true,
             label: 'Plan next iteration',
+            requires_confirmation: false,
+          },
+        },
+      },
+      delivery: {
+        provider: 'drone',
+        status: 'unhealthy',
+        contract_source: 'agent',
+        contract_confidence: 0.87,
+        agent_managed: true,
+        code_root: '/workspace/my-evo',
+        latest_run: {
+          id: '3bda65b5-1111-4222-9333-0967',
+          provider: 'drone',
+          status: 'failed',
+          reason:
+            'Drone build failed because repository-smoke did not pass for the current commit, and the run needs a fresh e2e-test stage result before the workspace can be marked healthy.',
+          external_id: 's1366560/my-evo#203',
+          external_url: 'https://drone.example.com/s1366560/my-evo/203',
+          commit_ref: '5cee4bc',
+          stages: [
+            {
+              id: 'stage-1',
+              run_id: '3bda65b5-1111-4222-9333-0967',
+              stage: 'repository-smoke',
+              status: 'failed',
+              exit_code: 1,
+              stderr_preview: 'npm audit blocked the pipeline',
+              artifact_refs: [],
+            },
+          ],
+          created_at: '2026-04-23T00:00:00Z',
+        },
+        recent_runs: [],
+        services: [],
+        deployment: {
+          id: 'deployment-1',
+          provider: 'drone',
+          status: 'failed',
+          service_id: 'preview',
+          required: true,
+          restart_count: 0,
+          created_at: '2026-04-23T00:00:00Z',
+        },
+        deployments: [],
+        run_assessment: {
+          status: 'failed',
+          summary:
+            'The latest Drone run is unhealthy and should stay readable without squeezing the status summary into a narrow column.',
+          evidence_refs: ['pipeline_run:failed:run-1'],
+          warnings: [],
+          required_services_total: 1,
+          required_services_healthy: 0,
+          failed_required_services: ['preview'],
+        },
+        warnings: [
+          'Delivery warning text can be long when CI/CD evidence belongs to an older commit and must be collapsed inside the delivery panel.',
+        ],
+        actions: {
+          request_pipeline: {
+            enabled: true,
+            label: 'Run pipeline',
+            requires_confirmation: false,
+          },
+          regenerate_contract: {
+            enabled: true,
+            label: 'Regenerate',
             requires_confirmation: false,
           },
         },
@@ -462,7 +535,12 @@ describe('StatusTab', () => {
     );
 
     expect((await screen.findAllByText('Ship autonomous plan'))[0]).toBeInTheDocument();
-    expect(await screen.findByTestId('execution-dag-graph')).toBeInTheDocument();
+    expect(screen.getByTestId('blackboard-status-layout').className).not.toContain('xl:grid-cols');
+    const dagWorkspace = screen.getByTestId('plan-run-dag-workspace');
+    expect(dagWorkspace.className).not.toContain('2xl:grid-cols');
+    const graph = await screen.findByTestId('execution-dag-graph');
+    expect(graph).toHaveStyle({ minHeight: '640px' });
+    expect(graph).toHaveAttribute('data-fit-to-width', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'blackboard.planRunListView' }));
     expect(screen.queryByTestId('execution-dag-graph')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'blackboard.planRunGraphView' })).toBeInTheDocument();
@@ -474,7 +552,11 @@ describe('StatusTab', () => {
     expect(screen.getAllByText('artifact.spec').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Iteration 1').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('active').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Ship the autonomous plan increment.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Finalize workspace persistence tests/).length).toBeGreaterThan(0);
+    const expandButtons = screen.getAllByRole('button', { name: 'blackboard.expandText' });
+    expect(expandButtons.length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(expandButtons[0]);
+    expect(screen.getByRole('button', { name: 'blackboard.collapseText' })).toBeInTheDocument();
     expect(screen.getAllByText('Review requested implementation evidence.').length).toBeGreaterThan(
       0
     );
@@ -485,7 +567,23 @@ describe('StatusTab', () => {
     expect(
       screen.getByText('Add browser verification before completing the goal.')
     ).toBeInTheDocument();
+    expect(screen.getByText(/Verification failed: required criteria/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Additional feedback should stay hidden until the operator expands the feedback list.'
+      )
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'blackboard.expandText (1)' }));
+    expect(
+      screen.getByText(
+        'Additional feedback should stay hidden until the operator expands the feedback list.'
+      )
+    ).toBeInTheDocument();
     expect(screen.getByText('Review history')).toBeInTheDocument();
+    expect(screen.getByText('Delivery / CI/CD')).toBeInTheDocument();
+    expect(screen.getByText('unhealthy')).toBeInTheDocument();
+    expect(screen.getByText('Provider drone · run 3bda65b...0967 · failed')).toBeInTheDocument();
+    expect(screen.getByText(/Drone build failed because repository-smoke/)).toBeInTheDocument();
     expect(screen.getByText('blackboard.planRunPlanNextManual')).toBeInTheDocument();
     expect(screen.getByText('blackboard.planRunIterationLimitHint')).toBeInTheDocument();
     expect(screen.getByText('Phase contract')).toBeInTheDocument();

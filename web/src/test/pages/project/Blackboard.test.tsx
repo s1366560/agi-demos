@@ -30,8 +30,9 @@ const {
   storeStateRef,
 } = vi.hoisted(() => {
   const mockUnsubscribe = vi.fn();
-  const statusListeners: Array<(status: 'connecting' | 'connected' | 'disconnected' | 'error') => void> =
-    [];
+  const statusListeners: Array<
+    (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void
+  > = [];
   return {
     mockLoadWorkspaceSurface: vi.fn().mockResolvedValue(undefined),
     mockClearSelectedHex: vi.fn(),
@@ -370,8 +371,11 @@ describe('Blackboard', () => {
     await waitFor(() => {
       expect(screen.getByTestId('central-blackboard-content')).toBeInTheDocument();
     });
-    expect(screen.getByText('blackboard.shellHint')).toBeInTheDocument();
+    expect(screen.getByTestId('blackboard-dashboard-header')).not.toHaveTextContent(
+      'blackboard.shellHint'
+    );
     const sensingBadge = screen.getByText('blackboard.shellSensingHint').closest('div');
+    expect(sensingBadge?.closest('div[title="blackboard.shellHint"]')).toBeInTheDocument();
     expect(sensingBadge).toHaveAttribute('data-blackboard-surface', 'sensing');
     expect(sensingBadge).toHaveAttribute('data-blackboard-signal-role', 'sensing-capable');
     expect(sensingBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
@@ -668,6 +672,11 @@ describe('Blackboard', () => {
     await waitFor(() => {
       expect(screen.getByText('blackboard.openInAgentWorkspace')).toBeInTheDocument();
     });
+
+    expect(screen.getByTestId('blackboard-dashboard-header').firstElementChild).toHaveClass(
+      'py-1.5'
+    );
+    expect(screen.getByTestId('blackboard-dashboard-metrics')).toBeInTheDocument();
 
     const link = screen.getByText('blackboard.openInAgentWorkspace').closest('a');
     expect(link).toBeInTheDocument();
