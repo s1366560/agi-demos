@@ -166,6 +166,7 @@ from src.infrastructure.agent.workspace_plan.verification_judge import (
     UnavailableWorkspaceVerificationJudge,
     WorkspaceVerifierAgentJudge,
 )
+from src.infrastructure.agent.workspace_plan.worktree_agent import WorkspaceWorktreeAgentPreparer
 from src.infrastructure.agent.workspace_plan.worktree_manager import (
     AttemptWorktreeContext,
     WorkspaceWorktreeManager,
@@ -6233,6 +6234,11 @@ def _coerce_worktree_prepare_result(
         setup_status=status,
         setup_reason=fields.get("reason"),
         setup_output=fields.get("output"),
+        original_base_ref=fields.get("original_base_ref"),
+        resolved_base_ref=fields.get("resolved_base_ref"),
+        fallback_reason=fields.get("fallback_reason"),
+        git_fsck_summary=fields.get("git_fsck_summary"),
+        pruned_worktrees_count=_worktree_note_int(fields.get("pruned_worktrees_count")),
     )
 
 
@@ -6247,6 +6253,17 @@ def _worktree_setup_note_fields(note: str) -> dict[str, str]:
         key, value = line.split("=", 1)
         fields[key.strip()] = value.strip()
     return fields
+
+
+def _worktree_note_int(value: object) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
 
 
 async def _persist_worker_launch_worktree_context(
@@ -6348,9 +6365,19 @@ async def _prepare_attempt_worktree_if_available(
     _extra_instructions: str | None,
     attempt_id: str | None,
 ) -> str | None:
+    workspace = await SqlWorkspaceRepository(session).find_by_id(workspace_id)
+    preparation_agent = (
+        WorkspaceWorktreeAgentPreparer(
+            tenant_id=workspace.tenant_id,
+            project_id=workspace.project_id,
+        )
+        if workspace is not None
+        else None
+    )
     context = await WorkspaceWorktreeManager(
         session,
         runner_factory=_WorkspaceSandboxCommandRunner,
+        preparation_agent=preparation_agent,
     ).prepare_attempt(
         workspace_id=workspace_id,
         task=task,

@@ -10,6 +10,7 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
     BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID,
     BUILTIN_WORKSPACE_SUPERVISOR_ID,
     BUILTIN_WORKSPACE_VERIFIER_ID,
+    BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID,
 )
 from src.infrastructure.agent.tools import workspace_plan_contract_tools as plan_contract_tools
 from src.infrastructure.agent.tools.context import ToolContext
@@ -250,4 +251,48 @@ async def test_supervisor_decision_captures_structured_payload() -> None:
         ],
         "repair_brief": {"failed_items": ["protected test path"]},
         "event_payload": {"disposition": "needs_separate_repair"},
+    }
+
+
+async def test_worktree_preparation_rejects_non_worktree_manager_agent() -> None:
+    result = await plan_contract_tools.workspace_submit_worktree_preparation_tool.execute(
+        _ctx(selected_agent_id=BUILTIN_WORKSPACE_SUPERVISOR_ID),
+        status="prepared",
+        worktree_path="/repo/.memstack/worktrees/a1",
+        branch_name="workspace/node-a1",
+        base_ref="HEAD",
+    )
+
+    assert result.is_error is True
+    assert BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID in json.loads(result.output)["error"]
+
+
+async def test_worktree_preparation_captures_structured_payload() -> None:
+    result = await plan_contract_tools.workspace_submit_worktree_preparation_tool.execute(
+        _ctx(selected_agent_id=BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID),
+        status="fallback_used",
+        worktree_path="/repo/.memstack/worktrees/a1",
+        branch_name="workspace/node-a1",
+        base_ref="missing-ref",
+        original_base_ref="missing-ref",
+        resolved_base_ref="HEAD",
+        fallback_reason="base_ref_unusable",
+        output="base_ref_unusable=missing-ref",
+        git_fsck_summary="ok",
+        pruned_worktrees_count=2,
+    )
+
+    assert result.is_error is False
+    assert result.metadata["worktree_preparation"] == {
+        "status": "fallback_used",
+        "worktree_path": "/repo/.memstack/worktrees/a1",
+        "branch_name": "workspace/node-a1",
+        "base_ref": "missing-ref",
+        "reason": "",
+        "output": "base_ref_unusable=missing-ref",
+        "original_base_ref": "missing-ref",
+        "resolved_base_ref": "HEAD",
+        "fallback_reason": "base_ref_unusable",
+        "git_fsck_summary": "ok",
+        "pruned_worktrees_count": 2,
     }

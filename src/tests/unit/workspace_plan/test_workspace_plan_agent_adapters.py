@@ -21,6 +21,7 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
     BUILTIN_WORKSPACE_PLANNER_ID,
     BUILTIN_WORKSPACE_SUPERVISOR_ID,
     BUILTIN_WORKSPACE_VERIFIER_ID,
+    BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID,
 )
 from src.infrastructure.agent.workspace.contract_agent_runtime import (
     create_workspace_contract_agent_service,
@@ -45,6 +46,14 @@ from src.infrastructure.agent.workspace_plan.verification_judge import (
     RuntimeWorkspaceVerifierAgentTurnRunner,
     WorkspaceVerifierAgentJudge,
     _verification_judgment_from_event,
+)
+from src.infrastructure.agent.workspace_plan.worktree_agent import (
+    RuntimeWorkspaceWorktreeAgentTurnRunner,
+    WorkspaceWorktreeAgentPreparer,
+    _worktree_preparation_from_event,
+)
+from src.infrastructure.agent.workspace_plan.worktree_manager import (
+    AttemptWorktreePreparationRequest,
 )
 
 pytestmark = pytest.mark.unit
@@ -135,6 +144,17 @@ class _SequentialSupervisorDecisionRunner:
         if not self.payloads:
             return None
         return self.payloads.pop(0)
+
+
+@dataclass
+class _WorktreePreparationRunner:
+    payload: dict[str, Any] | None
+    calls: list[dict[str, Any]] = field(default_factory=list)
+    last_diagnostics: dict[str, Any] = field(default_factory=dict)
+
+    async def run_preparation_turn(self, **kwargs: Any) -> dict[str, Any] | None:
+        self.calls.append(kwargs)
+        return self.payload
 
 
 def _patch_contract_agent_stream_runtime(  # noqa: C901
@@ -468,6 +488,50 @@ async def test_supervisor_agent_decision_provider_retries_missing_contract_submi
     assert '"event_count": 42' in retry_prompt
     assert result.action is WorkspaceSupervisorDecisionAction.RETRY_SAME_NODE
     assert result.confidence == 0.73
+
+
+async def test_worktree_agent_preparer_uses_builtin_agent_turn_runner() -> None:
+    runner = _WorktreePreparationRunner(
+        {
+            "status": "prepared",
+            "worktree_path": "/repo/.memstack/worktrees/attempt-1",
+            "branch_name": "workspace/node-attempt-1",
+            "base_ref": "HEAD",
+            "original_base_ref": "HEAD",
+            "resolved_base_ref": "HEAD",
+            "output": "git_head=abc123",
+        }
+    )
+    preparer = WorkspaceWorktreeAgentPreparer(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        turn_runner=runner,
+    )
+
+    result = await preparer.prepare_worktree(
+        AttemptWorktreePreparationRequest(
+            workspace_id="ws-1",
+            task_id="task-1",
+            attempt_id="attempt-1",
+            workspace_root="/repo",
+            sandbox_code_root="/repo/app",
+            worktree_path="/repo/.memstack/worktrees/attempt-1",
+            branch_name="workspace/node-attempt-1",
+            base_ref="HEAD",
+            original_base_ref="HEAD",
+            setup_command="echo setup",
+            diagnostics_command="echo diagnostics",
+        )
+    )
+
+    assert result is not None
+    assert runner.calls[0]["worktree_agent"].id == BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID
+    assert runner.calls[0]["workspace_id"] == "ws-1"
+    assert runner.calls[0]["task_id"] == "task-1"
+    assert "workspace_submit_worktree_preparation" in runner.calls[0]["user_prompt"]
+    assert result.setup_status == "prepared"
+    assert result.worktree_path == "/repo/.memstack/worktrees/attempt-1"
+    assert result.is_isolated is True
 
 
 async def test_verifier_agent_judge_uses_fallback_linked_task_in_prompts() -> None:
@@ -974,6 +1038,67 @@ async def test_runtime_iteration_reviewer_persists_linked_workspace_task(
     assert stream_calls[0]["app_model_context"]["iteration_review"]["plan_id"] == "plan-1"
 
 
+async def test_runtime_worktree_manager_persists_linked_workspace_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    persist_calls: list[dict[str, Any]] = []
+    stream_calls: list[dict[str, Any]] = []
+    payload = {
+        "status": "prepared",
+        "worktree_path": "/repo/.memstack/worktrees/attempt-1",
+        "branch_name": "workspace/node-attempt-1",
+        "base_ref": "HEAD",
+    }
+    _patch_contract_agent_stream_runtime(
+        monkeypatch,
+        events=[
+            {
+                "type": "observe",
+                "data": {
+                    "tool_name": "workspace_submit_worktree_preparation",
+                    "result": {"worktree_preparation": payload},
+                },
+            }
+        ],
+        persist_calls=persist_calls,
+        stream_calls=stream_calls,
+    )
+
+    runner = RuntimeWorkspaceWorktreeAgentTurnRunner(
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+
+    result = await runner.run_preparation_turn(
+        worktree_agent=SimpleNamespace(id=BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID),
+        user_prompt="prepare",
+        workspace_id="ws-1",
+        task_id="task-1",
+        attempt_id="attempt-1",
+    )
+
+    assert result == payload
+    assert persist_calls[0]["linked_workspace_task_id"] == "task-1"
+    assert persist_calls[0]["actor_user_id"] == "user-1"
+    assert persist_calls[0]["metadata"]["linked_workspace_task_id"] == "task-1"
+    assert stream_calls[0]["conversation_id"].startswith(
+        "workspace-contract:worktree-manager:tenant-1:project-1:ws-1:task-1:"
+    )
+    assert stream_calls[0]["user_message"] == "prepare"
+    assert stream_calls[0]["user_id"] == "user-1"
+    assert stream_calls[0]["agent_id"] == BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID
+    assert stream_calls[0]["app_model_context"]["context_type"] == "workspace_worker_runtime"
+    assert (
+        stream_calls[0]["app_model_context"][WORKSPACE_SESSION_ROLE_KEY]
+        == WORKSPACE_ROLE_CONTRACT
+    )
+    assert (
+        stream_calls[0]["app_model_context"]["workspace_binding"]["linked_workspace_task_id"]
+        == "task-1"
+    )
+    assert stream_calls[0]["app_model_context"]["worktree_manager"]["task_id"] == "task-1"
+
+
 def test_planning_contract_event_parser_accepts_observe_result_metadata() -> None:
     payload = {
         "task_graph": {"subtasks": []},
@@ -1032,6 +1157,28 @@ def test_verification_judgment_event_parser_accepts_observe_result_metadata() ->
                 "data": {
                     "tool_name": "workspace_submit_verification_judgment",
                     "result": {"verification_judgment": payload},
+                },
+            }
+        )
+        == payload
+    )
+
+
+def test_worktree_preparation_event_parser_accepts_observe_result_metadata() -> None:
+    payload = {
+        "status": "prepared",
+        "worktree_path": "/repo/.memstack/worktrees/attempt-1",
+        "branch_name": "workspace/node-attempt-1",
+        "base_ref": "HEAD",
+    }
+
+    assert (
+        _worktree_preparation_from_event(
+            {
+                "type": "observe",
+                "data": {
+                    "tool_name": "workspace_submit_worktree_preparation",
+                    "result": {"worktree_preparation": payload},
                 },
             }
         )

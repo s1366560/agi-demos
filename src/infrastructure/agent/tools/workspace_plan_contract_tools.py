@@ -22,6 +22,7 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
     BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID,
     BUILTIN_WORKSPACE_SUPERVISOR_ID,
     BUILTIN_WORKSPACE_VERIFIER_ID,
+    BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID,
 )
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
@@ -36,6 +37,7 @@ from src.infrastructure.agent.workspace.runtime_role_contract import (
 WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME = "workspace_submit_verification_judgment"
 WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME = "workspace_submit_iteration_review"
 WORKSPACE_SUBMIT_SUPERVISOR_DECISION_TOOL_NAME = "workspace_submit_supervisor_decision"
+WORKSPACE_SUBMIT_WORKTREE_PREPARATION_TOOL_NAME = "workspace_submit_worktree_preparation"
 
 _VALID_VERIFICATION_VERDICTS = {item.value for item in WorkspaceVerificationJudgeVerdict}
 _VALID_VERIFICATION_NEXT_ACTION_KINDS = {item.value for item in WorkspaceVerificationNextActionKind}
@@ -51,6 +53,7 @@ _VALID_VERIFICATION_RECOMMENDED_ACTIONS = {
 }
 _VALID_REVIEW_VERDICTS = {"complete_goal", "continue_next_iteration", "needs_human_review"}
 _VALID_SUPERVISOR_ACTIONS = {item.value for item in WorkspaceSupervisorDecisionAction}
+_VALID_WORKTREE_PREPARATION_STATUSES = {"prepared", "fallback_used", "failed", "skipped"}
 _VALID_PHASES = {"research", "plan", "implement", "test", "deploy", "review"}
 _VALID_SEVERITIES = {item.value for item in ReviewSeverity}
 
@@ -234,6 +237,28 @@ WORKSPACE_SUPERVISOR_DECISION_TOOL_PARAMETERS: dict[str, Any] = {
         },
     },
     "required": ["action", "rationale", "confidence"],
+    "additionalProperties": False,
+}
+
+WORKSPACE_WORKTREE_PREPARATION_TOOL_PARAMETERS: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "status": {
+            "type": "string",
+            "enum": sorted(_VALID_WORKTREE_PREPARATION_STATUSES),
+        },
+        "reason": {"type": "string"},
+        "output": {"type": "string"},
+        "worktree_path": {"type": "string"},
+        "branch_name": {"type": "string"},
+        "base_ref": {"type": "string"},
+        "original_base_ref": {"type": "string"},
+        "resolved_base_ref": {"type": "string"},
+        "fallback_reason": {"type": "string"},
+        "git_fsck_summary": {"type": "string"},
+        "pruned_worktrees_count": {"type": ["integer", "null"], "minimum": 0},
+    },
+    "required": ["status", "worktree_path", "branch_name", "base_ref"],
     "additionalProperties": False,
 }
 
@@ -471,6 +496,68 @@ async def workspace_submit_supervisor_decision_tool(
     )
 
 
+@tool_define(
+    name=WORKSPACE_SUBMIT_WORKTREE_PREPARATION_TOOL_NAME,
+    description=(
+        "Terminal workspace worktree preparation tool. The builtin worktree manager calls "
+        "this exactly once after preparing or failing an isolated attempt worktree."
+    ),
+    parameters=WORKSPACE_WORKTREE_PREPARATION_TOOL_PARAMETERS,
+    permission=None,
+    category="workspace",
+)
+async def workspace_submit_worktree_preparation_tool(
+    ctx: ToolContext,
+    *,
+    status: str,
+    worktree_path: str,
+    branch_name: str,
+    base_ref: str,
+    reason: str = "",
+    output: str = "",
+    original_base_ref: str = "",
+    resolved_base_ref: str = "",
+    fallback_reason: str = "",
+    git_fsck_summary: str = "",
+    pruned_worktrees_count: int | None = None,
+) -> ToolResult:
+    error = _require_builtin_agent(
+        ctx,
+        expected_agent_id=BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID,
+        tool_name=WORKSPACE_SUBMIT_WORKTREE_PREPARATION_TOOL_NAME,
+    )
+    if error:
+        return _deny(
+            error, selected_agent_id=runtime_context_string(ctx, "selected_agent_id") or None
+        )
+    normalized_status = str(status or "").strip()
+    if normalized_status not in _VALID_WORKTREE_PREPARATION_STATUSES:
+        return _deny(f"invalid worktree preparation status: {status}")
+    clean_worktree_path = str(worktree_path or "").strip()
+    clean_branch_name = str(branch_name or "").strip()
+    clean_base_ref = str(base_ref or "").strip()
+    if not clean_worktree_path or not clean_branch_name or not clean_base_ref:
+        return _deny("worktree_path, branch_name, and base_ref are required")
+    payload: dict[str, Any] = {
+        "status": normalized_status,
+        "worktree_path": clean_worktree_path,
+        "branch_name": clean_branch_name,
+        "base_ref": clean_base_ref,
+        "reason": str(reason or "").strip()[:1200],
+        "output": str(output or "").strip()[:4000],
+        "original_base_ref": str(original_base_ref or "").strip(),
+        "resolved_base_ref": str(resolved_base_ref or "").strip(),
+        "fallback_reason": str(fallback_reason or "").strip()[:1200],
+        "git_fsck_summary": str(git_fsck_summary or "").strip()[:1200],
+    }
+    if pruned_worktrees_count is not None:
+        payload["pruned_worktrees_count"] = max(0, int(pruned_worktrees_count))
+    return ToolResult(
+        output=json.dumps({"captured": True, "status": normalized_status}, ensure_ascii=False),
+        metadata={"worktree_preparation": payload},
+    )
+
+
 def _string_list(value: object, *, limit: int) -> list[str]:
     if isinstance(value, str):
         items = [value]
@@ -582,9 +669,12 @@ __all__ = [
     "WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME",
     "WORKSPACE_SUBMIT_SUPERVISOR_DECISION_TOOL_NAME",
     "WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME",
+    "WORKSPACE_SUBMIT_WORKTREE_PREPARATION_TOOL_NAME",
     "WORKSPACE_SUPERVISOR_DECISION_TOOL_PARAMETERS",
     "WORKSPACE_VERIFICATION_JUDGMENT_TOOL_PARAMETERS",
+    "WORKSPACE_WORKTREE_PREPARATION_TOOL_PARAMETERS",
     "workspace_submit_iteration_review_tool",
     "workspace_submit_supervisor_decision_tool",
     "workspace_submit_verification_judgment_tool",
+    "workspace_submit_worktree_preparation_tool",
 ]

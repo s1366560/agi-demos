@@ -6,11 +6,13 @@ from .builtin_agent import (
     BUILTIN_WORKSPACE_PLANNER_ID,
     BUILTIN_WORKSPACE_SUPERVISOR_ID,
     BUILTIN_WORKSPACE_VERIFIER_ID,
+    BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID,
     build_builtin_sisyphus_agent,
     build_builtin_workspace_iteration_reviewer_agent,
     build_builtin_workspace_planner_agent,
     build_builtin_workspace_supervisor_agent,
     build_builtin_workspace_verifier_agent,
+    build_builtin_workspace_worktree_manager_agent,
 )
 from .prompt_builder import SisyphusPromptBuilder, SisyphusPromptContext
 
@@ -20,6 +22,7 @@ __all__ = [
     "BUILTIN_WORKSPACE_PLANNER_ID",
     "BUILTIN_WORKSPACE_SUPERVISOR_ID",
     "BUILTIN_WORKSPACE_VERIFIER_ID",
+    "BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID",
     "SisyphusPromptBuilder",
     "SisyphusPromptContext",
     "build_builtin_sisyphus_agent",
@@ -27,4 +30,5 @@ __all__ = [
     "build_builtin_workspace_planner_agent",
     "build_builtin_workspace_supervisor_agent",
     "build_builtin_workspace_verifier_agent",
+    "build_builtin_workspace_worktree_manager_agent",
 ]

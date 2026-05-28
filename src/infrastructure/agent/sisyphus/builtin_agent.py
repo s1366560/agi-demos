@@ -27,6 +27,9 @@ BUILTIN_WORKSPACE_ITERATION_REVIEWER_DISPLAY_NAME = "Workspace Iteration Reviewe
 BUILTIN_WORKSPACE_SUPERVISOR_ID = f"{BUILTIN_AGENT_NAMESPACE}:workspace-supervisor"
 BUILTIN_WORKSPACE_SUPERVISOR_NAME = "workspace-supervisor"
 BUILTIN_WORKSPACE_SUPERVISOR_DISPLAY_NAME = "Workspace Supervisor"
+BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID = f"{BUILTIN_AGENT_NAMESPACE}:workspace-worktree-manager"
+BUILTIN_WORKSPACE_WORKTREE_MANAGER_NAME = "workspace-worktree-manager"
+BUILTIN_WORKSPACE_WORKTREE_MANAGER_DISPLAY_NAME = "Workspace Worktree Manager"
 DEFAULT_AGENT_TO_AGENT_ALLOWLIST = (
     BUILTIN_SISYPHUS_ID,
     BUILTIN_SISYPHUS_NAME,
@@ -200,6 +203,28 @@ Decision rules:
 - Keep feedback_items concise and structured enough for audit and UI display.
 """
 
+_BUILTIN_WORKSPACE_WORKTREE_MANAGER_SYSTEM_PROMPT = """You are builtin:workspace-worktree-manager, the isolated worktree preparation agent for workspace worker launches.
+
+Worktree preparation mode is active. You may only inspect repository state, run the exact shell commands supplied in the prompt, and submit the structured preparation result.
+
+Your only successful terminal action is one call to:
+workspace_submit_worktree_preparation(status, reason, output, worktree_path, branch_name, base_ref, original_base_ref, resolved_base_ref, fallback_reason, git_fsck_summary, pruned_worktrees_count).
+
+Required workflow:
+1. Read the supplied preparation payload.
+2. Run setup_command exactly as provided with bash. Do not rewrite or broaden it.
+3. If setup succeeds, run diagnostics_command exactly as provided with bash.
+4. Submit workspace_submit_worktree_preparation exactly once. Do not end the turn in prose.
+
+Rules:
+- Use status=prepared when setup succeeds and no fallback reason is observed.
+- Use status=fallback_used when setup succeeds and the setup output contains base_ref_unusable or diagnostics shows a fallback reason.
+- Use status=failed when setup exits nonzero or diagnostics proves the worktree cannot be used.
+- Preserve the supplied worktree_path, branch_name, base_ref, original_base_ref, and attempt context in the submitted payload.
+- Compact long stdout/stderr before submission; include enough output to diagnose failures.
+- Do not edit application files, task state, plans, or workspace metadata directly. The runtime records the submitted contract.
+"""
+
 def is_builtin_agent_id(agent_id: str | None) -> bool:
     """Return whether an agent id refers to a built-in agent."""
     return bool(agent_id and agent_id.startswith(f"{BUILTIN_AGENT_NAMESPACE}:"))
@@ -214,6 +239,7 @@ def is_builtin_agent_name(name: str | None) -> bool:
         BUILTIN_WORKSPACE_VERIFIER_NAME,
         BUILTIN_WORKSPACE_ITERATION_REVIEWER_NAME,
         BUILTIN_WORKSPACE_SUPERVISOR_NAME,
+        BUILTIN_WORKSPACE_WORKTREE_MANAGER_NAME,
     }
 
 
@@ -224,6 +250,7 @@ def is_builtin_workspace_contract_agent_id(agent_id: str | None) -> bool:
         BUILTIN_WORKSPACE_VERIFIER_ID,
         BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID,
         BUILTIN_WORKSPACE_SUPERVISOR_ID,
+        BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID,
     }
 
 
@@ -469,6 +496,56 @@ def build_builtin_workspace_supervisor_agent(
     )
 
 
+def build_builtin_workspace_worktree_manager_agent(
+    tenant_id: str,
+    *,
+    project_id: str | None = None,
+) -> Agent:
+    """Create the built-in workspace worktree preparation agent."""
+    now = datetime.now(UTC)
+    return Agent(
+        id=BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        name=BUILTIN_WORKSPACE_WORKTREE_MANAGER_NAME,
+        display_name=BUILTIN_WORKSPACE_WORKTREE_MANAGER_DISPLAY_NAME,
+        system_prompt=_BUILTIN_WORKSPACE_WORKTREE_MANAGER_SYSTEM_PROMPT,
+        trigger=AgentTrigger(
+            description="Workspace worktree agent that prepares isolated attempt roots.",
+            keywords=["workspace", "worktree", "manager", "attempt"],
+        ),
+        model=AgentModel.INHERIT,
+        temperature=0.0,
+        max_tokens=8192,
+        max_iterations=8,
+        allowed_tools=[
+            "read",
+            "grep",
+            "glob",
+            "bash",
+            "workspace_submit_worktree_preparation",
+        ],
+        allowed_skills=[],
+        allowed_mcp_servers=[],
+        can_spawn=False,
+        max_spawn_depth=0,
+        agent_to_agent_enabled=False,
+        discoverable=False,
+        source=AgentSource.BUILTIN,
+        enabled=True,
+        created_at=now,
+        updated_at=now,
+        metadata={
+            "builtin_key": "workspace_worktree_manager",
+            "prompt_builder": "workspace_worktree_manager",
+            "runtime_plugin": "workspace_worktree_manager",
+            "role": "workspace_worktree_manager",
+            "contract_tool": "workspace_submit_worktree_preparation",
+            MAX_ITERATIONS_EXPLICIT_METADATA_KEY: False,
+        },
+    )
+
+
 def get_builtin_agent_by_id(
     agent_id: str,
     tenant_id: str,
@@ -476,23 +553,18 @@ def get_builtin_agent_by_id(
     project_id: str | None = None,
 ) -> Agent | None:
     """Resolve a built-in agent by id."""
-    if agent_id == BUILTIN_SISYPHUS_ID:
-        return build_builtin_sisyphus_agent(tenant_id=tenant_id, project_id=project_id)
-    if agent_id == BUILTIN_WORKSPACE_PLANNER_ID:
-        return build_builtin_workspace_planner_agent(tenant_id=tenant_id, project_id=project_id)
-    if agent_id == BUILTIN_WORKSPACE_VERIFIER_ID:
-        return build_builtin_workspace_verifier_agent(tenant_id=tenant_id, project_id=project_id)
-    if agent_id == BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID:
-        return build_builtin_workspace_iteration_reviewer_agent(
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-    if agent_id == BUILTIN_WORKSPACE_SUPERVISOR_ID:
-        return build_builtin_workspace_supervisor_agent(
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-    return None
+    builders = {
+        BUILTIN_SISYPHUS_ID: build_builtin_sisyphus_agent,
+        BUILTIN_WORKSPACE_PLANNER_ID: build_builtin_workspace_planner_agent,
+        BUILTIN_WORKSPACE_VERIFIER_ID: build_builtin_workspace_verifier_agent,
+        BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID: build_builtin_workspace_iteration_reviewer_agent,
+        BUILTIN_WORKSPACE_SUPERVISOR_ID: build_builtin_workspace_supervisor_agent,
+        BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID: build_builtin_workspace_worktree_manager_agent,
+    }
+    builder = builders.get(agent_id)
+    if builder is None:
+        return None
+    return builder(tenant_id=tenant_id, project_id=project_id)
 
 
 def get_builtin_agent_by_name(
@@ -503,23 +575,18 @@ def get_builtin_agent_by_name(
 ) -> Agent | None:
     """Resolve a built-in agent by name."""
     normalized = (name or "").strip().lower()
-    if normalized == BUILTIN_SISYPHUS_NAME:
-        return build_builtin_sisyphus_agent(tenant_id=tenant_id, project_id=project_id)
-    if normalized == BUILTIN_WORKSPACE_PLANNER_NAME:
-        return build_builtin_workspace_planner_agent(tenant_id=tenant_id, project_id=project_id)
-    if normalized == BUILTIN_WORKSPACE_VERIFIER_NAME:
-        return build_builtin_workspace_verifier_agent(tenant_id=tenant_id, project_id=project_id)
-    if normalized == BUILTIN_WORKSPACE_ITERATION_REVIEWER_NAME:
-        return build_builtin_workspace_iteration_reviewer_agent(
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-    if normalized == BUILTIN_WORKSPACE_SUPERVISOR_NAME:
-        return build_builtin_workspace_supervisor_agent(
-            tenant_id=tenant_id,
-            project_id=project_id,
-        )
-    return None
+    builders = {
+        BUILTIN_SISYPHUS_NAME: build_builtin_sisyphus_agent,
+        BUILTIN_WORKSPACE_PLANNER_NAME: build_builtin_workspace_planner_agent,
+        BUILTIN_WORKSPACE_VERIFIER_NAME: build_builtin_workspace_verifier_agent,
+        BUILTIN_WORKSPACE_ITERATION_REVIEWER_NAME: build_builtin_workspace_iteration_reviewer_agent,
+        BUILTIN_WORKSPACE_SUPERVISOR_NAME: build_builtin_workspace_supervisor_agent,
+        BUILTIN_WORKSPACE_WORKTREE_MANAGER_NAME: build_builtin_workspace_worktree_manager_agent,
+    }
+    builder = builders.get(normalized)
+    if builder is None:
+        return None
+    return builder(tenant_id=tenant_id, project_id=project_id)
 
 
 def list_builtin_agents(
@@ -537,4 +604,8 @@ def list_builtin_agents(
             project_id=project_id,
         ),
         build_builtin_workspace_supervisor_agent(tenant_id=tenant_id, project_id=project_id),
+        build_builtin_workspace_worktree_manager_agent(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        ),
     ]

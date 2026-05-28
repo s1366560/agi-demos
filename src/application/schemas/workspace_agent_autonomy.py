@@ -114,6 +114,11 @@ class AttemptWorktreeContextMetadataModel(ContractModel):
     setup_status: str | None = None
     setup_reason: str | None = None
     setup_output: str | None = None
+    original_base_ref: str | None = None
+    resolved_base_ref: str | None = None
+    fallback_reason: str | None = None
+    git_fsck_summary: str | None = None
+    pruned_worktrees_count: int | None = None
 
 
 class WorktreeSetupMetadataModel(ContractModel):
@@ -124,6 +129,11 @@ class WorktreeSetupMetadataModel(ContractModel):
     branch_name: str | None = None
     base_ref: str | None = None
     attempt_id: str | None = None
+    original_base_ref: str | None = None
+    resolved_base_ref: str | None = None
+    fallback_reason: str | None = None
+    git_fsck_summary: str | None = None
+    pruned_worktrees_count: int | None = None
 
 
 class HarnessFeatureItemModel(ContractModel):

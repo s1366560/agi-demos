@@ -445,12 +445,12 @@ def _build_provider_configs(provider_name: str) -> list[ProviderConfigCreate]:
 
     configs: list[ProviderConfigCreate] = [
         ProviderConfigCreate(
-            **common,
             name=f"Default {provider_name.title()} LLM",
             operation_type=OperationType.LLM,
             llm_model=env.get("llm_model") or f"{provider_name}-default",
             llm_small_model=env.get("llm_small_model"),
             pool_enabled=True,
+            **common,
         )
     ]
 
@@ -458,11 +458,11 @@ def _build_provider_configs(provider_name: str) -> list[ProviderConfigCreate]:
     if embedding_model:
         configs.append(
             ProviderConfigCreate(
-                **common,
                 name=f"Default {provider_name.title()} Embedding",
                 operation_type=OperationType.EMBEDDING,
                 embedding_model=embedding_model,
                 pool_enabled=False,
+                **common,
             )
         )
 
@@ -470,11 +470,11 @@ def _build_provider_configs(provider_name: str) -> list[ProviderConfigCreate]:
     if reranker_model:
         configs.append(
             ProviderConfigCreate(
-                **common,
                 name=f"Default {provider_name.title()} Rerank",
                 operation_type=OperationType.RERANK,
                 reranker_model=reranker_model,
                 pool_enabled=False,
+                **common,
             )
         )
 

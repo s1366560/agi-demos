@@ -819,6 +819,7 @@ def _add_agent_tools(tools: dict[str, Any], project_id: str) -> None:
             "workspace_submit_verification_judgment",
             "workspace_submit_iteration_review",
             "workspace_submit_supervisor_decision",
+            "workspace_submit_worktree_preparation",
         )
         for name in agent_tool_names:
             if name in registry:
@@ -837,9 +838,11 @@ def _add_workspace_planning_contract_tool(tools: dict[str, Any]) -> None:
             WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME,
             WORKSPACE_SUBMIT_SUPERVISOR_DECISION_TOOL_NAME,
             WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME,
+            WORKSPACE_SUBMIT_WORKTREE_PREPARATION_TOOL_NAME,
             workspace_submit_iteration_review_tool,
             workspace_submit_supervisor_decision_tool,
             workspace_submit_verification_judgment_tool,
+            workspace_submit_worktree_preparation_tool,
         )
         from src.infrastructure.agent.tools.workspace_planning_contract import (
             WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME,
@@ -850,11 +853,13 @@ def _add_workspace_planning_contract_tool(tools: dict[str, Any]) -> None:
         _ = workspace_submit_verification_judgment_tool
         _ = workspace_submit_iteration_review_tool
         _ = workspace_submit_supervisor_decision_tool
+        _ = workspace_submit_worktree_preparation_tool
         fallback_tools = {
             WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME: workspace_submit_planning_contract_tool,
             WORKSPACE_SUBMIT_VERIFICATION_JUDGMENT_TOOL_NAME: workspace_submit_verification_judgment_tool,
             WORKSPACE_SUBMIT_ITERATION_REVIEW_TOOL_NAME: workspace_submit_iteration_review_tool,
             WORKSPACE_SUBMIT_SUPERVISOR_DECISION_TOOL_NAME: workspace_submit_supervisor_decision_tool,
+            WORKSPACE_SUBMIT_WORKTREE_PREPARATION_TOOL_NAME: workspace_submit_worktree_preparation_tool,
         }
         registry = get_registered_tools()
         for tool_name, fallback_tool in fallback_tools.items():

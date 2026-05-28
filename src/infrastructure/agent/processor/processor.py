@@ -373,6 +373,7 @@ class SessionProcessor:
             "workspace_submit_verification_judgment",
             "workspace_submit_iteration_review",
             "workspace_submit_supervisor_decision",
+            "workspace_submit_worktree_preparation",
         }
     )
 

@@ -96,6 +96,11 @@ class AttemptWorktreeContext:
     setup_status: str
     setup_reason: str | None = None
     setup_output: str | None = None
+    original_base_ref: str | None = None
+    resolved_base_ref: str | None = None
+    fallback_reason: str | None = None
+    git_fsck_summary: str | None = None
+    pruned_worktrees_count: int | None = None
 
     @property
     def execution_root(self) -> WorkspaceExecutionRoot:
@@ -123,6 +128,11 @@ class AttemptWorktreeContext:
             "setup_status": self.setup_status,
             "setup_reason": self.setup_reason,
             "setup_output": self.setup_output,
+            "original_base_ref": self.original_base_ref,
+            "resolved_base_ref": self.resolved_base_ref,
+            "fallback_reason": self.fallback_reason,
+            "git_fsck_summary": self.git_fsck_summary,
+            "pruned_worktrees_count": self.pruned_worktrees_count,
         }
 
     def setup_payload(self) -> dict[str, object]:
@@ -134,6 +144,11 @@ class AttemptWorktreeContext:
             "branch_name": self.branch_name,
             "base_ref": self.base_ref,
             "attempt_id": self.attempt_id,
+            "original_base_ref": self.original_base_ref,
+            "resolved_base_ref": self.resolved_base_ref,
+            "fallback_reason": self.fallback_reason,
+            "git_fsck_summary": self.git_fsck_summary,
+            "pruned_worktrees_count": self.pruned_worktrees_count,
         }
 
     def metadata_patch(self) -> dict[str, object]:
@@ -153,7 +168,36 @@ class AttemptWorktreeContext:
             worktree_path=self.worktree_path,
             branch_name=self.branch_name,
             base_ref=self.base_ref,
+            original_base_ref=self.original_base_ref,
+            resolved_base_ref=self.resolved_base_ref,
+            fallback_reason=self.fallback_reason,
+            git_fsck_summary=self.git_fsck_summary,
+            pruned_worktrees_count=self.pruned_worktrees_count,
         )
+
+
+@dataclass(frozen=True)
+class AttemptWorktreePreparationRequest:
+    """Inputs handed to the builtin worktree-manager agent for one attempt."""
+
+    workspace_id: str
+    task_id: str
+    attempt_id: str | None
+    workspace_root: str | None
+    sandbox_code_root: str
+    worktree_path: str
+    branch_name: str
+    base_ref: str
+    original_base_ref: str
+    setup_command: str
+    diagnostics_command: str
+
+
+class AttemptWorktreePreparationAgent(Protocol):
+    async def prepare_worktree(
+        self,
+        request: AttemptWorktreePreparationRequest,
+    ) -> AttemptWorktreeContext | None: ...
 
 
 class WorkspaceWorktreeManager:
@@ -164,9 +208,11 @@ class WorkspaceWorktreeManager:
         session: AsyncSession,
         *,
         runner_factory: WorkspaceCommandRunnerFactory,
+        preparation_agent: AttemptWorktreePreparationAgent | None = None,
     ) -> None:
         self._session = session
         self._runner_factory = runner_factory
+        self._preparation_agent = preparation_agent
 
     async def prepare_attempt(  # noqa: C901, PLR0911, PLR0912
         self,
@@ -288,6 +334,25 @@ class WorkspaceWorktreeManager:
             base_ref=base_ref,
             protected_worktree_names=protected_worktree_names,
         )
+        if self._preparation_agent is not None:
+            return await self._preparation_agent.prepare_worktree(
+                AttemptWorktreePreparationRequest(
+                    workspace_id=workspace_id,
+                    task_id=task.id,
+                    attempt_id=resolved_attempt_id,
+                    workspace_root=path_validation.workspace_root,
+                    sandbox_code_root=sandbox_code_root,
+                    worktree_path=worktree_path,
+                    branch_name=branch_name,
+                    base_ref=base_ref,
+                    original_base_ref=base_ref,
+                    setup_command=command,
+                    diagnostics_command=worktree_post_setup_diagnostics_command(
+                        sandbox_code_root=sandbox_code_root,
+                        resolved_base_ref=base_ref,
+                    ),
+                )
+            )
         try:
             result = await self._runner_factory(
                 project_id=workspace.project_id,
@@ -324,8 +389,15 @@ class WorkspaceWorktreeManager:
                 base_ref=base_ref,
                 attempt_id=resolved_attempt_id,
             )
+        diagnostics = await self._collect_post_setup_diagnostics(
+            project_id=workspace.project_id,
+            tenant_id=workspace.tenant_id,
+            sandbox_code_root=sandbox_code_root,
+            original_base_ref=base_ref,
+            setup_output=stdout,
+        )
         return _context(
-            setup_status="prepared",
+            setup_status="fallback_used" if diagnostics.get("fallback_reason") else "prepared",
             setup_output=compact_command_output(stdout),
             workspace_root=path_validation.workspace_root,
             sandbox_code_root=sandbox_code_root,
@@ -333,6 +405,17 @@ class WorkspaceWorktreeManager:
             branch_name=branch_name,
             base_ref=base_ref,
             attempt_id=resolved_attempt_id,
+            diagnostics={
+                "original_base_ref": base_ref,
+                "resolved_base_ref": _mapping_string(diagnostics, "resolved_base_ref")
+                or base_ref,
+                "fallback_reason": _mapping_string(diagnostics, "fallback_reason"),
+                "git_fsck_summary": _mapping_string(diagnostics, "git_fsck_summary"),
+                "pruned_worktrees_count": _mapping_int(
+                    diagnostics,
+                    "pruned_worktrees_count",
+                ),
+            },
         )
 
     async def active_attempt_worktree_names(self, workspace_id: str) -> tuple[str, ...]:
@@ -350,6 +433,42 @@ class WorkspaceWorktreeManager:
             )
         )
         return tuple(sorted(str(row[0]) for row in rows.all() if row[0]))
+
+    async def _collect_post_setup_diagnostics(
+        self,
+        *,
+        project_id: str,
+        tenant_id: str,
+        sandbox_code_root: str,
+        original_base_ref: str,
+        setup_output: str,
+    ) -> dict[str, object]:
+        fallback_reason = (
+            "base_ref_unusable" if "base_ref_unusable=" in setup_output else None
+        )
+        command = worktree_post_setup_diagnostics_command(
+            sandbox_code_root=sandbox_code_root,
+            resolved_base_ref="HEAD" if fallback_reason else original_base_ref,
+        )
+        try:
+            result = await self._runner_factory(
+                project_id=project_id,
+                tenant_id=tenant_id,
+            ).run_command(command, timeout=60)
+        except Exception as exc:
+            fields: dict[str, object] = {
+                "resolved_base_ref": "HEAD" if fallback_reason else original_base_ref,
+                "git_fsck_summary": f"diagnostics raised: {exc}",
+            }
+            if fallback_reason:
+                fields["fallback_reason"] = fallback_reason
+            return fields
+        fields = dict(worktree_setup_note_fields(str(result.get("stdout") or "")))
+        if fallback_reason:
+            fields["fallback_reason"] = fallback_reason
+        if "resolved_base_ref" not in fields:
+            fields["resolved_base_ref"] = "HEAD" if fallback_reason else original_base_ref
+        return fields
 
 
 def default_attempt_worktree_path(*, sandbox_code_root: str, attempt_id: str) -> str:
@@ -399,6 +518,10 @@ def worktree_setup_command(
                 "git rev-parse --verify HEAD >/dev/null 2>&1"
                 "||{ git add -A; git commit --allow-empty -m init >/dev/null; }"
             ),
+            (
+                'git cat-file -e "$R^{tree}" 2>/dev/null'
+                " || { echo base_ref_unusable=$R; R=HEAD; }"
+            ),
             'N=$(basename "$PWD")',
             'F=$(dirname "$PWD")/.memstack/git-remotes/$N.git',
             (
@@ -415,6 +538,28 @@ def worktree_setup_command(
                 'else git worktree add -B "$B" "$W" "$R"; fi'
             ),
             'printf "git_head=%s\\n" "$(git -C "$W" rev-parse HEAD)"',
+        ]
+    )
+
+
+def worktree_post_setup_diagnostics_command(
+    *,
+    sandbox_code_root: str,
+    resolved_base_ref: str,
+) -> str:
+    code_root = shlex.quote(sandbox_code_root)
+    base = shlex.quote(resolved_base_ref)
+    return "\n".join(
+        [
+            "set +e",
+            f"C={code_root}",
+            f"R={base}",
+            'cd "$C" || exit 0',
+            'P="$(git worktree prune -v 2>&1)"',
+            'printf "pruned_worktrees_count=%s\\n" "$(printf "%s\\n" "$P" | grep -c "^Removing " || true)"',
+            'printf "resolved_base_ref=%s\\n" "$R"',
+            'F="$(git fsck --no-progress --connectivity-only 2>&1 | head -20)"',
+            'if [ -n "$F" ]; then printf "git_fsck_summary=%s\\n" "$F"; fi',
         ]
     )
 
@@ -563,6 +708,11 @@ def worktree_setup_note(
     worktree_path: str | None = None,
     branch_name: str | None = None,
     base_ref: str | None = None,
+    original_base_ref: str | None = None,
+    resolved_base_ref: str | None = None,
+    fallback_reason: str | None = None,
+    git_fsck_summary: str | None = None,
+    pruned_worktrees_count: int | None = None,
 ) -> str:
     lines = ["[worktree-setup]", f"status={status}"]
     if worktree_path:
@@ -571,6 +721,16 @@ def worktree_setup_note(
         lines.append(f"branch_name={branch_name}")
     if base_ref:
         lines.append(f"base_ref={base_ref}")
+    if original_base_ref:
+        lines.append(f"original_base_ref={original_base_ref}")
+    if resolved_base_ref:
+        lines.append(f"resolved_base_ref={resolved_base_ref}")
+    if fallback_reason:
+        lines.append(f"fallback_reason={fallback_reason}")
+    if git_fsck_summary:
+        lines.append(f"git_fsck_summary={compact_command_output(git_fsck_summary, limit=500)}")
+    if pruned_worktrees_count is not None:
+        lines.append(f"pruned_worktrees_count={pruned_worktrees_count}")
     if reason:
         lines.append(f"reason={compact_command_output(reason)}")
     if output:
@@ -586,6 +746,29 @@ def compact_command_output(value: str, *, limit: int = 1000) -> str:
     return compacted[: limit - 15] + "...[truncated]"
 
 
+def worktree_setup_note_fields(note: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for raw_line in note.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("[") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        fields[key.strip()] = value.strip()
+    return fields
+
+
+def _mapping_int(metadata: Mapping[str, object], key: str) -> int | None:
+    value = metadata.get(key)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
 def _context(
     *,
     setup_status: str,
@@ -597,7 +780,10 @@ def _context(
     attempt_id: str | None = None,
     setup_reason: str | None = None,
     setup_output: str | None = None,
+    diagnostics: Mapping[str, object] | None = None,
 ) -> AttemptWorktreeContext:
+    structured = diagnostics or {}
+    git_fsck_summary = _mapping_string(structured, "git_fsck_summary")
     active_root = worktree_path or sandbox_code_root
     normalized_active_root = posixpath.normpath(active_root) if active_root else None
     normalized_sandbox_code_root = (
@@ -620,6 +806,15 @@ def _context(
         setup_status=setup_status,
         setup_reason=setup_reason,
         setup_output=setup_output,
+        original_base_ref=_mapping_string(structured, "original_base_ref"),
+        resolved_base_ref=_mapping_string(structured, "resolved_base_ref"),
+        fallback_reason=_mapping_string(structured, "fallback_reason"),
+        git_fsck_summary=(
+            compact_command_output(git_fsck_summary, limit=500)
+            if git_fsck_summary
+            else None
+        ),
+        pruned_worktrees_count=_mapping_int(structured, "pruned_worktrees_count"),
     )
 
 
@@ -630,6 +825,8 @@ def _mapping_string(metadata: Mapping[str, Any], key: str) -> str | None:
 
 __all__ = [
     "AttemptWorktreeContext",
+    "AttemptWorktreePreparationAgent",
+    "AttemptWorktreePreparationRequest",
     "WorkspaceExecutionRoot",
     "WorkspaceWorktreeManager",
     "compact_command_output",
@@ -638,6 +835,8 @@ __all__ = [
     "worktree_branch_name",
     "worktree_dirty_signature_command",
     "worktree_integration_command",
+    "worktree_post_setup_diagnostics_command",
     "worktree_setup_command",
     "worktree_setup_note",
+    "worktree_setup_note_fields",
 ]

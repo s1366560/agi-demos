@@ -11,6 +11,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from sqlalchemy import select
@@ -126,6 +127,7 @@ from src.infrastructure.agent.workspace_plan.pipeline import (
     PipelineDeploySpec,
 )
 from src.infrastructure.agent.workspace_plan.system_actor import WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+from src.infrastructure.agent.workspace_plan.worktree_manager import AttemptWorktreeContext
 
 
 def test_node_worker_brief_surfaces_latest_verification_feedback() -> None:
@@ -1956,7 +1958,7 @@ def test_worktree_setup_command_initializes_greenfield_code_root(tmp_path: Path)
     )
 
     result = subprocess.run(
-        ["bash", "-lc", command],
+        ["sh", "-lc", command],
         check=False,
         capture_output=True,
         text=True,
@@ -1965,6 +1967,31 @@ def test_worktree_setup_command_initializes_greenfield_code_root(tmp_path: Path)
 
     assert result.returncode == 0, result.stderr
     assert (sandbox_code_root / ".git").is_dir()
+    assert (worktree_path / ".git").exists()
+    assert "git_head=" in result.stdout
+
+
+def test_worktree_setup_command_falls_back_when_base_ref_unusable(tmp_path: Path) -> None:
+    sandbox_code_root = tmp_path / "repo"
+    worktree_path = tmp_path / ".memstack" / "worktrees" / "attempt-1"
+
+    command = _worktree_setup_command(
+        sandbox_code_root=str(sandbox_code_root),
+        worktree_path=str(worktree_path),
+        branch_name="workspace/node-1-attempt-1",
+        base_ref="missing-ref",
+    )
+
+    result = subprocess.run(
+        ["bash", "-lc", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "base_ref_unusable=missing-ref" in result.stdout
     assert (worktree_path / ".git").exists()
     assert "git_head=" in result.stdout
 
@@ -4124,17 +4151,29 @@ async def test_prepare_attempt_worktree_defaults_to_attempt_scope_without_checkp
 
     commands: list[str] = []
 
-    class FakeRunner:
-        def __init__(self, *, project_id: str, tenant_id: str) -> None:
-            assert project_id == "worker-project-1"
+    class FakeWorktreeAgentPreparer:
+        def __init__(self, *, tenant_id: str, project_id: str) -> None:
             assert tenant_id == "worker-tenant-1"
+            assert project_id == "worker-project-1"
 
-        async def run_command(self, command: str, *, timeout: int) -> dict[str, object]:
-            assert timeout == 120
-            commands.append(command)
-            return {"exit_code": 0, "stdout": "git_head=abc123\n", "stderr": ""}
+        async def prepare_worktree(self, request: Any) -> AttemptWorktreeContext:
+            commands.append(request.setup_command)
+            return AttemptWorktreeContext(
+                workspace_root=request.workspace_root,
+                sandbox_code_root=request.sandbox_code_root,
+                active_root=request.worktree_path,
+                worktree_path=request.worktree_path,
+                branch_name=request.branch_name,
+                base_ref=request.base_ref,
+                attempt_id=request.attempt_id,
+                is_isolated=True,
+                setup_status="prepared",
+                setup_output="git_head=abc123",
+                original_base_ref=request.base_ref,
+                resolved_base_ref=request.base_ref,
+            )
 
-    monkeypatch.setattr(outbox_handlers, "_WorkspaceSandboxCommandRunner", FakeRunner)
+    monkeypatch.setattr(outbox_handlers, "WorkspaceWorktreeAgentPreparer", FakeWorktreeAgentPreparer)
     task = WorkspaceTask(
         id="task-no-feature",
         workspace_id="workspace-1",
@@ -4165,6 +4204,83 @@ async def test_prepare_attempt_worktree_defaults_to_attempt_scope_without_checkp
     assert "W=/workspace/.memstack/worktrees/attempt-direct-1" in commands[0]
     assert "B=workspace/task-no-feature-attempt-dire" in commands[0]
     assert 'git worktree add -B "$B" "$W" "$R"' in commands[0]
+
+
+@pytest.mark.asyncio
+async def test_prepare_attempt_worktree_surfaces_structured_fallback_diagnostics(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    workspace = (
+        await db_session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "workspace-1"))
+    ).scalar_one()
+    workspace.metadata_json = {"code_context": {"sandbox_code_root": "/workspace/my-evo"}}
+    await db_session.flush()
+
+    commands: list[str] = []
+
+    class FakeWorktreeAgentPreparer:
+        def __init__(self, *, tenant_id: str, project_id: str) -> None:
+            assert tenant_id == "worker-tenant-1"
+            assert project_id == "worker-project-1"
+
+        async def prepare_worktree(self, request: Any) -> AttemptWorktreeContext:
+            commands.append(request.setup_command)
+            commands.append(request.diagnostics_command)
+            return AttemptWorktreeContext(
+                workspace_root=request.workspace_root,
+                sandbox_code_root=request.sandbox_code_root,
+                active_root=request.worktree_path,
+                worktree_path=request.worktree_path,
+                branch_name=request.branch_name,
+                base_ref=request.base_ref,
+                attempt_id=request.attempt_id,
+                is_isolated=True,
+                setup_status="fallback_used",
+                setup_output="base_ref_unusable=bad-ref\\ngit_head=abc123",
+                original_base_ref="bad-ref",
+                resolved_base_ref="HEAD",
+                fallback_reason="base_ref_unusable",
+                git_fsck_summary="broken link from commit abc",
+                pruned_worktrees_count=3,
+            )
+
+    monkeypatch.setattr(outbox_handlers, "WorkspaceWorktreeAgentPreparer", FakeWorktreeAgentPreparer)
+    task = WorkspaceTask(
+        id="task-fallback",
+        workspace_id="workspace-1",
+        title="Retry with bad base",
+        description="Exercise structured worktree fallback diagnostics.",
+        created_by="worker-user-1",
+        status="in_progress",
+        metadata={
+            AUTONOMY_SCHEMA_VERSION_KEY: 1,
+            ROOT_GOAL_TASK_ID: "root-task-1",
+            "feature_checkpoint": {
+                "worktree_path": "${sandbox_code_root}/../.memstack/worktrees/attempt-fallback",
+                "branch_name": "workspace/node-1-attempt-fallback",
+                "base_ref": "bad-ref",
+            },
+        },
+    )
+
+    note = await _prepare_attempt_worktree_if_available(
+        db_session,
+        "workspace-1",
+        task,
+        None,
+        "attempt-fallback",
+    )
+
+    assert note is not None
+    assert "status=fallback_used" in note
+    assert "original_base_ref=bad-ref" in note
+    assert "resolved_base_ref=HEAD" in note
+    assert "fallback_reason=base_ref_unusable" in note
+    assert "pruned_worktrees_count=3" in note
+    assert "git_fsck_summary=broken link from commit abc" in note
+    assert len(commands) == 2
 
 
 def test_apply_attempt_worktree_checkpoint_refreshes_retry_attempt_scope() -> None:
