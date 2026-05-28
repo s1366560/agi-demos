@@ -1,20 +1,22 @@
 /**
  * Skill detail page.
  *
- * Shows the Agent Skills package metadata, content, lineage, and version history.
+ * Shows the Agent Skills package metadata, content, and version history.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FC, ReactNode } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { Alert, Tag } from 'antd';
 import {
   ArrowLeft,
-  ArrowUpCircle,
+  Code2,
   Download,
+  Eye,
   FileText,
   History,
   KeyRound,
@@ -29,9 +31,13 @@ import { skillAPI } from '@/services/skillService';
 import { SkillModal } from '@/components/skill/SkillModal';
 import { LazyEmpty, LazyPopconfirm, LazySpin, useLazyMessage } from '@/components/ui/lazyAntd';
 
+import { safeMarkdownComponents, useMarkdownPlugins } from '../../components/agent/chat/markdownPlugins';
+import { MARKDOWN_PROSE_CLASSES } from '../../components/agent/styles';
+
 import type { SkillResponse, SkillVersionResponse } from '@/types/agent';
 
 type SkillSource = NonNullable<SkillResponse['source']>;
+type SkillContentMode = 'preview' | 'raw';
 
 const pageText = 'text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.94_0.006_255)]';
 const mutedText = 'text-[oklch(0.48_0.01_255)] dark:text-[oklch(0.68_0.008_255)]';
@@ -80,8 +86,52 @@ function isManagedSkill(skill: SkillResponse): boolean {
   return !skill.is_system_skill && (source === 'database' || source === 'hybrid');
 }
 
+function getSkillListPath(pathname: string): string {
+  const segments = pathname.split('/').filter(Boolean);
+  const skillsIndex = segments.lastIndexOf('skills');
+
+  if (skillsIndex === -1) {
+    return '/tenant/skills';
+  }
+
+  return `/${segments.slice(0, skillsIndex + 1).join('/')}`;
+}
+
+function SkillContentViewer({
+  content,
+  mode,
+}: {
+  content: string;
+  mode: SkillContentMode;
+}) {
+  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
+
+  if (mode === 'raw') {
+    return (
+      <pre className="mt-4 max-h-[520px] overflow-auto rounded-[4px] border border-[oklch(0.88_0.006_255)] bg-[oklch(0.96_0.004_255)] p-4 text-xs leading-5 text-[oklch(0.24_0.01_255)] dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)] dark:text-[oklch(0.88_0.006_255)]">
+        {content}
+      </pre>
+    );
+  }
+
+  return (
+    <div
+      className={`mt-4 max-h-[520px] overflow-auto rounded-[4px] border border-[oklch(0.88_0.006_255)] bg-white p-4 text-sm text-[oklch(0.24_0.01_255)] dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)] dark:text-[oklch(0.88_0.006_255)] ${MARKDOWN_PROSE_CLASSES}`}
+    >
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
+        components={safeMarkdownComponents}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
 export const SkillDetail: FC = () => {
   const { t } = useTranslation();
+  const location = useLocation();
   const navigate = useNavigate();
   const params = useParams<{ skillId: string }>();
   const message = useLazyMessage();
@@ -92,13 +142,14 @@ export const SkillDetail: FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rollbackVersion, setRollbackVersion] = useState<number | null>(null);
-  const [isUpgrading, setIsUpgrading] = useState(false);
+  const [contentMode, setContentMode] = useState<SkillContentMode>('preview');
 
   const metadataText = useMemo(() => jsonBlock(skill?.metadata), [skill?.metadata]);
   const allowedToolsRaw = skill?.allowed_tools_raw ?? skill?.tools.join(' ') ?? '';
   const skillScope = skill ? t(`tenant.skills.detail.scopeValues.${skill.scope}`) : '';
   const skillSource = skill ? getSkillSource(skill) : 'database';
   const managed = skill ? isManagedSkill(skill) : false;
+  const skillListPath = useMemo(() => getSkillListPath(location.pathname), [location.pathname]);
 
   const loadSkill = useCallback(async () => {
     if (!skillId) {
@@ -155,30 +206,6 @@ export const SkillDetail: FC = () => {
     }
   }, [message, skill, t]);
 
-  const handleUpgrade = useCallback(async () => {
-    if (!skill) {
-      return;
-    }
-    if (!isManagedSkill(skill)) {
-      message?.info(t('tenant.skills.detail.readOnlySource'));
-      return;
-    }
-    setIsUpgrading(true);
-    try {
-      const result = await skillAPI.upgrade(skill.id);
-      if (result.action === 'noop') {
-        message?.info(t('tenant.skills.detail.upgradeNoop'));
-      } else {
-        message?.success(t('tenant.skills.detail.upgradeSuccess'));
-        await loadSkill();
-      }
-    } catch {
-      message?.error(t('tenant.skills.detail.upgradeFailed'));
-    } finally {
-      setIsUpgrading(false);
-    }
-  }, [loadSkill, message, skill, t]);
-
   const handleRollback = useCallback(
     async (versionNumber: number) => {
       if (!skill) {
@@ -223,7 +250,7 @@ export const SkillDetail: FC = () => {
         <button
           type="button"
           onClick={() => {
-            void navigate('..');
+            void navigate(skillListPath);
           }}
           className={actionButton}
         >
@@ -242,7 +269,7 @@ export const SkillDetail: FC = () => {
           <button
             type="button"
             onClick={() => {
-              void navigate('..');
+              void navigate(skillListPath);
             }}
             className={`mb-3 inline-flex h-8 items-center gap-2 text-sm font-medium ${mutedText} hover:text-[oklch(0.24_0.01_255)] dark:hover:text-[oklch(0.94_0.006_255)]`}
           >
@@ -258,9 +285,7 @@ export const SkillDetail: FC = () => {
             </Tag>
             <Tag>{skillScope}</Tag>
             <Tag>{t(`tenant.skills.source.${skillSource}`)}</Tag>
-            {(skill.semver ?? skill.version_label) ? (
-              <Tag>{skill.semver ?? skill.version_label}</Tag>
-            ) : null}
+            {skill.version_label ? <Tag>{skill.version_label}</Tag> : null}
           </div>
           <p className={`mt-2 max-w-3xl text-sm ${mutedText}`}>{skill.description}</p>
         </div>
@@ -295,17 +320,6 @@ export const SkillDetail: FC = () => {
           >
             <Download size={16} />
             {t('tenant.skills.detail.export')}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              void handleUpgrade();
-            }}
-            className={actionButton}
-            disabled={isUpgrading || !managed}
-          >
-            <ArrowUpCircle size={16} />
-            {isUpgrading ? t('tenant.skills.detail.upgrading') : t('tenant.skills.detail.upgrade')}
           </button>
         </div>
       </div>
@@ -342,16 +356,50 @@ export const SkillDetail: FC = () => {
           </section>
 
           <section className={`rounded-[6px] p-5 ${surface}`}>
-            <div className="flex items-center gap-2">
-              <FileText size={17} className={mutedText} />
-              <h2 className={`text-sm font-semibold ${pageText}`}>
-                {t('tenant.skills.detail.fullContent')}
-              </h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <FileText size={17} className={mutedText} />
+                <h2 className={`text-sm font-semibold ${pageText}`}>
+                  {t('tenant.skills.detail.fullContent')}
+                </h2>
+              </div>
+              {skill.full_content ? (
+                <div
+                  className="inline-flex w-fit rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-[oklch(0.97_0.004_255)] p-0.5 dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.2_0.006_255)]"
+                  role="group"
+                  aria-label={t('tenant.skills.detail.contentMode')}
+                >
+                  {(
+                    [
+                      { key: 'preview' as const, icon: Eye },
+                      { key: 'raw' as const, icon: Code2 },
+                    ] satisfies Array<{ key: SkillContentMode; icon: typeof Eye }>
+                  ).map(({ key, icon: Icon }) => {
+                    const active = contentMode === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          setContentMode(key);
+                        }}
+                        className={`inline-flex h-8 items-center gap-1.5 rounded-[3px] px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] ${
+                          active
+                            ? 'bg-white text-[oklch(0.24_0.01_255)] shadow-sm dark:bg-[oklch(0.28_0.006_255)] dark:text-[oklch(0.94_0.006_255)]'
+                            : 'text-[oklch(0.48_0.01_255)] hover:text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.68_0.008_255)] dark:hover:text-[oklch(0.94_0.006_255)]'
+                        }`}
+                        aria-pressed={active}
+                      >
+                        <Icon size={14} />
+                        {t(`tenant.skills.detail.contentModes.${key}`)}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
             {skill.full_content ? (
-              <pre className="mt-4 max-h-[520px] overflow-auto rounded-[4px] border border-[oklch(0.88_0.006_255)] bg-[oklch(0.96_0.004_255)] p-4 text-xs leading-5 text-[oklch(0.24_0.01_255)] dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)] dark:text-[oklch(0.88_0.006_255)]">
-                {skill.full_content}
-              </pre>
+              <SkillContentViewer content={skill.full_content} mode={contentMode} />
             ) : (
               <div className="mt-4 py-8">
                 <LazyEmpty description={t('tenant.skills.detail.emptyContent')} />
@@ -401,28 +449,6 @@ export const SkillDetail: FC = () => {
               <InfoRow
                 label={t('tenant.skills.detail.updated')}
                 value={formatDate(skill.updated_at)}
-              />
-            </div>
-          </section>
-
-          <section className={`rounded-[6px] p-5 ${surface}`}>
-            <h2 className={`text-sm font-semibold ${pageText}`}>
-              {t('tenant.skills.detail.lineage')}
-            </h2>
-            <div className="mt-3">
-              <InfoRow
-                label={t('tenant.skills.detail.parentCurated')}
-                value={skill.parent_curated_id || t('tenant.skills.detail.notSet')}
-                mono={Boolean(skill.parent_curated_id)}
-              />
-              <InfoRow
-                label={t('tenant.skills.detail.semver')}
-                value={skill.semver || t('tenant.skills.detail.notSet')}
-              />
-              <InfoRow
-                label={t('tenant.skills.detail.revisionHash')}
-                value={skill.revision_hash || t('tenant.skills.detail.notSet')}
-                mono={Boolean(skill.revision_hash)}
               />
             </div>
           </section>

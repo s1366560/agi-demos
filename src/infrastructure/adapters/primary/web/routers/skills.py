@@ -19,7 +19,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import PurePosixPath
-from typing import Any, cast
+from typing import Any
 
 import yaml
 from fastapi import (
@@ -43,7 +43,6 @@ from src.domain.model.agent.skill_source import SkillSource
 from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import CuratedSkill
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.skill.markdown_parser import MarkdownParser, SkillMarkdown
 from src.infrastructure.skill.validator import AgentSkillsValidator
@@ -133,10 +132,6 @@ class SkillResponse(BaseModel):
     spec_version: str = "1.0"
     current_version: int = 0
     version_label: str | None = None
-    # P2-4 curated lineage
-    parent_curated_id: str | None = None
-    semver: str | None = None
-    revision_hash: str | None = None
 
 
 class SkillListResponse(BaseModel):
@@ -165,23 +160,8 @@ class SkillImportRequest(SkillPackagePayload):
     change_summary: str | None = Field(None, max_length=2000)
 
 
-class SkillInstallRequest(BaseModel):
-    """Schema for installing an approved curated skill."""
-
-    curated_id: str = Field(..., min_length=1)
-    project_id: str | None = None
-    overwrite: bool = Field(False, description="Update an existing skill with the same name")
-
-
-class SkillUpgradeRequest(BaseModel):
-    """Schema for upgrading an installed skill to a curated revision."""
-
-    curated_id: str | None = Field(None, description="Specific curated revision to upgrade to")
-    change_summary: str | None = Field(None, max_length=2000)
-
-
 class SkillLifecycleResponse(BaseModel):
-    """Schema for install/import/upgrade responses."""
+    """Schema for skill import and versioning responses."""
 
     action: str
     skill: SkillResponse
@@ -230,9 +210,6 @@ def skill_to_response(skill: Skill) -> SkillResponse:
         ),
         current_version=getattr(skill, "current_version", 0),
         version_label=getattr(skill, "version_label", None),
-        parent_curated_id=getattr(skill, "parent_curated_id", None),
-        semver=getattr(skill, "semver", None),
-        revision_hash=getattr(skill, "revision_hash", None),
     )
 
 
@@ -267,12 +244,6 @@ def _coerce_any_dict(value: object) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         return {}
     return {str(key): item for key, item in value.items()}
-
-
-def _coerce_string_dict(value: object) -> dict[str, str]:
-    if not isinstance(value, Mapping):
-        return {}
-    return {str(key): str(item) for key, item in value.items() if item is not None}
 
 
 def _merge_agentskills_metadata(
@@ -333,7 +304,6 @@ def _skill_matches_search(skill: Skill, search: str | None) -> bool:
             skill.name,
             skill.description,
             skill.version_label or "",
-            skill.semver or "",
             metadata_text,
         ]
     ).lower()
@@ -532,14 +502,16 @@ def _parse_skill_package(skill_md_content: str) -> tuple[SkillMarkdown, dict[str
     return parsed, metadata, tools
 
 
-def _build_skill_md_from_payload(payload: dict[str, Any], semver: str | None = None) -> str:
+def _build_skill_md_from_payload(
+    payload: dict[str, Any], version_label: str | None = None
+) -> str:
     name = str(payload.get("name") or "skill")
     description = str(payload.get("description") or "")
     tools = payload.get("tools") if isinstance(payload.get("tools"), list) else []
     metadata = _coerce_any_dict(payload.get("metadata"))
     agentskills = _coerce_any_dict(metadata.get("agentskills"))
-    if semver and "version" not in metadata:
-        metadata["version"] = semver
+    if version_label and "version" not in metadata:
+        metadata["version"] = version_label
 
     frontmatter: dict[str, Any] = {
         "name": name,
@@ -610,54 +582,6 @@ async def _create_skill_version_snapshot(
     skill.updated_at = datetime.now(UTC)
     await repo.update(skill)
     return version
-
-
-def _semver_key(value: str | None) -> tuple[int, int, int]:
-    if not value:
-        return (0, 0, 0)
-    parts = value.split(".")
-    parsed = []
-    for index in range(3):
-        try:
-            parsed.append(int(parts[index]))
-        except (IndexError, ValueError):
-            parsed.append(0)
-    return (parsed[0], parsed[1], parsed[2])
-
-
-async def _latest_curated_for_skill(db: AsyncSession, skill: Skill) -> CuratedSkill | None:
-    from sqlalchemy import select
-
-    from src.infrastructure.adapters.secondary.common.base_repository import (
-        refresh_select_statement,
-    )
-    source_skill_id: str | None = None
-    if skill.parent_curated_id:
-        parent = await db.get(CuratedSkill, skill.parent_curated_id)
-        if parent is not None:
-            source_skill_id = parent.source_skill_id
-
-    stmt = select(CuratedSkill).where(CuratedSkill.status == "active")
-    if source_skill_id:
-        stmt = stmt.where(CuratedSkill.source_skill_id == source_skill_id)
-    stmt = stmt.order_by(CuratedSkill.created_at.desc())
-    candidates = cast(
-        list[CuratedSkill],
-        (await db.execute(refresh_select_statement(stmt))).scalars().all(),
-    )
-
-    if not source_skill_id:
-        candidates = [
-            row
-            for row in candidates
-            if isinstance(row.payload, dict) and row.payload.get("name") == skill.name
-        ]
-
-    candidates = sorted(candidates, key=lambda row: _semver_key(row.semver), reverse=True)
-    for candidate in candidates:
-        if candidate.revision_hash != skill.revision_hash:
-            return candidate
-    return candidates[0] if candidates else None
 
 
 # === API Endpoints ===
@@ -887,9 +811,6 @@ async def update_skill(
         spec_version=data.spec_version if data.spec_version is not None else skill.spec_version,
         current_version=skill.current_version,
         version_label=skill.version_label,
-        parent_curated_id=skill.parent_curated_id,
-        semver=skill.semver,
-        revision_hash=skill.revision_hash,
     )
 
     result = await repo.update(updated_skill)
@@ -994,9 +915,6 @@ async def update_skill_status(
         spec_version=skill.spec_version,
         current_version=skill.current_version,
         version_label=skill.version_label,
-        parent_curated_id=skill.parent_curated_id,
-        semver=skill.semver,
-        revision_hash=skill.revision_hash,
     )
 
     result = await repo.update(updated_skill)
@@ -1172,9 +1090,6 @@ async def update_skill_content(
         spec_version=skill.spec_version,
         current_version=skill.current_version,
         version_label=skill.version_label,
-        parent_curated_id=skill.parent_curated_id,
-        semver=skill.semver,
-        revision_hash=skill.revision_hash,
     )
 
     result = await repo.update(updated_skill)
@@ -1244,7 +1159,6 @@ async def import_skill_package(
             allowed_tools_raw=parsed.allowed_tools_raw,
         )
         skill.version_label = version_label
-        skill.semver = version_label
         skill = await repo.create(skill)
         action = "import"
 
@@ -1337,7 +1251,7 @@ async def export_skill_package(
     skill_md_content = (
         version.skill_md_content
         if version is not None
-        else skill.full_content or _build_skill_md_from_payload(skill.to_dict(), skill.semver)
+        else skill.full_content or _build_skill_md_from_payload(skill.to_dict(), skill.version_label)
     )
     resource_files = version.resource_files if version is not None else {}
 
@@ -1347,188 +1261,6 @@ async def export_skill_package(
         resource_files=resource_files,
         version_number=version.version_number if version is not None else None,
         version_label=version.version_label if version is not None else skill.version_label,
-    )
-
-
-@router.post(
-    "/install",
-    response_model=SkillLifecycleResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Install a curated skill into the private library",
-)
-async def install_curated_skill(
-    request: Request,
-    data: SkillInstallRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
-) -> SkillLifecycleResponse:
-    """Install an approved curated skill as a tenant or project skill."""
-    curated = await db.get(CuratedSkill, data.curated_id)
-    if curated is None or curated.status != "active":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Curated skill not found"),
-        )
-
-    payload = _coerce_any_dict(curated.payload)
-    name = str(payload.get("name") or "")
-    description = str(payload.get("description") or "")
-    if not name or not description:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Invalid curated skill package"),
-        )
-    raw_tools = payload.get("tools")
-    tools = [str(tool) for tool in raw_tools] if isinstance(raw_tools, list) else ["*"]
-    metadata = _coerce_any_dict(payload.get("metadata"))
-    metadata.update(
-        {
-            "installed_from_curated_id": curated.id,
-            "curated_revision_hash": curated.revision_hash,
-        }
-    )
-    scope = SkillScope.PROJECT if data.project_id else SkillScope.TENANT
-    skill_md_content = str(
-        payload.get("full_content") or _build_skill_md_from_payload(payload, curated.semver)
-    )
-    resource_files = _coerce_string_dict(payload.get("resource_files"))
-
-    container = get_container_with_db(request, db)
-    repo = container.skill_repository()
-    existing = await _find_existing_skill(
-        repo,
-        tenant_id=tenant_id,
-        name=name,
-        scope=scope,
-        project_id=data.project_id,
-    )
-    if existing and not data.overwrite:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_("Skill already exists"),
-        )
-
-    if existing:
-        existing.description = description
-        existing.tools = tools or ["*"]
-        existing.full_content = skill_md_content
-        existing.metadata = metadata
-        existing.parent_curated_id = curated.id
-        existing.semver = curated.semver
-        existing.revision_hash = curated.revision_hash
-        existing.version_label = curated.semver
-        existing.updated_at = datetime.now(UTC)
-        skill = await repo.update(existing)
-        action = "update"
-    else:
-        skill = Skill.create(
-            tenant_id=tenant_id,
-            name=name,
-            description=description,
-            tools=tools or ["*"],
-            project_id=data.project_id,
-            full_content=skill_md_content,
-            metadata=metadata,
-            scope=scope,
-            is_system_skill=False,
-        )
-        skill.parent_curated_id = curated.id
-        skill.semver = curated.semver
-        skill.revision_hash = curated.revision_hash
-        skill.version_label = curated.semver
-        skill = await repo.create(skill)
-        action = "install"
-
-    version = await _create_skill_version_snapshot(
-        db,
-        repo,
-        skill,
-        skill_md_content=skill_md_content,
-        resource_files=resource_files,
-        change_summary=f"Installed curated skill {curated.id}",
-        created_by="install",
-    )
-    await db.commit()
-
-    return SkillLifecycleResponse(
-        action=action,
-        skill=skill_to_response(skill),
-        version_number=version.version_number,
-        version_label=version.version_label,
-    )
-
-
-@router.post(
-    "/{skill_id}/upgrade",
-    response_model=SkillLifecycleResponse,
-    summary="Upgrade an installed skill to a curated revision",
-)
-async def upgrade_skill(
-    request: Request,
-    skill_id: str,
-    data: SkillUpgradeRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
-    db: AsyncSession = Depends(get_db),
-) -> SkillLifecycleResponse:
-    """Upgrade an installed skill from a specified or latest curated revision."""
-    container = get_container_with_db(request, db)
-    repo = container.skill_repository()
-    skill = await _get_tenant_skill_or_404(repo, skill_id, tenant_id)
-
-    curated = (
-        await db.get(CuratedSkill, data.curated_id)
-        if data.curated_id
-        else await _latest_curated_for_skill(db, skill)
-    )
-    if curated is None or curated.status != "active":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Curated skill not found"),
-        )
-    if curated.revision_hash == skill.revision_hash:
-        return SkillLifecycleResponse(action="noop", skill=skill_to_response(skill))
-
-    payload = _coerce_any_dict(curated.payload)
-    skill.name = str(payload.get("name") or skill.name)
-    skill.description = str(payload.get("description") or skill.description)
-    raw_tools = payload.get("tools")
-    if isinstance(raw_tools, list):
-        skill.tools = [str(tool) for tool in raw_tools] or ["*"]
-    skill.full_content = str(
-        payload.get("full_content") or _build_skill_md_from_payload(payload, curated.semver)
-    )
-    metadata = _coerce_any_dict(payload.get("metadata"))
-    metadata.update(
-        {
-            "installed_from_curated_id": curated.id,
-            "curated_revision_hash": curated.revision_hash,
-        }
-    )
-    skill.metadata = metadata
-    skill.parent_curated_id = curated.id
-    skill.semver = curated.semver
-    skill.revision_hash = curated.revision_hash
-    skill.version_label = curated.semver
-    skill.updated_at = datetime.now(UTC)
-    skill = await repo.update(skill)
-
-    resource_files = _coerce_string_dict(payload.get("resource_files"))
-    version = await _create_skill_version_snapshot(
-        db,
-        repo,
-        skill,
-        skill_md_content=skill.full_content or _build_skill_md_from_payload(payload, curated.semver),
-        resource_files=resource_files,
-        change_summary=data.change_summary or f"Upgraded from curated skill {curated.id}",
-        created_by="upgrade",
-    )
-    await db.commit()
-
-    return SkillLifecycleResponse(
-        action="upgrade",
-        skill=skill_to_response(skill),
-        version_number=version.version_number,
-        version_label=version.version_label,
     )
 
 

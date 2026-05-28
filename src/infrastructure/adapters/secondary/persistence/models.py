@@ -1361,12 +1361,6 @@ class Skill(Base):
         Integer, default=0, nullable=False, server_default="0"
     )
     version_label: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    # P2-4: curated / private skill library
-    parent_curated_id: Mapped[str | None] = mapped_column(
-        String, ForeignKey("curated_skills.id", ondelete="SET NULL"), nullable=True
-    )
-    semver: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    revision_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Relationships
     project: Mapped[Optional["Project"]] = relationship(foreign_keys=[project_id])
@@ -1440,70 +1434,6 @@ class SkillVersion(Base):
     __table_args__ = (
         UniqueConstraint("skill_id", "version_number", name="uq_skill_version_number"),
         Index("ix_skill_versions_skill_id", "skill_id"),
-    )
-
-
-class CuratedSkill(Base):
-    """
-    Curated skill registry entry (P2-4).
-
-    Represents an admin-approved skill available to every tenant via the
-    "精选库" tab. Forking creates a new row in ``skills`` scoped to the
-    caller's tenant with ``parent_curated_id`` set.
-    """
-
-    __tablename__ = "curated_skills"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    semver: Mapped[str] = mapped_column(String(32), nullable=False)
-    revision_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    source_skill_id: Mapped[str | None] = mapped_column(
-        String, ForeignKey("skills.id", ondelete="SET NULL"), nullable=True
-    )
-    source_tenant_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
-    approved_by: Mapped[str | None] = mapped_column(
-        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
-    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(20), default="active", server_default="active", nullable=False, index=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-
-class SkillSubmission(Base):
-    """
-    Tenant-submitted skill candidate awaiting admin review (P2-4).
-
-    Snapshots the submitter's skill payload; source_skill_id is intentionally
-    a loose reference (not a FK) so submissions survive the original skill's
-    deletion.
-    """
-
-    __tablename__ = "skill_submissions"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    submitter_tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    submitter_user_id: Mapped[str | None] = mapped_column(
-        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
-    source_skill_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    skill_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    proposed_semver: Mapped[str] = mapped_column(String(32), nullable=False)
-    submission_note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(20), default="pending", server_default="pending", nullable=False, index=True
-    )
-    reviewer_id: Mapped[str | None] = mapped_column(
-        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
-    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 

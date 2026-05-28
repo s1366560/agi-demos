@@ -65,7 +65,7 @@ Canonical routes are defined in `src/App.tsx`.
 | Tenant home | `/tenant`, `/tenant/:tenantId/overview` |
 | Agent workspace | `/tenant/:tenantId/agent-workspace/:conversation?` |
 | Tenant admin/product | `/projects`, `/users`, `/providers`, `/analytics`, `/events`, `/webhooks`, `/billing`, `/settings`, `/org-settings/*` |
-| Skills/plugins/MCP | `/skills`, `/curated-skills`, `/templates`, `/plugins`, `/mcp-servers`, `/runtimes` |
+| Skills/plugins/MCP | `/skills`, `/templates`, `/plugins`, `/mcp-servers`, `/runtimes` |
 | Workspaces | `/workspaces`, `/workspaces/new`, project-scoped workspace routes |
 | Instances/deploy/genes | `/instances`, `/instances/:instanceId`, `/deploy`, `/genes`, `/instance-templates` |
 | Project pages | `/tenant/:tenantId/project/:projectId/memories`, `/graph`, `/entities`, `/communities`, `/advanced-search`, `/schema/*`, `/blackboard`, `/playbooks` |

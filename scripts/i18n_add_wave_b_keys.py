@@ -15,32 +15,6 @@ from typing import Any
 WEB_LOCALES = Path("web/src/locales")
 
 ADDITIONS: dict[str, tuple[str, str]] = {
-    # --- skill.submit (SubmitSkillDialog) -----------------------------------
-    "skill.submit.successMessage": (
-        "Submitted to the curated review queue.",
-        "已提交至精选库审核队列",
-    ),
-    "skill.submit.titleWithName": (
-        'Submit "{{name}}" to curated',
-        '提交 "{{name}}" 到精选库',
-    ),
-    "skill.submit.titleGeneric": ("Submit to curated", "提交到精选库"),
-    "skill.submit.okText": ("Submit", "提交"),
-    "skill.submit.description": (
-        "After submission an admin reviews the Skill; once approved it is "
-        "published to the curated library and every tenant can fork it.",
-        "提交后管理员会审核此 Skill 的内容；通过后将发布到精选库，所有租户都可以 fork。",
-    ),
-    "skill.submit.versionLabel": ("Version (semver)", "版本号（semver）"),
-    "skill.submit.versionFormatHint": (
-        "Must follow MAJOR.MINOR.PATCH (e.g. 1.2.3)",
-        "格式需为 MAJOR.MINOR.PATCH（例如 1.2.3）",
-    ),
-    "skill.submit.noteLabel": ("Submission note (optional)", "提交备注（可选）"),
-    "skill.submit.notePlaceholder": (
-        "Why is this Skill worth adding to the curated library?",
-        "为什么这个 Skill 值得加入精选库？",
-    ),
     # --- mcp.tools (McpToolsTabV2) ------------------------------------------
     "mcp.tools.allServers": ("All servers", "全部服务器"),
     "mcp.tools.loading": ("Loading tools...", "加载工具中..."),

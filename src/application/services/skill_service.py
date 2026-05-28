@@ -414,9 +414,6 @@ class SkillService:
             spec_version=skill.spec_version,
             current_version=skill.current_version,
             version_label=skill.version_label,
-            parent_curated_id=skill.parent_curated_id,
-            semver=skill.semver,
-            revision_hash=skill.revision_hash,
         )
 
     async def get_skill_by_name(

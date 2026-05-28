@@ -15,10 +15,8 @@ import type {
   SkillContentResponse,
   SkillImportRequest,
   SkillZipImportRequest,
-  SkillInstallRequest,
   SkillLifecycleResponse,
   SkillPackageResponse,
-  SkillUpgradeRequest,
   SkillVersionDetailResponse,
   SkillVersionListResponse,
   TenantSkillConfigResponse,
@@ -145,23 +143,6 @@ export const skillAPI = {
    */
   exportPackage: async (skillId: string): Promise<SkillPackageResponse> => {
     return await api.get<SkillPackageResponse>(`/skills/${skillId}/export`);
-  },
-
-  /**
-   * Install a curated skill into the private library.
-   */
-  install: async (data: SkillInstallRequest): Promise<SkillLifecycleResponse> => {
-    return await api.post<SkillLifecycleResponse>('/skills/install', data);
-  },
-
-  /**
-   * Upgrade an installed Skill to a curated revision.
-   */
-  upgrade: async (
-    skillId: string,
-    data: SkillUpgradeRequest = {}
-  ): Promise<SkillLifecycleResponse> => {
-    return await api.post<SkillLifecycleResponse>(`/skills/${skillId}/upgrade`, data);
   },
 
   /**

@@ -417,7 +417,7 @@ export const ExecutionDagGraph = memo<ExecutionDagGraphProps>(
 
     return (
       <div
-        className={`flex min-h-0 flex-col overflow-hidden rounded-md border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark ${className}`}
+        className={`relative flex min-h-0 flex-col overflow-hidden rounded-md border border-border-light bg-surface-light dark:border-border-dark dark:bg-surface-dark ${className}`}
         style={{ minHeight }}
         data-fit-to-width={viewMode === 'fit' ? 'true' : undefined}
         data-testid="execution-dag-graph"
@@ -747,21 +747,24 @@ export const ExecutionDagGraph = memo<ExecutionDagGraphProps>(
               );
             })}
           </svg>
-          {showOverview ? (
-            <div className="pointer-events-auto absolute bottom-3 right-3 rounded-md border border-border-light bg-surface-light/95 p-1 shadow-sm dark:border-border-dark dark:bg-surface-dark/95">
-              <GraphMinimap
-                layout={layout}
-                selectedNodeId={selectedNodeId}
-                highlightedNodeId={highlightedNodeId}
-                viewport={viewport}
-                label={t('executionDag.overviewMap', { defaultValue: 'Graph overview map' })}
-                onCenterPoint={(x, y) => {
-                  centerGraphPoint(x, y);
-                }}
-              />
-            </div>
-          ) : null}
         </div>
+        {showOverview ? (
+          <div
+            className="pointer-events-auto absolute bottom-3 right-3 z-10 rounded-md border border-border-light bg-surface-light/95 p-1 shadow-sm dark:border-border-dark dark:bg-surface-dark/95"
+            data-testid="execution-dag-minimap-overlay"
+          >
+            <GraphMinimap
+              layout={layout}
+              selectedNodeId={selectedNodeId}
+              highlightedNodeId={highlightedNodeId}
+              viewport={viewport}
+              label={t('executionDag.overviewMap', { defaultValue: 'Graph overview map' })}
+              onCenterPoint={(x, y) => {
+                centerGraphPoint(x, y);
+              }}
+            />
+          </div>
+        ) : null}
       </div>
     );
   }

@@ -294,8 +294,6 @@
     "agentConfiguration": "Agent Configuration",
     "subagents": "Agents",
     "skills": "Skills",
-    "curatedSkills": "Curated Skills",
-    "skillReview": "Skill Review",
     "plugins": "Plugins",
     "templates": "Templates",
     "providers": "Model Services",
@@ -1234,16 +1232,12 @@
       "actions": {
         "view": "View details",
         "viewAria": "View skill details",
-        "submitToCurated": "Submit to curated library",
-        "submitToCuratedAria": "Submit skill to curated library",
         "edit": "Edit",
         "editAria": "Edit skill",
         "duplicate": "Duplicate",
         "duplicateAria": "Duplicate skill",
         "export": "Export",
         "exportAria": "Export skill package",
-        "upgrade": "Upgrade",
-        "upgradeAria": "Upgrade skill from curated library",
         "versions": "Versions",
         "versionsAria": "Manage skill versions",
         "delete": "Delete",
@@ -1274,11 +1268,6 @@
         "success": "Skill package exported",
         "failed": "Skill export failed"
       },
-      "upgrade": {
-        "success": "Skill upgraded",
-        "noop": "Skill is already on the latest curated revision",
-        "failed": "Skill upgrade failed"
-      },
       "versions": {
         "title": "Versions for {{name}}",
         "empty": "No saved versions yet",
@@ -1299,11 +1288,8 @@
         "refresh": "Refresh",
         "edit": "Edit",
         "export": "Export",
-        "upgrade": "Upgrade",
-        "upgrading": "Upgrading",
         "package": "Package",
         "identity": "Identity",
-        "lineage": "Lineage",
         "versions": "Versions",
         "metadata": "Metadata",
         "id": "ID",
@@ -1318,14 +1304,16 @@
         "project": "Project",
         "created": "Created",
         "updated": "Updated",
-        "parentCurated": "Curated source",
-        "semver": "SemVer",
-        "revisionHash": "Revision hash",
         "license": "License",
         "compatibility": "Compatibility",
         "specVersion": "Spec",
         "allowedToolsRaw": "Allowed tools",
         "fullContent": "SKILL.md",
+        "contentMode": "SKILL.md display mode",
+        "contentModes": {
+          "preview": "Preview",
+          "raw": "Source"
+        },
         "emptyContent": "No SKILL.md content saved",
         "emptyVersions": "No version snapshots yet",
         "notVersioned": "Filesystem skills are read-only and do not have database version snapshots",
@@ -1336,9 +1324,6 @@
         "rollbackFailed": "Skill rollback failed",
         "exportSuccess": "Skill package exported",
         "exportFailed": "Skill export failed",
-        "upgradeSuccess": "Skill upgraded",
-        "upgradeNoop": "Skill is already on the latest curated revision",
-        "upgradeFailed": "Skill upgrade failed",
         "readOnlySource": "This skill source is read-only",
         "versionCreatedBy": "{{author}} · {{date}}",
         "notSet": "Not set"
@@ -2191,16 +2176,20 @@
         "role": "Role"
       },
       "actions": {
-        "view": "View",
-        "viewInstance": "View {{name}}",
-        "restart": "Restart",
-        "restartInstance": "Restart {{name}}",
-        "restartConfirm": "Are you sure you want to restart this instance?",
-        "delete": "Delete",
-        "deleteInstance": "Delete {{name}}",
-        "deleteConfirm": "Are you sure you want to delete this instance? This action cannot be undone.",
         "scale": "Scale",
-        "removeMember": "Remove"
+        "scaleSuccess": "Scaled successfully",
+        "scaleFailed": "Scale failed",
+        "restartConfirm": "Are you sure you want to restart this instance?",
+        "restart": "Restart",
+        "restartSuccess": "Restart initiated",
+        "restartFailed": "Restart failed",
+        "deleteConfirm": "Are you sure you want to delete this instance?",
+        "delete": "Delete",
+        "viewInstance": "View instance",
+        "view": "View",
+        "restartInstance": "Restart instance",
+        "deleteInstance": "Delete instance",
+        "scaleTitle": "Scale Instance"
       },
       "pagination": {
         "previousPage": "Previous page",
@@ -2338,22 +2327,6 @@
         }
       },
       "emptyText": "No instances found",
-      "actions": {
-        "scale": "Scale",
-        "scaleSuccess": "Scaled successfully",
-        "scaleFailed": "Scale failed",
-        "restartConfirm": "Are you sure you want to restart this instance?",
-        "restart": "Restart",
-        "restartSuccess": "Restart initiated",
-        "restartFailed": "Restart failed",
-        "deleteConfirm": "Are you sure you want to delete this instance?",
-        "delete": "Delete",
-        "viewInstance": "View instance",
-        "view": "View",
-        "restartInstance": "Restart instance",
-        "deleteInstance": "Delete instance",
-        "scaleTitle": "Scale Instance"
-      },
       "members": {
         "title": "Instance Members",
         "description": "Manage who has access to this instance",
@@ -4088,8 +4061,7 @@
       },
       "delete": {
         "title": "Delete Memory",
-        "message": "Are you sure you want to delete this memory? This action cannot be undone.",
-        "actionLabel": "Delete memory"
+        "confirmation": "Are you sure you want to delete this memory? This action cannot be undone and will remove all associated graph data."
       },
       "errors": {
         "reprocessFailed": "Failed to start processing. Please try again."
@@ -4192,10 +4164,6 @@
           "word_count": "Word count: {{count}}",
           "char_count": "Character count: {{count}}"
         }
-      },
-      "delete": {
-        "title": "Delete Memory",
-        "confirmation": "Are you sure you want to delete this memory? This action cannot be undone and will remove all associated graph data."
       },
       "detail": {
         "edit_memory": "Edit Memory",
@@ -7313,37 +7281,6 @@
         "reasonLabel": "Please provide a reason for discarding:",
         "reasonPlaceholder": "e.g., Duplicate event, Stale data, Manual fix applied..."
       }
-    },
-    "skillReview": {
-      "pageTitle": "Skill Review (Admin)",
-      "pageDescription": "Review tenant-submitted Skill candidates. Approval publishes with the current version; rejection records a review note.",
-      "tabs": {
-        "pending": "Pending",
-        "approved": "Approved",
-        "rejected": "Rejected",
-        "withdrawn": "Withdrawn"
-      },
-      "approveTitle": "Approve Submission",
-      "rejectTitle": "Reject Submission",
-      "approveDescription": "Approving will publish this Skill snapshot to the curated library.",
-      "rejectDescription": "Rejecting will close this record and save your review note.",
-      "releaseVersion": "Release Version",
-      "trustSubmitter": "Keep submitter version (v{{version}})",
-      "bumpPatch": "Override as patch",
-      "bumpMinor": "Override as minor",
-      "bumpMajor": "Override as major",
-      "effectiveVersion": "Effective version:",
-      "deprecateNote": "(If an active version already exists from the same source, the previous version will be marked deprecated automatically)",
-      "notePlaceholder": "Review note (optional)",
-      "submissionNotePrefix": "Submission note:",
-      "reviewNotePrefix": "Review note:",
-      "noSubmissionSelected": "Select a submission before reviewing.",
-      "approveSuccess": "Submission approved",
-      "rejectSuccess": "Submission rejected",
-      "reviewFailed": "Review failed",
-      "approveOk": "Approve",
-      "rejectOk": "Reject",
-      "emptyDescription": "No {{status}} submissions"
     }
   },
   "system": {
@@ -7413,52 +7350,6 @@
     "signInSubtitle": "You must be signed in to approve a CLI login. After signing in, you will be returned here automatically.",
     "copyBackLink": "Copy return link",
     "footer": "Only approve codes you just generated yourself. A 30-day API key will be issued to the waiting CLI."
-  },
-  "skill": {
-    "submit": {
-      "successMessage": "Submitted to the curated review queue.",
-      "titleWithName": "Submit \"{{name}}\" to curated",
-      "titleGeneric": "Submit to curated",
-      "okText": "Submit",
-      "description": "After submission an admin reviews the Skill; once approved it is published to the curated library and every tenant can install it.",
-      "versionLabel": "Version (semver)",
-      "versionFormatHint": "Must follow MAJOR.MINOR.PATCH (e.g. 1.2.3)",
-      "noteLabel": "Submission note (optional)",
-      "notePlaceholder": "Why is this Skill worth adding to the curated library?",
-      "noSkillSelected": "Select a Skill before submitting.",
-      "failedMessage": "Submit failed"
-    },
-    "curated": {
-      "eyebrow": "Library",
-      "pageTitle": "Curated Skill Library",
-      "pageDescription": "The curated library contains Skill templates approved by admins. Install a version into your private library before modifying it.",
-      "tabCurated": "Curated",
-      "tabSubmissions": "My Submissions",
-      "publishedCount": "{{count}} published Skills",
-      "includeDeprecatedAria": "Include deprecated versions",
-      "includeDeprecatedLabel": "Include deprecated versions",
-      "emptyCurated": "No Skills published in the curated library yet",
-      "emptySubmissions": "No submissions yet",
-      "deprecatedSuffix": " (deprecated)",
-      "versionCount": " · {{count}} versions",
-      "installButton": "Install",
-      "installTitle": "Install \"{{name}}\" v{{version}}",
-      "installDialogContent": "Install this curated Skill version into your private library.",
-      "installOverwrite": "Overwrite an existing installed Skill from the same curated source",
-      "installOk": "Install",
-      "installSuccess": "Installed {{name}}",
-      "installFailed": "Install failed",
-      "noSkillSelected": "Select a curated Skill before installing.",
-      "withdrawSuccess": "Submission withdrawn",
-      "withdrawFailed": "Withdrawal failed",
-      "noteLabel": "Note:",
-      "reviewNoteLabel": "Review note:",
-      "withdrawConfirmTitle": "Withdraw this submission?",
-      "withdrawConfirmDescription": "After withdrawal the status becomes withdrawn and will no longer enter the review queue.",
-      "withdrawOk": "Withdraw",
-      "withdrawCancel": "Cancel",
-      "withdrawAction": "Withdraw"
-    }
   },
   "mcp": {
     "serverDrawer": {

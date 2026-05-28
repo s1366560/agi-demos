@@ -106,6 +106,29 @@ class TestProjectSandboxLifecycleService:
             last_accessed_at=datetime.now(UTC),
         )
 
+    def test_resolve_config_with_rw_volume_overrides(self, service) -> None:
+        """Should pass through read-write volume overrides."""
+        config = service._resolve_config(
+            profile=None,
+            config_override={"rw_volumes": {"/var/run/docker.sock": "/var/run/docker.sock"}},
+        )
+
+        assert config.rw_volumes["/var/run/docker.sock"] == "/var/run/docker.sock"
+
+    def test_resolve_config_includes_host_docker_socket_volume(
+        self, mock_repository, mock_adapter
+    ) -> None:
+        """Should include configured Docker socket mount as read-write volume."""
+        service = ProjectSandboxLifecycleService(
+            repository=mock_repository,
+            sandbox_adapter=mock_adapter,
+            host_docker_socket_volume={"/var/run/docker.sock": "/var/run/docker.sock"},
+        )
+
+        config = service._resolve_config(profile=None, config_override=None)
+
+        assert config.rw_volumes["/var/run/docker.sock"] == "/var/run/docker.sock"
+
     @pytest.mark.asyncio
     async def test_get_or_create_sandbox_creates_new(
         self, service, mock_repository, mock_adapter

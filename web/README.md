@@ -100,7 +100,7 @@ Routes are defined in `web/src/App.tsx` and are lazy-loaded. Key areas:
 | Auth | `/login`, `/login/callback/:provider`, `/invite/:token`, `/device`, `/force-change-password` |
 | Tenant | `/tenant/:tenantId/overview`, `/projects`, `/users`, `/providers`, `/settings` |
 | Agent | `/tenant/:tenantId/agent-workspace/:conversation?`, `/agents`, `/subagents`, `/agent-definitions`, `/agent-bindings` |
-| Skills/plugins | `/skills`, `/curated-skills`, `/templates`, `/plugins`, `/mcp-servers`, `/runtimes` |
+| Skills/plugins | `/skills`, `/templates`, `/plugins`, `/mcp-servers`, `/runtimes` |
 | Workspace | `/workspaces`, `/workspaces/new`, project-scoped workspace routes |
 | Instances/genes | `/instances`, `/instances/:instanceId`, `/deploy`, `/genes`, `/instance-templates` |
 | Project | `/tenant/:tenantId/project/:projectId/memories`, `/graph`, `/entities`, `/communities`, `/schema/*`, `/blackboard`, `/playbooks` |

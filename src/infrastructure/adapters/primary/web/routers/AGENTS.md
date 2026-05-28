@@ -22,7 +22,7 @@ Last checked against code: 2026-05-18.
 | Memory/graph/search | `memories.py`, `episodes.py`, `graph.py`, `schema.py`, `enhanced_search.py`, `recall.py`, `reflection.py` |
 | Workspace | `workspaces.py`, `workspace_plans.py`, `workspace_tasks.py`, `workspace_autonomy.py`, `workspace_chat.py`, `blackboard.py`, `topology.py` |
 | Sandbox/MCP/terminal | `sandbox/*`, `project_sandbox.py`, `mcp/*`, `terminal.py`, `tunnel.py` |
-| Product/admin | `skills.py`, `skills_curated.py`, `subagents.py`, `channels.py`, `instances.py`, `deploy.py`, `genes.py`, `audit.py`, `trust.py`, `observability.py`, `admin_dlq.py` |
+| Product/admin | `skills.py`, `subagents.py`, `channels.py`, `instances.py`, `deploy.py`, `genes.py`, `audit.py`, `trust.py`, `observability.py`, `admin_dlq.py` |
 
 ## Standard Endpoint Pattern
 

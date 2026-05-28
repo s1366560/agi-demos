@@ -74,7 +74,6 @@ from src.infrastructure.adapters.primary.web.routers import (
     security_ws,
     shares,
     skills,
-    skills_curated,
     smtp_config,
     subagents,
     support,
@@ -711,7 +710,6 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(workspace_chat.router)
 
     # Agent Capability System (L2 Skill + L3 SubAgent)
-    app.include_router(skills_curated.router)
     app.include_router(skills.router)
     app.include_router(tenant_skill_configs.router)
     app.include_router(subagents.router)

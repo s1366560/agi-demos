@@ -12,7 +12,6 @@ import { useNavigate } from 'react-router-dom';
 
 import { Input, Modal, Switch } from 'antd';
 import {
-  ArrowUpCircle,
   Copy,
   Download,
   Eye,
@@ -23,7 +22,6 @@ import {
   RefreshCw,
   RotateCcw,
   Search as SearchIcon,
-  Send,
   Trash2,
   Upload,
   UploadCloud,
@@ -38,7 +36,6 @@ import {
 } from '@/components/ui/lazyAntd';
 
 import { SkillModal } from '../../components/skill/SkillModal';
-import { SubmitSkillDialog } from '../../components/skill/SubmitSkillDialog';
 import { skillAPI } from '../../services/skillService';
 import {
   useSkillStore,
@@ -144,7 +141,6 @@ export const SkillList: FC = () => {
   const [importOverwrite, setImportOverwrite] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [editingSkill, setEditingSkill] = useState<SkillResponse | null>(null);
-  const [submittingSkill, setSubmittingSkill] = useState<SkillResponse | null>(null);
   const [versionSkill, setVersionSkill] = useState<SkillResponse | null>(null);
   const [versionRows, setVersionRows] = useState<SkillVersionResponse[]>([]);
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
@@ -164,7 +160,7 @@ export const SkillList: FC = () => {
         const searchLower = search.toLowerCase();
         const matchesName = skill.name.toLowerCase().includes(searchLower);
         const matchesDescription = skill.description.toLowerCase().includes(searchLower);
-        const matchesVersion = [skill.version_label, skill.semver].some((value) =>
+        const matchesVersion = [skill.version_label].some((value) =>
           value?.toLowerCase().includes(searchLower)
         );
         const matchesSource = [skill.source, skill.file_path].some((value) =>
@@ -306,23 +302,6 @@ export const SkillList: FC = () => {
       }
     },
     [message, t]
-  );
-
-  const handleUpgrade = useCallback(
-    async (skill: SkillResponse) => {
-      try {
-        const result = await skillAPI.upgrade(skill.id);
-        if (result.action === 'noop') {
-          message?.info(t('tenant.skills.upgrade.noop'));
-        } else {
-          message?.success(t('tenant.skills.upgrade.success'));
-          void listSkills();
-        }
-      } catch {
-        message?.error(t('tenant.skills.upgrade.failed'));
-      }
-    },
-    [listSkills, message, t]
   );
 
   const loadVersions = useCallback(
@@ -515,7 +494,7 @@ export const SkillList: FC = () => {
             return (
               <div
                 key={skill.id}
-                className="grid gap-4 border-b border-[oklch(0.9_0.006_255)] px-4 py-4 last:border-b-0 hover:bg-[oklch(0.97_0.004_255)] dark:border-[oklch(0.28_0.006_255)] dark:hover:bg-[oklch(0.21_0.006_255)] lg:grid-cols-[minmax(0,1fr)_140px_400px] lg:items-center"
+                className="grid gap-4 border-b border-[oklch(0.9_0.006_255)] px-4 py-4 last:border-b-0 hover:bg-[oklch(0.97_0.004_255)] dark:border-[oklch(0.28_0.006_255)] dark:hover:bg-[oklch(0.21_0.006_255)] lg:grid-cols-[minmax(0,1fr)_140px_340px] lg:items-center"
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -530,11 +509,11 @@ export const SkillList: FC = () => {
                     </button>
                     <StatusBadge status={skill.status} label={t(`common.status.${skill.status}`)} />
                     <SourceBadge source={source} label={t(`tenant.skills.source.${source}`)} />
-                    {skill.version_label || skill.semver || skill.current_version > 0 ? (
+                    {skill.version_label || skill.current_version > 0 ? (
                       <span
                         className={`inline-flex h-6 items-center rounded-full border border-[oklch(0.86_0.006_255)] px-2 text-[11px] font-medium ${mutedText}`}
                       >
-                        {skill.semver ?? skill.version_label ?? `#${String(skill.current_version)}`}
+                        {skill.version_label ?? `#${String(skill.current_version)}`}
                       </span>
                     ) : null}
                   </div>
@@ -611,18 +590,6 @@ export const SkillList: FC = () => {
                     <button
                       type="button"
                       onClick={() => {
-                        void handleUpgrade(skill);
-                      }}
-                      className={iconButton}
-                      title={t('tenant.skills.actions.upgrade')}
-                      aria-label={t('tenant.skills.actions.upgradeAria')}
-                      disabled={!managed}
-                    >
-                      <ArrowUpCircle size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
                         handleOpenVersions(skill);
                       }}
                       className={iconButton}
@@ -631,18 +598,6 @@ export const SkillList: FC = () => {
                       disabled={!managed}
                     >
                       <History size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSubmittingSkill(skill);
-                      }}
-                      className={iconButton}
-                      title={t('tenant.skills.actions.submitToCurated')}
-                      aria-label={t('tenant.skills.actions.submitToCuratedAria')}
-                      disabled={!managed}
-                    >
-                      <Send size={16} />
                     </button>
                     <LazyPopconfirm
                       title={t('tenant.skills.deleteConfirm')}
@@ -808,13 +763,6 @@ export const SkillList: FC = () => {
           </div>
         )}
       </Modal>
-      <SubmitSkillDialog
-        skill={submittingSkill}
-        open={submittingSkill !== null}
-        onClose={() => {
-          setSubmittingSkill(null);
-        }}
-      />
     </div>
   );
 };

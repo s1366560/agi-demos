@@ -218,9 +218,6 @@ export interface SkillResponse {
   spec_version: string;
   current_version: number;
   version_label: string | null;
-  parent_curated_id?: string | null;
-  semver?: string | null;
-  revision_hash?: string | null;
 }
 
 /**
@@ -311,17 +308,6 @@ export interface SkillZipImportRequest {
   scope?: 'tenant' | 'project' | undefined;
   project_id?: string | null | undefined;
   overwrite?: boolean | undefined;
-  change_summary?: string | null | undefined;
-}
-
-export interface SkillInstallRequest {
-  curated_id: string;
-  project_id?: string | null | undefined;
-  overwrite?: boolean | undefined;
-}
-
-export interface SkillUpgradeRequest {
-  curated_id?: string | null | undefined;
   change_summary?: string | null | undefined;
 }
 

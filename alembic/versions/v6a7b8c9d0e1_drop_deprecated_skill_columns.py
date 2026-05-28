@@ -17,10 +17,8 @@ after the deprecation of the legacy stats endpoint.
 The migration also scrubs the same five keys out of the JSON snapshots
 stored on ``curated_skills.payload`` and ``skill_submissions.skill_snapshot``
 so the rows stop carrying ghost fields. ``curated_skills.revision_hash``
-is **not** recomputed because the canonical hash input
-(``name``/``description``/``tools``/``full_content``/``metadata``/``scope``/
-``semver`` — see :func:`src.application.services.skill_revision.canonical_skill_dict`)
-never included any of the removed keys, so existing hashes remain stable.
+is **not** recomputed because the canonical hash input never included any of
+the removed keys, so existing hashes remain stable.
 
 Revision ID: v6a7b8c9d0e1
 Revises: u5f6a7b8c9d0

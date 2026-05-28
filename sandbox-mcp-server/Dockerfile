@@ -5,6 +5,9 @@
 # Build: docker build -t sandbox-mcp-server .
 # Run:   docker run -p 8765:8765 -v $(pwd)/workspace:/workspace sandbox-mcp-server
 
+ARG DOCKER_CLI_IMAGE=docker:cli
+FROM ${DOCKER_CLI_IMAGE} AS docker-cli
+
 FROM ubuntu:25.04
 
 LABEL maintainer="MemStack Team"
@@ -444,6 +447,11 @@ RUN chmod +x /etc/kasmvnc/xstartup.template
 # Entrypoint
 COPY scripts/entrypoint.sh /usr/local/bin/sandbox-entrypoint.sh
 RUN chmod +x /usr/local/bin/sandbox-entrypoint.sh
+
+# Docker CLI only. The daemon is supplied by an explicitly mounted Docker socket or
+# remote Docker context when a sandbox is allowed to inspect host/container state.
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
 
 # ====================
 # Final Setup

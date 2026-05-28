@@ -95,6 +95,7 @@ class UnifiedSandboxService(SandboxResourcePort):
         cpu_limit_override: str | None = None,
         host_source_volume: dict[str, str] | None = None,
         host_memstack_volume: dict[str, str] | None = None,
+        host_docker_socket_volume: dict[str, str] | None = None,
     ) -> None:
         """Initialize the unified sandbox service.
 
@@ -109,6 +110,7 @@ class UnifiedSandboxService(SandboxResourcePort):
             cpu_limit_override: Override for CPU limit (e.g. from config)
             host_source_volume: Host source volume mount (ro) (host_path -> container_path)
             host_memstack_volume: .memstack rw mount (host_path -> container_path)
+            host_docker_socket_volume: Docker socket rw mount (host_path -> container_path)
         """
         self._repository = repository
         self._adapter = sandbox_adapter
@@ -120,6 +122,7 @@ class UnifiedSandboxService(SandboxResourcePort):
         self._cpu_limit_override = cpu_limit_override
         self._host_source_volume = host_source_volume
         self._host_memstack_volume = host_memstack_volume
+        self._host_docker_socket_volume = host_docker_socket_volume
 
         # Per-project locks for in-process concurrency control
         self._project_locks: dict[str, asyncio.Lock] = {}
@@ -847,6 +850,8 @@ class UnifiedSandboxService(SandboxResourcePort):
                 config.desktop_enabled = config_override["desktop_enabled"]
             if "volumes" in config_override:
                 config.volumes.update(config_override["volumes"])
+            if "rw_volumes" in config_override:
+                config.rw_volumes.update(config_override["rw_volumes"])
 
         # Apply host source volume from global settings (read-only)
         if self._host_source_volume:
@@ -857,6 +862,11 @@ class UnifiedSandboxService(SandboxResourcePort):
         # Apply .memstack volume from global settings (read-write)
         if self._host_memstack_volume:
             for host_path, container_path in self._host_memstack_volume.items():
+                if host_path and container_path:
+                    config.rw_volumes[host_path] = container_path
+
+        if self._host_docker_socket_volume:
+            for host_path, container_path in self._host_docker_socket_volume.items():
                 if host_path and container_path:
                     config.rw_volumes[host_path] = container_path
 

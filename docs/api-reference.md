@@ -93,7 +93,7 @@ registered by the current router set.
 
 | Area | Paths |
 |---|---|
-| Skills | `/api/v1/skills/*`, `/api/v1/curated-skills/*`, `/api/v1/tenant-skill-configs/*` |
+| Skills | `/api/v1/skills/*`, `/api/v1/tenant-skill-configs/*` |
 | Channels and webhooks | `/api/v1/channels/*`, `/api/v1/webhooks/*`, `/api/v1/tenant-webhooks/*` |
 | Instances/deploy/gene market | `/api/v1/instances/*`, `/api/v1/deploys/*`, `/api/v1/genes/*`, `/api/v1/instance-templates/*` |
 | Audit/trust | `/api/v1/audit/*`, `/api/v1/trust/*` |

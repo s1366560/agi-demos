@@ -371,6 +371,14 @@ class Settings(BaseSettings):
         default="/workspace/.memstack",
         alias="SANDBOX_HOST_MEMSTACK_MOUNT_POINT",
     )  # Container path where .memstack is mounted (read-write overlay)
+    sandbox_docker_socket_enabled: bool = Field(
+        default=False,
+        alias="SANDBOX_DOCKER_SOCKET_ENABLED",
+    )
+    sandbox_docker_socket_path: str = Field(
+        default="/var/run/docker.sock",
+        alias="SANDBOX_DOCKER_SOCKET_PATH",
+    )
 
     # Workspace Persistence Settings
     workspace_sync_enabled: bool = Field(default=True, alias="WORKSPACE_SYNC_ENABLED")

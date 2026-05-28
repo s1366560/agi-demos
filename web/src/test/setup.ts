@@ -1507,7 +1507,7 @@ const commonTranslations: Record<string, string> = {
   'agent.lifecycle.error.description': 'Agent encountered an error',
   'agent.lifecycle.unknown.label': 'Unknown',
   'agent.lifecycle.unknown.description': 'Agent state is unknown',
-  // Wave C1: ProjectSettingsModal, MemoryDetailModal, MemoryManager, AdminSkillReview
+  // Wave C1: ProjectSettingsModal, MemoryDetailModal, MemoryManager
   'project.settings.nameLabel': 'Project Name *',
   'project.settings.namePlaceholder': 'Enter project name',
   'project.settings.descriptionLabel': 'Description',
@@ -1580,60 +1580,6 @@ const commonTranslations: Record<string, string> = {
     'Are you sure you want to delete this memory? This action cannot be undone.',
   'memory.manager.entitiesLabel': 'Entities',
   'memory.manager.relationshipsLabel': 'Relationships',
-  'admin.skillReview.pageTitle': 'Skill Review (Admin)',
-  'admin.skillReview.pageDescription':
-    'Review tenant-submitted Skill candidates. Approval publishes with the current version; rejection records a review note.',
-  'admin.skillReview.tabs.pending': 'Pending',
-  'admin.skillReview.tabs.approved': 'Approved',
-  'admin.skillReview.tabs.rejected': 'Rejected',
-  'admin.skillReview.tabs.withdrawn': 'Withdrawn',
-  'admin.skillReview.approveTitle': 'Approve Submission',
-  'admin.skillReview.rejectTitle': 'Reject Submission',
-  'admin.skillReview.approveDescription':
-    'Approving will publish this Skill snapshot to the curated library.',
-  'admin.skillReview.rejectDescription':
-    'Rejecting will close this record and save your review note.',
-  'admin.skillReview.releaseVersion': 'Release Version',
-  'admin.skillReview.trustSubmitter': 'Keep submitter version (v{{version}})',
-  'admin.skillReview.bumpPatch': 'Override as patch',
-  'admin.skillReview.bumpMinor': 'Override as minor',
-  'admin.skillReview.bumpMajor': 'Override as major',
-  'admin.skillReview.effectiveVersion': 'Effective version:',
-  'admin.skillReview.deprecateNote':
-    '(If an active version already exists from the same source, the previous version will be marked deprecated automatically)',
-  'admin.skillReview.notePlaceholder': 'Review note (optional)',
-  'admin.skillReview.submissionNotePrefix': 'Submission note:',
-  'admin.skillReview.reviewNotePrefix': 'Review note:',
-  'admin.skillReview.emptyDescription': 'No {{status}} submissions',
-
-  // Wave C2 — skill.curated.*
-  'skill.curated.pageTitle': 'Curated Skill Library',
-  'skill.curated.pageDescription':
-    'The curated library contains Skill templates approved by admins. All tenants can fork them to their private library to modify.',
-  'skill.curated.tabCurated': 'Curated',
-  'skill.curated.tabSubmissions': 'My Submissions',
-  'skill.curated.publishedCount': '{{count}} published Skills',
-  'skill.curated.includeDeprecatedAria': 'Include deprecated versions',
-  'skill.curated.includeDeprecatedLabel': 'Include deprecated versions',
-  'skill.curated.emptyCurated': 'No Skills published in the curated library yet',
-  'skill.curated.emptySubmissions': 'No submissions yet',
-  'skill.curated.deprecatedSuffix': ' (deprecated)',
-  'skill.curated.versionCount': ' · {{count}} versions',
-  'skill.curated.forkButton': 'Fork to private library',
-  'skill.curated.forkDialogContent': 'Choose what to include when copying to your private library:',
-  'skill.curated.forkIncludeExecutor': 'Executor (tools + full_content)',
-  'skill.curated.forkIncludeMetadata': 'Metadata',
-  'skill.curated.withdrawSuccess': 'Submission withdrawn',
-  'skill.curated.withdrawFailed': 'Withdrawal failed',
-  'skill.curated.noteLabel': 'Note:',
-  'skill.curated.reviewNoteLabel': 'Review note:',
-  'skill.curated.withdrawConfirmTitle': 'Withdraw this submission?',
-  'skill.curated.withdrawConfirmDescription':
-    'After withdrawal the status becomes withdrawn and will no longer enter the review queue.',
-  'skill.curated.withdrawOk': 'Withdraw',
-  'skill.curated.withdrawCancel': 'Cancel',
-  'skill.curated.withdrawAction': 'Withdraw',
-
   // Wave C2 — memory.create.*
   'memory.create.title': 'Create Memory',
   'memory.create.tabBasic': 'Basic Info',

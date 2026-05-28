@@ -30,6 +30,7 @@ const conversationsState = {
       status: 'idle',
     },
   ],
+  conversationsLoading: false,
   hasMoreConversations: false,
 };
 
@@ -53,10 +54,6 @@ vi.mock('@/stores/agentV3', () => ({
 vi.mock('@/stores/agent/conversationsStore', () => ({
   useConversationsStore: (selector: (state: typeof conversationsState) => unknown) =>
     selector(conversationsState),
-}));
-
-vi.mock('@/stores/agent/timelineStore', () => ({
-  useIsLoadingHistory: () => false,
 }));
 
 vi.mock('@/stores/project', () => ({
@@ -172,6 +169,7 @@ function LocationProbe() {
 describe('TenantChatSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    agentState.activeConversationId = 'conv-1';
     agentState.createNewConversation.mockResolvedValue('conv-new');
     conversationsState.conversations = [
       {
@@ -181,6 +179,7 @@ describe('TenantChatSidebar', () => {
         status: 'idle',
       },
     ];
+    conversationsState.conversationsLoading = false;
     conversationsState.hasMoreConversations = false;
     projectState.projects = [
       { id: 'project-1', name: 'Project One' },
@@ -243,6 +242,17 @@ describe('TenantChatSidebar', () => {
     expect(
       projectSwitcher.compareDocumentPosition(conversation) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+
+  it('keeps the conversation list visible while switching session history', () => {
+    conversationsState.conversationsLoading = false;
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace/conv-1?projectId=project-1',
+    });
+
+    expect(screen.getByText('Conversation One')).toBeInTheDocument();
+    expect(screen.queryByText('No conversations yet')).not.toBeInTheDocument();
   });
 
   it('does not render conversation icons or tooltips when collapsed', () => {
@@ -382,5 +392,92 @@ describe('TenantChatSidebar', () => {
 
     expect(screen.getByRole('button', { name: /API Workspace/ })).toBeInTheDocument();
     expect(screen.queryByText('Unknown workspace')).not.toBeInTheDocument();
+  });
+
+  it('scrolls the selected conversation into view on distant session switches', async () => {
+    agentState.activeConversationId = 'conv-1';
+    conversationsState.conversations = Array.from({ length: 50 }, (_, index) => {
+      const ordinal = index === 39 ? 'Forty' : `${index + 1}`;
+      return {
+        id: `conv-${index + 1}`,
+        title: `Conversation ${ordinal}`,
+        created_at: '2026-04-17T00:00:00.000Z',
+        status: 'idle',
+      };
+    });
+
+    const getBoundingClientRect = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.classList.contains('custom-scrollbar')) {
+          return {
+            bottom: 100,
+            height: 100,
+            left: 0,
+            right: 256,
+            top: 0,
+            width: 256,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          };
+        }
+        if (this.textContent?.includes('Conversation Forty')) {
+          const containerScrollTop =
+            this.closest('.custom-scrollbar') instanceof HTMLElement
+              ? this.closest('.custom-scrollbar')?.scrollTop || 0
+              : 0;
+          const top = 420 - containerScrollTop;
+          return {
+            bottom: top + 40,
+            height: 40,
+            left: 0,
+            right: 256,
+            top,
+            width: 256,
+            x: 0,
+            y: top,
+            toJSON: () => ({}),
+          };
+        }
+        return {
+          bottom: 40,
+          height: 40,
+          left: 0,
+          right: 256,
+          top: 0,
+          width: 256,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        };
+      });
+
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return this.classList.contains('custom-scrollbar') ? 100 : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get() {
+        return this.textContent?.includes('Conversation Forty') ? 40 : 0;
+      },
+    });
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace/conv-40?projectId=project-1',
+    });
+
+    const activeItem = await screen.findByText('Conversation Forty');
+    const scrollContainer = activeItem.closest('.custom-scrollbar');
+
+    expect(scrollContainer).toBeInstanceOf(HTMLElement);
+    await waitFor(() => {
+      expect((scrollContainer as HTMLElement).scrollTop).toBe(390);
+    });
+
+    getBoundingClientRect.mockRestore();
   });
 });

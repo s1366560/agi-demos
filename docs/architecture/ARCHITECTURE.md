@@ -61,7 +61,7 @@ Major router groups:
 - Memories, episodes, graph, schema, recall, reflection, enhanced search.
 - Workspace, workspace plans/tasks/autonomy/events/chat, blackboard, topology.
 - Sandbox, project sandbox, terminal, MCP.
-- Skills, curated skills, channels, webhooks, instances, deploy, genes, audit, trust,
+- Skills, channels, webhooks, instances, deploy, genes, audit, trust,
   observability and admin DLQ.
 
 See [../api-reference.md](../api-reference.md) for route families.

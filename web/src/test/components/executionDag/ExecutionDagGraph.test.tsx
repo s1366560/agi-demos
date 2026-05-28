@@ -76,7 +76,10 @@ describe('ExecutionDagGraph', () => {
     expect(screen.getByLabelText('Center current or root node')).toBeInTheDocument();
     expect(screen.getByLabelText('Toggle overview map')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('Download SVG')).toBeInTheDocument();
-    expect(screen.getByTestId('execution-dag-minimap')).toBeInTheDocument();
+    const overviewOverlay = screen.getByTestId('execution-dag-minimap-overlay');
+    expect(overviewOverlay).toContainElement(screen.getByTestId('execution-dag-minimap'));
+    expect(screen.getByTestId('execution-dag-graph')).toContainElement(overviewOverlay);
+    expect(screen.getByTestId('execution-dag-canvas')).not.toContainElement(overviewOverlay);
   });
 
   it('supports zoom, pan mode, overview toggle, and keyboard shortcuts', () => {

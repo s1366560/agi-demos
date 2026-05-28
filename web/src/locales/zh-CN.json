@@ -294,8 +294,6 @@
     "agentConfiguration": "智能体配置",
     "subagents": "Agents",
     "skills": "技能",
-    "curatedSkills": "精选技能库",
-    "skillReview": "技能审核",
     "plugins": "插件",
     "templates": "模板市场",
     "providers": "模型服务",
@@ -1945,16 +1943,12 @@
       "actions": {
         "view": "查看详情",
         "viewAria": "查看技能详情",
-        "submitToCurated": "提交到精选库",
-        "submitToCuratedAria": "提交技能到精选库",
         "edit": "编辑",
         "editAria": "编辑技能",
         "duplicate": "复制",
         "duplicateAria": "复制技能",
         "export": "导出",
         "exportAria": "导出技能包",
-        "upgrade": "升级",
-        "upgradeAria": "从精选库升级技能",
         "versions": "版本",
         "versionsAria": "管理技能版本",
         "delete": "删除",
@@ -1985,11 +1979,6 @@
         "success": "技能包已导出",
         "failed": "技能导出失败"
       },
-      "upgrade": {
-        "success": "技能已升级",
-        "noop": "技能已是最新精选版本",
-        "failed": "技能升级失败"
-      },
       "versions": {
         "title": "{{name}} 的版本",
         "empty": "暂无已保存版本",
@@ -2010,11 +1999,8 @@
         "refresh": "刷新",
         "edit": "编辑",
         "export": "导出",
-        "upgrade": "升级",
-        "upgrading": "升级中",
         "package": "技能包",
         "identity": "标识",
-        "lineage": "来源",
         "versions": "版本",
         "metadata": "元数据",
         "id": "ID",
@@ -2029,14 +2015,16 @@
         "project": "项目",
         "created": "创建时间",
         "updated": "更新时间",
-        "parentCurated": "精选来源",
-        "semver": "SemVer",
-        "revisionHash": "修订哈希",
         "license": "许可证",
         "compatibility": "兼容性",
         "specVersion": "规范",
         "allowedToolsRaw": "允许工具",
         "fullContent": "SKILL.md",
+        "contentMode": "SKILL.md 显示模式",
+        "contentModes": {
+          "preview": "预览",
+          "raw": "原文"
+        },
         "emptyContent": "未保存 SKILL.md 内容",
         "emptyVersions": "暂无版本快照",
         "notVersioned": "文件系统技能为只读来源，不包含数据库版本快照",
@@ -2047,9 +2035,6 @@
         "rollbackFailed": "技能回滚失败",
         "exportSuccess": "技能包已导出",
         "exportFailed": "技能导出失败",
-        "upgradeSuccess": "技能已升级",
-        "upgradeNoop": "技能已是最新精选版本",
-        "upgradeFailed": "技能升级失败",
         "readOnlySource": "此技能来源为只读",
         "versionCreatedBy": "{{author}} · {{date}}",
         "notSet": "未设置"
@@ -2349,16 +2334,20 @@
         "role": "角色"
       },
       "actions": {
-        "view": "查看",
-        "viewInstance": "查看 {{name}}",
-        "restart": "重启",
-        "restartInstance": "重启 {{name}}",
-        "restartConfirm": "确定要重启此实例吗？",
-        "delete": "删除",
-        "deleteInstance": "删除 {{name}}",
-        "deleteConfirm": "确定要删除此实例吗？此操作不可撤销。",
         "scale": "扩缩容",
-        "removeMember": "移除"
+        "scaleSuccess": "扩缩容成功",
+        "scaleFailed": "扩缩容失败",
+        "restartConfirm": "确定要重启此实例吗？",
+        "restart": "重启",
+        "restartSuccess": "已开始重启",
+        "restartFailed": "重启失败",
+        "deleteConfirm": "确定要删除此实例吗？",
+        "delete": "删除",
+        "viewInstance": "查看实例",
+        "view": "查看",
+        "restartInstance": "重启实例",
+        "deleteInstance": "删除实例",
+        "scaleTitle": "扩缩容实例"
       },
       "pagination": {
         "previousPage": "上一页",
@@ -2496,22 +2485,6 @@
         }
       },
       "emptyText": "未找到实例",
-      "actions": {
-        "scale": "扩缩容",
-        "scaleSuccess": "扩缩容成功",
-        "scaleFailed": "扩缩容失败",
-        "restartConfirm": "确定要重启此实例吗？",
-        "restart": "重启",
-        "restartSuccess": "已开始重启",
-        "restartFailed": "重启失败",
-        "deleteConfirm": "确定要删除此实例吗？",
-        "delete": "删除",
-        "viewInstance": "查看实例",
-        "view": "查看",
-        "restartInstance": "重启实例",
-        "deleteInstance": "删除实例",
-        "scaleTitle": "扩缩容实例"
-      },
       "members": {
         "title": "实例成员",
         "description": "管理谁可以访问此实例",
@@ -4099,8 +4072,7 @@
       },
       "delete": {
         "title": "删除记忆",
-        "message": "确定要删除此记忆吗？此操作无法撤消。",
-        "actionLabel": "删除记忆"
+        "confirmation": "您确定要删除此记忆吗？此操作无法撤销，并将删除所有相关的图谱数据。"
       },
       "errors": {
         "reprocessFailed": "启动处理失败，请重试。"
@@ -4203,10 +4175,6 @@
           "word_count": "字数：{{count}}",
           "char_count": "字符数：{{count}}"
         }
-      },
-      "delete": {
-        "title": "删除记忆",
-        "confirmation": "您确定要删除此记忆吗？此操作无法撤销，并将删除所有相关的图谱数据。"
       },
       "detail": {
         "edit_memory": "编辑记忆",
@@ -7336,37 +7304,6 @@
         "cleanupResolvedDesc": "这将永久删除所有已解决消息。此操作无法撤销。"
       },
       "errorTypeDistribution": "错误类型分布"
-    },
-    "skillReview": {
-      "pageTitle": "Skill 审核（管理员）",
-      "pageDescription": "审核由租户提交的 Skill 候选。通过后会以当前版本号发布到精选库；驳回会记录审核意见。",
-      "tabs": {
-        "pending": "待审核",
-        "approved": "已通过",
-        "rejected": "已驳回",
-        "withdrawn": "已撤回"
-      },
-      "approveTitle": "通过审核",
-      "rejectTitle": "驳回提交",
-      "approveDescription": "审核通过将把此 Skill 快照发布到精选库。",
-      "rejectDescription": "驳回提交将关闭此记录并记录你的审核意见。",
-      "releaseVersion": "发布版本号",
-      "trustSubmitter": "沿用提交者版本 (v{{version}})",
-      "bumpPatch": "覆盖为 patch",
-      "bumpMinor": "覆盖为 minor",
-      "bumpMajor": "覆盖为 major",
-      "effectiveVersion": "最终发布版本：",
-      "deprecateNote": "（若同一来源已有激活版本，旧版本会自动标记为 deprecated）",
-      "notePlaceholder": "审核意见（可选）",
-      "submissionNotePrefix": "提交备注：",
-      "reviewNotePrefix": "审核意见：",
-      "noSubmissionSelected": "请先选择要审核的提交。",
-      "approveSuccess": "提交已通过审核",
-      "rejectSuccess": "提交已驳回",
-      "reviewFailed": "审核失败",
-      "approveOk": "通过",
-      "rejectOk": "驳回",
-      "emptyDescription": "暂无 {{status}} 的提交"
     }
   },
   "system": {
@@ -7436,52 +7373,6 @@
     "signInSubtitle": "您必须登录后才能批准 CLI 登录。登录后将自动返回此页。",
     "copyBackLink": "复制返回链接",
     "footer": "仅批准您自己刚刚生成的代码。系统将向等待中的 CLI 颁发 30 天 API 密钥。"
-  },
-  "skill": {
-    "submit": {
-      "successMessage": "已提交至精选库审核队列",
-      "titleWithName": "提交 \"{{name}}\" 到精选库",
-      "titleGeneric": "提交到精选库",
-      "okText": "提交",
-      "description": "提交后管理员会审核此 Skill 的内容；通过后将发布到精选库，所有租户都可以安装。",
-      "versionLabel": "版本号（semver）",
-      "versionFormatHint": "格式需为 MAJOR.MINOR.PATCH（例如 1.2.3）",
-      "noteLabel": "提交备注（可选）",
-      "notePlaceholder": "为什么这个 Skill 值得加入精选库？",
-      "noSkillSelected": "请先选择要提交的 Skill。",
-      "failedMessage": "提交失败"
-    },
-    "curated": {
-      "eyebrow": "库",
-      "pageTitle": "精选 Skill 库",
-      "pageDescription": "精选库包含管理员审核通过的 Skill 模板。先将指定版本安装到私有库，再进行修改。",
-      "tabCurated": "精选库",
-      "tabSubmissions": "我的提交",
-      "publishedCount": "{{count}} 个已发布 Skill",
-      "includeDeprecatedAria": "包含已弃用版本",
-      "includeDeprecatedLabel": "包含已弃用版本",
-      "emptyCurated": "精选库暂无已发布的 Skill",
-      "emptySubmissions": "暂无提交记录",
-      "deprecatedSuffix": "（已弃用）",
-      "versionCount": " · {{count}} 个版本",
-      "installButton": "安装",
-      "installTitle": "安装 “{{name}}” v{{version}}",
-      "installDialogContent": "将这个精选 Skill 版本安装到你的私有库。",
-      "installOverwrite": "覆盖来自同一精选来源的已安装 Skill",
-      "installOk": "安装",
-      "installSuccess": "已安装 {{name}}",
-      "installFailed": "安装失败",
-      "noSkillSelected": "请先选择要安装的精选 Skill。",
-      "withdrawSuccess": "已撤回提交",
-      "withdrawFailed": "撤回失败",
-      "noteLabel": "备注：",
-      "reviewNoteLabel": "审核意见：",
-      "withdrawConfirmTitle": "撤回此提交？",
-      "withdrawConfirmDescription": "撤回后状态变为 withdrawn，不再进入审核队列。",
-      "withdrawOk": "撤回",
-      "withdrawCancel": "取消",
-      "withdrawAction": "撤回"
-    }
   },
   "mcp": {
     "serverDrawer": {

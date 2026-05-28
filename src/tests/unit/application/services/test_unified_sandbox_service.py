@@ -107,6 +107,20 @@ class TestUnifiedSandboxServiceInit:
         assert service._adapter is mock_adapter
         assert service._distributed_lock is mock_lock
 
+    def test_resolve_config_includes_host_docker_socket_volume(
+        self, mock_repository, mock_adapter
+    ):
+        """Service should pass configured Docker socket mount to sandbox config."""
+        service = UnifiedSandboxService(
+            repository=mock_repository,
+            sandbox_adapter=mock_adapter,
+            host_docker_socket_volume={"/var/run/docker.sock": "/var/run/docker.sock"},
+        )
+
+        config = service._resolve_config(profile=None, config_override=None)
+
+        assert config.rw_volumes["/var/run/docker.sock"] == "/var/run/docker.sock"
+
 
 class TestGetOrCreate:
     """Test get_or_create method."""
@@ -807,6 +821,20 @@ class TestConfigResolution:
 
         assert config.memory_limit == "4g"
         assert config.cpu_limit == "2"
+
+    def test_resolve_config_with_rw_volume_overrides(self):
+        """Should apply read-write volume overrides."""
+        service = UnifiedSandboxService(
+            repository=AsyncMock(),
+            sandbox_adapter=AsyncMock(),
+        )
+
+        config = service._resolve_config(
+            profile=None,
+            config_override={"rw_volumes": {"/var/run/docker.sock": "/var/run/docker.sock"}},
+        )
+
+        assert config.rw_volumes["/var/run/docker.sock"] == "/var/run/docker.sock"
 
 
 class TestLockManagement:

@@ -1,6 +1,6 @@
 # pyright: basic
 """Wave C batch 1 — add i18n keys for ProjectSettingsModal, MemoryDetailModal,
-MemoryManager, AdminSkillReview.
+MemoryManager.
 
 Idempotent: deep-merges into web/src/locales/{en-US,zh-CN}.json.
 """
@@ -104,34 +104,7 @@ EN = {
             "entitiesLabel": "Entities",
             "relationshipsLabel": "Relationships",
         },
-    },
-    "admin": {
-        "skillReview": {
-            "pageTitle": "Skill Review (Admin)",
-            "pageDescription": "Review tenant-submitted Skill candidates. Approval publishes with the current version; rejection records a review note.",
-            "tabs": {
-                "pending": "Pending",
-                "approved": "Approved",
-                "rejected": "Rejected",
-                "withdrawn": "Withdrawn",
-            },
-            "approveTitle": "Approve Submission",
-            "rejectTitle": "Reject Submission",
-            "approveDescription": "Approving will publish this Skill snapshot to the curated library.",
-            "rejectDescription": "Rejecting will close this record and save your review note.",
-            "releaseVersion": "Release Version",
-            "trustSubmitter": "Keep submitter version (v{{version}})",
-            "bumpPatch": "Override as patch",
-            "bumpMinor": "Override as minor",
-            "bumpMajor": "Override as major",
-            "effectiveVersion": "Effective version:",
-            "deprecateNote": "(If an active version already exists from the same source, the previous version will be marked deprecated automatically)",
-            "notePlaceholder": "Review note (optional)",
-            "submissionNotePrefix": "Submission note:",
-            "reviewNotePrefix": "Review note:",
-            "emptyDescription": "No {{status}} submissions",
-        }
-    },
+    }
 }
 
 ZH = {
@@ -225,34 +198,7 @@ ZH = {
             "entitiesLabel": "实体",
             "relationshipsLabel": "关系",
         },
-    },
-    "admin": {
-        "skillReview": {
-            "pageTitle": "Skill 审核（管理员）",
-            "pageDescription": "审核由租户提交的 Skill 候选。通过后会以当前版本号发布到精选库；驳回会记录审核意见。",
-            "tabs": {
-                "pending": "待审核",
-                "approved": "已通过",
-                "rejected": "已驳回",
-                "withdrawn": "已撤回",
-            },
-            "approveTitle": "通过审核",
-            "rejectTitle": "驳回提交",
-            "approveDescription": "审核通过将把此 Skill 快照发布到精选库。",
-            "rejectDescription": "驳回提交将关闭此记录并记录你的审核意见。",
-            "releaseVersion": "发布版本号",
-            "trustSubmitter": "沿用提交者版本 (v{{version}})",
-            "bumpPatch": "覆盖为 patch",
-            "bumpMinor": "覆盖为 minor",
-            "bumpMajor": "覆盖为 major",
-            "effectiveVersion": "最终发布版本：",
-            "deprecateNote": "（若同一来源已有激活版本，旧版本会自动标记为 deprecated）",
-            "notePlaceholder": "审核意见（可选）",
-            "submissionNotePrefix": "提交备注：",
-            "reviewNotePrefix": "审核意见：",
-            "emptyDescription": "暂无 {{status}} 的提交",
-        }
-    },
+    }
 }
 
 

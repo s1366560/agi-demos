@@ -93,10 +93,6 @@ class Skill:
     # Version tracking
     current_version: int = 0
     version_label: str | None = None
-    # P2-4 curated library lineage
-    parent_curated_id: str | None = None
-    semver: str | None = None
-    revision_hash: str | None = None
 
     _NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     _NAME_MAX_LENGTH = 64
@@ -184,9 +180,6 @@ class Skill:
             "spec_version": self.spec_version,
             "current_version": self.current_version,
             "version_label": self.version_label,
-            "parent_curated_id": self.parent_curated_id,
-            "semver": self.semver,
-            "revision_hash": self.revision_hash,
         }
 
     @classmethod
@@ -216,9 +209,6 @@ class Skill:
             spec_version=data.get("spec_version", "1.0"),
             current_version=data.get("current_version", 0),
             version_label=data.get("version_label"),
-            parent_curated_id=data.get("parent_curated_id"),
-            semver=data.get("semver"),
-            revision_hash=data.get("revision_hash"),
         )
 
     @classmethod

@@ -1,0 +1,155 @@
+{
+  "id": "docker-compose-plugin",
+  "kind": "runtime_tool",
+  "name": "Docker Compose Plugin",
+  "description": "Configurable Docker Compose runtime tool with sandbox-safe Docker daemon selection.",
+  "version": "1.0.0",
+  "channels": [],
+  "providers": [],
+  "skills": ["docker-compose"],
+  "contracts": {
+    "tools": ["docker_compose"],
+    "skills": ["docker-compose"],
+    "commands": ["docker-compose"],
+    "services": ["docker_compose:defaults"]
+  },
+  "activation": {
+    "onStartup": false,
+    "onTools": ["docker_compose"],
+    "onCommands": ["docker-compose"]
+  },
+  "commandAliases": [
+    {
+      "name": "docker-compose",
+      "kind": "runtime-slash",
+      "description": "Run Docker Compose through the configured plugin environment.",
+      "tool": "docker_compose"
+    }
+  ],
+  "toolMetadata": {
+    "docker_compose": {
+      "description": "Run any docker compose subcommand with configured Docker daemon isolation.",
+      "sideEffects": ["container_runtime_mutation", "filesystem_read_write", "network"]
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "docker_bin": {
+        "type": "string",
+        "default": "docker"
+      },
+      "docker_host": {
+        "type": "string"
+      },
+      "docker_context": {
+        "type": "string"
+      },
+      "client_workdir": {
+        "type": "string"
+      },
+      "daemon_workdir": {
+        "type": "string"
+      },
+      "allow_host_socket_from_sandbox": {
+        "type": "boolean",
+        "default": false
+      },
+      "default_timeout_seconds": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 600
+      },
+      "output_limit_chars": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 40000
+      },
+      "allowed_project_roots": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "default": []
+      },
+      "allowed_client_roots": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "default": []
+      },
+      "path_mappings": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "container_path": {
+              "type": "string"
+            },
+            "daemon_path": {
+              "type": "string"
+            }
+          },
+          "required": ["container_path", "daemon_path"]
+        },
+        "default": []
+      }
+    }
+  },
+  "uiHints": {
+    "docker_bin": {
+      "label": "Docker CLI"
+    },
+    "docker_host": {
+      "label": "Docker Host",
+      "placeholder": "tcp://docker:2375"
+    },
+    "docker_context": {
+      "label": "Docker Context"
+    },
+    "client_workdir": {
+      "label": "Client Workdir",
+      "help": "Path readable by the API/plugin process for compose files."
+    },
+    "daemon_workdir": {
+      "label": "Docker Daemon Workdir",
+      "help": "Equivalent project path on the machine running the Docker daemon."
+    },
+    "allow_host_socket_from_sandbox": {
+      "label": "Allow Host Socket From Sandbox"
+    },
+    "default_timeout_seconds": {
+      "label": "Default Timeout Seconds"
+    },
+    "output_limit_chars": {
+      "label": "Output Limit Characters"
+    },
+    "allowed_project_roots": {
+      "label": "Allowed Project Roots"
+    },
+    "allowed_client_roots": {
+      "label": "Allowed Client Roots"
+    },
+    "path_mappings": {
+      "label": "Path Mappings"
+    }
+  },
+  "envVars": {
+    "docker-compose": [
+      "MEMSTACK_DOCKER_COMPOSE_BIN",
+      "MEMSTACK_DOCKER_COMPOSE_DOCKER_HOST",
+      "MEMSTACK_DOCKER_COMPOSE_CONTEXT",
+      "MEMSTACK_DOCKER_COMPOSE_CLIENT_WORKDIR",
+      "MEMSTACK_DOCKER_COMPOSE_DAEMON_WORKDIR",
+      "MEMSTACK_DOCKER_COMPOSE_PATH_MAPPINGS",
+      "MEMSTACK_DOCKER_COMPOSE_ALLOW_HOST_SOCKET_FROM_SANDBOX",
+      "MEMSTACK_DOCKER_COMPOSE_TIMEOUT_SECONDS",
+      "MEMSTACK_DOCKER_COMPOSE_ALLOWED_ROOTS",
+      "MEMSTACK_DOCKER_COMPOSE_ALLOWED_CLIENT_ROOTS",
+      "MEMSTACK_DOCKER_COMPOSE_OUTPUT_LIMIT_CHARS"
+    ]
+  }
+}

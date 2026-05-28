@@ -31,7 +31,6 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
-import { useIsLoadingHistory } from '@/stores/agent/timelineStore';
 import { useAgentV3Store } from '@/stores/agentV3';
 import { useProjectStore } from '@/stores/project';
 import {
@@ -64,6 +63,7 @@ interface ConversationWithProject extends Conversation {
 }
 
 interface ConversationItemProps {
+  activeItemRef?: React.Ref<HTMLDivElement> | undefined;
   conversation: ConversationWithProject;
   grouped?: boolean | undefined;
   isActive: boolean;
@@ -283,7 +283,7 @@ function buildConversationSections(
 
 // Memoized ConversationItem to prevent unnecessary re-renders (rerender-memo)
 const ConversationItem: React.FC<ConversationItemProps> = memo(
-  ({ conversation, grouped = false, isActive, onSelect, onDelete, onRename }) => {
+  ({ activeItemRef, conversation, grouped = false, isActive, onSelect, onDelete, onRename }) => {
     const { t } = useTranslation();
     const timeAgo = React.useMemo(() => {
       try {
@@ -333,6 +333,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
 
     return (
       <div
+        ref={activeItemRef}
         role="button"
         tabIndex={0}
         onClick={onSelect}
@@ -480,6 +481,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const widthRef = useRef(SIDEBAR_DEFAULT_WIDTH);
   const sidebarRef = useRef<HTMLElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const activeConversationItemRef = useRef<HTMLDivElement | null>(null);
 
   // Internal state for uncontrolled mode
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -515,15 +517,15 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       deleteConversation: state.deleteConversation,
     }))
   );
-  const isLoadingHistory = useIsLoadingHistory();
   const currentWorkspace = useCurrentWorkspace();
   const workspaceTasks = useWorkspaceTasks();
   const workspaces = useWorkspaces();
   const { loadWorkspaceSurface } = useWorkspaceActions();
 
-  const { conversations, hasMoreConversations } = useConversationsStore(
+  const { conversations, conversationsLoading, hasMoreConversations } = useConversationsStore(
     useShallow((state) => ({
       conversations: state.conversations,
+      conversationsLoading: state.conversationsLoading,
       hasMoreConversations: state.hasMoreConversations,
     }))
   );
@@ -541,6 +543,23 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     if (!location.search) return null;
     return new URLSearchParams(location.search).get('workspaceId');
   }, [location.search]);
+  const routeConversationId = useMemo(() => {
+    const marker = '/agent-workspace/';
+    const markerIndex = location.pathname.indexOf(marker);
+    if (markerIndex === -1) {
+      return null;
+    }
+    const encodedId = location.pathname.slice(markerIndex + marker.length).split('/')[0];
+    if (!encodedId) {
+      return null;
+    }
+    try {
+      return decodeURIComponent(encodedId);
+    } catch {
+      return encodedId;
+    }
+  }, [location.pathname]);
+  const selectedConversationId = routeConversationId ?? activeConversationId;
   const isProjectScopedPath = location.pathname.includes('/project/');
   const contextualProjectId = isProjectScopedPath ? currentProject?.id : undefined;
   const contextualProjectBasePath = contextualProjectId
@@ -766,27 +785,29 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     [navigate, tenantId, workspaceIdFromQuery]
   );
 
-  // Preserve sidebar scroll position across re-renders triggered by conversation switch.
-  // The conversation list DOM stays the same — only the active highlight changes —
-  // so we pin the scroll position to prevent any visual jump.
-  const pinnedScrollTopRef = useRef<number | null>(null);
-  const prevActiveIdRef = useRef(activeConversationId);
-
-  // Capture scroll position BEFORE React commits DOM changes for the new activeConversationId
-  if (prevActiveIdRef.current !== activeConversationId) {
-    prevActiveIdRef.current = activeConversationId;
-    if (scrollContainerRef.current) {
-      pinnedScrollTopRef.current = scrollContainerRef.current.scrollTop;
-    }
-  }
-
-  // Restore immediately after DOM commit
+  // Keep route-driven or distant conversation switches anchored to the selected item.
   useLayoutEffect(() => {
-    if (pinnedScrollTopRef.current !== null && scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = pinnedScrollTopRef.current;
-      pinnedScrollTopRef.current = null;
+    const container = scrollContainerRef.current;
+    const activeItem = activeConversationItemRef.current;
+    if (!container || !activeItem || collapsed) {
+      return;
     }
-  });
+
+    const containerRect = container.getBoundingClientRect();
+    const itemRect = activeItem.getBoundingClientRect();
+    const isFullyVisible =
+      itemRect.top >= containerRect.top && itemRect.bottom <= containerRect.bottom;
+    if (isFullyVisible) {
+      return;
+    }
+
+    const nextScrollTop =
+      container.scrollTop +
+      itemRect.top -
+      containerRect.top -
+      (container.clientHeight - activeItem.offsetHeight) / 2;
+    container.scrollTop = Math.max(0, nextScrollTop);
+  }, [collapsed, conversationSections, selectedConversationId]);
 
   // Auto-load more conversations when content doesn't fill the container
   useEffect(() => {
@@ -1067,7 +1088,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       >
         {!collapsed && (
           <div className="px-3">
-            {isLoadingHistory ? (
+            {conversationsLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin motion-reduce:animate-none" />
               </div>
@@ -1086,9 +1107,14 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                       const conv = section.conversation;
                       return (
                         <ConversationItem
+                          activeItemRef={
+                            conv.id === selectedConversationId
+                              ? activeConversationItemRef
+                              : undefined
+                          }
                           key={conv.id}
                           conversation={conv}
-                          isActive={conv.id === activeConversationId}
+                          isActive={conv.id === selectedConversationId}
                           onSelect={() => {
                             handleSelectConversation(conv.id, conv.projectId);
                           }}
@@ -1116,10 +1142,15 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                         {!groupCollapsed
                           ? section.conversations.map((conv) => (
                               <ConversationItem
+                                activeItemRef={
+                                  conv.id === selectedConversationId
+                                    ? activeConversationItemRef
+                                    : undefined
+                                }
                                 key={conv.id}
                                 conversation={conv}
                                 grouped
-                                isActive={conv.id === activeConversationId}
+                                isActive={conv.id === selectedConversationId}
                                 onSelect={() => {
                                   handleSelectConversation(conv.id, conv.projectId);
                                 }}

@@ -102,6 +102,7 @@ class SandboxContainer:
                 else None
             ),
             host_memstack_volume=self._resolve_memstack_volume(),
+            host_docker_socket_volume=self._resolve_docker_socket_volume(),
         )
 
     def workspace_sync_service(self) -> Any:
@@ -144,6 +145,7 @@ class SandboxContainer:
                 else None
             ),
             host_memstack_volume=self._resolve_memstack_volume(),
+            host_docker_socket_volume=self._resolve_docker_socket_volume(),
             workspace_sync=self.workspace_sync_service(),
         )
 
@@ -247,6 +249,21 @@ class SandboxContainer:
             return {str(cwd_memstack): mount_point}
 
         return None
+
+    def _resolve_docker_socket_volume(self) -> dict[str, str] | None:
+        """Resolve optional Docker socket mount for sandbox Docker-aware tasks."""
+        if not self._settings or not self._settings.sandbox_docker_socket_enabled:
+            return None
+
+        socket_path = Path(self._settings.sandbox_docker_socket_path)
+        if not socket_path.exists():
+            self._logger.warning(
+                "SANDBOX_DOCKER_SOCKET_ENABLED=true but socket path does not exist: %s",
+                socket_path,
+            )
+            return None
+
+        return {str(socket_path): "/var/run/docker.sock"}
 
     def dependency_orchestrator(self) -> Any:
         """Get DependencyOrchestrator for sandbox dependency management.

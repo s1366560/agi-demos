@@ -1,5 +1,5 @@
 # pyright: basic
-"""Wave C2 — keys for CuratedSkills + MemoryCreateModal.
+"""Wave C2 — keys for MemoryCreateModal.
 
 Idempotent deep-merge into web/src/locales/{en-US,zh-CN}.json.
 """
@@ -13,34 +13,6 @@ REPO = Path(__file__).resolve().parents[1]
 LOCALES = REPO / "web" / "src" / "locales"
 
 EN = {
-    "skill": {
-        "curated": {
-            "pageTitle": "Curated Skill Library",
-            "pageDescription": "The curated library contains Skill templates approved by admins. All tenants can fork them to their private library to modify.",
-            "tabCurated": "Curated",
-            "tabSubmissions": "My Submissions",
-            "publishedCount": "{{count}} published Skills",
-            "includeDeprecatedAria": "Include deprecated versions",
-            "includeDeprecatedLabel": "Include deprecated versions",
-            "emptyCurated": "No Skills published in the curated library yet",
-            "emptySubmissions": "No submissions yet",
-            "deprecatedSuffix": " (deprecated)",
-            "versionCount": " · {{count}} versions",
-            "forkButton": "Fork to private library",
-            "forkDialogContent": "Choose what to include when copying to your private library:",
-            "forkIncludeExecutor": "Executor (tools + full_content)",
-            "forkIncludeMetadata": "Metadata",
-            "withdrawSuccess": "Submission withdrawn",
-            "withdrawFailed": "Withdrawal failed",
-            "noteLabel": "Note:",
-            "reviewNoteLabel": "Review note:",
-            "withdrawConfirmTitle": "Withdraw this submission?",
-            "withdrawConfirmDescription": "After withdrawal the status becomes withdrawn and will no longer enter the review queue.",
-            "withdrawOk": "Withdraw",
-            "withdrawCancel": "Cancel",
-            "withdrawAction": "Withdraw",
-        }
-    },
     "memory": {
         "create": {
             "title": "Create Memory",
@@ -80,34 +52,6 @@ EN = {
 }
 
 ZH = {
-    "skill": {
-        "curated": {
-            "pageTitle": "精选 Skill 库",
-            "pageDescription": "精选库包含管理员审核通过的 Skill 模板，所有租户都可以 fork 到自己的私有库进行修改。",
-            "tabCurated": "精选库",
-            "tabSubmissions": "我的提交",
-            "publishedCount": "{{count}} 个已发布 Skill",
-            "includeDeprecatedAria": "包含已弃用版本",
-            "includeDeprecatedLabel": "包含已弃用版本",
-            "emptyCurated": "精选库暂无已发布的 Skill",
-            "emptySubmissions": "暂无提交记录",
-            "deprecatedSuffix": "（已弃用）",
-            "versionCount": " · {{count}} 个版本",
-            "forkButton": "Fork 到私有库",
-            "forkDialogContent": "选择复制到私有库时要包含的内容：",
-            "forkIncludeExecutor": "执行器（tools + full_content）",
-            "forkIncludeMetadata": "元数据 (metadata)",
-            "withdrawSuccess": "已撤回提交",
-            "withdrawFailed": "撤回失败",
-            "noteLabel": "备注：",
-            "reviewNoteLabel": "审核意见：",
-            "withdrawConfirmTitle": "撤回此提交？",
-            "withdrawConfirmDescription": "撤回后状态变为 withdrawn，不再进入审核队列。",
-            "withdrawOk": "撤回",
-            "withdrawCancel": "取消",
-            "withdrawAction": "撤回",
-        }
-    },
     "memory": {
         "create": {
             "title": "创建记忆",

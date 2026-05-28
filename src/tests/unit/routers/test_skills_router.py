@@ -136,16 +136,6 @@ class _MemoryVersionRepository:
         return len([version for version in self._db.versions if version.skill_id == skill_id])
 
 
-class _CuratedDb:
-    def __init__(self, curated_rows: list[SimpleNamespace]) -> None:
-        self.curated_by_id = {row.id: row for row in curated_rows}
-        self.versions: list[SkillVersion] = []
-        self.commit = AsyncMock()
-
-    async def get(self, _model: object, object_id: str) -> object | None:
-        return self.curated_by_id.get(object_id)
-
-
 @pytest.mark.unit
 async def test_create_skill_sanitizes_domain_validation_error(
     monkeypatch: pytest.MonkeyPatch,
@@ -253,7 +243,7 @@ def test_skill_md_builder_emits_agentskills_frontmatter_fields() -> None:
                 }
             },
         },
-        semver="1.2.3",
+        version_label="1.2.3",
     )
 
     parsed, metadata, tools = router._parse_skill_package(skill_md)
@@ -306,7 +296,7 @@ def test_skill_search_matches_name_description_version_and_metadata() -> None:
         tools=["Read"],
         metadata={"author": "platform"},
     )
-    skill.semver = "1.2.3"
+    skill.version_label = "1.2.3"
 
     assert router._skill_matches_search(skill, "platform")
     assert router._skill_matches_search(skill, "1.2")
@@ -469,117 +459,6 @@ async def test_export_skill_package_uses_latest_version(
     assert response.version_number == 1
     assert response.resource_files == {"assets/template.txt": "template"}
     assert response.skill_md_content == SAMPLE_SKILL_MD
-
-
-@pytest.mark.unit
-async def test_install_curated_skill_creates_skill_and_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    repo = _MemorySkillRepository()
-    curated = SimpleNamespace(
-        id="curated-1",
-        status="active",
-        semver="1.2.4",
-        revision_hash="hash-new",
-        payload={
-            "name": "alpha-skill",
-            "description": "Installed curated skill",
-            "tools": ["Read"],
-            "metadata": {"category": "ops"},
-            "resource_files": {"references/README.md": "installed"},
-        },
-    )
-    db = _CuratedDb([curated])
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
-
-    response = await router.install_curated_skill(
-        request=SimpleNamespace(),
-        data=router.SkillInstallRequest(curated_id=curated.id),
-        tenant_id="tenant-1",
-        db=db,
-    )
-
-    assert response.action == "install"
-    assert response.skill.name == "alpha-skill"
-    assert response.skill.parent_curated_id == "curated-1"
-    assert response.skill.semver == "1.2.4"
-    assert response.skill.revision_hash == "hash-new"
-    assert response.skill.metadata == {
-        "category": "ops",
-        "installed_from_curated_id": "curated-1",
-        "curated_revision_hash": "hash-new",
-    }
-    assert response.version_number == 1
-    assert response.version_label == "1.2.4"
-    assert db.versions[0].created_by == "install"
-    assert db.versions[0].resource_files == {"references/README.md": "installed"}
-    db.commit.assert_awaited_once()
-
-
-@pytest.mark.unit
-async def test_upgrade_skill_updates_curated_lineage_and_creates_version(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    repo = _MemorySkillRepository()
-    existing = Skill.create(
-        tenant_id="tenant-1",
-        name="alpha-skill",
-        description="Old curated skill",
-        tools=["Read"],
-        metadata={"installed_from_curated_id": "curated-old"},
-    )
-    existing.parent_curated_id = "curated-old"
-    existing.semver = "1.0.0"
-    existing.revision_hash = "hash-old"
-    await repo.create(existing)
-    curated = SimpleNamespace(
-        id="curated-2",
-        status="active",
-        semver="2.0.0",
-        revision_hash="hash-new",
-        payload={
-            "name": "alpha-skill",
-            "description": "Upgraded curated skill",
-            "tools": ["Read", "Bash"],
-            "metadata": {"category": "ops"},
-        },
-    )
-    db = _CuratedDb([curated])
-    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
-    monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
-        "SqlSkillVersionRepository",
-        _MemoryVersionRepository,
-    )
-
-    response = await router.upgrade_skill(
-        request=SimpleNamespace(),
-        skill_id=existing.id,
-        data=router.SkillUpgradeRequest(curated_id=curated.id),
-        tenant_id="tenant-1",
-        db=db,
-    )
-
-    assert response.action == "upgrade"
-    assert response.skill.description == "Upgraded curated skill"
-    assert response.skill.tools == ["Read", "Bash"]
-    assert response.skill.parent_curated_id == "curated-2"
-    assert response.skill.semver == "2.0.0"
-    assert response.skill.revision_hash == "hash-new"
-    assert response.skill.metadata == {
-        "category": "ops",
-        "installed_from_curated_id": "curated-2",
-        "curated_revision_hash": "hash-new",
-    }
-    assert response.version_number == 1
-    assert response.version_label == "2.0.0"
-    assert db.versions[0].created_by == "upgrade"
-    db.commit.assert_awaited_once()
 
 
 @pytest.mark.unit
