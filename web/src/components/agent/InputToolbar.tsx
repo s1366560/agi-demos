@@ -113,19 +113,19 @@ export const InputToolbar = memo<InputToolbarProps>(
     return (
       <div
         data-testid="input-toolbar"
-        className="flex-shrink-0 px-3 pt-2 pb-2.5 flex flex-col gap-2 sm:flex-row sm:items-center"
+        className="mt-auto flex min-w-0 flex-shrink-0 flex-wrap items-center gap-1.5 px-2 pt-1 pb-1.5 sm:px-3"
       >
         {/* Left Actions */}
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
           {onAgentSelect && (
             <>
               <AgentSwitcher
                 activeAgentId={activeAgentId}
                 onSelect={onAgentSelect}
                 disabled={!!(isStreaming || disabled)}
-                className="h-8 max-w-[180px] sm:max-w-[240px]"
+                className="h-8 min-w-0 max-w-[112px] min-[520px]:max-w-[180px]"
               />
-              <div className="hidden sm:block w-px h-4 bg-slate-200 dark:bg-slate-700 mx-1" />
+              <div className="hidden min-[460px]:block w-px h-4 bg-slate-200 dark:bg-slate-700 mx-0.5" />
             </>
           )}
 
@@ -253,13 +253,10 @@ export const InputToolbar = memo<InputToolbarProps>(
           </Popover>
         </div>
 
-        {/* Spacer */}
-        <div className="hidden sm:block flex-1" />
-
         {/* Right Actions */}
         <div
           data-testid="input-toolbar-actions"
-          className="flex w-full items-center justify-end gap-2 sm:w-auto sm:flex-none"
+          className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1"
         >
           {onTogglePlanMode && (
             <LazyTooltip
@@ -321,14 +318,16 @@ export const InputToolbar = memo<InputToolbarProps>(
               aria-label={t('agent.inputBar.send', 'Send message')}
               data-testid="send-button"
               className={`
-                rounded-lg flex items-center gap-1.5 h-8 px-3
+                rounded-lg flex items-center gap-1.5 h-8 px-2 min-[1280px]:px-3
                 bg-primary hover:bg-primary-600
                 shadow-sm
                 disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed
                 transition-colors duration-200
               `}
             >
-              {t('agent.inputBar.send', 'Send')}
+              <span className="hidden min-[1280px]:inline">
+                {t('agent.inputBar.send', 'Send')}
+              </span>
             </LazyButton>
           )}
         </div>

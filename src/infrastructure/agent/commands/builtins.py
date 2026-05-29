@@ -322,6 +322,82 @@ async def _handle_context(
     return ReplyResult(text="\n".join(lines))
 
 
+async def _handle_goal(  # noqa: PLR0911
+    invocation: CommandInvocation,
+    context: dict[str, Any],
+) -> CommandResult:
+    """Create a workspace-backed standing goal."""
+    from src.infrastructure.agent.commands.goal_mode import (
+        create_workspace_goal,
+        list_workspace_goals,
+        resolve_preferred_language,
+        resolve_workspace_id,
+    )
+
+    goal_text = invocation.raw_args_text.strip()
+    if goal_text.lower() in {"pause", "resume", "clear", "stop", "done"}:
+        return ReplyResult(
+            text=(
+                "This /goal mode is backed by workspace root tasks. "
+                "Use the workspace Goals panel for pause, completion, or cleanup controls."
+            ),
+            level="warning",
+        )
+
+    workspace_id = resolve_workspace_id(context)
+    if not workspace_id:
+        return ReplyResult(
+            text="/goal requires a workspace-linked conversation.",
+            level="warning",
+        )
+
+    actor_user_id = context.get("user_id")
+    if not isinstance(actor_user_id, str) or not actor_user_id.strip():
+        return ReplyResult(text="/goal requires an authenticated user.", level="error")
+
+    if not goal_text or goal_text.lower() == "status":
+        try:
+            goals = await list_workspace_goals(
+                workspace_id=workspace_id,
+                actor_user_id=actor_user_id,
+            )
+        except PermissionError:
+            return ReplyResult(text="Access denied for this workspace.", level="error")
+        if not goals:
+            return ReplyResult(
+                text=(
+                    "No workspace root goals are active.\n"
+                    "Usage: /goal <objective>"
+                )
+            )
+        lines = ["Workspace root goals:"]
+        lines.extend(f"- {goal.root_task_id} [{goal.status}] {goal.title}" for goal in goals)
+        return ReplyResult(text="\n".join(lines))
+
+    try:
+        conversation_id = context.get("conversation_id")
+        outcome = await create_workspace_goal(
+            workspace_id=workspace_id,
+            actor_user_id=actor_user_id,
+            goal_text=goal_text,
+            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+            preferred_language=resolve_preferred_language(context),
+        )
+    except PermissionError:
+        return ReplyResult(text="Access denied for this workspace.", level="error")
+    except ValueError as exc:
+        return ReplyResult(text=str(exc), level="error")
+
+    tick_line = "Autonomy tick scheduled." if outcome.scheduled else "Autonomy tick queued."
+    return ReplyResult(
+        text=(
+            f"Goal created: {outcome.root_task_id}\n"
+            f"Workspace: {outcome.workspace_id}\n"
+            f"{tick_line}"
+        )
+    )
+
+
 async def _handle_spawn(
     invocation: CommandInvocation,
     context: dict[str, Any],
@@ -625,6 +701,25 @@ def register_builtin_commands(registry: CommandRegistry) -> None:
             category=CommandCategory.AGENT,
             scope=CommandScope.BOTH,
             handler=_handle_context,
+        )
+    )
+
+    registry.register(
+        CommandDefinition(
+            name="goal",
+            description="Create a workspace-backed standing goal",
+            category=CommandCategory.AGENT,
+            scope=CommandScope.CHAT,
+            args=[
+                CommandArgSpec(
+                    name="objective",
+                    description="Goal objective text",
+                    arg_type=CommandArgType.STRING,
+                    required=False,
+                    capture_remaining=True,
+                ),
+            ],
+            handler=_handle_goal,
         )
     )
 

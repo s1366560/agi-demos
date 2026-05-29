@@ -97,9 +97,9 @@ interface AgentChatContentProps {
 }
 
 // Constants for resize constraints
-const INPUT_MIN_HEIGHT = 140;
+const INPUT_MIN_HEIGHT = 160;
 const INPUT_MAX_HEIGHT = 560;
-const INPUT_DEFAULT_HEIGHT = 180;
+const INPUT_DEFAULT_HEIGHT = 160;
 
 function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | null {
   const value = metadata?.[key];

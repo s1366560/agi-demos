@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -167,6 +170,67 @@ class TestSessionCollector:
         assert trajectory["user_query"] == "read the file"
 
 
+class TestSessionSummarizer:
+    @pytest.mark.asyncio
+    async def test_summarize_wraps_llm_trajectory_list_as_steps(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.summarizer import (
+            SessionSummarizer,
+        )
+
+        llm_client = MagicMock()
+        llm_client.generate = AsyncMock(
+            return_value={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "trajectory": [
+                                        {
+                                            "step": 1,
+                                            "action": "Checked output",
+                                            "tool": None,
+                                            "outcome": "partial",
+                                        }
+                                    ],
+                                    "summary": "The skill needs clearer verification guidance.",
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+        )
+        session = SkillEvolutionSession(
+            id="s1",
+            skill_name="test-skill",
+            tenant_id="t1",
+            conversation_id="c1",
+            user_query="query",
+            trajectory={"steps": []},
+            success=True,
+        )
+
+        trajectory, summary = await SessionSummarizer(SkillEvolutionConfig())._summarize_one(
+            session, llm_client
+        )
+
+        assert trajectory == {
+            "steps": [
+                {
+                    "step": 1,
+                    "action": "Checked output",
+                    "tool": None,
+                    "outcome": "partial",
+                }
+            ]
+        }
+        assert summary == "The skill needs clearer verification guidance."
+
+
 class TestSkillMerger:
     @pytest.mark.asyncio
     async def test_apply_skip_action(self) -> None:
@@ -242,8 +306,100 @@ class TestSkillMerger:
             rationale="Added better examples",
         )
         result = await merger.apply_evolution(job, tenant_id="t1")
-        assert result is None  # version tracking not yet implemented
+        assert result is None
         skill_service.update_skill_content.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_apply_improve_skill_creates_version_when_repositories_provided(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionJob,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.skill_merger import (
+            SkillMerger,
+        )
+
+        skill = MagicMock()
+        skill.id = "sk1"
+        skill.name = "test-skill"
+        skill.current_version = 2
+        skill.version_label = "2"
+        skill.full_content = "# Old SKILL.md"
+
+        skill_service = MagicMock()
+        skill_repository = MagicMock()
+        skill_repository.get_by_name = AsyncMock(return_value=skill)
+        skill_repository.update = AsyncMock(return_value=skill)
+        version_repository = MagicMock()
+        version_repository.get_max_version_number = AsyncMock(return_value=2)
+        version_repository.create = AsyncMock()
+        merger = SkillMerger(skill_service)
+
+        job = SkillEvolutionJob(
+            id="j4",
+            skill_name="test-skill",
+            tenant_id="t1",
+            action="improve_skill",
+            candidate_content="# Improved SKILL.md",
+            rationale="Added better examples",
+        )
+        result = await merger.apply_evolution(
+            job,
+            tenant_id="t1",
+            skill_repository=skill_repository,
+            skill_version_repository=version_repository,
+        )
+
+        assert result is not None
+        version_repository.create.assert_awaited_once()
+        created_version = version_repository.create.await_args.args[0]
+        assert created_version.version_number == 3
+        assert created_version.skill_md_content == "# Improved SKILL.md"
+        assert created_version.created_by == "evolution"
+        assert skill.current_version == 3
+        assert skill.full_content == "# Improved SKILL.md"
+        skill_repository.update.assert_awaited_once_with(skill)
+
+    @pytest.mark.asyncio
+    async def test_optimize_description_keeps_skill_body(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionJob,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.skill_merger import (
+            SkillMerger,
+        )
+
+        skill = MagicMock()
+        skill.id = "sk1"
+        skill.name = "test-skill"
+        skill.current_version = 1
+        skill.full_content = "---\nname: test-skill\ndescription: Old\n---\n\n# Body"
+
+        skill_repository = MagicMock()
+        skill_repository.get_by_name = AsyncMock(return_value=skill)
+        skill_repository.update = AsyncMock(return_value=skill)
+        version_repository = MagicMock()
+        version_repository.get_max_version_number = AsyncMock(return_value=1)
+        version_repository.create = AsyncMock()
+        merger = SkillMerger(MagicMock())
+
+        job = SkillEvolutionJob(
+            id="j5",
+            skill_name="test-skill",
+            tenant_id="t1",
+            action="optimize_description",
+            candidate_content="New description",
+            rationale="Usage data showed clearer trigger language is needed",
+        )
+
+        await merger.apply_evolution(
+            job,
+            tenant_id="t1",
+            skill_repository=skill_repository,
+            skill_version_repository=version_repository,
+        )
+
+        assert "description: New description" in skill.full_content
+        assert "# Body" in skill.full_content
 
 
 class TestHookRegistration:
@@ -285,6 +441,231 @@ class TestHookRegistration:
             session_factory=None,
         )
         assert plugin.config.enabled is False
+
+
+class TestSkillEvolutionEndToEnd:
+    @pytest.mark.asyncio
+    async def test_trigger_evolution_applies_job_and_links_version(self) -> None:  # noqa: PLR0915
+        from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from src.domain.model.agent.skill import Skill, SkillScope
+        from src.infrastructure.adapters.secondary.persistence import models as db_models
+        from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
+            SqlSkillRepository,
+        )
+        from src.infrastructure.agent.plugins.registry import AgentPluginRegistry
+        from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
+        from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionJob,
+            SkillEvolutionSession,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
+            SkillEvolutionPlugin,
+        )
+
+        tenant_id = "tenant-evolution-smoke"
+        project_id = "project-evolution-smoke"
+        skill_name = "evolution-smoke-skill"
+        evolved_content = (
+            "---\n"
+            "name: evolution-smoke-skill\n"
+            "description: Evolved smoke skill.\n"
+            "---\n\n"
+            "# Evolution Smoke Skill\n\n"
+            "Include explicit verification evidence.\n"
+        )
+
+        class FakeLLMClient:
+            def __init__(self) -> None:
+                self.calls: list[str] = []
+
+            async def generate(self, messages, max_tokens=None):
+                system = str(messages[0].content)
+                self.calls.append(system)
+                if "session analyst" in system:
+                    content = json.dumps(
+                        {
+                            "trajectory": [
+                                {
+                                    "step": 1,
+                                    "action": "Observed weak final response",
+                                    "tool": None,
+                                    "outcome": "partial",
+                                }
+                            ],
+                            "summary": "The skill should require verification evidence.",
+                        }
+                    )
+                elif "session quality judge" in system:
+                    content = json.dumps(
+                        {
+                            "task_completion": 0.9,
+                            "response_quality": 0.82,
+                            "efficiency": 0.95,
+                            "tool_usage": 0.8,
+                            "rationale": "The skill needs clearer verification instructions.",
+                        }
+                    )
+                elif "skill evolution specialist" in system:
+                    content = json.dumps(
+                        {
+                            "action": "improve_skill",
+                            "rationale": "Missing verification evidence guidance.",
+                            "skill_content": evolved_content,
+                        }
+                    )
+                else:  # pragma: no cover - defensive guard for prompt drift
+                    raise AssertionError(f"Unexpected prompt: {system[:120]}")
+                return {"choices": [{"message": {"content": content}}]}
+
+        class FakeLLMProviderManager:
+            def __init__(self, client: FakeLLMClient) -> None:
+                self.client = client
+
+            async def get_llm_client(self) -> FakeLLMClient:
+                return self.client
+
+        class FakeSkillService:
+            def __init__(self, session_factory) -> None:
+                self._session_factory = session_factory
+
+            async def get_skill_by_name(self, *, tenant_id: str, skill_name: str):
+                async with self._session_factory() as db:
+                    return await SqlSkillRepository(db).get_by_name(tenant_id, skill_name)
+
+            async def update_skill_content(self, skill_id: str, full_content: str):
+                raise AssertionError("direct repository-backed merge should be used")
+
+        with tempfile.TemporaryDirectory(prefix="skill-evolution-smoke-") as tmp:
+            engine = create_async_engine(f"sqlite+aiosqlite:///{Path(tmp) / 'smoke.db'}")
+            session_factory = async_sessionmaker(engine, expire_on_commit=False)
+            async with engine.begin() as conn:
+                for table in (
+                    db_models.Skill.__table__,
+                    db_models.SkillVersion.__table__,
+                    SkillEvolutionSession.__table__,
+                    SkillEvolutionJob.__table__,
+                ):
+                    await conn.run_sync(
+                        lambda sync_conn, table=table: table.create(
+                            sync_conn, checkfirst=True
+                        )
+                    )
+
+            async with session_factory() as db:
+                await SqlSkillRepository(db).create(
+                    Skill(
+                        id="skill-evolution-smoke-id",
+                        tenant_id=tenant_id,
+                        name=skill_name,
+                        description="Initial smoke skill",
+                        tools=["terminal"],
+                        full_content=(
+                            "---\n"
+                            "name: evolution-smoke-skill\n"
+                            "description: Initial smoke skill.\n"
+                            "---\n\n"
+                            "# Evolution Smoke Skill\n"
+                        ),
+                        scope=SkillScope.TENANT,
+                        current_version=0,
+                    )
+                )
+                await db.commit()
+
+            client = FakeLLMClient()
+            config = SkillEvolutionConfig(
+                enabled=True,
+                min_sessions_per_skill=1,
+                min_avg_score=0.5,
+                max_sessions_per_batch=5,
+                publish_mode="direct",
+                auto_apply=True,
+            )
+            plugin = SkillEvolutionPlugin(
+                config=config,
+                skill_service=FakeSkillService(session_factory),
+                llm_provider_manager=FakeLLMProviderManager(client),
+                session_factory=session_factory,
+            )
+
+            registry = AgentPluginRegistry()
+            plugin.setup(PluginRuntimeApi("skill-evolution", registry=registry))
+            hook_result = await registry.apply_hook(
+                "after_turn_complete",
+                payload={
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
+                    "conversation_id": "conv-evolution-smoke",
+                    "user_message": "Please answer and show verification evidence.",
+                    "final_content": "Done.",
+                    "matched_skill_name": skill_name,
+                    "conversation_context": [{"role": "assistant", "content": "Done."}],
+                    "success": True,
+                    "execution_time_ms": 120,
+                },
+            )
+
+            result = await plugin.trigger_evolution(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                skill_name=skill_name,
+            )
+
+            async with session_factory() as db:
+                session = (
+                    await db.execute(
+                        select(SkillEvolutionSession).where(
+                            SkillEvolutionSession.skill_name == skill_name
+                        )
+                    )
+                ).scalar_one()
+                job = (
+                    await db.execute(
+                        select(SkillEvolutionJob).where(
+                            SkillEvolutionJob.skill_name == skill_name
+                        )
+                    )
+                ).scalar_one()
+                version = (
+                    await db.execute(
+                        select(db_models.SkillVersion).where(
+                            db_models.SkillVersion.id == job.skill_version_id
+                        )
+                    )
+                ).scalar_one()
+                skill = (
+                    await db.execute(
+                        select(db_models.Skill).where(db_models.Skill.name == skill_name)
+                    )
+                ).scalar_one()
+
+            await engine.dispose()
+            plugin_module._collector = None
+            plugin_module._config = None
+            plugin_module._scheduler = None
+            plugin_module._session_factory = None
+
+        assert "after_turn_complete" in registry.list_hooks()
+        assert hook_result.diagnostics == []
+        assert result == {"summarized": 1, "judged": 1, "groups": 1, "jobs": 1}
+        assert len(client.calls) == 3
+        assert session.processed is True
+        assert isinstance(session.trajectory, dict)
+        assert "steps" in session.trajectory
+        assert session.summary
+        assert session.overall_score is not None
+        assert session.overall_score >= 0.5
+        assert job.action == "improve_skill"
+        assert job.status == "applied"
+        assert job.skill_version_id == version.id
+        assert version.created_by == "evolution"
+        assert "explicit verification evidence" in version.skill_md_content
+        assert skill.current_version == version.version_number == 1
+        assert skill.version_label == "1"
+        assert "explicit verification evidence" in (skill.full_content or "")
 
 
 class TestModels:

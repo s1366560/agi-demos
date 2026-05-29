@@ -764,7 +764,7 @@ class TestBuiltinCommands:
     def test_register_builtin_commands_count(self, registry_with_builtins: CommandRegistry) -> None:
         """register_builtin_commands() registers all built-in commands."""
         all_cmds = registry_with_builtins.list_commands(include_hidden=True)
-        assert len(all_cmds) == 22
+        assert len(all_cmds) == 23
 
     def test_all_builtin_names_present(self, registry_with_builtins: CommandRegistry) -> None:
         """All expected built-in command names are registered."""
@@ -788,6 +788,7 @@ class TestBuiltinCommands:
             "send",
             "reset",
             "context",
+            "goal",
             "spawn",
             "kill",
             "steer",
@@ -910,6 +911,121 @@ class TestBuiltinCommands:
         assert isinstance(result, ReplyResult)
         assert "search" in result.text
         assert "write" in result.text
+
+    async def test_goal_requires_workspace_context(
+        self, registry_with_builtins: CommandRegistry
+    ) -> None:
+        invocation = registry_with_builtins.parse_and_resolve("/goal Ship the release")
+        assert invocation is not None
+        result = await invocation.definition.handler(invocation, {"user_id": "user-1"})
+        assert isinstance(result, ReplyResult)
+        assert result.level == "warning"
+        assert "workspace-linked" in result.text
+
+    async def test_goal_creates_workspace_root(
+        self, registry_with_builtins: CommandRegistry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from src.infrastructure.agent.commands import goal_mode
+
+        captured: dict[str, str | None] = {}
+
+        async def fake_create_workspace_goal(**kwargs: str | None) -> goal_mode.GoalCommandOutcome:
+            captured.update(kwargs)
+            return goal_mode.GoalCommandOutcome(
+                root_task_id="root-1",
+                workspace_id=str(kwargs["workspace_id"]),
+                scheduled=True,
+            )
+
+        monkeypatch.setattr(goal_mode, "create_workspace_goal", fake_create_workspace_goal)
+        invocation = registry_with_builtins.parse_and_resolve("/goal Ship the release")
+        assert invocation is not None
+
+        result = await invocation.definition.handler(
+            invocation,
+            {
+                "user_id": "user-1",
+                "conversation_id": "conv-1",
+                "runtime_context": {"workspace_id": "ws-1", "preferred_language": "zh-CN"},
+            },
+        )
+
+        assert isinstance(result, ReplyResult)
+        assert "Goal created: root-1" in result.text
+        assert captured == {
+            "workspace_id": "ws-1",
+            "actor_user_id": "user-1",
+            "goal_text": "Ship the release",
+            "conversation_id": "conv-1",
+            "preferred_language": "zh-CN",
+        }
+
+    async def test_goal_status_lists_workspace_roots(
+        self, registry_with_builtins: CommandRegistry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from src.infrastructure.agent.commands import goal_mode
+
+        captured: dict[str, str | int] = {}
+
+        async def fake_list_workspace_goals(
+            *, workspace_id: str, actor_user_id: str, limit: int = 5
+        ) -> list[goal_mode.GoalStatusItem]:
+            captured.update(
+                {"workspace_id": workspace_id, "actor_user_id": actor_user_id, "limit": limit}
+            )
+            return [
+                goal_mode.GoalStatusItem(
+                    root_task_id="root-1",
+                    title="Ship the release",
+                    status="in_progress",
+                )
+            ]
+
+        monkeypatch.setattr(goal_mode, "list_workspace_goals", fake_list_workspace_goals)
+        invocation = registry_with_builtins.parse_and_resolve("/goal status")
+        assert invocation is not None
+
+        result = await invocation.definition.handler(
+            invocation,
+            {"user_id": "user-1", "runtime_context": {"workspace_id": "ws-1"}},
+        )
+
+        assert isinstance(result, ReplyResult)
+        assert "Workspace root goals:" in result.text
+        assert "root-1 [in_progress] Ship the release" in result.text
+        assert captured == {"workspace_id": "ws-1", "actor_user_id": "user-1", "limit": 5}
+
+    async def test_goal_control_words_are_not_destructive(
+        self, registry_with_builtins: CommandRegistry
+    ) -> None:
+        invocation = registry_with_builtins.parse_and_resolve("/goal clear")
+        assert invocation is not None
+        result = await invocation.definition.handler(
+            invocation,
+            {"user_id": "user-1", "runtime_context": {"workspace_id": "ws-1"}},
+        )
+        assert isinstance(result, ReplyResult)
+        assert result.level == "warning"
+        assert "workspace root tasks" in result.text
+
+    def test_goal_metadata_matches_root_goal_schema(self) -> None:
+        from src.application.services.workspace_agent_autonomy import validate_autonomy_metadata
+        from src.infrastructure.agent.commands.goal_mode import build_human_goal_metadata
+
+        metadata = validate_autonomy_metadata(
+            build_human_goal_metadata(
+                goal_text="Ship the release",
+                conversation_id="conv-1",
+                preferred_language="zh-CN",
+            )
+        )
+
+        assert metadata["task_role"] == "goal_root"
+        assert metadata["goal_origin"] == "human_defined"
+        assert metadata["goal_source_refs"] == ["conversation:conv-1"]
+        assert metadata["preferred_language"] == "zh-CN"
+        assert metadata["workspace_harness"]["mode"] == "long_running_agent"
+        assert metadata["workspace_harness"]["harness_id"].startswith("harness:")
 
     async def test_tools_handler_empty(self, registry_with_builtins: CommandRegistry) -> None:
         """/tools with no tools returns empty message."""

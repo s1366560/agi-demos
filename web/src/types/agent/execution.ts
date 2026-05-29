@@ -292,6 +292,61 @@ export interface SkillVersionListResponse {
   total: number;
 }
 
+export interface SkillEvolutionJobResponse {
+  id: string;
+  skill_name: string;
+  action: string;
+  status: string;
+  rationale: string | null;
+  session_ids: string[];
+  skill_version_id: string | null;
+  created_at: string;
+  applied_at: string | null;
+}
+
+export interface SkillEvolutionRouteEntry {
+  kind: 'version' | 'evolution_job';
+  id: string;
+  label: string;
+  status: string | null;
+  action: string | null;
+  version_number: number | null;
+  version_label: string | null;
+  skill_version_id: string | null;
+  change_summary: string | null;
+  rationale: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface SkillEvolutionTriggerResponse {
+  capture_hook: string;
+  capture_timing: string;
+  scheduled_timing: string;
+  manual_trigger: string;
+  min_sessions_per_skill: number;
+  min_avg_score: number;
+  max_sessions_per_batch: number;
+  publish_mode: string;
+  auto_apply: boolean;
+  enabled: boolean;
+}
+
+export interface SkillEvolutionDetailResponse {
+  skill_id: string;
+  skill_name: string;
+  captured_session_count: number;
+  jobs: SkillEvolutionJobResponse[];
+  route: SkillEvolutionRouteEntry[];
+  trigger: SkillEvolutionTriggerResponse;
+}
+
+export interface SkillEvolutionRunResponse {
+  skill_id: string;
+  skill_name: string;
+  result: Record<string, unknown>;
+}
+
 export interface SkillPackagePayload {
   skill_md_content: string;
   resource_files?: Record<string, string> | undefined;

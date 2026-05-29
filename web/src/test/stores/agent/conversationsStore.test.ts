@@ -272,6 +272,37 @@ describe('ConversationsStore', () => {
     });
   });
 
+  describe('loadMoreConversations', () => {
+    it('keeps refreshed incoming order when merging duplicate conversations', async () => {
+      const olderConversation = {
+        ...createMockConversation('conv-old', 'proj-1', 'Old'),
+        updated_at: '2024-01-01T00:00:00Z',
+      };
+      const refreshedConversation = {
+        ...createMockConversation('conv-refresh', 'proj-1', 'Refreshed'),
+        updated_at: '2024-01-03T00:00:00Z',
+      };
+
+      useConversationsStore.setState({
+        conversations: [olderConversation, refreshedConversation],
+        hasMoreConversations: true,
+        conversationsNextOffset: 2,
+      });
+
+      listConversationsMock.mockResolvedValue({
+        items: [refreshedConversation],
+        has_more: false,
+        total: 2,
+        offset: 2,
+      });
+
+      await useConversationsStore.getState().loadMoreConversations('proj-1');
+
+      expect(useConversationsStore.getState().conversations.map((conversation) => conversation.id))
+        .toEqual(['conv-refresh', 'conv-old']);
+    });
+  });
+
   describe('createConversation', () => {
     it('should create conversation successfully', async () => {
       const newConversation = createMockConversation('conv-1', 'proj-1', 'New Chat');

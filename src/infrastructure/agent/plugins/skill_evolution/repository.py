@@ -58,6 +58,7 @@ class SkillEvolutionRepository:
         self,
         *,
         tenant_id: str,
+        skill_name: str | None = None,
         limit: int = 50,
     ) -> list[SkillEvolutionSession]:
         stmt = (
@@ -70,6 +71,8 @@ class SkillEvolutionRepository:
             .order_by(SkillEvolutionSession.created_at.asc())
             .limit(limit)
         )
+        if skill_name is not None:
+            stmt = stmt.where(SkillEvolutionSession.skill_name == skill_name)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
@@ -200,7 +203,7 @@ class SkillEvolutionRepository:
         cutoff = datetime.now(UTC) - timedelta(days=retention_days)
         stmt = delete(SkillEvolutionSession).where(
             SkillEvolutionSession.created_at < cutoff
-        )
+        ).execution_options(synchronize_session=False)
         result = await self._session.execute(stmt)
         await self._session.flush()
         return int(getattr(result, "rowcount", 0) or 0)
@@ -273,3 +276,16 @@ class SkillEvolutionRepository:
             stmt = stmt.where(SkillEvolutionJob.skill_name == skill_name)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_sessions_by_skill(
+        self,
+        *,
+        tenant_id: str,
+        skill_name: str,
+    ) -> int:
+        stmt = select(func.count(SkillEvolutionSession.id)).where(
+            SkillEvolutionSession.tenant_id == tenant_id,
+            SkillEvolutionSession.skill_name == skill_name,
+        )
+        result = await self._session.execute(stmt)
+        return int(result.scalar() or 0)

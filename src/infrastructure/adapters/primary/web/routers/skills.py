@@ -53,6 +53,8 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     Get DI container with database session for the current request.
     """
     app_container = request.app.state.container
+    if hasattr(app_container, "with_db"):
+        return app_container.with_db(db)
     return DIContainer(
         db=db,
         graph_service=app_container.graph_service,
@@ -1293,10 +1295,247 @@ class SkillVersionListResponse(BaseModel):
     total: int
 
 
+class SkillEvolutionJobResponse(BaseModel):
+    """Schema for skill evolution job response."""
+
+    id: str
+    skill_name: str
+    action: str
+    status: str
+    rationale: str | None
+    session_ids: list[str]
+    skill_version_id: str | None
+    created_at: str
+    applied_at: str | None
+
+
+class SkillEvolutionRouteEntry(BaseModel):
+    """A version or evolution job shown in the skill's evolution route."""
+
+    kind: str
+    id: str
+    label: str
+    status: str | None = None
+    action: str | None = None
+    version_number: int | None = None
+    version_label: str | None = None
+    skill_version_id: str | None = None
+    change_summary: str | None = None
+    rationale: str | None = None
+    created_by: str | None = None
+    created_at: str
+
+
+class SkillEvolutionTriggerResponse(BaseModel):
+    """Describes when and how skill evolution runs."""
+
+    capture_hook: str
+    capture_timing: str
+    scheduled_timing: str
+    manual_trigger: str
+    min_sessions_per_skill: int
+    min_avg_score: float
+    max_sessions_per_batch: int
+    publish_mode: str
+    auto_apply: bool
+    enabled: bool
+
+
+class SkillEvolutionDetailResponse(BaseModel):
+    """Schema for skill evolution route and trigger details."""
+
+    skill_id: str
+    skill_name: str
+    captured_session_count: int
+    jobs: list[SkillEvolutionJobResponse]
+    route: list[SkillEvolutionRouteEntry]
+    trigger: SkillEvolutionTriggerResponse
+
+
+class SkillEvolutionRunResponse(BaseModel):
+    """Schema for manual evolution run result."""
+
+    skill_id: str
+    skill_name: str
+    result: dict[str, Any]
+
+
 class SkillRollbackRequest(BaseModel):
     """Schema for skill rollback request."""
 
     version_number: int = Field(..., ge=1, description="Version number to rollback to")
+
+
+def _evolution_job_to_response(job: Any) -> SkillEvolutionJobResponse:  # noqa: ANN401
+    session_ids = job.session_ids if isinstance(job.session_ids, list) else []
+    return SkillEvolutionJobResponse(
+        id=job.id,
+        skill_name=job.skill_name,
+        action=job.action,
+        status=job.status,
+        rationale=job.rationale,
+        session_ids=[str(value) for value in session_ids],
+        skill_version_id=job.skill_version_id,
+        created_at=job.created_at.isoformat(),
+        applied_at=job.applied_at.isoformat() if job.applied_at else None,
+    )
+
+
+def _build_evolution_route(
+    *,
+    versions: list[SkillVersion],
+    jobs: list[Any],
+) -> list[SkillEvolutionRouteEntry]:
+    entries: list[SkillEvolutionRouteEntry] = []
+    for version in versions:
+        entries.append(
+            SkillEvolutionRouteEntry(
+                kind="version",
+                id=version.id,
+                label=version.version_label or f"v{version.version_number}",
+                version_number=version.version_number,
+                version_label=version.version_label,
+                change_summary=version.change_summary,
+                created_by=version.created_by,
+                created_at=version.created_at.isoformat(),
+            )
+        )
+    for job in jobs:
+        entries.append(
+            SkillEvolutionRouteEntry(
+                kind="evolution_job",
+                id=job.id,
+                label=f"{job.action}:{job.status}",
+                status=job.status,
+                action=job.action,
+                skill_version_id=job.skill_version_id,
+                rationale=job.rationale,
+                created_by="skill-evolution",
+                created_at=job.created_at.isoformat(),
+            )
+        )
+    return sorted(entries, key=lambda entry: entry.created_at, reverse=True)
+
+
+def _skill_evolution_trigger_response(skill_id: str) -> SkillEvolutionTriggerResponse:
+    from src.infrastructure.agent.plugins.skill_evolution.config import (
+        SkillEvolutionConfig,
+    )
+
+    config = SkillEvolutionConfig.from_env()
+    return SkillEvolutionTriggerResponse(
+        capture_hook="after_turn_complete",
+        capture_timing=(
+            "After every agent turn completes, the plugin records matched skill, "
+            "conversation trajectory, tool calls, success, and latency."
+        ),
+        scheduled_timing=(
+            f"Every {config.evolution_interval_minutes} minute(s), the scheduler "
+            "summarizes, judges, aggregates, and evolves qualifying skill sessions."
+        ),
+        manual_trigger=f"/api/v1/skills/{skill_id}/evolution/run",
+        min_sessions_per_skill=config.min_sessions_per_skill,
+        min_avg_score=config.min_avg_score,
+        max_sessions_per_batch=config.max_sessions_per_batch,
+        publish_mode=config.publish_mode,
+        auto_apply=config.auto_apply,
+        enabled=config.enabled,
+    )
+
+
+@router.get(
+    "/{skill_id}/evolution",
+    response_model=SkillEvolutionDetailResponse,
+    summary="Get skill evolution route",
+)
+async def get_skill_evolution(
+    skill_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+) -> SkillEvolutionDetailResponse:
+    """Return trigger metadata, evolution jobs, and version route for a skill."""
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
+        SqlSkillRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
+        SqlSkillVersionRepository,
+    )
+    from src.infrastructure.agent.plugins.skill_evolution.repository import (
+        SkillEvolutionRepository,
+    )
+
+    tenant_id = _normalize_tenant_id(tenant)
+    skill_repo = SqlSkillRepository(db)
+    skill = await _get_tenant_skill_or_404(skill_repo, skill_id, tenant_id)
+
+    version_repo = SqlSkillVersionRepository(db)
+    versions = await version_repo.list_by_skill(skill_id, limit=limit, offset=0)
+
+    evolution_repo = SkillEvolutionRepository(db)
+    jobs = await evolution_repo.list_jobs(
+        tenant_id=tenant_id,
+        skill_name=skill.name,
+        limit=limit,
+    )
+    captured_session_count = await evolution_repo.count_sessions_by_skill(
+        tenant_id=tenant_id,
+        skill_name=skill.name,
+    )
+
+    return SkillEvolutionDetailResponse(
+        skill_id=skill.id,
+        skill_name=skill.name,
+        captured_session_count=captured_session_count,
+        jobs=[_evolution_job_to_response(job) for job in jobs],
+        route=_build_evolution_route(versions=versions, jobs=jobs),
+        trigger=_skill_evolution_trigger_response(skill_id),
+    )
+
+
+@router.post(
+    "/{skill_id}/evolution/run",
+    response_model=SkillEvolutionRunResponse,
+    summary="Run skill evolution now",
+)
+async def run_skill_evolution(
+    request: Request,
+    skill_id: str,
+    db: AsyncSession = Depends(get_db),
+    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+) -> SkillEvolutionRunResponse:
+    """Manually trigger one evolution cycle scoped to a single skill."""
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
+        SqlSkillRepository,
+    )
+
+    tenant_id = _normalize_tenant_id(tenant)
+    skill_repo = SqlSkillRepository(db)
+    skill = await _get_tenant_skill_or_404(skill_repo, skill_id, tenant_id)
+    if skill.is_system_skill or skill.scope == SkillScope.SYSTEM:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Skill evolution is only available for managed skills"),
+        )
+
+    container = get_container_with_db(request, db)
+    plugin = container.skill_evolution_plugin()
+    if plugin is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_("Skill evolution plugin is not available"),
+        )
+
+    result = await plugin.trigger_evolution(
+        tenant_id=tenant_id,
+        project_id=skill.project_id,
+        skill_name=skill.name,
+    )
+    return SkillEvolutionRunResponse(
+        skill_id=skill.id,
+        skill_name=skill.name,
+        result=result,
+    )
 
 
 @router.get(

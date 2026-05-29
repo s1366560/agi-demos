@@ -14,9 +14,9 @@ import type { TimelineEvent } from '@/types/agent';
 
 import type { SubAgentSummary } from './message/groupTimelineEvents';
 
-export const INPUT_MIN_HEIGHT = 140;
+export const INPUT_MIN_HEIGHT = 160;
 export const INPUT_MAX_HEIGHT = 560;
-export const INPUT_DEFAULT_HEIGHT = 180;
+export const INPUT_DEFAULT_HEIGHT = 160;
 
 export interface ChatColumnProps {
   headerExtra?: React.ReactNode;

@@ -897,7 +897,19 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 report,
                 artifacts=ctx.artifacts,
             )
-            plan.replace_node(_node_with_pipeline_request(evidenced_node, report))
+            pipeline_node = _node_with_pipeline_request(evidenced_node, report)
+            plan.replace_node(pipeline_node)
+            await self._emit_event(
+                errors,
+                workspace_id,
+                pipeline_node,
+                "pipeline_run_requested",
+                {
+                    "attempt_id": report.attempt_id,
+                    "summary": decision.rationale or report.summary(),
+                    "reason": "supervisor_decision_request_pipeline",
+                },
+            )
             return True, 0, 0
 
         if action is WorkspaceSupervisorDecisionAction.WAIT_PIPELINE:
@@ -921,6 +933,17 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 decision,
             )
             plan.replace_node(retry_node)
+            await self._emit_event(
+                errors,
+                workspace_id,
+                retry_node,
+                "verification_retry_scheduled",
+                _verification_retry_scheduled_payload(
+                    retry_node,
+                    report,
+                    retry_verification_only=_is_verification_judge_retry_report(report),
+                ),
+            )
             return True, 0, 0
 
         if action in {
@@ -991,6 +1014,13 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     "summary": "human block decision lacked explicit human-required evidence",
                     "rationale": decision.rationale,
                 },
+            )
+            await self._emit_event(
+                errors,
+                workspace_id,
+                retry_node,
+                "verification_retry_scheduled",
+                _verification_retry_scheduled_payload(retry_node, report),
             )
             return True, 0, 0
 
@@ -3201,6 +3231,23 @@ def _node_with_verification_retry_backoff(
         metadata=metadata,
         updated_at=datetime.now(UTC),
     )
+
+
+def _verification_retry_scheduled_payload(
+    node: PlanNode,
+    report: VerificationReport,
+    *,
+    retry_verification_only: bool = False,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "attempt_id": report.attempt_id,
+        "summary": report.summary(),
+        "retry_count": node.metadata.get("retry_count"),
+        "retry_not_before": node.metadata.get("retry_not_before"),
+    }
+    if retry_verification_only:
+        payload["retry_verification_only"] = True
+    return payload
 
 
 def _ready_nodes_due(ready_nodes: list[PlanNode], *, now: datetime) -> list[PlanNode]:

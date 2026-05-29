@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 import logging
+import uuid
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+
+import yaml
+
+from src.domain.model.agent.skill import Skill
+from src.domain.model.agent.skill.skill_version import SkillVersion
 
 if TYPE_CHECKING:
     from src.application.services.skill_service import SkillService
+    from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
+    from src.domain.ports.repositories.skill_version_repository import SkillVersionRepositoryPort
     from src.infrastructure.agent.plugins.skill_evolution.models import (
         SkillEvolutionJob,
     )
@@ -30,6 +39,8 @@ class SkillMerger:
         *,
         tenant_id: str,
         project_id: str | None = None,
+        skill_repository: SkillRepositoryPort | None = None,
+        skill_version_repository: SkillVersionRepositoryPort | None = None,
     ) -> str | None:
         """Apply the evolution result from a job to the target skill.
 
@@ -41,13 +52,14 @@ class SkillMerger:
             return None
 
         try:
-            skill = await self._skill_service.get_skill_by_name(
-                tenant_id=tenant_id, skill_name=job.skill_name
-            )
+            if skill_repository is not None:
+                skill = await skill_repository.get_by_name(tenant_id, job.skill_name)
+            else:
+                skill = await self._skill_service.get_skill_by_name(
+                    tenant_id=tenant_id, skill_name=job.skill_name
+                )
         except Exception:
-            logger.exception(
-                "Failed to load skill '%s' for evolution", job.skill_name
-            )
+            logger.exception("Failed to load skill '%s' for evolution", job.skill_name)
             return None
 
         if skill is None:
@@ -57,30 +69,42 @@ class SkillMerger:
             return None
 
         if job.action == "optimize_description" and job.candidate_content:
-            await self._skill_service.update_skill_content(
-                skill.id,
-                full_content=job.candidate_content,
+            previous_version = skill.current_version
+            updated_content = _replace_frontmatter_description(
+                skill.full_content or "",
+                job.candidate_content,
+            )
+            version_id = await self._persist_skill_update(
+                skill,
+                updated_content=updated_content,
+                job=job,
+                skill_repository=skill_repository,
+                skill_version_repository=skill_version_repository,
             )
             logger.info(
                 "Optimized description for skill '%s' (v%d -> v%d)",
                 skill.name,
+                previous_version,
                 skill.current_version,
-                skill.current_version + 1,
             )
-            return None
+            return version_id
 
         if job.action == "improve_skill" and job.candidate_content:
-            await self._skill_service.update_skill_content(
-                skill.id,
-                full_content=job.candidate_content,
+            previous_version = skill.current_version
+            version_id = await self._persist_skill_update(
+                skill,
+                updated_content=job.candidate_content,
+                job=job,
+                skill_repository=skill_repository,
+                skill_version_repository=skill_version_repository,
             )
             logger.info(
                 "Improved skill '%s' (v%d -> v%d)",
                 skill.name,
+                previous_version,
                 skill.current_version,
-                skill.current_version + 1,
             )
-            return None
+            return version_id
 
         if job.action == "create_skill" and job.candidate_content:
             logger.info(
@@ -89,3 +113,65 @@ class SkillMerger:
             )
 
         return None
+
+    async def _persist_skill_update(
+        self,
+        skill: Skill,
+        *,
+        updated_content: str,
+        job: SkillEvolutionJob,
+        skill_repository: SkillRepositoryPort | None,
+        skill_version_repository: SkillVersionRepositoryPort | None,
+    ) -> str | None:
+        if skill_repository is None or skill_version_repository is None:
+            await self._skill_service.update_skill_content(
+                skill.id,
+                full_content=updated_content,
+            )
+            return None
+
+        max_version = await skill_version_repository.get_max_version_number(skill.id)
+        next_version = max_version + 1
+        version_label = str(next_version)
+        version = SkillVersion(
+            id=str(uuid.uuid4()),
+            skill_id=skill.id,
+            version_number=next_version,
+            version_label=version_label,
+            skill_md_content=updated_content,
+            resource_files={},
+            change_summary=job.rationale or f"Evolution {job.action}",
+            created_by="evolution",
+        )
+        await skill_version_repository.create(version)
+
+        skill.full_content = updated_content
+        skill.current_version = version.version_number
+        skill.version_label = version.version_label
+        skill.updated_at = datetime.now(UTC)
+        await skill_repository.update(skill)
+        return version.id
+
+
+def _replace_frontmatter_description(content: str, description: str) -> str:
+    """Update only frontmatter description when a skill has YAML frontmatter."""
+    if not content.startswith("---\n"):
+        return content or description
+
+    end = content.find("\n---", 4)
+    if end == -1:
+        return content or description
+
+    frontmatter_text = content[4:end].strip()
+    body = content[end + 4 :]
+    try:
+        frontmatter = yaml.safe_load(frontmatter_text) or {}
+    except yaml.YAMLError:
+        return content
+
+    if not isinstance(frontmatter, dict):
+        return content
+
+    frontmatter["description"] = description
+    yaml_text = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True).strip()
+    return f"---\n{yaml_text}\n---{body}"

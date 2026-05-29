@@ -22,10 +22,12 @@ Key Features:
 """
 
 import logging
+from typing import cast
 
 from sqlalchemy import BigInteger, delete, desc, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from src.domain.model.agent import Conversation, ConversationStatus
 from src.domain.model.agent.agent_mode import AgentMode
@@ -42,6 +44,29 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _activity_time_us() -> ColumnElement[int]:
+    """Return the conversation fallback activity timestamp as microseconds."""
+    activity_at = func.coalesce(DBConversation.updated_at, DBConversation.created_at)
+    return cast(
+        "ColumnElement[int]",
+        func.cast(func.extract("epoch", activity_at) * 1_000_000, BigInteger),
+    )
+
+
+def _conversation_activity_order(
+    last_event_time_us: ColumnElement[int],
+) -> tuple[ColumnElement[object], ...]:
+    """Stable newest-first ordering for conversation list pagination."""
+    activity_time_us = _activity_time_us()
+    effective_activity_time_us = func.coalesce(last_event_time_us, activity_time_us)
+    return (
+        cast("ColumnElement[object]", desc(effective_activity_time_us)),
+        cast("ColumnElement[object]", desc(activity_time_us)),
+        cast("ColumnElement[object]", desc(DBConversation.created_at)),
+        cast("ColumnElement[object]", desc(DBConversation.id)),
+    )
 
 
 class SqlConversationRepository(
@@ -213,15 +238,13 @@ class SqlConversationRepository(
         if status:
             query = query.where(DBConversation.status == status.value)
 
-        # Sort by last event time (microseconds), falling back to created_at converted
-        # to microseconds for consistent comparison with event_time_us.
-        created_at_us = func.cast(
-            func.extract("epoch", DBConversation.created_at) * 1_000_000,
-            BigInteger,
-        )
+        # Sort by last event time (microseconds), falling back to conversation
+        # activity time, then deterministic tie-breakers for stable pagination.
         query = (
             query.order_by(
-                desc(func.coalesce(last_activity_subq.c.last_event_time_us, created_at_us))
+                *_conversation_activity_order(
+                    cast("ColumnElement[int]", last_activity_subq.c.last_event_time_us)
+                )
             )
             .offset(offset)
             .limit(limit)
@@ -275,13 +298,13 @@ class SqlConversationRepository(
         if project_id:
             query = query.where(DBConversation.project_id == project_id)
 
-        created_at_us = func.cast(
-            func.extract("epoch", DBConversation.created_at) * 1_000_000,
-            BigInteger,
-        )
+        # Sort by last event time (microseconds), falling back to conversation
+        # activity time, then deterministic tie-breakers for stable pagination.
         query = (
             query.order_by(
-                desc(func.coalesce(last_activity_subq.c.last_event_time_us, created_at_us))
+                *_conversation_activity_order(
+                    cast("ColumnElement[int]", last_activity_subq.c.last_event_time_us)
+                )
             )
             .offset(offset)
             .limit(limit)

@@ -123,7 +123,7 @@ class ProviderAdapterRegistry:
                 raise ValueError("llm_model is required to create an LLM adapter")
             llm_config = LLMConfig(
                 model=model_name,
-                temperature=provider_config.temperature,  # type: ignore[attr-defined]
+                temperature=getattr(provider_config, "temperature", 0.0),
             )
 
         # Get adapter class

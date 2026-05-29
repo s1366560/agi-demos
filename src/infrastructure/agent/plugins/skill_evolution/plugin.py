@@ -162,11 +162,15 @@ class SkillEvolutionPlugin:
         await self._scheduler_instance.stop()
 
     async def trigger_evolution(
-        self, *, tenant_id: str, project_id: str | None = None
+        self,
+        *,
+        tenant_id: str,
+        project_id: str | None = None,
+        skill_name: str | None = None,
     ) -> dict[str, Any]:
         """Manually trigger an evolution cycle for a tenant."""
         return await self._scheduler_instance.run_once(
-            tenant_id=tenant_id, project_id=project_id
+            tenant_id=tenant_id, project_id=project_id, skill_name=skill_name
         )
 
 

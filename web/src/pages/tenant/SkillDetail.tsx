@@ -18,9 +18,11 @@ import {
   Download,
   Eye,
   FileText,
+  GitBranch,
   History,
   KeyRound,
   Pencil,
+  Play,
   RefreshCw,
   RotateCcw,
   Wrench,
@@ -31,10 +33,18 @@ import { skillAPI } from '@/services/skillService';
 import { SkillModal } from '@/components/skill/SkillModal';
 import { LazyEmpty, LazyPopconfirm, LazySpin, useLazyMessage } from '@/components/ui/lazyAntd';
 
-import { safeMarkdownComponents, useMarkdownPlugins } from '../../components/agent/chat/markdownPlugins';
+import {
+  safeMarkdownComponents,
+  useMarkdownPlugins,
+} from '../../components/agent/chat/markdownPlugins';
 import { MARKDOWN_PROSE_CLASSES } from '../../components/agent/styles';
 
-import type { SkillResponse, SkillVersionResponse } from '@/types/agent';
+import type {
+  SkillEvolutionDetailResponse,
+  SkillEvolutionRouteEntry,
+  SkillResponse,
+  SkillVersionResponse,
+} from '@/types/agent';
 
 type SkillSource = NonNullable<SkillResponse['source']>;
 type SkillContentMode = 'preview' | 'raw';
@@ -97,13 +107,7 @@ function getSkillListPath(pathname: string): string {
   return `/${segments.slice(0, skillsIndex + 1).join('/')}`;
 }
 
-function SkillContentViewer({
-  content,
-  mode,
-}: {
-  content: string;
-  mode: SkillContentMode;
-}) {
+function SkillContentViewer({ content, mode }: { content: string; mode: SkillContentMode }) {
   const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
 
   if (mode === 'raw') {
@@ -129,6 +133,43 @@ function SkillContentViewer({
   );
 }
 
+function EvolutionRouteRow({ entry }: { entry: SkillEvolutionRouteEntry }) {
+  const isVersion = entry.kind === 'version';
+  return (
+    <div className="py-3">
+      <div className="flex items-start gap-3">
+        <div
+          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] ${
+            isVersion
+              ? 'bg-[oklch(0.9_0.08_145)] text-[oklch(0.35_0.1_145)] dark:bg-[oklch(0.24_0.05_145)] dark:text-[oklch(0.78_0.09_145)]'
+              : 'bg-[oklch(0.91_0.05_255)] text-[oklch(0.38_0.1_255)] dark:bg-[oklch(0.24_0.04_255)] dark:text-[oklch(0.76_0.08_255)]'
+          }`}
+        >
+          {isVersion ? <History size={15} /> : <GitBranch size={15} />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-sm font-semibold ${pageText}`}>{entry.label}</span>
+            <Tag>{isVersion ? 'version' : entry.action}</Tag>
+            {entry.status ? (
+              <Tag color={entry.status === 'applied' ? 'success' : 'default'}>{entry.status}</Tag>
+            ) : null}
+          </div>
+          {entry.change_summary || entry.rationale ? (
+            <div className={`mt-1 text-sm ${mutedText}`}>
+              {entry.change_summary ?? entry.rationale}
+            </div>
+          ) : null}
+          <div className={`mt-1 text-xs ${mutedText}`}>
+            {entry.created_by ? `${entry.created_by} · ` : ''}
+            {formatDate(entry.created_at)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export const SkillDetail: FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
@@ -139,7 +180,9 @@ export const SkillDetail: FC = () => {
 
   const [skill, setSkill] = useState<SkillResponse | null>(null);
   const [versions, setVersions] = useState<SkillVersionResponse[]>([]);
+  const [evolution, setEvolution] = useState<SkillEvolutionDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isEvolutionRunning, setIsEvolutionRunning] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rollbackVersion, setRollbackVersion] = useState<number | null>(null);
   const [contentMode, setContentMode] = useState<SkillContentMode>('preview');
@@ -163,12 +206,18 @@ export const SkillDetail: FC = () => {
       setSkill(nextSkill);
       if (!isManagedSkill(nextSkill)) {
         setVersions([]);
+        setEvolution(null);
       } else {
         try {
-          const versionResult = await skillAPI.listVersions(nextSkill.id);
+          const [versionResult, evolutionResult] = await Promise.all([
+            skillAPI.listVersions(nextSkill.id),
+            skillAPI.getEvolution(nextSkill.id),
+          ]);
           setVersions(versionResult.versions);
+          setEvolution(evolutionResult);
         } catch {
           setVersions([]);
+          setEvolution(null);
           message?.error(t('tenant.skills.detail.versionLoadFailed'));
         }
       }
@@ -228,6 +277,22 @@ export const SkillDetail: FC = () => {
     },
     [loadSkill, message, skill, t]
   );
+
+  const handleRunEvolution = useCallback(async () => {
+    if (!skill || !managed) {
+      return;
+    }
+    setIsEvolutionRunning(true);
+    try {
+      await skillAPI.runEvolution(skill.id);
+      message?.success(t('tenant.skills.detail.evolutionRunSuccess'));
+      await loadSkill();
+    } catch {
+      message?.error(t('tenant.skills.detail.evolutionRunFailed'));
+    } finally {
+      setIsEvolutionRunning(false);
+    }
+  }, [loadSkill, managed, message, skill, t]);
 
   const handleModalSuccess = useCallback(() => {
     setIsModalOpen(false);
@@ -417,6 +482,73 @@ export const SkillDetail: FC = () => {
             <pre className="mt-4 max-h-[360px] overflow-auto rounded-[4px] border border-[oklch(0.88_0.006_255)] bg-[oklch(0.96_0.004_255)] p-4 text-xs leading-5 text-[oklch(0.24_0.01_255)] dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)] dark:text-[oklch(0.88_0.006_255)]">
               {metadataText}
             </pre>
+          </section>
+
+          <section className={`rounded-[6px] p-5 ${surface}`}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-center gap-2">
+                <GitBranch size={17} className={mutedText} />
+                <h2 className={`text-sm font-semibold ${pageText}`}>
+                  {t('tenant.skills.detail.evolutionRoute')}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleRunEvolution();
+                }}
+                className={actionButton}
+                disabled={!managed || isEvolutionRunning}
+              >
+                <Play size={16} />
+                {isEvolutionRunning
+                  ? t('tenant.skills.detail.evolutionRunning')
+                  : t('tenant.skills.detail.runEvolution')}
+              </button>
+            </div>
+            {evolution ? (
+              <div className="mt-4 grid gap-4">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <InfoRow
+                    label={t('tenant.skills.detail.capturedSessions')}
+                    value={evolution.captured_session_count}
+                  />
+                  <InfoRow
+                    label={t('tenant.skills.detail.triggerHook')}
+                    value={evolution.trigger.capture_hook}
+                    mono
+                  />
+                  <InfoRow
+                    label={t('tenant.skills.detail.evolutionThreshold')}
+                    value={`${evolution.trigger.min_sessions_per_skill} / ${evolution.trigger.min_avg_score}`}
+                  />
+                </div>
+                <div className={`text-sm ${mutedText}`}>
+                  {evolution.trigger.capture_timing}
+                  <br />
+                  {evolution.trigger.scheduled_timing}
+                </div>
+                {evolution.route.length === 0 ? (
+                  <LazyEmpty description={t('tenant.skills.detail.emptyEvolutionRoute')} />
+                ) : (
+                  <div className="divide-y divide-[oklch(0.9_0.006_255)] dark:divide-[oklch(0.28_0.006_255)]">
+                    {evolution.route.map((entry) => (
+                      <EvolutionRouteRow key={`${entry.kind}-${entry.id}`} entry={entry} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-4 py-8">
+                <LazyEmpty
+                  description={
+                    managed
+                      ? t('tenant.skills.detail.emptyEvolutionRoute')
+                      : t('tenant.skills.detail.notVersioned')
+                  }
+                />
+              </div>
+            )}
           </section>
         </div>
 

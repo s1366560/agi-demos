@@ -7,7 +7,8 @@ import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
 
 import { fireEvent, render, screen, waitFor } from '../../utils';
 
-const { loadWorkspaceSurfaceMock, modalConfirm } = vi.hoisted(() => ({
+const { formatDistanceToNowMock, loadWorkspaceSurfaceMock, modalConfirm } = vi.hoisted(() => ({
+  formatDistanceToNowMock: vi.fn(() => 'just now'),
   loadWorkspaceSurfaceMock: vi.fn(),
   modalConfirm: vi.fn(),
 }));
@@ -102,7 +103,7 @@ vi.mock('@/utils/agentWorkspacePath', () => ({
 }));
 
 vi.mock('@/utils/date', () => ({
-  formatDistanceToNow: () => 'just now',
+  formatDistanceToNow: (value: string) => formatDistanceToNowMock(value),
 }));
 
 vi.mock('antd', () => ({
@@ -169,6 +170,7 @@ function LocationProbe() {
 describe('TenantChatSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    formatDistanceToNowMock.mockReturnValue('just now');
     agentState.activeConversationId = 'conv-1';
     agentState.createNewConversation.mockResolvedValue('conv-new');
     conversationsState.conversations = [
@@ -253,6 +255,25 @@ describe('TenantChatSidebar', () => {
 
     expect(screen.getByText('Conversation One')).toBeInTheDocument();
     expect(screen.queryByText('No conversations yet')).not.toBeInTheDocument();
+  });
+
+  it('displays conversation activity time from updated_at when available', () => {
+    conversationsState.conversations = [
+      {
+        id: 'conv-active-time',
+        title: 'Conversation Activity Time',
+        created_at: '2026-04-17T00:00:00.000Z',
+        updated_at: '2026-04-18T00:00:00.000Z',
+        status: 'active',
+      },
+    ];
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-1',
+    });
+
+    expect(screen.getByText('Conversation Activity Time')).toBeInTheDocument();
+    expect(formatDistanceToNowMock).toHaveBeenCalledWith('2026-04-18T00:00:00.000Z');
   });
 
   it('does not render conversation icons or tooltips when collapsed', () => {

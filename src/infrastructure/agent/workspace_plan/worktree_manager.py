@@ -335,24 +335,29 @@ class WorkspaceWorktreeManager:
             protected_worktree_names=protected_worktree_names,
         )
         if self._preparation_agent is not None:
-            return await self._preparation_agent.prepare_worktree(
-                AttemptWorktreePreparationRequest(
-                    workspace_id=workspace_id,
-                    task_id=task.id,
-                    attempt_id=resolved_attempt_id,
-                    workspace_root=path_validation.workspace_root,
-                    sandbox_code_root=sandbox_code_root,
-                    worktree_path=worktree_path,
-                    branch_name=branch_name,
-                    base_ref=base_ref,
-                    original_base_ref=base_ref,
-                    setup_command=command,
-                    diagnostics_command=worktree_post_setup_diagnostics_command(
+            try:
+                prepared = await self._preparation_agent.prepare_worktree(
+                    AttemptWorktreePreparationRequest(
+                        workspace_id=workspace_id,
+                        task_id=task.id,
+                        attempt_id=resolved_attempt_id,
+                        workspace_root=path_validation.workspace_root,
                         sandbox_code_root=sandbox_code_root,
-                        resolved_base_ref=base_ref,
+                        worktree_path=worktree_path,
+                        branch_name=branch_name,
+                        base_ref=base_ref,
+                        original_base_ref=base_ref,
+                        setup_command=command,
+                        diagnostics_command=worktree_post_setup_diagnostics_command(
+                            sandbox_code_root=sandbox_code_root,
+                            resolved_base_ref=base_ref,
+                        ),
                     ),
                 )
-            )
+            except Exception:
+                prepared = None
+            if prepared is not None and not prepared.setup_failed:
+                return prepared
         try:
             result = await self._runner_factory(
                 project_id=workspace.project_id,

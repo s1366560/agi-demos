@@ -114,6 +114,10 @@ class SessionSummarizer:
         parsed = json.loads(content)
 
         trajectory = parsed.get("trajectory", raw_trajectory)
+        if isinstance(trajectory, list):
+            trajectory = {"steps": trajectory}
+        elif not isinstance(trajectory, dict):
+            trajectory = raw_trajectory
         summary = parsed.get("summary", "")
 
         return trajectory, summary

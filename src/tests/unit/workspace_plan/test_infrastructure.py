@@ -4160,6 +4160,146 @@ class TestSupervisorTick:
         assert node.intent is TaskIntent.DONE
         assert node.execution is TaskExecution.IDLE
 
+    async def test_tick_agent_supervisor_pipeline_decision_emits_pipeline_event(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+            )
+        )
+        await repo.save(plan)
+
+        provider = _StaticSupervisorDecisionProvider(
+            WorkspaceSupervisorDecisionResult(
+                action=WorkspaceSupervisorDecisionAction.REQUEST_PIPELINE,
+                rationale="trigger harness-native CI for the committed attempt",
+                confidence=0.9,
+            )
+        )
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("pipeline request should not redispatch in the same tick")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node, attempt_id=node.current_attempt_id)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_RetryableInfrastructureVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            supervisor_decision_provider=provider,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        pipeline_events = [event for event in events if event[0] == "pipeline_run_requested"]
+        assert len(pipeline_events) == 1
+        assert pipeline_events[0][1] == "a"
+        assert pipeline_events[0][2]["attempt_id"] == "attempt-a"
+        assert pipeline_events[0][2]["reason"] == "supervisor_decision_request_pipeline"
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.metadata["pipeline_status"] == "requested"
+        assert node.metadata["pipeline_gate_status"] == "requested"
+
+    async def test_tick_agent_supervisor_retry_decision_schedules_followup_tick(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+            )
+        )
+        await repo.save(plan)
+
+        provider = _StaticSupervisorDecisionProvider(
+            WorkspaceSupervisorDecisionResult(
+                action=WorkspaceSupervisorDecisionAction.RETRY_SAME_NODE,
+                rationale="transient model connection failure; retry the same node",
+                confidence=0.8,
+            )
+        )
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("retry backoff should not redispatch in the same tick")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node, attempt_id=node.current_attempt_id)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_RetryableInfrastructureVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            supervisor_decision_provider=provider,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.allocations_made == 0
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.intent is TaskIntent.TODO
+        assert node.execution is TaskExecution.IDLE
+        assert node.current_attempt_id is None
+        assert node.metadata["retry_not_before"].endswith("Z")
+        retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
+        assert len(retry_events) == 1
+        assert retry_events[0][2]["attempt_id"] == "attempt-a"
+        assert retry_events[0][2]["retry_not_before"] == node.metadata["retry_not_before"]
+
     async def test_tick_does_not_human_block_without_explicit_agent_payload(self) -> None:
         repo = InMemoryPlanRepository()
         plan = _plan_with_two_tasks()
@@ -4220,6 +4360,7 @@ class TestSupervisorTick:
         assert report.verifications_ran == 1
         assert report.nodes_blocked == 0
         assert any(event[0] == "supervisor_decision_human_block_downgraded" for event in events)
+        assert any(event[0] == "verification_retry_scheduled" for event in events)
         reloaded = await repo.get_by_workspace("ws-1")
         assert reloaded is not None
         node = reloaded.nodes[PlanNodeId("a")]

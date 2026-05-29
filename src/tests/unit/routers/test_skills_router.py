@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import zipfile
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -134,6 +135,43 @@ class _MemoryVersionRepository:
 
     async def count_by_skill(self, skill_id: str) -> int:
         return len([version for version in self._db.versions if version.skill_id == skill_id])
+
+
+class _MemorySqlSkillRepository:
+    def __init__(self, db: SimpleNamespace) -> None:
+        self._repo = db.skill_repo
+
+    async def get_by_id(self, skill_id: str) -> Skill | None:
+        return await self._repo.get_by_id(skill_id)
+
+
+class _MemoryEvolutionRepository:
+    def __init__(self, db: SimpleNamespace) -> None:
+        self._db = db
+
+    async def list_jobs(
+        self,
+        *,
+        tenant_id: str,
+        status: str | None = None,
+        skill_name: str | None = None,
+        limit: int = 50,
+    ) -> list[SimpleNamespace]:
+        jobs = [
+            job
+            for job in self._db.evolution_jobs
+            if job.tenant_id == tenant_id
+            and (status is None or job.status == status)
+            and (skill_name is None or job.skill_name == skill_name)
+        ]
+        return jobs[:limit]
+
+    async def count_sessions_by_skill(self, *, tenant_id: str, skill_name: str) -> int:
+        return sum(
+            1
+            for session in self._db.evolution_sessions
+            if session.tenant_id == tenant_id and session.skill_name == skill_name
+        )
 
 
 @pytest.mark.unit
@@ -490,3 +528,124 @@ async def test_get_skill_version_sanitizes_missing_version(
     assert exc_info.value.detail == "Skill version not found"
     assert "secret" not in exc_info.value.detail
     assert "42" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+async def test_get_skill_evolution_returns_route_and_trigger_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        name="alpha-skill",
+        description="Manages Agent Skills packages",
+        tools=["Read"],
+        full_content=SAMPLE_SKILL_MD,
+    )
+    await repo.create(skill)
+    created_at = datetime.now(UTC)
+    db = SimpleNamespace(
+        skill_repo=repo,
+        versions=[
+            SkillVersion(
+                id="version-1",
+                skill_id=skill.id,
+                version_number=1,
+                version_label="1.2.3",
+                skill_md_content=SAMPLE_SKILL_MD,
+                change_summary="Initial import",
+                created_by="api",
+                created_at=created_at,
+            )
+        ],
+        evolution_jobs=[
+            SimpleNamespace(
+                id="job-1",
+                tenant_id="tenant-1",
+                skill_name="alpha-skill",
+                action="improve_skill",
+                status="pending_review",
+                rationale="Observed repeated missing setup step",
+                session_ids=["s1", "s2"],
+                skill_version_id=None,
+                created_at=created_at,
+                applied_at=None,
+            )
+        ],
+        evolution_sessions=[
+            SimpleNamespace(tenant_id="tenant-1", skill_name="alpha-skill"),
+            SimpleNamespace(tenant_id="tenant-1", skill_name="alpha-skill"),
+        ],
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository."
+        "SqlSkillRepository",
+        _MemorySqlSkillRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
+        "SqlSkillVersionRepository",
+        _MemoryVersionRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.skill_evolution.repository."
+        "SkillEvolutionRepository",
+        _MemoryEvolutionRepository,
+    )
+
+    response = await router.get_skill_evolution(
+        skill_id=skill.id,
+        limit=20,
+        db=db,
+        tenant={"id": "tenant-1"},
+    )
+
+    assert response.skill_name == "alpha-skill"
+    assert response.captured_session_count == 2
+    assert response.trigger.capture_hook == "after_turn_complete"
+    assert response.trigger.manual_trigger.endswith(f"/skills/{skill.id}/evolution/run")
+    assert [entry.kind for entry in response.route] == ["version", "evolution_job"]
+    assert response.jobs[0].rationale == "Observed repeated missing setup step"
+
+
+@pytest.mark.unit
+async def test_run_skill_evolution_triggers_single_skill_cycle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        name="alpha-skill",
+        description="Manages Agent Skills packages",
+        tools=["Read"],
+    )
+    await repo.create(skill)
+    db = SimpleNamespace(skill_repo=repo)
+    plugin = SimpleNamespace(trigger_evolution=AsyncMock(return_value={"jobs": 1}))
+    container = SimpleNamespace(skill_evolution_plugin=lambda: plugin)
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                container=SimpleNamespace(with_db=lambda _db: container)
+            )
+        )
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository."
+        "SqlSkillRepository",
+        _MemorySqlSkillRepository,
+    )
+
+    response = await router.run_skill_evolution(
+        request=request,
+        skill_id=skill.id,
+        db=db,
+        tenant={"id": "tenant-1"},
+    )
+
+    assert response.result == {"jobs": 1}
+    plugin.trigger_evolution.assert_awaited_once_with(
+        tenant_id="tenant-1",
+        project_id=None,
+        skill_name="alpha-skill",
+    )

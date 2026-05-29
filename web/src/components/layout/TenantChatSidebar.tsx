@@ -281,17 +281,21 @@ function buildConversationSections(
   return sections;
 }
 
+function conversationActivityDate(conversation: Conversation): string {
+  return conversation.updated_at || conversation.created_at;
+}
+
 // Memoized ConversationItem to prevent unnecessary re-renders (rerender-memo)
 const ConversationItem: React.FC<ConversationItemProps> = memo(
   ({ activeItemRef, conversation, grouped = false, isActive, onSelect, onDelete, onRename }) => {
     const { t } = useTranslation();
     const timeAgo = React.useMemo(() => {
       try {
-        return formatDistanceToNow(conversation.created_at);
+        return formatDistanceToNow(conversationActivityDate(conversation));
       } catch {
         return '';
       }
-    }, [conversation.created_at]);
+    }, [conversation]);
 
     const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
       if (key === 'delete') {

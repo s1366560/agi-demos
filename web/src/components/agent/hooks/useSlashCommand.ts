@@ -6,6 +6,7 @@ import type { SlashCommandDropdownHandle } from '../SlashCommandDropdown';
 
 interface UseSlashCommandParams {
   onSend: (content: string) => void;
+  onInputClear?: () => void;
 }
 
 interface UseSlashCommandReturn {
@@ -26,7 +27,10 @@ interface UseSlashCommandReturn {
   resetSlash: () => void;
 }
 
-export function useSlashCommand({ onSend }: UseSlashCommandParams): UseSlashCommandReturn {
+export function useSlashCommand({
+  onSend,
+  onInputClear,
+}: UseSlashCommandParams): UseSlashCommandReturn {
   const [slashDropdownVisible, setSlashDropdownVisible] = useState(false);
   const [slashQuery, setSlashQuery] = useState('');
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
@@ -40,14 +44,16 @@ export function useSlashCommand({ onSend }: UseSlashCommandParams): UseSlashComm
         setSelectedSkill(item.data);
         setSlashDropdownVisible(false);
         setSlashQuery('');
+        onInputClear?.();
       } else {
         setSlashDropdownVisible(false);
         setSlashQuery('');
         const cmdText = `/${item.data.name}`;
         onSend(cmdText);
+        onInputClear?.();
       }
     },
-    [onSend]
+    [onSend, onInputClear]
   );
 
   const handleRemoveSkill = useCallback(() => {

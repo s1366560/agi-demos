@@ -202,6 +202,13 @@ export const InputBar = memo<InputBarProps>(
     const shiftPrompt = usePendingPromptStore((s) => s.shift);
     const canQueue = isStreaming && !disabled && content.trim().length > 0 && Boolean(queueConvId);
 
+    const clearInputContent = useCallback(() => {
+      setContent('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+    }, []);
+
     // --- Extracted hooks ---
     const {
       slashDropdownVisible,
@@ -216,7 +223,7 @@ export const InputBar = memo<InputBarProps>(
       handleRemoveSkill,
       slashDropdownRef,
       resetSlash,
-    } = useSlashCommand({ onSend });
+    } = useSlashCommand({ onSend, onInputClear: clearInputContent });
 
     const {
       mentionVisible,
@@ -252,7 +259,7 @@ export const InputBar = memo<InputBarProps>(
     // --- Textarea resize ---
     const resizeTextarea = useCallback((target: HTMLTextAreaElement) => {
       target.style.height = 'auto';
-      const minHeight = 56;
+      const minHeight = 32;
       const containerHeight = target.parentElement?.clientHeight ?? 400;
       const nextHeight = Math.max(minHeight, Math.min(target.scrollHeight, containerHeight));
       target.style.height = `${String(nextHeight)}px`;
@@ -275,12 +282,9 @@ export const InputBar = memo<InputBarProps>(
           skillName: selectedSkill?.name,
           subAgentName: selectedSubAgent || undefined,
         });
-        setContent('');
+        clearInputContent();
         resetSlash();
         resetMention();
-        if (textareaRef.current) {
-          textareaRef.current.style.height = 'auto';
-        }
         return;
       }
       if (
@@ -310,13 +314,10 @@ export const InputBar = memo<InputBarProps>(
         imageAttachments,
         isSharedMode && selectedSubAgent ? [selectedSubAgent] : undefined
       );
-      setContent('');
+      clearInputContent();
       resetSlash();
       resetMention();
       clearAll();
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-      }
     }, [
       content,
       uploadedAttachments,
@@ -332,6 +333,7 @@ export const InputBar = memo<InputBarProps>(
       captureFrame,
       resetSlash,
       resetMention,
+      clearInputContent,
       queueConvId,
       enqueuePrompt,
     ]);
@@ -452,7 +454,7 @@ export const InputBar = memo<InputBarProps>(
     const charCount = content.length;
 
     return (
-      <div className="h-full flex flex-col p-4">
+      <div className="h-full min-w-0 flex flex-col p-2 sm:p-4">
         {/* Plan Mode indicator */}
         {isPlanMode && (
           <div className="mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-300 text-sm">
@@ -486,7 +488,7 @@ export const InputBar = memo<InputBarProps>(
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           className={`
-            flex-1 flex flex-col min-h-0 rounded-xl border relative
+            flex-1 flex flex-col min-h-0 min-w-0 rounded-lg sm:rounded-xl border relative
             bg-white dark:bg-slate-800
             transition-shadow duration-200 ease-out shadow-lg
             ${
@@ -513,7 +515,7 @@ export const InputBar = memo<InputBarProps>(
 
           {/* Inline Attachment Chips */}
           {attachments.length > 0 && (
-            <div className="px-4 pt-3 flex-shrink-0">
+            <div className="px-3 pt-3 sm:px-4 flex-shrink-0">
               <div className="flex flex-wrap gap-2">
                 {attachments.map((file) => (
                   <AttachmentChip
@@ -535,58 +537,8 @@ export const InputBar = memo<InputBarProps>(
             />
           </div>
 
-          {/* Selected Skill Badge */}
-          {selectedSkill && (
-            <div className="px-4 pt-3 flex-shrink-0">
-              <div className="inline-flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary dark:border-primary/30 dark:bg-primary/10">
-                <Zap size={12} />
-                <span>/{selectedSkill.name}</span>
-                <button
-                  type="button"
-                  onClick={handleRemoveSkill}
-                  aria-label={t('agent.inputBar.removeSelectedSkill', {
-                    name: selectedSkill.name,
-                    defaultValue: 'Remove /{{name}} skill',
-                  })}
-                  title={t('agent.inputBar.removeSelectedSkill', {
-                    name: selectedSkill.name,
-                    defaultValue: 'Remove /{{name}} skill',
-                  })}
-                  className="ml-0.5 rounded p-0.5 transition-colors duration-150 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                >
-                  <X size={10} />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Selected SubAgent Badge */}
-          {selectedSubAgent && (
-            <div className="px-4 pt-3 flex-shrink-0">
-              <div className="inline-flex items-center gap-1.5 rounded-md border border-purple-500/20 bg-purple-500/5 px-3 py-1.5 text-xs font-medium text-purple-600 dark:border-purple-500/30 dark:bg-purple-500/10 dark:text-purple-400">
-                <Workflow size={12} />
-                <span>@{selectedSubAgent}</span>
-                <button
-                  type="button"
-                  onClick={handleRemoveSubAgent}
-                  aria-label={t('agent.inputBar.removeSelectedSubAgent', {
-                    name: selectedSubAgent,
-                    defaultValue: 'Remove @{{name}} subagent',
-                  })}
-                  title={t('agent.inputBar.removeSelectedSubAgent', {
-                    name: selectedSubAgent,
-                    defaultValue: 'Remove @{{name}} subagent',
-                  })}
-                  className="ml-0.5 rounded p-0.5 transition-colors duration-150 hover:bg-purple-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                >
-                  <X size={10} />
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Text Area */}
-          <div className="flex-1 min-h-0 px-4 py-3 relative overflow-visible">
+          <div className="min-w-0 flex-shrink-0 px-3 py-2 sm:px-4 relative overflow-visible">
             <SlashCommandDropdown
               ref={slashDropdownRef}
               query={slashQuery}
@@ -632,49 +584,98 @@ export const InputBar = memo<InputBarProps>(
                 }}
               />
             )}
-            <textarea
-              id="agent-message-input"
-              ref={mergedRef}
-              value={content}
-              onChange={handleInput}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              onFocus={() => {
-                setIsFocused(true);
-              }}
-              onBlur={() => {
-                setIsFocused(false);
-              }}
-              aria-label={t(
-                'agent.inputBar.placeholder',
-                "Ask me anything, or type '/' for commands..."
-              )}
-              placeholder={t(
-                'agent.inputBar.placeholder',
-                "Ask me anything, or type '/' for commands..."
-              )}
-              rows={1}
-              data-testid="chat-input"
-              dir="auto"
-              autoCapitalize="sentences"
+            <div
               className="
-                w-full h-auto rounded-lg px-3 py-2
+                flex min-h-11 w-full min-w-0 flex-wrap items-center gap-1.5 rounded-md px-2 py-1.5
                 bg-slate-50/80 dark:bg-slate-900/50
-                text-slate-800 dark:text-slate-100
-                placeholder:text-slate-400 dark:placeholder:text-slate-500
-                focus:outline-none text-sm leading-relaxed
-                overflow-y-auto overflow-x-hidden
-                break-words font-sans
-                scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600
-                scrollbar-track-transparent scrollbar-w-1.5
-                hover:scrollbar-thumb-slate-400 dark:hover:scrollbar-thumb-slate-500
+                transition-colors
               "
-              style={{
-                resize: 'none',
-                minHeight: '56px',
-                maxHeight: '100%',
-              }}
-            />
+            >
+              {selectedSkill && (
+                <div className="inline-flex max-w-full shrink-0 items-center gap-1 rounded border border-primary/20 bg-primary/5 px-2 py-1 text-xs font-medium text-primary dark:border-primary/30 dark:bg-primary/10">
+                  <Zap size={12} />
+                  <span className="max-w-[12rem] truncate">/{selectedSkill.name}</span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveSkill}
+                    aria-label={t('agent.inputBar.removeSelectedSkill', {
+                      name: selectedSkill.name,
+                      defaultValue: 'Remove /{{name}} skill',
+                    })}
+                    title={t('agent.inputBar.removeSelectedSkill', {
+                      name: selectedSkill.name,
+                      defaultValue: 'Remove /{{name}} skill',
+                    })}
+                    className="-mr-0.5 rounded p-0.5 transition-colors duration-150 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              )}
+              {selectedSubAgent && (
+                <div className="inline-flex max-w-full shrink-0 items-center gap-1 rounded border border-purple-500/20 bg-purple-500/5 px-2 py-1 text-xs font-medium text-purple-600 dark:border-purple-500/30 dark:bg-purple-500/10 dark:text-purple-400">
+                  <Workflow size={12} />
+                  <span className="max-w-[10rem] truncate">@{selectedSubAgent}</span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveSubAgent}
+                    aria-label={t('agent.inputBar.removeSelectedSubAgent', {
+                      name: selectedSubAgent,
+                      defaultValue: 'Remove @{{name}} subagent',
+                    })}
+                    title={t('agent.inputBar.removeSelectedSubAgent', {
+                      name: selectedSubAgent,
+                      defaultValue: 'Remove @{{name}} subagent',
+                    })}
+                    className="-mr-0.5 rounded p-0.5 transition-colors duration-150 hover:bg-purple-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              )}
+              <textarea
+                id="agent-message-input"
+                ref={mergedRef}
+                value={content}
+                onChange={handleInput}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                onFocus={() => {
+                  setIsFocused(true);
+                }}
+                onBlur={() => {
+                  setIsFocused(false);
+                }}
+                aria-label={t(
+                  'agent.inputBar.placeholder',
+                  "Ask me anything, or type '/' for commands..."
+                )}
+                placeholder={t(
+                  'agent.inputBar.placeholder',
+                  "Ask me anything, or type '/' for commands..."
+                )}
+                rows={1}
+                data-testid="chat-input"
+                dir="auto"
+                autoCapitalize="sentences"
+                className="
+                  h-auto min-w-40 flex-1 bg-transparent px-1 py-1
+                  text-sm leading-relaxed text-slate-800 dark:text-slate-100
+                  placeholder:text-slate-400 dark:placeholder:text-slate-500
+                  focus:outline-none
+                  overflow-y-auto overflow-x-hidden
+                  break-words font-sans
+                  scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600
+                  scrollbar-track-transparent scrollbar-w-1.5
+                  hover:scrollbar-thumb-slate-400 dark:hover:scrollbar-thumb-slate-500
+                "
+                style={{
+                  resize: 'none',
+                  minHeight: '32px',
+                  maxHeight: '100%',
+                }}
+              />
+            </div>
           </div>
 
           {/* Toolbar */}

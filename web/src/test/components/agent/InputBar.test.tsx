@@ -87,6 +87,24 @@ describe('InputBar autocomplete overlays', () => {
     expect(input.closest('.overflow-visible')).toBeInTheDocument();
   });
 
+  it('clears slash query text after selecting a skill with Enter', async () => {
+    render(<InputBar onSend={vi.fn()} onAbort={vi.fn()} isStreaming={false} />);
+
+    const input = await screen.findByTestId('chat-input');
+    fireEvent.change(input, { target: { value: '/pla' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('/planner')).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(input).toHaveValue('');
+    });
+    expect(screen.getByText('/planner')).toBeInTheDocument();
+  });
+
   it('shows mention popover when typing @ query', async () => {
     render(
       <InputBar onSend={vi.fn()} onAbort={vi.fn()} isStreaming={false} projectId="project-1" />
@@ -108,11 +126,12 @@ describe('InputBar autocomplete overlays', () => {
       <InputBar onSend={vi.fn()} onAbort={vi.fn()} isStreaming={false} onTogglePlanMode={vi.fn()} />
     );
 
-    expect(screen.getByTestId('input-toolbar')).toHaveClass('flex-col', 'sm:flex-row');
+    expect(screen.getByTestId('input-toolbar')).toHaveClass('flex-wrap', 'items-center');
+    expect(screen.getByTestId('input-toolbar')).toHaveClass('min-w-0', 'mt-auto');
     expect(screen.getByTestId('input-toolbar-actions')).toHaveClass(
-      'w-full',
       'justify-end',
-      'sm:w-auto'
+      'ml-auto',
+      'flex-wrap'
     );
   });
 });

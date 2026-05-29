@@ -2037,6 +2037,15 @@
         "exportFailed": "技能导出失败",
         "readOnlySource": "此技能来源为只读",
         "versionCreatedBy": "{{author}} · {{date}}",
+        "evolutionRoute": "进化路线",
+        "runEvolution": "执行进化",
+        "evolutionRunning": "执行中",
+        "evolutionRunSuccess": "进化周期已完成",
+        "evolutionRunFailed": "进化周期失败",
+        "capturedSessions": "捕获会话",
+        "triggerHook": "触发 Hook",
+        "evolutionThreshold": "阈值",
+        "emptyEvolutionRoute": "暂无进化任务或版本路线",
         "notSet": "未设置"
       },
       "modal": {

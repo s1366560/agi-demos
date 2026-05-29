@@ -1326,6 +1326,15 @@
         "exportFailed": "Skill export failed",
         "readOnlySource": "This skill source is read-only",
         "versionCreatedBy": "{{author}} · {{date}}",
+        "evolutionRoute": "Evolution route",
+        "runEvolution": "Run evolution",
+        "evolutionRunning": "Running",
+        "evolutionRunSuccess": "Evolution cycle completed",
+        "evolutionRunFailed": "Evolution cycle failed",
+        "capturedSessions": "Captured",
+        "triggerHook": "Hook",
+        "evolutionThreshold": "Threshold",
+        "emptyEvolutionRoute": "No evolution jobs or version route yet",
         "notSet": "Not set"
       },
       "modal": {

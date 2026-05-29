@@ -4283,6 +4283,89 @@ async def test_prepare_attempt_worktree_surfaces_structured_fallback_diagnostics
     assert len(commands) == 2
 
 
+@pytest.mark.asyncio
+async def test_prepare_attempt_worktree_uses_runner_when_agent_contract_fails(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    workspace = (
+        await db_session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "workspace-1"))
+    ).scalar_one()
+    workspace.metadata_json = {"code_context": {"sandbox_code_root": "/workspace/my-evo"}}
+    await db_session.flush()
+
+    agent_commands: list[str] = []
+    runner_commands: list[str] = []
+
+    class FakeWorktreeAgentPreparer:
+        def __init__(self, *, tenant_id: str, project_id: str) -> None:
+            assert tenant_id == "worker-tenant-1"
+            assert project_id == "worker-project-1"
+
+        async def prepare_worktree(self, request: Any) -> AttemptWorktreeContext:
+            agent_commands.append(request.setup_command)
+            return AttemptWorktreeContext(
+                workspace_root=request.workspace_root,
+                sandbox_code_root=request.sandbox_code_root,
+                active_root=request.worktree_path,
+                worktree_path=request.worktree_path,
+                branch_name=request.branch_name,
+                base_ref=request.base_ref,
+                attempt_id=request.attempt_id,
+                is_isolated=True,
+                setup_status="failed",
+                setup_reason="builtin workspace worktree manager did not submit preparation: {}",
+            )
+
+    class FakeRunner:
+        def __init__(self, *, project_id: str, tenant_id: str) -> None:
+            assert project_id == "worker-project-1"
+            assert tenant_id == "worker-tenant-1"
+
+        async def run_command(self, command: str, *, timeout: int) -> dict[str, object]:
+            runner_commands.append(command)
+            if timeout == 120:
+                return {"exit_code": 0, "stdout": "git_head=abc123\n", "stderr": ""}
+            assert timeout == 60
+            return {
+                "exit_code": 0,
+                "stdout": "resolved_base_ref=abc123\npruned_worktrees_count=0\n",
+                "stderr": "",
+            }
+
+    monkeypatch.setattr(outbox_handlers, "WorkspaceWorktreeAgentPreparer", FakeWorktreeAgentPreparer)
+    monkeypatch.setattr(outbox_handlers, "_WorkspaceSandboxCommandRunner", FakeRunner)
+    task = WorkspaceTask(
+        id="task-agent-contract-fallback",
+        workspace_id="workspace-1",
+        title="Prepare after missing worktree contract",
+        description="Exercise deterministic setup after agent contract failure.",
+        created_by="worker-user-1",
+        status="in_progress",
+        metadata={
+            AUTONOMY_SCHEMA_VERSION_KEY: 1,
+            ROOT_GOAL_TASK_ID: "root-task-1",
+        },
+    )
+
+    note = await _prepare_attempt_worktree_if_available(
+        db_session,
+        "workspace-1",
+        task,
+        None,
+        "attempt-contract-fallback",
+    )
+
+    assert note is not None
+    assert "status=prepared" in note
+    assert "worktree_path=/workspace/.memstack/worktrees/attempt-contract-fallback" in note
+    assert agent_commands
+    assert len(runner_commands) == 2
+    assert "git worktree add -B" in runner_commands[0]
+    assert "git fsck --no-progress --connectivity-only" in runner_commands[1]
+
+
 def test_apply_attempt_worktree_checkpoint_refreshes_retry_attempt_scope() -> None:
     node = PlanNode(
         id="node-1",

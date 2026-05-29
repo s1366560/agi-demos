@@ -1,0 +1,77 @@
+{
+  "id": "darwinian-evolver-plugin",
+  "kind": "skill",
+  "name": "Darwinian Evolver Plugin",
+  "description": "Skill plugin for running Imbue's darwinian_evolver loop to optimize prompts, regex, SQL, or small code snippets against a measurable fitness function.",
+  "version": "0.1.0",
+  "channels": [],
+  "providers": [],
+  "skills": ["darwinian-evolver"],
+  "contracts": {
+    "skills": ["darwinian-evolver"],
+    "services": ["darwinian_evolver:defaults"]
+  },
+  "activation": {
+    "onStartup": false,
+    "onSkills": ["darwinian-evolver"]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "cache_dir": {
+        "type": "string",
+        "default": "~/.memstack/cache/darwinian-evolver"
+      },
+      "default_model": {
+        "type": "string",
+        "default": "openai/gpt-4o-mini"
+      },
+      "default_iterations": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 3
+      },
+      "default_parent_count": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 2
+      },
+      "default_concurrency": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 2
+      }
+    }
+  },
+  "uiHints": {
+    "cache_dir": {
+      "label": "Cache Directory",
+      "help": "Where the upstream darwinian_evolver checkout is kept."
+    },
+    "default_model": {
+      "label": "Default OpenRouter Model",
+      "placeholder": "openai/gpt-4o-mini"
+    },
+    "default_iterations": {
+      "label": "Default Iterations"
+    },
+    "default_parent_count": {
+      "label": "Default Parent Count"
+    },
+    "default_concurrency": {
+      "label": "Default Concurrency"
+    }
+  },
+  "envVars": {
+    "darwinian-evolver": [
+      "OPENROUTER_API_KEY",
+      "ANTHROPIC_API_KEY",
+      "OPENAI_API_KEY",
+      "OPENROUTER_BASE_URL",
+      "EVOLVER_MODEL",
+      "EVOLVER_TRACE_JSONL",
+      "DARWINIAN_EVOLVER_CACHE_DIR"
+    ]
+  }
+}

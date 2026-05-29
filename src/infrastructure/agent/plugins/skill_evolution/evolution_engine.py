@@ -13,17 +13,17 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from src.domain.llm_providers.llm_types import LLMClient, Message
+from src.infrastructure.agent.plugins.skill_evolution.models import SkillEvolutionJob
 
 if TYPE_CHECKING:
     from src.application.services.skill_service import SkillService
+    from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
+    from src.domain.ports.repositories.skill_version_repository import SkillVersionRepositoryPort
     from src.infrastructure.agent.plugins.skill_evolution.aggregation import (
         SkillSessionGroup,
     )
     from src.infrastructure.agent.plugins.skill_evolution.config import (
         SkillEvolutionConfig,
-    )
-    from src.infrastructure.agent.plugins.skill_evolution.models import (
-        SkillEvolutionJob,
     )
     from src.infrastructure.agent.plugins.skill_evolution.repository import (
         SkillEvolutionRepository,
@@ -92,6 +92,8 @@ class EvolutionEngine:
         *,
         tenant_id: str,
         project_id: str | None = None,
+        skill_repository: SkillRepositoryPort | None = None,
+        skill_version_repository: SkillVersionRepositoryPort | None = None,
     ) -> list[SkillEvolutionJob]:
         """Run evolution for every skill group.
 
@@ -110,7 +112,14 @@ class EvolutionEngine:
                     jobs.append(job)
 
                     if self._config.publish_mode == "direct" and self._config.auto_apply:
-                        await self._apply_job(job, repo, tenant_id=tenant_id, project_id=project_id)
+                        await self._apply_job(
+                            job,
+                            repo,
+                            tenant_id=tenant_id,
+                            project_id=project_id,
+                            skill_repository=skill_repository,
+                            skill_version_repository=skill_version_repository,
+                        )
             except Exception:
                 logger.exception(
                     "Evolution failed for skill '%s'", group.skill_name
@@ -193,10 +202,16 @@ class EvolutionEngine:
         *,
         tenant_id: str,
         project_id: str | None = None,
+        skill_repository: SkillRepositoryPort | None = None,
+        skill_version_repository: SkillVersionRepositoryPort | None = None,
     ) -> None:
         try:
             version_id = await self._merger.apply_evolution(
-                job, tenant_id=tenant_id, project_id=project_id
+                job,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                skill_repository=skill_repository,
+                skill_version_repository=skill_version_repository,
             )
             await repo.update_job_status(
                 job.id, status="applied", skill_version_id=version_id

@@ -21,7 +21,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent import Conversation, ConversationStatus
 from src.domain.model.agent.agent_mode import AgentMode
-from src.infrastructure.adapters.secondary.persistence.models import Conversation as DBConversation
+from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentExecutionEvent as DBAgentExecutionEvent,
+    Conversation as DBConversation,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
     SqlConversationRepository,
 )
@@ -215,6 +218,78 @@ class TestSqlConversationRepositoryList:
         conversations = await v2_conversation_repo.list_by_project("proj-1")
         assert len(conversations) == 3
         assert all(c.project_id == "proj-1" for c in conversations)
+
+    @pytest.mark.asyncio
+    async def test_list_by_project_uses_stable_activity_order(
+        self, v2_conversation_repo: SqlConversationRepository, db_session: AsyncSession
+    ):
+        """List conversations by newest activity with deterministic tie-breakers."""
+        base_time = datetime(2026, 5, 29, 1, 0, tzinfo=UTC)
+        old_time = datetime(2026, 5, 29, 0, 0, tzinfo=UTC)
+
+        for conversation_id, updated_at in (
+            ("conv-stable-old", old_time),
+            ("conv-stable-b", base_time),
+            ("conv-stable-a", base_time),
+        ):
+            conversation = Conversation(
+                id=conversation_id,
+                project_id="proj-stable-order",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title=conversation_id,
+                status=ConversationStatus.ACTIVE,
+                agent_config={},
+                metadata={},
+                message_count=0,
+                created_at=old_time,
+                updated_at=updated_at,
+                current_mode=AgentMode.BUILD,
+            )
+            await v2_conversation_repo.save(conversation)
+
+        db_session.add(
+            DBAgentExecutionEvent(
+                id="event-stable-old-newer",
+                conversation_id="conv-stable-old",
+                message_id="message-stable-old-newer",
+                event_type="assistant_message",
+                event_data={},
+                event_time_us=2_000_000,
+                event_counter=0,
+            )
+        )
+        db_session.add(
+            DBAgentExecutionEvent(
+                id="event-stable-a",
+                conversation_id="conv-stable-a",
+                message_id="message-stable-a",
+                event_type="assistant_message",
+                event_data={},
+                event_time_us=1_000_000,
+                event_counter=0,
+            )
+        )
+        db_session.add(
+            DBAgentExecutionEvent(
+                id="event-stable-b",
+                conversation_id="conv-stable-b",
+                message_id="message-stable-b",
+                event_type="assistant_message",
+                event_data={},
+                event_time_us=1_000_000,
+                event_counter=0,
+            )
+        )
+        await db_session.flush()
+
+        conversations = await v2_conversation_repo.list_by_project("proj-stable-order")
+
+        assert [conversation.id for conversation in conversations] == [
+            "conv-stable-old",
+            "conv-stable-b",
+            "conv-stable-a",
+        ]
 
     @pytest.mark.asyncio
     async def test_list_by_project_with_status_filter(

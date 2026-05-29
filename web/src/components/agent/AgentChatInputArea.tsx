@@ -57,7 +57,7 @@ export const AgentChatInputArea = ({
   onAbort,
   isStreaming,
   disabled = false,
-  minHeight = 140,
+  minHeight = 160,
   maxHeight = 560,
   projectId,
 }: AgentChatInputAreaProps) => {

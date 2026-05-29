@@ -2022,7 +2022,11 @@ class SessionProcessor:
             "model_name": self.config.model,
             "tools": list(self.tools.keys()),
             "skills": skills,
+            "runtime_context": dict(self.config.runtime_context),
         }
+        workspace_id = self.config.runtime_context.get("workspace_id")
+        if isinstance(workspace_id, str) and workspace_id.strip():
+            ctx["workspace_id"] = workspace_id.strip()
         if self._langfuse_context:
             ctx["conversation_id"] = self._langfuse_context.get("conversation_id")
             ctx["project_id"] = self._langfuse_context.get("project_id")

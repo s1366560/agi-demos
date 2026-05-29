@@ -109,15 +109,33 @@ export const initialState = {
 
 const groupedConversationListOptions = { groupByWorkspace: true };
 
+function conversationActivityTime(conversation: Conversation): number {
+  const rawTimestamp = conversation.updated_at || conversation.created_at;
+  const time = Date.parse(rawTimestamp);
+  return Number.isFinite(time) ? time : 0;
+}
+
 function mergeUniqueConversations(
   existing: Conversation[],
   incoming: Conversation[]
 ): Conversation[] {
-  const byId = new Map(existing.map((conversation) => [conversation.id, conversation]));
-  for (const conversation of incoming) {
-    byId.set(conversation.id, conversation);
+  if (existing.length === 0) {
+    return incoming;
   }
-  return Array.from(byId.values());
+  if (incoming.length === 0) {
+    return existing;
+  }
+
+  const incomingIds = new Set(incoming.map((conversation) => conversation.id));
+  return [
+    ...incoming,
+    ...existing
+      .filter((conversation) => !incomingIds.has(conversation.id))
+      .sort((a, b) => {
+        const timeDiff = conversationActivityTime(b) - conversationActivityTime(a);
+        return timeDiff !== 0 ? timeDiff : b.id.localeCompare(a.id);
+      }),
+  ];
 }
 
 function responseNextOffset(

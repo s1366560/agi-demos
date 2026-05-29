@@ -145,6 +145,11 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
         }}
         disabled={disabled}
         onKeyDown={handleTriggerKeyDown}
+        title={
+          activeAgent
+            ? activeAgent.display_name || activeAgent.name
+            : t('agent.selectAgent', 'Select Agent')
+        }
         className={`group flex h-8 items-center gap-1.5 px-2 text-sm rounded-lg transition-colors ${
           disabled
             ? 'cursor-not-allowed text-slate-400 dark:text-slate-500 opacity-40'
@@ -159,7 +164,7 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
           size={16}
           className={`shrink-0 ${disabled ? 'text-slate-400 dark:text-slate-500' : 'text-current'}`}
         />
-        <span className="max-w-[152px] truncate min-w-0 text-xs font-medium">
+        <span className="hidden max-w-[152px] truncate min-w-0 text-xs font-medium min-[1024px]:inline">
           {activeAgent
             ? activeAgent.display_name || activeAgent.name
             : t('agent.selectAgent', 'Select Agent')}

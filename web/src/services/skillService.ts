@@ -17,6 +17,8 @@ import type {
   SkillZipImportRequest,
   SkillLifecycleResponse,
   SkillPackageResponse,
+  SkillEvolutionDetailResponse,
+  SkillEvolutionRunResponse,
   SkillVersionDetailResponse,
   SkillVersionListResponse,
   TenantSkillConfigResponse,
@@ -174,6 +176,20 @@ export const skillAPI = {
     return await api.post<SkillResponse>(`/skills/${skillId}/rollback`, {
       version_number: versionNumber,
     });
+  },
+
+  /**
+   * Get skill evolution trigger metadata, jobs, and route.
+   */
+  getEvolution: async (skillId: string): Promise<SkillEvolutionDetailResponse> => {
+    return await api.get<SkillEvolutionDetailResponse>(`/skills/${skillId}/evolution`);
+  },
+
+  /**
+   * Run one evolution cycle for a Skill.
+   */
+  runEvolution: async (skillId: string): Promise<SkillEvolutionRunResponse> => {
+    return await api.post<SkillEvolutionRunResponse>(`/skills/${skillId}/evolution/run`);
   },
 };
 
