@@ -215,6 +215,28 @@ class SkillEvolutionRepository:
         await self._session.flush()
         return job
 
+    async def has_job_for_sessions(
+        self,
+        *,
+        tenant_id: str,
+        skill_name: str,
+        session_ids: list[str],
+    ) -> bool:
+        """Return true when this exact session batch already produced a job."""
+        if not session_ids:
+            return False
+
+        expected = set(session_ids)
+        stmt = select(SkillEvolutionJob).where(
+            SkillEvolutionJob.tenant_id == tenant_id,
+            SkillEvolutionJob.skill_name == skill_name,
+        )
+        result = await self._session.execute(stmt)
+        for job in result.scalars().all():
+            if set(job.session_ids or []) == expected:
+                return True
+        return False
+
     async def get_pending_jobs(
         self, *, tenant_id: str, skill_name: str | None = None
     ) -> list[SkillEvolutionJob]:

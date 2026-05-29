@@ -565,7 +565,7 @@ def _build_subagent_started(data: dict[str, Any], **_kwargs: Any) -> dict[str, A
 
 def _build_subagent_completed(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
-        "subagentId": data.get("subagent_id", ""),
+        "subagentId": data.get("subagent_id") or data.get("run_id") or data.get("agent_id") or "",
         "subagentName": data.get("subagent_name"),
         "summary": data.get("summary") or data.get("final_content", ""),
         "tokensUsed": data.get("tokens_used", 0),
@@ -576,7 +576,7 @@ def _build_subagent_completed(data: dict[str, Any], **_kwargs: Any) -> dict[str,
 
 def _build_subagent_failed(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
-        "subagentId": data.get("subagent_id", ""),
+        "subagentId": data.get("subagent_id") or data.get("run_id") or data.get("agent_id") or "",
         "subagentName": data.get("subagent_name"),
         "error": data.get("error", ""),
     }

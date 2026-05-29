@@ -122,6 +122,8 @@ def _env_float(name: str, default: float, *, minimum: float = 1.0, maximum: floa
 
 _DEFAULT_SCAN_MAX_FILES = _env_int("MCP_FILE_TOOL_MAX_SCAN_FILES", 5000)
 _DEFAULT_SCAN_TIME_BUDGET_SECONDS = _env_float("MCP_FILE_TOOL_SCAN_TIME_BUDGET_SECONDS", 20.0)
+_EDIT_FAILURE_TRACKER: dict[str, int] = {}
+_EDIT_FAILURE_TRACKER_MAX_SIZE = 128
 
 
 @dataclass(frozen=True)
@@ -166,6 +168,139 @@ def _path_metadata(resolved: Path, workspace_dir: str) -> dict[str, Any]:
     except ValueError:
         metadata["workspace_relative_path"] = None
     return metadata
+
+
+def _detect_line_ending(sample: str) -> str | None:
+    """Return the dominant line ending in existing file text."""
+    head = sample[:4096]
+    if "\r\n" in head:
+        return "\r\n"
+    if "\n" in head:
+        return "\n"
+    return None
+
+
+def _normalize_line_endings(text: str, target: str | None) -> str:
+    """Normalize text to the target line ending when one is known."""
+    if target not in {"\n", "\r\n"}:
+        return text
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    if target == "\r\n":
+        return normalized.replace("\n", "\r\n")
+    return normalized
+
+
+def _sync_parent_directory(path: Path) -> None:
+    """Best-effort fsync of the parent directory after atomic replacement."""
+    if not hasattr(os, "O_DIRECTORY"):
+        return
+    try:
+        fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _atomic_write_text_sync(path: Path, content: str) -> None:
+    """Write UTF-8 text atomically while preserving an existing file mode."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    original_mode: int | None = None
+    with contextlib.suppress(OSError):
+        original_mode = path.stat().st_mode & 0o777
+
+    temp_path = path.with_name(f".{path.name}.tmp-{os.getpid()}-{time.time_ns()}")
+    try:
+        with open(temp_path, "w", encoding="utf-8", newline="") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        if original_mode is not None:
+            with contextlib.suppress(OSError):
+                temp_path.chmod(original_mode)
+        os.replace(temp_path, path)
+        _sync_parent_directory(path)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            temp_path.unlink()
+
+
+async def _atomic_write_text(path: Path, content: str) -> None:
+    """Async wrapper around the durable atomic text write."""
+    await asyncio.to_thread(_atomic_write_text_sync, path, content)
+
+
+def _append_text_sync(path: Path, content: str) -> None:
+    """Append UTF-8 text and fsync the file handle before returning."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8", newline="") as f:
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _find_closest_sections(
+    old_string: str,
+    content: str,
+    *,
+    context_lines: int = 2,
+    max_results: int = 3,
+) -> list[str]:
+    """Find compact nearby sections for a failed exact-string edit."""
+    if not old_string or not content:
+        return []
+
+    content_lines = content.splitlines()
+    old_lines = old_string.splitlines()
+    anchor = next((line.strip() for line in old_lines if line.strip()), "")
+    if not anchor:
+        return []
+
+    scored: list[tuple[float, int]] = []
+    for index, line in enumerate(content_lines):
+        score = difflib.SequenceMatcher(None, anchor, line.strip()).ratio()
+        if anchor in line:
+            score = max(score, 0.95)
+        if score >= 0.45:
+            scored.append((score, index))
+
+    sections: list[str] = []
+    used_ranges: list[tuple[int, int]] = []
+    for _score, index in sorted(scored, reverse=True)[: max_results * 2]:
+        start = max(0, index - context_lines)
+        end = min(len(content_lines), index + context_lines + 1)
+        if any(
+            not (end <= used_start or start >= used_end) for used_start, used_end in used_ranges
+        ):
+            continue
+        used_ranges.append((start, end))
+        section = "\n".join(
+            f"{line_no + 1}: {content_lines[line_no]}" for line_no in range(start, end)
+        )
+        sections.append(section)
+        if len(sections) >= max_results:
+            break
+    return sections
+
+
+def _record_edit_failure(resolved_path: Path) -> int:
+    """Track consecutive edit anchor failures per file."""
+    key = str(resolved_path)
+    if (
+        key not in _EDIT_FAILURE_TRACKER
+        and len(_EDIT_FAILURE_TRACKER) >= _EDIT_FAILURE_TRACKER_MAX_SIZE
+    ):
+        with contextlib.suppress(StopIteration):
+            del _EDIT_FAILURE_TRACKER[next(iter(_EDIT_FAILURE_TRACKER))]
+    _EDIT_FAILURE_TRACKER[key] = _EDIT_FAILURE_TRACKER.get(key, 0) + 1
+    return _EDIT_FAILURE_TRACKER[key]
+
+
+def _reset_edit_failure(resolved_path: Path) -> None:
+    """Clear edit failure tracking after a successful write/edit."""
+    _EDIT_FAILURE_TRACKER.pop(str(resolved_path), None)
 
 
 def _nearest_existing_parent(path: Path) -> Path | None:
@@ -285,6 +420,7 @@ def get_path_error_result(
         suggestions=suggestions,
         metadata=metadata,
     )
+
 
 def _resolve_path(
     path: str,
@@ -630,17 +766,10 @@ async def write_file(
         resolved.parent.mkdir(parents=True, exist_ok=True)
 
         if write_mode == "append":
-            async with aiofiles.open(resolved, "a", encoding="utf-8") as f:
-                await f.write(content)
+            await asyncio.to_thread(_append_text_sync, resolved, content)
         else:
-            temp_path = resolved.with_name(f".{resolved.name}.tmp-{os.getpid()}-{time.time_ns()}")
-            try:
-                async with aiofiles.open(temp_path, "w", encoding="utf-8") as f:
-                    await f.write(content)
-                os.replace(temp_path, resolved)
-            finally:
-                with contextlib.suppress(FileNotFoundError):
-                    temp_path.unlink()
+            await _atomic_write_text(resolved, content)
+        _reset_edit_failure(resolved)
 
         return _success_result(
             f"Successfully wrote to {requested_path}",
@@ -750,22 +879,40 @@ async def edit_file(
                 metadata={"requested_path": file_path, **path_metadata},
             )
 
-        async with aiofiles.open(resolved, "r", encoding="utf-8") as f:
+        async with aiofiles.open(resolved, "r", encoding="utf-8", newline="") as f:
             content = await f.read()
+        line_ending = _detect_line_ending(content)
+        normalized_old_string = _normalize_line_endings(old_string, line_ending)
+        normalized_new_string = _normalize_line_endings(new_string, line_ending)
 
         # Check if old_string exists
-        if old_string not in content:
+        if normalized_old_string not in content:
+            failure_count = _record_edit_failure(resolved)
+            closest_sections = _find_closest_sections(normalized_old_string, content)
+            hint = "Read the file first or use grep to confirm the exact text to replace."
+            if failure_count >= 3:
+                hint = (
+                    f"This is failure #{failure_count} editing this file. Re-read the file "
+                    "and use a longer unique old_string with surrounding context, or use write "
+                    "to replace the full file when an exact anchor is hard to target."
+                )
             return _error_result(
                 f"String not found in file: {old_string[:100]}",
                 code="string_not_found",
-                hint="Read the file first or use grep to confirm the exact text to replace.",
-                metadata={"requested_path": file_path, **path_metadata},
+                hint=hint,
+                suggestions=closest_sections,
+                metadata={
+                    "requested_path": file_path,
+                    "failure_count": failure_count,
+                    **path_metadata,
+                },
             )
 
         # Check uniqueness if not replacing all
-        if not replace_all and content.count(old_string) > 1:
+        occurrences = content.count(normalized_old_string)
+        if not replace_all and occurrences > 1:
             return _error_result(
-                f"String appears {content.count(old_string)} times.",
+                f"String appears {occurrences} times.",
                 code="ambiguous_replacement",
                 hint="Use replace_all=true or provide a longer unique old_string.",
                 metadata={"requested_path": file_path, **path_metadata},
@@ -773,19 +920,24 @@ async def edit_file(
 
         # Perform replacement
         if replace_all:
-            new_content = content.replace(old_string, new_string)
-            count = content.count(old_string)
+            new_content = content.replace(normalized_old_string, normalized_new_string)
+            count = occurrences
         else:
-            new_content = content.replace(old_string, new_string, 1)
+            new_content = content.replace(normalized_old_string, normalized_new_string, 1)
             count = 1
 
-        async with aiofiles.open(resolved, "w", encoding="utf-8") as f:
-            await f.write(new_content)
+        await _atomic_write_text(resolved, new_content)
+        _reset_edit_failure(resolved)
 
         return _success_result(
             f"Successfully replaced {count} occurrence(s) in {file_path}",
             metadata={
                 "replacements": count,
+                "line_ending": "crlf"
+                if line_ending == "\r\n"
+                else "lf"
+                if line_ending == "\n"
+                else None,
                 **path_metadata,
             },
         )
@@ -878,7 +1030,9 @@ async def glob_files(
             except ValueError:
                 # Pattern is outside workspace - also try unresolved workspace
                 try:
-                    rel_pattern = str(pattern_path.relative_to(Path(_expand_user_path(_workspace_dir))))
+                    rel_pattern = str(
+                        pattern_path.relative_to(Path(_expand_user_path(_workspace_dir)))
+                    )
                     normalized_pattern = rel_pattern
                 except ValueError:
                     return get_path_error_result(
@@ -898,7 +1052,9 @@ async def glob_files(
                 f"Directory not found: {path}",
                 code="directory_not_found",
                 hint="Use list or glob on a parent directory to discover valid search roots.",
-                suggestions=_suggest_path_matches(path or ".", _workspace_dir, allow_extra_paths=True),
+                suggestions=_suggest_path_matches(
+                    path or ".", _workspace_dir, allow_extra_paths=True
+                ),
                 metadata={"requested_path": path, "pattern": pattern},
             )
 
@@ -1150,7 +1306,9 @@ def _collect_scan_files(
         dirnames[:] = kept_dirs
 
         for filename in filenames:
-            relative_file = relative_root / filename if str(relative_root) != "." else Path(filename)
+            relative_file = (
+                relative_root / filename if str(relative_root) != "." else Path(filename)
+            )
             if _is_scan_excluded(relative_file, excludes):
                 continue
 
@@ -1215,7 +1373,9 @@ async def grep_files(
                 f"Directory not found: {path}",
                 code="directory_not_found",
                 hint="Use list or glob on a parent directory to discover valid search roots.",
-                suggestions=_suggest_path_matches(path or ".", _workspace_dir, allow_extra_paths=True),
+                suggestions=_suggest_path_matches(
+                    path or ".", _workspace_dir, allow_extra_paths=True
+                ),
                 metadata={"requested_path": path, "pattern": pattern},
             )
 
@@ -1470,7 +1630,9 @@ def _walk_directory(
 
         if child.is_dir():
             _walk_directory(
-                root, child, items,
+                root,
+                child,
+                items,
                 max_depth=max_depth,
                 current_depth=current_depth + 1,
                 include_hidden=include_hidden,
@@ -1535,10 +1697,24 @@ async def list_directory(
             # Default directories to exclude from recursive listing — these
             # produce massive output and are almost never what the caller wants.
             default_excludes = {
-                "node_modules", ".git", "__pycache__", ".next", "dist",
-                ".cache", ".venv", "venv", ".tox", ".mypy_cache",
-                ".pytest_cache", ".ruff_cache", "build", ".eggs",
-                "*.egg-info", ".gradle", ".m2", "target",
+                "node_modules",
+                ".git",
+                "__pycache__",
+                ".next",
+                "dist",
+                ".cache",
+                ".venv",
+                "venv",
+                ".tox",
+                ".mypy_cache",
+                ".pytest_cache",
+                ".ruff_cache",
+                "build",
+                ".eggs",
+                "*.egg-info",
+                ".gradle",
+                ".m2",
+                "target",
             }
             # Merge user-provided excludes
             excludes = default_excludes | set(exclude) if exclude else default_excludes
@@ -1548,7 +1724,9 @@ async def list_directory(
             # enforce max_depth and skip excluded directories.
             items = []
             _walk_directory(
-                resolved, resolved, items,
+                resolved,
+                resolved,
+                items,
                 max_depth=max_depth,
                 current_depth=0,
                 include_hidden=include_hidden,
@@ -1756,8 +1934,9 @@ async def apply_patch(
             )
 
         # Read original file
-        async with aiofiles.open(resolved, "r", encoding="utf-8") as f:
+        async with aiofiles.open(resolved, "r", encoding="utf-8", newline="") as f:
             original_lines = await f.readlines()
+        line_ending = _detect_line_ending("".join(original_lines))
 
         # Parse patch
         parsed_patch = _parse_unified_diff(patch, strip)
@@ -1784,14 +1963,25 @@ async def apply_patch(
                 metadata={"requested_path": file_path, **path_metadata},
             )
 
-        # Apply hunks to file content
-        new_lines, failed_hunks = _apply_hunks(original_lines, parsed_hunks)
+        # Apply hunks against LF-normalized content, then restore the file's
+        # original line ending style on write.
+        original_lines_for_patch = [_normalize_line_endings(line, "\n") for line in original_lines]
+        new_lines, failed_hunks = _apply_hunks(original_lines_for_patch, parsed_hunks)
 
         if failed_hunks:
+            suggestions: list[str] = []
+            for failed_hunk in failed_hunks[:1]:
+                anchor = "\n".join(
+                    line.text
+                    for line in failed_hunk.lines
+                    if line.operation in {" ", "-"} and line.text.strip()
+                )
+                suggestions.extend(_find_closest_sections(anchor, "".join(original_lines)))
             return _error_result(
                 f"Patch application failed. {len(failed_hunks)} hunks could not be applied.",
                 code="patch_apply_failed",
                 hint="Re-read the target file and regenerate the patch against the current content.",
+                suggestions=suggestions,
                 metadata={
                     "failed_hunks": [hunk.to_dict() for hunk in failed_hunks],
                     "requested_path": file_path,
@@ -1800,12 +1990,21 @@ async def apply_patch(
             )
 
         # Write patched content
-        async with aiofiles.open(resolved, "w", encoding="utf-8") as f:
-            await f.writelines(new_lines)
+        new_content = _normalize_line_endings("".join(new_lines), line_ending)
+        await _atomic_write_text(resolved, new_content)
+        _reset_edit_failure(resolved)
 
         return _success_result(
             f"Successfully applied patch to {file_path} ({len(parsed_hunks)} hunks)",
-            metadata={"hunks_applied": len(parsed_hunks), **path_metadata},
+            metadata={
+                "hunks_applied": len(parsed_hunks),
+                "line_ending": "crlf"
+                if line_ending == "\r\n"
+                else "lf"
+                if line_ending == "\n"
+                else None,
+                **path_metadata,
+            },
         )
 
     except ValueError as e:
@@ -1976,23 +2175,15 @@ def _apply_hunks(
         old_start = hunk.old_start
         old_count = hunk.old_count
 
-        old_lines_from_hunk = [
-            line.render()
-            for line in hunk.lines
-            if line.operation in {" ", "-"}
-        ]
-        actual_old_lines = result_lines[old_start:old_start + old_count]
+        old_lines_from_hunk = [line.render() for line in hunk.lines if line.operation in {" ", "-"}]
+        actual_old_lines = result_lines[old_start : old_start + old_count]
 
         if old_lines_from_hunk != actual_old_lines:
             failed_hunks.append(hunk)
             continue
 
-        new_lines = [
-            line.render()
-            for line in hunk.lines
-            if line.operation in {" ", "+"}
-        ]
-        result_lines[old_start:old_start + old_count] = new_lines
+        new_lines = [line.render() for line in hunk.lines if line.operation in {" ", "+"}]
+        result_lines[old_start : old_start + old_count] = new_lines
 
     return result_lines, failed_hunks
 

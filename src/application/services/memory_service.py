@@ -48,6 +48,7 @@ class MemoryService:
         tags: list[str] | None = None,
         is_public: bool = False,
         metadata: dict[str, Any] | None = None,
+        enqueue_graph: bool = True,
     ) -> Memory:
         """
         Create a new memory and queue it for background processing.
@@ -97,6 +98,9 @@ class MemoryService:
         # Save memory to database
         await self._memory_repo.save(memory)
         logger.info(f"Saved memory {memory.id} to database")
+
+        if not enqueue_graph:
+            return memory
 
         # Create episode for graph processing
         episode = Episode(

@@ -16,7 +16,7 @@ from src.infrastructure.agent.tools.memory_tools import (
 @pytest.mark.unit
 class TestMemoryToolsChunkSync:
     @pytest.mark.asyncio
-    async def test_create_uses_shared_chunk_sync_helper(self) -> None:
+    async def test_create_returns_after_commit_and_schedules_background_sync(self) -> None:
         session = AsyncMock()
         session_factory = MagicMock(return_value=session)
         repo = MagicMock()
@@ -28,7 +28,7 @@ class TestMemoryToolsChunkSync:
                 processing_status="PENDING",
             )
         )
-        upsert_chunks = AsyncMock(return_value=1)
+        schedule_sync = MagicMock()
 
         with (
             patch(
@@ -40,12 +40,8 @@ class TestMemoryToolsChunkSync:
                 return_value=service,
             ),
             patch(
-                "src.infrastructure.adapters.secondary.persistence.sql_chunk_repository.SqlChunkRepository",
-                return_value="chunk-repo",
-            ),
-            patch(
-                "src.infrastructure.memory.chunk_sync.upsert_memory_chunks",
-                upsert_chunks,
+                "src.infrastructure.agent.tools.memory_tools._schedule_memory_create_background_sync",
+                schedule_sync,
             ),
         ):
             result = await _execute_memory_create(
@@ -63,9 +59,11 @@ class TestMemoryToolsChunkSync:
 
         payload = json.loads(result)
         assert payload["status"] == "created"
-        assert upsert_chunks.await_args.kwargs["memory_id"] == "mem-1"
-        assert upsert_chunks.await_args.kwargs["project_id"] == "proj-1"
-        assert upsert_chunks.await_args.kwargs["metadata"]["source"] == "agent_tool"
+        service.create_memory.assert_awaited_once()
+        assert service.create_memory.await_args.kwargs["enqueue_graph"] is False
+        assert schedule_sync.call_args.kwargs["memory_id"] == "mem-1"
+        assert schedule_sync.call_args.kwargs["project_id"] == "proj-1"
+        assert schedule_sync.call_args.kwargs["embedding_service"] is None
 
     @pytest.mark.asyncio
     async def test_update_uses_shared_chunk_sync_helper(self) -> None:

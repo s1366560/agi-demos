@@ -13,10 +13,11 @@ rather than relying solely on automatic recall.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from src.infrastructure.agent.tools.context import ToolContext
@@ -24,6 +25,8 @@ from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
 
 logger = logging.getLogger(__name__)
+
+_memory_create_background_tasks: set[asyncio.Task[None]] = set()
 
 
 async def _execute_memory_get(
@@ -362,6 +365,117 @@ def configure_memory_create(
     _memcreate_user_id = user_id
 
 
+def _schedule_memory_create_background_sync(
+    *,
+    session_factory: Callable[..., Any],
+    graph_service: Any,
+    memory_id: str,
+    title: str,
+    content: str,
+    project_id: str,
+    tenant_id: str,
+    user_id: str,
+    category: str,
+    tags: list[str],
+    embedding_service: Any,
+) -> None:
+    task = asyncio.create_task(
+        _background_sync_created_memory(
+            session_factory=session_factory,
+            graph_service=graph_service,
+            memory_id=memory_id,
+            title=title,
+            content=content,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            category=category,
+            tags=tags,
+            embedding_service=embedding_service,
+        )
+    )
+    _memory_create_background_tasks.add(task)
+    task.add_done_callback(_memory_create_background_tasks.discard)
+
+
+async def _background_sync_created_memory(
+    *,
+    session_factory: Callable[..., Any],
+    graph_service: Any,
+    memory_id: str,
+    title: str,
+    content: str,
+    project_id: str,
+    tenant_id: str,
+    user_id: str,
+    category: str,
+    tags: list[str],
+    embedding_service: Any,
+) -> None:
+    from src.domain.model.memory.episode import Episode, SourceType
+    from src.infrastructure.adapters.secondary.persistence.sql_chunk_repository import (
+        SqlChunkRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
+        SqlMemoryRepository,
+    )
+    from src.infrastructure.memory.chunk_sync import upsert_memory_chunks
+
+    try:
+        episode = Episode(
+            id=Episode.generate_id(),
+            name=title,
+            content=content,
+            source_type=SourceType.TEXT,
+            valid_at=datetime.now(UTC),
+            metadata={
+                "memory_id": memory_id,
+                "tenant_id": tenant_id,
+                "project_id": project_id,
+                "user_id": user_id,
+            },
+            tenant_id=tenant_id,
+            project_id=project_id,
+            user_id=user_id,
+        )
+        _ = await graph_service.add_episode(episode)
+    except Exception as graph_err:
+        logger.warning("memory_create: failed to queue graph processing: %s", graph_err)
+        session = session_factory()
+        try:
+            repo = SqlMemoryRepository(session)
+            memory = await repo.find_by_id(memory_id)
+            if memory is not None:
+                memory.processing_status = "FAILED"
+                _ = await repo.save(memory)
+                await session.commit()
+        except Exception as status_err:
+            logger.warning("memory_create: failed to mark memory sync failure: %s", status_err)
+            await session.rollback()
+        finally:
+            await session.close()
+        return
+
+    session = session_factory()
+    try:
+        chunk_repo = SqlChunkRepository(session)
+        _ = await upsert_memory_chunks(
+            chunk_repo,
+            memory_id=memory_id,
+            content=content,
+            project_id=project_id,
+            category=category,
+            metadata={"title": title, "tags": tags, "source": "agent_tool"},
+            embedding_service=embedding_service,
+        )
+        await session.commit()
+    except Exception as chunk_err:
+        logger.warning("memory_create: failed to sync searchable chunks: %s", chunk_err)
+        await session.rollback()
+    finally:
+        await session.close()
+
+
 async def _execute_memory_create(
     *,
     content: str,
@@ -382,13 +496,9 @@ async def _execute_memory_create(
     session = session_factory()
     try:
         from src.application.services.memory_service import MemoryService
-        from src.infrastructure.adapters.secondary.persistence.sql_chunk_repository import (
-            SqlChunkRepository,
-        )
         from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
             SqlMemoryRepository,
         )
-        from src.infrastructure.memory.chunk_sync import upsert_memory_chunks
 
         repo = SqlMemoryRepository(session)
         service = MemoryService(
@@ -405,25 +515,24 @@ async def _execute_memory_create(
             content_type="text",
             tags=tags,
             metadata={"category": category, "source": "agent_tool"},
+            enqueue_graph=False,
         )
 
         await session.commit()
 
-        # Sync searchable chunks via the shared helper after the primary write commits.
-        try:
-            chunk_repo = SqlChunkRepository(session)
-            await upsert_memory_chunks(
-                chunk_repo,
-                memory_id=memory.id,
-                content=content,
-                project_id=project_id,
-                category=category,
-                metadata={"title": title, "tags": tags, "source": "agent_tool"},
-                embedding_service=embedding_service or _memcreate_embedding_service,
-            )
-            await session.commit()
-        except Exception as chunk_err:
-            logger.warning("memory_create: failed to sync searchable chunks: %s", chunk_err)
+        _schedule_memory_create_background_sync(
+            session_factory=session_factory,
+            graph_service=graph_service,
+            memory_id=memory.id,
+            title=title,
+            content=content,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            user_id=user_id or "agent",
+            category=category,
+            tags=tags,
+            embedding_service=embedding_service or _memcreate_embedding_service,
+        )
 
         logger.info(
             "memory_create: created memory %s for project %s",

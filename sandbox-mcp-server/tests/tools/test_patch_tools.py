@@ -229,6 +229,35 @@ class TestPatchTool:
         assert result.get("isError") is True
         content = result.get("content", [{}])[0].get("text", "").lower()
         assert "hunk" in content or "match" in content or "fail" in content
+        assert result.get("error", {}).get("suggestions")
+
+    @pytest.mark.asyncio
+    async def test_patch_preserves_crlf_line_endings(self, workspace):
+        """Patch should match LF hunks against CRLF files and preserve CRLF output."""
+        file_path = os.path.join(workspace, "windows.txt")
+        with open(file_path, "wb") as f:
+            f.write(b"line1\r\nline2\r\nline3\r\n")
+
+        patch_content = """--- a/windows.txt
++++ b/windows.txt
+@@ -1,3 +1,3 @@
+ line1
+-line2
++line2_modified
+ line3
+"""
+
+        result = await apply_patch(
+            file_path="windows.txt",
+            patch=patch_content,
+            strip=0,
+            _workspace_dir=workspace,
+        )
+
+        assert not result.get("isError")
+        with open(file_path, "rb") as f:
+            assert f.read() == b"line1\r\nline2_modified\r\nline3\r\n"
+        assert result["metadata"]["line_ending"] == "crlf"
 
     @pytest.mark.asyncio
     async def test_patch_multiple_hunks(self, workspace):

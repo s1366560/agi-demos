@@ -92,10 +92,8 @@ import {
 import { ExecutionTimeline } from './timeline/ExecutionTimeline';
 import { JitContextCard } from './timeline/JitContextCard';
 import { MemoryCapturedStep } from './timeline/MemoryRecalledStep';
-import { SubAgentCostSummary } from './timeline/SubAgentCostSummary';
 import { SubAgentTimeline } from './timeline/SubAgentTimeline';
 
-import type { SubAgentGroup } from './timeline/SubAgentTimeline';
 import type { TimelineEvent } from '../../types/agent';
 
 // Import and re-export types from separate file
@@ -310,17 +308,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       }
       return map;
     }, [turns, groupedItems]);
-
-    const subagentGroups = useMemo(
-      () =>
-        groupedItems
-          .filter(
-            (item): item is { kind: 'subagent'; group: SubAgentGroup; startIndex: number } =>
-              item.kind === 'subagent'
-          )
-          .map((item) => item.group),
-      [groupedItems]
-    );
 
     const lastTimelineGroupIndex = useMemo(() => {
       for (let i = displayItems.length - 1; i >= 0; i--) {
@@ -866,18 +853,6 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   );
                 })}
               </div>
-
-              {subagentGroups.length >= 2 && !isStreaming && (
-                <div
-                  className="flex items-start gap-3 pb-3"
-                  style={{ marginTop: virtualizer.getTotalSize() ? 8 : 0 }}
-                >
-                  <div className="w-8 shrink-0" />
-                  <div className={`flex-1 min-w-0 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
-                    <SubAgentCostSummary groups={subagentGroups} />
-                  </div>
-                </div>
-              )}
 
               {/* Non-virtualized streaming/footer content */}
               <div className="space-y-1.5">

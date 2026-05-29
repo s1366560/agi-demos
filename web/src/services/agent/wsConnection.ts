@@ -144,11 +144,19 @@ export class WebSocketConnection {
 
         this.ws.onclose = (event) => {
           logger.debug('[AgentWS] Disconnected', event.code, event.reason);
+          const closedBeforeOpen = this.connectingPromise !== null;
           this.setStatus('disconnected');
+          this.stopHeartbeat();
           this.stopWatchdog();
+          this.ws = null;
+          this.connectingPromise = null;
 
           if (!this.isManualClose && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.scheduleReconnect();
+          }
+
+          if (closedBeforeOpen) {
+            reject(new Error(`WebSocket closed before connection opened: ${String(event.code)}`));
           }
         };
 

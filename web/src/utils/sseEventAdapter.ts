@@ -729,13 +729,17 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
 
     case 'subagent_completed': {
       const data = event.data as SubAgentCompletedEventData;
+      const raw = data as SubAgentCompletedEventData & {
+        run_id?: string | undefined;
+        agent_id?: string | undefined;
+      };
       return {
         id: generateTimelineEventId('subagent_completed'),
         type: 'subagent_completed' as const,
         eventTimeUs,
         eventCounter,
         timestamp,
-        subagentId: data.subagent_id,
+        subagentId: data.subagent_id || raw.run_id || raw.agent_id || '',
         subagentName: data.subagent_name,
         summary: data.summary,
         tokensUsed: data.tokens_used ?? 0,
@@ -746,13 +750,17 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
 
     case 'subagent_failed': {
       const data = event.data as SubAgentFailedEventData;
+      const raw = data as SubAgentFailedEventData & {
+        run_id?: string | undefined;
+        agent_id?: string | undefined;
+      };
       return {
         id: generateTimelineEventId('subagent_failed'),
         type: 'subagent_failed' as const,
         eventTimeUs,
         eventCounter,
         timestamp,
-        subagentId: data.subagent_id,
+        subagentId: data.subagent_id || raw.run_id || raw.agent_id || '',
         subagentName: data.subagent_name,
         error: data.error,
       };

@@ -240,34 +240,34 @@ export const ArtifactCreatedItem = memo(
 
     return (
       <div className="flex flex-col gap-1">
-        <div className="flex items-start gap-4">
-          <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 dark:border-emerald-800/55 dark:bg-emerald-950/35">
             {(() => {
               const Icon = getCategoryIcon(event.category);
-              return <Icon size={18} className="text-emerald-600 dark:text-emerald-400" />;
+              return <Icon size={17} className="text-emerald-600 dark:text-emerald-400" />;
             })()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="rounded-lg border border-emerald-200/50 bg-emerald-50 dark:border-emerald-700/50 dark:bg-emerald-900/20 p-4">
-              <div className="flex items-center gap-2 mb-3">
+            <div className="rounded-md bg-white p-4 shadow-[0_0_0_1px_rgba(15,23,42,0.08),0_8px_20px_-16px_rgba(15,23,42,0.28)] dark:bg-slate-950 dark:shadow-[0_0_0_1px_rgba(148,163,184,0.18)]">
+              <div className="mb-3 flex min-w-0 items-center gap-2">
                 {(() => {
                   const Icon = getCategoryIcon(event.category);
-                  return <Icon size={18} className="text-emerald-600 dark:text-emerald-400" />;
+                  return <Icon size={17} className="text-emerald-600 dark:text-emerald-400" />;
                 })()}
-                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                   {t('agent.artifact.fileGenerated', 'File generated')}
                 </span>
                 {event.sourceTool && (
-                  <span className="text-xs px-2 py-0.5 bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400 rounded">
+                  <span className="max-w-[180px] truncate rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/45 dark:text-emerald-300 dark:ring-emerald-800/60">
                     {event.sourceTool}
                   </span>
                 )}
               </div>
 
               {isImage && url && !imageError && (
-                <div className="mb-3 relative">
+                <div className="relative mb-3 overflow-hidden rounded-md border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
                   {!imageLoaded && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg min-h-[100px]">
+                    <div className="absolute inset-0 flex min-h-[100px] items-center justify-center bg-slate-100 dark:bg-slate-800">
                       <LoaderCircle
                         size={24}
                         className="animate-spin motion-reduce:animate-none text-slate-400"
@@ -277,7 +277,7 @@ export const ArtifactCreatedItem = memo(
                   <img
                     src={url}
                     alt={event.filename}
-                    className={`max-w-full max-h-75 rounded-lg shadow-sm object-contain ${
+                    className={`max-h-75 max-w-full object-contain ${
                       imageLoaded ? 'opacity-100' : 'opacity-0'
                     } transition-opacity duration-300`}
                     onLoad={() => {
@@ -291,16 +291,16 @@ export const ArtifactCreatedItem = memo(
               )}
 
               {hasError && (
-                <div className="mb-3 flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/30 rounded-lg border border-red-200/50 dark:border-red-700/50">
+                <div className="mb-3 flex items-center gap-2 rounded-md border border-red-200/50 bg-red-50 p-2 dark:border-red-700/50 dark:bg-red-900/30">
                   <AlertCircle size={16} className="text-red-500 dark:text-red-400" />
                   <span className="text-xs text-red-600 dark:text-red-400">{artifactError}</span>
                 </div>
               )}
 
-              <div className="flex items-center gap-3 text-sm">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <FileIcon size={16} className="text-slate-500 dark:text-slate-400" />
-                  <span className="truncate text-slate-700 dark:text-slate-300 font-medium">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-900/70">
+                <div className="flex min-w-[220px] flex-1 items-center gap-2">
+                  <FileIcon size={16} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <span className="min-w-0 truncate font-medium text-slate-800 dark:text-slate-200">
                     {event.filename}
                   </span>
                 </div>
@@ -312,7 +312,7 @@ export const ArtifactCreatedItem = memo(
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                    className="inline-flex items-center gap-1 rounded text-xs font-medium text-emerald-700 transition-colors hover:text-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 dark:text-emerald-300 dark:hover:text-emerald-200"
                     download={event.filename}
                   >
                     <Download size={16} />
@@ -325,7 +325,7 @@ export const ArtifactCreatedItem = memo(
                     onClick={() => {
                       void handleOpenInCanvas();
                     }}
-                    className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                    className="inline-flex items-center gap-1 rounded text-xs font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
                   >
                     <PanelRight size={14} />
                     {t('agent.artifact.openInCanvas', 'Open in Canvas')}
@@ -339,11 +339,11 @@ export const ArtifactCreatedItem = memo(
                 )}
               </div>
 
-              <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                <span className="px-2 py-0.5 bg-white/50 dark:bg-slate-800/50 rounded">
+              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 dark:border-slate-800 dark:bg-slate-900">
                   {event.mimeType}
                 </span>
-                <span className="capitalize px-2 py-0.5 bg-white/50 dark:bg-slate-800/50 rounded">
+                <span className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5 capitalize dark:border-slate-800 dark:bg-slate-900">
                   {event.category}
                 </span>
               </div>

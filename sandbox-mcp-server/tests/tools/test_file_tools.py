@@ -5,6 +5,7 @@ import pytest
 from src.tools.file_tools import (
     batch_read,
     create_write_tool,
+    edit_file,
     get_path_error_result,
     glob_files,
     grep_files,
@@ -40,9 +41,7 @@ class TestGrepTool:
         assert "after" in text
 
     @pytest.mark.asyncio
-    async def test_grep_files_supports_allowed_paths_outside_workspace(
-        self, tmp_path, monkeypatch
-    ):
+    async def test_grep_files_supports_allowed_paths_outside_workspace(self, tmp_path, monkeypatch):
         """Searching an allowlisted path outside the workspace should not crash."""
         workspace = tmp_path / "workspace"
         workspace.mkdir()
@@ -211,6 +210,74 @@ class TestWriteTool:
         assert properties["mode"]["enum"] == ["overwrite", "append"]
         assert "append" in properties
         assert "path" in properties
+
+
+class TestEditTool:
+    """Regression coverage for edit durability and recovery hints."""
+
+    @pytest.mark.asyncio
+    async def test_edit_file_preserves_crlf_line_endings(self, tmp_path):
+        """Exact edits should not silently normalize CRLF files to LF."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        target = workspace / "windows.txt"
+        target.write_bytes(b"one\r\ntwo\r\nthree\r\n")
+
+        result = await edit_file(
+            file_path="windows.txt",
+            old_string="two\n",
+            new_string="TWO\n",
+            _workspace_dir=str(workspace),
+        )
+
+        assert not result.get("isError")
+        assert target.read_bytes() == b"one\r\nTWO\r\nthree\r\n"
+        assert result["metadata"]["line_ending"] == "crlf"
+
+    @pytest.mark.asyncio
+    async def test_edit_file_returns_nearby_sections_for_missing_anchor(self, tmp_path):
+        """Failed exact edits should include actionable nearby context."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        target = workspace / "sample.py"
+        target.write_text(
+            "def calculate_total(items):\n    subtotal = sum(items)\n    return subtotal\n",
+            encoding="utf-8",
+        )
+
+        result = await edit_file(
+            file_path="sample.py",
+            old_string="subtotal = sum(item)",
+            new_string="subtotal = sum(items)",
+            _workspace_dir=str(workspace),
+        )
+
+        assert result.get("isError") is True
+        assert result["error"]["code"] == "string_not_found"
+        suggestions = result["error"]["suggestions"]
+        assert suggestions
+        assert "subtotal = sum(items)" in suggestions[0]
+
+    @pytest.mark.asyncio
+    async def test_edit_file_escalates_hint_after_repeated_anchor_failures(self, tmp_path):
+        """Repeated failures on the same file should tell the agent to stop retrying."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        target = workspace / "sample.py"
+        target.write_text("value = 1\n", encoding="utf-8")
+
+        result = None
+        for _ in range(3):
+            result = await edit_file(
+                file_path="sample.py",
+                old_string="missing = 1",
+                new_string="missing = 2",
+                _workspace_dir=str(workspace),
+            )
+
+        assert result is not None
+        assert result.get("isError") is True
+        assert result["metadata"]["error"]["hint"].startswith("This is failure #")
 
 
 class TestGlobTool:

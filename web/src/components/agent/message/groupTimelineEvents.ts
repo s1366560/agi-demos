@@ -161,6 +161,73 @@ function getSubAgentId(ev: TimelineEvent): string | undefined {
   return typeof id === 'string' && id.length > 0 ? id : undefined;
 }
 
+function getSubAgentName(ev: TimelineEvent): string | undefined {
+  const d = ev as unknown as Record<string, unknown>;
+  const name = d.subagentName;
+  return typeof name === 'string' && name.length > 0 ? name : undefined;
+}
+
+function normalizeSubAgentName(name: string | undefined): string {
+  return (name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function getSubAgentGroupMode(ev: TimelineEvent): 'parallel' | 'chain' | 'single' {
+  if (ev.type.startsWith('parallel_')) return 'parallel';
+  if (ev.type.startsWith('chain_')) return 'chain';
+  return 'single';
+}
+
+function getTextMarkers(ev: TimelineEvent): string[] {
+  const d = ev as unknown as Record<string, unknown>;
+  return [d.task, d.summary, d.error]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.trim());
+}
+
+function hasSharedTextMarker(events: TimelineEvent[], candidate: TimelineEvent): boolean {
+  const candidateMarkers = getTextMarkers(candidate);
+  if (candidateMarkers.length === 0) return false;
+  const existingMarkers = new Set(events.flatMap((event) => getTextMarkers(event)));
+  return candidateMarkers.some((marker) => existingMarkers.has(marker));
+}
+
+function hasTerminalEvent(events: TimelineEvent[]): boolean {
+  return events.some((event) => TERMINAL_SUBAGENT_TYPES.has(event.type));
+}
+
+function isCompatibleSubAgentEvent(events: TimelineEvent[], candidate: TimelineEvent): boolean {
+  if (events.length === 0) return true;
+
+  const first = events[0];
+  if (!first) return true;
+
+  const mode = getSubAgentGroupMode(first);
+  const candidateMode = getSubAgentGroupMode(candidate);
+  if (mode !== candidateMode) return false;
+  if (mode !== 'single') return true;
+
+  const candidateId = getSubAgentId(candidate);
+  const knownIds = new Set(events.map((event) => getSubAgentId(event)).filter(Boolean));
+  if (candidateId && knownIds.size > 0) return knownIds.has(candidateId);
+
+  const candidateName = getSubAgentName(candidate);
+  const normalizedCandidateName = normalizeSubAgentName(candidateName);
+  const knownNames = new Set(
+    events
+      .map((event) => normalizeSubAgentName(getSubAgentName(event)))
+      .filter((name) => name.length > 0)
+  );
+  if (normalizedCandidateName && knownNames.size > 0) {
+    return knownNames.has(normalizedCandidateName);
+  }
+
+  if (!candidateId && !candidateName && TERMINAL_SUBAGENT_TYPES.has(candidate.type)) {
+    return !hasTerminalEvent(events) || hasSharedTextMarker(events, candidate);
+  }
+
+  return knownIds.size === 0 && knownNames.size === 0;
+}
+
 /**
  * Build a SubAgentGroup from consecutive SubAgent events starting at index.
  * Returns the group and the last consumed event index.
@@ -182,15 +249,16 @@ function buildSubAgentGroup(
   for (let i = startIdx; i < timeline.length; i++) {
     const item = timeline[i];
     if (!item) break;
-    if (SUBAGENT_EVENT_TYPES.has(item.type)) {
-      events.push(item);
-      endIndex = i;
-      if (TERMINAL_SUBAGENT_TYPES.has(item.type)) {
-        foundTerminal = true;
-        break;
-      }
-    } else {
+    if (!SUBAGENT_EVENT_TYPES.has(item.type)) {
       break;
+    }
+    if (!isCompatibleSubAgentEvent(events, item)) {
+      break;
+    }
+    events.push(item);
+    endIndex = i;
+    if (TERMINAL_SUBAGENT_TYPES.has(item.type)) {
+      foundTerminal = true;
     }
   }
 
@@ -209,7 +277,11 @@ function buildSubAgentGroup(
       for (let i = endIndex + 1; i < timeline.length; i++) {
         const item = timeline[i];
         if (!item) break;
-        if (TERMINAL_SUBAGENT_TYPES.has(item.type) && getSubAgentId(item) === targetId) {
+        if (
+          TERMINAL_SUBAGENT_TYPES.has(item.type) &&
+          getSubAgentId(item) === targetId &&
+          isCompatibleSubAgentEvent(events, item)
+        ) {
           events.push(item);
           // Record this index so the main loop skips it (avoid duplicate group)
           claimedIndices.add(i);
@@ -249,6 +321,8 @@ function buildSubAgentGroup(
       }
       case 'subagent_completed': {
         const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
         group.status = 'success';
         group.summary = d.summary;
         group.tokensUsed = d.tokensUsed;
@@ -257,6 +331,8 @@ function buildSubAgentGroup(
       }
       case 'subagent_failed': {
         const d = ev;
+        group.subagentId = group.subagentId || d.subagentId || '';
+        group.subagentName = group.subagentName || d.subagentName || '';
         group.status = 'error';
         group.error = d.error;
         break;
@@ -425,36 +501,4 @@ function buildSubAgentGroup(
   }
 
   return { group, endIndex, claimedIndices };
-}
-
-export interface SubAgentSummary {
-  subagentId: string;
-  name: string;
-  status: SubAgentGroup['status'];
-  executionTimeMs?: number;
-  tokensUsed?: number;
-  startIndex: number;
-}
-
-export function getSubAgentSummaries(items: GroupedItem[]): SubAgentSummary[] {
-  return items
-    .filter(
-      (item): item is { kind: 'subagent'; group: SubAgentGroup; startIndex: number } =>
-        item.kind === 'subagent'
-    )
-    .map((item) => {
-      const summary: SubAgentSummary = {
-        subagentId: item.group.subagentId,
-        name: item.group.subagentName || item.group.subagentId.slice(0, 8) || 'Unnamed',
-        status: item.group.status,
-        startIndex: item.startIndex,
-      };
-      if (item.group.executionTimeMs !== undefined) {
-        summary.executionTimeMs = item.group.executionTimeMs;
-      }
-      if (item.group.tokensUsed !== undefined) {
-        summary.tokensUsed = item.group.tokensUsed;
-      }
-      return summary;
-    });
 }

@@ -112,6 +112,19 @@ class EvolutionEngine:
 
         for group in groups.values():
             try:
+                session_ids = [s.id for s in group.sessions]
+                if await repo.has_job_for_sessions(
+                    tenant_id=tenant_id,
+                    skill_name=group.skill_name,
+                    session_ids=session_ids,
+                ):
+                    logger.info(
+                        "Skipping duplicate evolution job for '%s' (%d sessions)",
+                        group.skill_name,
+                        len(session_ids),
+                    )
+                    continue
+
                 job = await self._evolve_one(
                     group,
                     llm_client,
@@ -200,6 +213,7 @@ class EvolutionEngine:
             candidate_content = description
 
         session_ids = [s.id for s in group.sessions]
+        job_status = "skipped" if action == "skip" else "pending_review"
 
         job = SkillEvolutionJob(
             id=f"evj-{uuid.uuid4().hex[:16]}",
@@ -209,7 +223,7 @@ class EvolutionEngine:
             candidate_content=candidate_content,
             rationale=rationale,
             session_ids=session_ids,
-            status="pending_review",
+            status=job_status,
         )
 
         logger.info(

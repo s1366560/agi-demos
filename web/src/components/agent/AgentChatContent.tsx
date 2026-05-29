@@ -23,8 +23,6 @@ import { message } from 'antd';
 import { GripHorizontal, Download, ChevronDown, GitCompareArrows, Bot, Folder } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { DEFAULT_GENERAL_AGENT_ID } from '@/constants/agent';
-
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
 import { useIsPlanMode, useExecutionStore } from '@/stores/agent/executionStore';
 import { useDoomLoopDetected, useSuggestions } from '@/stores/agent/hitlStore';
@@ -48,6 +46,8 @@ import type { FileMetadata } from '@/services/sandboxUploadService';
 import { useProjectBasePath } from '@/hooks/useProjectBasePath';
 import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
 
+import { DEFAULT_GENERAL_AGENT_ID } from '@/constants/agent';
+
 import { useLazyNotification } from '@/components/ui/lazyAntd';
 
 // Import design components
@@ -66,14 +66,12 @@ import { EmptyState } from './EmptyState';
 import { EvidenceBundleDrawer } from './evidence/EvidenceBundleDrawer';
 import { InputBar } from './InputBar';
 import { LayoutModeSelector } from './layout/LayoutModeSelector';
-import { groupTimelineEvents, getSubAgentSummaries } from './message/groupTimelineEvents';
 import { MessageArea } from './MessageArea';
 import { ProjectAgentStatusBar } from './ProjectAgentStatusBar';
 import { Resizer } from './Resizer';
 import { SplitPaneLayout } from './SplitPaneLayout';
 import { LAYOUT_BG_CLASSES } from './styles';
 import { deriveTaskProgress } from './tasks/taskProgressDerivation';
-import { SubAgentMiniMap } from './timeline/SubAgentMiniMap';
 
 import type {
   AgentTask,
@@ -717,25 +715,6 @@ ${content}`;
     // Plan Mode toggle
     const isPlanMode = useIsPlanMode();
 
-    const groupedTimeline = useMemo(() => groupTimelineEvents(timeline), [timeline]);
-    const subagentSummaries = useMemo(
-      () => getSubAgentSummaries(groupedTimeline),
-      [groupedTimeline]
-    );
-
-    const handleScrollToSubAgent = useCallback((startIndex: number) => {
-      const exact = document.querySelector(`[data-subagent-start-index="${String(startIndex)}"]`);
-      if (exact instanceof HTMLElement) {
-        exact.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return;
-      }
-
-      const nearest = document.querySelector(`[data-timeline-index="${String(startIndex)}"]`);
-      if (nearest instanceof HTMLElement) {
-        nearest.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, []);
-
     const handleTogglePlanMode = useCallback(async () => {
       const targetConversationId = activeConversationId || conversationId;
       if (!targetConversationId) return;
@@ -775,9 +754,6 @@ ${content}`;
         )}
         <div className="flex-1 overflow-hidden relative min-h-0">
           {messageArea}
-          {subagentSummaries.length >= 3 && (
-            <SubAgentMiniMap summaries={subagentSummaries} onScrollTo={handleScrollToSubAgent} />
-          )}
           <ChatSearch
             timeline={timeline}
             visible={chatSearchVisible}

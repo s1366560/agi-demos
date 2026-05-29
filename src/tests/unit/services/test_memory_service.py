@@ -57,6 +57,24 @@ class TestMemoryService:
         assert episode.project_id == "project-1"
         assert episode.user_id == "user-1"
 
+    async def test_create_memory_can_skip_graph_enqueue(self, mock_memory_repo, mock_graphiti_client):
+        """Agent tools can use a fast commit path and queue graph work separately."""
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
+
+        result = await service.create_memory(
+            title="Fast Memory",
+            content="Fast content",
+            project_id="project-1",
+            user_id="user-1",
+            tenant_id="tenant-1",
+            enqueue_graph=False,
+        )
+
+        assert result.title == "Fast Memory"
+        assert result.processing_status == ProcessingStatus.PENDING.value
+        mock_memory_repo.save.assert_awaited_once_with(result)
+        mock_graphiti_client.add_episode.assert_not_awaited()
+
     async def test_update_memory_success(self, mock_memory_repo, mock_graphiti_client):
         """Test successful memory update."""
         # Arrange

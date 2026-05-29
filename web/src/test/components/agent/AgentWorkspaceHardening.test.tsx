@@ -43,10 +43,6 @@ vi.mock('@/components/agent/timeline/SubAgentTimeline', () => ({
   SubAgentTimeline: () => <div data-testid="subagent-timeline" />,
 }));
 
-vi.mock('@/components/agent/timeline/SubAgentCostSummary', () => ({
-  SubAgentCostSummary: () => <div data-testid="subagent-cost-summary" />,
-}));
-
 vi.mock('@/components/agent/chat/ThinkingBlock', () => ({
   ThinkingBlock: ({ content }: { content: string }) => (
     <div data-testid="thinking-block">{content}</div>

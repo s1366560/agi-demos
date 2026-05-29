@@ -6,13 +6,10 @@ import type { FileMetadata } from '@/services/sandboxUploadService';
 
 import { ChatSearch } from './chat/ChatSearch';
 import { Resizer } from './Resizer';
-import { SubAgentMiniMap } from './timeline/SubAgentMiniMap';
 
 import { InputBar } from './index';
 
 import type { TimelineEvent } from '@/types/agent';
-
-import type { SubAgentSummary } from './message/groupTimelineEvents';
 
 export const INPUT_MIN_HEIGHT = 160;
 export const INPUT_MAX_HEIGHT = 560;
@@ -22,8 +19,6 @@ export interface ChatColumnProps {
   headerExtra?: React.ReactNode;
   activeAgentNode: { name: string | null; status: string } | null;
   messageArea: React.ReactNode;
-  subagentSummaries: SubAgentSummary[];
-  onScrollToSubAgent: (startIndex: number) => void;
   timeline: TimelineEvent[];
   chatSearchVisible: boolean;
   onChatSearchClose: () => void;
@@ -52,8 +47,6 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   headerExtra,
   activeAgentNode,
   messageArea,
-  subagentSummaries,
-  onScrollToSubAgent,
   timeline,
   chatSearchVisible,
   onChatSearchClose,
@@ -87,9 +80,6 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       )}
       <div className="flex-1 overflow-hidden relative min-h-0">
         {messageArea}
-        {subagentSummaries.length >= 3 && (
-          <SubAgentMiniMap summaries={subagentSummaries} onScrollTo={onScrollToSubAgent} />
-        )}
         <ChatSearch timeline={timeline} visible={chatSearchVisible} onClose={onChatSearchClose} />
       </div>
       <div

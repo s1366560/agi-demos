@@ -808,6 +808,7 @@ class TestEvolutionEngine:
         skill_repo.get_by_name = AsyncMock(return_value=None)
         skill_repo.list_by_tenant = AsyncMock(return_value=[])
         repo = MagicMock()
+        repo.has_job_for_sessions = AsyncMock(return_value=False)
         repo.save_job = AsyncMock()
 
         client = FakeLLMClient()
@@ -828,3 +829,114 @@ class TestEvolutionEngine:
         assert jobs[0].status == "pending_review"
         assert "No managed SKILL.md exists" in client.prompt
         repo.save_job.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_skip_decision_is_not_pending_review(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.evolution_engine import (
+            EvolutionEngine,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+
+        class FakeLLMClient:
+            async def generate(self, messages, max_tokens: int):
+                return {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "action": "skip",
+                                        "rationale": "The skill is working well.",
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                }
+
+        skill = MagicMock()
+        skill.full_content = "---\nname: stable-skill\n---\n# Stable Skill\n"
+        group = SkillSessionGroup(skill_name="stable-skill")
+        for i in range(5):
+            group.add(
+                SkillEvolutionSession(
+                    id=f"s{i}",
+                    skill_name="stable-skill",
+                    tenant_id="t1",
+                    conversation_id=f"c{i}",
+                    user_query="do stable work",
+                    summary="Completed successfully.",
+                    success=True,
+                    overall_score=0.9,
+                )
+            )
+
+        skill_repo = MagicMock()
+        skill_repo.get_by_name = AsyncMock(return_value=skill)
+        skill_repo.list_by_tenant = AsyncMock(return_value=[skill])
+        repo = MagicMock()
+        repo.has_job_for_sessions = AsyncMock(return_value=False)
+        repo.save_job = AsyncMock()
+
+        engine = EvolutionEngine(
+            SkillEvolutionConfig(), skill_service=MagicMock(), merger=MagicMock()
+        )
+
+        jobs = await engine.evolve_all(
+            {"stable-skill": group},
+            FakeLLMClient(),
+            repo,
+            tenant_id="t1",
+            skill_repository=skill_repo,
+        )
+
+        assert len(jobs) == 1
+        assert jobs[0].action == "skip"
+        assert jobs[0].status == "skipped"
+        repo.save_job.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_existing_session_batch_is_not_evolved_again(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.evolution_engine import (
+            EvolutionEngine,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+
+        llm_client = MagicMock()
+        llm_client.generate = AsyncMock()
+        group = SkillSessionGroup(skill_name="stable-skill")
+        for i in range(5):
+            group.add(
+                SkillEvolutionSession(
+                    id=f"s{i}",
+                    skill_name="stable-skill",
+                    tenant_id="t1",
+                    conversation_id=f"c{i}",
+                    user_query="do stable work",
+                    success=True,
+                    overall_score=0.9,
+                )
+            )
+
+        repo = MagicMock()
+        repo.has_job_for_sessions = AsyncMock(return_value=True)
+        repo.save_job = AsyncMock()
+
+        engine = EvolutionEngine(
+            SkillEvolutionConfig(), skill_service=MagicMock(), merger=MagicMock()
+        )
+
+        jobs = await engine.evolve_all(
+            {"stable-skill": group},
+            llm_client,
+            repo,
+            tenant_id="t1",
+        )
+
+        assert jobs == []
+        llm_client.generate.assert_not_awaited()
+        repo.save_job.assert_not_awaited()
