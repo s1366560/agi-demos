@@ -6,7 +6,7 @@
  */
 
 import type React from 'react';
-import { memo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import type { Components } from 'react-markdown';
@@ -39,13 +39,14 @@ import {
   XCircle,
 } from 'lucide-react';
 
-import { useCanvasStore } from '@/stores/canvasStore';
+import { useCanvasStore, type CanvasContentType } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@/stores/sandbox';
 
 import { artifactService, fetchArtifactResource } from '@/services/artifactService';
 
 import { useLocaleNumberFormat } from '@/i18n/formatters';
+import { formatDateTime, formatTimeOnly } from '@/utils/date';
 import { normalizeExecutionSummary } from '@/utils/executionSummary';
 import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
 
@@ -78,6 +79,7 @@ import type {
 } from './types';
 import type {
   ActEvent,
+  Artifact,
   ArtifactCreatedEvent,
   ArtifactReference,
   ClarificationAskedEventData,
@@ -96,7 +98,7 @@ import type {
 
 const COUNT_FORMATTER_FALLBACK = new Intl.NumberFormat('en-US');
 const SUMMARY_PILL_CLASSES =
-  'inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-neutral-600 dark:border-slate-700 dark:bg-slate-800/70';
+  'inline-flex items-center gap-1 rounded-full border border-slate-200/60 bg-slate-50/80 px-2.5 py-1 text-xs text-neutral-600 dark:border-slate-800/60 dark:bg-slate-800/50';
 
 const formatCount = (
   value: number,
@@ -109,6 +111,250 @@ const SummaryPill: React.FC<{ label: string; value: string }> = ({ label, value 
     <span className="font-medium text-neutral-800">{value}</span>
   </span>
 );
+
+const USER_MESSAGE_MAX_WIDTH_CLASSES = 'max-w-[85%] md:max-w-[75%] lg:max-w-[70%]';
+const SANDBOX_FILE_LINK_PREFIX = '#sandbox-file:';
+const SANDBOX_FILE_PATH_PATTERN =
+  /(^|[\s:：([（])((?:\/workspace\/|~\/|(?:output|outputs|artifacts|input|inputs|tmp|workspace)\/)[^\s)\]）}>`"']*\.[A-Za-z0-9]{1,12})/g;
+const TEXT_FILE_EXTENSIONS = new Set([
+  'txt',
+  'md',
+  'markdown',
+  'json',
+  'jsonl',
+  'yaml',
+  'yml',
+  'toml',
+  'csv',
+  'tsv',
+  'xml',
+  'html',
+  'css',
+  'scss',
+  'js',
+  'jsx',
+  'ts',
+  'tsx',
+  'py',
+  'go',
+  'rs',
+  'java',
+  'kt',
+  'rb',
+  'php',
+  'sh',
+  'bash',
+  'zsh',
+  'sql',
+  'log',
+]);
+
+const MessageTime: React.FC<{
+  timestamp?: number | undefined;
+  className?: string | undefined;
+}> = ({ timestamp, className = '' }) => {
+  if (!timestamp) {
+    return null;
+  }
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return (
+    <time
+      dateTime={date.toISOString()}
+      title={formatDateTime(timestamp)}
+      className={`inline-flex flex-shrink-0 items-center gap-1 text-2xs leading-none text-slate-400 dark:text-slate-500 ${className}`}
+    >
+      <Clock size={11} aria-hidden="true" />
+      <span>{formatTimeOnly(timestamp)}</span>
+    </time>
+  );
+};
+
+function getFileNameFromPath(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+}
+
+function getFileExtension(path: string): string {
+  const name = getFileNameFromPath(path);
+  const dotIndex = name.lastIndexOf('.');
+  return dotIndex >= 0 ? name.slice(dotIndex + 1).toLowerCase() : '';
+}
+
+function getCanvasTypeForSandboxPath(path: string): CanvasContentType {
+  const ext = getFileExtension(path);
+  if (ext === 'md' || ext === 'markdown') return 'markdown';
+  if (['json', 'jsonl', 'csv', 'tsv', 'xml', 'yaml', 'yml', 'toml'].includes(ext)) return 'data';
+  if (['html', 'htm', 'svg'].includes(ext)) return 'preview';
+  return 'code';
+}
+
+function getMimeTypeForSandboxPath(path: string): string | undefined {
+  const ext = getFileExtension(path);
+  if (ext === 'md' || ext === 'markdown') return 'text/markdown';
+  if (ext === 'html' || ext === 'htm') return 'text/html';
+  if (ext === 'svg') return 'image/svg+xml';
+  if (ext === 'json' || ext === 'jsonl') return 'application/json';
+  if (ext === 'csv') return 'text/csv';
+  if (ext === 'pdf') return 'application/pdf';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext))
+    return `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+  if (TEXT_FILE_EXTENSIONS.has(ext)) return 'text/plain';
+  return undefined;
+}
+
+function escapeMarkdownLinkText(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/\]/g, '\\]');
+}
+
+function linkifySandboxPaths(content: string): string {
+  const lines = content.split('\n');
+  let inFence = false;
+  return lines
+    .map((line) => {
+      if (/^\s*```/.test(line)) {
+        inFence = !inFence;
+        return line;
+      }
+      if (inFence) return line;
+      return line.replace(SANDBOX_FILE_PATH_PATTERN, (_match, prefix: string, path: string) => {
+        return `${prefix}[${escapeMarkdownLinkText(path)}](${SANDBOX_FILE_LINK_PREFIX}${encodeURIComponent(path)})`;
+      });
+    })
+    .join('\n');
+}
+
+function collectNodeText(node: React.ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(collectNodeText).join('');
+  return '';
+}
+
+function isSandboxFilePathText(value: string): boolean {
+  const trimmed = value.trim();
+  const padded = ` ${trimmed}`;
+  SANDBOX_FILE_PATH_PATTERN.lastIndex = 0;
+  const matches = SANDBOX_FILE_PATH_PATTERN.test(padded);
+  SANDBOX_FILE_PATH_PATTERN.lastIndex = 0;
+  return (
+    trimmed === value &&
+    matches &&
+    padded.replace(SANDBOX_FILE_PATH_PATTERN, '').trim().length === 0
+  );
+}
+
+function normalizeSandboxPath(path: string): string {
+  if (path.startsWith('~/')) return `/workspace/${path.slice(2)}`;
+  return path;
+}
+
+function pathMatchesArtifact(path: string, artifact: Artifact): boolean {
+  const normalized = normalizeSandboxPath(path);
+  const sourcePath = artifact.sourcePath ? normalizeSandboxPath(artifact.sourcePath) : '';
+  const filename = artifact.filename;
+  return (
+    sourcePath === normalized ||
+    sourcePath.endsWith(`/${path}`) ||
+    normalized.endsWith(`/${filename}`) ||
+    path === filename
+  );
+}
+
+async function openArtifactInCanvas(artifact: Artifact, requestedPath: string): Promise<boolean> {
+  const url = artifact.url || artifact.previewUrl;
+  if (!url || !isSafeArtifactUrl(url)) return false;
+
+  const title = artifact.filename || getFileNameFromPath(requestedPath);
+  const mime = (artifact.mimeType || getMimeTypeForSandboxPath(title) || '').toLowerCase();
+
+  if (
+    mime.startsWith('image/') ||
+    mime.startsWith('video/') ||
+    mime.startsWith('audio/') ||
+    isOfficeMimeType(mime) ||
+    isOfficeExtension(title)
+  ) {
+    useCanvasStore.getState().openTab({
+      id: artifact.id,
+      title,
+      type: 'preview',
+      content: url,
+      mimeType: artifact.mimeType,
+      artifactId: artifact.id,
+      artifactUrl: url,
+    });
+    useLayoutModeStore.getState().setMode('canvas');
+    return true;
+  }
+
+  const response = await fetchArtifactResource(url);
+  if (!response.ok) return false;
+  const responseType = response.headers.get('content-type')?.toLowerCase() || '';
+  if (responseType.includes('application/pdf')) {
+    useCanvasStore.getState().openTab({
+      id: artifact.id,
+      title,
+      type: 'preview',
+      content: url,
+      mimeType: 'application/pdf',
+      pdfVerified: true,
+      artifactId: artifact.id,
+      artifactUrl: url,
+    });
+    useLayoutModeStore.getState().setMode('canvas');
+    return true;
+  }
+
+  const content = await response.text();
+  const contentType = getCanvasTypeForSandboxPath(title);
+  useCanvasStore.getState().openTab({
+    id: artifact.id,
+    title,
+    type: contentType,
+    content,
+    language: getFileExtension(title) || undefined,
+    mimeType: artifact.mimeType,
+    artifactId: artifact.id,
+    artifactUrl: url,
+  });
+  useLayoutModeStore.getState().setMode('canvas');
+  return true;
+}
+
+async function openSandboxPathInCanvas(path: string): Promise<void> {
+  const artifacts = Array.from(useSandboxStore.getState().artifacts.values());
+  const artifact = artifacts.find((item) => pathMatchesArtifact(path, item));
+  if (artifact) {
+    try {
+      const opened = await openArtifactInCanvas(artifact, path);
+      if (opened) return;
+    } catch {
+      // Fall back to direct sandbox read below.
+    }
+  }
+
+  const normalizedPath = normalizeSandboxPath(path);
+  const result = await useSandboxStore
+    .getState()
+    .executeTool('read', { file_path: normalizedPath, offset: 0, limit: 50000 }, 20);
+  if (!result.success || result.isError) return;
+
+  const title = getFileNameFromPath(path);
+  const type = getCanvasTypeForSandboxPath(path);
+  useCanvasStore.getState().openTab({
+    id: `${SANDBOX_FILE_LINK_PREFIX}${normalizedPath}`,
+    title,
+    type,
+    content: result.content,
+    language: getFileExtension(path) || undefined,
+    mimeType: getMimeTypeForSandboxPath(path),
+  });
+  useLayoutModeStore.getState().setMode('canvas');
+}
 
 const ExecutionSummaryPanel: React.FC<{
   summary: ReturnType<typeof normalizeExecutionSummary>;
@@ -437,9 +683,64 @@ const getSafeArtifactReferences = (
   return artifacts.filter((artifact) => isSafeArtifactUrl(artifact.url));
 };
 
+const SandboxFileButton: React.FC<{ path: string; children: React.ReactNode }> = ({
+  path,
+  children,
+}) => {
+  const [opening, setOpening] = useState(false);
+  const { t } = useTranslation();
+
+  return (
+    <button
+      type="button"
+      disabled={opening}
+      onClick={(event) => {
+        event.preventDefault();
+        setOpening(true);
+        void openSandboxPathInCanvas(path).finally(() => {
+          setOpening(false);
+        });
+      }}
+      className="inline-flex max-w-full items-baseline gap-1 rounded px-1 text-left font-medium text-primary underline decoration-primary/30 underline-offset-2 transition-colors hover:text-primary/80 hover:decoration-primary/70 disabled:cursor-wait disabled:opacity-60"
+      title={t('agent.messageBubble.openSandboxFileInCanvas', {
+        defaultValue: 'Open {{path}} in Canvas',
+        path,
+      })}
+    >
+      <FileText size={12} className="relative top-0.5 shrink-0" aria-hidden="true" />
+      <span className="truncate">{children}</span>
+    </button>
+  );
+};
+
+const SandboxFileLink: Components['a'] = ({ href, children, ...props }) => {
+  if (!href?.startsWith(SANDBOX_FILE_LINK_PREFIX)) {
+    return (
+      <a href={href} {...props}>
+        {children}
+      </a>
+    );
+  }
+
+  const path = safeDecodeURIComponent(href.slice(SANDBOX_FILE_LINK_PREFIX.length));
+  return <SandboxFileButton path={path}>{children}</SandboxFileButton>;
+};
+
+const SandboxAwareInlineCode: Components['code'] = ({ children, className, ...props }) => {
+  const text = collectNodeText(children);
+  if (!className && isSandboxFilePathText(text)) {
+    return <SandboxFileButton path={text}>{children}</SandboxFileButton>;
+  }
+  return (
+    <code className={className} {...props}>
+      {children}
+    </code>
+  );
+};
+
 // User Message Component - Modern floating style with action bar
 const UserMessage: React.FC<UserMessageProps> = memo(
-  ({ content, onReply, forcedSkillName, forcedSubAgentName, fileMetadata }) => {
+  ({ content, timestamp, onReply, forcedSkillName, forcedSubAgentName, fileMetadata }) => {
     const { t } = useTranslation();
 
     if (!content) return null;
@@ -461,7 +762,12 @@ const UserMessage: React.FC<UserMessageProps> = memo(
       <div className="group flex flex-col items-end gap-1 pb-1">
         {/* Main row: bubble + avatar */}
         <div className="flex items-end justify-end gap-3 w-full">
-          <div className={MESSAGE_MAX_WIDTH_CLASSES}>
+          <div className={USER_MESSAGE_MAX_WIDTH_CLASSES}>
+            {timestamp ? (
+              <div className="mb-1 flex justify-end pr-1">
+                <MessageTime timestamp={timestamp} />
+              </div>
+            ) : null}
             <div
               className={
                 isForced ? `relative ${gradientClass} rounded-lg rounded-br-sm p-px` : 'relative'
@@ -504,8 +810,8 @@ const UserMessage: React.FC<UserMessageProps> = memo(
               <div
                 className={
                   isForced
-                    ? 'bg-slate-50 dark:bg-slate-800 rounded-lg rounded-br-sm px-4 py-2'
-                    : 'bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-lg rounded-br-sm px-4 py-2 shadow-sm'
+                    ? 'bg-slate-50/80 dark:bg-slate-800/70 rounded-lg rounded-br-sm px-4 py-2'
+                    : 'bg-slate-50/80 dark:bg-slate-800/70 border border-slate-200/40 dark:border-slate-700/40 rounded-lg rounded-br-sm px-4 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.02)]'
                 }
               >
                 <p className="text-sm leading-[1.5] whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
@@ -527,7 +833,7 @@ const UserMessage: React.FC<UserMessageProps> = memo(
               )}
             </div>
           </div>
-          <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700/70 flex items-center justify-center flex-shrink-0 shadow-sm">
+          <div className="w-8 h-8 rounded-lg bg-slate-100/80 dark:bg-slate-800/70 ring-1 ring-slate-200/45 dark:ring-slate-700/45 flex items-center justify-center flex-shrink-0">
             <User size={16} className="text-slate-500 dark:text-slate-400" />
           </div>
         </div>
@@ -537,7 +843,7 @@ const UserMessage: React.FC<UserMessageProps> = memo(
             {fileMetadata.map((file, idx) => (
               <div
                 key={idx}
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-lg"
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 dark:bg-slate-800/70 border border-slate-200/40 dark:border-slate-700/40 rounded-md"
               >
                 {(() => {
                   const FileIcon = getFileIconForMime(file.mime_type);
@@ -563,13 +869,16 @@ UserMessage.displayName = 'MessageBubble.User';
 const ASSISTANT_COMPONENTS: Components = {
   pre: SharedCodeBlock,
   ...safeMarkdownComponents,
+  a: SandboxFileLink,
+  code: SandboxAwareInlineCode,
 };
 
 // Assistant Message Component - Modern card style with action bar
 const AssistantMessage: React.FC<AssistantMessageProps> = memo(
-  ({ content, metadata, artifacts, isStreaming, isPinned, onPin, onReply }) => {
+  ({ content, timestamp, metadata, artifacts, isStreaming, isPinned, onPin, onReply }) => {
     const [showSaveTemplate, setShowSaveTemplate] = useState(false);
-    const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
+    const markdownContent = useMemo(() => linkifySandboxPaths(content), [content]);
+    const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(markdownContent);
     const executionSummary = normalizeExecutionSummary(metadata?.executionSummary);
     const completionArtifacts = getSafeArtifactReferences(
       artifacts ?? (metadata?.artifacts as ArtifactReference[] | undefined)
@@ -582,6 +891,11 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
           <Bot size={18} className="text-primary" />
         </div>
         <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
+          {timestamp ? (
+            <div className="mb-1 flex pl-1">
+              <MessageTime timestamp={timestamp} />
+            </div>
+          ) : null}
           <div className="relative">
             <div className={ASSISTANT_BUBBLE_CLASSES}>
               <ExecutionSummaryPanel summary={executionSummary} />
@@ -592,7 +906,7 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
                     rehypePlugins={rehypePlugins}
                     components={ASSISTANT_COMPONENTS}
                   >
-                    {content}
+                    {markdownContent}
                   </ReactMarkdown>
                 ) : null}
               </div>
@@ -634,8 +948,9 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
 AssistantMessage.displayName = 'MessageBubble.Assistant';
 
 // Text Delta Component (for streaming content)
-const TextDelta: React.FC<TextDeltaProps> = memo(({ content }) => {
-  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
+const TextDelta: React.FC<TextDeltaProps> = memo(({ content, timestamp }) => {
+  const markdownContent = useMemo(() => linkifySandboxPaths(content), [content]);
+  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(markdownContent);
   if (!content) return null;
   return (
     <div className="flex items-start gap-3 pb-1">
@@ -643,14 +958,19 @@ const TextDelta: React.FC<TextDeltaProps> = memo(({ content }) => {
         <Bot size={18} className="text-primary" />
       </div>
       <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
+        {timestamp ? (
+          <div className="mb-1 flex pl-1">
+            <MessageTime timestamp={timestamp} />
+          </div>
+        ) : null}
         <div className={ASSISTANT_BUBBLE_CLASSES}>
           <div className={MARKDOWN_PROSE_CLASSES}>
             <ReactMarkdown
               remarkPlugins={remarkPlugins}
               rehypePlugins={rehypePlugins}
-              components={safeMarkdownComponents}
+              components={ASSISTANT_COMPONENTS}
             >
-              {content}
+              {markdownContent}
             </ReactMarkdown>
           </div>
         </div>
@@ -661,7 +981,7 @@ const TextDelta: React.FC<TextDeltaProps> = memo(({ content }) => {
 TextDelta.displayName = 'MessageBubble.TextDelta';
 
 // Thought/Reasoning Component - Modern pill style
-const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
+const Thought: React.FC<ThoughtProps> = memo(({ content, timestamp }) => {
   const [expanded, setExpanded] = useState(true);
   const { t } = useTranslation();
 
@@ -673,7 +993,7 @@ const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
         <Lightbulb size={16} className="text-slate-500 dark:text-slate-400" />
       </div>
       <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
-        <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/60 rounded-lg overflow-hidden">
+        <div className="bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/45 dark:border-slate-700/45 rounded-md overflow-hidden">
           <button
             type="button"
             onClick={() => {
@@ -684,6 +1004,7 @@ const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               {t('agent.messageBubble.reasoning', 'Reasoning')}
             </span>
+            <MessageTime timestamp={timestamp} className="ml-auto" />
             {expanded ? (
               <ChevronUp size={14} className="text-slate-400" />
             ) : (
@@ -740,7 +1061,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
         <Wrench size={16} className="text-slate-500 dark:text-slate-400" />
       </div>
       <div className={`flex-1 min-w-0 ${WIDE_MESSAGE_MAX_WIDTH_CLASSES}`}>
-        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-lg overflow-hidden shadow-sm">
+        <div className="bg-slate-50/80 dark:bg-slate-800/55 border border-slate-200/45 dark:border-slate-700/40 rounded-md overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.02)]">
           {/* Header */}
           <button
             type="button"
@@ -777,7 +1098,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
 
           {/* Content */}
           {expanded && (
-            <div className="px-4 pb-4 border-t border-slate-100 dark:border-slate-700/50">
+            <div className="px-4 pb-4 border-t border-slate-200/45 dark:border-slate-700/35">
               {/* Input */}
               <div className="mt-3">
                 <p className="text-2xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wide">
@@ -862,7 +1183,7 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
         <Bot size={16} className="text-primary" />
       </div>
       <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
-        <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/60 rounded-lg overflow-hidden">
+        <div className="bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/45 dark:border-slate-700/45 rounded-md overflow-hidden">
           <button
             type="button"
             onClick={() => {
@@ -916,7 +1237,8 @@ WorkPlan.displayName = 'MessageBubble.WorkPlan';
 const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply }) => {
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const fullText = 'fullText' in event ? (event.fullText as string) : '';
-  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(fullText);
+  const markdownContent = useMemo(() => linkifySandboxPaths(fullText), [fullText]);
+  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(markdownContent);
   const executionSummary = normalizeExecutionSummary(event.metadata?.executionSummary);
   const completionArtifacts = getSafeArtifactReferences(
     event.artifacts ?? (event.metadata?.artifacts as ArtifactReference[] | undefined)
@@ -931,6 +1253,11 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
         <Bot size={18} className="text-primary" />
       </div>
       <div className={`flex-1 ${MESSAGE_MAX_WIDTH_CLASSES}`}>
+        {event.timestamp ? (
+          <div className="mb-1 flex pl-1">
+            <MessageTime timestamp={event.timestamp} />
+          </div>
+        ) : null}
         <div className="relative">
           <div className={ASSISTANT_BUBBLE_CLASSES}>
             <ExecutionSummaryPanel summary={executionSummary} />
@@ -939,9 +1266,9 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
                 <ReactMarkdown
                   remarkPlugins={remarkPlugins}
                   rehypePlugins={rehypePlugins}
-                  components={safeMarkdownComponents}
+                  components={ASSISTANT_COMPONENTS}
                 >
-                  {fullText}
+                  {markdownContent}
                 </ReactMarkdown>
               ) : null}
             </div>
@@ -1153,7 +1480,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
         <FileOutput size={16} className="text-emerald-600 dark:text-emerald-400" />
       </div>
       <div className={`flex-1 min-w-0 ${WIDE_MESSAGE_MAX_WIDTH_CLASSES}`}>
-        <div className="rounded-md bg-white p-4 shadow-[0_0_0_1px_rgba(15,23,42,0.08),0_8px_20px_-16px_rgba(15,23,42,0.28)] dark:bg-slate-950 dark:shadow-[0_0_0_1px_rgba(148,163,184,0.18)]">
+        <div className="rounded-md bg-white p-4 shadow-[0_0_0_1px_rgba(15,23,42,0.055),0_6px_16px_-16px_rgba(15,23,42,0.22)] dark:bg-slate-950 dark:shadow-[0_0_0_1px_rgba(148,163,184,0.12)]">
           {/* Header */}
           <div className="mb-3 flex min-w-0 items-center gap-2">
             {(() => {
@@ -1226,7 +1553,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
           )}
 
           {/* File Info */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-900/70">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-slate-200/55 bg-slate-50/80 px-3 py-2.5 text-sm dark:border-slate-800/60 dark:bg-slate-900/60">
             <div className="flex min-w-[220px] flex-1 items-center gap-2">
               <File size={16} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
               <span className="min-w-0 truncate font-medium text-slate-800 dark:text-slate-200">
@@ -1345,6 +1672,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         return (
           <UserMessage
             content={content}
+            timestamp={event.timestamp}
             onReply={onReply}
             forcedSkillName={event.metadata?.forcedSkillName as string | undefined}
             forcedSubAgentName={forcedSubAgentName}
@@ -1366,6 +1694,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         return (
           <AssistantMessage
             content={getContent(event)}
+            timestamp={event.timestamp}
             metadata={event.metadata}
             artifacts={event.artifacts}
             isStreaming={isStreaming}
@@ -1380,10 +1709,10 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         if (allEvents?.some((e) => e.type === 'text_end')) {
           return null;
         }
-        return <TextDelta content={getContent(event)} />;
+        return <TextDelta content={getContent(event)} timestamp={event.timestamp} />;
 
       case 'thought':
-        return <Thought content={getContent(event)} />;
+        return <Thought content={getContent(event)} timestamp={event.timestamp} />;
 
       case 'act': {
         const observeEvent = allEvents ? findMatchingObserve(event, allEvents) : undefined;

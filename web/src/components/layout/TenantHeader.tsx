@@ -260,6 +260,17 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
             {overflowNav.length > 0 && <OverflowMenu items={overflowNav} />}
           </nav>
 
+          <nav
+            className="hidden md:flex xl:hidden items-center flex-1 min-w-0 ml-2 mr-2 overflow-hidden"
+            aria-label={t('nav.navigation', 'Navigation')}
+          >
+            <OverflowMenu
+              items={contextualNavItems}
+              label={t('nav.navigation', 'Navigation')}
+              icon={<Menu size={16} />}
+            />
+          </nav>
+
           {/* Right: Actions */}
           <div className="flex items-center gap-1 sm:gap-2 ml-auto flex-none">
             <SearchButton searchPath={searchPath} />
@@ -276,7 +287,15 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
 /**
  * Overflow "More" dropdown for secondary nav items
  */
-function OverflowMenu({ items }: { items: NavItem[] }) {
+function OverflowMenu({
+  items,
+  label,
+  icon,
+}: {
+  items: NavItem[];
+  label?: string | undefined;
+  icon?: React.ReactNode;
+}) {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
@@ -330,6 +349,8 @@ function OverflowMenu({ items }: { items: NavItem[] }) {
   }, [open, updateMenuPosition]);
 
   const isAnyActive = items.some((item) => isContextualTopNavItemActive(location.pathname, item));
+  const buttonLabel = label ?? t('nav.more', 'More');
+  const buttonIcon = icon ?? <MoreHorizontal size={16} />;
   const menu =
     open && menuPosition
       ? createPortal(
@@ -377,8 +398,8 @@ function OverflowMenu({ items }: { items: NavItem[] }) {
             : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
         }`}
       >
-        <MoreHorizontal size={16} />
-        <span className="hidden lg:inline">{t('nav.more', 'More')}</span>
+        {buttonIcon}
+        <span className="hidden lg:inline">{buttonLabel}</span>
       </button>
       {menu}
     </div>

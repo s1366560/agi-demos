@@ -17,12 +17,9 @@ import {
   Search,
   FileText,
   Globe,
-  CheckCircle2,
-  XCircle,
   Loader2,
   ChevronDown,
   ChevronRight,
-  Clock,
   Wrench,
   Undo2,
   AppWindow,
@@ -43,6 +40,7 @@ export interface TimelineStep {
   isError?: boolean | undefined;
   duration?: number | undefined;
   timestamp?: number | undefined;
+  todoTitle?: string | undefined;
   mcpUiMetadata?:
     | {
         resource_uri?: string | undefined;
@@ -60,6 +58,7 @@ interface ExecutionTimelineProps {
   conversationId?: string | undefined;
   defaultCollapsed?: boolean | undefined;
   onUndoRequest?: ((stepId: string, toolName: string) => void) | undefined;
+  onAgentSessionSelect?: ((sessionId: string) => void) | undefined;
 }
 
 const getToolIcon = (toolName: string, size = 13, className = '') => {
@@ -100,57 +99,399 @@ const toSafeDomId = (value: string): string => value.replace(/[^A-Za-z0-9_-]/g, 
 // eslint-disable-next-line react-refresh/only-export-components -- Utility function exported for reuse in related components
 export { getToolLabel };
 
-const getInputPreview = (input?: Record<string, unknown>, toolName?: string): string | null => {
-  if (!input) return null;
-  const name = (toolName ?? '').toLowerCase();
+const getPathName = (path: string): string => {
+  const segments = path.split(/[\\/]/).filter(Boolean);
+  return segments.at(-1) ?? path;
+};
 
-  // Write/Edit tools: show file path + line count
-  if (name.includes('write') || name.includes('edit') || name.includes('patch')) {
-    const filePath = (input.path ?? input.file_path ?? '') as string;
-    const content = (input.content ?? input.new_content ?? input.text ?? '') as string;
-    if (filePath) {
-      const lineCount = content ? content.split('\n').length : 0;
-      return lineCount > 0 ? `${filePath} (${String(lineCount)} lines)` : filePath;
+const truncateMiddle = (value: string, maxLength = 120): string => {
+  if (value.length <= maxLength) return value;
+  const headLength = Math.ceil((maxLength - 3) * 0.62);
+  const tailLength = Math.floor((maxLength - 3) * 0.38);
+  return `${value.slice(0, headLength)}...${value.slice(value.length - tailLength)}`;
+};
+
+const TOOL_PREVIEW_KEYS = [
+  'command',
+  'cmd',
+  'path',
+  'file_path',
+  'pattern',
+  'query',
+  'url',
+  'report',
+  'summary',
+  'message',
+  'content',
+  'text',
+  'title',
+  'status',
+  'result',
+  'output',
+];
+
+const normalizePreviewText = (value: string): string => {
+  return (
+    value
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) ?? ''
+  );
+};
+
+const getPreviewFromUnknown = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    const text = normalizePreviewText(value);
+    return text ? truncateMiddle(text) : null;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const preview = getPreviewFromUnknown(item);
+      if (preview) return preview;
+    }
+    return null;
+  }
+
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    for (const key of TOOL_PREVIEW_KEYS) {
+      const preview = getPreviewFromUnknown(record[key]);
+      if (preview) return preview;
     }
   }
 
-  // Read tools: show file path
-  if (name.includes('read')) {
-    const filePath = (input.path ?? input.file_path ?? '') as string;
-    if (filePath) return filePath;
-  }
-
-  // command: Bash/terminal tools
-  if (input.command && typeof input.command === 'string') {
-    return input.command.length > 80 ? input.command.slice(0, 77) + '...' : input.command;
-  }
-  // path: List/Glob tools
-  if (input.path && typeof input.path === 'string') {
-    return input.path;
-  }
-  // pattern: Glob/Grep tools
-  if (input.pattern && typeof input.pattern === 'string') {
-    return input.pattern.length > 80 ? input.pattern.slice(0, 77) + '...' : input.pattern;
-  }
-  // query: search tools
-  if (input.query && typeof input.query === 'string') {
-    return input.query.length > 80 ? input.query.slice(0, 77) + '...' : input.query;
-  }
-  // file_path: alternative path field
-  if (input.file_path && typeof input.file_path === 'string') {
-    return input.file_path;
-  }
-  // url: web tools
-  if (input.url && typeof input.url === 'string') {
-    return input.url.length > 80 ? input.url.slice(0, 77) + '...' : input.url;
-  }
-  // Fallback: show first string value from input
-  for (const value of Object.values(input)) {
-    if (typeof value === 'string' && value.length > 0) {
-      return value.length > 80 ? value.slice(0, 77) + '...' : value;
-    }
-  }
   return null;
+};
+
+type ToolActionKind = 'read' | 'write' | 'command' | 'search' | 'open' | 'todo' | 'tool';
+
+interface ToolActionSummaryItem {
+  kind: ToolActionKind;
+  label: string;
+}
+
+const getRecordFromUnknown = (value: unknown): Record<string, unknown> | null => {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text.startsWith('{') && !text.startsWith('[')) return null;
+    try {
+      const parsed: unknown = JSON.parse(text);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+};
+
+const getTodosFromRecord = (record: Record<string, unknown> | null): Record<string, unknown>[] => {
+  const todos = record?.todos;
+  return Array.isArray(todos)
+    ? todos.filter((todo): todo is Record<string, unknown> =>
+        Boolean(todo && typeof todo === 'object')
+      )
+    : [];
+};
+
+const getTodoTitle = (todo: Record<string, unknown>): string | null => {
+  const title = todo.content ?? todo.title ?? todo.task ?? todo.description ?? todo.name;
+  return typeof title === 'string' && title.trim() ? truncateMiddle(title.trim(), 48) : null;
+};
+
+const getTodoStatusText = (
+  status: string,
+  count: number,
+  t: ReturnType<typeof useTranslation>['t']
+): string => {
+  const key = status.toLowerCase();
+  const label =
+    key === 'completed' || key === 'done'
+      ? t('agent.timeline.todoStatus.completed', 'completed')
+      : key === 'in_progress' || key === 'running'
+        ? t('agent.timeline.todoStatus.inProgress', 'in progress')
+        : key === 'blocked'
+          ? t('agent.timeline.todoStatus.blocked', 'blocked')
+          : key === 'cancelled' || key === 'canceled'
+            ? t('agent.timeline.todoStatus.cancelled', 'cancelled')
+            : t('agent.timeline.todoStatus.pending', 'pending');
+  return t('agent.timeline.todoStatus.count', '{{count}} {{status}}', { count, status: label });
+};
+
+const summarizeTodoDetails = (
+  toolName: string,
+  primary: unknown,
+  fallback: unknown,
+  t: ReturnType<typeof useTranslation>['t'],
+  knownTitle?: string
+): string => {
+  const primaryRecord = getRecordFromUnknown(primary);
+  const fallbackRecord = getRecordFromUnknown(fallback);
+  const record = primaryRecord ?? fallbackRecord;
+  const todos = getTodosFromRecord(record);
+  const fallbackTodos = getTodosFromRecord(fallbackRecord);
+  const todosHaveTitles = todos.some((todo) => Boolean(getTodoTitle(todo)));
+  const source =
+    todos.length > 0 && (todosHaveTitles || fallbackTodos.length === 0) ? todos : fallbackTodos;
+  const action = typeof record?.action === 'string' ? record.action.toLowerCase() : '';
+  const todoId = typeof record?.todo_id === 'string' ? record.todo_id : null;
+
+  const statusCounts = new Map<string, number>();
+  for (const todo of source) {
+    const status = typeof todo.status === 'string' ? todo.status : 'pending';
+    statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1);
+  }
+
+  const statusText = Array.from(statusCounts.entries())
+    .slice(0, 3)
+    .map(([status, count]) => getTodoStatusText(status, count, t))
+    .join('，');
+  const titles = source.map(getTodoTitle).filter((title): title is string => Boolean(title));
+  const visibleTitles = titles.slice(0, 2).join('、');
+  const hiddenTitleCount = Math.max(0, titles.length - 2);
+  const baseTitle = visibleTitles || knownTitle || '';
+  const titleText = baseTitle
+    ? `${baseTitle}${hiddenTitleCount > 0 ? t('agent.timeline.actionGroup.moreItems', ' and {{count}} more', { count: hiddenTitleCount }) : ''}`
+    : '';
+  const suffix = [statusText, titleText].filter(Boolean).join('：');
+  const total = source.length;
+
+  if (toolName.toLowerCase().includes('read')) {
+    return total > 0
+      ? t('agent.timeline.todo.readMany', 'Read {{count}} todos: {{summary}}', {
+          count: total,
+          summary: suffix,
+        })
+      : t('agent.timeline.todo.read', 'Read todos');
+  }
+
+  const verb =
+    action === 'add'
+      ? t('agent.timeline.todo.addVerb', 'Add')
+      : action === 'update'
+        ? t('agent.timeline.todo.updateVerb', 'Update')
+        : action === 'replace'
+          ? t('agent.timeline.todo.replaceVerb', 'Replace')
+          : t('agent.timeline.todo.writeVerb', 'Update');
+
+  if (total > 0) {
+    return t('agent.timeline.todo.writeMany', '{{verb}} {{count}} todos: {{summary}}', {
+      verb,
+      count: total,
+      summary: suffix,
+    });
+  }
+
+  if (todoId) {
+    return t('agent.timeline.todo.writeOne', '{{verb}} todo {{id}}', { verb, id: todoId });
+  }
+
+  return t('agent.timeline.todo.write', '{{verb}} todos', { verb });
+};
+
+const getStepAction = (step: TimelineStep): ToolActionSummaryItem => {
+  const toolName = step.toolName.toLowerCase();
+  const input = step.input ?? {};
+  const pathValue = input.path ?? input.file_path;
+  const commandValue = input.command ?? input.cmd;
+  const queryValue = input.query ?? input.pattern;
+  const urlValue = input.url;
+
+  if (toolName.includes('todo')) {
+    return { kind: 'todo', label: getToolLabel(step.toolName) };
+  }
+
+  if (typeof commandValue === 'string' && commandValue.trim().length > 0) {
+    return { kind: 'command', label: truncateMiddle(commandValue.trim()) };
+  }
+
+  if (
+    typeof pathValue === 'string' &&
+    pathValue.trim().length > 0 &&
+    (toolName.includes('write') || toolName.includes('edit') || toolName.includes('patch'))
+  ) {
+    return { kind: 'write', label: getPathName(pathValue.trim()) };
+  }
+
+  if (
+    typeof pathValue === 'string' &&
+    pathValue.trim().length > 0 &&
+    (toolName.includes('read') || toolName.includes('file'))
+  ) {
+    return { kind: 'read', label: getPathName(pathValue.trim()) };
+  }
+
+  if (typeof queryValue === 'string' && queryValue.trim().length > 0) {
+    return { kind: 'search', label: truncateMiddle(queryValue.trim()) };
+  }
+
+  if (typeof urlValue === 'string' && urlValue.trim().length > 0) {
+    return { kind: 'open', label: truncateMiddle(urlValue.trim()) };
+  }
+
+  return { kind: 'tool', label: getToolLabel(step.toolName) };
+};
+
+const getStepExecutionPreview = (
+  step: TimelineStep,
+  t: ReturnType<typeof useTranslation>['t']
+): string => {
+  const action = getStepAction(step);
+  const inputPreview = getPreviewFromUnknown(step.input);
+  const outputPreview = getPreviewFromUnknown(step.output);
+  const detail = inputPreview ?? outputPreview ?? action.label;
+
+  switch (action.kind) {
+    case 'read':
+      return t('agent.timeline.preview.read', 'Read: {{detail}}', { detail });
+    case 'write':
+      return t('agent.timeline.preview.write', 'Changed: {{detail}}', { detail });
+    case 'command':
+      return t('agent.timeline.preview.command', 'Command: {{detail}}', { detail });
+    case 'search':
+      return t('agent.timeline.preview.search', 'Search: {{detail}}', { detail });
+    case 'open':
+      return t('agent.timeline.preview.open', 'Open: {{detail}}', { detail });
+    case 'todo':
+      return summarizeTodoDetails(step.toolName, step.input, step.output, t, step.todoTitle);
+    case 'tool':
+      if (step.toolName.toLowerCase().includes('report') && (inputPreview || outputPreview)) {
+        return t('agent.timeline.preview.report', 'Report: {{detail}}', { detail });
+      }
+      return inputPreview || outputPreview
+        ? t('agent.timeline.preview.toolWithDetail', 'Content: {{detail}}', { detail })
+        : t('agent.timeline.preview.tool', 'Call: {{detail}}', { detail });
+  }
+};
+
+const TOOL_ACTION_KIND_ORDER: ToolActionKind[] = [
+  'read',
+  'write',
+  'command',
+  'search',
+  'open',
+  'todo',
+  'tool',
+];
+
+const getUniqueLabels = (items: ToolActionSummaryItem[]): string[] => {
+  return Array.from(new Set(items.map((item) => item.label).filter(Boolean)));
+};
+
+const getVisibleLabels = (
+  labels: string[],
+  t: ReturnType<typeof useTranslation>['t'],
+  maxVisible = 3
+): string => {
+  const visible = labels.slice(0, maxVisible).join('、');
+  const hiddenCount = labels.length - maxVisible;
+  if (hiddenCount <= 0) return visible;
+  return `${visible}${t('agent.timeline.actionGroup.moreItems', ' and {{count}} more', {
+    count: hiddenCount,
+  })}`;
+};
+
+const getActionGroupText = (
+  kind: ToolActionKind,
+  items: ToolActionSummaryItem[],
+  t: ReturnType<typeof useTranslation>['t']
+): string => {
+  const labels = getUniqueLabels(items);
+  const names = getVisibleLabels(labels, t);
+  const count = items.length;
+
+  if (count === 1) {
+    switch (kind) {
+      case 'read':
+        return t('agent.timeline.actionGroup.readSingle', 'Read {{names}}', { names });
+      case 'write':
+        return t('agent.timeline.actionGroup.writeSingle', 'Changed {{names}}', { names });
+      case 'command':
+        return t('agent.timeline.actionGroup.commandSingle', 'Ran {{names}}', { names });
+      case 'search':
+        return t('agent.timeline.actionGroup.searchSingle', 'Searched {{names}}', { names });
+      case 'open':
+        return t('agent.timeline.actionGroup.openSingle', 'Opened {{names}}', { names });
+      case 'tool':
+        return t('agent.timeline.actionGroup.toolSingle', 'Called {{names}}', { names });
+    }
+  }
+
+  switch (kind) {
+    case 'read':
+      return t('agent.timeline.actionGroup.readMany', 'Read {{count}} files: {{names}}', {
+        count,
+        names,
+      });
+    case 'write':
+      return t('agent.timeline.actionGroup.writeMany', 'Changed {{count}} files: {{names}}', {
+        count,
+        names,
+      });
+    case 'command':
+      return t('agent.timeline.actionGroup.commandMany', 'Ran {{count}} commands: {{names}}', {
+        count,
+        names,
+      });
+    case 'search':
+      return t('agent.timeline.actionGroup.searchMany', 'Searched {{count}} times: {{names}}', {
+        count,
+        names,
+      });
+    case 'open':
+      return t('agent.timeline.actionGroup.openMany', 'Opened {{count}} links: {{names}}', {
+        count,
+        names,
+      });
+    case 'todo':
+      return count === 1
+        ? t('agent.timeline.actionGroup.todoSingle', '{{names}}', { names })
+        : t('agent.timeline.actionGroup.todoMany', '{{count}} todo updates: {{names}}', {
+            count,
+            names,
+          });
+    case 'tool':
+      return t('agent.timeline.actionGroup.toolMany', 'Called {{count}} tools: {{names}}', {
+        count,
+        names,
+      });
+  }
+};
+
+const summarizeToolActions = (
+  steps: TimelineStep[],
+  t: ReturnType<typeof useTranslation>['t']
+): string[] => {
+  const grouped = new Map<ToolActionKind, ToolActionSummaryItem[]>();
+  for (const step of steps) {
+    const action = getStepAction(step);
+    const summaryAction =
+      action.kind === 'todo'
+        ? {
+            ...action,
+            label: summarizeTodoDetails(step.toolName, step.input, step.output, t, step.todoTitle),
+          }
+        : action;
+    const items = grouped.get(summaryAction.kind) ?? [];
+    items.push(summaryAction);
+    grouped.set(summaryAction.kind, items);
+  }
+
+  return TOOL_ACTION_KIND_ORDER.flatMap((kind) => {
+    const items = grouped.get(kind);
+    return items && items.length > 0 ? [getActionGroupText(kind, items, t)] : [];
+  });
 };
 
 // Individual timeline step
@@ -159,10 +500,11 @@ const TimelineStepItem = memo<{
   isLast: boolean;
   defaultExpanded?: boolean | undefined;
   onUndoRequest?: ((stepId: string, toolName: string) => void) | undefined;
-}>(({ step, isLast, defaultExpanded = false, onUndoRequest }) => {
+  onAgentSessionSelect?: ((sessionId: string) => void) | undefined;
+}>(({ step, isLast, defaultExpanded = false, onUndoRequest, onAgentSessionSelect }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const { t } = useTranslation();
-  const preview = getInputPreview(step.input, step.toolName);
+  const toolPreview = getStepExecutionPreview(step, t);
   const openMCPApp = useMCPAppOpen(step);
   const stepLabel = getToolLabel(step.toolName);
   const safeStepId = useMemo(() => toSafeDomId(step.id), [step.id]);
@@ -211,6 +553,7 @@ const TimelineStepItem = memo<{
             status={step.status}
             {...(step.isError !== undefined ? { isError: step.isError } : {})}
             {...(step.duration !== undefined ? { duration: step.duration } : {})}
+            onAgentSessionSelect={onAgentSessionSelect}
           />
         </div>
       </div>
@@ -224,26 +567,13 @@ const TimelineStepItem = memo<{
         ? 'text-emerald-500'
         : 'text-red-500';
 
-  const statusBg =
-    step.status === 'running'
-      ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800/40'
-      : step.status === 'success'
-        ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200/60 dark:border-emerald-800/30'
-        : 'bg-red-50 dark:bg-red-950 border-red-200/60 dark:border-red-800/30';
-
-  const statusIcon =
-    step.status === 'running' ? (
-      <Loader2 size={14} className={`${statusColor} animate-spin motion-reduce:animate-none`} />
-    ) : step.status === 'success' ? (
-      <CheckCircle2 size={14} className={`${statusColor} animate-fade-in`} />
-    ) : (
-      <XCircle size={14} className={`${statusColor} animate-fade-in`} />
-    );
-
   return (
     <div className="relative flex gap-2 mb-0" style={{ minHeight: '24px' }}>
       {/* Timeline line + dot */}
-      <div className="flex flex-col items-center flex-shrink-0" style={{ width: '24px' }}>
+      <div
+        className="flex flex-col items-center flex-shrink-0"
+        style={{ width: step.duration != null ? '36px' : '24px' }}
+      >
         <div
           className={`
             w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-300
@@ -265,20 +595,19 @@ const TimelineStepItem = memo<{
             </span>
           )}
         </div>
+        {step.duration != null && (
+          <span className="mt-0.5 max-w-10 truncate text-center text-[10px] leading-none tabular-nums text-slate-400 dark:text-slate-500">
+            {formatDuration(step.duration)}
+          </span>
+        )}
         {!isLast && (
-          <div className="w-px flex-1 min-h-4 bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
+          <div className="mt-1 w-px flex-1 min-h-4 bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
         )}
       </div>
 
       {/* Content */}
       <div className="flex-1 pb-1.5 min-w-0 flex flex-col">
-        <div
-          className={`
-            w-full rounded-md border px-2.5 py-1.5 transition-colors duration-300 motion-reduce:transition-none
-            ${statusBg}
-            hover:shadow-sm
-          `}
-        >
+        <div className="w-full rounded-md border border-slate-200/50 bg-white px-3 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.02)] transition-[border-color,box-shadow] duration-200 hover:border-slate-300/70 hover:shadow-[0_1px_3px_rgba(15,23,42,0.045)] dark:border-slate-800/60 dark:bg-slate-950/70 dark:hover:border-slate-700/70 motion-reduce:transition-none">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -298,16 +627,14 @@ const TimelineStepItem = memo<{
               }
               className="flex min-w-0 flex-1 items-center gap-2 text-left cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
             >
-              <span className="text-xs font-medium text-slate-700 dark:text-slate-300 flex-1 truncate">
-                {stepLabel}
-              </span>
-              {step.duration != null && (
-                <span className="flex items-center gap-1 text-2xs text-slate-400">
-                  <Clock size={10} />
-                  {formatDuration(step.duration)}
+              <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                <span className="min-w-0 truncate text-sm font-normal text-slate-800 dark:text-slate-200">
+                  {toolPreview}
                 </span>
-              )}
-              {statusIcon}
+                <span className="shrink-0 text-2xs font-normal text-slate-400 dark:text-slate-500">
+                  {stepLabel}
+                </span>
+              </span>
               {(step.input || step.output) &&
                 (expanded ? (
                   <ChevronDown size={12} className="text-slate-400" />
@@ -329,20 +656,6 @@ const TimelineStepItem = memo<{
               </button>
             )}
           </div>
-          {!expanded && preview && (
-            <button
-              type="button"
-              onClick={() => {
-                setExpanded(true);
-              }}
-              aria-label={t('agent.timeline.showStepDetails', 'Show details for {{tool}}', {
-                tool: stepLabel,
-              })}
-              className="mt-1 w-full text-xs-plus text-slate-500 dark:text-slate-400 font-mono truncate text-left rounded-sm hover:text-slate-600 dark:hover:text-slate-300 active:text-slate-700 dark:active:text-slate-200 transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 cursor-pointer"
-            >
-              {preview}
-            </button>
-          )}
         </div>
 
         {/* MCP App "Open App" button - visible without expanding */}
@@ -369,7 +682,7 @@ const TimelineStepItem = memo<{
             className="mt-1.5 space-y-1.5 text-xs"
           >
             {step.input && Object.keys(step.input).length > 0 && (
-              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-md p-2 border border-slate-200/60 dark:border-slate-700/40">
+              <div className="bg-slate-50/75 dark:bg-slate-800/40 rounded-md p-2 border border-slate-200/40 dark:border-slate-700/35">
                 <div className="text-2xs font-medium text-slate-400 uppercase tracking-wider mb-1">
                   {t('agent.timeline.input', 'Input')}
                 </div>
@@ -382,8 +695,8 @@ const TimelineStepItem = memo<{
               <div
                 className={`rounded-md p-2 border ${
                   step.isError
-                    ? 'bg-red-50 dark:bg-red-950/30 border-red-200/60 dark:border-red-800/30'
-                    : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200/60 dark:border-slate-700/40'
+                    ? 'bg-red-50/80 dark:bg-red-950/25 border-red-200/45 dark:border-red-800/25'
+                    : 'bg-slate-50/75 dark:bg-slate-800/40 border-slate-200/40 dark:border-slate-700/35'
                 }`}
               >
                 <div className="text-2xs font-medium text-slate-400 uppercase tracking-wider mb-1">
@@ -412,7 +725,7 @@ TimelineStepItem.displayName = 'TimelineStepItem';
 
 // Main timeline component
 export const ExecutionTimeline = memo<ExecutionTimelineProps>(
-  ({ steps, isStreaming, defaultCollapsed, onUndoRequest }) => {
+  ({ steps, isStreaming, defaultCollapsed, onUndoRequest, onAgentSessionSelect }) => {
     const { t } = useTranslation();
     const [collapsed, setCollapsed] = useState(defaultCollapsed ?? false);
     const timelineStepsPanelId = useMemo(
@@ -425,8 +738,20 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
       const completed = steps.filter((s) => s.status === 'success').length;
       const failed = steps.filter((s) => s.status === 'error').length;
       const running = steps.filter((s) => s.status === 'running').length;
-      return { total, completed, failed, running };
-    }, [steps]);
+      const actions = summarizeToolActions(steps, t);
+      const title =
+        actions[0] ??
+        (running > 0
+          ? t('agent.timeline.actionSummaryRunning', '{{count}} actions running', {
+              count: running,
+            })
+          : t('agent.timeline.actionSummary', '{{count}} actions', {
+              count: total,
+            }));
+      const detailActions = actions.slice(1);
+      const hiddenActions = Math.max(0, detailActions.length - 7);
+      return { total, completed, failed, running, title, detailActions, hiddenActions };
+    }, [steps, t]);
 
     if (steps.length === 0) return null;
 
@@ -455,15 +780,14 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
           ) : (
             <ChevronDown size={14} className="text-slate-400" />
           )}
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-            {summary.running > 0
-              ? t('agent.timeline.running', 'Running {{count}} tools...', {
-                  count: summary.running,
-                })
-              : t('agent.timeline.completed', '{{completed}}/{{total}} steps completed', {
-                  completed: summary.completed,
-                  total: summary.total,
-                })}
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-600 dark:text-slate-300">
+            {summary.title}
+          </span>
+          <span className="hidden shrink-0 text-2xs text-slate-400 sm:inline">
+            {t('agent.timeline.progress', '{{completed}}/{{total}} done', {
+              completed: summary.completed,
+              total: summary.total,
+            })}
           </span>
           {summary.failed > 0 && (
             <span className="text-2xs px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full">
@@ -476,6 +800,26 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
         </button>
 
         {/* Timeline steps */}
+        {collapsed && summary.detailActions.length > 0 && (
+          <div className="mb-1.5 ml-6 space-y-1 overflow-hidden">
+            {summary.detailActions.slice(0, 7).map((action, index) => (
+              <div
+                key={`${action}-${String(index)}`}
+                className="truncate text-sm leading-6 text-slate-500 dark:text-slate-400"
+              >
+                {action}
+              </div>
+            ))}
+            {summary.hiddenActions > 0 && (
+              <div className="truncate text-sm leading-6 text-slate-400 dark:text-slate-500">
+                {t('agent.timeline.moreActions', 'More {{count}} actions', {
+                  count: summary.hiddenActions,
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {!collapsed && (
           <div id={timelineStepsPanelId} className="pl-1 pt-0.5" style={{ display: 'flow-root' }}>
             {steps.map((step, i) => (
@@ -485,6 +829,7 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
                 isLast={i === steps.length - 1}
                 defaultExpanded={step.status === 'error'}
                 onUndoRequest={onUndoRequest}
+                onAgentSessionSelect={onAgentSessionSelect}
               />
             ))}
           </div>

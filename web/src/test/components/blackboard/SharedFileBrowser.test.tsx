@@ -14,6 +14,9 @@ const {
   uploadFileMock,
   downloadFileMock,
   deleteFileMock,
+  renameFileMock,
+  moveFileMock,
+  copyFileMock,
   messageSuccessMock,
   messageErrorMock,
 } = vi.hoisted(() => ({
@@ -22,6 +25,9 @@ const {
   uploadFileMock: vi.fn(),
   downloadFileMock: vi.fn(),
   deleteFileMock: vi.fn(),
+  renameFileMock: vi.fn(),
+  moveFileMock: vi.fn(),
+  copyFileMock: vi.fn(),
   messageSuccessMock: vi.fn(),
   messageErrorMock: vi.fn(),
 }));
@@ -33,6 +39,9 @@ vi.mock('@/services/blackboardFileService', () => ({
     uploadFile: (...args: unknown[]) => uploadFileMock(...args),
     downloadFile: (...args: unknown[]) => downloadFileMock(...args),
     deleteFile: (...args: unknown[]) => deleteFileMock(...args),
+    renameFile: (...args: unknown[]) => renameFileMock(...args),
+    moveFile: (...args: unknown[]) => moveFileMock(...args),
+    copyFile: (...args: unknown[]) => copyFileMock(...args),
   },
 }));
 
@@ -85,6 +94,9 @@ describe('SharedFileBrowser', () => {
     uploadFileMock.mockResolvedValue(makeFile());
     downloadFileMock.mockResolvedValue(new Blob(['hello'], { type: 'text/plain' }));
     deleteFileMock.mockResolvedValue(true);
+    renameFileMock.mockResolvedValue(makeFile({ name: 'renamed.txt' }));
+    moveFileMock.mockResolvedValue(makeFile({ parent_path: '/docs/' }));
+    copyFileMock.mockResolvedValue(makeFile({ id: 'copy-1', name: 'copy.txt' }));
     useWorkspaceStore.setState({ fileRefreshCounters: {} });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
@@ -161,10 +173,82 @@ describe('SharedFileBrowser', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Yes' }));
 
     await waitFor(() => {
-      expect(deleteFileMock).toHaveBeenCalledWith('t-1', 'p-1', 'ws-1', 'file-1');
+      expect(deleteFileMock).toHaveBeenCalledWith('t-1', 'p-1', 'ws-1', 'file-1', false);
     });
     expect(window.confirm).not.toHaveBeenCalled();
     expect(listFilesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('renames files from the row action panel', async () => {
+    listFilesMock.mockResolvedValueOnce([makeFile()]);
+    render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
+
+    fireEvent.click(await screen.findByTitle('blackboard.files.rename'));
+    fireEvent.change(screen.getByLabelText('blackboard.files.name'), {
+      target: { value: 'renamed.txt' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'blackboard.files.rename' }));
+
+    await waitFor(() => {
+      expect(renameFileMock).toHaveBeenCalledWith('t-1', 'p-1', 'ws-1', 'file-1', 'renamed.txt');
+    });
+    expect(listFilesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('moves files to a normalized destination path', async () => {
+    listFilesMock.mockResolvedValueOnce([makeFile()]);
+    render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
+
+    fireEvent.click(await screen.findByTitle('blackboard.files.move'));
+    fireEvent.change(screen.getByLabelText('blackboard.files.destinationPath'), {
+      target: { value: 'docs' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'blackboard.files.move' }));
+
+    await waitFor(() => {
+      expect(moveFileMock).toHaveBeenCalledWith('t-1', 'p-1', 'ws-1', 'file-1', '/docs/');
+    });
+    expect(listFilesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('copies files with a target path and name', async () => {
+    listFilesMock.mockResolvedValueOnce([makeFile()]);
+    render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
+
+    fireEvent.click(await screen.findByTitle('blackboard.files.copy'));
+    fireEvent.change(screen.getByLabelText('blackboard.files.name'), {
+      target: { value: 'copy.txt' },
+    });
+    fireEvent.change(screen.getByLabelText('blackboard.files.destinationPath'), {
+      target: { value: '/archive/' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'blackboard.files.copy' }));
+
+    await waitFor(() => {
+      expect(copyFileMock).toHaveBeenCalledWith(
+        't-1',
+        'p-1',
+        'ws-1',
+        'file-1',
+        '/archive/',
+        'copy.txt'
+      );
+    });
+    expect(listFilesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('deletes directories recursively from the row action', async () => {
+    listFilesMock.mockResolvedValueOnce([
+      makeFile({ id: 'dir-1', name: 'docs', is_directory: true }),
+    ]);
+    render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
+
+    fireEvent.click(await screen.findByTitle('blackboard.files.delete'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Yes' }));
+
+    await waitFor(() => {
+      expect(deleteFileMock).toHaveBeenCalledWith('t-1', 'p-1', 'ws-1', 'dir-1', true);
+    });
   });
 
   it('surfaces load failures with a retry action', async () => {

@@ -5,7 +5,7 @@ import { useLocation } from 'react-router-dom';
 
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
 
-import { fireEvent, render, screen, waitFor } from '../../utils';
+import { act, fireEvent, render, screen, waitFor } from '../../utils';
 
 const { formatDistanceToNowMock, loadWorkspaceSurfaceMock, modalConfirm } = vi.hoisted(() => ({
   formatDistanceToNowMock: vi.fn(() => 'just now'),
@@ -539,5 +539,52 @@ describe('TenantChatSidebar', () => {
     });
 
     getBoundingClientRect.mockRestore();
+  });
+
+  it('continues loading when hidden subagent sessions leave the visible list underfilled', async () => {
+    conversationsState.hasMoreConversations = true;
+    conversationsState.conversations = [
+      {
+        id: 'conv-visible',
+        title: 'Visible Conversation',
+        created_at: '2026-04-17T00:00:00.000Z',
+        status: 'idle',
+      },
+    ];
+
+    let resolveLoadMore: (() => void) | undefined;
+    agentState.loadMoreConversations.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveLoadMore = resolve;
+        })
+    );
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-1',
+    });
+
+    await waitFor(() => {
+      expect(agentState.loadMoreConversations).toHaveBeenCalledTimes(1);
+    });
+
+    conversationsState.conversations = [
+      ...conversationsState.conversations,
+      {
+        id: 'child-agent-session',
+        title: 'Worker session',
+        created_at: '2026-04-17T00:00:00.000Z',
+        status: 'idle',
+        parent_conversation_id: 'conv-visible',
+      },
+    ];
+
+    await act(async () => {
+      resolveLoadMore?.();
+    });
+
+    await waitFor(() => {
+      expect(agentState.loadMoreConversations).toHaveBeenCalledTimes(2);
+    });
   });
 });

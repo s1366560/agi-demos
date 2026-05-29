@@ -420,6 +420,317 @@ export interface ToolExecutionCardDisplayProps {
   defaultExpanded?: boolean | undefined;
 }
 
+type ToolPurposeKind = 'read' | 'write' | 'command' | 'search' | 'open' | 'tool';
+
+const TOOL_PREVIEW_KEYS = [
+  'command',
+  'cmd',
+  'path',
+  'file_path',
+  'pattern',
+  'query',
+  'url',
+  'report',
+  'summary',
+  'message',
+  'content',
+  'text',
+  'title',
+  'status',
+  'result',
+  'output',
+];
+
+function truncateMiddle(value: string, maxLength = 120): string {
+  if (value.length <= maxLength) return value;
+  const headLength = Math.ceil((maxLength - 3) * 0.62);
+  const tailLength = Math.floor((maxLength - 3) * 0.38);
+  return `${value.slice(0, headLength)}...${value.slice(value.length - tailLength)}`;
+}
+
+function normalizePreviewText(value: string): string {
+  return (
+    value
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) ?? ''
+  );
+}
+
+function getPreviewFromUnknown(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const text = normalizePreviewText(value);
+    return text ? truncateMiddle(text) : null;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const preview = getPreviewFromUnknown(item);
+      if (preview) return preview;
+    }
+    return null;
+  }
+
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    for (const key of TOOL_PREVIEW_KEYS) {
+      const preview = getPreviewFromUnknown(record[key]);
+      if (preview) return preview;
+    }
+  }
+
+  return null;
+}
+
+function getRecordFromUnknown(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text.startsWith('{') && !text.startsWith('[')) return null;
+    try {
+      const parsed: unknown = JSON.parse(text);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function getTodosFromRecord(record: Record<string, unknown> | null): Record<string, unknown>[] {
+  const todos = record?.todos;
+  return Array.isArray(todos)
+    ? todos.filter((todo): todo is Record<string, unknown> =>
+        Boolean(todo && typeof todo === 'object')
+      )
+    : [];
+}
+
+function getTodoTitle(todo: Record<string, unknown>): string | null {
+  const title = todo.content ?? todo.title ?? todo.task ?? todo.description ?? todo.name;
+  return typeof title === 'string' && title.trim() ? truncateMiddle(title.trim(), 48) : null;
+}
+
+function getTodoStatusText(
+  status: string,
+  count: number,
+  t: ReturnType<typeof useTranslation>['t']
+): string {
+  const key = status.toLowerCase();
+  const label =
+    key === 'completed' || key === 'done'
+      ? t('components.messageStream.todoStatus.completed', { defaultValue: 'completed' })
+      : key === 'in_progress' || key === 'running'
+        ? t('components.messageStream.todoStatus.inProgress', { defaultValue: 'in progress' })
+        : key === 'blocked'
+          ? t('components.messageStream.todoStatus.blocked', { defaultValue: 'blocked' })
+          : key === 'cancelled' || key === 'canceled'
+            ? t('components.messageStream.todoStatus.cancelled', { defaultValue: 'cancelled' })
+            : t('components.messageStream.todoStatus.pending', { defaultValue: 'pending' });
+  return t('components.messageStream.todoStatus.count', {
+    defaultValue: '{{count}} {{status}}',
+    count,
+    status: label,
+  });
+}
+
+function summarizeTodoTool(
+  toolName: string,
+  t: ReturnType<typeof useTranslation>['t'],
+  parameters?: Record<string, unknown>,
+  result?: string
+): string {
+  const primaryRecord = getRecordFromUnknown(parameters);
+  const fallbackRecord = getRecordFromUnknown(result);
+  const record = primaryRecord ?? fallbackRecord;
+  const todos = getTodosFromRecord(record);
+  const fallbackTodos = getTodosFromRecord(fallbackRecord);
+  const todosHaveTitles = todos.some((todo) => Boolean(getTodoTitle(todo)));
+  const source =
+    todos.length > 0 && (todosHaveTitles || fallbackTodos.length === 0) ? todos : fallbackTodos;
+  const action = typeof record?.action === 'string' ? record.action.toLowerCase() : '';
+  const todoId = typeof record?.todo_id === 'string' ? record.todo_id : null;
+
+  const statusCounts = new Map<string, number>();
+  for (const todo of source) {
+    const status = typeof todo.status === 'string' ? todo.status : 'pending';
+    statusCounts.set(status, (statusCounts.get(status) ?? 0) + 1);
+  }
+
+  const statusText = Array.from(statusCounts.entries())
+    .slice(0, 3)
+    .map(([status, count]) => getTodoStatusText(status, count, t))
+    .join('，');
+  const titles = source.map(getTodoTitle).filter((title): title is string => Boolean(title));
+  const visibleTitles = titles.slice(0, 2).join('、');
+  const hiddenTitleCount = Math.max(0, titles.length - 2);
+  const titleText = visibleTitles
+    ? `${visibleTitles}${hiddenTitleCount > 0 ? t('components.messageStream.todo.moreItems', { defaultValue: ' and {{count}} more', count: hiddenTitleCount }) : ''}`
+    : '';
+  const summary = [statusText, titleText].filter(Boolean).join('：');
+  const total = source.length;
+
+  if (toolName.toLowerCase().includes('read')) {
+    return total > 0
+      ? t('components.messageStream.todo.readMany', {
+          defaultValue: 'Read {{count}} todos: {{summary}}',
+          count: total,
+          summary,
+        })
+      : t('components.messageStream.todo.read', { defaultValue: 'Read todos' });
+  }
+
+  const verb =
+    action === 'add'
+      ? t('components.messageStream.todo.addVerb', { defaultValue: 'Add' })
+      : action === 'update'
+        ? t('components.messageStream.todo.updateVerb', { defaultValue: 'Update' })
+        : action === 'replace'
+          ? t('components.messageStream.todo.replaceVerb', { defaultValue: 'Replace' })
+          : t('components.messageStream.todo.writeVerb', { defaultValue: 'Update' });
+
+  if (total > 0) {
+    return t('components.messageStream.todo.writeMany', {
+      defaultValue: '{{verb}} {{count}} todos: {{summary}}',
+      verb,
+      count: total,
+      summary,
+    });
+  }
+
+  if (todoId) {
+    return t('components.messageStream.todo.writeOne', {
+      defaultValue: '{{verb}} todo {{id}}',
+      verb,
+      id: todoId,
+    });
+  }
+
+  return t('components.messageStream.todo.write', {
+    defaultValue: '{{verb}} todos',
+    verb,
+  });
+}
+
+function inferToolPurpose(toolName: string, parameters?: Record<string, unknown>): ToolPurposeKind {
+  const name = toolName.toLowerCase();
+  if (
+    typeof parameters?.command === 'string' ||
+    typeof parameters?.cmd === 'string' ||
+    name.includes('terminal') ||
+    name.includes('shell') ||
+    name.includes('command')
+  ) {
+    return 'command';
+  }
+  if (name.includes('write') || name.includes('edit') || name.includes('patch')) {
+    return 'write';
+  }
+  if (name.includes('read')) {
+    return 'read';
+  }
+  if (
+    name.includes('glob') ||
+    name.includes('grep') ||
+    name.includes('search') ||
+    name.includes('find') ||
+    typeof parameters?.pattern === 'string' ||
+    typeof parameters?.query === 'string'
+  ) {
+    return 'search';
+  }
+  if (
+    name.includes('web') ||
+    name.includes('browse') ||
+    name.includes('scrape') ||
+    typeof parameters?.url === 'string'
+  ) {
+    return 'open';
+  }
+  return 'tool';
+}
+
+function getToolExecutionSummary(
+  toolName: string,
+  purposeKind: ToolPurposeKind,
+  t: ReturnType<typeof useTranslation>['t'],
+  parameters?: Record<string, unknown>,
+  partialArguments?: string,
+  result?: string,
+  error?: string
+): string {
+  if (toolName.toLowerCase().includes('todo')) {
+    return summarizeTodoTool(toolName, t, parameters, result);
+  }
+
+  const argumentPreview =
+    getPreviewFromUnknown(parameters) ?? getPreviewFromUnknown(partialArguments);
+  const resultPreview = getPreviewFromUnknown(result);
+  const errorPreview = getPreviewFromUnknown(error);
+  const detail = errorPreview ?? argumentPreview ?? resultPreview ?? toolName;
+
+  if (errorPreview) {
+    return t('components.messageStream.preview.error', {
+      defaultValue: 'Error: {{detail}}',
+      detail,
+    });
+  }
+
+  switch (purposeKind) {
+    case 'read':
+      return t('components.messageStream.preview.read', {
+        defaultValue: 'Read: {{detail}}',
+        detail,
+      });
+    case 'write':
+      return t('components.messageStream.preview.write', {
+        defaultValue: 'Changed: {{detail}}',
+        detail,
+      });
+    case 'command':
+      return t('components.messageStream.preview.command', {
+        defaultValue: 'Command: {{detail}}',
+        detail,
+      });
+    case 'search':
+      return t('components.messageStream.preview.search', {
+        defaultValue: 'Search: {{detail}}',
+        detail,
+      });
+    case 'open':
+      return t('components.messageStream.preview.open', {
+        defaultValue: 'Open: {{detail}}',
+        detail,
+      });
+    case 'tool':
+      if (toolName.toLowerCase().includes('report') && (argumentPreview || resultPreview)) {
+        return t('components.messageStream.preview.report', {
+          defaultValue: 'Report: {{detail}}',
+          detail,
+        });
+      }
+      return argumentPreview || resultPreview
+        ? t('components.messageStream.preview.toolWithDetail', {
+            defaultValue: 'Content: {{detail}}',
+            detail,
+          })
+        : t('components.messageStream.preview.tool', {
+            defaultValue: 'Call: {{detail}}',
+            detail,
+          });
+  }
+}
+
 export function ToolExecutionCardDisplay({
   toolName,
   status,
@@ -449,6 +760,16 @@ export function ToolExecutionCardDisplay({
 
   // Format result to ensure it's always a string
   const formattedResult = formatToolResult(result);
+  const purposeKind = inferToolPurpose(toolName, parameters);
+  const executionSummary = getToolExecutionSummary(
+    toolName,
+    purposeKind,
+    t,
+    parameters,
+    partialArguments,
+    formattedResult,
+    error
+  );
 
   const getStatusBadge = () => {
     switch (status) {
@@ -492,11 +813,25 @@ export function ToolExecutionCardDisplay({
   const hasDetails = parameters || partialArguments || executionMode || formattedResult || error;
 
   return (
-    <div className="bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-md rounded-tl-none shadow-sm overflow-hidden">
-      <div className="px-4 py-3 bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-border-dark flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Wrench size={20} className="text-primary" />
-          <span className="text-sm font-semibold">{toolName}</span>
+    <div className="overflow-hidden rounded-md rounded-tl-none border border-slate-200 bg-white shadow-sm dark:border-border-dark dark:bg-surface-dark">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-primary dark:bg-slate-800">
+            <Wrench size={18} />
+          </div>
+          <div className="min-w-0 truncate">
+            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t('components.messageStream.toolTitle', {
+                defaultValue: 'Tool: {{tool}}',
+                tool: toolName,
+              })}
+            </span>
+            {status !== 'preparing' && (
+              <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
+                {executionSummary}
+              </span>
+            )}
+          </div>
         </div>
         {getStatusBadge()}
       </div>
@@ -506,7 +841,7 @@ export function ToolExecutionCardDisplay({
           className="group"
           open={defaultExpanded || status === 'running' || status === 'preparing'}
         >
-          <summary className="px-4 py-2 text-xs text-slate-500 cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-1 select-none">
+          <summary className="border-t border-slate-200 px-4 py-2 text-xs text-slate-500 cursor-pointer hover:bg-slate-50 dark:border-border-dark dark:hover:bg-white/5 flex items-center gap-1 select-none">
             <ChevronRight size={14} className="group-open:rotate-90 transition-transform" />
             <span>{t('components.messageStream.details', { defaultValue: 'Details' })}</span>
           </summary>

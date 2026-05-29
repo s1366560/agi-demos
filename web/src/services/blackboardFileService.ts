@@ -84,11 +84,53 @@ export const blackboardFileService = {
     tenantId: string,
     projectId: string,
     workspaceId: string,
-    fileId: string
+    fileId: string,
+    recursive = false
   ): Promise<boolean> {
     const res = await httpClient.delete<{ deleted: boolean }>(
-      `${basePath(tenantId, projectId, workspaceId)}/files/${encodeURIComponent(fileId)}`
+      `${basePath(tenantId, projectId, workspaceId)}/files/${encodeURIComponent(fileId)}`,
+      { params: { recursive } }
     );
     return res.deleted;
+  },
+
+  async renameFile(
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    fileId: string,
+    name: string
+  ): Promise<BlackboardFileItem> {
+    return httpClient.patch<BlackboardFileItem>(
+      `${basePath(tenantId, projectId, workspaceId)}/files/${encodeURIComponent(fileId)}`,
+      { name }
+    );
+  },
+
+  async moveFile(
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    fileId: string,
+    parentPath: string
+  ): Promise<BlackboardFileItem> {
+    return httpClient.patch<BlackboardFileItem>(
+      `${basePath(tenantId, projectId, workspaceId)}/files/${encodeURIComponent(fileId)}`,
+      { parent_path: parentPath }
+    );
+  },
+
+  async copyFile(
+    tenantId: string,
+    projectId: string,
+    workspaceId: string,
+    fileId: string,
+    targetParentPath: string,
+    name?: string
+  ): Promise<BlackboardFileItem> {
+    return httpClient.post<BlackboardFileItem>(
+      `${basePath(tenantId, projectId, workspaceId)}/files/${encodeURIComponent(fileId)}/copy`,
+      { target_parent_path: targetParentPath, name: name || undefined }
+    );
   },
 };

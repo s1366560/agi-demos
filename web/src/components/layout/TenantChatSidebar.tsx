@@ -129,6 +129,26 @@ function workspaceNodeIdFromConversation(conversation: Conversation): string | n
   return nodeId && nodeId.length > 0 ? nodeId : null;
 }
 
+function isDerivedAgentConversation(conversation: Conversation): boolean {
+  if (conversation.parent_conversation_id) {
+    return true;
+  }
+
+  const looksLikeGeneratedAgentSessionTitle = /\bsession\s*$/i.test(conversation.title.trim());
+  if (
+    looksLikeGeneratedAgentSessionTitle &&
+    !conversation.workspace_id &&
+    !conversation.linked_workspace_task_id
+  ) {
+    return true;
+  }
+
+  return Boolean(
+    readMetadataString(conversation.metadata, 'spawned_by_agent_id') ||
+      readMetadataString(conversation.metadata, 'spawned_agent_id')
+  );
+}
+
 function cleanWorkspaceTitle(title: string): string {
   return title
     .replace(/^Workspace Worker\s*-\s*/i, '')
@@ -268,7 +288,7 @@ function buildConversationSections(
 
     sections.push({
       type: 'workspace',
-      id: `${sectionGroupKey}:${sections.length}`,
+      id: `${sectionGroupKey}:${sections.length.toString()}`,
       groupKey: sectionGroupKey,
       workspaceTitle: display.contextLabel,
       conversations: [conversation],
@@ -690,7 +710,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       workspaceNameById.set(currentWorkspace.id, currentWorkspace.name);
     }
     const workspaceTaskTitleById = new Map(workspaceTasks.map((task) => [task.id, task.title]));
-    return conversations.map((conv) => ({
+    return conversations.filter((conv) => !isDerivedAgentConversation(conv)).map((conv) => ({
       ...conv,
       projectId: selectedProjectId || '',
       projectName: selectedProjectName,
@@ -813,7 +833,13 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   // Auto-load more conversations when content doesn't fill the container
   useEffect(() => {
     const container = scrollContainerRef.current;
-    if (!container || !hasMoreConversations || isLoadingMoreRef.current || !selectedProjectId) {
+    if (
+      !container ||
+      !hasMoreConversations ||
+      isLoadingMore ||
+      isLoadingMoreRef.current ||
+      !selectedProjectId
+    ) {
       return;
     }
 
@@ -826,7 +852,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         console.error('Failed to auto-load more conversations:', error);
       });
     }
-  }, [conversations.length, hasMoreConversations, selectedProjectId, loadMore]);
+  }, [conversations.length, hasMoreConversations, isLoadingMore, selectedProjectId, loadMore]);
 
   const handleNewConversation = useCallback(async () => {
     if (!selectedProjectId) return;

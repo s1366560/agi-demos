@@ -5436,8 +5436,10 @@
       "lanes": "泳道",
       "tabs": {
         "tasks": "任务",
+        "agent": "会话",
         "insights": "洞察",
-        "agents": "Agent"
+        "agents": "团队",
+        "graph": "图谱"
       },
       "workspacePlan": {
         "planSummary": "{{done}}/{{total}} 个计划节点已完成",
@@ -5796,6 +5798,9 @@
         "thinking": "思考中...",
         "planMode": "计划模式"
       },
+      "header": {
+        "createdAt": "创建于 {{date}}"
+      },
       "messagesAria": "聊天消息",
       "errors": {
         "title": "Agent 错误",
@@ -6140,9 +6145,85 @@
     "timeline": {
       "input": "输入",
       "output": "输出",
-      "running": "正在执行 {{count}} 个工具...",
-      "completed": "{{completed}}/{{total}} 步已完成",
+      "running": "正在调用 {{count}} 个工具...",
+      "runningWithTools": "正在调用 {{count}} 个工具：{{tools}}",
+      "completed": "已完成 {{completed}}/{{total}} 步",
+      "completedWithTools": "已完成 {{total}} 个工具调用：{{tools}}",
+      "completedWithFailures": "已完成 {{completed}}/{{total}} 个工具调用，其中 {{failed}} 个失败：{{tools}}",
+      "moreToolsSuffix": "，另有 {{count}} 个",
+      "progress": "{{completed}}/{{total}} 完成",
       "failed": "失败",
+      "toolTitle": "工具：{{tool}}",
+      "parametersPreview": "参数：{{preview}}",
+      "purposeLabel": "用途：{{purpose}}",
+      "purpose": {
+        "read": "读取文件",
+        "write": "修改文件",
+        "command": "运行命令",
+        "search": "搜索文件",
+        "open": "打开链接",
+        "tool": "调用工具"
+      },
+      "moreActions": "还有 {{count}} 条记录",
+      "actionSummary": "{{count}} 次工具调用",
+      "actionSummaryRunning": "{{count}} 次工具调用进行中",
+      "action": {
+        "ranCommand": "已运行 {{command}}",
+        "readFile": "读取 {{file}}",
+        "changedFile": "修改 {{file}}",
+        "searched": "搜索 {{query}}",
+        "openedUrl": "打开 {{url}}",
+        "calledTool": "调用 {{tool}}"
+      },
+      "actionGroup": {
+        "moreItems": "等 {{count}} 项",
+        "readSingle": "读取 {{names}}",
+        "readMany": "读取 {{count}} 个文件：{{names}}",
+        "writeSingle": "修改 {{names}}",
+        "writeMany": "修改 {{count}} 个文件：{{names}}",
+        "commandSingle": "已运行 {{names}}",
+        "commandMany": "运行 {{count}} 条命令：{{names}}",
+        "searchSingle": "搜索 {{names}}",
+        "searchMany": "搜索 {{count}} 次：{{names}}",
+        "openSingle": "打开 {{names}}",
+        "openMany": "打开 {{count}} 个链接：{{names}}",
+        "toolSingle": "调用 {{names}}",
+        "toolMany": "调用 {{count}} 个工具：{{names}}"
+      },
+      "preview": {
+        "read": "读取：{{detail}}",
+        "write": "修改：{{detail}}",
+        "command": "命令：{{detail}}",
+        "search": "搜索：{{detail}}",
+        "open": "打开：{{detail}}",
+        "report": "报告：{{detail}}",
+        "tool": "调用：{{detail}}",
+        "toolWithDetail": "内容：{{detail}}"
+      },
+      "todo": {
+        "read": "读取待办",
+        "readMany": "读取 {{count}} 个待办：{{summary}}",
+        "write": "{{verb}}待办",
+        "writeOne": "{{verb}}待办 {{id}}",
+        "writeMany": "{{verb}} {{count}} 个待办：{{summary}}",
+        "addVerb": "新增",
+        "updateVerb": "更新",
+        "replaceVerb": "替换",
+        "writeVerb": "更新"
+      },
+      "todoStatus": {
+        "pending": "待处理",
+        "inProgress": "进行中",
+        "completed": "已完成",
+        "blocked": "受阻",
+        "cancelled": "已取消",
+        "count": "{{count}} 个{{status}}"
+      },
+      "status": {
+        "running": "运行中",
+        "success": "成功",
+        "error": "失败"
+      },
       "openApp": "打开应用",
       "taskProgress": "任务 {{current}}/{{total}}",
       "taskStatus": "任务 {{current}}/{{total}} {{status}}",
@@ -8483,6 +8564,48 @@
         "failed": "失败"
       },
       "details": "详情",
+      "toolTitle": "工具：{{tool}}",
+      "parametersPreview": "参数：{{preview}}",
+      "purposeLabel": "用途：{{purpose}}",
+      "purpose": {
+        "read": "读取文件",
+        "write": "修改文件",
+        "command": "运行命令",
+        "search": "搜索文件",
+        "open": "打开链接",
+        "tool": "调用工具"
+      },
+      "preview": {
+        "read": "读取：{{detail}}",
+        "write": "修改：{{detail}}",
+        "command": "命令：{{detail}}",
+        "search": "搜索：{{detail}}",
+        "open": "打开：{{detail}}",
+        "report": "报告：{{detail}}",
+        "tool": "调用：{{detail}}",
+        "toolWithDetail": "内容：{{detail}}",
+        "error": "错误：{{detail}}"
+      },
+      "todo": {
+        "read": "读取待办",
+        "readMany": "读取 {{count}} 个待办：{{summary}}",
+        "write": "{{verb}}待办",
+        "writeOne": "{{verb}}待办 {{id}}",
+        "writeMany": "{{verb}} {{count}} 个待办：{{summary}}",
+        "addVerb": "新增",
+        "updateVerb": "更新",
+        "replaceVerb": "替换",
+        "writeVerb": "更新",
+        "moreItems": "等 {{count}} 项"
+      },
+      "todoStatus": {
+        "pending": "待处理",
+        "inProgress": "进行中",
+        "completed": "已完成",
+        "blocked": "受阻",
+        "cancelled": "已取消",
+        "count": "{{count}} 个{{status}}"
+      },
       "buildingArguments": "构建参数",
       "preparingToolCall": "正在准备工具调用...",
       "input": "输入",

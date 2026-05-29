@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { blackboardFileService } from '@/services/blackboardFileService';
 
-const { httpGetMock, httpPostMock, httpDeleteMock } = vi.hoisted(() => ({
+const { httpGetMock, httpPostMock, httpPatchMock, httpDeleteMock } = vi.hoisted(() => ({
   httpGetMock: vi.fn(),
   httpPostMock: vi.fn(),
+  httpPatchMock: vi.fn(),
   httpDeleteMock: vi.fn(),
 }));
 
@@ -12,6 +13,7 @@ vi.mock('@/services/client/httpClient', () => ({
   httpClient: {
     get: (...args: unknown[]) => httpGetMock(...args),
     post: (...args: unknown[]) => httpPostMock(...args),
+    patch: (...args: unknown[]) => httpPatchMock(...args),
     delete: (...args: unknown[]) => httpDeleteMock(...args),
   },
 }));
@@ -83,8 +85,57 @@ describe('blackboardFileService', () => {
       { responseType: 'blob' }
     );
     expect(httpDeleteMock).toHaveBeenCalledWith(
-      '/tenants/tenant-1/projects/project-1/workspaces/ws-1/blackboard/files/file%2F1'
+      '/tenants/tenant-1/projects/project-1/workspaces/ws-1/blackboard/files/file%2F1',
+      { params: { recursive: false } }
     );
     expect(deleted).toBe(true);
+  });
+
+  it('passes recursive delete for directories', async () => {
+    httpDeleteMock.mockResolvedValueOnce({ deleted: true });
+
+    await blackboardFileService.deleteFile('tenant-1', 'project-1', 'ws-1', 'dir-1', true);
+
+    expect(httpDeleteMock).toHaveBeenCalledWith(
+      '/tenants/tenant-1/projects/project-1/workspaces/ws-1/blackboard/files/dir-1',
+      { params: { recursive: true } }
+    );
+  });
+
+  it('renames and moves files through the patch endpoint', async () => {
+    httpPatchMock.mockResolvedValueOnce({ id: 'file-1', name: 'new.txt' });
+    httpPatchMock.mockResolvedValueOnce({ id: 'file-1', parent_path: '/docs/' });
+
+    await blackboardFileService.renameFile('tenant-1', 'project-1', 'ws-1', 'file/1', 'new.txt');
+    await blackboardFileService.moveFile('tenant-1', 'project-1', 'ws-1', 'file/1', '/docs/');
+
+    expect(httpPatchMock).toHaveBeenNthCalledWith(
+      1,
+      '/tenants/tenant-1/projects/project-1/workspaces/ws-1/blackboard/files/file%2F1',
+      { name: 'new.txt' }
+    );
+    expect(httpPatchMock).toHaveBeenNthCalledWith(
+      2,
+      '/tenants/tenant-1/projects/project-1/workspaces/ws-1/blackboard/files/file%2F1',
+      { parent_path: '/docs/' }
+    );
+  });
+
+  it('copies files with destination path and optional new name', async () => {
+    httpPostMock.mockResolvedValueOnce({ id: 'copy-1' });
+
+    await blackboardFileService.copyFile(
+      'tenant-1',
+      'project-1',
+      'ws-1',
+      'file/1',
+      '/docs/',
+      'copy.txt'
+    );
+
+    expect(httpPostMock).toHaveBeenCalledWith(
+      '/tenants/tenant-1/projects/project-1/workspaces/ws-1/blackboard/files/file%2F1/copy',
+      { target_parent_path: '/docs/', name: 'copy.txt' }
+    );
   });
 });

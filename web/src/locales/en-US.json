@@ -5413,8 +5413,10 @@
       "lanes": "Lanes",
       "tabs": {
         "tasks": "Tasks",
+        "agent": "Session",
         "insights": "Insights",
-        "agents": "Agents"
+        "agents": "Agents",
+        "graph": "Graph"
       },
       "workspacePlan": {
         "planSummary": "{{done}}/{{total}} plan nodes done",
@@ -5773,6 +5775,9 @@
         "thinking": "Thinking...",
         "planMode": "Plan Mode"
       },
+      "header": {
+        "createdAt": "Created {{date}}"
+      },
       "messagesAria": "Chat messages",
       "errors": {
         "title": "Agent Error",
@@ -6118,8 +6123,84 @@
       "input": "Input",
       "output": "Output",
       "running": "Running {{count}} tools...",
+      "runningWithTools": "Execute {{count}} tools: {{tools}}",
       "completed": "{{completed}}/{{total}} steps completed",
+      "completedWithTools": "Finish {{total}} tools: {{tools}}",
+      "completedWithFailures": "Finish {{completed}}/{{total}} tools, mark {{failed}} failed: {{tools}}",
+      "moreToolsSuffix": ", include {{count}} more",
+      "progress": "{{completed}}/{{total}} done",
       "failed": "Failed",
+      "toolTitle": "Tool: {{tool}}",
+      "parametersPreview": "Parameters: {{preview}}",
+      "purposeLabel": "Purpose: {{purpose}}",
+      "purpose": {
+        "read": "Read files",
+        "write": "Change files",
+        "command": "Run command",
+        "search": "Search files",
+        "open": "Open link",
+        "tool": "Call tool"
+      },
+      "moreActions": "More {{count}} actions",
+      "actionSummary": "{{count}} actions",
+      "actionSummaryRunning": "{{count}} actions running",
+      "action": {
+        "ranCommand": "Ran {{command}}",
+        "readFile": "Read {{file}}",
+        "changedFile": "Changed {{file}}",
+        "searched": "Searched {{query}}",
+        "openedUrl": "Opened {{url}}",
+        "calledTool": "Called {{tool}}"
+      },
+      "actionGroup": {
+        "moreItems": " and {{count}} more",
+        "readSingle": "Read {{names}}",
+        "readMany": "Read {{count}} files: {{names}}",
+        "writeSingle": "Changed {{names}}",
+        "writeMany": "Changed {{count}} files: {{names}}",
+        "commandSingle": "Ran {{names}}",
+        "commandMany": "Ran {{count}} commands: {{names}}",
+        "searchSingle": "Searched {{names}}",
+        "searchMany": "Searched {{count}} times: {{names}}",
+        "openSingle": "Opened {{names}}",
+        "openMany": "Opened {{count}} links: {{names}}",
+        "toolSingle": "Called {{names}}",
+        "toolMany": "Called {{count}} tools: {{names}}"
+      },
+      "preview": {
+        "read": "Read: {{detail}}",
+        "write": "Changed: {{detail}}",
+        "command": "Command: {{detail}}",
+        "search": "Search: {{detail}}",
+        "open": "Open: {{detail}}",
+        "report": "Report: {{detail}}",
+        "tool": "Call: {{detail}}",
+        "toolWithDetail": "Content: {{detail}}"
+      },
+      "todo": {
+        "read": "Read todos",
+        "readMany": "Read {{count}} todos: {{summary}}",
+        "write": "{{verb}} todos",
+        "writeOne": "{{verb}} todo {{id}}",
+        "writeMany": "{{verb}} {{count}} todos: {{summary}}",
+        "addVerb": "Add",
+        "updateVerb": "Update",
+        "replaceVerb": "Replace",
+        "writeVerb": "Update"
+      },
+      "todoStatus": {
+        "pending": "pending",
+        "inProgress": "in progress",
+        "completed": "completed",
+        "blocked": "blocked",
+        "cancelled": "cancelled",
+        "count": "{{count}} {{status}}"
+      },
+      "status": {
+        "running": "Running",
+        "success": "Success",
+        "error": "Failed"
+      },
       "openApp": "Open App",
       "taskProgress": "Task {{current}}/{{total}}",
       "taskStatus": "Task {{current}}/{{total}} {{status}}",
@@ -8460,6 +8541,48 @@
         "failed": "Failed"
       },
       "details": "Details",
+      "toolTitle": "Tool: {{tool}}",
+      "parametersPreview": "Parameters: {{preview}}",
+      "purposeLabel": "Purpose: {{purpose}}",
+      "purpose": {
+        "read": "Read files",
+        "write": "Change files",
+        "command": "Run command",
+        "search": "Search files",
+        "open": "Open link",
+        "tool": "Call tool"
+      },
+      "preview": {
+        "read": "Read: {{detail}}",
+        "write": "Changed: {{detail}}",
+        "command": "Command: {{detail}}",
+        "search": "Search: {{detail}}",
+        "open": "Open: {{detail}}",
+        "report": "Report: {{detail}}",
+        "tool": "Call: {{detail}}",
+        "toolWithDetail": "Content: {{detail}}",
+        "error": "Error: {{detail}}"
+      },
+      "todo": {
+        "read": "Read todos",
+        "readMany": "Read {{count}} todos: {{summary}}",
+        "write": "{{verb}} todos",
+        "writeOne": "{{verb}} todo {{id}}",
+        "writeMany": "{{verb}} {{count}} todos: {{summary}}",
+        "addVerb": "Add",
+        "updateVerb": "Update",
+        "replaceVerb": "Replace",
+        "writeVerb": "Update",
+        "moreItems": " and {{count}} more"
+      },
+      "todoStatus": {
+        "pending": "pending",
+        "inProgress": "in progress",
+        "completed": "completed",
+        "blocked": "blocked",
+        "cancelled": "cancelled",
+        "count": "{{count}} {{status}}"
+      },
       "buildingArguments": "Building Arguments",
       "preparingToolCall": "Preparing tool call...",
       "input": "Input",

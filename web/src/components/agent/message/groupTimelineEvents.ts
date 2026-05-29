@@ -13,6 +13,48 @@ export type GroupedItem =
   | { kind: 'timeline'; steps: TimelineStep[]; startIndex: number }
   | { kind: 'subagent'; group: SubAgentGroup; startIndex: number };
 
+function parseRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text.startsWith('{')) return null;
+    try {
+      const parsed: unknown = JSON.parse(text);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function getTodoId(input: unknown): string | undefined {
+  const record = parseRecord(input);
+  return typeof record?.todo_id === 'string' ? record.todo_id : undefined;
+}
+
+function cacheTodoTitlesFromOutput(output: unknown, cache: Map<string, string>): void {
+  const record = parseRecord(output);
+  const todos = record?.todos;
+  if (!Array.isArray(todos)) return;
+
+  for (const todo of todos) {
+    if (!todo || typeof todo !== 'object') continue;
+    const item = todo as Record<string, unknown>;
+    const id = item.id;
+    const title = item.content ?? item.title ?? item.task ?? item.description ?? item.name;
+    if (typeof id === 'string' && typeof title === 'string' && title.trim()) {
+      cache.set(id, title.trim());
+    }
+  }
+}
+
 const SUBAGENT_EVENT_TYPES = new Set([
   'subagent_routed',
   'subagent_started',
@@ -43,6 +85,7 @@ export function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
   const result: GroupedItem[] = [];
   let currentSteps: TimelineStep[] = [];
   let groupStartIndex = 0;
+  const todoTitleById = new Map<string, string>();
 
   // Build observe lookup by execution_id
   const observeByExecId = new Map<string, ObserveEvent>();
@@ -119,10 +162,12 @@ export function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
         output: obs?.toolOutput,
         isError: obs?.isError,
         duration: obs && act.timestamp && obs.timestamp ? obs.timestamp - act.timestamp : undefined,
+        todoTitle: todoTitleById.get(getTodoId(act.toolInput) ?? ''),
         mcpUiMetadata: obs?.mcpUiMetadata,
       };
       currentSteps.push(step);
     } else if (event.type === 'observe') {
+      cacheTodoTitlesFromOutput(event.toolOutput, todoTitleById);
       // Skip - handled as part of act
       continue;
     } else {

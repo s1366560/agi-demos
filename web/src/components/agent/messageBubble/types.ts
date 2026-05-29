@@ -68,6 +68,7 @@ export interface UserMessageFileMetadata {
 
 export interface UserMessageProps {
   content: string;
+  timestamp?: number | undefined;
   onReply?: (() => void) | undefined;
   forcedSkillName?: string | undefined;
   forcedSubAgentName?: string | undefined;
@@ -79,6 +80,7 @@ export interface UserMessageProps {
  */
 export interface AssistantMessageProps {
   content: string;
+  timestamp?: number | undefined;
   metadata?: Record<string, unknown> | undefined;
   artifacts?: ArtifactReference[] | undefined;
   isStreaming?: boolean | undefined;
@@ -92,6 +94,7 @@ export interface AssistantMessageProps {
  */
 export interface TextDeltaProps {
   content: string;
+  timestamp?: number | undefined;
 }
 
 /**
@@ -99,6 +102,7 @@ export interface TextDeltaProps {
  */
 export interface ThoughtProps {
   content: string;
+  timestamp?: number | undefined;
 }
 
 /**

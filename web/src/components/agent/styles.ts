@@ -22,25 +22,25 @@ export const ASSISTANT_PROSE_CLASSES = MARKDOWN_PROSE_CLASSES;
  * Used by: AssistantMessage, TextEndItem, streaming content display.
  */
 export const ASSISTANT_BUBBLE_CLASSES =
-  'flex-1 min-w-0 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl rounded-tl-sm shadow-sm px-4 py-2.5';
+  'flex-1 min-w-0 bg-white dark:bg-surface-dark border border-slate-200/55 dark:border-slate-800/55 rounded-lg rounded-tl-sm shadow-[0_1px_2px_rgba(15,23,42,0.025)] px-4 py-2.5';
 
 /**
  * Assistant avatar component classes.
  * Used by: AssistantMessage, streaming content display.
  */
 export const ASSISTANT_AVATAR_CLASSES =
-  'w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 dark:border-primary/25 flex items-center justify-center shrink-0 mt-0.5 shadow-sm';
+  'w-8 h-8 rounded-lg bg-primary/10 ring-1 ring-primary/15 dark:ring-primary/20 flex items-center justify-center shrink-0 mt-0.5';
 
 /**
- * Shared max-width constraint for message bubbles.
- * Used by: UserMessage, AssistantMessage, TextDelta, Thought, ToolExecution, WorkPlan, TextEnd.
+ * Shared max-width constraint for assistant-side messages and timeline entries.
+ * Keeps the left content column readable while using most of the available pane width.
  */
-export const MESSAGE_MAX_WIDTH_CLASSES = 'max-w-[85%] md:max-w-[75%] lg:max-w-[70%]';
+export const MESSAGE_MAX_WIDTH_CLASSES = 'max-w-[96%] md:max-w-[94%] lg:max-w-[92%]';
 
 /**
  * Max-width for dense tool/sub-agent cards that carry structured data.
  */
-export const WIDE_MESSAGE_MAX_WIDTH_CLASSES = 'max-w-[94%] md:max-w-[88%] lg:max-w-[84%]';
+export const WIDE_MESSAGE_MAX_WIDTH_CLASSES = 'max-w-[98%] md:max-w-[96%] lg:max-w-[94%]';
 
 /**
  * Common layout background for split-pane wrappers.

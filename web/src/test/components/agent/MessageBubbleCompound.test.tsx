@@ -393,6 +393,17 @@ describe('MessageBubble Compound Component', () => {
       expect(screen.getByText('Test assistant message')).toBeInTheDocument();
     });
 
+    it('should linkify sandbox file paths in assistant content', () => {
+      render(
+        <MessageBubble.Assistant content="报告已导出: output/补充工具深度测试报告_20260529.md (9.4KB)" />
+      );
+
+      const markdown = screen.getByTestId('markdown');
+      expect(markdown.textContent).toContain(
+        '[output/补充工具深度测试报告_20260529.md](#sandbox-file:'
+      );
+    });
+
     it('should return null for empty content when not streaming', () => {
       const { container } = render(<MessageBubble.Assistant content="" />);
 

@@ -163,6 +163,22 @@ describe('TenantHeader', () => {
     expect(screen.getByRole('button', { name: 'Search' }).parentElement).toHaveClass('flex-none');
   });
 
+  it('keeps contextual navigation reachable in the tablet header range', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Projects' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/projects');
+  });
+
   it('routes tenant-level search to the project discovery view', () => {
     render(
       <TenantHeader

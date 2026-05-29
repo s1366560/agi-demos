@@ -12,6 +12,12 @@ import { useStreamingStore } from '../../../stores/agent/streamingStore';
 
 import { MessageArea } from '../../../components/agent/MessageArea';
 
+const virtualizerMock = vi.hoisted(() => ({
+  measureElement: vi.fn(),
+  measure: vi.fn(),
+  scrollToIndex: vi.fn(),
+}));
+
 // Mock virtualizer to render all rows in tests
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count }: { count: number }) => ({
@@ -23,9 +29,9 @@ vi.mock('@tanstack/react-virtual', () => ({
         size: 80,
         key: index,
       })),
-    measureElement: vi.fn(),
-    scrollToIndex: vi.fn(),
-    measure: vi.fn(),
+    measureElement: virtualizerMock.measureElement,
+    scrollToIndex: virtualizerMock.scrollToIndex,
+    measure: virtualizerMock.measure,
   }),
 }));
 
@@ -96,6 +102,45 @@ describe('MessageArea Compound Component', () => {
       render(<MessageArea {...defaultProps} preloadItemCount={20} />);
 
       expect(screen.getByTestId('message-1')).toBeInTheDocument();
+    });
+
+    it('should remeasure virtual rows when rendered content resizes', () => {
+      const resizeCallbacks: ResizeObserverCallback[] = [];
+      const originalResizeObserver = globalThis.ResizeObserver;
+      const requestAnimationFrameSpy = vi
+        .spyOn(window, 'requestAnimationFrame')
+        .mockImplementation((callback: FrameRequestCallback) => {
+          callback(0);
+          return 1;
+        });
+
+      class MockResizeObserver {
+        constructor(callback: ResizeObserverCallback) {
+          resizeCallbacks.push(callback);
+        }
+
+        observe = vi.fn();
+        unobserve = vi.fn();
+        disconnect = vi.fn();
+      }
+
+      globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+
+      try {
+        render(<MessageArea {...defaultProps} />);
+
+        const row = document.querySelector('[data-index="0"]');
+        expect(row).toBeInstanceOf(HTMLElement);
+        expect(resizeCallbacks.length).toBeGreaterThan(0);
+
+        virtualizerMock.measureElement.mockClear();
+        resizeCallbacks[0]?.([{ target: row } as ResizeObserverEntry], {} as ResizeObserver);
+
+        expect(virtualizerMock.measureElement).toHaveBeenCalledWith(row);
+      } finally {
+        globalThis.ResizeObserver = originalResizeObserver;
+        requestAnimationFrameSpy.mockRestore();
+      }
     });
   });
 

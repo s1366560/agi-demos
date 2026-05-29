@@ -27,8 +27,8 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-import { agentService } from '../../services/agentService';
 import { DEFAULT_GENERAL_AGENT_ID } from '../../constants/agent';
+import { agentService } from '../../services/agentService';
 
 import type {
   Conversation,

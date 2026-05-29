@@ -450,34 +450,34 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
     let bg: string;
     switch (group.status) {
       case 'running':
-        bg = 'bg-white dark:bg-slate-900/70 border-blue-200/80 dark:border-blue-800/50';
+        bg = 'bg-white dark:bg-slate-900/65 border-blue-200/45 dark:border-blue-800/30';
         break;
       case 'success':
-        bg = 'bg-white dark:bg-slate-900/70 border-emerald-200/80 dark:border-emerald-800/40';
+        bg = 'bg-white dark:bg-slate-900/65 border-emerald-200/45 dark:border-emerald-800/25';
         break;
       case 'error':
-        bg = 'bg-white dark:bg-slate-900/70 border-red-200/80 dark:border-red-800/40';
+        bg = 'bg-white dark:bg-slate-900/65 border-red-200/50 dark:border-red-800/30';
         break;
       case 'background':
-        bg = 'bg-white dark:bg-slate-900/70 border-purple-200/70 dark:border-purple-800/40';
+        bg = 'bg-white dark:bg-slate-900/65 border-purple-200/40 dark:border-purple-800/25';
         break;
       case 'queued':
-        bg = 'bg-white dark:bg-slate-900/70 border-amber-200/80 dark:border-amber-800/40';
+        bg = 'bg-white dark:bg-slate-900/65 border-amber-200/45 dark:border-amber-800/25';
         break;
       case 'killed':
-        bg = 'bg-white dark:bg-slate-900/70 border-red-300/80 dark:border-red-700/50';
+        bg = 'bg-white dark:bg-slate-900/65 border-red-300/50 dark:border-red-700/30';
         break;
       case 'steered':
-        bg = 'bg-white dark:bg-slate-900/70 border-cyan-200/80 dark:border-cyan-800/40';
+        bg = 'bg-white dark:bg-slate-900/65 border-cyan-200/45 dark:border-cyan-800/25';
         break;
       case 'depth_limited':
-        bg = 'bg-white dark:bg-slate-900/70 border-orange-200/80 dark:border-orange-800/40';
+        bg = 'bg-white dark:bg-slate-900/65 border-orange-200/45 dark:border-orange-800/25';
         break;
       default:
-        bg = 'bg-white dark:bg-slate-900/70 border-slate-200 dark:border-slate-700';
+        bg = 'bg-white dark:bg-slate-900/65 border-slate-200/50 dark:border-slate-800/60';
     }
 
-    return `rounded-md border ${bg} ${pulse} shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-[border-color,box-shadow] duration-200`;
+    return `rounded-md border ${bg} ${pulse} shadow-[0_1px_2px_rgba(15,23,42,0.02)] transition-[border-color,box-shadow] duration-200`;
   }, [group.status]);
 
   const iconSurfaceClasses = useMemo(() => {
@@ -651,7 +651,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
 
       {/* Live streaming preview */}
       {group.status === 'running' && subagentPreview && (
-        <div className="mx-4 mt-2 rounded-md bg-slate-50 dark:bg-slate-800/50 px-3 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono leading-relaxed animate-fade-in border border-slate-200/70 dark:border-slate-700/60">
+        <div className="mx-4 mt-2 rounded-md bg-slate-50/75 dark:bg-slate-800/40 px-3 py-2 text-xs text-slate-600 dark:text-slate-400 font-mono leading-relaxed animate-fade-in border border-slate-200/40 dark:border-slate-700/35">
           <div className="flex items-center gap-1.5 mb-1">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse motion-reduce:animate-none" />
             <span className="text-slate-500 dark:text-slate-500 text-2xs uppercase tracking-wider font-sans">
@@ -674,7 +674,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
                 className={`text-2xs px-2 py-0.5 rounded-full border ${
                   step.active
                     ? 'border-primary/30 bg-primary/10 text-primary dark:border-primary/40 dark:bg-primary/20'
-                    : 'border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/40 text-slate-400'
+                    : 'border-slate-200/50 dark:border-slate-700/45 bg-white/40 dark:bg-slate-800/30 text-slate-400'
                 }`}
               >
                 {step.label}
@@ -706,7 +706,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
 
           {/* Summary (on completion) — 2.3 distinct output framing (quote block) & 2.6 Animated Status Transitions */}
           {group.summary && (
-            <div className="mt-1 animate-fade-in rounded-md border border-slate-200/80 bg-slate-50/70 px-3 py-2.5 dark:border-slate-700/70 dark:bg-slate-800/40">
+            <div className="mt-1 animate-fade-in rounded-md border border-slate-200/45 bg-slate-50/65 px-3 py-2.5 dark:border-slate-700/40 dark:bg-slate-800/35">
               <p className="max-w-[76ch] text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                 {group.summary}
               </p>

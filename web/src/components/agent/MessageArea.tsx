@@ -129,6 +129,7 @@ interface _MessageAreaRootProps {
   conversationId?: string | null | undefined;
   suggestions?: string[] | undefined;
   onSuggestionSelect?: ((suggestion: string) => void) | undefined;
+  onAgentSessionSelect?: ((sessionId: string) => void) | undefined;
   children?: React.ReactNode | undefined;
 }
 
@@ -266,6 +267,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     conversationId,
     suggestions,
     onSuggestionSelect,
+    onAgentSessionSelect,
     children,
   }) => {
     // Subscribe to fast-changing streaming values directly from the store
@@ -474,6 +476,68 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       overscan: 15,
       paddingEnd: isStreaming ? 16 : 0,
     });
+    const virtualizerRef = useRef(virtualizer);
+    const rowResizeObserverRef = useRef<ResizeObserver | null>(null);
+    const pendingMeasuredRowsRef = useRef(new Set<Element>());
+    const rowMeasurementFrameRef = useRef<number | null>(null);
+
+    virtualizerRef.current = virtualizer;
+
+    const flushMeasuredRows = useCallback(() => {
+      rowMeasurementFrameRef.current = null;
+      const rows = Array.from(pendingMeasuredRowsRef.current);
+      pendingMeasuredRowsRef.current.clear();
+
+      for (const row of rows) {
+        virtualizerRef.current.measureElement(row);
+      }
+    }, []);
+
+    const scheduleRowMeasure = useCallback(
+      (row: Element) => {
+        pendingMeasuredRowsRef.current.add(row);
+        if (rowMeasurementFrameRef.current !== null) return;
+        rowMeasurementFrameRef.current = requestAnimationFrame(flushMeasuredRows);
+      },
+      [flushMeasuredRows]
+    );
+
+    const measureVirtualRow = useCallback(
+      (node: HTMLDivElement | null) => {
+        if (!node) return;
+
+        virtualizerRef.current.measureElement(node);
+
+        if (typeof ResizeObserver === 'undefined') return;
+
+        if (!rowResizeObserverRef.current) {
+          rowResizeObserverRef.current = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+              scheduleRowMeasure(entry.target);
+            }
+          });
+        }
+
+        rowResizeObserverRef.current.observe(node);
+      },
+      [scheduleRowMeasure]
+    );
+
+    useEffect(() => {
+      const pendingRows = pendingMeasuredRowsRef.current;
+      return () => {
+        rowResizeObserverRef.current?.disconnect();
+        pendingRows.clear();
+        if (rowMeasurementFrameRef.current !== null) {
+          cancelAnimationFrame(rowMeasurementFrameRef.current);
+          rowMeasurementFrameRef.current = null;
+        }
+      };
+    }, []);
+
+    useEffect(() => {
+      virtualizer.measure();
+    }, [virtualizer, displayItems.length, timelineLen, streamingContent, streamingThought]);
 
     useEffect(() => {
       if (lastConversationIdRef.current === conversationId) return;
@@ -676,7 +740,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                       <div
                         key={`turn-placeholder-${item.turnId}`}
                         data-index={virtualRow.index}
-                        ref={virtualizer.measureElement}
+                        ref={measureVirtualRow}
                         style={{
                           position: 'absolute',
                           top: 0,
@@ -700,7 +764,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                         key={`timeline-group-${String(item.startIndex)}`}
                         data-index={virtualRow.index}
                         data-msg-index={virtualRow.index}
-                        ref={virtualizer.measureElement}
+                        ref={measureVirtualRow}
                         style={{
                           position: 'absolute',
                           top: 0,
@@ -718,6 +782,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                                 isStreaming && item.startIndex + item.steps.length >= timelineLen
                               }
                               defaultCollapsed={virtualRow.index !== lastTimelineGroupIndex}
+                              onAgentSessionSelect={onAgentSessionSelect}
                             />
                           </div>
                         </div>
@@ -733,7 +798,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                         data-timeline-index={item.startIndex}
                         data-subagent-start-index={item.startIndex}
                         data-subagent-id={item.group.subagentId}
-                        ref={virtualizer.measureElement}
+                        ref={measureVirtualRow}
                         style={{
                           position: 'absolute',
                           top: 0,
@@ -765,7 +830,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                       <div
                         key={event.id || `event-${String(index)}`}
                         data-index={virtualRow.index}
-                        ref={virtualizer.measureElement}
+                        ref={measureVirtualRow}
                         style={{
                           position: 'absolute',
                           top: 0,
@@ -801,7 +866,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                       data-index={virtualRow.index}
                       data-msg-index={virtualRow.index}
                       data-msg-id={event.id}
-                      ref={virtualizer.measureElement}
+                      ref={measureVirtualRow}
                       style={{
                         position: 'absolute',
                         top: 0,

@@ -20,7 +20,15 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { message } from 'antd';
-import { GripHorizontal, Download, ChevronDown, GitCompareArrows, Bot, Folder } from 'lucide-react';
+import {
+  GripHorizontal,
+  Download,
+  ChevronDown,
+  GitCompareArrows,
+  Bot,
+  Folder,
+  Clock3,
+} from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
@@ -51,6 +59,7 @@ import { DEFAULT_GENERAL_AGENT_ID } from '@/constants/agent';
 import { useLazyNotification } from '@/components/ui/lazyAntd';
 
 // Import design components
+import { formatDateTime } from '../../utils/date';
 import {
   downloadConversationMarkdown,
   downloadConversationPdf,
@@ -401,6 +410,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     // Local UI state
     const [inputHeight, setInputHeight] = useState(INPUT_DEFAULT_HEIGHT);
     const [chatSearchVisible, setChatSearchVisible] = useState(false);
+    const [selectedAgentSessionId, setSelectedAgentSessionId] = useState<string | null>(null);
     const [showOnboarding, setShowOnboarding] = useState(
       () => !localStorage.getItem('memstack_onboarding_complete')
     );
@@ -419,6 +429,18 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         setChatSearchVisible(true);
       });
     }, []);
+
+    const handleAgentSessionSelect = useCallback(
+      (sessionId: string) => {
+        setSelectedAgentSessionId(null);
+        void navigate(`${basePath}/${sessionId}${navigationSuffix}`);
+      },
+      [basePath, navigate, navigationSuffix]
+    );
+    const getAgentSessionHref = useCallback(
+      (sessionId: string) => `${basePath}/${sessionId}${navigationSuffix}`,
+      [basePath, navigationSuffix]
+    );
 
     // Cmd+F to open chat search, / to focus input, Shift+Tab to toggle plan mode
     useEffect(() => {
@@ -656,6 +678,7 @@ ${content}`;
             onSuggestionSelect={(...args) => {
               void handleSend(...args);
             }}
+            onAgentSessionSelect={handleAgentSessionSelect}
           />
         ),
       [
@@ -672,6 +695,7 @@ ${content}`;
         suggestions,
         loadEarlierMessages,
         projectId,
+        handleAgentSessionSelect,
       ]
     );
 
@@ -702,6 +726,11 @@ ${content}`;
     const taskProgress = useMemo(
       () => deriveTaskProgress(tasks, isStreaming),
       [tasks, isStreaming]
+    );
+    const conversationTitle = currentConversation ? currentConversation.title.trim() : '';
+    const conversationCreatedAt = useMemo(
+      () => (currentConversation?.created_at ? formatDateTime(currentConversation.created_at) : ''),
+      [currentConversation?.created_at]
     );
     const routeConversation =
       currentConversation?.id === activeConversationId ? currentConversation : null;
@@ -742,8 +771,30 @@ ${content}`;
           </div>
         )}
         {(currentConversation || activeAgentNode?.name) && (
-          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/60 dark:bg-slate-900/40 px-4 py-1.5 flex items-center gap-2">
+          <div className="flex-shrink-0 border-b border-slate-200/60 dark:border-slate-700/50 bg-white/60 dark:bg-slate-900/40 px-4 py-1.5 flex items-center gap-2 min-w-0">
             <ConversationAgentBadge conversation={currentConversation} />
+            {currentConversation && (
+              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                <span
+                  className="min-w-0 truncate text-sm font-medium text-slate-800 dark:text-slate-100"
+                  title={conversationTitle}
+                >
+                  {conversationTitle}
+                </span>
+                {conversationCreatedAt && (
+                  <span
+                    className="hidden shrink-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-400 sm:inline-flex"
+                    title={conversationCreatedAt}
+                  >
+                    <Clock3 size={12} />
+                    {t('agent.chat.header.createdAt', {
+                      date: conversationCreatedAt,
+                      defaultValue: 'Created {{date}}',
+                    })}
+                  </span>
+                )}
+              </div>
+            )}
             {activeAgentNode?.name && (
               <span className="flex items-center gap-1.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-medium px-2 py-0.5 rounded-full">
                 <Bot size={12} />
@@ -763,7 +814,7 @@ ${content}`;
           />
         </div>
         <div
-          className="relative flex flex-shrink-0 flex-col border-t border-slate-200/60 bg-white shadow-md dark:border-slate-700/50 dark:bg-slate-900"
+          className="relative flex flex-shrink-0 flex-col border-t border-slate-200/45 bg-white shadow-[0_-1px_2px_rgba(15,23,42,0.025)] dark:border-slate-800/55 dark:bg-slate-900"
           style={{ height: inputHeight }}
         >
           <div className="absolute -top-2 left-0 right-0 z-40 flex justify-center">
@@ -1053,6 +1104,10 @@ ${content}`;
                 sandboxId={activeSandboxId}
                 workspaceId={activeWorkspaceId}
                 currentWorkspaceTaskId={activeWorkspaceTaskId}
+                projectId={projectId}
+                selectedAgentSessionId={selectedAgentSessionId}
+                onAgentSessionSelect={handleAgentSessionSelect}
+                getAgentSessionHref={getAgentSessionHref}
                 executionPathDecision={executionPathDecision}
                 selectionTrace={selectionTrace}
                 policyFiltered={policyFiltered}

@@ -488,22 +488,22 @@ export const InputBar = memo<InputBarProps>(
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           className={`
-            flex-1 flex flex-col min-h-0 min-w-0 rounded-lg sm:rounded-xl border relative
+            flex-1 flex flex-col min-h-0 min-w-0 rounded-md border relative
             bg-white dark:bg-slate-800
-            transition-shadow duration-200 ease-out shadow-lg
+            transition-[border-color,box-shadow] duration-200 ease-out
             ${
               isDragging
-                ? 'border-primary/60 ring-2 ring-primary/20 shadow-primary/15'
+                ? 'border-primary/55 ring-2 ring-primary/15 shadow-[0_1px_5px_rgba(0,112,243,0.08)]'
                 : isFocused
-                  ? 'border-primary/40 shadow-primary/10 ring-2 ring-primary/10'
-                  : 'border-slate-200/60 dark:border-slate-700/60 shadow-slate-200/50 dark:shadow-black/20'
+                  ? 'border-primary/25 shadow-[0_1px_4px_rgba(0,112,243,0.045)] ring-2 ring-primary/5'
+                  : 'border-slate-200/45 dark:border-slate-700/45 shadow-[0_1px_3px_rgba(15,23,42,0.035)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.12)]'
             }
             ${disabled ? 'opacity-60 pointer-events-none' : ''}
           `}
         >
           {/* Drag overlay */}
           {isDragging && (
-            <div className="absolute inset-0 z-20 rounded-xl bg-primary/5 dark:bg-primary/10 flex items-center justify-center pointer-events-none">
+            <div className="absolute inset-0 z-20 rounded-md bg-primary/5 dark:bg-primary/10 flex items-center justify-center pointer-events-none">
               <div className="flex flex-col items-center gap-2 text-primary">
                 <Upload size={28} strokeWidth={1.5} />
                 <span className="text-sm font-medium">
@@ -586,8 +586,8 @@ export const InputBar = memo<InputBarProps>(
             )}
             <div
               className="
-                flex min-h-11 w-full min-w-0 flex-wrap items-center gap-1.5 rounded-md px-2 py-1.5
-                bg-slate-50/80 dark:bg-slate-900/50
+                flex min-h-11 w-full min-w-0 flex-wrap items-center gap-1.5 rounded px-2 py-1.5
+                bg-slate-50/70 dark:bg-slate-900/40
                 transition-colors
               "
             >

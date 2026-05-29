@@ -4,13 +4,16 @@ import { useTranslation } from 'react-i18next';
 
 import {
   ChevronRight,
+  Copy,
   Download,
+  Edit3,
   FileCode,
   FileText,
   Folder,
   FolderPlus,
   Image,
   Loader2,
+  MoveRight,
   RefreshCw,
   Trash2,
   Upload,
@@ -31,6 +34,13 @@ export interface SharedFileBrowserProps {
   tenantId: string;
   projectId: string;
   workspaceId: string;
+}
+
+type FileAction = 'rename' | 'move' | 'copy';
+
+interface PendingFileAction {
+  kind: FileAction;
+  item: BlackboardFileItem;
 }
 
 function isTextType(contentType: string): boolean {
@@ -101,6 +111,10 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingFileAction | null>(null);
+  const [actionName, setActionName] = useState('');
+  const [actionPath, setActionPath] = useState('/');
+  const [actionSubmitting, setActionSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [previewFile, setPreviewFile] = useState<BlackboardFileItem | null>(null);
   const [previewContent, setPreviewContent] = useState<string | null>(null);
@@ -169,6 +183,95 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
 
   const navigateTo = (path: string) => {
     setCurrentPath(path);
+  };
+
+  const openFileAction = (kind: FileAction, item: BlackboardFileItem) => {
+    setPendingAction({ kind, item });
+    setActionName(kind === 'move' ? '' : item.name);
+    setActionPath(kind === 'move' ? item.parent_path : currentPath);
+    setErrorMessage(null);
+  };
+
+  const closeFileAction = () => {
+    if (actionSubmitting) return;
+    setPendingAction(null);
+    setActionName('');
+    setActionPath('/');
+  };
+
+  const normalizedActionPath = () => {
+    const trimmed = actionPath.trim();
+    if (!trimmed || trimmed === '/') return '/';
+    const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
+  };
+
+  const submitFileAction = async () => {
+    if (!pendingAction) return;
+    const name = actionName.trim();
+    if (
+      (pendingAction.kind === 'rename' || pendingAction.kind === 'copy') &&
+      !isValidDirectoryName(name)
+    ) {
+      const errorText = t(
+        'blackboard.files.errors.invalidName',
+        'Name cannot be empty or contain slashes.'
+      );
+      setErrorMessage(errorText);
+      void message?.error(errorText);
+      return;
+    }
+
+    setActionSubmitting(true);
+    try {
+      if (pendingAction.kind === 'rename') {
+        await blackboardFileService.renameFile(
+          tenantId,
+          projectId,
+          workspaceId,
+          pendingAction.item.id,
+          name
+        );
+        void message?.success(t('blackboard.files.renamed', 'Renamed {{name}}', { name }));
+      } else if (pendingAction.kind === 'move') {
+        const parentPath = normalizedActionPath();
+        await blackboardFileService.moveFile(
+          tenantId,
+          projectId,
+          workspaceId,
+          pendingAction.item.id,
+          parentPath
+        );
+        void message?.success(
+          t('blackboard.files.moved', 'Moved {{name}}', { name: pendingAction.item.name })
+        );
+      } else {
+        const parentPath = normalizedActionPath();
+        await blackboardFileService.copyFile(
+          tenantId,
+          projectId,
+          workspaceId,
+          pendingAction.item.id,
+          parentPath,
+          name
+        );
+        void message?.success(t('blackboard.files.copied', 'Copied {{name}}', { name }));
+      }
+      setPendingAction(null);
+      setActionName('');
+      setActionPath('/');
+      setErrorMessage(null);
+      await fetchFiles();
+    } catch (err) {
+      const errorText = getErrorMessage(
+        err,
+        t('blackboard.files.errors.action', 'Failed to update file')
+      );
+      setErrorMessage(errorText);
+      void message?.error(errorText);
+    } finally {
+      setActionSubmitting(false);
+    }
   };
 
   const handleMkdir = async () => {
@@ -271,7 +374,13 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
   const handleDelete = async (item: BlackboardFileItem) => {
     setDeletingId(item.id);
     try {
-      await blackboardFileService.deleteFile(tenantId, projectId, workspaceId, item.id);
+      await blackboardFileService.deleteFile(
+        tenantId,
+        projectId,
+        workspaceId,
+        item.id,
+        item.is_directory
+      );
       setErrorMessage(null);
       void message?.success(t('blackboard.files.deleted', 'Deleted {{name}}', { name: item.name }));
       await fetchFiles();
@@ -480,6 +589,86 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
         </div>
       )}
 
+      {pendingAction && (
+        <div className="rounded-md border border-border-light bg-surface-light p-3 dark:border-border-dark dark:bg-surface-dark">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-text-primary dark:text-text-inverse">
+                {pendingAction.kind === 'rename'
+                  ? t('blackboard.files.renameTitle', 'Rename {{name}}', {
+                      name: pendingAction.item.name,
+                    })
+                  : pendingAction.kind === 'move'
+                    ? t('blackboard.files.moveTitle', 'Move {{name}}', {
+                        name: pendingAction.item.name,
+                      })
+                    : t('blackboard.files.copyTitle', 'Copy {{name}}', {
+                        name: pendingAction.item.name,
+                      })}
+              </div>
+              <div className="truncate text-xs text-text-secondary dark:text-text-muted">
+                {pendingAction.item.parent_path}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={closeFileAction}
+              aria-label={t('common.close', 'Close')}
+              className="rounded-md p-1.5 text-text-secondary hover:bg-surface-muted dark:text-text-muted dark:hover:bg-surface-elevated"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+            {pendingAction.kind !== 'move' && (
+              <input
+                type="text"
+                value={actionName}
+                onChange={(e) => {
+                  setActionName(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void submitFileAction();
+                  if (e.key === 'Escape') closeFileAction();
+                }}
+                placeholder={t('blackboard.files.name', 'Name')}
+                aria-label={t('blackboard.files.name', 'Name')}
+                className="min-h-9 rounded-md border border-border-light bg-surface-light px-3 text-sm text-text-primary outline-none focus:ring-1 focus:ring-primary dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse"
+              />
+            )}
+            {pendingAction.kind !== 'rename' && (
+              <input
+                type="text"
+                value={actionPath}
+                onChange={(e) => {
+                  setActionPath(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void submitFileAction();
+                  if (e.key === 'Escape') closeFileAction();
+                }}
+                placeholder={t('blackboard.files.destinationPath', 'Destination path')}
+                aria-label={t('blackboard.files.destinationPath', 'Destination path')}
+                className="min-h-9 rounded-md border border-border-light bg-surface-light px-3 text-sm text-text-primary outline-none focus:ring-1 focus:ring-primary dark:border-border-dark dark:bg-surface-dark dark:text-text-inverse"
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => void submitFileAction()}
+              disabled={actionSubmitting}
+              className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-slate-50 transition hover:bg-primary/90 disabled:opacity-50"
+            >
+              {actionSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {pendingAction.kind === 'rename'
+                ? t('blackboard.files.rename', 'Rename')
+                : pendingAction.kind === 'move'
+                  ? t('blackboard.files.move', 'Move')
+                  : t('blackboard.files.copy', 'Copy')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* File list */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
@@ -551,6 +740,45 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          openFileAction('rename', item);
+                        }}
+                        aria-label={t('blackboard.files.renameNamed', 'Rename {{name}}', {
+                          name: item.name,
+                        })}
+                        className="rounded p-1.5 text-text-secondary transition hover:bg-surface-muted hover:text-text-primary dark:text-text-muted dark:hover:bg-surface-elevated dark:hover:text-text-inverse"
+                        title={t('blackboard.files.rename', 'Rename')}
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          openFileAction('move', item);
+                        }}
+                        aria-label={t('blackboard.files.moveNamed', 'Move {{name}}', {
+                          name: item.name,
+                        })}
+                        className="rounded p-1.5 text-text-secondary transition hover:bg-surface-muted hover:text-text-primary dark:text-text-muted dark:hover:bg-surface-elevated dark:hover:text-text-inverse"
+                        title={t('blackboard.files.move', 'Move')}
+                      >
+                        <MoveRight className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          openFileAction('copy', item);
+                        }}
+                        aria-label={t('blackboard.files.copyNamed', 'Copy {{name}}', {
+                          name: item.name,
+                        })}
+                        className="rounded p-1.5 text-text-secondary transition hover:bg-surface-muted hover:text-text-primary dark:text-text-muted dark:hover:bg-surface-elevated dark:hover:text-text-inverse"
+                        title={t('blackboard.files.copy', 'Copy')}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
                       {!item.is_directory && (
                         <button
                           type="button"
@@ -565,9 +793,17 @@ export function SharedFileBrowser({ tenantId, projectId, workspaceId }: SharedFi
                         </button>
                       )}
                       <LazyPopconfirm
-                        title={t('blackboard.files.deleteConfirm', 'Delete {{name}}?', {
-                          name: item.name,
-                        })}
+                        title={
+                          item.is_directory
+                            ? t(
+                                'blackboard.files.deleteDirectoryConfirm',
+                                'Delete {{name}} and all contents?',
+                                { name: item.name }
+                              )
+                            : t('blackboard.files.deleteConfirm', 'Delete {{name}}?', {
+                                name: item.name,
+                              })
+                        }
                         okText={t('common.yes', 'Yes')}
                         cancelText={t('common.no', 'No')}
                         onConfirm={() => void handleDelete(item)}

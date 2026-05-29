@@ -9,6 +9,8 @@ import type { AgentNode } from '../../../types/multiAgent';
 
 interface MultiAgentPanelProps {
   agentNodes: Map<string, AgentNode> | undefined;
+  onSessionSelect?: ((sessionId: string) => void) | undefined;
+  getSessionHref?: ((sessionId: string) => string) | undefined;
 }
 
 const STATUS_STYLES: Record<
@@ -51,29 +53,45 @@ interface AgentNodeItemProps {
   node: AgentNode;
   agentNodes: Map<string, AgentNode>;
   depth: number;
+  onSessionSelect?: ((sessionId: string) => void) | undefined;
+  getSessionHref?: ((sessionId: string) => string) | undefined;
 }
 
-const AgentNodeItem: FC<AgentNodeItemProps> = memo(({ node, agentNodes, depth }) => {
-  const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(true);
-  const hasChildren = node.children.length > 0;
-  const style = STATUS_STYLES[node.status];
+const AgentNodeItem: FC<AgentNodeItemProps> = memo(
+  ({ node, agentNodes, depth, onSessionSelect, getSessionHref }) => {
+    const { t } = useTranslation();
+    const [expanded, setExpanded] = useState(true);
+    const hasChildren = node.children.length > 0;
+    const style = STATUS_STYLES[node.status];
+    const canOpenSession = Boolean(node.sessionId && onSessionSelect);
+    const sessionHref = node.sessionId && getSessionHref ? getSessionHref(node.sessionId) : null;
 
-  const toggleExpand = useCallback(() => {
-    setExpanded((prev) => !prev);
-  }, []);
+    const toggleExpand = useCallback(() => {
+      setExpanded((prev) => !prev);
+    }, []);
 
-  return (
-    <div>
-      <div
-        className={`flex items-start gap-2 rounded-lg p-2 transition-colors
-            hover:bg-slate-50 dark:hover:bg-slate-800/50`}
-        style={{ paddingLeft: `${String(depth * 16 + 8)}px` }}
-      >
+    const openSession = useCallback(() => {
+      if (node.sessionId && onSessionSelect) {
+        onSessionSelect(node.sessionId);
+      }
+    }, [node.sessionId, onSessionSelect]);
+
+    const rowClassName = `flex items-start gap-2 rounded-lg p-2 transition-colors
+      hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
+        canOpenSession
+          ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50'
+          : ''
+      }`;
+    const rowStyle = { paddingLeft: `${String(depth * 16 + 8)}px` };
+    const rowContent = (
+      <>
         {hasChildren ? (
           <button
             type="button"
-            onClick={toggleExpand}
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleExpand();
+            }}
             className="mt-0.5 flex-shrink-0 p-0.5 rounded hover:bg-slate-200
                 dark:hover:bg-slate-700 transition-colors"
           >
@@ -121,19 +139,61 @@ const AgentNodeItem: FC<AgentNodeItemProps> = memo(({ node, agentNodes, depth })
             </p>
           ) : null}
         </div>
-      </div>
+      </>
+    );
 
-      {expanded && hasChildren
-        ? node.children.map((childId) => {
-            const child = agentNodes.get(childId);
-            return child ? (
-              <AgentNodeItem key={childId} node={child} agentNodes={agentNodes} depth={depth + 1} />
-            ) : null;
-          })
-        : null}
-    </div>
-  );
-});
+    return (
+      <div>
+        {canOpenSession && !hasChildren && sessionHref ? (
+          <a
+            href={sessionHref}
+            data-session-id={node.sessionId}
+            className={`${rowClassName} w-full text-left`}
+            style={rowStyle}
+          >
+            {rowContent}
+          </a>
+        ) : (
+          <div
+            role={canOpenSession ? 'button' : undefined}
+            tabIndex={canOpenSession ? 0 : undefined}
+            onClick={canOpenSession ? openSession : undefined}
+            onKeyDown={
+              canOpenSession
+                ? (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openSession();
+                    }
+                  }
+                : undefined
+            }
+            className={rowClassName}
+            style={rowStyle}
+          >
+            {rowContent}
+          </div>
+        )}
+
+        {expanded && hasChildren
+          ? node.children.map((childId) => {
+              const child = agentNodes.get(childId);
+              return child ? (
+                <AgentNodeItem
+                  key={childId}
+                  node={child}
+                  agentNodes={agentNodes}
+                  depth={depth + 1}
+                  onSessionSelect={onSessionSelect}
+                  getSessionHref={getSessionHref}
+                />
+              ) : null;
+            })
+          : null}
+      </div>
+    );
+  }
+);
 
 AgentNodeItem.displayName = 'AgentNodeItem';
 
@@ -160,27 +220,36 @@ const EmptyAgentState: FC = memo(() => {
 
 EmptyAgentState.displayName = 'EmptyAgentState';
 
-export const MultiAgentPanel: FC<MultiAgentPanelProps> = memo(({ agentNodes }) => {
-  if (!agentNodes || agentNodes.size === 0) {
-    return <EmptyAgentState />;
-  }
-
-  const roots: AgentNode[] = [];
-  agentNodes.forEach((node) => {
-    if (node.parentAgentId === null || !agentNodes.has(node.parentAgentId)) {
-      roots.push(node);
+export const MultiAgentPanel: FC<MultiAgentPanelProps> = memo(
+  ({ agentNodes, onSessionSelect, getSessionHref }) => {
+    if (!agentNodes || agentNodes.size === 0) {
+      return <EmptyAgentState />;
     }
-  });
 
-  const sortedRoots = [...roots].sort((a, b) => a.createdAt - b.createdAt);
+    const roots: AgentNode[] = [];
+    agentNodes.forEach((node) => {
+      if (node.parentAgentId === null || !agentNodes.has(node.parentAgentId)) {
+        roots.push(node);
+      }
+    });
 
-  return (
-    <div className="p-2 space-y-1">
-      {sortedRoots.map((root) => (
-        <AgentNodeItem key={root.agentId} node={root} agentNodes={agentNodes} depth={0} />
-      ))}
-    </div>
-  );
-});
+    const sortedRoots = [...roots].sort((a, b) => a.createdAt - b.createdAt);
+
+    return (
+      <div className="p-2 space-y-1">
+        {sortedRoots.map((root) => (
+          <AgentNodeItem
+            key={root.agentId}
+            node={root}
+            agentNodes={agentNodes}
+            depth={0}
+            onSessionSelect={onSessionSelect}
+            getSessionHref={getSessionHref}
+          />
+        ))}
+      </div>
+    );
+  }
+);
 
 MultiAgentPanel.displayName = 'MultiAgentPanel';

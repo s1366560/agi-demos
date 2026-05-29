@@ -48,7 +48,7 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
     }
 
     return (
-      <div className="mx-4 mb-4 px-4 py-3 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-lg animate-fade-in-up">
+      <div className="mx-4 mb-4 px-4 py-3 bg-slate-50/70 dark:bg-slate-900/35 border border-slate-200/45 dark:border-slate-800/45 rounded-md shadow-[0_1px_2px_rgba(15,23,42,0.02)] animate-fade-in-up">
         <div className="flex items-start gap-2">
           <FileText size={14} className="text-primary mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">

@@ -11,11 +11,18 @@ import { useCallback, useEffect, memo, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Filter, GitBranch, ListTodo, Route, X } from 'lucide-react';
+import { Bot, Filter, GitBranch, ListTodo, Route, X } from 'lucide-react';
 
 import { useActiveGraphRunForConversation } from '@/stores/graphStore';
+import { useTenantStore } from '@/stores/tenant';
+import { useWorkspaceStore } from '@/stores/workspace';
 
-import { workspacePlanService, workspaceTaskService } from '@/services/workspaceService';
+import { agentService } from '@/services/agentService';
+import {
+  workspacePlanService,
+  workspaceService,
+  workspaceTaskService,
+} from '@/services/workspaceService';
 
 import { LazyButton } from '@/components/ui/lazyAntd';
 
@@ -23,13 +30,14 @@ import { useUrlState } from '../../hooks/useUrlState';
 
 import { AgentGraphView } from './AgentGraphView';
 import { MultiAgentPanel } from './multiAgent/MultiAgentPanel';
+import { buildWorkspaceAgentNodes } from './multiAgent/workspaceAgentPanelModel';
 import { ResizeHandle } from './RightPanelComponents';
 import { TaskList } from './TaskList';
 import { TaskLanePanel } from './tasks/TaskLanePanel';
 import { WorkspaceTaskPlanPanel } from './workspace/WorkspaceTaskPlanPanel';
 import { buildWorkspaceTaskPlanRows } from './workspace/WorkspaceTaskPlanPanelModel';
 
-import type { WorkspacePlanSnapshot, WorkspaceTask } from '@/types/workspace';
+import type { WorkspaceAgent, WorkspacePlanSnapshot, WorkspaceTask } from '@/types/workspace';
 
 import type {
   AgentTask,
@@ -38,6 +46,7 @@ import type {
   PolicyFilteredEventData,
   SelectionTraceEventData,
   ToolsetChangedEventData,
+  TimelineEvent as AgentTimelineEvent,
 } from '../../types/agent';
 import type { AgentNode } from '../../types/multiAgent';
 import type { TFunction } from 'i18next';
@@ -48,6 +57,10 @@ export interface RightPanelProps {
   sandboxId?: string | null | undefined;
   workspaceId?: string | null | undefined;
   currentWorkspaceTaskId?: string | null | undefined;
+  projectId?: string | null | undefined;
+  selectedAgentSessionId?: string | null | undefined;
+  onAgentSessionSelect?: ((sessionId: string) => void) | undefined;
+  getAgentSessionHref?: ((sessionId: string) => string) | undefined;
   executionPathDecision?: ExecutionPathDecidedEventData | null | undefined;
   selectionTrace?: SelectionTraceEventData | null | undefined;
   policyFiltered?: PolicyFilteredEventData | null | undefined;
@@ -63,7 +76,7 @@ export interface RightPanelProps {
   maxWidth?: number | undefined;
 }
 
-type PanelTab = 'tasks' | 'insights' | 'agents' | 'graph';
+type PanelTab = 'tasks' | 'agent' | 'insights' | 'agents' | 'graph';
 
 function tFallback(t: TFunction, key: string, fallback: string): string {
   const translated = t(key, fallback);
@@ -264,12 +277,171 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
 
 ExecutionInsights.displayName = 'ExecutionInsights';
 
+function agentEventRole(event: AgentTimelineEvent): string {
+  if (event.type === 'user_message') return 'User';
+  if (event.type === 'assistant_message' || event.type === 'text_end') return 'Agent';
+  if (event.type === 'act') return 'Tool';
+  if (event.type === 'observe') return 'Result';
+  return event.type.replace(/_/g, ' ');
+}
+
+function agentEventContent(event: AgentTimelineEvent): string {
+  if ('content' in event && typeof event.content === 'string') {
+    return event.content;
+  }
+  if (event.type === 'text_end' && typeof event.fullText === 'string') {
+    return event.fullText;
+  }
+  if (event.type === 'act') {
+    return JSON.stringify({ tool: event.toolName, input: event.toolInput }, null, 2);
+  }
+  if (event.type === 'observe') {
+    return event.toolOutput || (event.isError ? 'Tool failed' : 'Tool completed');
+  }
+  return '';
+}
+
+function agentEventTimestamp(event: AgentTimelineEvent, locale: string): string {
+  const date = new Date(event.timestamp);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+const AgentSessionMessagesPanel = memo<{
+  projectId?: string | null | undefined;
+  sessionId?: string | null | undefined;
+}>(({ projectId, sessionId }) => {
+  const { t, i18n } = useTranslation();
+  const [events, setEvents] = useState<AgentTimelineEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const requestSeqRef = useRef(0);
+
+  useEffect(() => {
+    if (!projectId || !sessionId) {
+      return;
+    }
+
+    const requestSeq = requestSeqRef.current + 1;
+    requestSeqRef.current = requestSeq;
+    void Promise.resolve().then(async () => {
+      if (requestSeqRef.current !== requestSeq) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await agentService.getConversationMessages(sessionId, projectId, 100);
+        if (requestSeqRef.current !== requestSeq) return;
+        setEvents(response.timeline);
+      } catch (err) {
+        if (requestSeqRef.current !== requestSeq) return;
+        setEvents([]);
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (requestSeqRef.current === requestSeq) setLoading(false);
+      }
+    });
+
+    return () => {
+      requestSeqRef.current += 1;
+    };
+  }, [projectId, sessionId]);
+
+  if (!sessionId) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center px-4 py-12 text-center">
+        <Bot size={30} className="mb-3 text-slate-300 dark:text-slate-600" />
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {tFallback(
+            t,
+            'agent.rightPanel.agentSession.empty',
+            'Click an agent interaction card to inspect its session messages.'
+          )}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b border-slate-200/60 px-4 py-3 dark:border-slate-700/50">
+        <div className="flex items-center gap-2">
+          <Bot size={15} className="text-slate-500 dark:text-slate-400" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {tFallback(t, 'agent.rightPanel.agentSession.title', 'Agent session')}
+            </p>
+            <code className="block truncate text-[11px] text-slate-500 dark:text-slate-400">
+              {sessionId}
+            </code>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3">
+        {loading ? (
+          <div className="space-y-2" role="status">
+            <div className="h-12 rounded-md bg-slate-100 dark:bg-slate-800" />
+            <div className="h-16 rounded-md bg-slate-100 dark:bg-slate-800" />
+          </div>
+        ) : error ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300">
+            {error}
+          </div>
+        ) : events.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {tFallback(
+              t,
+              'agent.rightPanel.agentSession.noMessages',
+              'No messages recorded for this session yet.'
+            )}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {events.map((event) => {
+              const content = agentEventContent(event);
+              if (!content) return null;
+              return (
+                <article
+                  key={event.id}
+                  className="rounded-md border border-slate-200/70 bg-white px-3 py-2 dark:border-slate-700/60 dark:bg-slate-900/35"
+                >
+                  <div className="mb-1 flex min-w-0 items-center gap-2">
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      {agentEventRole(event)}
+                    </span>
+                    <span className="ml-auto shrink-0 text-[11px] text-slate-400 dark:text-slate-500">
+                      {agentEventTimestamp(event, i18n.language || 'en')}
+                    </span>
+                  </div>
+                  <p className="whitespace-pre-wrap break-words text-xs leading-5 text-slate-700 dark:text-slate-200">
+                    {content}
+                  </p>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+AgentSessionMessagesPanel.displayName = 'AgentSessionMessagesPanel';
+
 export const RightPanel = memo<RightPanelProps>(
   ({
     tasks = [],
     conversationId,
     workspaceId,
     currentWorkspaceTaskId,
+    projectId,
+    selectedAgentSessionId,
+    onAgentSessionSelect,
+    getAgentSessionHref,
     executionPathDecision,
     selectionTrace,
     policyFiltered,
@@ -291,11 +463,15 @@ export const RightPanel = memo<RightPanelProps>(
       latestToolsetChange ||
       (executionNarrative && executionNarrative.length > 0)
     );
-    const hasAgents = Boolean(agentNodes && agentNodes.size > 0);
+    const hasAgentSession = Boolean(selectedAgentSessionId);
+    const tenantId = useTenantStore((state) => state.currentTenant?.id);
+    const storeWorkspaceId = useWorkspaceStore((state) => state.currentWorkspace?.id);
+    const storeWorkspaceAgents = useWorkspaceStore((state) => state.agents);
     const activeGraphRun = useActiveGraphRunForConversation(conversationId);
     const isWorkspaceActive = Boolean(workspaceId);
     const hasGraph = Boolean(activeGraphRun) || isWorkspaceActive;
     const [workspaceTasks, setWorkspaceTasks] = useState<WorkspaceTask[]>([]);
+    const [workspaceAgents, setWorkspaceAgents] = useState<WorkspaceAgent[]>([]);
     const [workspaceSnapshot, setWorkspaceSnapshot] = useState<WorkspacePlanSnapshot | null>(null);
     const [workspaceLoading, setWorkspaceLoading] = useState(false);
     const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -305,7 +481,44 @@ export const RightPanel = memo<RightPanelProps>(
       () => (workspaceDataId === workspaceId ? workspaceTasks : []),
       [workspaceDataId, workspaceId, workspaceTasks]
     );
+    const activeWorkspaceAgents = useMemo(() => {
+      if (!isWorkspaceActive) return [];
+      if (workspaceDataId === workspaceId && workspaceAgents.length > 0) return workspaceAgents;
+      return storeWorkspaceId === workspaceId ? storeWorkspaceAgents : [];
+    }, [
+      isWorkspaceActive,
+      storeWorkspaceAgents,
+      storeWorkspaceId,
+      workspaceAgents,
+      workspaceDataId,
+      workspaceId,
+    ]);
     const activeWorkspaceSnapshot = workspaceDataId === workspaceId ? workspaceSnapshot : null;
+    const workspaceAgentNodes = useMemo(
+      () =>
+        buildWorkspaceAgentNodes({
+          workspaceId,
+          conversationId,
+          agents: activeWorkspaceAgents,
+          tasks: activeWorkspaceTasks,
+          snapshot: activeWorkspaceSnapshot,
+        }),
+      [
+        activeWorkspaceAgents,
+        activeWorkspaceSnapshot,
+        activeWorkspaceTasks,
+        conversationId,
+        workspaceId,
+      ]
+    );
+    const displayAgentNodes = useMemo(() => {
+      const merged = new Map(workspaceAgentNodes);
+      agentNodes?.forEach((node, key) => {
+        merged.set(key, node);
+      });
+      return merged;
+    }, [agentNodes, workspaceAgentNodes]);
+    const hasAgents = displayAgentNodes.size > 0;
     const activeWorkspaceLoading =
       isWorkspaceActive && (workspaceLoading || workspaceDataId !== workspaceId);
     const activeWorkspaceError = workspaceDataId === workspaceId ? workspaceError : null;
@@ -320,26 +533,36 @@ export const RightPanel = memo<RightPanelProps>(
     );
     const visibleTaskCount = isWorkspaceActive ? workspaceRows.length : tasks.length;
     const initialTab: PanelTab = isWorkspaceActive
-      ? 'tasks'
+      ? hasAgentSession
+        ? 'agent'
+        : 'tasks'
       : hasGraph && tasks.length === 0
         ? 'graph'
         : hasInsights && tasks.length === 0
           ? 'insights'
           : 'tasks';
     const [preferredTab, setPreferredTab] = useUrlState<PanelTab>('panel', initialTab, {
-      allowed: ['tasks', 'insights', 'agents', 'graph'],
+      allowed: ['tasks', 'agent', 'insights', 'agents', 'graph'],
     });
     const [taskView, setTaskView] = useUrlState<'flat' | 'lanes'>('tasks', 'flat', {
       allowed: ['flat', 'lanes'],
     });
     const activeTab: PanelTab =
-      preferredTab === 'insights' && !hasInsights
+      preferredTab === 'agent' && !hasAgentSession
         ? 'tasks'
-        : preferredTab === 'agents' && !hasAgents
+        : preferredTab === 'insights' && !hasInsights
           ? 'tasks'
-          : preferredTab === 'graph' && !hasGraph
+          : preferredTab === 'agents' && !hasAgents
             ? 'tasks'
-            : preferredTab;
+            : preferredTab === 'graph' && !hasGraph
+              ? 'tasks'
+              : preferredTab;
+
+    useEffect(() => {
+      if (selectedAgentSessionId) {
+        setPreferredTab('agent');
+      }
+    }, [selectedAgentSessionId, setPreferredTab]);
 
     useEffect(() => {
       if (!workspaceId) return;
@@ -351,9 +574,15 @@ export const RightPanel = memo<RightPanelProps>(
         setWorkspaceLoading(true);
         setWorkspaceError(null);
 
-        const [tasksResult, snapshotResult] = await Promise.allSettled([
+        const agentsRequest =
+          tenantId && projectId
+            ? workspaceService.listAgents(tenantId, projectId, workspaceId)
+            : Promise.resolve([] as WorkspaceAgent[]);
+
+        const [tasksResult, snapshotResult, agentsResult] = await Promise.allSettled([
           workspaceTaskService.list(workspaceId),
           workspacePlanService.getSnapshot(workspaceId, { outboxLimit: 8, eventLimit: 20 }),
+          agentsRequest,
         ]);
 
         if (workspaceRequestSeqRef.current !== requestSeq) return;
@@ -363,6 +592,12 @@ export const RightPanel = memo<RightPanelProps>(
           setWorkspaceTasks(tasksResult.value);
         } else {
           setWorkspaceTasks([]);
+        }
+
+        if (agentsResult.status === 'fulfilled') {
+          setWorkspaceAgents(agentsResult.value);
+        } else {
+          setWorkspaceAgents([]);
         }
 
         if (snapshotResult.status === 'fulfilled') {
@@ -382,7 +617,7 @@ export const RightPanel = memo<RightPanelProps>(
       return () => {
         workspaceRequestSeqRef.current += 1;
       };
-    }, [workspaceId]);
+    }, [projectId, tenantId, workspaceId]);
 
     const handleResize = useCallback(
       (delta: number) => {
@@ -463,6 +698,25 @@ export const RightPanel = memo<RightPanelProps>(
                 <button
                   type="button"
                   onClick={() => {
+                    if (hasAgentSession) {
+                      setPreferredTab('agent');
+                    }
+                  }}
+                  disabled={!hasAgentSession}
+                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                    activeTab === 'agent'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'
+                      : 'text-slate-500 dark:text-slate-400'
+                  } ${!hasAgentSession ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <Bot size={12} aria-hidden />
+                    {tFallback(t, 'agent.rightPanel.tabs.agent', 'Agent')}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     if (hasInsights) {
                       setPreferredTab('insights');
                     }
@@ -528,7 +782,11 @@ export const RightPanel = memo<RightPanelProps>(
             </div>
           </div>
 
-          {activeTab === 'insights' ? (
+          {activeTab === 'agent' ? (
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <AgentSessionMessagesPanel projectId={projectId} sessionId={selectedAgentSessionId} />
+            </div>
+          ) : activeTab === 'insights' ? (
             <div className="flex-1 overflow-y-auto p-3">
               <ExecutionInsights
                 executionPathDecision={executionPathDecision}
@@ -540,7 +798,11 @@ export const RightPanel = memo<RightPanelProps>(
             </div>
           ) : activeTab === 'agents' ? (
             <div className="flex-1 overflow-y-auto">
-              <MultiAgentPanel agentNodes={agentNodes} />
+              <MultiAgentPanel
+                agentNodes={displayAgentNodes}
+                onSessionSelect={onAgentSessionSelect}
+                getSessionHref={getAgentSessionHref}
+              />
             </div>
           ) : activeTab === 'graph' ? (
             <div className="min-h-0 flex-1 overflow-hidden">

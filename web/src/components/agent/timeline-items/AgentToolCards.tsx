@@ -535,8 +535,12 @@ function AgentHistoryCard({ params, result, status, error, duration }: AgentHist
           {messages.length > 3 && (
             <button
               type="button"
-              onClick={() => {
+              onClick={(event) => {
+                event.stopPropagation();
                 setExpanded((v) => !v);
+              }}
+              onKeyDown={(event) => {
+                event.stopPropagation();
               }}
               className="text-2xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer px-2 py-0.5"
             >
@@ -565,6 +569,34 @@ interface AgentToolStepCardProps {
   status: 'running' | 'success' | 'error';
   isError?: boolean;
   duration?: number;
+  onAgentSessionSelect?: ((sessionId: string) => void) | undefined;
+}
+
+function sessionIdFromAgentTool(
+  toolName: string,
+  params: Record<string, unknown>,
+  result: Record<string, unknown> | unknown[] | null
+): string | null {
+  const inputSessionId = params['session_id'];
+  if (typeof inputSessionId === 'string' && inputSessionId.trim().length > 0) {
+    return inputSessionId;
+  }
+
+  if (Array.isArray(result)) return null;
+
+  const resultSessionId = result?.['session_id'];
+  if (typeof resultSessionId === 'string' && resultSessionId.trim().length > 0) {
+    return resultSessionId;
+  }
+
+  if (toolName === 'agent_spawn') {
+    const childSessionId = result?.['child_session_id'];
+    if (typeof childSessionId === 'string' && childSessionId.trim().length > 0) {
+      return childSessionId;
+    }
+  }
+
+  return null;
 }
 
 export const AgentToolStepCard = memo(function AgentToolStepCard({
@@ -574,10 +606,12 @@ export const AgentToolStepCard = memo(function AgentToolStepCard({
   status,
   isError,
   duration,
+  onAgentSessionSelect,
 }: AgentToolStepCardProps) {
   const errorMsg = isError && typeof output === 'string' ? output : undefined;
   const parsed = output ? parseResult(output) : null;
   const params = input ?? {};
+  const selectedSessionId = sessionIdFromAgentTool(toolName, params, parsed);
 
   let card: React.ReactNode;
 
@@ -636,6 +670,27 @@ export const AgentToolStepCard = memo(function AgentToolStepCard({
       break;
     default:
       return null;
+  }
+
+  if (selectedSessionId && onAgentSessionSelect) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => {
+          onAgentSessionSelect(selectedSessionId);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onAgentSessionSelect(selectedSessionId);
+          }
+        }}
+        className="block w-full cursor-pointer rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1"
+      >
+        {card}
+      </div>
+    );
   }
 
   return card;

@@ -94,6 +94,8 @@ export interface MessageAreaRootProps {
   suggestions?: string[] | undefined;
   /** Callback when user clicks a suggestion chip */
   onSuggestionSelect?: ((suggestion: string) => void) | undefined;
+  /** Callback when an agent tool card selects a child session */
+  onAgentSessionSelect?: ((sessionId: string) => void) | undefined;
   /** Children for compound component pattern */
   children?: React.ReactNode | undefined;
 }
