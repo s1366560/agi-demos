@@ -180,6 +180,7 @@ class SubAgentProcess:
             # Build independent message list from context
             bridge = ContextBridge()
             messages = bridge.build_messages(self._context)
+            messages = self._add_tool_scope_guidance(messages)
 
             # Emit subagent_started event (only on first attempt)
             if attempt == 0:
@@ -385,6 +386,43 @@ class SubAgentProcess:
             permission_manager=self._permission_manager,
             artifact_service=self._artifact_service,
         )
+
+    def _add_tool_scope_guidance(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Insert run-specific tool scope guidance into the SubAgent prompt."""
+        guidance = self._build_tool_scope_guidance()
+        if not guidance:
+            return messages
+
+        scoped_messages = list(messages)
+        insert_at = 1 if scoped_messages and scoped_messages[0].get("role") == "system" else 0
+        scoped_messages.insert(insert_at, {"role": "system", "content": guidance})
+        return scoped_messages
+
+    def _build_tool_scope_guidance(self) -> str:
+        """Build explicit guidance for the filtered tools available to this SubAgent."""
+        tool_names = self._available_tool_names()
+        if not tool_names:
+            return (
+                "[SubAgent Tool Scope]\n"
+                "No tools are available in this SubAgent run. Do not call any tool. "
+                "If the task requires tool use, report the missing capability to the parent agent."
+            )
+
+        available_tools = ", ".join(f"`{name}`" for name in tool_names)
+        return (
+            "[SubAgent Tool Scope]\n"
+            f"You can call only these tools in this run: {available_tools}.\n"
+            "Do not call tools that are not listed. If the task requires an unlisted tool, "
+            "report the missing capability and ask the parent agent to reassign or provide it."
+        )
+
+    def _available_tool_names(self) -> list[str]:
+        names: set[str] = set()
+        for tool in self._tools:
+            name = str(getattr(tool, "name", "") or "").strip()
+            if name:
+                names.add(name)
+        return sorted(names)
 
     def _reset_execution_state(self) -> None:
         """Reset mutable state between retry attempts."""

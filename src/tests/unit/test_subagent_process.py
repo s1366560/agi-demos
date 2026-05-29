@@ -7,6 +7,7 @@ Tests for:
 """
 
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -350,6 +351,34 @@ class TestSubAgentProcess:
             base_model="qwen-max",
         )
         assert process._model == "gpt-4o"
+
+    async def test_process_injects_filtered_tool_scope_guidance(self, sample_subagent):
+        from src.infrastructure.agent.subagent.process import SubAgentProcess
+
+        ctx = SubAgentContext(
+            task_description="Research and write a report",
+            system_prompt="Prompt",
+        )
+        process = SubAgentProcess(
+            subagent=sample_subagent,
+            context=ctx,
+            tools=[
+                SimpleNamespace(name="todoread"),
+                SimpleNamespace(name="workspace_report_complete"),
+            ],
+            base_model="qwen-max",
+        )
+
+        messages = process._add_tool_scope_guidance(
+            [{"role": "system", "content": "Prompt"}, {"role": "user", "content": "Task"}]
+        )
+
+        assert messages[1]["role"] == "system"
+        guidance = messages[1]["content"]
+        assert "`todoread`" in guidance
+        assert "`workspace_report_complete`" in guidance
+        assert "Do not call tools that are not listed" in guidance
+        assert "reassign" in guidance
 
     async def test_process_extract_summary_short(self, sample_subagent):
         from src.infrastructure.agent.subagent.process import SubAgentProcess

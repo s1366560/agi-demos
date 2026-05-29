@@ -11,6 +11,8 @@ from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import
     SqlAgentRegistryRepository,
 )
 from src.infrastructure.agent.sisyphus.builtin_agent import (
+    BUILTIN_ALL_ACCESS_ID,
+    build_builtin_all_access_agent,
     build_builtin_sisyphus_agent,
     list_builtin_agents,
 )
@@ -40,11 +42,23 @@ class TestSqlAgentRegistryRepository:
     async def test_get_by_id_resolves_builtin_for_requested_tenant(self) -> None:
         repo = _make_repo()
 
-        agent = await repo.get_by_id("builtin:sisyphus", tenant_id="tenant-1", project_id="proj-1")
+        agent = await repo.get_by_id(
+            BUILTIN_ALL_ACCESS_ID, tenant_id="tenant-1", project_id="proj-1"
+        )
 
         assert agent is not None
         assert agent.tenant_id == "tenant-1"
         assert agent.project_id == "proj-1"
+        assert agent.allowed_tools == ["*"]
+        assert agent.allowed_mcp_servers == ["*"]
+        assert agent.allowed_skills == []
+
+    def test_all_access_builtin_is_first_listed_default(self) -> None:
+        agents = list_builtin_agents(tenant_id="tenant-1", project_id="proj-1")
+
+        assert agents[0].id == BUILTIN_ALL_ACCESS_ID
+        assert agents[0].source == AgentSource.BUILTIN
+        assert build_builtin_all_access_agent("tenant-1").discoverable is True
 
     @pytest.mark.asyncio
     async def test_update_rejects_reserved_builtin_name(self) -> None:
@@ -91,10 +105,20 @@ class TestSqlAgentRegistryRepository:
         agents = await repo.list_by_project("proj-1", tenant_id="tenant-1")
 
         builtin_ids = [
-            agent.id
-            for agent in list_builtin_agents(tenant_id="tenant-1", project_id="proj-1")
+            agent.id for agent in list_builtin_agents(tenant_id="tenant-1", project_id="proj-1")
         ]
         assert [agent.id for agent in agents] == [*builtin_ids, "custom-1"]
+
+    @pytest.mark.asyncio
+    async def test_count_by_tenant_includes_all_builtin_agents(self) -> None:
+        repo = _make_repo()
+        result = MagicMock()
+        result.scalar.return_value = 2
+        repo._session.execute.return_value = result
+
+        count = await repo.count_by_tenant("tenant-1")
+
+        assert count == 2 + len(list_builtin_agents(tenant_id="tenant-1"))
 
     @pytest.mark.asyncio
     async def test_get_by_id_refreshes_existing_identity_map_rows(

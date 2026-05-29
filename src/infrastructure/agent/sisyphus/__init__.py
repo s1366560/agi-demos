@@ -1,12 +1,15 @@
 """Built-in Sisyphus agent support."""
 
 from .builtin_agent import (
+    BUILTIN_ALL_ACCESS_ID,
     BUILTIN_SISYPHUS_ID,
     BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID,
     BUILTIN_WORKSPACE_PLANNER_ID,
     BUILTIN_WORKSPACE_SUPERVISOR_ID,
     BUILTIN_WORKSPACE_VERIFIER_ID,
     BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID,
+    DEFAULT_GENERAL_AGENT_ID,
+    build_builtin_all_access_agent,
     build_builtin_sisyphus_agent,
     build_builtin_workspace_iteration_reviewer_agent,
     build_builtin_workspace_planner_agent,
@@ -17,14 +20,17 @@ from .builtin_agent import (
 from .prompt_builder import SisyphusPromptBuilder, SisyphusPromptContext
 
 __all__ = [
+    "BUILTIN_ALL_ACCESS_ID",
     "BUILTIN_SISYPHUS_ID",
     "BUILTIN_WORKSPACE_ITERATION_REVIEWER_ID",
     "BUILTIN_WORKSPACE_PLANNER_ID",
     "BUILTIN_WORKSPACE_SUPERVISOR_ID",
     "BUILTIN_WORKSPACE_VERIFIER_ID",
     "BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID",
+    "DEFAULT_GENERAL_AGENT_ID",
     "SisyphusPromptBuilder",
     "SisyphusPromptContext",
+    "build_builtin_all_access_agent",
     "build_builtin_sisyphus_agent",
     "build_builtin_workspace_iteration_reviewer_agent",
     "build_builtin_workspace_planner_agent",

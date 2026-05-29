@@ -422,6 +422,31 @@ describe('Agent Workspace hardening', () => {
     expect(overlay.className).toContain('mb-2');
   });
 
+  it('shows the AGI Stack builtin agent as a selectable system agent', () => {
+    useAgentDefinitionStore.setState((state) => ({
+      ...state,
+      definitions: [
+        {
+          id: 'builtin:all-access',
+          name: 'agi-stack',
+          display_name: 'AGI Stack',
+          enabled: true,
+          source: 'builtin',
+          project_id: null,
+        } as any,
+      ],
+    }));
+
+    render(<AgentSwitcher activeAgentId="builtin:all-access" onSelect={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: /AGI Stack/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /AGI Stack/i }));
+    expect(screen.getByRole('option', { name: /AGI Stack/i })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+  });
+
   it('supports keyboard selection in AgentSwitcher like slash/@ popovers', () => {
     useAgentDefinitionStore.setState((state) => ({
       ...state,

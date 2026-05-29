@@ -28,6 +28,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
 import { agentService } from '../../services/agentService';
+import { DEFAULT_GENERAL_AGENT_ID } from '../../constants/agent';
 
 import type {
   Conversation,
@@ -107,7 +108,7 @@ export const initialState = {
   conversationsNextOffset: 0,
 };
 
-const groupedConversationListOptions = { groupByWorkspace: true };
+const groupedConversationListOptions = { groupByWorkspace: false };
 
 function conversationActivityTime(conversation: Conversation): number {
   const rawTimestamp = conversation.updated_at || conversation.created_at;
@@ -136,6 +137,21 @@ function mergeUniqueConversations(
         return timeDiff !== 0 ? timeDiff : b.id.localeCompare(a.id);
       }),
   ];
+}
+
+function appendUniqueConversations(
+  existing: Conversation[],
+  incoming: Conversation[]
+): Conversation[] {
+  if (existing.length === 0) {
+    return incoming;
+  }
+  if (incoming.length === 0) {
+    return existing;
+  }
+
+  const existingIds = new Set(existing.map((conversation) => conversation.id));
+  return [...existing, ...incoming.filter((conversation) => !existingIds.has(conversation.id))];
 }
 
 function responseNextOffset(
@@ -252,7 +268,7 @@ export const useConversationsStore = create<ConversationsState>()(
             groupedConversationListOptions
           );
           set({
-            conversations: mergeUniqueConversations(state.conversations, response.items),
+            conversations: appendUniqueConversations(state.conversations, response.items),
             hasMoreConversations: response.has_more,
             conversationsTotal: response.total,
             conversationsNextOffset: responseNextOffset(response, offset),
@@ -283,6 +299,7 @@ export const useConversationsStore = create<ConversationsState>()(
           const request: CreateConversationRequest = {
             project_id: projectId,
             title,
+            agent_config: { selected_agent_id: DEFAULT_GENERAL_AGENT_ID },
           };
           const conversation = await agentService.createConversation(request);
           const { conversations } = get();

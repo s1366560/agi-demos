@@ -23,6 +23,8 @@ import { message } from 'antd';
 import { GripHorizontal, Download, ChevronDown, GitCompareArrows, Bot, Folder } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { DEFAULT_GENERAL_AGENT_ID } from '@/constants/agent';
+
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
 import { useIsPlanMode, useExecutionStore } from '@/stores/agent/executionStore';
 import { useDoomLoopDetected, useSuggestions } from '@/stores/agent/hitlStore';
@@ -292,7 +294,18 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     );
     const { onAct, onObserve } = useSandboxAgentHandlers(activeSandboxId);
 
-    const [activeAgentId, setActiveAgentId] = useState<string | undefined>(undefined);
+    const [activeAgentId, setActiveAgentId] = useState<string | undefined>(
+      DEFAULT_GENERAL_AGENT_ID
+    );
+
+    useEffect(() => {
+      const selectedAgentId = currentConversation?.agent_config?.['selected_agent_id'];
+      setActiveAgentId(
+        typeof selectedAgentId === 'string' && selectedAgentId
+          ? selectedAgentId
+          : DEFAULT_GENERAL_AGENT_ID
+      );
+    }, [currentConversation?.agent_config, currentConversation?.id]);
 
     // Bind project-scoped sandbox state without creating containers on page load.
     useEffect(() => {

@@ -38,11 +38,13 @@ _EVOLVE_SYSTEM_PROMPT = """You are a skill evolution specialist. Your job is to 
 and improve SKILL.md files to make them more effective.
 
 You will receive:
-1. The current SKILL.md content for a skill
+1. The current SKILL.md content for a skill, or a note that no managed skill exists yet
 2. Session evidence: summaries of real agent sessions that used this skill, with quality scores
 
 Based on the evidence, decide ONE of these actions:
 
+- "create_skill": No managed skill exists yet, but the session evidence shows a reusable
+  workflow worth preserving. Write a complete new SKILL.md.
 - "improve_skill": The skill has issues (unclear instructions, missing edge cases, wrong tool choices).
   Rewrite the FULL SKILL.md to address the problems while preserving what works.
 - "optimize_description": The skill content is good but the description/trigger patterns
@@ -56,12 +58,14 @@ Rules:
 3. If the evidence shows the skill works well, choose "skip".
 4. Keep SKILL.md frontmatter (--- ... ---) intact unless changing description/triggers.
 5. Never remove working instructions — only add or refine.
+6. If no managed skill exists, choose either "create_skill" or "skip"; do not choose
+   "improve_skill" or "optimize_description".
 
 Return ONLY valid JSON (no markdown fences):
 {
-  "action": "improve_skill" | "optimize_description" | "skip",
+  "action": "create_skill" | "improve_skill" | "optimize_description" | "skip",
   "rationale": "Why this decision — cite specific session evidence",
-  "skill_content": "Full improved SKILL.md (only for improve_skill)",
+  "skill_content": "Full SKILL.md content (for create_skill or improve_skill)",
   "description": "Updated description line (only for optimize_description)"
 }"""
 
@@ -100,12 +104,20 @@ class EvolutionEngine:
         Returns the list of created evolution jobs.
         """
         jobs: list[SkillEvolutionJob] = []
-        existing_names = set(groups.keys())
+        existing_names = await self._existing_skill_names(
+            tenant_id=tenant_id,
+            skill_repository=skill_repository,
+            fallback_names=set(groups.keys()),
+        )
 
         for group in groups.values():
             try:
                 job = await self._evolve_one(
-                    group, llm_client, existing_names, tenant_id=tenant_id
+                    group,
+                    llm_client,
+                    existing_names,
+                    tenant_id=tenant_id,
+                    skill_repository=skill_repository,
                 )
                 if job is not None:
                     await repo.save_job(job)
@@ -136,9 +148,19 @@ class EvolutionEngine:
         existing_skill_names: set[str],
         *,
         tenant_id: str,
+        skill_repository: SkillRepositoryPort | None = None,
     ) -> SkillEvolutionJob | None:
-        skill = await self._load_skill(group.skill_name, tenant_id=tenant_id)
-        current_content = skill.full_content or ""
+        skill = await self._load_skill(
+            group.skill_name, tenant_id=tenant_id, skill_repository=skill_repository
+        )
+        current_content = (
+            skill.full_content
+            if skill is not None
+            else (
+                "No managed SKILL.md exists for this skill name yet. "
+                "Use action=create_skill only if the evidence supports a reusable workflow."
+            )
+        )
 
         evidence = self._build_evidence_text(group)
         existing_list = "\n".join(
@@ -170,6 +192,9 @@ class EvolutionEngine:
         rationale = parsed.get("rationale", "")
         candidate_content = parsed.get("skill_content")
         description = parsed.get("description")
+
+        if skill is None and action in {"improve_skill", "optimize_description"}:
+            action = "create_skill" if candidate_content else "skip"
 
         if action == "optimize_description" and description:
             candidate_content = description
@@ -220,10 +245,34 @@ class EvolutionEngine:
             logger.exception("Failed to apply evolution job %s", job.id)
             await repo.update_job_status(job.id, status="pending_review")
 
-    async def _load_skill(self, skill_name: str, *, tenant_id: str) -> Any:  # noqa: ANN401
+    async def _load_skill(
+        self,
+        skill_name: str,
+        *,
+        tenant_id: str,
+        skill_repository: SkillRepositoryPort | None = None,
+    ) -> Any:  # noqa: ANN401
+        if skill_repository is not None:
+            return await skill_repository.get_by_name(tenant_id, skill_name)
         return await self._skill_service.get_skill_by_name(
             tenant_id=tenant_id, skill_name=skill_name
         )
+
+    async def _existing_skill_names(
+        self,
+        *,
+        tenant_id: str,
+        skill_repository: SkillRepositoryPort | None,
+        fallback_names: set[str],
+    ) -> set[str]:
+        if skill_repository is None:
+            return fallback_names
+        try:
+            skills = await skill_repository.list_by_tenant(tenant_id, limit=500)
+        except Exception:
+            logger.exception("Failed to list existing skill names for evolution")
+            return fallback_names
+        return {skill.name for skill in skills}
 
     @staticmethod
     def _build_evidence_text(group: SkillSessionGroup) -> str:

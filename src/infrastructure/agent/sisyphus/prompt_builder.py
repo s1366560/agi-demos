@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 
 @dataclass(frozen=True)
@@ -48,13 +49,15 @@ class SisyphusPromptBuilder:
             "3. Prefer direct tool use over telling the user what should be done.\n"
             "4. Delegate only when a specialized skill or subagent is materially better.\n"
             "5. When you stop, leave the user with a stable outcome, not an unfinished thought.\n"
-            "6. Treat tool output as the source of truth and adjust the plan after each observation."
+            "6. Treat tool output as the source of truth and adjust the plan after each observation.\n"
+            "7. Before delegating, match the subagent's responsibility and allowed tools to the task; "
+            "do not delegate work that requires tools the subagent does not have."
         )
 
     def _build_capabilities_section(self, context: SisyphusPromptContext) -> str:
         tool_lines = self._render_tools(context.tools)
         skill_lines = self._render_named_items(context.skills, "name", "description")
-        subagent_lines = self._render_named_items(context.subagents, "name", "description")
+        subagent_lines = self._render_subagents(context.subagents)
         sections = [
             "## Available Runtime Capabilities",
             tool_lines,
@@ -99,6 +102,50 @@ class SisyphusPromptBuilder:
             description = str(getattr(item, description_attr, "")).strip()
             lines.append(f"- `{name}`: {description}" if description else f"- `{name}`")
         return "\n".join(lines)
+
+    def _render_subagents(self, subagents: list[Any]) -> str:
+        lines: list[str] = []
+        for subagent in subagents:
+            name = str(getattr(subagent, "name", "")).strip()
+            if not name:
+                continue
+            description = self._subagent_description(subagent)
+            allowed_tools = getattr(subagent, "allowed_tools", None)
+            tool_scope = self._format_allowed_tools(allowed_tools)
+            details = [description] if description else []
+            details.append(f"allowed tools: {tool_scope}")
+            lines.append(f"- `{name}`: {'; '.join(details)}")
+        return "\n".join(lines)
+
+    def _subagent_description(self, subagent: object) -> str:
+        for attr_name in ("description", "trigger_description", "system_prompt"):
+            value = str(getattr(subagent, attr_name, "") or "").strip()
+            if value:
+                return self._truncate(value, 220)
+
+        trigger = getattr(subagent, "trigger", None)
+        trigger_description = str(getattr(trigger, "description", "") or "").strip()
+        if trigger_description:
+            return self._truncate(trigger_description, 220)
+        return ""
+
+    def _format_allowed_tools(self, allowed_tools: object) -> str:
+        if allowed_tools is None:
+            return "not declared"
+        if allowed_tools == "*":
+            return "*"
+        if isinstance(allowed_tools, str):
+            return allowed_tools.strip() or "none"
+        if not isinstance(allowed_tools, Iterable):
+            return str(allowed_tools).strip() or "none"
+        tool_values = cast(Iterable[object], allowed_tools)
+        tools = [str(tool).strip() for tool in tool_values if str(tool).strip()]
+        return ", ".join(tools) if tools else "none"
+
+    def _truncate(self, value: str, limit: int) -> str:
+        if len(value) <= limit:
+            return value
+        return value[: limit - 3].rstrip() + "..."
 
     def _build_model_overlay(self, model_name: str) -> str:
         normalized = (model_name or "").strip().lower()

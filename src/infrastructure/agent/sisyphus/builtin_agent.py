@@ -12,6 +12,10 @@ from src.domain.model.agent.agent_source import AgentSource
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger
 
 BUILTIN_AGENT_NAMESPACE = "builtin"
+BUILTIN_ALL_ACCESS_ID = f"{BUILTIN_AGENT_NAMESPACE}:all-access"
+BUILTIN_ALL_ACCESS_NAME = "agi-stack"
+BUILTIN_ALL_ACCESS_DISPLAY_NAME = "AGI Stack"
+DEFAULT_GENERAL_AGENT_ID = BUILTIN_ALL_ACCESS_ID
 BUILTIN_SISYPHUS_ID = f"{BUILTIN_AGENT_NAMESPACE}:sisyphus"
 BUILTIN_SISYPHUS_NAME = "sisyphus"
 BUILTIN_SISYPHUS_DISPLAY_NAME = "Sisyphus"
@@ -31,8 +35,16 @@ BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID = f"{BUILTIN_AGENT_NAMESPACE}:workspace-wo
 BUILTIN_WORKSPACE_WORKTREE_MANAGER_NAME = "workspace-worktree-manager"
 BUILTIN_WORKSPACE_WORKTREE_MANAGER_DISPLAY_NAME = "Workspace Worktree Manager"
 DEFAULT_AGENT_TO_AGENT_ALLOWLIST = (
+    BUILTIN_ALL_ACCESS_ID,
+    BUILTIN_ALL_ACCESS_NAME,
     BUILTIN_SISYPHUS_ID,
     BUILTIN_SISYPHUS_NAME,
+)
+
+_BUILTIN_ALL_ACCESS_SYSTEM_PROMPT = (
+    "You are AGI Stack, the default general-purpose agent for normal conversations. "
+    "Use the full system tool and skill catalog deliberately, choose the smallest useful "
+    "workflow for the user's goal, and carry work through verification before reporting completion."
 )
 
 _BUILTIN_SISYPHUS_SYSTEM_PROMPT = (
@@ -225,6 +237,7 @@ Rules:
 - Do not edit application files, task state, plans, or workspace metadata directly. The runtime records the submitted contract.
 """
 
+
 def is_builtin_agent_id(agent_id: str | None) -> bool:
     """Return whether an agent id refers to a built-in agent."""
     return bool(agent_id and agent_id.startswith(f"{BUILTIN_AGENT_NAMESPACE}:"))
@@ -234,6 +247,7 @@ def is_builtin_agent_name(name: str | None) -> bool:
     """Return whether a name refers to a built-in agent."""
     normalized = (name or "").strip().lower()
     return normalized in {
+        BUILTIN_ALL_ACCESS_NAME,
         BUILTIN_SISYPHUS_NAME,
         BUILTIN_WORKSPACE_PLANNER_NAME,
         BUILTIN_WORKSPACE_VERIFIER_NAME,
@@ -252,6 +266,49 @@ def is_builtin_workspace_contract_agent_id(agent_id: str | None) -> bool:
         BUILTIN_WORKSPACE_SUPERVISOR_ID,
         BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID,
     }
+
+
+def build_builtin_all_access_agent(
+    tenant_id: str,
+    *,
+    project_id: str | None = None,
+) -> Agent:
+    """Create the built-in all-access agent for normal conversations."""
+    now = datetime.now(UTC)
+    return Agent(
+        id=BUILTIN_ALL_ACCESS_ID,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        name=BUILTIN_ALL_ACCESS_NAME,
+        display_name=BUILTIN_ALL_ACCESS_DISPLAY_NAME,
+        system_prompt=_BUILTIN_ALL_ACCESS_SYSTEM_PROMPT,
+        trigger=AgentTrigger(
+            description="Default AGI Stack agent for normal conversations.",
+            keywords=["default", "general", "agi-stack", "all-access"],
+        ),
+        model=AgentModel.INHERIT,
+        temperature=0.2,
+        max_tokens=8192,
+        max_iterations=20,
+        allowed_tools=["*"],
+        allowed_skills=[],
+        allowed_mcp_servers=["*"],
+        can_spawn=True,
+        max_spawn_depth=6,
+        agent_to_agent_enabled=True,
+        discoverable=True,
+        source=AgentSource.BUILTIN,
+        enabled=True,
+        created_at=now,
+        updated_at=now,
+        metadata={
+            "builtin_key": "all_access",
+            "prompt_builder": "default",
+            "runtime_plugin": "all_access",
+            "role": "primary_all_access",
+            "default_for": "normal_conversation",
+        },
+    )
 
 
 def build_builtin_sisyphus_agent(
@@ -554,6 +611,7 @@ def get_builtin_agent_by_id(
 ) -> Agent | None:
     """Resolve a built-in agent by id."""
     builders = {
+        BUILTIN_ALL_ACCESS_ID: build_builtin_all_access_agent,
         BUILTIN_SISYPHUS_ID: build_builtin_sisyphus_agent,
         BUILTIN_WORKSPACE_PLANNER_ID: build_builtin_workspace_planner_agent,
         BUILTIN_WORKSPACE_VERIFIER_ID: build_builtin_workspace_verifier_agent,
@@ -576,6 +634,7 @@ def get_builtin_agent_by_name(
     """Resolve a built-in agent by name."""
     normalized = (name or "").strip().lower()
     builders = {
+        BUILTIN_ALL_ACCESS_NAME: build_builtin_all_access_agent,
         BUILTIN_SISYPHUS_NAME: build_builtin_sisyphus_agent,
         BUILTIN_WORKSPACE_PLANNER_NAME: build_builtin_workspace_planner_agent,
         BUILTIN_WORKSPACE_VERIFIER_NAME: build_builtin_workspace_verifier_agent,
@@ -596,6 +655,7 @@ def list_builtin_agents(
 ) -> list[Agent]:
     """Return the built-in agents available to a tenant."""
     return [
+        build_builtin_all_access_agent(tenant_id=tenant_id, project_id=project_id),
         build_builtin_sisyphus_agent(tenant_id=tenant_id, project_id=project_id),
         build_builtin_workspace_planner_agent(tenant_id=tenant_id, project_id=project_id),
         build_builtin_workspace_verifier_agent(tenant_id=tenant_id, project_id=project_id),

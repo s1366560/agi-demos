@@ -21,7 +21,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from src.configuration.config import Settings
 from src.domain.model.agent import Conversation
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
-from src.infrastructure.agent.sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID
+from src.infrastructure.agent.sisyphus.builtin_agent import DEFAULT_GENERAL_AGENT_ID
 
 if TYPE_CHECKING:
     from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
@@ -323,7 +323,9 @@ class AgentRuntimeBootstrapper:
             app_model_context,
         )
         resolved_agent_id = (
-            agent_id or _selected_agent_id_from_conversation(conversation) or BUILTIN_SISYPHUS_ID
+            agent_id
+            or _selected_agent_id_from_conversation(conversation)
+            or DEFAULT_GENERAL_AGENT_ID
         )
         runtime_mode = self._resolve_runtime_mode(
             configured_mode=settings.agent_runtime_mode,

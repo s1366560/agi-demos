@@ -1,7 +1,7 @@
 """Tests for conversation route hardening."""
 
 import inspect
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -25,6 +25,7 @@ from src.infrastructure.adapters.primary.web.routers.agent.schemas import (
     UpdateConversationTitleRequest,
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentExecutionEvent as DBAgentExecutionEvent,
     Conversation as DBConversation,
     WorkspaceModel,
 )
@@ -257,6 +258,129 @@ async def test_list_conversations_expands_workspace_group_and_names(
     assert {item.workspace_id for item in response.items} == {"ws-group"}
     assert response.next_offset == 1
     assert response.has_more is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_grouped_workspace_conversations_use_stable_activity_order(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = WorkspaceModel(
+        id="ws-stable-order",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        name="Stable Workspace",
+        created_by="user-1",
+    )
+    old_time = datetime.now(UTC) - timedelta(days=2)
+    base_time = datetime.now(UTC)
+    rows = [
+        DBConversation(
+            id="workspace-worker:ws-stable-order:task-old:agent-1:attempt-1",
+            project_id="project-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            title="Old created but active",
+            status=ConversationStatus.ACTIVE.value,
+            agent_config={},
+            meta={},
+            message_count=0,
+            created_at=old_time,
+            updated_at=old_time,
+            current_mode="build",
+            participant_agents=[],
+        ),
+        DBConversation(
+            id="workspace-worker:ws-stable-order:task-b:agent-1:attempt-1",
+            project_id="project-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            title="Tie B",
+            status=ConversationStatus.ACTIVE.value,
+            agent_config={},
+            meta={},
+            message_count=0,
+            created_at=old_time,
+            updated_at=base_time,
+            current_mode="build",
+            participant_agents=[],
+        ),
+        DBConversation(
+            id="workspace-worker:ws-stable-order:task-a:agent-1:attempt-1",
+            project_id="project-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            title="Tie A",
+            status=ConversationStatus.ACTIVE.value,
+            agent_config={},
+            meta={},
+            message_count=0,
+            created_at=old_time,
+            updated_at=base_time,
+            current_mode="build",
+            participant_agents=[],
+        ),
+    ]
+    db_session.add_all([workspace, *rows])
+    db_session.add_all(
+        [
+            DBAgentExecutionEvent(
+                id="event-router-stable-old-newer",
+                conversation_id="workspace-worker:ws-stable-order:task-old:agent-1:attempt-1",
+                message_id="message-router-stable-old-newer",
+                event_type="assistant_message",
+                event_data={},
+                event_time_us=2_000_000,
+                event_counter=0,
+            ),
+            DBAgentExecutionEvent(
+                id="event-router-stable-a",
+                conversation_id="workspace-worker:ws-stable-order:task-a:agent-1:attempt-1",
+                message_id="message-router-stable-a",
+                event_type="assistant_message",
+                event_data={},
+                event_time_us=1_000_000,
+                event_counter=0,
+            ),
+            DBAgentExecutionEvent(
+                id="event-router-stable-b",
+                conversation_id="workspace-worker:ws-stable-order:task-b:agent-1:attempt-1",
+                message_id="message-router-stable-b",
+                event_type="assistant_message",
+                event_data={},
+                event_time_us=1_000_000,
+                event_counter=0,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    container = SimpleNamespace(
+        list_conversations_use_case=lambda _llm: ListUseCase([], total=3)
+    )
+    monkeypatch.setattr(
+        conversations_router, "get_container_with_db", lambda _request, _db: container
+    )
+
+    response = await conversations_router.list_conversations(
+        request=_request_with_container(container),
+        project_id="project-1",
+        status="active",
+        limit=10,
+        offset=0,
+        workspace_id="ws-stable-order",
+        group_by_workspace=True,
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-1",
+        db=db_session,
+    )
+
+    assert [item.id for item in response.items] == [
+        "workspace-worker:ws-stable-order:task-old:agent-1:attempt-1",
+        "workspace-worker:ws-stable-order:task-b:agent-1:attempt-1",
+        "workspace-worker:ws-stable-order:task-a:agent-1:attempt-1",
+    ]
 
 
 def test_list_conversations_accepts_large_workspace_refresh_pages() -> None:

@@ -133,9 +133,11 @@ class SqlAgentRegistryRepository(
         )
 
         result = await self._session.execute(
-            refresh_select_statement(select(AgentDefinitionModel)
-            .where(AgentDefinitionModel.id == agent_id)
-            .execution_options(populate_existing=True))
+            refresh_select_statement(
+                select(AgentDefinitionModel)
+                .where(AgentDefinitionModel.id == agent_id)
+                .execution_options(populate_existing=True)
+            )
         )
         db_agent = result.scalar_one_or_none()
         return self._to_domain(db_agent) if db_agent else None
@@ -154,10 +156,12 @@ class SqlAgentRegistryRepository(
         )
 
         result = await self._session.execute(
-            refresh_select_statement(select(AgentDefinitionModel)
-            .where(AgentDefinitionModel.tenant_id == tenant_id)
-            .where(AgentDefinitionModel.name == name)
-            .execution_options(populate_existing=True))
+            refresh_select_statement(
+                select(AgentDefinitionModel)
+                .where(AgentDefinitionModel.tenant_id == tenant_id)
+                .where(AgentDefinitionModel.name == name)
+                .execution_options(populate_existing=True)
+            )
         )
         db_agent = result.scalar_one_or_none()
         return self._to_domain(db_agent) if db_agent else None
@@ -171,9 +175,11 @@ class SqlAgentRegistryRepository(
         )
 
         result = await self._session.execute(
-            refresh_select_statement(select(AgentDefinitionModel)
-            .where(AgentDefinitionModel.id == agent.id)
-            .execution_options(populate_existing=True))
+            refresh_select_statement(
+                select(AgentDefinitionModel)
+                .where(AgentDefinitionModel.id == agent.id)
+                .execution_options(populate_existing=True)
+            )
         )
         db_agent = result.scalar_one_or_none()
 
@@ -230,7 +236,9 @@ class SqlAgentRegistryRepository(
         )
 
         result = await self._session.execute(
-            refresh_select_statement(delete(AgentDefinitionModel).where(AgentDefinitionModel.id == agent_id))
+            refresh_select_statement(
+                delete(AgentDefinitionModel).where(AgentDefinitionModel.id == agent_id)
+            )
         )
 
         if cast(CursorResult[Any], result).rowcount == 0:
@@ -262,7 +270,9 @@ class SqlAgentRegistryRepository(
         db_agents: Sequence[AgentDefinitionModel] = ()
         if db_limit > 0:
             query = (
-                query.order_by(AgentDefinitionModel.created_at.desc()).limit(db_limit).offset(db_offset)
+                query.order_by(AgentDefinitionModel.created_at.desc())
+                .limit(db_limit)
+                .offset(db_offset)
             )
             result = await self._session.execute(
                 refresh_select_statement(query.execution_options(populate_existing=True))
@@ -303,7 +313,9 @@ class SqlAgentRegistryRepository(
 
         query = query.order_by(AgentDefinitionModel.created_at.desc())
 
-        result = await self._session.execute(refresh_select_statement(query.execution_options(populate_existing=True)))
+        result = await self._session.execute(
+            refresh_select_statement(query.execution_options(populate_existing=True))
+        )
         db_agents = result.scalars().all()
 
         resolved_tenant_id = tenant_id or BUILTIN_AGENT_NAMESPACE
@@ -327,9 +339,11 @@ class SqlAgentRegistryRepository(
         )
 
         result = await self._session.execute(
-            refresh_select_statement(select(AgentDefinitionModel)
-            .where(AgentDefinitionModel.id == agent_id)
-            .execution_options(populate_existing=True))
+            refresh_select_statement(
+                select(AgentDefinitionModel)
+                .where(AgentDefinitionModel.id == agent_id)
+                .execution_options(populate_existing=True)
+            )
         )
         db_agent = result.scalar_one_or_none()
 
@@ -375,7 +389,7 @@ class SqlAgentRegistryRepository(
             query = query.where(AgentDefinitionModel.enabled.is_(True))
 
         result = await self._session.execute(refresh_select_statement(query))
-        builtin_count = 1
+        builtin_count = len(list_builtin_agents(tenant_id=tenant_id))
         return int(result.scalar() or 0) + builtin_count
 
     def _to_domain(self, db_agent: object) -> Agent | None:

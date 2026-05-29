@@ -78,10 +78,7 @@ _DERIVED_NON_DISPLAYABLE: set[AgentEventType] = {
 }
 
 _NON_DISPLAYABLE_EVENT_TYPES: set[AgentEventType] = (
-    DELTA_EVENT_TYPES
-    | INTERNAL_EVENT_TYPES
-    | _LIFECYCLE_NON_DISPLAYABLE
-    | _DERIVED_NON_DISPLAYABLE
+    DELTA_EVENT_TYPES | INTERNAL_EVENT_TYPES | _LIFECYCLE_NON_DISPLAYABLE | _DERIVED_NON_DISPLAYABLE
 )
 
 _DISPLAYABLE_EVENTS: set[str] = {
@@ -100,12 +97,25 @@ async def _verify_conversation_access(
     if owner_id != current_user.id:
         raise HTTPException(status_code=403, detail=_("Access denied"))
 
+
 # Legacy alias event-type strings that the agent has historically emitted but
 # are not first-class members of ``AgentEventType``.  Preserve replay parity.
 _DISPLAYABLE_EVENTS.update(
     {
         "permission_requested",  # legacy alias for permission_asked
         "permission_granted",  # legacy alias for permission_replied
+        # Sessionized / chained SubAgent events predate AgentEventType but the
+        # live SSE adapter renders them as first-class timeline items.
+        "subagent_run_started",
+        "subagent_run_completed",
+        "subagent_run_failed",
+        "subagent_session_spawned",
+        "subagent_session_message_sent",
+        "subagent_announce_giveup",
+        "chain_started",
+        "chain_step_started",
+        "chain_step_completed",
+        "chain_completed",
     }
 )
 
@@ -203,7 +213,11 @@ def _build_completion_map(
             continue
 
         last_assistant_event = next(
-            (event for event in reversed(message_events) if event.event_type == "assistant_message"),
+            (
+                event
+                for event in reversed(message_events)
+                if event.event_type == "assistant_message"
+            ),
             None,
         )
         if last_assistant_event is None:
@@ -532,6 +546,244 @@ def _build_canvas_updated(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any
     }
 
 
+def _build_subagent_routed(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "subagentId": data.get("subagent_id", ""),
+        "subagentName": data.get("subagent_name", ""),
+        "confidence": data.get("confidence", 0),
+        "reason": data.get("reason") or data.get("match_reason", ""),
+    }
+
+
+def _build_subagent_started(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "subagentId": data.get("subagent_id", ""),
+        "subagentName": data.get("subagent_name", ""),
+        "task": data.get("task", ""),
+    }
+
+
+def _build_subagent_completed(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "subagentId": data.get("subagent_id", ""),
+        "subagentName": data.get("subagent_name"),
+        "summary": data.get("summary") or data.get("final_content", ""),
+        "tokensUsed": data.get("tokens_used", 0),
+        "executionTimeMs": data.get("execution_time_ms", 0),
+        "success": data.get("success", True),
+    }
+
+
+def _build_subagent_failed(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "subagentId": data.get("subagent_id", ""),
+        "subagentName": data.get("subagent_name"),
+        "error": data.get("error", ""),
+    }
+
+
+def _build_subagent_run(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "subagentId": data.get("run_id", ""),
+        "subagentName": data.get("subagent_name", ""),
+        "task": data.get("task", ""),
+        "status": data.get("status", ""),
+        "summary": data.get("summary"),
+        "error": data.get("error"),
+        "executionTimeMs": data.get("execution_time_ms"),
+        "tokensUsed": data.get("tokens_used"),
+    }
+
+
+def _build_subagent_session_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "conversationId": data.get("conversation_id", ""),
+        "subagentId": data.get("run_id", ""),
+        "subagentName": data.get("subagent_name", ""),
+    }
+
+
+def _build_subagent_session_message_sent(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "conversationId": data.get("conversation_id", ""),
+        "parentSubagentId": data.get("parent_run_id", ""),
+        "subagentId": data.get("run_id", ""),
+        "subagentName": data.get("subagent_name", ""),
+    }
+
+
+def _build_subagent_announce_retry(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "conversationId": data.get("conversation_id") or data.get("session_id", ""),
+        "subagentId": data.get("run_id") or data.get("agent_id", ""),
+        "subagentName": data.get("subagent_name", ""),
+        "attempt": data.get("attempt", 0),
+        "error": data.get("error", ""),
+        "nextDelayMs": data.get("next_delay_ms") or data.get("delay_ms", 0),
+    }
+
+
+def _build_subagent_announce_giveup(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "conversationId": data.get("conversation_id") or data.get("session_id", ""),
+        "subagentId": data.get("run_id") or data.get("agent_id", ""),
+        "subagentName": data.get("subagent_name", ""),
+        "attempts": data.get("attempts", 0),
+        "error": data.get("error") or data.get("last_error", ""),
+    }
+
+
+def _build_subagent_queued(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "subagentId": data.get("subagent_id", ""),
+        "subagentName": data.get("subagent_name"),
+        "queuePosition": data.get("queue_position"),
+        "reason": data.get("reason"),
+    }
+
+
+def _build_subagent_killed(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "subagentId": data.get("subagent_id", ""),
+        "subagentName": data.get("subagent_name"),
+        "kill_reason": data.get("kill_reason"),
+        "error": data.get("error"),
+    }
+
+
+def _build_subagent_steered(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "subagentId": data.get("subagent_id", ""),
+        "subagentName": data.get("subagent_name"),
+        "instruction": data.get("instruction"),
+    }
+
+
+def _build_subagent_depth_limited(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "subagentName": data.get("subagent_name"),
+        "current_depth": data.get("current_depth"),
+        "max_depth": data.get("max_depth"),
+        "parentSubagentName": data.get("parent_subagent_name"),
+    }
+
+
+def _build_subagent_session_update(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "subagentId": data.get("subagent_id", ""),
+        "subagentName": data.get("subagent_name"),
+        "progress": data.get("progress"),
+        "statusMessage": data.get("status_message"),
+        "tokensUsed": data.get("tokens_used"),
+        "toolCallsCount": data.get("tool_calls_count"),
+    }
+
+
+def _build_parallel_started(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "taskCount": data.get("task_count", 0),
+        "subtasks": data.get("subtasks", []),
+    }
+
+
+def _build_parallel_completed(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "results": data.get("results", []),
+        "totalTimeMs": data.get("total_time_ms", 0),
+    }
+
+
+def _build_chain_started(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "stepCount": data.get("step_count", 0),
+        "chainName": data.get("chain_name", ""),
+    }
+
+
+def _build_chain_step_started(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "stepIndex": data.get("step_index", 0),
+        "stepName": data.get("step_name", ""),
+        "subagentName": data.get("subagent_name", ""),
+    }
+
+
+def _build_chain_step_completed(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "stepIndex": data.get("step_index", 0),
+        "summary": data.get("summary", ""),
+        "success": data.get("success"),
+    }
+
+
+def _build_chain_completed(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "totalSteps": data.get("total_steps", 0),
+        "totalTimeMs": data.get("total_time_ms", 0),
+        "success": data.get("success"),
+    }
+
+
+def _build_background_launched(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "executionId": data.get("execution_id", ""),
+        "subagentName": data.get("subagent_name", ""),
+        "task": data.get("task", ""),
+    }
+
+
+def _build_agent_spawned(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "agentId": data.get("agent_id", ""),
+        "agentName": data.get("agent_name"),
+        "parentAgentId": data.get("parent_agent_id"),
+        "childSessionId": data.get("child_session_id"),
+        "mode": data.get("mode", "autonomous"),
+        "taskSummary": data.get("task_summary"),
+    }
+
+
+def _build_agent_completed(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "agentId": data.get("agent_id", ""),
+        "agentName": data.get("agent_name"),
+        "parentAgentId": data.get("parent_agent_id"),
+        "sessionId": data.get("session_id"),
+        "result": data.get("result"),
+        "success": data.get("success", False),
+        "artifacts": data.get("artifacts", []),
+    }
+
+
+def _build_agent_message_sent(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "fromAgentId": data.get("from_agent_id", ""),
+        "toAgentId": data.get("to_agent_id", ""),
+        "fromAgentName": data.get("from_agent_name", ""),
+        "toAgentName": data.get("to_agent_name", ""),
+        "messagePreview": data.get("message_preview", ""),
+    }
+
+
+def _build_agent_message_received(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "agentId": data.get("agent_id", ""),
+        "agentName": data.get("agent_name", ""),
+        "fromAgentId": data.get("from_agent_id", ""),
+        "fromAgentName": data.get("from_agent_name", ""),
+        "messagePreview": data.get("message_preview", ""),
+    }
+
+
+def _build_agent_stopped(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    return {
+        "agentId": data.get("agent_id", ""),
+        "agentName": data.get("agent_name"),
+        "reason": data.get("reason"),
+        "stoppedBy": data.get("stopped_by"),
+    }
+
+
 # Dispatch dict: event_type -> builder function
 _EVENT_BUILDERS: dict[str, Any] = {
     "user_message": _build_user_message,
@@ -557,6 +809,34 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "permission_granted": _build_permission_replied,
     "permission_replied": _build_permission_replied,
     "canvas_updated": _build_canvas_updated,
+    "subagent_routed": _build_subagent_routed,
+    "subagent_started": _build_subagent_started,
+    "subagent_completed": _build_subagent_completed,
+    "subagent_failed": _build_subagent_failed,
+    "subagent_run_started": _build_subagent_run,
+    "subagent_run_completed": _build_subagent_run,
+    "subagent_run_failed": _build_subagent_run,
+    "subagent_session_spawned": _build_subagent_session_spawned,
+    "subagent_session_message_sent": _build_subagent_session_message_sent,
+    "subagent_announce_retry": _build_subagent_announce_retry,
+    "subagent_announce_giveup": _build_subagent_announce_giveup,
+    "subagent_queued": _build_subagent_queued,
+    "subagent_killed": _build_subagent_killed,
+    "subagent_steered": _build_subagent_steered,
+    "subagent_depth_limited": _build_subagent_depth_limited,
+    "subagent_session_update": _build_subagent_session_update,
+    "parallel_started": _build_parallel_started,
+    "parallel_completed": _build_parallel_completed,
+    "chain_started": _build_chain_started,
+    "chain_step_started": _build_chain_step_started,
+    "chain_step_completed": _build_chain_step_completed,
+    "chain_completed": _build_chain_completed,
+    "background_launched": _build_background_launched,
+    "agent_spawned": _build_agent_spawned,
+    "agent_completed": _build_agent_completed,
+    "agent_message_sent": _build_agent_message_sent,
+    "agent_message_received": _build_agent_message_received,
+    "agent_stopped": _build_agent_stopped,
 }
 
 
@@ -734,8 +1014,7 @@ async def get_conversation_messages(
             if event.event_type == "artifact_created" and event.message_id
         }
         message_events_by_id = await event_repo.get_events_by_message_ids(
-            conversation_id,
-            visible_assistant_message_ids | visible_artifact_message_ids
+            conversation_id, visible_assistant_message_ids | visible_artifact_message_ids
         )
         completion_map = _build_completion_map(
             {
@@ -831,9 +1110,7 @@ async def get_conversation_execution(
         raise HTTPException(status_code=404, detail=_("Conversation not found")) from e
     except Exception as exc:
         logger.exception("Error getting conversation execution history")
-        raise HTTPException(
-            status_code=500, detail=_("Failed to get execution history")
-        ) from exc
+        raise HTTPException(status_code=500, detail=_("Failed to get execution history")) from exc
 
 
 @router.get("/conversations/{conversation_id}/tool-executions")

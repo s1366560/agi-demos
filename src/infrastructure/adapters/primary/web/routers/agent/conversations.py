@@ -6,10 +6,10 @@ CRUD operations for Agent conversations.
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import BigInteger, desc, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import ColumnElement, Select, Subquery
@@ -34,6 +34,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
     SqlConversationRepository,
+    conversation_activity_order,
 )
 from src.infrastructure.i18n import gettext as _
 
@@ -100,17 +101,17 @@ def _last_activity_subquery() -> Subquery:
 
 def _ordered_conversation_query() -> Select[tuple[ConversationModel]]:
     last_activity_subq = _last_activity_subquery()
-    created_at_us = func.cast(
-        func.extract("epoch", ConversationModel.created_at) * 1_000_000,
-        BigInteger,
-    )
     return (
         select(ConversationModel)
         .outerjoin(
             last_activity_subq,
             ConversationModel.id == last_activity_subq.c.conversation_id,
         )
-        .order_by(desc(func.coalesce(last_activity_subq.c.last_event_time_us, created_at_us)))
+        .order_by(
+            *conversation_activity_order(
+                cast("ColumnElement[int]", last_activity_subq.c.last_event_time_us)
+            )
+        )
     )
 
 

@@ -415,6 +415,45 @@ describe('TenantChatSidebar', () => {
     expect(screen.queryByText('Unknown workspace')).not.toBeInTheDocument();
   });
 
+  it('does not move later workspace conversations ahead of newer normal conversations', () => {
+    conversationsState.conversations = [
+      {
+        id: 'workspace-verifier:ws-current:node-b2768f4c07e7:agent-1:attempt-1',
+        title: 'Workspace Verification Gate - node-b2768f4c07e7',
+        created_at: '2026-04-17T03:00:00.000Z',
+        status: 'active',
+        workspace_id: 'ws-current',
+        linked_workspace_task_id: 'node-b2768f4c07e7',
+      },
+      {
+        id: 'normal-recent',
+        title: 'Recent normal conversation',
+        created_at: '2026-04-17T02:00:00.000Z',
+        status: 'idle',
+      },
+      {
+        id: 'workspace-worker:ws-current:node-b2768f4c07e7:agent-1:attempt-2',
+        title: 'Workspace Worker - node-b2768f4c07e7',
+        created_at: '2026-04-17T01:00:00.000Z',
+        status: 'active',
+        workspace_id: 'ws-current',
+        linked_workspace_task_id: 'node-b2768f4c07e7',
+      },
+    ];
+
+    const { container } = render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-1&workspaceId=ws-current',
+    });
+
+    const sidebarText = container.textContent ?? '';
+    expect(sidebarText.indexOf('Fix Drone deploy pipeline')).toBeLessThan(
+      sidebarText.indexOf('Recent normal conversation')
+    );
+    expect(sidebarText.indexOf('Recent normal conversation')).toBeLessThan(
+      sidebarText.lastIndexOf('Fix Drone deploy pipeline')
+    );
+  });
+
   it('scrolls the selected conversation into view on distant session switches', async () => {
     agentState.activeConversationId = 'conv-1';
     conversationsState.conversations = Array.from({ length: 50 }, (_, index) => {

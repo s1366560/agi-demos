@@ -77,6 +77,7 @@ type ConversationListSection =
   | {
       type: 'workspace';
       id: string;
+      groupKey: string;
       workspaceTitle: string;
       conversations: ConversationWithProject[];
     };
@@ -248,7 +249,6 @@ function buildConversationSections(
   t: ReturnType<typeof useTranslation>['t']
 ): ConversationListSection[] {
   const sections: ConversationListSection[] = [];
-  const workspaceSectionIndex = new Map<string, number>();
 
   for (const conversation of conversations) {
     const display = buildConversationDisplay(conversation, t, '');
@@ -258,21 +258,18 @@ function buildConversationSections(
     }
 
     const workspaceKey = workspaceIdFromConversation(conversation) ?? display.contextLabel;
-    const sectionId = `workspace:${workspaceKey}`;
-    const existingIndex = workspaceSectionIndex.get(sectionId);
+    const sectionGroupKey = `workspace:${workspaceKey}`;
+    const previousSection = sections[sections.length - 1];
 
-    if (existingIndex !== undefined) {
-      const section = sections[existingIndex];
-      if (section?.type === 'workspace') {
-        section.conversations.push(conversation);
-      }
+    if (previousSection?.type === 'workspace' && previousSection.groupKey === sectionGroupKey) {
+      previousSection.conversations.push(conversation);
       continue;
     }
 
-    workspaceSectionIndex.set(sectionId, sections.length);
     sections.push({
       type: 'workspace',
-      id: sectionId,
+      id: `${sectionGroupKey}:${sections.length}`,
+      groupKey: sectionGroupKey,
       workspaceTitle: display.contextLabel,
       conversations: [conversation],
     });

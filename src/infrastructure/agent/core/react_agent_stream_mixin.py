@@ -43,7 +43,10 @@ from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 from ..i18n import directive_for, resolve_response_language
 from ..plugins.selection_pipeline import ToolSelectionContext
 from ..routing import ExecutionPath, RoutingDecision
-from ..sisyphus.builtin_agent import BUILTIN_SISYPHUS_ID, build_builtin_sisyphus_agent
+from ..sisyphus.builtin_agent import (
+    DEFAULT_GENERAL_AGENT_ID,
+    build_builtin_all_access_agent,
+)
 from ..skill import SkillProtocol
 from ..workspace.runtime_role_contract import (
     WORKSPACE_ROLE_CONTRACT,
@@ -1360,7 +1363,7 @@ class StreamMixin:
         # Phase 4b: Filesystem skill loading (lazy, once per agent instance)
         await self._load_filesystem_skills(tenant_id, project_id)
 
-        resolved_agent_id = agent_id or BUILTIN_SISYPHUS_ID
+        resolved_agent_id = agent_id or DEFAULT_GENERAL_AGENT_ID
         selected_agent = await self._load_selected_agent(
             agent_id=resolved_agent_id,
             tenant_id=tenant_id,
@@ -1368,10 +1371,10 @@ class StreamMixin:
         )
         if selected_agent is None:
             logger.warning(
-                "[ReActAgent] Falling back to built-in Sisyphus for missing agent %s",
+                "[ReActAgent] Falling back to built-in all-access agent for missing agent %s",
                 resolved_agent_id,
             )
-            selected_agent = build_builtin_sisyphus_agent(
+            selected_agent = build_builtin_all_access_agent(
                 tenant_id=tenant_id,
                 project_id=project_id,
             )

@@ -55,7 +55,7 @@ def _activity_time_us() -> ColumnElement[int]:
     )
 
 
-def _conversation_activity_order(
+def conversation_activity_order(
     last_event_time_us: ColumnElement[int],
 ) -> tuple[ColumnElement[object], ...]:
     """Stable newest-first ordering for conversation list pagination."""
@@ -242,7 +242,7 @@ class SqlConversationRepository(
         # activity time, then deterministic tie-breakers for stable pagination.
         query = (
             query.order_by(
-                *_conversation_activity_order(
+                *conversation_activity_order(
                     cast("ColumnElement[int]", last_activity_subq.c.last_event_time_us)
                 )
             )
@@ -302,7 +302,7 @@ class SqlConversationRepository(
         # activity time, then deterministic tie-breakers for stable pagination.
         query = (
             query.order_by(
-                *_conversation_activity_order(
+                *conversation_activity_order(
                     cast("ColumnElement[int]", last_activity_subq.c.last_event_time_us)
                 )
             )

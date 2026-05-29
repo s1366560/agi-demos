@@ -167,7 +167,7 @@ describe('ConversationsStore', () => {
       expect(conversationsLoading).toBe(false);
       expect(conversationsError).toBe(null);
       expect(listConversationsMock).toHaveBeenCalledWith('proj-1', undefined, 10, 0, undefined, {
-        groupByWorkspace: true,
+        groupByWorkspace: false,
       });
     });
 
@@ -185,7 +185,7 @@ describe('ConversationsStore', () => {
       await useConversationsStore.getState().listConversations('proj-1', 'active');
 
       expect(listConversationsMock).toHaveBeenCalledWith('proj-1', 'active', 10, 0, undefined, {
-        groupByWorkspace: true,
+        groupByWorkspace: false,
       });
     });
 
@@ -200,7 +200,7 @@ describe('ConversationsStore', () => {
       await useConversationsStore.getState().listConversations('proj-1', undefined, 100);
 
       expect(listConversationsMock).toHaveBeenCalledWith('proj-1', undefined, 100, 0, undefined, {
-        groupByWorkspace: true,
+        groupByWorkspace: false,
       });
     });
 
@@ -273,7 +273,7 @@ describe('ConversationsStore', () => {
   });
 
   describe('loadMoreConversations', () => {
-    it('keeps refreshed incoming order when merging duplicate conversations', async () => {
+    it('appends older pages without moving existing conversations behind them', async () => {
       const olderConversation = {
         ...createMockConversation('conv-old', 'proj-1', 'Old'),
         updated_at: '2024-01-01T00:00:00Z',
@@ -282,24 +282,29 @@ describe('ConversationsStore', () => {
         ...createMockConversation('conv-refresh', 'proj-1', 'Refreshed'),
         updated_at: '2024-01-03T00:00:00Z',
       };
+      const nextPageConversation = {
+        ...createMockConversation('conv-next-page', 'proj-1', 'Next Page'),
+        updated_at: '2023-12-31T00:00:00Z',
+      };
 
       useConversationsStore.setState({
-        conversations: [olderConversation, refreshedConversation],
+        conversations: [refreshedConversation, olderConversation],
         hasMoreConversations: true,
         conversationsNextOffset: 2,
       });
 
       listConversationsMock.mockResolvedValue({
-        items: [refreshedConversation],
+        items: [nextPageConversation, refreshedConversation],
         has_more: false,
-        total: 2,
+        total: 3,
         offset: 2,
       });
 
       await useConversationsStore.getState().loadMoreConversations('proj-1');
 
-      expect(useConversationsStore.getState().conversations.map((conversation) => conversation.id))
-        .toEqual(['conv-refresh', 'conv-old']);
+      expect(
+        useConversationsStore.getState().conversations.map((conversation) => conversation.id)
+      ).toEqual(['conv-refresh', 'conv-old', 'conv-next-page']);
     });
   });
 
@@ -322,6 +327,7 @@ describe('ConversationsStore', () => {
       expect(createConversationMock).toHaveBeenCalledWith({
         project_id: 'proj-1',
         title: 'New Chat',
+        agent_config: { selected_agent_id: 'builtin:all-access' },
       });
     });
 
@@ -335,6 +341,7 @@ describe('ConversationsStore', () => {
       expect(createConversationMock).toHaveBeenCalledWith({
         project_id: 'proj-1',
         title: 'Custom Title',
+        agent_config: { selected_agent_id: 'builtin:all-access' },
       });
     });
 

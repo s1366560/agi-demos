@@ -747,3 +747,84 @@ class TestAggregator:
         groups = await aggregator.aggregate(repo, tenant_id="t1")
         assert "debug-skill" in groups
         assert groups["debug-skill"].session_count == 5
+
+
+class TestEvolutionEngine:
+    @pytest.mark.asyncio
+    async def test_missing_managed_skill_creates_review_job(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.evolution_engine import (
+            EvolutionEngine,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+
+        class FakeLLMClient:
+            def __init__(self) -> None:
+                self.prompt = ""
+
+            async def generate(self, messages, max_tokens: int):
+                self.prompt = messages[-1].content
+                return {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "action": "create_skill",
+                                        "rationale": "Repeated sessions show a reusable workflow.",
+                                        "skill_content": (
+                                            "---\nname: deep-research\n"
+                                            "description: Run deep research.\n---\n"
+                                            "# Deep Research\n"
+                                        ),
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                }
+
+        group = SkillSessionGroup(skill_name="deep-research")
+        for i in range(5):
+            group.add(
+                SkillEvolutionSession(
+                    id=f"s{i}",
+                    skill_name="deep-research",
+                    tenant_id="t1",
+                    conversation_id=f"c{i}",
+                    user_query="research this",
+                    summary="Needed reusable research workflow.",
+                    success=True,
+                    overall_score=0.8,
+                )
+            )
+
+        skill_service = MagicMock()
+        skill_service.get_skill_by_name = AsyncMock(
+            side_effect=AssertionError("repository-backed lookup should be used")
+        )
+        skill_repo = MagicMock()
+        skill_repo.get_by_name = AsyncMock(return_value=None)
+        skill_repo.list_by_tenant = AsyncMock(return_value=[])
+        repo = MagicMock()
+        repo.save_job = AsyncMock()
+
+        client = FakeLLMClient()
+        engine = EvolutionEngine(
+            SkillEvolutionConfig(), skill_service=skill_service, merger=MagicMock()
+        )
+
+        jobs = await engine.evolve_all(
+            {"deep-research": group},
+            client,
+            repo,
+            tenant_id="t1",
+            skill_repository=skill_repo,
+        )
+
+        assert len(jobs) == 1
+        assert jobs[0].action == "create_skill"
+        assert jobs[0].status == "pending_review"
+        assert "No managed SKILL.md exists" in client.prompt
+        repo.save_job.assert_awaited_once()

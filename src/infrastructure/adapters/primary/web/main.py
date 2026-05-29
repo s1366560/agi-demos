@@ -130,6 +130,9 @@ from src.infrastructure.adapters.primary.web.startup.graph import (
 from src.infrastructure.adapters.primary.web.websocket import (
     router as websocket_router,
 )
+from src.infrastructure.adapters.secondary.persistence.database import (
+    async_session_factory,
+)
 from src.infrastructure.llm.resilience.health_checker import (
     start_health_checker,
     stop_health_checker,
@@ -231,8 +234,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Start Skill Evolution Plugin scheduler (periodic pipeline for SKILL.md improvement)
     try:
-        plugin = container.skill_evolution_plugin()
+        async with async_session_factory() as db:
+            plugin = container.with_db(db).skill_evolution_plugin()
         if plugin is not None:
+            app.state.skill_evolution_plugin = plugin
             await plugin.on_enable()
             logger.info("Skill evolution plugin scheduler started")
         else:
@@ -385,10 +390,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
 
     # Stop Skill Evolution Plugin scheduler
     try:
-        plugin = app.state.container.skill_evolution_plugin()
+        plugin = getattr(app.state, "skill_evolution_plugin", None)
         if plugin is not None:
             await plugin.on_disable()
             logger.info("Skill evolution plugin scheduler stopped")
+            app.state.skill_evolution_plugin = None
     except Exception:
         logger.exception("Error stopping skill evolution plugin")
 
