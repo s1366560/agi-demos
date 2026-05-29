@@ -217,6 +217,7 @@ class AgentRuntimeBootstrapper:
         child_agent_id: str,
         child_agent_name: str,
         mode: str,
+        metadata: dict[str, Any] | None = None,
     ) -> Conversation:
         """Create or load the persisted conversation backing a spawned child session."""
         from src.infrastructure.adapters.secondary.persistence.database import (
@@ -244,6 +245,15 @@ class AgentRuntimeBootstrapper:
             if not resolved_user_id:
                 raise ValueError("Spawned agent session requires a user_id")
 
+            conversation_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+            conversation_metadata.update(
+                {
+                    "spawned_by_agent_id": parent_agent_id,
+                    "spawned_agent_id": child_agent_id,
+                    "spawn_mode": mode,
+                }
+            )
+
             conversation = Conversation(
                 id=child_session_id,
                 project_id=resolved_project_id,
@@ -251,11 +261,7 @@ class AgentRuntimeBootstrapper:
                 user_id=resolved_user_id,
                 title=f"{child_agent_name or child_agent_id} session",
                 agent_config={"selected_agent_id": child_agent_id},
-                metadata={
-                    "spawned_by_agent_id": parent_agent_id,
-                    "spawned_agent_id": child_agent_id,
-                    "spawn_mode": mode,
-                },
+                metadata=conversation_metadata,
                 parent_conversation_id=parent_session_id,
             )
             await repo.save_and_commit(conversation)
@@ -278,6 +284,7 @@ class AgentRuntimeBootstrapper:
             child_agent_id=request.child_agent_id,
             child_agent_name=request.child_agent_name,
             mode=request.mode.value,
+            metadata=request.metadata,
         )
         await self.start_chat_actor(
             conversation=conversation,

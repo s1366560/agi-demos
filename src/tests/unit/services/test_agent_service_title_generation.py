@@ -38,6 +38,7 @@ class MockLLMClient:
         self.fail_count = fail_count
         self.call_count = 0
         self.responses = []
+        self.call_args = None
 
     def set_response(self, response: str):
         """Set the response to return."""
@@ -46,6 +47,7 @@ class MockLLMClient:
     async def ainvoke(self, messages, **kwargs):
         """Mock async invoke (matches LangChain-style interface)."""
         self.call_count += 1
+        self.call_args = (messages, kwargs)
 
         if self.should_fail:
             raise Exception("LLM service unavailable")
@@ -191,10 +193,7 @@ class TestConversationTitleGeneration:
     @pytest.mark.asyncio
     async def test_generate_title_empty_response_returns_fallback(self, agent_service):
         """Test that empty LLM response returns fallback title."""
-        # Mock that returns whitespace (causes len() to fail)
-        response = Mock()
-        response.content = "   "  # Only whitespace
-        agent_service._llm.responses = [response]
+        agent_service._llm.set_response("   ")
 
         title = await agent_service.generate_conversation_title(
             first_message="Test message that is quite long actually",
@@ -205,6 +204,35 @@ class TestConversationTitleGeneration:
         # The fallback uses the first_message when LLM fails
         assert title != "New Conversation"
         assert "Test message" in title or "Test" in title
+
+    @pytest.mark.asyncio
+    async def test_generate_title_strips_prefix_and_trailing_punctuation(self, agent_service):
+        """Test that common LLM wrappers are stripped from generated titles."""
+        agent_service._llm.set_response("Title: Debug Python Imports.")
+
+        title = await agent_service.generate_conversation_title(
+            first_message="My Python imports keep failing",
+            llm=agent_service._llm,
+        )
+
+        assert title == "Debug Python Imports"
+
+    @pytest.mark.asyncio
+    async def test_generate_title_uses_assistant_response_context(self, agent_service):
+        """Test title generation includes the first assistant response when available."""
+        agent_service._llm.set_response("FastAPI Auth Debugging")
+
+        title = await agent_service._conversation_mgr.generate_conversation_title(
+            first_message="It still fails",
+            assistant_response="The traceback points to FastAPI dependency injection.",
+            llm=agent_service._llm,
+        )
+
+        assert title == "FastAPI Auth Debugging"
+        assert agent_service._llm.call_args is not None
+        user_prompt = agent_service._llm.call_args[0][1].content
+        assert "User: It still fails" in user_prompt
+        assert "Assistant: The traceback points to FastAPI dependency injection." in user_prompt
 
     @pytest.mark.asyncio
     async def test_generate_title_llm_failure_returns_fallback(self, agent_service):

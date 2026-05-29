@@ -545,3 +545,35 @@ async def test_extract_first_user_message_scopes_event_lookup_to_conversation() 
         conversation_id="conv-1",
         message_id="msg-1",
     )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_extract_title_seed_exchange_reads_user_and_assistant_message() -> None:
+    service = _build_service()
+    service._agent_execution_event_repo.get_events_by_message.return_value = [
+        SimpleNamespace(
+            event_type="user_message",
+            event_data={"content": "it still fails"},
+        ),
+        SimpleNamespace(
+            event_type="thought",
+            event_data={"content": "not title material"},
+        ),
+        SimpleNamespace(
+            event_type="assistant_message",
+            event_data={"content": "The traceback points to FastAPI dependency injection."},
+        ),
+    ]
+
+    user_message, assistant_message = await service._extract_title_seed_exchange(
+        "conv-1",
+        "msg-1",
+    )
+
+    assert user_message == "it still fails"
+    assert assistant_message == "The traceback points to FastAPI dependency injection."
+    service._agent_execution_event_repo.get_events_by_message.assert_awaited_once_with(
+        conversation_id="conv-1",
+        message_id="msg-1",
+    )

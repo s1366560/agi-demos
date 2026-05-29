@@ -527,6 +527,14 @@ class ReActLoop:
             self._last_evaluated_result = LoopResult.STOP
             return
 
+        if goal_check.source == "tasks" and goal_check.pending_tasks > 0:
+            self._pending_completion_status = None
+            self._no_progress_steps = 0
+            yield AgentStatusEvent(status="goal_pending:tasks")
+            yield AgentStatusEvent(status="task_progress_continuation")
+            self._last_evaluated_result = LoopResult.CONTINUE
+            return
+
         self._no_progress_steps += 1
         self._pending_completion_status = None
         yield AgentStatusEvent(status=f"goal_pending:{goal_check.source}")

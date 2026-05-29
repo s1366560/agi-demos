@@ -91,6 +91,9 @@ class ConversationResponse(BaseModel):
     updated_at: str | None = None
     summary: str | None = None
     agent_config: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+    parent_conversation_id: str | None = None
+    branch_point_message_id: str | None = None
     conversation_mode: str | None = None
     workspace_id: str | None = None
     linked_workspace_task_id: str | None = None
@@ -121,6 +124,9 @@ class ConversationResponse(BaseModel):
             updated_at=conversation.updated_at.isoformat() if conversation.updated_at else None,
             summary=conversation.summary,
             agent_config=conversation.agent_config or None,
+            metadata=conversation.metadata or None,
+            parent_conversation_id=conversation.parent_conversation_id,
+            branch_point_message_id=conversation.branch_point_message_id,
             conversation_mode=(
                 conversation.conversation_mode.value
                 if conversation.conversation_mode is not None

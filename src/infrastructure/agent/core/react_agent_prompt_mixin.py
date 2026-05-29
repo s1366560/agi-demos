@@ -381,35 +381,24 @@ class PromptMixin:
             selected_agent=selected_agent,
             tenant_agent_config=tenant_agent_config,
         )
-        is_builtin_sisyphus = (
-            selected_agent is not None and selected_agent.id == BUILTIN_SISYPHUS_ID
-        )
         effective_temperature = (
             selected_agent.temperature
-            if selected_agent is not None and not is_builtin_sisyphus
+            if selected_agent is not None and selected_agent.has_explicit_temperature()
             else tenant_agent_config.llm_temperature
         )
         effective_max_tokens = (
             selected_agent.max_tokens
-            if selected_agent is not None and not is_builtin_sisyphus
+            if selected_agent is not None and selected_agent.has_explicit_max_tokens()
             else self.max_tokens
         )
         effective_max_steps = (
             selected_agent.max_iterations
-            if (
-                selected_agent is not None
-                and not is_builtin_sisyphus
-                and selected_agent.has_explicit_max_iterations()
-            )
+            if selected_agent is not None and selected_agent.has_explicit_max_iterations()
             else tenant_agent_config.max_work_plan_steps
         )
-        if (
-            selected_agent is not None
-            and not is_builtin_sisyphus
-            and not selected_agent.has_explicit_max_iterations()
-        ):
+        if selected_agent is not None and not selected_agent.has_explicit_max_iterations():
             logger.info(
-                "[ReActAgent] Agent %s uses legacy default max_iterations=%s; "
+                "[ReActAgent] Agent %s uses implicit max_iterations=%s; "
                 "falling back to tenant max_work_plan_steps=%s",
                 selected_agent.id,
                 selected_agent.max_iterations,

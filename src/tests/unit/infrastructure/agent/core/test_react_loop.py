@@ -468,7 +468,7 @@ class TestLoopExecution:
     async def test_run_does_not_emit_conversational_goal_achieved_when_tasks_are_pending(
         self, sample_messages, sample_tools, context
     ):
-        """Pending tasks should block conversational completion."""
+        """Pending tasks should continue the loop without tripping no-progress failure."""
         invoker = MockLLMInvoker()
         invoker.set_events(
             [
@@ -492,6 +492,9 @@ class TestLoopExecution:
         assert not any(getattr(e, "status", None) == "goal_achieved:conversational_response" for e in events)
         assert any(getattr(e, "status", None) == "goal_pending:tasks" for e in events)
         assert any(
+            getattr(e, "status", None) == "task_progress_continuation" for e in events
+        )
+        assert not any(
             e.event_type == AgentEventType.ERROR and e.code == "GOAL_NOT_ACHIEVED" for e in events
         )
         assert not any(

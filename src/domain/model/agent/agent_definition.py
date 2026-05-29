@@ -25,6 +25,8 @@ from src.domain.model.agent.workspace_config import WorkspaceConfig
 _RESERVED_AGENT_REFS = frozenset({"__system__"})
 LEGACY_DEFAULT_MAX_ITERATIONS = 10
 MAX_ITERATIONS_EXPLICIT_METADATA_KEY = "max_iterations_explicit"
+MAX_TOKENS_EXPLICIT_METADATA_KEY = "max_tokens_explicit"
+TEMPERATURE_EXPLICIT_METADATA_KEY = "temperature_explicit"
 
 
 @dataclass
@@ -209,12 +211,32 @@ class Agent:
         Legacy agent records were created with a default ``max_iterations=10``
         even when the user never intended to override tenant execution guardrails.
         Treat that legacy default as implicit unless metadata explicitly marks it.
+        Built-in agents must also mark runtime overrides explicitly; otherwise
+        tenant-level agent configuration remains authoritative.
         """
         metadata = self.metadata or {}
         explicit = metadata.get(MAX_ITERATIONS_EXPLICIT_METADATA_KEY)
         if isinstance(explicit, bool):
             return explicit
+        if self.source == AgentSource.BUILTIN:
+            return False
         return self.max_iterations != LEGACY_DEFAULT_MAX_ITERATIONS
+
+    def has_explicit_max_tokens(self) -> bool:
+        """Return whether max_tokens should override runtime configuration."""
+        metadata = self.metadata or {}
+        explicit = metadata.get(MAX_TOKENS_EXPLICIT_METADATA_KEY)
+        if isinstance(explicit, bool):
+            return explicit
+        return self.source != AgentSource.BUILTIN
+
+    def has_explicit_temperature(self) -> bool:
+        """Return whether temperature should override tenant agent configuration."""
+        metadata = self.metadata or {}
+        explicit = metadata.get(TEMPERATURE_EXPLICIT_METADATA_KEY)
+        if isinstance(explicit, bool):
+            return explicit
+        return self.source != AgentSource.BUILTIN
 
     def is_enabled(self) -> bool:
         """Check if agent is enabled."""

@@ -195,6 +195,7 @@ getById:(id) => httpClient.get(`${BASE_URL}/${id}`);            // ✅ (sub-reso
 - Selected agent prompts are appended as `agent_definition_prompt`, not used as base system identity.
 - `sessions_history` reads from DB repositories, not the Redis agent stream.
 - Conversations are stateful — always pass `conversation_id`.
+- Built-in agents must inherit tenant "智能体配置" runtime parameters by default. When adding a builtin in `src/infrastructure/agent/sisyphus/builtin_agent.py`, use `_builtin_metadata(...)` and only set `temperature_explicit`, `max_tokens_explicit`, or `max_iterations_explicit` to `true` when the builtin intentionally overrides the tenant config. Do not add one-off id checks in runtime profile resolution.
 
 ### Ray Actor code changes
 
@@ -308,7 +309,7 @@ Core groups (see `.env.example` for full list): `API_*` · `SECRET_KEY`, `LLM_EN
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **agi-demos** (68758 symbols, 193475 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **agi-demos** (68856 symbols, 193770 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

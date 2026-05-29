@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 
 from src.domain.model.agent.agent_definition import (
     MAX_ITERATIONS_EXPLICIT_METADATA_KEY,
+    MAX_TOKENS_EXPLICIT_METADATA_KEY,
+    TEMPERATURE_EXPLICIT_METADATA_KEY,
     Agent,
 )
 from src.domain.model.agent.agent_source import AgentSource
@@ -238,6 +240,21 @@ Rules:
 """
 
 
+def _builtin_metadata(values: dict[str, object]) -> dict[str, object]:
+    """Return metadata defaults that make tenant runtime config authoritative.
+
+    Built-in agent constructors should only override temperature, max tokens, or
+    max iterations when the corresponding ``*_explicit`` flag is intentionally
+    set to ``True`` in this metadata.
+    """
+    return {
+        TEMPERATURE_EXPLICIT_METADATA_KEY: False,
+        MAX_TOKENS_EXPLICIT_METADATA_KEY: False,
+        MAX_ITERATIONS_EXPLICIT_METADATA_KEY: False,
+        **values,
+    }
+
+
 def is_builtin_agent_id(agent_id: str | None) -> bool:
     """Return whether an agent id refers to a built-in agent."""
     return bool(agent_id and agent_id.startswith(f"{BUILTIN_AGENT_NAMESPACE}:"))
@@ -301,13 +318,15 @@ def build_builtin_all_access_agent(
         enabled=True,
         created_at=now,
         updated_at=now,
-        metadata={
-            "builtin_key": "all_access",
-            "prompt_builder": "default",
-            "runtime_plugin": "all_access",
-            "role": "primary_all_access",
-            "default_for": "normal_conversation",
-        },
+        metadata=_builtin_metadata(
+            {
+                "builtin_key": "all_access",
+                "prompt_builder": "default",
+                "runtime_plugin": "all_access",
+                "role": "primary_all_access",
+                "default_for": "normal_conversation",
+            }
+        ),
     )
 
 
@@ -344,12 +363,14 @@ def build_builtin_sisyphus_agent(
         enabled=True,
         created_at=now,
         updated_at=now,
-        metadata={
-            "builtin_key": "sisyphus",
-            "prompt_builder": "sisyphus",
-            "runtime_plugin": "sisyphus",
-            "role": "primary_orchestrator",
-        },
+        metadata=_builtin_metadata(
+            {
+                "builtin_key": "sisyphus",
+                "prompt_builder": "sisyphus",
+                "runtime_plugin": "sisyphus",
+                "role": "primary_orchestrator",
+            }
+        ),
     )
 
 
@@ -392,14 +413,15 @@ def build_builtin_workspace_planner_agent(
         enabled=True,
         created_at=now,
         updated_at=now,
-        metadata={
-            "builtin_key": "workspace_planner",
-            "prompt_builder": "workspace_planner",
-            "runtime_plugin": "workspace_planner",
-            "role": "workspace_planner",
-            "contract_tool": "workspace_submit_planning_contract",
-            MAX_ITERATIONS_EXPLICIT_METADATA_KEY: False,
-        },
+        metadata=_builtin_metadata(
+            {
+                "builtin_key": "workspace_planner",
+                "prompt_builder": "workspace_planner",
+                "runtime_plugin": "workspace_planner",
+                "role": "workspace_planner",
+                "contract_tool": "workspace_submit_planning_contract",
+            }
+        ),
     )
 
 
@@ -442,14 +464,15 @@ def build_builtin_workspace_verifier_agent(
         enabled=True,
         created_at=now,
         updated_at=now,
-        metadata={
-            "builtin_key": "workspace_verifier",
-            "prompt_builder": "workspace_verifier",
-            "runtime_plugin": "workspace_verifier",
-            "role": "workspace_verifier",
-            "contract_tool": "workspace_submit_verification_judgment",
-            MAX_ITERATIONS_EXPLICIT_METADATA_KEY: False,
-        },
+        metadata=_builtin_metadata(
+            {
+                "builtin_key": "workspace_verifier",
+                "prompt_builder": "workspace_verifier",
+                "runtime_plugin": "workspace_verifier",
+                "role": "workspace_verifier",
+                "contract_tool": "workspace_submit_verification_judgment",
+            }
+        ),
     )
 
 
@@ -492,14 +515,15 @@ def build_builtin_workspace_iteration_reviewer_agent(
         enabled=True,
         created_at=now,
         updated_at=now,
-        metadata={
-            "builtin_key": "workspace_iteration_reviewer",
-            "prompt_builder": "workspace_iteration_reviewer",
-            "runtime_plugin": "workspace_iteration_reviewer",
-            "role": "workspace_iteration_reviewer",
-            "contract_tool": "workspace_submit_iteration_review",
-            MAX_ITERATIONS_EXPLICIT_METADATA_KEY: False,
-        },
+        metadata=_builtin_metadata(
+            {
+                "builtin_key": "workspace_iteration_reviewer",
+                "prompt_builder": "workspace_iteration_reviewer",
+                "runtime_plugin": "workspace_iteration_reviewer",
+                "role": "workspace_iteration_reviewer",
+                "contract_tool": "workspace_submit_iteration_review",
+            }
+        ),
     )
 
 
@@ -542,14 +566,15 @@ def build_builtin_workspace_supervisor_agent(
         enabled=True,
         created_at=now,
         updated_at=now,
-        metadata={
-            "builtin_key": "workspace_supervisor",
-            "prompt_builder": "workspace_supervisor",
-            "runtime_plugin": "workspace_supervisor",
-            "role": "workspace_supervisor",
-            "contract_tool": "workspace_submit_supervisor_decision",
-            MAX_ITERATIONS_EXPLICIT_METADATA_KEY: False,
-        },
+        metadata=_builtin_metadata(
+            {
+                "builtin_key": "workspace_supervisor",
+                "prompt_builder": "workspace_supervisor",
+                "runtime_plugin": "workspace_supervisor",
+                "role": "workspace_supervisor",
+                "contract_tool": "workspace_submit_supervisor_decision",
+            }
+        ),
     )
 
 
@@ -592,14 +617,15 @@ def build_builtin_workspace_worktree_manager_agent(
         enabled=True,
         created_at=now,
         updated_at=now,
-        metadata={
-            "builtin_key": "workspace_worktree_manager",
-            "prompt_builder": "workspace_worktree_manager",
-            "runtime_plugin": "workspace_worktree_manager",
-            "role": "workspace_worktree_manager",
-            "contract_tool": "workspace_submit_worktree_preparation",
-            MAX_ITERATIONS_EXPLICIT_METADATA_KEY: False,
-        },
+        metadata=_builtin_metadata(
+            {
+                "builtin_key": "workspace_worktree_manager",
+                "prompt_builder": "workspace_worktree_manager",
+                "runtime_plugin": "workspace_worktree_manager",
+                "role": "workspace_worktree_manager",
+                "contract_tool": "workspace_submit_worktree_preparation",
+            }
+        ),
     )
 
 

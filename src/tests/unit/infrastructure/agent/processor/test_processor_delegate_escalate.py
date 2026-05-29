@@ -321,6 +321,24 @@ class TestEvaluateNoToolResultDelegation:
         assert any("goal_pending" in e.status for e in status_events)
 
     @pytest.mark.asyncio
+    async def test_pending_tasks_do_not_exhaust_no_progress_budget(self) -> None:
+        proc = self._build_processor_for_eval("I need to continue the task plan.")
+        proc.config.max_no_progress_steps = 1
+        proc._goal_evaluator.evaluate_goal_completion.return_value.pending_tasks = 13
+
+        events = [event async for event in proc._evaluate_no_tool_result("session-1", [])]
+
+        statuses = [event.status for event in events if isinstance(event, AgentStatusEvent)]
+        assert statuses == ["goal_pending:tasks", "task_progress_continuation"]
+        assert not any(
+            isinstance(event, AgentErrorEvent) and event.code == "GOAL_NOT_ACHIEVED"
+            for event in events
+        )
+        assert proc._no_progress_steps == 0
+        assert proc._last_process_result == ProcessorResult.CONTINUE
+        assert SessionProcessor._TOOL_USAGE_REMINDER in proc._response_instructions
+
+    @pytest.mark.asyncio
     async def test_task_ledger_only_replan_requires_tool_calls_before_text_completion(
         self,
     ) -> None:

@@ -114,6 +114,8 @@ class TestTodoReadTool:
 
         assert result.is_error is False
         assert captured["conversation_id"] == "conv-persisted"
+        payload = json.loads(result.output)
+        assert "exact todos[].id" in payload["update_instruction"]
 
     @pytest.mark.asyncio
     async def test_read_uses_workspace_authority_scope(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -241,6 +243,14 @@ class TestTodoWriteTool:
         assert "add" in action_prop["enum"]
         assert "update" in action_prop["enum"]
 
+    def test_update_schema_warns_against_numeric_positions(self) -> None:
+        schema = todowrite_tool.parameters
+        todo_id_prop = schema["properties"]["todo_id"]
+
+        assert todo_id_prop["pattern"] == "^(?!\\d+$).+"
+        assert "Do not use order_index or list positions" in todo_id_prop["description"]
+        assert "never use list positions" in todowrite_tool.description
+
     def test_consume_pending_events_via_context(self) -> None:
         """Events are consumed from ToolContext, not from the tool itself."""
         ctx = _make_ctx()
@@ -350,6 +360,52 @@ class TestTodoWriteTool:
         assert data["success"] is False
         assert "not found" in data["message"].lower()
         assert captured["update_called"] is False
+
+    @pytest.mark.asyncio
+    async def test_update_rejects_numeric_list_position_todo_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Numeric list positions are rejected before repository lookup."""
+        import src.infrastructure.agent.tools.todo_tools as todo_tools_module
+
+        class _DummySession:
+            async def __aenter__(self) -> _DummySession:
+                return self
+
+            async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+                return False
+
+        class _FakeRepo:
+            def __init__(self, session: Any) -> None:
+                _ = session
+
+            async def find_by_id(self, task_id: str) -> Any:
+                _ = task_id
+                raise AssertionError("numeric list positions should not hit repository lookup")
+
+        monkeypatch.setattr(
+            todo_tools_module,
+            "_todowrite_session_factory",
+            lambda: _DummySession(),
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence.sql_agent_task_repository."
+            "SqlAgentTaskRepository",
+            _FakeRepo,
+        )
+
+        ctx = _make_ctx(session_id="session-ephemeral", conversation_id="conv-persisted")
+        result = await todowrite_tool.execute(
+            ctx,
+            action="update",
+            todo_id="1",
+            todos=[{"status": "completed"}],
+        )
+        data = json.loads(result.output)
+
+        assert data["success"] is False
+        assert data["error_code"] == "TODO_ID_IS_LIST_POSITION"
+        assert "Call todoread and retry" in data["retry_instruction"]
 
     @pytest.mark.asyncio
     async def test_add_writes_workspace_execution_tasks_when_workspace_authority_active(

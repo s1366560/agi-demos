@@ -442,8 +442,18 @@ async def _project_done_idle_accepted_attempts_after_tick(
         if not _node_is_done_idle_with_attempt(node) or not node.current_attempt_id:
             continue
         attempt = await _load_plan_attempt(session, node.current_attempt_id)
-        if attempt is None or _attempt_status_value(attempt) != "accepted":
+        if attempt is None:
             continue
+        status = _attempt_status_value(attempt)
+        if status != "accepted":
+            if not _done_idle_node_has_accepted_supervisor_judge(node):
+                continue
+            summary = _accepted_supervisor_judge_summary(node, attempt)
+            attempt.status = WorkspaceTaskSessionAttemptStatus.ACCEPTED.value
+            attempt.leader_feedback = summary
+            attempt.adjudication_reason = "supervisor_decision_accept_node_reconciled"
+            attempt.completed_at = now
+            attempt.updated_at = now
         if not _accepted_attempt_matches_node_expected_commit(node, attempt):
             continue
         if (
@@ -498,6 +508,24 @@ async def _project_done_idle_accepted_attempts_after_tick(
     if changed:
         await repo.save(plan)
     return changed
+
+
+def _done_idle_node_has_accepted_supervisor_judge(node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    return str(metadata.get("last_verification_judge_verdict") or "").lower() == "accepted"
+
+
+def _accepted_supervisor_judge_summary(
+    node: PlanNode,
+    attempt: WorkspaceTaskSessionAttemptModel,
+) -> str:
+    metadata = dict(node.metadata or {})
+    return str(
+        metadata.get("last_verification_summary")
+        or attempt.leader_feedback
+        or attempt.candidate_summary
+        or "accepted terminal attempt"
+    )
 
 
 _PROJECTABLE_DONE_DISPOSITIONS = frozenset(

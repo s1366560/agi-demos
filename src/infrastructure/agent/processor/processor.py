@@ -335,6 +335,7 @@ class SessionProcessor:
         "verification, or project changes, call the appropriate tool instead of "
         "producing another text-only reply."
     )
+    _GOAL_PENDING_REASON_PREFIX = "[GOAL CHECK FEEDBACK]"
     _NATIVE_TOOL_PROTOCOL_GUIDANCE = (
         "When a tool is needed, use the runtime's native tool-call protocol and only "
         "the tools declared for the current step. Never print textual tool-call markup "
@@ -635,6 +636,27 @@ class SessionProcessor:
             item for item in self._response_instructions if item != self._TOOL_USAGE_REMINDER
         ]
 
+    def _queue_goal_pending_reason(self, reason: str) -> None:
+        """Inject the latest failed completion reason into the next model step."""
+        clean_reason = " ".join((reason or "Goal is not complete").split())
+        self._clear_goal_pending_reason()
+        self._response_instructions.append(
+            f"{self._GOAL_PENDING_REASON_PREFIX} Completion is not accepted yet: "
+            f"{clean_reason}. Fix this specific blocker before giving another final answer. "
+            "If task state is the blocker, call todoread and then todowrite update with "
+            "the exact todo_id copied from todoread; do not use list positions like 1 or 2."
+        )
+
+    def _clear_goal_pending_reason(self) -> None:
+        """Remove previously injected completion feedback."""
+        if not self._response_instructions:
+            return
+        self._response_instructions = [
+            item
+            for item in self._response_instructions
+            if not item.startswith(self._GOAL_PENDING_REASON_PREFIX)
+        ]
+
     def _queue_workspace_delegation_recovery_hint(self) -> None:
         """Inject a temporary recovery hint after workspace delegation guardrail failures."""
         if self._WORKSPACE_DELEGATION_RECOVERY_HINT not in self._response_instructions:
@@ -733,6 +755,7 @@ class SessionProcessor:
         self._clear_workspace_delegation_retry_action()
         self._clear_workspace_terminal_report_required_hint()
         self._clear_workspace_contract_tool_required_hint()
+        self._clear_goal_pending_reason()
 
     def _is_workspace_worker_turn(self) -> bool:
         runtime_context = (
@@ -868,6 +891,29 @@ class SessionProcessor:
             return events
         self._last_process_result = ProcessorResult.CONTINUE
         return events
+
+    def _continue_pending_task_goal(self, reason: str) -> list[ProcessorEvent]:
+        """Keep task-backed goals alive while child tasks are still active."""
+        self._pending_completion_status = None
+        self._no_progress_steps = 0
+        self._queue_goal_pending_reason(reason)
+        self._queue_tool_usage_reminder()
+        self._last_process_result = ProcessorResult.CONTINUE
+        return [
+            AgentStatusEvent(status="goal_pending:tasks"),
+            AgentStatusEvent(status="task_progress_continuation"),
+        ]
+
+    def _stop_unachievable_goal(self, reason: str) -> AgentErrorEvent:
+        """Stop when the goal evaluator reports a terminal blocker."""
+        self._reset_tool_usage_reminder_streak()
+        self._pending_completion_status = None
+        self._state = ProcessorState.ERROR
+        self._last_process_result = ProcessorResult.STOP
+        return AgentErrorEvent(
+            message=reason or "Goal cannot be completed",
+            code="GOAL_NOT_ACHIEVED",
+        )
 
     async def _run_workspace_replan_protocol_recovery(
         self,
@@ -1812,14 +1858,12 @@ class SessionProcessor:
             return
 
         if goal_check.should_stop:
-            self._reset_tool_usage_reminder_streak()
-            self._pending_completion_status = None
-            yield AgentErrorEvent(
-                message=goal_check.reason or "Goal cannot be completed",
-                code="GOAL_NOT_ACHIEVED",
-            )
-            self._state = ProcessorState.ERROR
-            self._last_process_result = ProcessorResult.STOP
+            yield self._stop_unachievable_goal(goal_check.reason)
+            return
+
+        if goal_check.source == "tasks" and goal_check.pending_tasks > 0:
+            for evt in self._continue_pending_task_goal(goal_check.reason):
+                yield evt
             return
 
         full_text = self._current_message.get_full_text().strip() if self._current_message else ""
@@ -1866,6 +1910,7 @@ class SessionProcessor:
         # No progress -- check if we should give up
         self._pending_completion_status = None
         self._no_progress_steps += 1
+        self._queue_goal_pending_reason(goal_check.reason)
         yield AgentStatusEvent(status=f"goal_pending:{goal_check.source}")
         if self._no_progress_steps > 1:
             self._queue_tool_usage_reminder()
@@ -1919,9 +1964,13 @@ class SessionProcessor:
                 self._is_workspace_task_ledger_only_turn()
                 and self._pending_completion_status == "goal_achieved:workspace_replan_dispatched"
             )
+            task_reconciled_completion = (
+                self._pending_completion_status == "goal_achieved:llm_task_reconciliation"
+            )
             if (
                 self._saw_task_events
                 and not replan_dispatched
+                and not task_reconciled_completion
                 and not self._goal_evaluator.has_task_reader()
             ):
                 self._pending_completion_status = None
@@ -1933,7 +1982,7 @@ class SessionProcessor:
                 self._state = ProcessorState.ERROR
                 self._last_process_result = ProcessorResult.STOP
                 return
-            if not replan_dispatched:
+            if not replan_dispatched and not task_reconciled_completion:
                 task_gate = await self._goal_evaluator.evaluate_task_completion_gate(session_id)
                 if task_gate is not None and not task_gate.achieved:
                     self._pending_completion_status = None

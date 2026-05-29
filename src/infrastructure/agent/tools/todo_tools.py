@@ -119,6 +119,18 @@ def _todo_status_value(todo: dict[str, Any]) -> str | None:
     return normalized or None
 
 
+def _looks_like_list_position(todo_id: str | None) -> bool:
+    return bool(isinstance(todo_id, str) and todo_id.strip().isdigit())
+
+
+def _todo_id_retry_instruction() -> str:
+    return (
+        "todo_id must be the exact id returned by todoread in todos[].id "
+        "or workspace_task_id. Numeric list positions such as 1 or 2 are invalid. "
+        "Call todoread and retry with the copied id."
+    )
+
+
 def _workspace_todo_requests_cancellation(todo: dict[str, Any]) -> bool:
     return _todo_status_value(todo) == "cancelled"
 
@@ -281,6 +293,10 @@ async def todoread_tool(
         "session_id": ctx.session_id,
         "conversation_id": conversation_id,
         "total_count": len(todos),
+        "update_instruction": (
+            "For todowrite action=update, set todo_id to the exact todos[].id value "
+            "returned here. Do not use order_index, display order, or list positions."
+        ),
         "todos": todos,
     }
     logger.info(
@@ -320,6 +336,15 @@ async def _todowrite_handle_update(
     """Handle the 'update' action for a single task."""
     if not todo_id:
         return {"success": False, "error": "todo_id required for update"}
+    if _looks_like_list_position(todo_id):
+        return {
+            "success": False,
+            "action": "update",
+            "todo_id": todo_id,
+            "error_code": "TODO_ID_IS_LIST_POSITION",
+            "message": _todo_id_retry_instruction(),
+            "retry_instruction": _todo_id_retry_instruction(),
+        }
 
     existing_task = await repo.find_by_id(todo_id)
     if not existing_task or existing_task.conversation_id != conversation_id:
@@ -834,6 +859,8 @@ async def _dispatch_created_workspace_tasks(
         "'add' to append new tasks discovered during execution, "
         "'update' to change a task's status "
         "(pending/in_progress/completed/failed). "
+        "For update, first call todoread and copy the exact todos[].id into todo_id; "
+        "never use list positions such as 1 or 2 as todo_id. "
         "Status changes are displayed in the user's UI in real-time."
     ),
     parameters={
@@ -854,6 +881,14 @@ async def _dispatch_created_workspace_tasks(
                             "type": "string",
                             "description": "Task description",
                         },
+                        "id": {
+                            "type": "string",
+                            "description": (
+                                "Optional stable task id copied from todoread; "
+                                "not a numeric list position."
+                            ),
+                            "pattern": "^(?!\\d+$).+",
+                        },
                         "status": {
                             "type": "string",
                             "description": ("pending, in_progress, completed, failed, cancelled"),
@@ -868,7 +903,12 @@ async def _dispatch_created_workspace_tasks(
             },
             "todo_id": {
                 "type": "string",
-                "description": "For update: the task ID to update",
+                "description": (
+                    "For action=update only: exact id copied from todoread todos[].id "
+                    "or workspace_task_id. Do not use order_index or list positions like "
+                    "'1' or '2'."
+                ),
+                "pattern": "^(?!\\d+$).+",
             },
         },
         "required": ["action"],
@@ -1089,6 +1129,15 @@ async def todowrite_tool(  # noqa: C901, PLR0912, PLR0915
             elif action == "update":
                 if not todo_id:
                     result = {"success": False, "error": "todo_id required for update"}
+                elif _looks_like_list_position(todo_id):
+                    result = {
+                        "success": False,
+                        "action": "update",
+                        "todo_id": todo_id,
+                        "error_code": "TODO_ID_IS_LIST_POSITION",
+                        "message": _todo_id_retry_instruction(),
+                        "retry_instruction": _todo_id_retry_instruction(),
+                    }
                 else:
                     existing_task = await task_repo.find_by_id(todo_id)
                     if existing_task is None or existing_task.workspace_id != workspace_id:

@@ -110,6 +110,76 @@ class TestProcessorGoalCompletion:
         assert result.pending_tasks == 1
 
     @pytest.mark.asyncio
+    async def test_pending_task_goal_can_reconcile_with_llm_completion_evidence(self) -> None:
+        llm_client = AsyncMock()
+        llm_client.generate = AsyncMock(
+            return_value={
+                "content": (
+                    '{"goal_achieved": true, '
+                    '"reason": "The final report and verification evidence satisfy the request."}'
+                )
+            }
+        )
+        evaluator = GoalEvaluator(
+            llm_client=llm_client,
+            tools={
+                "todoread": create_todoread_tool(
+                    [
+                        {"id": "task-real-1", "status": "completed", "content": "Run tests"},
+                        {"id": "task-real-2", "status": "in_progress", "content": "Write report"},
+                    ]
+                )
+            },
+        )
+
+        result = await evaluator.evaluate_goal_completion(
+            session_id="session-1",
+            messages=[
+                {"role": "user", "content": "深度测试文件系统所有工具，生成测试报告与优化建议"},
+                {
+                    "role": "assistant",
+                    "content": "测试已全部完成，报告已保存，12 个工具 36 个用例通过 35 个。",
+                },
+            ],
+        )
+
+        assert result.achieved is True
+        assert result.source == "llm_task_reconciliation"
+        assert "final report" in result.reason
+
+    @pytest.mark.asyncio
+    async def test_pending_task_goal_preserves_task_result_when_llm_rejects_completion(
+        self,
+    ) -> None:
+        llm_client = AsyncMock()
+        llm_client.generate = AsyncMock(
+            return_value={
+                "content": (
+                    '{"goal_achieved": false, '
+                    '"reason": "The report is not present in the conversation."}'
+                )
+            }
+        )
+        evaluator = GoalEvaluator(
+            llm_client=llm_client,
+            tools={
+                "todoread": create_todoread_tool(
+                    [{"id": "task-real-1", "status": "pending", "content": "Write report"}]
+                )
+            },
+        )
+
+        result = await evaluator.evaluate_goal_completion(
+            session_id="session-1",
+            messages=[{"role": "user", "content": "finish task"}],
+        )
+
+        assert result.achieved is False
+        assert result.source == "tasks"
+        assert result.reason == "1 task(s) still in progress"
+        assert result.pending_tasks == 1
+
+    @pytest.mark.asyncio
     async def test_task_goal_all_terminal_success_returns_complete(self, evaluator_with_tasks):
         evaluator = evaluator_with_tasks(
             [

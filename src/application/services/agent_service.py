@@ -670,7 +670,10 @@ class AgentService(AgentServicePort):
             if not conv or conv.title not in ("New Conversation", "New Chat"):
                 return
 
-            first_user_msg = await self._extract_first_user_message(conversation_id, message_id)
+            first_user_msg, first_assistant_msg = await self._extract_title_seed_exchange(
+                conversation_id,
+                message_id,
+            )
             if not first_user_msg:
                 return
 
@@ -679,6 +682,7 @@ class AgentService(AgentServicePort):
                     conversation_id=conversation_id,
                     project_id=conv.project_id,
                     user_message=first_user_msg,
+                    assistant_response=first_assistant_msg,
                 )
             )
             _background_tasks.add(_title_task)
@@ -686,27 +690,46 @@ class AgentService(AgentServicePort):
         except Exception as title_err:
             logger.debug(f"Title generation check failed: {title_err}")
 
-    async def _extract_first_user_message(
+    async def _extract_title_seed_exchange(
         self,
         conversation_id: str,
         message_id: str | None,
-    ) -> str:
-        """Extract the first user message content from event history."""
+    ) -> tuple[str, str]:
+        """Extract the first user/assistant exchange for title generation."""
         if not message_id:
-            return ""
+            return ("", "")
+
+        first_user_msg = ""
+        first_assistant_msg = ""
         try:
             assert self._agent_execution_event_repo is not None
             msg_events = await self._agent_execution_event_repo.get_events_by_message(
                 conversation_id=conversation_id, message_id=message_id
             )
             for me in msg_events:
-                if me.event_type == "user_message":
-                    return str(
-                        me.event_data.get("content", "") if isinstance(me.event_data, dict) else ""
-                    )
+                if not isinstance(me.event_data, dict):
+                    continue
+                content = str(me.event_data.get("content", "")).strip()
+                if not content:
+                    continue
+                if me.event_type == "user_message" and not first_user_msg:
+                    first_user_msg = content
+                elif me.event_type == "assistant_message" and not first_assistant_msg:
+                    first_assistant_msg = content
+                if first_user_msg and first_assistant_msg:
+                    break
         except Exception:
             pass
-        return ""
+        return (first_user_msg, first_assistant_msg)
+
+    async def _extract_first_user_message(
+        self,
+        conversation_id: str,
+        message_id: str | None,
+    ) -> str:
+        """Extract the first user message content from event history."""
+        first_user_msg, _ = await self._extract_title_seed_exchange(conversation_id, message_id)
+        return first_user_msg
 
     def _is_event_already_seen(
         self,
@@ -1348,6 +1371,7 @@ class AgentService(AgentServicePort):
         conversation_id: str,
         project_id: str,
         user_message: str,
+        assistant_response: str = "",
     ) -> None:
         """
         Generate a title for a new conversation and publish title_generated event.
@@ -1375,7 +1399,9 @@ class AgentService(AgentServicePort):
             llm = await self._get_title_llm()
 
             title = await self._conversation_mgr.generate_conversation_title(
-                first_message=user_message, llm=llm
+                first_message=user_message,
+                llm=llm,
+                assistant_response=assistant_response,
             )
 
             # Update the conversation title in DB

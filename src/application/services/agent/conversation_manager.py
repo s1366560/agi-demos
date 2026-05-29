@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -24,6 +25,9 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+_TITLE_PREFIX_RE = re.compile(r"^\s*(?:title|标题)\s*[:：]\s*", re.IGNORECASE)
+_TITLE_TRAILING_PUNCTUATION = "。！？.!?;；:："
 
 
 class ConversationManager:
@@ -169,11 +173,22 @@ class ConversationManager:
         logger.info(f"Updated title for conversation {conversation_id} to: {title}")
         return conversation
 
-    async def generate_conversation_title(self, first_message: str, llm: LLMClient) -> str:
+    async def generate_conversation_title(
+        self,
+        first_message: str,
+        llm: LLMClient,
+        assistant_response: str | None = None,
+    ) -> str:
         """Generate a friendly, concise title for a conversation."""
+        user_snippet = first_message[:500]
+        assistant_snippet = (assistant_response or "")[:500]
+        exchange = f"User: {user_snippet}"
+        if assistant_snippet:
+            exchange = f"{exchange}\n\nAssistant: {assistant_snippet}"
+
         prompt = f"""Generate a short, friendly title (max 50 characters) for a conversation that starts with this message:
 
-"{first_message[:200]}"
+{exchange}
 
 Guidelines:
 - Be concise and descriptive
@@ -181,6 +196,7 @@ Guidelines:
 - Focus on the main topic or question
 - Maximum 50 characters
 - Return ONLY the title, no explanation
+- No quotes, no prefixes like "Title:", no punctuation at the end
 
 Title:"""
 
@@ -198,12 +214,9 @@ Title:"""
                     ]
                 )
 
-                title = response.content.strip().strip('"').strip("'")
-
-                if len(title) > 50:
-                    title = title[:47] + "..."
+                title = self._normalize_generated_title(str(response.content or ""))
                 if not title:
-                    title = "New Conversation"
+                    title = self._generate_fallback_title(first_message)
 
                 logger.info(f"Generated conversation title: {title}")
                 return title
@@ -222,6 +235,16 @@ Title:"""
                     return self._generate_fallback_title(first_message)
 
         return "New Conversation"
+
+    def _normalize_generated_title(self, raw_title: str) -> str:
+        """Normalize an LLM-generated conversation title."""
+        title = raw_title.strip().strip('"').strip("'").strip()
+        title = _TITLE_PREFIX_RE.sub("", title).strip()
+        title = title.rstrip(_TITLE_TRAILING_PUNCTUATION).strip()
+
+        if len(title) > 50:
+            title = title[:47].rstrip() + "..."
+        return title
 
     def _generate_fallback_title(self, first_message: str) -> str:
         """Generate a fallback title from the first message when LLM fails."""

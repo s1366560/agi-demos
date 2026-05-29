@@ -108,7 +108,17 @@ class GoalEvaluator:
                     source="tasks",
                 )
             if tasks:
-                return self._evaluate_task_goal(tasks)
+                task_result = self._evaluate_task_goal(tasks)
+                if task_result.achieved or task_result.should_stop:
+                    return task_result
+                reconciled_result = await self._evaluate_pending_task_goal_with_llm(
+                    tasks,
+                    task_result,
+                    messages,
+                )
+                if reconciled_result is not None:
+                    return reconciled_result
+                return task_result
         return await self._evaluate_llm_goal(messages)
 
     async def evaluate_task_completion_gate(self, session_id: str) -> GoalCheckResult | None:
@@ -548,6 +558,49 @@ class GoalEvaluator:
     # LLM-based evaluation
     # ------------------------------------------------------------------
 
+    async def _evaluate_pending_task_goal_with_llm(
+        self,
+        tasks: list[dict[str, Any]],
+        task_result: GoalCheckResult,
+        messages: list[dict[str, Any]],
+    ) -> GoalCheckResult | None:
+        """Reconcile a pending ordinary task ledger with recent completion evidence."""
+        if task_result.pending_tasks <= 0 or self._llm_client is None:
+            return None
+
+        context_summary = self._build_pending_task_goal_check_context(
+            tasks,
+            task_result,
+            messages,
+        )
+        if not context_summary:
+            return None
+
+        content = await self._call_goal_check_llm(context_summary)
+        if content is None:
+            return None
+
+        parsed = self._extract_goal_json(content)
+        if parsed is None:
+            parsed = self._extract_goal_from_plain_text(content)
+        if parsed is None:
+            logger.debug(
+                "[GoalEvaluator] Task reconciliation payload not parseable: %s",
+                content[:200],
+            )
+            return None
+
+        achieved = self._coerce_goal_achieved_bool(parsed.get("goal_achieved"))
+        if achieved is not True:
+            return None
+
+        reason = str(parsed.get("reason", "")).strip()
+        return GoalCheckResult(
+            achieved=True,
+            reason=reason or "Recent assistant evidence satisfies the goal despite stale tasks",
+            source="llm_task_reconciliation",
+        )
+
     async def _evaluate_llm_goal(self, messages: list[dict[str, Any]]) -> GoalCheckResult:
         """Evaluate completion using explicit LLM self-check in no-task mode."""
         fallback = self._evaluate_goal_from_latest_text()
@@ -612,6 +665,43 @@ class GoalEvaluator:
         if isinstance(response, str):
             return response
         return str(response)
+
+    def _build_pending_task_goal_check_context(
+        self,
+        tasks: list[dict[str, Any]],
+        task_result: GoalCheckResult,
+        messages: list[dict[str, Any]],
+    ) -> str:
+        """Build context for reconciling stale ordinary task ledgers."""
+        base_context = self._build_goal_check_context(messages)
+        counts = self._summarize_task_counts(tasks)
+        pending_examples: list[str] = []
+        for task in tasks:
+            status = str(task.get("status", "")).strip().lower()
+            if status not in {"pending", "in_progress"}:
+                continue
+            task_id = str(task.get("id", "")).strip()
+            content = str(task.get("content", "")).strip()
+            pending_examples.append(f"- id={task_id or '<missing>'} status={status} content={content[:160]}")
+            if len(pending_examples) >= 8:
+                break
+
+        lines = [
+            base_context,
+            "",
+            "Task ledger reconciliation:",
+            f"- current_task_result: {task_result.reason}",
+            f"- status_counts: {json.dumps(counts, ensure_ascii=False, sort_keys=True)}",
+            "- pending_task_examples:",
+            *(pending_examples or ["- <none>"]),
+            "",
+            "The task ledger is authoritative unless it appears stale because recent assistant "
+            "messages provide concrete final deliverables or verification evidence satisfying the "
+            "user objective. Return goal_achieved=true only if the user's objective is fully "
+            "satisfied despite the pending task statuses. Return false when listed tasks still "
+            "represent real unfinished work.",
+        ]
+        return "\n".join(lines)
 
     # ------------------------------------------------------------------
     # Text-based fallback evaluation
