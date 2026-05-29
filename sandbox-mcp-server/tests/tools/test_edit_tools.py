@@ -88,14 +88,14 @@ def old_function():
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test_sample.py"
-            test_file.write_text('''
+            test_file.write_text("""
 class Greeter:
     def old_name(self):
         return "instance"
 
 def old_name():
     return "module"
-''')
+""")
 
             result = await edit_by_ast(
                 file_path=str(test_file),
@@ -120,14 +120,14 @@ def old_name():
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test_sample.py"
-            test_file.write_text('''
+            test_file.write_text("""
 class Greeter:
     def old_name(self):
         return "instance"
 
     def wrapper(self):
         return self.old_name()
-''')
+""")
 
             result = await edit_by_ast(
                 file_path=str(test_file),
@@ -153,7 +153,7 @@ class Greeter:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test_sample.py"
-            test_file.write_text('''
+            test_file.write_text("""
 class Greeter:
     def wrapper(self):
         def old_name():
@@ -162,7 +162,7 @@ class Greeter:
 
     def old_name(self):
         return "method"
-''')
+""")
 
             result = await edit_by_ast(
                 file_path=str(test_file),
@@ -223,7 +223,7 @@ class Greeter:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test_sample.py"
-            test_file.write_text('class MyClass:\n    pass\n')
+            test_file.write_text("class MyClass:\n    pass\n")
 
             result = await edit_by_ast(
                 file_path=str(test_file),
@@ -361,13 +361,13 @@ class TestPreviewEdit:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test.py"
-            test_file.write_text('''
+            test_file.write_text("""
 def function_one():
     return 1
 
 def function_two():
     return 2
-''')
+""")
 
             result = await preview_edit(
                 file_path=str(test_file),
@@ -399,6 +399,30 @@ def function_two():
 
             assert not result.get("isError")
             # Should show context around the change
+
+    @pytest.mark.asyncio
+    async def test_preview_diff_is_not_duplicated(self):
+        """Preview output should render the unified diff exactly once."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "test.py"
+            test_file.write_text("line1\nline2\nline3\n")
+
+            result = await preview_edit(
+                file_path=str(test_file),
+                old_string="line2",
+                new_string="line2_modified",
+                _workspace_dir=tmpdir,
+            )
+
+            assert not result.get("isError")
+            text = result["content"][0]["text"]
+            assert text.count("--- a/") == 1
+            assert text.count("+++ b/") == 1
+            assert text.count("-line2") == 1
+            assert text.count("+line2_modified") == 1
 
     @pytest.mark.asyncio
     async def test_preview_no_changes(self):
@@ -471,11 +495,13 @@ class OriginalClass:
             assert not preview.get("isError")
 
             # Step 2: Apply the edit via batch_edit
-            edits = [{
-                "file_path": "workflow_test.py",
-                "old_string": "OriginalClass",
-                "new_string": "UpdatedClass",
-            }]
+            edits = [
+                {
+                    "file_path": "workflow_test.py",
+                    "old_string": "OriginalClass",
+                    "new_string": "UpdatedClass",
+                }
+            ]
 
             result = await batch_edit(
                 edits=edits,

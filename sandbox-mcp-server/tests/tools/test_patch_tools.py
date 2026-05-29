@@ -260,6 +260,59 @@ class TestPatchTool:
         assert result["metadata"]["line_ending"] == "crlf"
 
     @pytest.mark.asyncio
+    async def test_patch_applies_multi_change_single_hunk(self, workspace):
+        """One hunk may modify multiple lines inside the same context block."""
+        file_path = os.path.join(workspace, "multi.txt")
+        with open(file_path, "w") as f:
+            f.write("alpha\nbeta\ngamma\n")
+
+        patch_content = """--- a/multi.txt
++++ b/multi.txt
+@@ -1,3 +1,3 @@
+-alpha
++ALPHA
+ beta
+-gamma
++GAMMA
+"""
+
+        result = await apply_patch(
+            file_path="multi.txt",
+            patch=patch_content,
+            strip=0,
+            _workspace_dir=workspace,
+        )
+
+        assert not result.get("isError")
+        with open(file_path, "r") as f:
+            assert f.read() == "ALPHA\nbeta\nGAMMA\n"
+
+    @pytest.mark.asyncio
+    async def test_patch_accepts_absolute_header_path_inside_workspace(self, workspace):
+        """Absolute diff headers inside the workspace should match the target file."""
+        file_path = os.path.join(workspace, "absolute.txt")
+        with open(file_path, "w") as f:
+            f.write("old\n")
+
+        patch_content = f"""--- {file_path}
++++ {file_path}
+@@ -1,1 +1,1 @@
+-old
++new
+"""
+
+        result = await apply_patch(
+            file_path="absolute.txt",
+            patch=patch_content,
+            strip=0,
+            _workspace_dir=workspace,
+        )
+
+        assert not result.get("isError")
+        with open(file_path, "r") as f:
+            assert f.read() == "new\n"
+
+    @pytest.mark.asyncio
     async def test_patch_multiple_hunks(self, workspace):
         """Test patch with multiple hunks."""
         file_path = os.path.join(workspace, "test.txt")

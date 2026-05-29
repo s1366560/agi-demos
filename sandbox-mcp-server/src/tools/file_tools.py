@@ -2031,10 +2031,24 @@ def _extract_patch_path(header_value: str) -> str | None:
     return raw_path.replace("\\", "/")
 
 
-def _candidate_patch_paths(patch_path: str | None, strip: int = 0) -> set[str]:
+def _candidate_patch_paths(
+    patch_path: str | None,
+    strip: int = 0,
+    workspace_dir: str = "/workspace",
+) -> set[str]:
     """Generate candidate normalized paths for a diff header."""
     if not patch_path:
         return set()
+
+    workspace = Path(workspace_dir).resolve()
+    normalized_patch_path = patch_path.replace("\\", "/")
+    candidates: set[str] = set()
+    if normalized_patch_path.startswith("/"):
+        resolved_patch_path = Path(normalized_patch_path).resolve()
+        try:
+            candidates.add(str(resolved_patch_path.relative_to(workspace)))
+        except ValueError:
+            candidates.add(resolved_patch_path.as_posix().lstrip("/"))
 
     parts = [part for part in patch_path.split("/") if part not in {"", "."}]
     if strip == 0 and parts[:1] in (["a"], ["b"]):
@@ -2042,7 +2056,9 @@ def _candidate_patch_paths(patch_path: str | None, strip: int = 0) -> set[str]:
     elif strip > 0:
         parts = parts[strip:] if strip < len(parts) else []
 
-    return {"/".join(parts)} if parts else set()
+    if parts:
+        candidates.add("/".join(parts))
+    return candidates
 
 
 def _patch_targets_match(
@@ -2058,7 +2074,11 @@ def _patch_targets_match(
         normalized_target = str(target_file_path.resolve().relative_to(workspace))
     except ValueError:
         normalized_target = target_file_path.resolve().as_posix().lstrip("./")
-    candidates = _candidate_patch_paths(old_path, strip) | _candidate_patch_paths(new_path, strip)
+    candidates = _candidate_patch_paths(old_path, strip, workspace_dir) | _candidate_patch_paths(
+        new_path,
+        strip,
+        workspace_dir,
+    )
     return not candidates or normalized_target in candidates
 
 
@@ -2172,20 +2192,49 @@ def _apply_hunks(
     failed_hunks: list[PatchHunk] = []
 
     for hunk in sorted_hunks:
-        old_start = hunk.old_start
-        old_count = hunk.old_count
-
         old_lines_from_hunk = [line.render() for line in hunk.lines if line.operation in {" ", "-"}]
-        actual_old_lines = result_lines[old_start : old_start + old_count]
-
-        if old_lines_from_hunk != actual_old_lines:
+        replacement_start = _find_hunk_start(result_lines, hunk, old_lines_from_hunk)
+        if replacement_start is None:
             failed_hunks.append(hunk)
             continue
 
         new_lines = [line.render() for line in hunk.lines if line.operation in {" ", "+"}]
-        result_lines[old_start : old_start + old_count] = new_lines
+        replacement_end = replacement_start + len(old_lines_from_hunk)
+        result_lines[replacement_start:replacement_end] = new_lines
 
     return result_lines, failed_hunks
+
+
+def _find_hunk_start(
+    current_lines: list[str],
+    hunk: PatchHunk,
+    old_lines_from_hunk: list[str],
+) -> int | None:
+    """Find the line index where a hunk should apply."""
+    expected_start = max(hunk.old_start, 0)
+    expected_end = expected_start + len(old_lines_from_hunk)
+    if current_lines[expected_start:expected_end] == old_lines_from_hunk:
+        return expected_start
+
+    if not old_lines_from_hunk:
+        return min(expected_start, len(current_lines))
+
+    search_starts = [expected_start]
+    window = max(len(old_lines_from_hunk) + 3, 8)
+    low = max(0, expected_start - window)
+    high = min(len(current_lines) - len(old_lines_from_hunk), expected_start + window)
+    search_starts.extend(range(low, high + 1))
+    search_starts.extend(range(0, len(current_lines) - len(old_lines_from_hunk) + 1))
+
+    seen: set[int] = set()
+    for start in search_starts:
+        if start in seen or start < 0:
+            continue
+        seen.add(start)
+        end = start + len(old_lines_from_hunk)
+        if current_lines[start:end] == old_lines_from_hunk:
+            return start
+    return None
 
 
 def create_patch_tool() -> MCPTool:

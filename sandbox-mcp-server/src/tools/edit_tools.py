@@ -48,7 +48,7 @@ async def edit_by_ast(
 
         Returns:
             Edit result
-        """
+    """
     try:
         full_path = _resolve_path(file_path, _workspace_dir)
 
@@ -89,18 +89,10 @@ async def edit_by_ast(
             ) -> ast.FunctionDef | ast.AsyncFunctionDef:
                 is_method = self._class_depth > 0
                 is_direct_method = is_method and self._function_depth == 0
-                if (
-                    target_type == "function"
-                    and not is_method
-                    and node.name == self.old_name
-                ):
+                if target_type == "function" and not is_method and node.name == self.old_name:
                     node.name = self.new_name
                     self.modified = True
-                elif (
-                    target_type == "method"
-                    and is_direct_method
-                    and node.name == self.old_name
-                ):
+                elif target_type == "method" and is_direct_method and node.name == self.old_name:
                     node.name = self.new_name
                     self.modified = True
                 self._function_depth += 1
@@ -142,7 +134,12 @@ async def edit_by_ast(
                 new_content = ast.unparse(new_tree)
             else:
                 return {
-                    "content": [{"type": "text", "text": f"Target '{target_name}' not found or operation not applicable"}],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Target '{target_name}' not found or operation not applicable",
+                        }
+                    ],
                     "isError": False,
                     "metadata": {"modified": False},
                 }
@@ -257,11 +254,13 @@ async def batch_edit(
 
             if not all([file_path, old_string, new_string is not None]):
                 failed += 1
-                results.append({
-                    "file": file_path,
-                    "status": "error",
-                    "message": "Missing required fields",
-                })
+                results.append(
+                    {
+                        "file": file_path,
+                        "status": "error",
+                        "message": "Missing required fields",
+                    }
+                )
                 if stop_on_error:
                     break
                 continue
@@ -271,11 +270,13 @@ async def batch_edit(
 
                 if not full_path.exists():
                     failed += 1
-                    results.append({
-                        "file": file_path,
-                        "status": "error",
-                        "message": "File not found",
-                    })
+                    results.append(
+                        {
+                            "file": file_path,
+                            "status": "error",
+                            "message": "File not found",
+                        }
+                    )
                     if stop_on_error:
                         break
                     continue
@@ -284,11 +285,13 @@ async def batch_edit(
 
                 if old_string not in content:
                     failed += 1
-                    results.append({
-                        "file": file_path,
-                        "status": "error",
-                        "message": "Old string not found",
-                    })
+                    results.append(
+                        {
+                            "file": file_path,
+                            "status": "error",
+                            "message": "Old string not found",
+                        }
+                    )
                     if stop_on_error:
                         break
                     continue
@@ -297,11 +300,13 @@ async def batch_edit(
                 occurrences = content.count(old_string)
                 if occurrences > 1 and edit_spec.get("replace_all", False) is False:
                     failed += 1
-                    results.append({
-                        "file": file_path,
-                        "status": "error",
-                        "message": f"String appears {occurrences} times, use replace_all=true",
-                    })
+                    results.append(
+                        {
+                            "file": file_path,
+                            "status": "error",
+                            "message": f"String appears {occurrences} times, use replace_all=true",
+                        }
+                    )
                     if stop_on_error:
                         break
                     continue
@@ -314,19 +319,23 @@ async def batch_edit(
                         await f.write(new_content)
 
                 successful += 1
-                results.append({
-                    "file": file_path,
-                    "status": "success",
-                    "message": "Applied successfully",
-                })
+                results.append(
+                    {
+                        "file": file_path,
+                        "status": "success",
+                        "message": "Applied successfully",
+                    }
+                )
 
             except Exception as e:
                 failed += 1
-                results.append({
-                    "file": file_path,
-                    "status": "error",
-                    "message": str(e),
-                })
+                results.append(
+                    {
+                        "file": file_path,
+                        "status": "error",
+                        "message": str(e),
+                    }
+                )
                 if stop_on_error:
                     break
 
@@ -450,13 +459,16 @@ async def preview_edit(
         new_lines = new_content.splitlines(keepends=True)
 
         # Generate unified diff
-        diff = list(difflib.unified_diff(
-            lines,
-            new_lines,
-            fromfile=f"a/{file_path}",
-            tofile=f"b/{file_path}",
-            lineterm="",
-        ))
+        diff = list(
+            difflib.unified_diff(
+                lines,
+                new_lines,
+                fromfile=f"a/{file_path}",
+                tofile=f"b/{file_path}",
+                n=context_lines,
+                lineterm="",
+            )
+        )
 
         if not diff:
             return {
@@ -487,7 +499,6 @@ async def preview_edit(
             "--- Diff ---",
         ]
         result_lines.extend(output)
-        result_lines.extend(diff)
 
         # Truncate if too long
         if len(result_lines) > 200:
