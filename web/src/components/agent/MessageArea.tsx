@@ -94,6 +94,7 @@ import { JitContextCard } from './timeline/JitContextCard';
 import { MemoryCapturedStep } from './timeline/MemoryRecalledStep';
 import { SubAgentTimeline } from './timeline/SubAgentTimeline';
 
+import type { DisplayItem } from './message/turnFolding';
 import type { TimelineEvent } from '../../types/agent';
 
 // Import and re-export types from separate file
@@ -198,6 +199,87 @@ interface _MessageAreaCompound extends React.FC<_MessageAreaRootProps> {
 // Helper type for marker components with symbol tags and displayName
 type _SymbolTagged = Record<symbol, boolean> & { displayName?: string };
 
+const getTextSize = (value: unknown): number => {
+  if (typeof value === 'string') return value.length;
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value).length;
+  try {
+    return JSON.stringify(value).length;
+  } catch {
+    return 0;
+  }
+};
+
+const getDisplayItemKey = (item: DisplayItem, index: number): string => {
+  if (item.kind === 'turn-placeholder') {
+    return `turn-placeholder:${item.turnId}:${String(item.hiddenCount)}:${String(item.startIndex)}-${String(item.endIndex)}`;
+  }
+
+  if (item.kind === 'timeline') {
+    const firstStep = item.steps[0];
+    const lastStep = item.steps.at(-1);
+    const statusSummary = item.steps.map((step) => step.status).join(',');
+    return [
+      'timeline',
+      String(item.startIndex),
+      String(item.steps.length),
+      firstStep?.id ?? 'first',
+      lastStep?.id ?? 'last',
+      statusSummary,
+    ].join(':');
+  }
+
+  if (item.kind === 'subagent') {
+    return [
+      'subagent',
+      item.group.subagentId || String(item.startIndex),
+      String(item.startIndex),
+      String(item.group.events.length),
+      item.group.status,
+    ].join(':');
+  }
+
+  return item.event.id || `event:${item.event.type}:${String(index)}`;
+};
+
+const getDisplayItemMeasurementKey = (item: DisplayItem, index: number): string => {
+  const baseKey = getDisplayItemKey(item, index);
+
+  if (item.kind === 'timeline') {
+    const sizeSignature = item.steps
+      .map((step) =>
+        [
+          step.id,
+          step.status,
+          String(getTextSize(step.input)),
+          String(getTextSize(step.output)),
+          String(step.duration ?? ''),
+        ].join('/')
+      )
+      .join('|');
+    return `${baseKey}:${sizeSignature}`;
+  }
+
+  if (item.kind === 'subagent') {
+    return [
+      baseKey,
+      item.group.summary?.length ?? 0,
+      item.group.error?.length ?? 0,
+      item.group.task?.length ?? 0,
+    ].join(':');
+  }
+
+  if (item.kind === 'event') {
+    const event = item.event as TimelineEvent & {
+      content?: string | undefined;
+      fullText?: string | undefined;
+    };
+    return `${baseKey}:${String(event.content?.length ?? 0)}:${String(event.fullText?.length ?? 0)}`;
+  }
+
+  return baseKey;
+};
+
 // ========================================
 // Actual Sub-Component Implementations
 // ========================================
@@ -295,6 +377,15 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const displayItems = useMemo(
       () => applyTurnCollapse(groupedItems, turnCollapse.collapsed),
       [groupedItems, turnCollapse.collapsed]
+    );
+    const displayItemKeys = useMemo(
+      () => displayItems.map((item, index) => getDisplayItemKey(item, index)),
+      [displayItems]
+    );
+    const displayMeasurementKey = useMemo(
+      () =>
+        displayItems.map((item, index) => getDisplayItemMeasurementKey(item, index)).join('\u001f'),
+      [displayItems]
     );
 
     // Map each grouped item index to the turn that owns it. Used to wire the
@@ -467,17 +558,23 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       },
       [displayItems]
     );
+    const getItemKey = useCallback(
+      (index: number) => displayItemKeys[index] ?? `missing:${String(index)}`,
+      [displayItemKeys]
+    );
 
     // eslint-disable-next-line react-hooks/incompatible-library
     const virtualizer = useVirtualizer({
       count: displayItems.length,
       getScrollElement: () => containerRef.current,
       estimateSize,
+      getItemKey,
       overscan: 15,
       paddingEnd: isStreaming ? 16 : 0,
     });
     const virtualizerRef = useRef(virtualizer);
     const rowResizeObserverRef = useRef<ResizeObserver | null>(null);
+    const rowElementsByKeyRef = useRef(new Map<string, Element>());
     const pendingMeasuredRowsRef = useRef(new Set<Element>());
     const rowMeasurementFrameRef = useRef<number | null>(null);
 
@@ -503,7 +600,14 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     );
 
     const measureVirtualRow = useCallback(
-      (node: HTMLDivElement | null) => {
+      (rowKey: string, node: HTMLDivElement | null) => {
+        const previousNode = rowElementsByKeyRef.current.get(rowKey);
+        if (previousNode && previousNode !== node) {
+          rowResizeObserverRef.current?.unobserve(previousNode);
+          pendingMeasuredRowsRef.current.delete(previousNode);
+          rowElementsByKeyRef.current.delete(rowKey);
+        }
+
         if (!node) return;
 
         virtualizerRef.current.measureElement(node);
@@ -518,15 +622,20 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
           });
         }
 
-        rowResizeObserverRef.current.observe(node);
+        if (previousNode !== node) {
+          rowElementsByKeyRef.current.set(rowKey, node);
+          rowResizeObserverRef.current.observe(node);
+        }
       },
       [scheduleRowMeasure]
     );
 
     useEffect(() => {
       const pendingRows = pendingMeasuredRowsRef.current;
+      const rowElements = rowElementsByKeyRef.current;
       return () => {
         rowResizeObserverRef.current?.disconnect();
+        rowElements.clear();
         pendingRows.clear();
         if (rowMeasurementFrameRef.current !== null) {
           cancelAnimationFrame(rowMeasurementFrameRef.current);
@@ -537,7 +646,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     useEffect(() => {
       virtualizer.measure();
-    }, [virtualizer, displayItems.length, timelineLen, streamingContent, streamingThought]);
+    }, [virtualizer, displayMeasurementKey, streamingContent, streamingThought]);
 
     useEffect(() => {
       if (lastConversationIdRef.current === conversationId) return;
@@ -735,12 +844,15 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                 {virtualizer.getVirtualItems().map((virtualRow) => {
                   const item = displayItems[virtualRow.index];
                   if (!item) return null;
+                  const rowKey = getItemKey(virtualRow.index);
                   if (isTurnPlaceholder(item)) {
                     return (
                       <div
-                        key={`turn-placeholder-${item.turnId}`}
+                        key={rowKey}
                         data-index={virtualRow.index}
-                        ref={measureVirtualRow}
+                        ref={(node) => {
+                          measureVirtualRow(rowKey, node);
+                        }}
                         style={{
                           position: 'absolute',
                           top: 0,
@@ -761,10 +873,12 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   if (item.kind === 'timeline') {
                     return (
                       <div
-                        key={`timeline-group-${String(item.startIndex)}`}
+                        key={rowKey}
                         data-index={virtualRow.index}
                         data-msg-index={virtualRow.index}
-                        ref={measureVirtualRow}
+                        ref={(node) => {
+                          measureVirtualRow(rowKey, node);
+                        }}
                         style={{
                           position: 'absolute',
                           top: 0,
@@ -792,13 +906,15 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   if (item.kind === 'subagent') {
                     return (
                       <div
-                        key={`subagent-group-${String(item.startIndex)}`}
+                        key={rowKey}
                         data-index={virtualRow.index}
                         data-msg-index={virtualRow.index}
                         data-timeline-index={item.startIndex}
                         data-subagent-start-index={item.startIndex}
                         data-subagent-id={item.group.subagentId}
-                        ref={measureVirtualRow}
+                        ref={(node) => {
+                          measureVirtualRow(rowKey, node);
+                        }}
                         style={{
                           position: 'absolute',
                           top: 0,
@@ -828,9 +944,11 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   if (event.type === 'memory_recalled' || event.type === 'memory_captured') {
                     return (
                       <div
-                        key={event.id || `event-${String(index)}`}
+                        key={rowKey}
                         data-index={virtualRow.index}
-                        ref={measureVirtualRow}
+                        ref={(node) => {
+                          measureVirtualRow(rowKey, node);
+                        }}
                         style={{
                           position: 'absolute',
                           top: 0,
@@ -862,11 +980,13 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   const isTurnFolded = !!turnIdForItem && turnCollapse.isCollapsed(turnIdForItem);
                   return (
                     <div
-                      key={event.id || `event-${String(index)}`}
+                      key={rowKey}
                       data-index={virtualRow.index}
                       data-msg-index={virtualRow.index}
                       data-msg-id={event.id}
-                      ref={measureVirtualRow}
+                      ref={(node) => {
+                        measureVirtualRow(rowKey, node);
+                      }}
                       style={{
                         position: 'absolute',
                         top: 0,

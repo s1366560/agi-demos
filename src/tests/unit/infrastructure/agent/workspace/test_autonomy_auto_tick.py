@@ -218,6 +218,124 @@ class TestWorkerSessionHealLimit:
         }
 
     @pytest.mark.asyncio
+    async def test_disposed_durable_plan_child_is_not_requeued_from_metadata(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        child = SimpleNamespace(
+            id="plan-child",
+            workspace_id="ws-1",
+            assignee_agent_id="worker-1",
+            archived_at=None,
+            status=WorkspaceTaskStatus.IN_PROGRESS,
+            metadata={
+                "task_role": "execution_task",
+                "workspace_plan_id": "plan-1",
+                "workspace_plan_node_id": "node-1",
+                "durable_plan_verdict": "disposed",
+                "durable_plan_disposition": "supervisor_agent_disposed_node",
+            },
+        )
+        task_repo = MagicMock()
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[child])
+        attempt_repo = MagicMock()
+        attempt_repo.find_active_by_workspace_task_id = AsyncMock(return_value=None)
+        enqueued: list[dict[str, object]] = []
+
+        class _FakeOutboxRepository:
+            def __init__(self, _db: object) -> None:
+                pass
+
+            async def enqueue(self, **kwargs: object) -> object:
+                enqueued.append(kwargs)
+                return SimpleNamespace(id="outbox-1")
+
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence."
+            "sql_workspace_task_session_attempt_repository."
+            "SqlWorkspaceTaskSessionAttemptRepository",
+            lambda _db: attempt_repo,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence."
+            "sql_workspace_plan_outbox.SqlWorkspacePlanOutboxRepository",
+            _FakeOutboxRepository,
+        )
+
+        healed = await wlb._heal_assigned_execution_tasks_without_sessions(
+            db=MagicMock(),
+            task_repo=task_repo,
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id="leader-1",
+            actor_user_id="user-1",
+        )
+
+        assert healed == 0
+        attempt_repo.find_active_by_workspace_task_id.assert_not_awaited()
+        assert enqueued == []
+
+    @pytest.mark.asyncio
+    async def test_disposed_durable_plan_child_is_not_requeued_from_event(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        child = SimpleNamespace(
+            id="plan-child",
+            workspace_id="ws-1",
+            assignee_agent_id="worker-1",
+            archived_at=None,
+            status=WorkspaceTaskStatus.IN_PROGRESS,
+            metadata={
+                "task_role": "execution_task",
+                "workspace_plan_id": "plan-1",
+                "workspace_plan_node_id": "node-1",
+            },
+        )
+        task_repo = MagicMock()
+        task_repo.find_by_root_goal_task_id = AsyncMock(return_value=[child])
+        attempt_repo = MagicMock()
+        attempt_repo.find_active_by_workspace_task_id = AsyncMock(return_value=None)
+        enqueued: list[dict[str, object]] = []
+
+        class _FakeOutboxRepository:
+            def __init__(self, _db: object) -> None:
+                pass
+
+            async def enqueue(self, **kwargs: object) -> object:
+                enqueued.append(kwargs)
+                return SimpleNamespace(id="outbox-1")
+
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence."
+            "sql_workspace_task_session_attempt_repository."
+            "SqlWorkspaceTaskSessionAttemptRepository",
+            lambda _db: attempt_repo,
+        )
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.persistence."
+            "sql_workspace_plan_outbox.SqlWorkspacePlanOutboxRepository",
+            _FakeOutboxRepository,
+        )
+        db = MagicMock()
+        db.execute = AsyncMock(
+            return_value=SimpleNamespace(scalar_one_or_none=lambda: "dispose-event-1"),
+        )
+        db.commit = AsyncMock()
+        db.rollback = AsyncMock()
+
+        healed = await wlb._heal_assigned_execution_tasks_without_sessions(
+            db=db,
+            task_repo=task_repo,
+            workspace_id="ws-1",
+            root_task_id="root-1",
+            leader_agent_id="leader-1",
+            actor_user_id="user-1",
+        )
+
+        assert healed == 0
+        attempt_repo.find_active_by_workspace_task_id.assert_awaited_once_with("plan-child")
+        assert enqueued == []
+
+    @pytest.mark.asyncio
     async def test_durable_plan_projected_child_with_active_attempt_is_not_requeued(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

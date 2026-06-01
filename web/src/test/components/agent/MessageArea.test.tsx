@@ -7,7 +7,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { useAgentV3Store } from '../../../stores/agentV3';
 import { useStreamingStore } from '../../../stores/agent/streamingStore';
 
 import { MessageArea } from '../../../components/agent/MessageArea';
@@ -16,23 +15,33 @@ const virtualizerMock = vi.hoisted(() => ({
   measureElement: vi.fn(),
   measure: vi.fn(),
   scrollToIndex: vi.fn(),
+  options: [] as Array<{
+    count: number;
+    getItemKey?: ((index: number) => string | number) | undefined;
+  }>,
 }));
 
 // Mock virtualizer to render all rows in tests
 vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: ({ count }: { count: number }) => ({
-    getTotalSize: () => count * 80,
-    getVirtualItems: () =>
-      Array.from({ length: count }, (_, index) => ({
-        index,
-        start: index * 80,
-        size: 80,
-        key: index,
-      })),
-    measureElement: virtualizerMock.measureElement,
-    scrollToIndex: virtualizerMock.scrollToIndex,
-    measure: virtualizerMock.measure,
-  }),
+  useVirtualizer: (options: {
+    count: number;
+    getItemKey?: ((index: number) => string | number) | undefined;
+  }) => {
+    virtualizerMock.options.push(options);
+    return {
+      getTotalSize: () => options.count * 80,
+      getVirtualItems: () =>
+        Array.from({ length: options.count }, (_, index) => ({
+          index,
+          start: index * 80,
+          size: 80,
+          key: options.getItemKey?.(index) ?? index,
+        })),
+      measureElement: virtualizerMock.measureElement,
+      scrollToIndex: virtualizerMock.scrollToIndex,
+      measure: virtualizerMock.measure,
+    };
+  },
 }));
 
 // Mock the dependencies
@@ -75,6 +84,7 @@ describe('MessageArea Compound Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    virtualizerMock.options.length = 0;
     useStreamingStore.setState({
       agentStreamingAssistantContent: '',
       agentStreamingThought: '',
@@ -107,6 +117,7 @@ describe('MessageArea Compound Component', () => {
     it('should remeasure virtual rows when rendered content resizes', () => {
       const resizeCallbacks: ResizeObserverCallback[] = [];
       const originalResizeObserver = globalThis.ResizeObserver;
+      const observeSpy = vi.fn();
       const requestAnimationFrameSpy = vi
         .spyOn(window, 'requestAnimationFrame')
         .mockImplementation((callback: FrameRequestCallback) => {
@@ -119,7 +130,7 @@ describe('MessageArea Compound Component', () => {
           resizeCallbacks.push(callback);
         }
 
-        observe = vi.fn();
+        observe = observeSpy;
         unobserve = vi.fn();
         disconnect = vi.fn();
       }
@@ -137,10 +148,55 @@ describe('MessageArea Compound Component', () => {
         resizeCallbacks[0]?.([{ target: row } as ResizeObserverEntry], {} as ResizeObserver);
 
         expect(virtualizerMock.measureElement).toHaveBeenCalledWith(row);
+        expect(observeSpy).toHaveBeenCalledWith(row);
       } finally {
         globalThis.ResizeObserver = originalResizeObserver;
         requestAnimationFrameSpy.mockRestore();
       }
+    });
+
+    it('should pass stable content-aware item keys to the virtualizer', () => {
+      render(<MessageArea {...defaultProps} />);
+
+      const latestOptions = virtualizerMock.options.at(-1);
+      expect(latestOptions?.getItemKey?.(0)).toBe('1');
+      expect(latestOptions?.getItemKey?.(1)).toBe('2');
+    });
+
+    it('should remeasure when the same index changes into a long timeline group', () => {
+      const shortTimeline: any[] = [
+        { id: 'user-1', type: 'user_message', content: 'Run diagnostics', timestamp: 1 },
+      ];
+      const longCommand = `set +e\n${'printf "diagnostics=%s\\n" "$VALUE"\n'.repeat(80)}`;
+      const longTimeline: any[] = [
+        {
+          id: 'act-1',
+          type: 'act',
+          toolName: 'terminal_command',
+          toolInput: { command: longCommand },
+          execution_id: 'exec-1',
+          timestamp: 2,
+        },
+        {
+          id: 'observe-1',
+          type: 'observe',
+          toolName: 'terminal_command',
+          toolOutput: { output: `${longCommand}\n${longCommand}` },
+          execution_id: 'exec-1',
+          timestamp: 3,
+          isError: false,
+        },
+      ];
+
+      const { rerender } = render(
+        <MessageArea timeline={shortTimeline} isStreaming={false} isLoading={false} />
+      );
+      virtualizerMock.measure.mockClear();
+
+      rerender(<MessageArea timeline={longTimeline} isStreaming={false} isLoading={false} />);
+
+      expect(virtualizerMock.options.at(-1)?.getItemKey?.(0)).toContain('timeline:0:1:exec-1');
+      expect(virtualizerMock.measure).toHaveBeenCalled();
     });
   });
 

@@ -4064,6 +4064,117 @@ async def test_done_supervisor_dispose_disposition_projects_workspace_task(
 
 
 @pytest.mark.asyncio
+async def test_supervisor_dispose_event_reconciles_node_before_tick(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="disposed-task",
+                workspace_id="workspace-1",
+                title="Disposed task",
+                description="",
+                created_by="worker-user-1",
+                status="in_progress",
+                priority=0,
+                assignee_agent_id="worker-agent",
+                blocker_reason="Maximum steps (80) exceeded",
+                metadata_json={
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    TASK_ROLE: "execution_task",
+                    ROOT_GOAL_TASK_ID: "root-task-1",
+                    WORKSPACE_PLAN_ID: "disposed-plan-2",
+                    WORKSPACE_PLAN_NODE_ID: "disposed-node",
+                },
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="disposed-attempt",
+                workspace_task_id="disposed-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=1,
+                status="rejected",
+                conversation_id="disposed-conversation",
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+            ),
+            WorkspacePlanEventModel(
+                id="dispose-event-reconcile",
+                plan_id="disposed-plan-2",
+                workspace_id="workspace-1",
+                node_id="disposed-node",
+                attempt_id="disposed-attempt",
+                event_type="supervisor_decision_completed",
+                source="workspace_plan_verifier",
+                payload_json={
+                    "action": "dispose_node",
+                    "rationale": "Node is stale and structurally superseded.",
+                    "confidence": 0.91,
+                },
+                created_at=datetime.now(UTC),
+            ),
+        ]
+    )
+    plan = Plan(
+        id="disposed-plan-2",
+        workspace_id="workspace-1",
+        goal_id=PlanNodeId("disposed-root"),
+        status=PlanStatus.ACTIVE,
+    )
+    plan.add_node(
+        PlanNode(
+            id="disposed-root",
+            plan_id=plan.id,
+            parent_id=None,
+            kind=PlanNodeKind.GOAL,
+            title="Root",
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.IDLE,
+            workspace_task_id="root-task-1",
+        )
+    )
+    plan.add_node(
+        PlanNode(
+            id="disposed-node",
+            plan_id=plan.id,
+            parent_id=PlanNodeId("disposed-root"),
+            kind=PlanNodeKind.TASK,
+            title="Disposed task",
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.RUNNING,
+            workspace_task_id="disposed-task",
+            current_attempt_id="new-running-attempt",
+            metadata={
+                TASK_ROLE: "execution_task",
+                WORKSPACE_PLAN_ID: "disposed-plan-2",
+                WORKSPACE_PLAN_NODE_ID: "disposed-node",
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    changed = await outbox_handlers._reconcile_supervisor_disposed_nodes_before_tick(
+        session=db_session,
+        plan_id="disposed-plan-2",
+        workspace_id="workspace-1",
+    )
+    assert changed is True
+
+    loaded = await SqlPlanRepository(db_session).get("disposed-plan-2")
+    assert loaded is not None
+    disposed = loaded.nodes[PlanNodeId("disposed-node")]
+    assert disposed.intent is TaskIntent.DONE
+    assert disposed.execution is TaskExecution.IDLE
+    assert disposed.current_attempt_id == "disposed-attempt"
+    assert disposed.metadata["verification_feedback_disposition"] == (
+        "supervisor_agent_disposed_node"
+    )
+    assert disposed.metadata["last_supervisor_decision_action"] == "dispose_node"
+
+
+@pytest.mark.asyncio
 async def test_accepted_terminal_attempt_integrates_worktree_commit(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -5359,6 +5470,93 @@ async def test_worker_launch_handler_skips_terminal_stale_attempt_before_capacit
         .all()
     )
     assert [job.id for job in launch_jobs] == [item.id]
+
+
+@pytest.mark.asyncio
+async def test_worker_launch_handler_skips_supervisor_disposed_node(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="disposed-task",
+                workspace_id="workspace-1",
+                title="Disposed task",
+                description="",
+                created_by="worker-user-1",
+                status="in_progress",
+                priority=0,
+                assignee_agent_id="worker-agent",
+                metadata_json={
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    TASK_ROLE: "execution_task",
+                    ROOT_GOAL_TASK_ID: "root-task-1",
+                    CURRENT_ATTEMPT_ID: "disposed-attempt",
+                },
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="disposed-attempt",
+                workspace_task_id="disposed-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=1,
+                status="running",
+                conversation_id=None,
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+            ),
+            WorkspacePlanEventModel(
+                id="dispose-event-1",
+                plan_id="worker-plan-1",
+                workspace_id="workspace-1",
+                node_id="disposed-node",
+                attempt_id="disposed-attempt",
+                event_type="supervisor_decision_completed",
+                source="workspace_plan_verifier",
+                payload_json={"action": "dispose_node"},
+                created_at=datetime.now(UTC),
+            ),
+        ]
+    )
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    item = await repo.enqueue(
+        plan_id="worker-plan-1",
+        workspace_id="workspace-1",
+        event_type=WORKER_LAUNCH_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "task_id": "disposed-task",
+            "node_id": "disposed-node",
+            "worker_agent_id": "worker-agent",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+            "attempt_id": "disposed-attempt",
+        },
+        metadata={"source": "test"},
+    )
+    await db_session.commit()
+    launched: list[str] = []
+    monkeypatch.setattr(
+        "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+        lambda **kwargs: launched.append(kwargs["attempt"].id),
+    )
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree)
+        },
+        worker_id="worker-a",
+        batch_size=1,
+    )
+
+    assert await worker.run_once() == 1
+    assert launched == []
+    completed = await repo.get_by_id(item.id)
+    assert completed is not None
+    assert completed.status == "completed"
 
 
 @pytest.mark.asyncio
@@ -8252,6 +8450,88 @@ async def test_handoff_resume_handler_running_current_attempt_respects_force_sch
     refreshed_plan = await SqlPlanRepository(db_session).get(plan.id)
     assert refreshed_plan is not None
     assert refreshed_plan.leaf_tasks()[0].current_attempt_id == leaf.current_attempt_id
+
+
+@pytest.mark.asyncio
+async def test_handoff_resume_handler_skips_supervisor_disposed_node(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="disposed-task",
+                workspace_id="workspace-1",
+                title="Disposed task",
+                description="",
+                created_by="worker-user-1",
+                status="in_progress",
+                priority=0,
+                assignee_agent_id="worker-agent",
+                metadata_json={
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    TASK_ROLE: "execution_task",
+                    ROOT_GOAL_TASK_ID: "root-task-1",
+                    WORKSPACE_PLAN_ID: "worker-plan-1",
+                    WORKSPACE_PLAN_NODE_ID: "disposed-node",
+                },
+            ),
+            WorkspacePlanEventModel(
+                id="dispose-event-handoff",
+                plan_id="worker-plan-1",
+                workspace_id="workspace-1",
+                node_id="disposed-node",
+                attempt_id="previous-attempt",
+                event_type="supervisor_decision_completed",
+                source="workspace_plan_verifier",
+                payload_json={"action": "dispose_node"},
+                created_at=datetime.now(UTC),
+            ),
+        ]
+    )
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    item = await repo.enqueue(
+        plan_id="worker-plan-1",
+        workspace_id="workspace-1",
+        event_type=HANDOFF_RESUME_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "task_id": "disposed-task",
+            "node_id": "disposed-node",
+            "worker_agent_id": "worker-agent",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+            "previous_attempt_id": "previous-attempt",
+            "root_goal_task_id": "root-task-1",
+            "summary": "snapshot thought this was stale",
+            "force_schedule": True,
+        },
+    )
+    await db_session.commit()
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={HANDOFF_RESUME_EVENT: make_handoff_resume_handler()},
+        worker_id="worker-b",
+        batch_size=1,
+    )
+
+    assert await worker.run_once() == 1
+    completed = await repo.get_by_id(item.id)
+    assert completed is not None
+    assert completed.status == "completed"
+    launch_jobs = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel).where(
+                    WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert launch_jobs == []
 
 
 @pytest.mark.asyncio

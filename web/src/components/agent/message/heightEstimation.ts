@@ -6,6 +6,25 @@
 import type { GroupedItem } from './groupTimelineEvents';
 import type { DisplayItem } from './turnFolding';
 
+const MAX_TIMELINE_TEXT_ESTIMATE = 1800;
+
+function getTextLength(value: unknown): number {
+  if (typeof value === 'string') return value.length;
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value).length;
+  try {
+    return JSON.stringify(value).length;
+  } catch {
+    return 0;
+  }
+}
+
+function estimateTimelineTextHeight(value: unknown): number {
+  const length = Math.min(getTextLength(value), MAX_TIMELINE_TEXT_ESTIMATE);
+  if (length === 0) return 0;
+  return Math.ceil(length / 90) * 18;
+}
+
 /**
  * Estimate item height for the virtualizer based on item type.
  */
@@ -14,7 +33,16 @@ export function estimateGroupedItemHeight(item: GroupedItem | DisplayItem): numb
     return 36;
   }
   if (item.kind === 'timeline') {
-    return 80 + item.steps.length * 52;
+    const base = 64;
+    const stepChrome = item.steps.length * 56;
+    const dynamicContent = item.steps.reduce((height, step, index) => {
+      const isLikelyExpanded = index === item.steps.length - 1 || step.status === 'error';
+      if (!isLikelyExpanded) return height;
+      return (
+        height + estimateTimelineTextHeight(step.input) + estimateTimelineTextHeight(step.output)
+      );
+    }, 0);
+    return Math.min(1200, base + stepChrome + dynamicContent);
   }
   if (item.kind === 'subagent') {
     const base = 60;

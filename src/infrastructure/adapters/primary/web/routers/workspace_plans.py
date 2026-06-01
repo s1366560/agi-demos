@@ -3901,6 +3901,27 @@ async def _has_pending_node_recovery_job(
     return result.scalar_one_or_none() is not None
 
 
+async def _has_supervisor_dispose_decision_for_node(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan_id: str,
+    node_id: str,
+) -> bool:
+    result = await session.execute(
+        refresh_select_statement(
+            select(WorkspacePlanEventModel.id)
+            .where(WorkspacePlanEventModel.workspace_id == workspace_id)
+            .where(WorkspacePlanEventModel.plan_id == plan_id)
+            .where(WorkspacePlanEventModel.node_id == node_id)
+            .where(WorkspacePlanEventModel.event_type == "supervisor_decision_completed")
+            .where(WorkspacePlanEventModel.payload_json["action"].as_string() == "dispose_node")
+            .limit(1)
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def _active_nodes_with_terminal_attempts(
     *,
     session: AsyncSession,
@@ -4266,6 +4287,13 @@ async def _enqueue_stale_plan_node_recovery(
     repo = SqlWorkspacePlanOutboxRepository(session)
     for node in nodes[:1]:
         if not node.workspace_task_id or not node.assignee_agent_id:
+            continue
+        if await _has_supervisor_dispose_decision_for_node(
+            session=session,
+            workspace_id=workspace_id,
+            plan_id=plan.id,
+            node_id=node.id,
+        ):
             continue
         if await _has_pending_node_recovery_job(
             session=session,

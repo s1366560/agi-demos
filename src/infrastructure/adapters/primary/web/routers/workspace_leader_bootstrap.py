@@ -20,7 +20,11 @@ from src.infrastructure.adapters.primary.web.routers.agent.utils import get_cont
 from src.infrastructure.adapters.primary.web.startup.container import get_app_container
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
-from src.infrastructure.adapters.secondary.persistence.models import User, WorkspacePlanOutboxModel
+from src.infrastructure.adapters.secondary.persistence.models import (
+    User,
+    WorkspacePlanEventModel,
+    WorkspacePlanOutboxModel,
+)
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_ID,
@@ -38,6 +42,7 @@ _NON_OPEN_ROOT_STATUSES = frozenset({"done", "blocked"})
 _WORKER_SESSION_HEAL_MAX_PER_TICK_ENV = "WORKSPACE_AUTONOMY_MAX_WORKER_SESSION_HEAL_PER_TICK"
 _DEFAULT_WORKER_SESSION_HEAL_MAX_PER_TICK = 2
 _WORKER_LAUNCH_OUTBOX_RECOVERY_STATUSES = frozenset({"pending", "processing", "failed"})
+_DURABLE_DISPOSED_METADATA_VALUES = frozenset({"disposed", "supervisor_agent_disposed_node"})
 
 _AUTO_TICK_ENV = "WORKSPACE_AUTONOMY_AUTO_TICK_ENABLED"
 _AUTO_COMPLETE_ENV = "WORKSPACE_AUTONOMY_AUTO_COMPLETE_ENABLED"
@@ -261,6 +266,7 @@ def _durable_plan_worker_launch_recovery_metadata(
         or status_value in {WorkspaceTaskStatus.DONE.value, WorkspaceTaskStatus.BLOCKED.value}
         or not isinstance(metadata, dict)
         or metadata.get("task_role") not in _EXECUTION_TASK_ROLES
+        or _durable_plan_disposition_suppresses_worker_recovery(metadata)
     ):
         return None
     plan_id = metadata.get(WORKSPACE_PLAN_ID)
@@ -270,6 +276,37 @@ def _durable_plan_worker_launch_recovery_metadata(
         if isinstance(plan_id, str) and plan_id and isinstance(node_id, str) and node_id
         else None
     )
+
+
+def _durable_plan_disposition_suppresses_worker_recovery(metadata: Mapping[str, object]) -> bool:
+    """Return whether terminal supervisor disposition should prevent worker recovery."""
+
+    for key in ("durable_plan_verdict", "durable_plan_disposition", "last_attempt_status"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip().lower() in _DURABLE_DISPOSED_METADATA_VALUES:
+            return True
+    return False
+
+
+async def _has_supervisor_dispose_decision_for_node(
+    *,
+    db: AsyncSession,
+    workspace_id: str,
+    plan_id: str,
+    node_id: str,
+) -> bool:
+    result = await db.execute(
+        refresh_select_statement(
+            select(WorkspacePlanEventModel.id)
+            .where(WorkspacePlanEventModel.workspace_id == workspace_id)
+            .where(WorkspacePlanEventModel.plan_id == plan_id)
+            .where(WorkspacePlanEventModel.node_id == node_id)
+            .where(WorkspacePlanEventModel.event_type == "supervisor_decision_completed")
+            .where(WorkspacePlanEventModel.payload_json["action"].as_string() == "dispose_node")
+            .limit(1)
+        )
+    )
+    return result.scalar_one_or_none() is not None
 
 
 async def _has_recoverable_worker_launch_outbox(
@@ -364,6 +401,13 @@ async def _try_recover_durable_plan_worker_launch(
         return False
 
     try:
+        if await _has_supervisor_dispose_decision_for_node(
+            db=db,
+            workspace_id=workspace_id,
+            plan_id=plan_id,
+            node_id=node_id,
+        ):
+            return False
         if await _has_recoverable_worker_launch_outbox(
             db=db,
             workspace_id=workspace_id,

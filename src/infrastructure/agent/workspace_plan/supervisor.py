@@ -2182,8 +2182,58 @@ def _node_disposition_satisfies_dependency_without_integration(node: PlanNode) -
         and node.execution is TaskExecution.IDLE
         and _metadata_text(metadata.get("verification_feedback_disposition"))
         == "supervisor_agent_disposed_node"
+        and _metadata_text(metadata.get("last_supervisor_decision_action")) == "dispose_node"
         and _metadata_text(metadata.get("last_verification_judge_next_action_kind"))
         != "retry_same_node"
+        and _supervisor_disposition_is_terminal_dependency_satisfaction(metadata)
+    )
+
+
+_TERMINAL_DEPENDENCY_DISPOSITION_MARKERS = frozenset(
+    {
+        "stale",
+        "obsolete",
+        "superseded",
+        "duplicate",
+        "structurally satisfied",
+        "structurally_satisfied",
+        "redundant",
+    }
+)
+
+
+def _supervisor_disposition_is_terminal_dependency_satisfaction(
+    metadata: Mapping[str, Any],
+) -> bool:
+    event_payload = metadata.get("last_supervisor_decision_event_payload")
+    if isinstance(event_payload, Mapping):
+        if any(
+            key in event_payload
+            for key in (
+                "superseded_by_task_id",
+                "superseded_by_node_id",
+                "disposed_node_id",
+                "redundant_verification_goal",
+            )
+        ):
+            return True
+        event_reason = " ".join(str(value).lower() for value in event_payload.values())
+        if any(marker in event_reason for marker in _TERMINAL_DEPENDENCY_DISPOSITION_MARKERS):
+            return True
+
+    feedback_items = metadata.get("last_supervisor_decision_feedback_items")
+    if isinstance(feedback_items, list):
+        for item in feedback_items:
+            if not isinstance(item, Mapping):
+                continue
+            feedback_text = " ".join(str(value).lower() for value in item.values())
+            if any(marker in feedback_text for marker in _TERMINAL_DEPENDENCY_DISPOSITION_MARKERS):
+                return True
+
+    rationale = _metadata_text(metadata.get("last_supervisor_decision_rationale"))
+    return bool(
+        rationale
+        and any(marker in rationale.lower() for marker in _TERMINAL_DEPENDENCY_DISPOSITION_MARKERS)
     )
 
 

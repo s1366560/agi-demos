@@ -72,8 +72,10 @@ from src.domain.ports.services.workspace_supervisor_port import TickReport
 from src.domain.ports.services.workspace_verification_judge_port import (
     WorkspaceVerificationJudgePort,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     WorkspacePipelineRunModel,
+    WorkspacePlanEventModel,
     WorkspacePlanOutboxModel,
     WorkspaceTaskModel,
     WorkspaceTaskSessionAttemptModel,
@@ -341,6 +343,15 @@ def make_supervisor_tick_handler(
                 )
                 if reconciled_terminal_attempt or reconciled_reported_attempt:
                     await session.commit()
+                reconciled_supervisor_disposed_nodes = (
+                    await _reconcile_supervisor_disposed_nodes_before_tick(
+                        session=session,
+                        plan_id=item.plan_id,
+                        workspace_id=workspace_id,
+                    )
+                )
+                if reconciled_supervisor_disposed_nodes:
+                    await session.commit()
                 recovered_pipeline_requests = (
                     await _recover_orphaned_running_pipeline_requests_after_tick(
                         session=session,
@@ -534,6 +545,91 @@ _PROJECTABLE_DONE_DISPOSITIONS = frozenset(
         "superseded_by_completed_repair_alternative",
     }
 )
+
+
+async def _reconcile_supervisor_disposed_nodes_before_tick(
+    *,
+    session: AsyncSession,
+    plan_id: str,
+    workspace_id: str,
+) -> bool:
+    """Restore terminal supervisor disposition before the next scheduling pass."""
+
+    repo = SqlPlanRepository(session)
+    plan = await repo.get(plan_id)
+    if plan is None or plan.workspace_id != workspace_id:
+        return False
+
+    result = await session.execute(
+        refresh_select_statement(
+            select(
+                WorkspacePlanEventModel.node_id,
+                WorkspacePlanEventModel.attempt_id,
+                WorkspacePlanEventModel.payload_json,
+            )
+            .where(WorkspacePlanEventModel.workspace_id == workspace_id)
+            .where(WorkspacePlanEventModel.plan_id == plan_id)
+            .where(WorkspacePlanEventModel.event_type == "supervisor_decision_completed")
+            .where(WorkspacePlanEventModel.payload_json["action"].as_string() == "dispose_node")
+            .order_by(WorkspacePlanEventModel.created_at.desc())
+        )
+    )
+    events_by_node_id: dict[str, tuple[str | None, dict[str, Any]]] = {}
+    for node_id, attempt_id, payload in result.all():
+        if not node_id or node_id in events_by_node_id:
+            continue
+        events_by_node_id[str(node_id)] = (
+            str(attempt_id) if attempt_id else None,
+            dict(payload or {}),
+        )
+    if not events_by_node_id:
+        return False
+
+    now = datetime.now(UTC)
+    changed = False
+    for node in list(plan.nodes.values()):
+        event = events_by_node_id.get(node.id)
+        if event is None:
+            continue
+        if _node_has_projectable_supervisor_disposition(node):
+            continue
+        attempt_id, event_payload = event
+        metadata = dict(node.metadata or {})
+        metadata.update(
+            {
+                "verification_feedback_disposition": "supervisor_agent_disposed_node",
+                "last_supervisor_decision_action": "dispose_node",
+                "last_supervisor_decision_rationale": _metadata_string(
+                    event_payload.get("rationale")
+                ),
+                "last_supervisor_decision_confidence": event_payload.get("confidence"),
+                "last_supervisor_decision_feedback_items": event_payload.get(
+                    "feedback_items",
+                    [],
+                ),
+                "last_supervisor_decision_event_payload": event_payload,
+                "supervisor_disposition_reconciled_at": now.isoformat().replace(
+                    "+00:00",
+                    "Z",
+                ),
+            }
+        )
+        plan.replace_node(
+            replace(
+                node,
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                current_attempt_id=attempt_id or node.current_attempt_id,
+                metadata=metadata,
+                updated_at=now,
+                completed_at=node.completed_at or now,
+            )
+        )
+        changed = True
+
+    if changed:
+        await repo.save(plan)
+    return changed
 
 
 async def _project_done_idle_disposition_nodes_after_tick(
@@ -3002,6 +3098,13 @@ async def _stale_worker_launch_reason(
         reason = "task_current_attempt_changed"
 
     if reason is None and plan_id and node_id:
+        if await _has_supervisor_dispose_decision_for_node(
+            session=session,
+            workspace_id=task.workspace_id,
+            plan_id=plan_id,
+            node_id=node_id,
+        ):
+            return "supervisor_disposed_node"
         plan = await SqlPlanRepository(session).get(plan_id)
         node = plan.nodes.get(PlanNodeId(node_id)) if plan is not None else None
         if node is not None:
@@ -3012,6 +3115,27 @@ async def _stale_worker_launch_reason(
             elif node.intent is TaskIntent.DONE or node.execution is TaskExecution.IDLE:
                 reason = "node_not_launchable"
     return reason
+
+
+async def _has_supervisor_dispose_decision_for_node(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan_id: str,
+    node_id: str,
+) -> bool:
+    result = await session.execute(
+        refresh_select_statement(
+            select(WorkspacePlanEventModel.id)
+            .where(WorkspacePlanEventModel.workspace_id == workspace_id)
+            .where(WorkspacePlanEventModel.plan_id == plan_id)
+            .where(WorkspacePlanEventModel.node_id == node_id)
+            .where(WorkspacePlanEventModel.event_type == "supervisor_decision_completed")
+            .where(WorkspacePlanEventModel.payload_json["action"].as_string() == "dispose_node")
+            .limit(1)
+        )
+    )
+    return result.scalar_one_or_none() is not None
 
 
 async def _defer_worker_launch(
@@ -3505,6 +3629,23 @@ def make_handoff_resume_handler() -> WorkspacePlanOutboxHandler:  # noqa: C901, 
             metadata, WORKSPACE_PLAN_NODE_ID
         )
         if plan_id and node_id:
+            if await _has_supervisor_dispose_decision_for_node(
+                session=session,
+                workspace_id=workspace_id,
+                plan_id=plan_id,
+                node_id=node_id,
+            ):
+                logger.info(
+                    "workspace_plan.handoff_resume.skip_supervisor_disposed_node",
+                    extra={
+                        "event": "workspace_plan.handoff_resume.skip_supervisor_disposed_node",
+                        "workspace_id": workspace_id,
+                        "plan_id": plan_id,
+                        "node_id": node_id,
+                        "task_id": task.id,
+                    },
+                )
+                return
             missing_dependencies = await _defer_handoff_resume_for_unmet_dependencies(
                 session=session,
                 workspace_id=workspace_id,
