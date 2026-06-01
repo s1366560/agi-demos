@@ -347,16 +347,18 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                         },
                     )
                 verifies_ran += 1
-                handled_by_agent, completed_by_agent, blocked_by_agent = (
-                    await self._apply_agent_supervisor_decision(
-                        workspace_id=workspace_id,
-                        plan=plan,
-                        node=node,
-                        report=report,
-                        ctx=ctx,
-                        feedback_items=feedback_items,
-                        errors=errors,
-                    )
+                (
+                    handled_by_agent,
+                    completed_by_agent,
+                    blocked_by_agent,
+                ) = await self._apply_agent_supervisor_decision(
+                    workspace_id=workspace_id,
+                    plan=plan,
+                    node=node,
+                    report=report,
+                    ctx=ctx,
+                    feedback_items=feedback_items,
+                    errors=errors,
                 )
                 if handled_by_agent:
                     nodes_done += completed_by_agent
@@ -955,9 +957,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 report,
                 artifacts=ctx.artifacts,
             )
-            plan.replace_node(
-                _node_with_supervisor_decision_repair_brief(evidenced_node, decision)
-            )
+            plan.replace_node(_node_with_supervisor_decision_repair_brief(evidenced_node, decision))
             await self._planner.replan(
                 plan,
                 ReplanTrigger(
@@ -969,8 +969,14 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
             return True, 0, 0
 
         if action is WorkspaceSupervisorDecisionAction.DISPOSE_NODE:
-            disposed_node = _node_with_verification_feedback_disposition(
+            evidenced_node = _node_with_supervisor_decision_disposition(
                 node,
+                report,
+                decision=decision,
+                artifacts=ctx.artifacts,
+            )
+            disposed_node = _node_with_verification_feedback_disposition(
+                evidenced_node,
                 report,
                 artifacts=ctx.artifacts,
                 disposition=_supervisor_decision_disposition(decision),
@@ -2081,6 +2087,8 @@ def _dependency_blocking_ids(plan: Plan, node: PlanNode) -> list[str]:
             blocking.append(dep_id.value)
             continue
         if _dependency_commit_needs_integration(dependency):
+            if _node_disposition_satisfies_dependency_without_integration(dependency):
+                continue
             if _repair_dependency_can_seed_downstream_worktree(
                 node=node,
                 dependency_id=dep_id,
@@ -2113,9 +2121,29 @@ def _repair_dependency_can_seed_downstream_worktree(
         return False
     if not _dependency_dispatch_commit_ref(dependency):
         return False
-    if repair_dependency is not None and dependency_id == repair_dependency:
-        return True
-    return _nodes_repair_same_original(node, dependency)
+    return (
+        (repair_dependency is not None and dependency_id == repair_dependency)
+        or bool(_metadata_text(node.metadata.get("repair_for_node_id")))
+        or _node_is_iteration_review_feedback(node)
+        or _node_is_iteration_release_candidate(node)
+        or _nodes_repair_same_original(node, dependency)
+    )
+
+
+def _node_is_iteration_review_feedback(node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    return (
+        _metadata_text(metadata.get("iteration_phase")) == "review"
+        and _metadata_text(metadata.get("scrum_artifact")) == "feedback"
+    )
+
+
+def _node_is_iteration_release_candidate(node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    return (
+        _metadata_text(metadata.get("iteration_phase")) == "deploy"
+        and _metadata_text(metadata.get("scrum_artifact")) == "release_candidate"
+    )
 
 
 def _nodes_repair_same_original(node: PlanNode, dependency: PlanNode) -> bool:
@@ -2125,6 +2153,8 @@ def _nodes_repair_same_original(node: PlanNode, dependency: PlanNode) -> bool:
 
 
 def _dependency_commit_needs_integration(node: PlanNode) -> bool:
+    if _node_disposition_satisfies_dependency_without_integration(node):
+        return False
     commit_ref = _node_verified_commit_ref(node)
     if not commit_ref:
         return False
@@ -2143,6 +2173,18 @@ def _dependency_commit_needs_integration(node: PlanNode) -> bool:
     if _node_pipeline_published_commit(node, commit_ref=commit_ref):
         return False
     return status not in _SUCCESSFUL_WORKTREE_INTEGRATION_STATUSES
+
+
+def _node_disposition_satisfies_dependency_without_integration(node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    return (
+        node.intent is TaskIntent.DONE
+        and node.execution is TaskExecution.IDLE
+        and _metadata_text(metadata.get("verification_feedback_disposition"))
+        == "supervisor_agent_disposed_node"
+        and _metadata_text(metadata.get("last_verification_judge_next_action_kind"))
+        != "retry_same_node"
+    )
 
 
 def _node_with_dependency_base_ref(plan: Plan, node: PlanNode) -> PlanNode:
@@ -3432,6 +3474,25 @@ def _node_with_supervisor_decision_retry_override(
         retry_at = datetime.now(UTC) + timedelta(seconds=decision.retry_not_before_seconds)
         metadata["retry_not_before"] = retry_at.isoformat().replace("+00:00", "Z")
     return replace(node, metadata=metadata, updated_at=datetime.now(UTC))
+
+
+def _node_with_supervisor_decision_disposition(
+    node: PlanNode,
+    report: VerificationReport,
+    *,
+    decision: WorkspaceSupervisorDecisionResult,
+    artifacts: Mapping[str, Any] | None,
+) -> PlanNode:
+    evidenced = _node_with_verification_evidence(node, report, artifacts=artifacts)
+    metadata = dict(evidenced.metadata or {})
+    metadata["last_supervisor_decision_action"] = decision.action.value
+    metadata["last_supervisor_decision_rationale"] = decision.rationale
+    metadata["last_supervisor_decision_confidence"] = decision.confidence
+    if decision.feedback_items:
+        metadata["last_supervisor_decision_feedback_items"] = list(decision.feedback_items)
+    if decision.event_payload:
+        metadata["last_supervisor_decision_event_payload"] = dict(decision.event_payload)
+    return replace(evidenced, metadata=metadata, updated_at=datetime.now(UTC))
 
 
 def _node_with_supervisor_decision_repair_brief(
