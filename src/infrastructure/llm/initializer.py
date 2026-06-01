@@ -42,6 +42,8 @@ PROVIDER_TYPE_MAP: dict[str, ProviderType] = {
 
 # Auto-detection order: env var -> provider name
 _PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
+    ("GOOGLE_API_KEY", "gemini"),
+    ("GOOGLE_GENERATIVE_AI_API_KEY", "gemini"),
     ("GEMINI_API_KEY", "gemini"),
     ("DASHSCOPE_API_KEY", "dashscope"),
     ("OPENAI_API_KEY", "openai"),
@@ -50,6 +52,7 @@ _PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
     ("MINIMAX_API_KEY", "minimax"),
     ("ZAI_API_KEY", "zai"),
     ("ZHIPU_API_KEY", "zai"),
+    ("MOONSHOT_API_KEY", "kimi"),
     ("KIMI_API_KEY", "kimi"),
     ("ANTHROPIC_API_KEY", "anthropic"),
     ("OLLAMA_BASE_URL", "ollama"),
@@ -213,9 +216,11 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
 
 def _env_gemini() -> dict[str, Any]:
     return {
-        "api_key": os.getenv("GEMINI_API_KEY"),
+        "api_key": os.getenv("GOOGLE_API_KEY")
+        or os.getenv("GOOGLE_GENERATIVE_AI_API_KEY")
+        or os.getenv("GEMINI_API_KEY"),
         "llm_model": os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
-        "embedding_model": os.getenv("GEMINI_EMBEDDING_MODEL", "text-embedding-004"),
+        "embedding_model": os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"),
         "reranker_model": os.getenv("GEMINI_RERANK_MODEL"),
     }
 
@@ -223,9 +228,9 @@ def _env_gemini() -> dict[str, Any]:
 def _env_zai() -> dict[str, Any]:
     return {
         "api_key": os.getenv("ZAI_API_KEY") or os.getenv("ZHIPU_API_KEY"),
-        "llm_model": os.getenv("ZAI_MODEL") or os.getenv("ZHIPU_MODEL", "glm-4-plus"),
+        "llm_model": os.getenv("ZAI_MODEL") or os.getenv("ZHIPU_MODEL", "glm-5.1"),
         "llm_small_model": os.getenv("ZAI_SMALL_MODEL")
-        or os.getenv("ZHIPU_SMALL_MODEL", "glm-4-flash"),
+        or os.getenv("ZHIPU_SMALL_MODEL", "glm-4.7-flash"),
         "embedding_model": os.getenv("ZAI_EMBEDDING_MODEL")
         or os.getenv("ZHIPU_EMBEDDING_MODEL", "embedding-3"),
         "reranker_model": os.getenv("ZAI_RERANK_MODEL") or os.getenv("ZHIPU_RERANK_MODEL"),
@@ -273,9 +278,9 @@ def _env_deepseek() -> dict[str, Any]:
     return {
         "api_key": os.getenv("DEEPSEEK_API_KEY"),
         "llm_model": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-        "llm_small_model": os.getenv("DEEPSEEK_SMALL_MODEL", "deepseek-coder"),
+        "llm_small_model": os.getenv("DEEPSEEK_SMALL_MODEL", "deepseek-v4-flash"),
         "reranker_model": os.getenv("DEEPSEEK_RERANK_MODEL"),
-        "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
+        "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
     }
 
 
@@ -286,15 +291,16 @@ def _env_minimax() -> dict[str, Any]:
         "llm_small_model": os.getenv("MINIMAX_SMALL_MODEL", "MiniMax-M2.5-highspeed"),
         "embedding_model": os.getenv("MINIMAX_EMBEDDING_MODEL", "embo-01"),
         "reranker_model": os.getenv("MINIMAX_RERANK_MODEL"),
-        "base_url": os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1"),
+        "base_url": os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/anthropic/v1"),
     }
 
 
 def _env_kimi() -> dict[str, Any]:
     return {
-        "api_key": os.getenv("KIMI_API_KEY"),
-        "llm_model": os.getenv("KIMI_MODEL", "moonshot-v1-8k"),
-        "llm_small_model": os.getenv("KIMI_SMALL_MODEL", "moonshot-v1-8k"),
+        "api_key": os.getenv("MOONSHOT_API_KEY") or os.getenv("KIMI_API_KEY"),
+        "llm_model": os.getenv("KIMI_MODEL") or os.getenv("MOONSHOT_MODEL", "kimi-k2.5"),
+        "llm_small_model": os.getenv("KIMI_SMALL_MODEL")
+        or os.getenv("MOONSHOT_SMALL_MODEL", "kimi-k2.5"),
         "embedding_model": os.getenv("KIMI_EMBEDDING_MODEL", "kimi-embedding-1"),
         "reranker_model": os.getenv("KIMI_RERANK_MODEL"),
         "base_url": os.getenv("KIMI_BASE_URL", "https://api.moonshot.cn/v1"),

@@ -92,8 +92,8 @@ const PROVIDER_CONFIG: Record<
   deepseek: {
     icon: '🔍',
     gradient: 'from-blue-500 to-cyan-500',
-    label: 'Deepseek',
-    description: 'Deepseek-Chat, Coder',
+    label: 'DeepSeek',
+    description: 'DeepSeek Chat, Coder',
   },
   minimax: {
     icon: '🧩',

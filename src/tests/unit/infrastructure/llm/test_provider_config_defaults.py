@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import importlib
+import json
+from pathlib import Path
 
 import pytest
 
 from src.domain.llm_providers.models import ProviderType
 from src.infrastructure.llm.provider_config import (
+    DEFAULT_MODELS,
     ProviderHealthConfig,
     ProviderPrefix,
     UnifiedLLMConfig,
@@ -50,6 +53,7 @@ def test_llm_type_contract_module_imports_all_typed_dicts() -> None:
     [
         (ProviderType.OPENAI, ProviderPrefix.OPENAI),
         (ProviderType.OPENROUTER, ProviderPrefix.OPENAI),
+        (ProviderType.DEEPSEEK, ProviderPrefix.DEEPSEEK),
         (ProviderType.KIMI, ProviderPrefix.KIMI),
         (ProviderType.LMSTUDIO, ProviderPrefix.LMSTUDIO),
         (ProviderType.VOLCENGINE, ProviderPrefix.VOLCENGINE),
@@ -114,9 +118,35 @@ def test_unified_llm_config_keeps_openai_model_unprefixed() -> None:
 def test_provider_health_config_uses_completion_default() -> None:
     config = ProviderHealthConfig(provider_type=ProviderType.GEMINI)
 
-    assert config.health_check_model == "gemini-1.5-flash"
+    assert config.health_check_model == "gemini-2.0-flash"
     assert config.failure_threshold == 5
     assert config.recovery_timeout == 60.0
+
+
+def test_models_dev_llm_defaults_exist_in_snapshot() -> None:
+    snapshot = json.loads(
+        Path("src/infrastructure/llm/models_snapshot.json").read_text(encoding="utf-8")
+    )
+    by_provider: dict[str, set[str]] = {}
+    for model in snapshot["models"].values():
+        by_provider.setdefault(model["provider"], set()).add(model["name"])
+
+    provider_types = (
+        ProviderType.GEMINI,
+        ProviderType.KIMI,
+        ProviderType.DEEPSEEK,
+        ProviderType.MINIMAX,
+        ProviderType.ZAI,
+        ProviderType.GROQ,
+        ProviderType.COHERE,
+        ProviderType.BEDROCK,
+        ProviderType.VERTEX,
+    )
+    for provider_type in provider_types:
+        provider_models = by_provider[provider_type.value]
+        defaults = DEFAULT_MODELS[provider_type]
+        assert defaults["completion"] in provider_models
+        assert defaults["completion_medium"] in provider_models
 
 
 @pytest.mark.parametrize(
@@ -178,6 +208,77 @@ def test_resolve_provider_env_defaults_uses_env_sources(
     assert defaults.base_url == "https://open.bigmodel.cn/api/paas/v4"
     assert defaults.base_url_source is None
     assert defaults.api_key_env_vars == ("ZAI_API_KEY", "ZHIPU_API_KEY")
+
+
+def test_resolve_provider_env_defaults_supports_deepseek(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for key in (
+        "DEEPSEEK_API_KEY",
+        "DEEPSEEK_MODEL",
+        "DEEPSEEK_SMALL_MODEL",
+        "DEEPSEEK_BASE_URL",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", " deepseek-key ")
+    monkeypatch.setenv("DEEPSEEK_MODEL", " deepseek-reasoner ")
+
+    defaults = resolve_provider_env_defaults(ProviderType.DEEPSEEK)
+
+    assert defaults.api_key == "deepseek-key"
+    assert defaults.api_key_source == "DEEPSEEK_API_KEY"
+    assert defaults.llm_model == "deepseek-reasoner"
+    assert defaults.llm_model_source == "DEEPSEEK_MODEL"
+    assert defaults.llm_small_model == "deepseek-v4-flash"
+    assert defaults.base_url == "https://api.deepseek.com"
+    assert defaults.api_key_env_vars == ("DEEPSEEK_API_KEY",)
+
+
+def test_resolve_provider_env_defaults_uses_models_dev_env_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for key in (
+        "GOOGLE_API_KEY",
+        "GOOGLE_GENERATIVE_AI_API_KEY",
+        "GEMINI_API_KEY",
+        "MOONSHOT_API_KEY",
+        "KIMI_API_KEY",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    monkeypatch.setenv("GOOGLE_GENERATIVE_AI_API_KEY", " google-key ")
+    gemini = resolve_provider_env_defaults(ProviderType.GEMINI)
+    assert gemini.api_key == "google-key"
+    assert gemini.api_key_source == "GOOGLE_GENERATIVE_AI_API_KEY"
+    assert gemini.embedding_model == "gemini-embedding-001"
+    assert gemini.api_key_env_vars == (
+        "GOOGLE_API_KEY",
+        "GOOGLE_GENERATIVE_AI_API_KEY",
+        "GEMINI_API_KEY",
+    )
+
+    monkeypatch.setenv("MOONSHOT_API_KEY", " moonshot-key ")
+    kimi = resolve_provider_env_defaults(ProviderType.KIMI)
+    assert kimi.api_key == "moonshot-key"
+    assert kimi.api_key_source == "MOONSHOT_API_KEY"
+    assert kimi.llm_model == "kimi-k2.5"
+    assert kimi.llm_small_model == "kimi-k2.5"
+    assert kimi.api_key_env_vars == ("MOONSHOT_API_KEY", "KIMI_API_KEY")
+
+
+def test_resolve_provider_env_defaults_uses_models_dev_api_bases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for key in ("MINIMAX_API_KEY", "MINIMAX_BASE_URL"):
+        monkeypatch.delenv(key, raising=False)
+
+    monkeypatch.setenv("MINIMAX_API_KEY", " minimax-key ")
+
+    defaults = resolve_provider_env_defaults(ProviderType.MINIMAX)
+
+    assert defaults.api_key == "minimax-key"
+    assert defaults.base_url == "https://api.minimax.io/anthropic/v1"
 
 
 def test_resolve_provider_env_defaults_handles_unprofiled_provider() -> None:

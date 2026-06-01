@@ -2,9 +2,9 @@
   "_meta": {
     "version": "3.0.0",
     "source": "models.dev",
-    "generated_at": "2026-05-18T04:45:29Z",
+    "generated_at": "2026-06-01T02:39:38Z",
     "description": "Model catalog snapshot generated from models.dev API",
-    "model_count": 882
+    "model_count": 859
   },
   "models": {
     "claude-3-5-haiku-20241022": {
@@ -715,6 +715,40 @@
       "supports_presence_penalty": false,
       "supports_top_p": false
     },
+    "claude-opus-4-8": {
+      "name": "claude-opus-4-8",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_cost_per_1m": 5.0,
+      "output_cost_per_1m": 25.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "anthropic",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "claude-opus",
+      "release_date": "2026-05-28",
+      "description": "Claude Opus 4.8",
+      "reasoning": true,
+      "supports_temperature": false,
+      "supports_tool_call": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.5,
+      "cache_write_cost_per_1m": 6.25,
+      "supports_response_format": true,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
     "claude-sonnet-4-0": {
       "name": "claude-sonnet-4-0",
       "context_length": 200000,
@@ -1368,7 +1402,7 @@
       "description": "GPT-4.1 nano",
       "supports_tool_call": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.03,
+      "cache_read_cost_per_1m": 0.025,
       "knowledge_cutoff": "2024-04",
       "supports_response_format": true,
       "temperature_range": [
@@ -1438,7 +1472,7 @@
       "description": "GPT-4o mini",
       "supports_tool_call": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.08,
+      "cache_read_cost_per_1m": 0.075,
       "knowledge_cutoff": "2023-09",
       "supports_response_format": true,
       "temperature_range": [
@@ -2307,7 +2341,7 @@
       "supports_temperature": false,
       "supports_tool_call": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.28,
+      "cache_read_cost_per_1m": 0.275,
       "knowledge_cutoff": "2024-05",
       "supports_response_format": true,
       "supports_stop": false,
@@ -4554,6 +4588,40 @@
       "supports_presence_penalty": false,
       "supports_top_p": false
     },
+    "anthropic.claude-opus-4-8": {
+      "name": "anthropic.claude-opus-4-8",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_cost_per_1m": 5.0,
+      "output_cost_per_1m": 25.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "bedrock",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "claude-opus",
+      "release_date": "2026-05-28",
+      "description": "Claude Opus 4.8",
+      "reasoning": true,
+      "supports_temperature": false,
+      "supports_tool_call": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.5,
+      "cache_write_cost_per_1m": 6.25,
+      "supports_response_format": true,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
     "anthropic.claude-sonnet-4-5-20250929-v1:0": {
       "name": "anthropic.claude-sonnet-4-5-20250929-v1:0",
       "context_length": 200000,
@@ -4709,6 +4777,40 @@
         0.0,
         1.0
       ]
+    },
+    "au.anthropic.claude-opus-4-8": {
+      "name": "au.anthropic.claude-opus-4-8",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_cost_per_1m": 5.0,
+      "output_cost_per_1m": 25.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "bedrock",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "claude-opus",
+      "release_date": "2026-05-28",
+      "description": "Claude Opus 4.8 (AU)",
+      "reasoning": true,
+      "supports_temperature": false,
+      "supports_tool_call": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.5,
+      "cache_write_cost_per_1m": 6.25,
+      "supports_response_format": true,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
     },
     "au.anthropic.claude-sonnet-4-5-20250929-v1:0": {
       "name": "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
@@ -4970,8 +5072,8 @@
       "name": "eu.anthropic.claude-opus-4-6-v1",
       "context_length": 1000000,
       "max_output_tokens": 128000,
-      "input_cost_per_1m": 5.0,
-      "output_cost_per_1m": 25.0,
+      "input_cost_per_1m": 5.5,
+      "output_cost_per_1m": 27.5,
       "capabilities": [
         "chat",
         "function_calling",
@@ -4992,8 +5094,8 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.5,
-      "cache_write_cost_per_1m": 6.25,
+      "cache_read_cost_per_1m": 0.55,
+      "cache_write_cost_per_1m": 6.875,
       "knowledge_cutoff": "2025-05-31",
       "supports_response_format": true,
       "temperature_range": [
@@ -5009,8 +5111,8 @@
       "name": "eu.anthropic.claude-opus-4-7",
       "context_length": 1000000,
       "max_output_tokens": 128000,
-      "input_cost_per_1m": 5.0,
-      "output_cost_per_1m": 25.0,
+      "input_cost_per_1m": 5.5,
+      "output_cost_per_1m": 27.5,
       "capabilities": [
         "chat",
         "function_calling",
@@ -5031,9 +5133,43 @@
       "supports_temperature": false,
       "supports_tool_call": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.5,
-      "cache_write_cost_per_1m": 6.25,
+      "cache_read_cost_per_1m": 0.55,
+      "cache_write_cost_per_1m": 6.875,
       "knowledge_cutoff": "2026-01-31",
+      "supports_response_format": true,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
+    "eu.anthropic.claude-opus-4-8": {
+      "name": "eu.anthropic.claude-opus-4-8",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_cost_per_1m": 5.5,
+      "output_cost_per_1m": 27.5,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "bedrock",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "claude-opus",
+      "release_date": "2026-05-28",
+      "description": "Claude Opus 4.8 (EU)",
+      "reasoning": true,
+      "supports_temperature": false,
+      "supports_tool_call": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.55,
+      "cache_write_cost_per_1m": 6.875,
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -5044,8 +5180,8 @@
       "name": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
       "context_length": 200000,
       "max_output_tokens": 64000,
-      "input_cost_per_1m": 3.0,
-      "output_cost_per_1m": 15.0,
+      "input_cost_per_1m": 3.3,
+      "output_cost_per_1m": 16.5,
       "capabilities": [
         "chat",
         "function_calling",
@@ -5066,8 +5202,8 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.3,
-      "cache_write_cost_per_1m": 3.75,
+      "cache_read_cost_per_1m": 0.33,
+      "cache_write_cost_per_1m": 4.125,
       "knowledge_cutoff": "2025-07-31",
       "supports_response_format": true,
       "temperature_range": [
@@ -5083,8 +5219,8 @@
       "name": "eu.anthropic.claude-sonnet-4-6",
       "context_length": 1000000,
       "max_output_tokens": 64000,
-      "input_cost_per_1m": 3.0,
-      "output_cost_per_1m": 15.0,
+      "input_cost_per_1m": 3.3,
+      "output_cost_per_1m": 16.5,
       "capabilities": [
         "chat",
         "function_calling",
@@ -5105,8 +5241,8 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.3,
-      "cache_write_cost_per_1m": 3.75,
+      "cache_read_cost_per_1m": 0.33,
+      "cache_write_cost_per_1m": 4.125,
       "knowledge_cutoff": "2025-08-31",
       "supports_response_format": true,
       "temperature_range": [
@@ -5264,6 +5400,40 @@
       "cache_read_cost_per_1m": 0.5,
       "cache_write_cost_per_1m": 6.25,
       "knowledge_cutoff": "2026-01-31",
+      "supports_response_format": true,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
+    "global.anthropic.claude-opus-4-8": {
+      "name": "global.anthropic.claude-opus-4-8",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_cost_per_1m": 5.0,
+      "output_cost_per_1m": 25.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "bedrock",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "claude-opus",
+      "release_date": "2026-05-28",
+      "description": "Claude Opus 4.8 (Global)",
+      "reasoning": true,
+      "supports_temperature": false,
+      "supports_tool_call": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.5,
+      "cache_write_cost_per_1m": 6.25,
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -5477,6 +5647,40 @@
       "cache_read_cost_per_1m": 0.5,
       "cache_write_cost_per_1m": 6.25,
       "knowledge_cutoff": "2026-01-31",
+      "supports_response_format": true,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
+    "jp.anthropic.claude-opus-4-8": {
+      "name": "jp.anthropic.claude-opus-4-8",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_cost_per_1m": 5.0,
+      "output_cost_per_1m": 25.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "bedrock",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "claude-opus",
+      "release_date": "2026-05-28",
+      "description": "Claude Opus 4.8 (JP)",
+      "reasoning": true,
+      "supports_temperature": false,
+      "supports_tool_call": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.5,
+      "cache_write_cost_per_1m": 6.25,
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -6121,8 +6325,8 @@
     },
     "moonshot.kimi-k2-thinking": {
       "name": "moonshot.kimi-k2-thinking",
-      "context_length": 256000,
-      "max_output_tokens": 256000,
+      "context_length": 262143,
+      "max_output_tokens": 16000,
       "input_cost_per_1m": 0.6,
       "output_cost_per_1m": 2.5,
       "capabilities": [
@@ -6154,8 +6358,8 @@
     },
     "moonshotai.kimi-k2.5": {
       "name": "moonshotai.kimi-k2.5",
-      "context_length": 256000,
-      "max_output_tokens": 256000,
+      "context_length": 262143,
+      "max_output_tokens": 16000,
       "input_cost_per_1m": 0.6,
       "output_cost_per_1m": 3.0,
       "capabilities": [
@@ -6858,6 +7062,40 @@
       "cache_read_cost_per_1m": 0.5,
       "cache_write_cost_per_1m": 6.25,
       "knowledge_cutoff": "2026-01-31",
+      "supports_response_format": true,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
+    "us.anthropic.claude-opus-4-8": {
+      "name": "us.anthropic.claude-opus-4-8",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_cost_per_1m": 5.0,
+      "output_cost_per_1m": 25.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "bedrock",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "claude-opus",
+      "release_date": "2026-05-28",
+      "description": "Claude Opus 4.8 (US)",
+      "reasoning": true,
+      "supports_temperature": false,
+      "supports_tool_call": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.5,
+      "cache_write_cost_per_1m": 6.25,
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -7675,7 +7913,7 @@
       "interleaved": {
         "field": "reasoning_content"
       },
-      "cache_read_cost_per_1m": 0.028,
+      "cache_read_cost_per_1m": 0.0028,
       "knowledge_cutoff": "2025-05",
       "open_weights": true,
       "supports_response_format": true,
@@ -7692,8 +7930,8 @@
       "name": "deepseek-v4-pro",
       "context_length": 1000000,
       "max_output_tokens": 384000,
-      "input_cost_per_1m": 1.74,
-      "output_cost_per_1m": 3.48,
+      "input_cost_per_1m": 0.435,
+      "output_cost_per_1m": 0.87,
       "capabilities": [
         "chat",
         "function_calling"
@@ -7715,7 +7953,7 @@
       "interleaved": {
         "field": "reasoning_content"
       },
-      "cache_read_cost_per_1m": 0.145,
+      "cache_read_cost_per_1m": 0.003625,
       "knowledge_cutoff": "2025-05",
       "open_weights": true,
       "supports_response_format": true,
@@ -10261,6 +10499,45 @@
         1.0
       ]
     },
+    "qwen3.6-flash": {
+      "name": "qwen3.6-flash",
+      "context_length": 1000000,
+      "max_output_tokens": 65536,
+      "input_cost_per_1m": 0.1875,
+      "output_cost_per_1m": 1.125,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "dashscope",
+      "modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "family": "qwen3.6",
+      "release_date": "2026-04-27",
+      "description": "Qwen3.6 Flash",
+      "input_budget_ratio": 0.85,
+      "chars_per_token": 1.4,
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_write_cost_per_1m": 0.234375,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
     "qwen3.6-max-preview": {
       "name": "qwen3.6-max-preview",
       "context_length": 245800,
@@ -10325,6 +10602,41 @@
       "cache_read_cost_per_1m": 0.05,
       "cache_write_cost_per_1m": 0.625,
       "knowledge_cutoff": "2025-04",
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "qwen3.7-max": {
+      "name": "qwen3.7-max",
+      "context_length": 1000000,
+      "max_output_tokens": 65536,
+      "input_cost_per_1m": 2.5,
+      "output_cost_per_1m": 7.5,
+      "capabilities": [
+        "chat",
+        "function_calling"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "dashscope",
+      "modalities": [
+        "text"
+      ],
+      "family": "qwen",
+      "release_date": "2026-05-21",
+      "description": "Qwen3.7 Max",
+      "input_budget_ratio": 0.85,
+      "chars_per_token": 1.4,
+      "reasoning": true,
+      "supports_tool_call": true,
+      "cache_read_cost_per_1m": 0.5,
+      "cache_write_cost_per_1m": 3.125,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -10666,7 +10978,7 @@
       "interleaved": {
         "field": "reasoning_content"
       },
-      "cache_read_cost_per_1m": 0.028,
+      "cache_read_cost_per_1m": 0.0028,
       "knowledge_cutoff": "2025-05",
       "open_weights": true,
       "supports_response_format": true,
@@ -10684,8 +10996,8 @@
       "name": "deepseek-v4-pro",
       "context_length": 1000000,
       "max_output_tokens": 384000,
-      "input_cost_per_1m": 1.74,
-      "output_cost_per_1m": 3.48,
+      "input_cost_per_1m": 0.435,
+      "output_cost_per_1m": 0.87,
       "capabilities": [
         "chat",
         "function_calling"
@@ -10705,122 +11017,11 @@
       "interleaved": {
         "field": "reasoning_content"
       },
-      "cache_read_cost_per_1m": 0.145,
+      "cache_read_cost_per_1m": 0.003625,
       "knowledge_cutoff": "2025-05",
       "open_weights": true,
       "supports_response_format": true,
       "supports_seed": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemini-1.5-flash": {
-      "name": "gemini-1.5-flash",
-      "context_length": 1000000,
-      "max_output_tokens": 8192,
-      "input_cost_per_1m": 0.075,
-      "output_cost_per_1m": 0.3,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video"
-      ],
-      "family": "gemini-flash",
-      "release_date": "2024-05-14",
-      "description": "Gemini 1.5 Flash",
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.01875,
-      "knowledge_cutoff": "2024-04",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemini-1.5-flash-8b": {
-      "name": "gemini-1.5-flash-8b",
-      "context_length": 1000000,
-      "max_output_tokens": 8192,
-      "input_cost_per_1m": 0.0375,
-      "output_cost_per_1m": 0.15,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video"
-      ],
-      "family": "gemini-flash",
-      "release_date": "2024-10-03",
-      "description": "Gemini 1.5 Flash-8B",
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.01,
-      "knowledge_cutoff": "2024-04",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemini-1.5-pro": {
-      "name": "gemini-1.5-pro",
-      "context_length": 1000000,
-      "max_output_tokens": 8192,
-      "input_cost_per_1m": 1.25,
-      "output_cost_per_1m": 5.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video"
-      ],
-      "family": "gemini-pro",
-      "release_date": "2024-02-15",
-      "description": "Gemini 1.5 Pro",
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.3125,
-      "knowledge_cutoff": "2024-04",
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -10892,7 +11093,7 @@
       ],
       "family": "gemini-flash-lite",
       "release_date": "2024-12-11",
-      "description": "Gemini 2.0 Flash Lite",
+      "description": "Gemini 2.0 Flash-Lite",
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
@@ -10965,35 +11166,7 @@
       ],
       "family": "gemini-flash",
       "release_date": "2025-08-26",
-      "description": "Gemini 2.5 Flash Image",
-      "reasoning": true,
-      "supports_temperature": false,
-      "cache_read_cost_per_1m": 0.075,
-      "knowledge_cutoff": "2025-06",
-      "supports_stop": false,
-      "supports_frequency_penalty": false,
-      "supports_presence_penalty": false,
-      "supports_top_p": false
-    },
-    "gemini-2.5-flash-image-preview": {
-      "name": "gemini-2.5-flash-image-preview",
-      "context_length": 32768,
-      "max_output_tokens": 32768,
-      "input_cost_per_1m": 0.3,
-      "output_cost_per_1m": 30.0,
-      "capabilities": [
-        "image_editing"
-      ],
-      "supports_streaming": false,
-      "supports_json_mode": false,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image"
-      ],
-      "family": "gemini-flash",
-      "release_date": "2025-08-26",
-      "description": "Gemini 2.5 Flash Image (Preview)",
+      "description": "Nano Banana",
       "reasoning": true,
       "supports_temperature": false,
       "cache_read_cost_per_1m": 0.075,
@@ -11026,7 +11199,7 @@
       ],
       "family": "gemini-flash-lite",
       "release_date": "2025-06-17",
-      "description": "Gemini 2.5 Flash Lite",
+      "description": "Gemini 2.5 Flash-Lite",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
@@ -11043,208 +11216,10 @@
         1.0
       ]
     },
-    "gemini-2.5-flash-lite-preview-06-17": {
-      "name": "gemini-2.5-flash-lite-preview-06-17",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.1,
-      "output_cost_per_1m": 0.4,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-flash-lite",
-      "release_date": "2025-06-17",
-      "description": "Gemini 2.5 Flash Lite Preview 06-17",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.025,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemini-2.5-flash-lite-preview-09-2025": {
-      "name": "gemini-2.5-flash-lite-preview-09-2025",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.1,
-      "output_cost_per_1m": 0.4,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-flash-lite",
-      "release_date": "2025-09-25",
-      "description": "Gemini 2.5 Flash Lite Preview 09-25",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.025,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemini-2.5-flash-preview-04-17": {
-      "name": "gemini-2.5-flash-preview-04-17",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.15,
-      "output_cost_per_1m": 0.6,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-flash",
-      "release_date": "2025-04-17",
-      "description": "Gemini 2.5 Flash Preview 04-17",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.0375,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemini-2.5-flash-preview-05-20": {
-      "name": "gemini-2.5-flash-preview-05-20",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.15,
-      "output_cost_per_1m": 0.6,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-flash",
-      "release_date": "2025-05-20",
-      "description": "Gemini 2.5 Flash Preview 05-20",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.0375,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemini-2.5-flash-preview-09-2025": {
-      "name": "gemini-2.5-flash-preview-09-2025",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.3,
-      "output_cost_per_1m": 2.5,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-flash",
-      "release_date": "2025-09-25",
-      "description": "Gemini 2.5 Flash Preview 09-25",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.075,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
     "gemini-2.5-flash-preview-tts": {
       "name": "gemini-2.5-flash-preview-tts",
-      "context_length": 8000,
-      "max_output_tokens": 16000,
+      "context_length": 8192,
+      "max_output_tokens": 16384,
       "input_cost_per_1m": 0.5,
       "output_cost_per_1m": 10.0,
       "capabilities": [
@@ -11260,9 +11235,15 @@
       "family": "gemini-flash",
       "release_date": "2025-05-01",
       "description": "Gemini 2.5 Flash Preview TTS",
-      "supports_temperature": false,
       "knowledge_cutoff": "2025-01",
-      "supports_top_p": false
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
     },
     "gemini-2.5-pro": {
       "name": "gemini-2.5-pro",
@@ -11304,90 +11285,10 @@
         1.0
       ]
     },
-    "gemini-2.5-pro-preview-05-06": {
-      "name": "gemini-2.5-pro-preview-05-06",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 1.25,
-      "output_cost_per_1m": 10.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-pro",
-      "release_date": "2025-05-06",
-      "description": "Gemini 2.5 Pro Preview 05-06",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.31,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemini-2.5-pro-preview-06-05": {
-      "name": "gemini-2.5-pro-preview-06-05",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 1.25,
-      "output_cost_per_1m": 10.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-pro",
-      "release_date": "2025-06-05",
-      "description": "Gemini 2.5 Pro Preview 06-05",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.31,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
     "gemini-2.5-pro-preview-tts": {
       "name": "gemini-2.5-pro-preview-tts",
-      "context_length": 8000,
-      "max_output_tokens": 16000,
+      "context_length": 8192,
+      "max_output_tokens": 16384,
       "input_cost_per_1m": 1.0,
       "output_cost_per_1m": 20.0,
       "capabilities": [
@@ -11403,9 +11304,15 @@
       "family": "gemini-flash",
       "release_date": "2025-05-01",
       "description": "Gemini 2.5 Pro Preview TTS",
-      "supports_temperature": false,
       "knowledge_cutoff": "2025-01",
-      "supports_top_p": false
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
     },
     "gemini-3-flash-preview": {
       "name": "gemini-3-flash-preview",
@@ -11449,8 +11356,8 @@
     },
     "gemini-3-pro-preview": {
       "name": "gemini-3-pro-preview",
-      "context_length": 1000000,
-      "max_output_tokens": 64000,
+      "context_length": 1048576,
+      "max_output_tokens": 65536,
       "input_cost_per_1m": 2.0,
       "output_cost_per_1m": 12.0,
       "capabilities": [
@@ -11489,8 +11396,8 @@
     },
     "gemini-3.1-flash-image-preview": {
       "name": "gemini-3.1-flash-image-preview",
-      "context_length": 131072,
-      "max_output_tokens": 32768,
+      "context_length": 65536,
+      "max_output_tokens": 65536,
       "input_cost_per_1m": 0.5,
       "output_cost_per_1m": 60.0,
       "capabilities": [
@@ -11506,7 +11413,7 @@
       ],
       "family": "gemini-flash",
       "release_date": "2026-02-26",
-      "description": "Gemini 3.1 Flash Image (Preview)",
+      "description": "Nano Banana 2",
       "reasoning": true,
       "supports_temperature": false,
       "knowledge_cutoff": "2025-01",
@@ -11675,10 +11582,50 @@
         1.0
       ]
     },
+    "gemini-3.5-flash": {
+      "name": "gemini-3.5-flash",
+      "context_length": 1048576,
+      "max_output_tokens": 65536,
+      "input_cost_per_1m": 1.5,
+      "output_cost_per_1m": 9.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "gemini",
+      "modalities": [
+        "text",
+        "image",
+        "video",
+        "audio",
+        "pdf"
+      ],
+      "family": "gemini-flash",
+      "release_date": "2026-05-19",
+      "description": "Gemini 3.5 Flash",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.15,
+      "knowledge_cutoff": "2025-01",
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
     "gemini-embedding-001": {
       "name": "gemini-embedding-001",
       "context_length": 2048,
-      "max_output_tokens": 3072,
+      "max_output_tokens": 1,
       "input_cost_per_1m": 0.15,
       "output_cost_per_1m": 0.0,
       "capabilities": [
@@ -11780,241 +11727,10 @@
         1.0
       ]
     },
-    "gemini-live-2.5-flash": {
-      "name": "gemini-live-2.5-flash",
-      "context_length": 128000,
-      "max_output_tokens": 8000,
-      "input_cost_per_1m": 0.5,
-      "output_cost_per_1m": 2.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video"
-      ],
-      "family": "gemini-flash",
-      "release_date": "2025-09-01",
-      "description": "Gemini Live 2.5 Flash",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemini-live-2.5-flash-preview-native-audio": {
-      "name": "gemini-live-2.5-flash-preview-native-audio",
-      "context_length": 131072,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.5,
-      "output_cost_per_1m": 2.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "audio",
-        "video"
-      ],
-      "family": "gemini-flash",
-      "release_date": "2025-06-17",
-      "description": "Gemini Live 2.5 Flash Preview Native Audio",
-      "reasoning": true,
-      "supports_temperature": false,
-      "supports_tool_call": true,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "supports_stop": false,
-      "supports_frequency_penalty": false,
-      "supports_presence_penalty": false,
-      "supports_top_p": false
-    },
-    "gemma-3-12b-it": {
-      "name": "gemma-3-12b-it",
-      "context_length": 32768,
-      "max_output_tokens": 8192,
-      "input_cost_per_1m": 0.0,
-      "output_cost_per_1m": 0.0,
-      "capabilities": [
-        "chat",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image"
-      ],
-      "family": "gemma",
-      "release_date": "2025-03-13",
-      "description": "Gemma 3 12B",
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "knowledge_cutoff": "2024-10",
-      "open_weights": true,
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemma-3-27b-it": {
-      "name": "gemma-3-27b-it",
-      "context_length": 131072,
-      "max_output_tokens": 8192,
-      "input_cost_per_1m": 0.0,
-      "output_cost_per_1m": 0.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image"
-      ],
-      "family": "gemma",
-      "release_date": "2025-03-12",
-      "description": "Gemma 3 27B",
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "knowledge_cutoff": "2024-10",
-      "open_weights": true,
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemma-3-4b-it": {
-      "name": "gemma-3-4b-it",
-      "context_length": 32768,
-      "max_output_tokens": 8192,
-      "input_cost_per_1m": 0.0,
-      "output_cost_per_1m": 0.0,
-      "capabilities": [
-        "chat",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": false,
-      "provider": "gemini",
-      "modalities": [
-        "text",
-        "image"
-      ],
-      "family": "gemma",
-      "release_date": "2025-03-13",
-      "description": "Gemma 3 4B",
-      "supports_attachment": true,
-      "knowledge_cutoff": "2024-10",
-      "open_weights": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemma-3n-e2b-it": {
-      "name": "gemma-3n-e2b-it",
-      "context_length": 8192,
-      "max_output_tokens": 2000,
-      "input_cost_per_1m": 0.0,
-      "output_cost_per_1m": 0.0,
-      "capabilities": [
-        "chat"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": false,
-      "provider": "gemini",
-      "modalities": [
-        "text"
-      ],
-      "family": "gemma",
-      "release_date": "2025-07-09",
-      "description": "Gemma 3n 2B",
-      "supports_attachment": true,
-      "knowledge_cutoff": "2024-10",
-      "open_weights": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "gemma-3n-e4b-it": {
-      "name": "gemma-3n-e4b-it",
-      "context_length": 8192,
-      "max_output_tokens": 2000,
-      "input_cost_per_1m": 0.0,
-      "output_cost_per_1m": 0.0,
-      "capabilities": [
-        "chat"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": false,
-      "provider": "gemini",
-      "modalities": [
-        "text"
-      ],
-      "family": "gemma",
-      "release_date": "2025-05-20",
-      "description": "Gemma 3n 4B",
-      "supports_attachment": true,
-      "knowledge_cutoff": "2024-10",
-      "open_weights": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
     "gemma-4-26b-a4b-it": {
       "name": "gemma-4-26b-a4b-it",
-      "context_length": 256000,
-      "max_output_tokens": 8192,
+      "context_length": 262144,
+      "max_output_tokens": 32768,
       "capabilities": [
         "chat",
         "function_calling",
@@ -12029,10 +11745,11 @@
       ],
       "family": "gemma",
       "release_date": "2026-04-02",
-      "description": "Gemma 4 26B",
+      "description": "Gemma 4 26B A4B IT",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
+      "supports_attachment": true,
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -12046,8 +11763,8 @@
     },
     "gemma-4-31b-it": {
       "name": "gemma-4-31b-it",
-      "context_length": 256000,
-      "max_output_tokens": 8192,
+      "context_length": 262144,
+      "max_output_tokens": 32768,
       "capabilities": [
         "chat",
         "function_calling",
@@ -12062,10 +11779,11 @@
       ],
       "family": "gemma",
       "release_date": "2026-04-02",
-      "description": "Gemma 4 31B",
+      "description": "Gemma 4 31B IT",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
+      "supports_attachment": true,
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -12343,6 +12061,7 @@
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
+      "cache_read_cost_per_1m": 0.075,
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -12376,6 +12095,7 @@
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
+      "cache_read_cost_per_1m": 0.0375,
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -12821,6 +12541,7 @@
       "description": "Kimi K2 Instruct 0905",
       "supports_tool_call": true,
       "supports_structured_output": true,
+      "cache_read_cost_per_1m": 0.5,
       "knowledge_cutoff": "2024-10",
       "open_weights": true,
       "supports_response_format": true,
@@ -14352,7 +14073,7 @@
       "family": "gpt",
       "release_date": "2023-03-01",
       "description": "GPT-3.5-turbo",
-      "cache_read_cost_per_1m": 1.25,
+      "cache_read_cost_per_1m": 0.0,
       "knowledge_cutoff": "2021-09-01",
       "supports_seed": true,
       "temperature_range": [
@@ -14532,7 +14253,7 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.03,
+      "cache_read_cost_per_1m": 0.025,
       "knowledge_cutoff": "2024-04",
       "supports_response_format": true,
       "supports_seed": true,
@@ -14718,7 +14439,7 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.08,
+      "cache_read_cost_per_1m": 0.075,
       "knowledge_cutoff": "2023-09",
       "supports_response_format": true,
       "supports_seed": true,
@@ -14791,6 +14512,7 @@
       "reasoning": true,
       "supports_structured_output": true,
       "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.125,
       "knowledge_cutoff": "2024-09-30",
       "supports_response_format": true,
       "supports_seed": true,
@@ -14969,7 +14691,7 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.13,
+      "cache_read_cost_per_1m": 0.125,
       "knowledge_cutoff": "2024-09-30",
       "supports_response_format": true,
       "supports_stop": false,
@@ -15936,7 +15658,7 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.28,
+      "cache_read_cost_per_1m": 0.275,
       "knowledge_cutoff": "2024-05",
       "supports_response_format": true,
       "supports_stop": false,
@@ -16072,7 +15794,6 @@
       "release_date": "2025-08-08",
       "description": "Jamba Large 1.7",
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "knowledge_cutoff": "2024-08-31",
       "open_weights": true,
       "supports_response_format": true,
@@ -16187,70 +15908,6 @@
       "release_date": "2025-02-04",
       "description": "Aion-RP 1.0 (8B)",
       "knowledge_cutoff": "2023-12-31",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "alfredpros/codellama-7b-instruct-solidity": {
-      "name": "alfredpros/codellama-7b-instruct-solidity",
-      "context_length": 4096,
-      "max_output_tokens": 4096,
-      "input_cost_per_1m": 0.8,
-      "output_cost_per_1m": 1.2,
-      "capabilities": [
-        "chat"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": false,
-      "provider": "openrouter",
-      "modalities": [
-        "text"
-      ],
-      "family": "llama",
-      "release_date": "2025-04-14",
-      "description": "CodeLLaMa 7B Instruct Solidity",
-      "knowledge_cutoff": "2023-06-30",
-      "open_weights": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "alibaba/tongyi-deepresearch-30b-a3b": {
-      "name": "alibaba/tongyi-deepresearch-30b-a3b",
-      "context_length": 131072,
-      "max_output_tokens": 131072,
-      "input_cost_per_1m": 0.09,
-      "output_cost_per_1m": 0.45,
-      "capabilities": [
-        "chat",
-        "function_calling"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text"
-      ],
-      "family": "yi",
-      "release_date": "2025-09-18",
-      "description": "Tongyi DeepResearch 30B A3B",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "cache_read_cost_per_1m": 0.09,
-      "knowledge_cutoff": "2025-03-31",
-      "open_weights": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -16470,17 +16127,15 @@
         "chat"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "text"
       ],
       "release_date": "2024-10-22",
       "description": "Magnum v4 72B",
-      "supports_structured_output": true,
       "knowledge_cutoff": "2024-06-30",
       "open_weights": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -16583,7 +16238,7 @@
       ],
       "family": "claude-haiku",
       "release_date": "2025-10-15",
-      "description": "Claude Haiku 4.5",
+      "description": "Claude Haiku 4.5 (latest)",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
@@ -16660,14 +16315,14 @@
       ],
       "family": "claude-opus",
       "release_date": "2025-08-05",
-      "description": "Claude Opus 4.1",
+      "description": "Claude Opus 4.1 (latest)",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 1.5,
       "cache_write_cost_per_1m": 18.75,
-      "knowledge_cutoff": "2025-01-31",
+      "knowledge_cutoff": "2025-03-31",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -16699,14 +16354,14 @@
       ],
       "family": "claude-opus",
       "release_date": "2025-11-24",
-      "description": "Claude Opus 4.5",
+      "description": "Claude Opus 4.5 (latest)",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.5,
       "cache_write_cost_per_1m": 6.25,
-      "knowledge_cutoff": "2025-05-30",
+      "knowledge_cutoff": "2025-03-31",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -16737,7 +16392,7 @@
         "pdf"
       ],
       "family": "claude-opus",
-      "release_date": "2026-02-04",
+      "release_date": "2026-02-05",
       "description": "Claude Opus 4.6",
       "reasoning": true,
       "supports_tool_call": true,
@@ -16865,6 +16520,76 @@
       "supports_presence_penalty": false,
       "supports_top_p": false
     },
+    "anthropic/claude-opus-4.8": {
+      "name": "anthropic/claude-opus-4.8",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_cost_per_1m": 5.0,
+      "output_cost_per_1m": 25.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "openrouter",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "claude-opus",
+      "release_date": "2026-05-28",
+      "description": "Claude Opus 4.8",
+      "reasoning": true,
+      "supports_temperature": false,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.5,
+      "cache_write_cost_per_1m": 6.25,
+      "supports_response_format": true,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
+    "anthropic/claude-opus-4.8-fast": {
+      "name": "anthropic/claude-opus-4.8-fast",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_cost_per_1m": 10.0,
+      "output_cost_per_1m": 50.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "openrouter",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "claude-opus",
+      "release_date": "2026-05-27",
+      "description": "Claude Opus 4.8 (Fast)",
+      "reasoning": true,
+      "supports_temperature": false,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 1.0,
+      "cache_write_cost_per_1m": 12.5,
+      "supports_response_format": true,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
     "anthropic/claude-sonnet-4": {
       "name": "anthropic/claude-sonnet-4",
       "context_length": 1000000,
@@ -16924,14 +16649,14 @@
       ],
       "family": "claude-sonnet",
       "release_date": "2025-09-29",
-      "description": "Claude Sonnet 4.5",
+      "description": "Claude Sonnet 4.5 (latest)",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.3,
       "cache_write_cost_per_1m": 3.75,
-      "knowledge_cutoff": "2025-01-31",
+      "knowledge_cutoff": "2025-07-31",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -17066,38 +16791,6 @@
         1.0
       ]
     },
-    "arcee-ai/trinity-large-preview": {
-      "name": "arcee-ai/trinity-large-preview",
-      "context_length": 131000,
-      "max_output_tokens": 131000,
-      "input_cost_per_1m": 0.15,
-      "output_cost_per_1m": 0.45,
-      "capabilities": [
-        "chat",
-        "function_calling"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text"
-      ],
-      "family": "trinity",
-      "release_date": "2026-01-27",
-      "description": "Trinity Large Preview",
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "open_weights": true,
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
     "arcee-ai/trinity-large-thinking": {
       "name": "arcee-ai/trinity-large-thinking",
       "context_length": 262144,
@@ -17121,38 +16814,6 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "cache_read_cost_per_1m": 0.06,
-      "open_weights": true,
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "arcee-ai/trinity-large-thinking:free": {
-      "name": "arcee-ai/trinity-large-thinking:free",
-      "context_length": 262144,
-      "max_output_tokens": 80000,
-      "input_cost_per_1m": 0.0,
-      "output_cost_per_1m": 0.0,
-      "capabilities": [
-        "chat",
-        "function_calling"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text"
-      ],
-      "family": "trinity",
-      "release_date": "2026-04-01",
-      "description": "Trinity Large Thinking (free)",
-      "reasoning": true,
-      "supports_tool_call": true,
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -17227,95 +16888,6 @@
         1.0
       ]
     },
-    "baidu/cobuddy:free": {
-      "name": "baidu/cobuddy:free",
-      "context_length": 131072,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.0,
-      "output_cost_per_1m": 0.0,
-      "capabilities": [
-        "chat",
-        "function_calling"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text"
-      ],
-      "release_date": "2026-05-06",
-      "description": "CoBuddy (free)",
-      "reasoning": true,
-      "supports_temperature": false,
-      "supports_tool_call": true,
-      "supports_response_format": true,
-      "supports_stop": false,
-      "supports_frequency_penalty": false,
-      "supports_presence_penalty": false,
-      "supports_top_p": false
-    },
-    "baidu/ernie-4.5-21b-a3b": {
-      "name": "baidu/ernie-4.5-21b-a3b",
-      "context_length": 120000,
-      "max_output_tokens": 8000,
-      "input_cost_per_1m": 0.07,
-      "output_cost_per_1m": 0.28,
-      "capabilities": [
-        "chat",
-        "function_calling"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text"
-      ],
-      "family": "ernie",
-      "release_date": "2025-08-12",
-      "description": "ERNIE 4.5 21B A3B",
-      "supports_tool_call": true,
-      "knowledge_cutoff": "2025-03-31",
-      "open_weights": true,
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "baidu/ernie-4.5-21b-a3b-thinking": {
-      "name": "baidu/ernie-4.5-21b-a3b-thinking",
-      "context_length": 131072,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.07,
-      "output_cost_per_1m": 0.28,
-      "capabilities": [
-        "chat"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": false,
-      "provider": "openrouter",
-      "modalities": [
-        "text"
-      ],
-      "family": "ernie",
-      "release_date": "2025-10-09",
-      "description": "ERNIE 4.5 21B A3B Thinking",
-      "reasoning": true,
-      "knowledge_cutoff": "2025-03-31",
-      "open_weights": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
     "baidu/ernie-4.5-300b-a47b": {
       "name": "baidu/ernie-4.5-300b-a47b",
       "context_length": 123000,
@@ -17326,7 +16898,7 @@
         "chat"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "text"
@@ -17334,10 +16906,8 @@
       "family": "ernie",
       "release_date": "2025-06-30",
       "description": "ERNIE 4.5 300B A47B ",
-      "supports_structured_output": true,
       "knowledge_cutoff": "2025-03-31",
       "open_weights": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -17407,36 +16977,6 @@
       "supports_attachment": true,
       "knowledge_cutoff": "2025-03-31",
       "open_weights": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "baidu/qianfan-ocr-fast": {
-      "name": "baidu/qianfan-ocr-fast",
-      "context_length": 65536,
-      "max_output_tokens": 28672,
-      "input_cost_per_1m": 0.68,
-      "output_cost_per_1m": 2.81,
-      "capabilities": [
-        "chat",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": false,
-      "provider": "openrouter",
-      "modalities": [
-        "image",
-        "text"
-      ],
-      "release_date": "2026-04-20",
-      "description": "Qianfan-OCR-Fast",
-      "reasoning": true,
-      "supports_attachment": true,
       "temperature_range": [
         0.0,
         2.0
@@ -17702,10 +17242,11 @@
       ],
       "family": "command-r",
       "release_date": "2024-08-30",
-      "description": "Command R (08-2024)",
+      "description": "Command R",
       "supports_tool_call": true,
       "supports_structured_output": true,
-      "knowledge_cutoff": "2024-03-31",
+      "knowledge_cutoff": "2024-06-01",
+      "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -17734,10 +17275,11 @@
       ],
       "family": "command-r",
       "release_date": "2024-08-30",
-      "description": "Command R+ (08-2024)",
+      "description": "Command R+",
       "supports_tool_call": true,
       "supports_structured_output": true,
-      "knowledge_cutoff": "2024-03-31",
+      "knowledge_cutoff": "2024-06-01",
+      "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -17764,10 +17306,11 @@
         "text"
       ],
       "family": "command-r",
-      "release_date": "2024-12-14",
-      "description": "Command R7B (12-2024)",
+      "release_date": "2024-02-27",
+      "description": "Command R7B",
       "supports_structured_output": true,
-      "knowledge_cutoff": "2024-08-31",
+      "knowledge_cutoff": "2024-06-01",
+      "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -17810,10 +17353,10 @@
     },
     "deepseek/deepseek-chat": {
       "name": "deepseek/deepseek-chat",
-      "context_length": 163840,
-      "max_output_tokens": 16384,
-      "input_cost_per_1m": 0.32,
-      "output_cost_per_1m": 0.89,
+      "context_length": 128000,
+      "max_output_tokens": 16000,
+      "input_cost_per_1m": 0.2288,
+      "output_cost_per_1m": 0.9144,
       "capabilities": [
         "chat",
         "function_calling"
@@ -17825,11 +17368,11 @@
         "text"
       ],
       "family": "deepseek",
-      "release_date": "2024-12-26",
-      "description": "DeepSeek V3",
+      "release_date": "2025-12-01",
+      "description": "DeepSeek Chat",
       "supports_tool_call": true,
       "supports_structured_output": true,
-      "knowledge_cutoff": "2024-07-31",
+      "knowledge_cutoff": "2025-09",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -17989,7 +17532,7 @@
         "chat"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "text"
@@ -17998,10 +17541,8 @@
       "release_date": "2025-01-23",
       "description": "R1 Distill Llama 70B",
       "reasoning": true,
-      "supports_structured_output": true,
       "knowledge_cutoff": "2024-07-31",
       "open_weights": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -18147,45 +17688,12 @@
         1.0
       ]
     },
-    "deepseek/deepseek-v3.2-speciale": {
-      "name": "deepseek/deepseek-v3.2-speciale",
-      "context_length": 163840,
-      "max_output_tokens": 163840,
-      "input_cost_per_1m": 0.287,
-      "output_cost_per_1m": 0.431,
-      "capabilities": [
-        "chat"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text"
-      ],
-      "family": "deepseek",
-      "release_date": "2025-12-01",
-      "description": "DeepSeek V3.2 Speciale",
-      "reasoning": true,
-      "supports_structured_output": true,
-      "cache_read_cost_per_1m": 0.058,
-      "knowledge_cutoff": "2024-07",
-      "open_weights": true,
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
     "deepseek/deepseek-v4-flash": {
       "name": "deepseek/deepseek-v4-flash",
-      "context_length": 1048575,
+      "context_length": 1048576,
       "max_output_tokens": 131072,
-      "input_cost_per_1m": 0.112,
-      "output_cost_per_1m": 0.224,
+      "input_cost_per_1m": 0.0983,
+      "output_cost_per_1m": 0.1966,
       "capabilities": [
         "chat",
         "function_calling"
@@ -18196,7 +17704,7 @@
       "modalities": [
         "text"
       ],
-      "family": "deepseek",
+      "family": "deepseek-flash",
       "release_date": "2026-04-24",
       "description": "DeepSeek V4 Flash",
       "reasoning": true,
@@ -18205,7 +17713,8 @@
       "interleaved": {
         "field": "reasoning_content"
       },
-      "cache_read_cost_per_1m": 0.022,
+      "cache_read_cost_per_1m": 0.0197,
+      "knowledge_cutoff": "2025-05",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -18216,35 +17725,6 @@
         0.0,
         1.0
       ]
-    },
-    "deepseek/deepseek-v4-flash:free": {
-      "name": "deepseek/deepseek-v4-flash:free",
-      "context_length": 1048576,
-      "max_output_tokens": 384000,
-      "input_cost_per_1m": 0.0,
-      "output_cost_per_1m": 0.0,
-      "capabilities": [
-        "chat",
-        "function_calling"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text"
-      ],
-      "family": "deepseek",
-      "release_date": "2026-04-24",
-      "description": "DeepSeek V4 Flash (free)",
-      "reasoning": true,
-      "supports_temperature": false,
-      "supports_tool_call": true,
-      "open_weights": true,
-      "supports_response_format": true,
-      "supports_stop": false,
-      "supports_frequency_penalty": false,
-      "supports_presence_penalty": false,
-      "supports_top_p": false
     },
     "deepseek/deepseek-v4-pro": {
       "name": "deepseek/deepseek-v4-pro",
@@ -18262,7 +17742,7 @@
       "modalities": [
         "text"
       ],
-      "family": "deepseek",
+      "family": "deepseek-thinking",
       "release_date": "2026-04-24",
       "description": "DeepSeek V4 Pro",
       "reasoning": true,
@@ -18272,6 +17752,7 @@
         "field": "reasoning_content"
       },
       "cache_read_cost_per_1m": 0.003625,
+      "knowledge_cutoff": "2025-05",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -18415,7 +17896,7 @@
         "video"
       ],
       "family": "gemini-flash",
-      "release_date": "2025-06-17",
+      "release_date": "2025-03-20",
       "description": "Gemini 2.5 Flash",
       "reasoning": true,
       "supports_tool_call": true,
@@ -18424,7 +17905,7 @@
       "cache_read_cost_per_1m": 0.03,
       "cache_write_cost_per_1m": 0.083333,
       "reasoning_cost_per_1m": 2.5,
-      "knowledge_cutoff": "2025-01-31",
+      "knowledge_cutoff": "2025-01",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -18451,13 +17932,13 @@
         "image",
         "text"
       ],
-      "family": "gemini",
-      "release_date": "2025-10-07",
-      "description": "Nano Banana (Gemini 2.5 Flash Image)",
+      "family": "gemini-flash",
+      "release_date": "2025-08-26",
+      "description": "Nano Banana",
       "supports_temperature": false,
       "cache_read_cost_per_1m": 0.03,
       "cache_write_cost_per_1m": 0.083333,
-      "knowledge_cutoff": "2025-01-31",
+      "knowledge_cutoff": "2025-06",
       "supports_stop": false,
       "supports_frequency_penalty": false,
       "supports_presence_penalty": false,
@@ -18485,8 +17966,8 @@
         "video"
       ],
       "family": "gemini-flash-lite",
-      "release_date": "2025-07-22",
-      "description": "Gemini 2.5 Flash Lite",
+      "release_date": "2025-06-17",
+      "description": "Gemini 2.5 Flash-Lite",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
@@ -18494,7 +17975,7 @@
       "cache_read_cost_per_1m": 0.01,
       "cache_write_cost_per_1m": 0.083333,
       "reasoning_cost_per_1m": 0.4,
-      "knowledge_cutoff": "2025-01-31",
+      "knowledge_cutoff": "2025-01",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -18568,8 +18049,8 @@
         "audio",
         "video"
       ],
-      "family": "gemini",
-      "release_date": "2025-06-17",
+      "family": "gemini-pro",
+      "release_date": "2025-03-20",
       "description": "Gemini 2.5 Pro",
       "reasoning": true,
       "supports_tool_call": true,
@@ -18578,7 +18059,7 @@
       "cache_read_cost_per_1m": 0.125,
       "cache_write_cost_per_1m": 0.375,
       "reasoning_cost_per_1m": 10.0,
-      "knowledge_cutoff": "2025-01-31",
+      "knowledge_cutoff": "2025-01",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -18764,7 +18245,7 @@
       ],
       "family": "gemini-flash",
       "release_date": "2026-02-26",
-      "description": "Nano Banana 2 (Gemini 3.1 Flash Image Preview)",
+      "description": "Nano Banana 2",
       "reasoning": true,
       "supports_temperature": false,
       "knowledge_cutoff": "2025-01",
@@ -18794,7 +18275,7 @@
         "pdf",
         "audio"
       ],
-      "family": "gemini",
+      "family": "gemini-flash-lite",
       "release_date": "2026-05-07",
       "description": "Gemini 3.1 Flash Lite",
       "reasoning": true,
@@ -18804,6 +18285,7 @@
       "cache_read_cost_per_1m": 0.025,
       "cache_write_cost_per_1m": 0.083333,
       "reasoning_cost_per_1m": 1.5,
+      "knowledge_cutoff": "2025-01",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -18845,6 +18327,7 @@
       "cache_read_cost_per_1m": 0.025,
       "cache_write_cost_per_1m": 0.083333,
       "reasoning_cost_per_1m": 1.5,
+      "knowledge_cutoff": "2025-01",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -18922,7 +18405,7 @@
         "pdf"
       ],
       "family": "gemini-pro",
-      "release_date": "2026-02-25",
+      "release_date": "2026-02-19",
       "description": "Gemini 3.1 Pro Preview Custom Tools",
       "reasoning": true,
       "supports_tool_call": true,
@@ -18934,6 +18417,48 @@
       "cache_read_cost_per_1m": 0.2,
       "cache_write_cost_per_1m": 0.375,
       "reasoning_cost_per_1m": 12.0,
+      "knowledge_cutoff": "2025-01",
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "google/gemini-3.5-flash": {
+      "name": "google/gemini-3.5-flash",
+      "context_length": 1048576,
+      "max_output_tokens": 65536,
+      "input_cost_per_1m": 1.5,
+      "output_cost_per_1m": 9.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "openrouter",
+      "modalities": [
+        "text",
+        "image",
+        "video",
+        "pdf",
+        "audio"
+      ],
+      "family": "gemini-flash",
+      "release_date": "2026-05-19",
+      "description": "Gemini 3.5 Flash",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.15,
+      "cache_write_cost_per_1m": 0.083333,
+      "reasoning_cost_per_1m": 9.0,
       "knowledge_cutoff": "2025-01",
       "supports_response_format": true,
       "temperature_range": [
@@ -19131,13 +18656,12 @@
         "video"
       ],
       "family": "gemma",
-      "release_date": "2026-04-03",
-      "description": "Gemma 4 26B A4B ",
+      "release_date": "2026-04-02",
+      "description": "Gemma 4 26B A4B IT",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "knowledge_cutoff": "2025-01",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -19169,13 +18693,11 @@
         "video"
       ],
       "family": "gemma",
-      "release_date": "2026-04-03",
+      "release_date": "2026-04-02",
       "description": "Gemma 4 26B A4B  (free)",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "supports_attachment": true,
-      "knowledge_cutoff": "2025-01",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -19208,12 +18730,11 @@
       ],
       "family": "gemma",
       "release_date": "2026-04-02",
-      "description": "Gemma 4 31B",
+      "description": "Gemma 4 31B IT",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "knowledge_cutoff": "2025-01",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -19249,9 +18770,7 @@
       "description": "Gemma 4 31B (free)",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "supports_attachment": true,
-      "knowledge_cutoff": "2025-01",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -19274,7 +18793,7 @@
         "vision"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "text",
@@ -19284,9 +18803,7 @@
       "family": "lyria",
       "release_date": "2026-03-30",
       "description": "Lyria 3 Clip Preview",
-      "supports_structured_output": true,
       "supports_attachment": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -19307,7 +18824,7 @@
         "vision"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "text",
@@ -19317,9 +18834,7 @@
       "family": "lyria",
       "release_date": "2026-03-30",
       "description": "Lyria 3 Pro Preview",
-      "supports_structured_output": true,
       "supports_attachment": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -19457,8 +18972,8 @@
       "name": "inclusionai/ling-2.6-1t",
       "context_length": 262144,
       "max_output_tokens": 32768,
-      "input_cost_per_1m": 0.3,
-      "output_cost_per_1m": 2.5,
+      "input_cost_per_1m": 0.075,
+      "output_cost_per_1m": 0.625,
       "capabilities": [
         "chat",
         "function_calling"
@@ -19474,7 +18989,7 @@
       "description": "Ling-2.6-1T",
       "supports_tool_call": true,
       "supports_structured_output": true,
-      "cache_read_cost_per_1m": 0.06,
+      "cache_read_cost_per_1m": 0.015,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -19521,8 +19036,8 @@
       "name": "inclusionai/ring-2.6-1t",
       "context_length": 262144,
       "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.075,
-      "output_cost_per_1m": 0.625,
+      "input_cost_per_1m": 0.3,
+      "output_cost_per_1m": 2.5,
       "capabilities": [
         "chat",
         "function_calling"
@@ -19538,8 +19053,7 @@
       "description": "Ring-2.6-1T",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
-      "cache_read_cost_per_1m": 0.015,
+      "cache_read_cost_per_1m": 0.06,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -19734,7 +19248,7 @@
         "chat"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "text"
@@ -19742,9 +19256,7 @@
       "family": "alpha",
       "release_date": "2023-08-02",
       "description": "Weaver (alpha)",
-      "supports_structured_output": true,
       "knowledge_cutoff": "2023-06-30",
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -19795,7 +19307,7 @@
         "chat"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "text"
@@ -19803,10 +19315,8 @@
       "family": "llama",
       "release_date": "2024-04-18",
       "description": "Llama 3 8B Instruct",
-      "supports_structured_output": true,
       "knowledge_cutoff": "2023-12-31",
       "open_weights": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -19893,7 +19403,7 @@
         "vision"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "text",
@@ -19902,11 +19412,9 @@
       "family": "llama",
       "release_date": "2024-09-25",
       "description": "Llama 3.2 11B Vision Instruct",
-      "supports_structured_output": true,
       "supports_attachment": true,
       "knowledge_cutoff": "2023-12-31",
       "open_weights": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -20021,10 +19529,10 @@
       ],
       "family": "llama",
       "release_date": "2024-12-06",
-      "description": "Llama 3.3 70B Instruct",
+      "description": "Llama-3.3-70B-Instruct",
       "supports_tool_call": true,
       "supports_structured_output": true,
-      "knowledge_cutoff": "2023-12-31",
+      "knowledge_cutoff": "2023-12",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -20056,7 +19564,7 @@
       "release_date": "2024-12-06",
       "description": "Llama 3.3 70B Instruct (free)",
       "supports_tool_call": true,
-      "knowledge_cutoff": "2023-12-31",
+      "knowledge_cutoff": "2023-12",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -20076,6 +19584,7 @@
       "output_cost_per_1m": 0.6,
       "capabilities": [
         "chat",
+        "function_calling",
         "vision"
       ],
       "supports_streaming": true,
@@ -20088,6 +19597,7 @@
       "family": "llama",
       "release_date": "2025-04-05",
       "description": "Llama 4 Maverick",
+      "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "knowledge_cutoff": "2024-08-31",
@@ -20178,7 +19688,7 @@
         "vision"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "image",
@@ -20187,11 +19697,9 @@
       "family": "llama",
       "release_date": "2025-04-30",
       "description": "Llama Guard 4 12B",
-      "supports_structured_output": true,
       "supports_attachment": true,
       "knowledge_cutoff": "2024-08-31",
       "open_weights": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -20273,17 +19781,15 @@
         "chat"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "text"
       ],
       "release_date": "2024-04-16",
       "description": "WizardLM-2 8x22B",
-      "supports_structured_output": true,
       "knowledge_cutoff": "2024-04-30",
       "open_weights": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -20374,8 +19880,8 @@
         "text"
       ],
       "family": "minimax",
-      "release_date": "2025-10-23",
-      "description": "MiniMax M2",
+      "release_date": "2025-10-27",
+      "description": "MiniMax-M2",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
@@ -20440,7 +19946,7 @@
       ],
       "family": "minimax",
       "release_date": "2025-12-23",
-      "description": "MiniMax M2.1",
+      "description": "MiniMax-M2.1",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
@@ -20477,43 +19983,7 @@
       ],
       "family": "minimax",
       "release_date": "2026-02-12",
-      "description": "MiniMax M2.5",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "interleaved": {
-        "field": "reasoning_details"
-      },
-      "open_weights": true,
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "minimax/minimax-m2.5:free": {
-      "name": "minimax/minimax-m2.5:free",
-      "context_length": 196608,
-      "max_output_tokens": 8192,
-      "input_cost_per_1m": 0.0,
-      "output_cost_per_1m": 0.0,
-      "capabilities": [
-        "chat",
-        "function_calling"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text"
-      ],
-      "family": "minimax",
-      "release_date": "2026-02-12",
-      "description": "MiniMax M2.5 (free)",
+      "description": "MiniMax-M2.5",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
@@ -20535,7 +20005,7 @@
       "name": "minimax/minimax-m2.7",
       "context_length": 196608,
       "max_output_tokens": 131072,
-      "input_cost_per_1m": 0.279,
+      "input_cost_per_1m": 0.26,
       "output_cost_per_1m": 1.2,
       "capabilities": [
         "chat",
@@ -20549,7 +20019,7 @@
       ],
       "family": "minimax",
       "release_date": "2026-03-18",
-      "description": "MiniMax M2.7",
+      "description": "MiniMax-M2.7",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
@@ -20620,85 +20090,12 @@
       ],
       "family": "devstral",
       "release_date": "2025-12-09",
-      "description": "Devstral 2 2512",
+      "description": "Devstral 2",
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.04,
       "knowledge_cutoff": "2025-12",
-      "open_weights": true,
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "mistralai/devstral-medium": {
-      "name": "mistralai/devstral-medium",
-      "context_length": 131072,
-      "max_output_tokens": 131072,
-      "input_cost_per_1m": 0.4,
-      "output_cost_per_1m": 2.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "code"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text",
-        "pdf"
-      ],
-      "family": "devstral",
-      "release_date": "2025-07-10",
-      "description": "Devstral Medium",
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.04,
-      "knowledge_cutoff": "2025-06-30",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "mistralai/devstral-small": {
-      "name": "mistralai/devstral-small",
-      "context_length": 131072,
-      "max_output_tokens": 131072,
-      "input_cost_per_1m": 0.1,
-      "output_cost_per_1m": 0.3,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "code"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text",
-        "pdf"
-      ],
-      "family": "devstral",
-      "release_date": "2025-07-10",
-      "description": "Devstral Small 1.1",
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.01,
-      "knowledge_cutoff": "2025-03-31",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -20818,35 +20215,6 @@
         1.0
       ]
     },
-    "mistralai/mistral-7b-instruct-v0.1": {
-      "name": "mistralai/mistral-7b-instruct-v0.1",
-      "context_length": 2824,
-      "max_output_tokens": 2824,
-      "input_cost_per_1m": 0.11,
-      "output_cost_per_1m": 0.19,
-      "capabilities": [
-        "chat"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": false,
-      "provider": "openrouter",
-      "modalities": [
-        "text"
-      ],
-      "family": "mistral",
-      "release_date": "2023-09-28",
-      "description": "Mistral 7B Instruct v0.1",
-      "knowledge_cutoff": "2023-09-30",
-      "open_weights": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
     "mistralai/mistral-large": {
       "name": "mistralai/mistral-large",
       "context_length": 128000,
@@ -20917,41 +20285,6 @@
         1.0
       ]
     },
-    "mistralai/mistral-large-2411": {
-      "name": "mistralai/mistral-large-2411",
-      "context_length": 131072,
-      "max_output_tokens": 131072,
-      "input_cost_per_1m": 2.0,
-      "output_cost_per_1m": 6.0,
-      "capabilities": [
-        "chat",
-        "function_calling"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text",
-        "pdf"
-      ],
-      "family": "mistral-large",
-      "release_date": "2024-11-19",
-      "description": "Mistral Large 2411",
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.2,
-      "knowledge_cutoff": "2024-07-31",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
     "mistralai/mistral-large-2512": {
       "name": "mistralai/mistral-large-2512",
       "context_length": 262144,
@@ -20972,12 +20305,14 @@
         "pdf"
       ],
       "family": "mistral-large",
-      "release_date": "2025-12-01",
-      "description": "Mistral Large 3 2512",
+      "release_date": "2024-11-01",
+      "description": "Mistral Large 3",
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.05,
+      "knowledge_cutoff": "2024-11",
+      "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -21115,11 +20450,11 @@
         "text"
       ],
       "family": "mistral-nemo",
-      "release_date": "2024-07-19",
+      "release_date": "2024-07-01",
       "description": "Mistral Nemo",
       "supports_tool_call": true,
       "supports_structured_output": true,
-      "knowledge_cutoff": "2024-04-30",
+      "knowledge_cutoff": "2024-07",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -21238,7 +20573,7 @@
     "mistralai/mistral-small-3.1-24b-instruct": {
       "name": "mistralai/mistral-small-3.1-24b-instruct",
       "context_length": 128000,
-      "max_output_tokens": 8192,
+      "max_output_tokens": 128000,
       "input_cost_per_1m": 0.351,
       "output_cost_per_1m": 0.555,
       "capabilities": [
@@ -21329,43 +20664,6 @@
       "cache_read_cost_per_1m": 0.2,
       "knowledge_cutoff": "2024-01-31",
       "open_weights": true,
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "mistralai/pixtral-large-2411": {
-      "name": "mistralai/pixtral-large-2411",
-      "context_length": 131072,
-      "max_output_tokens": 131072,
-      "input_cost_per_1m": 2.0,
-      "output_cost_per_1m": 6.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text",
-        "image",
-        "pdf"
-      ],
-      "family": "mistral",
-      "release_date": "2024-11-19",
-      "description": "Pixtral Large 2411",
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.2,
-      "knowledge_cutoff": "2024-07-31",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -21532,8 +20830,7 @@
         "text",
         "image"
       ],
-      "family": "kimi",
-      "release_date": "2026-01-27",
+      "family": "kimi-k2.5",
       "description": "Kimi K2.5",
       "reasoning": true,
       "supports_tool_call": true,
@@ -21557,10 +20854,10 @@
     },
     "moonshotai/kimi-k2.6": {
       "name": "moonshotai/kimi-k2.6",
-      "context_length": 262142,
-      "max_output_tokens": 262142,
-      "input_cost_per_1m": 0.73,
-      "output_cost_per_1m": 3.49,
+      "context_length": 262144,
+      "max_output_tokens": 262144,
+      "input_cost_per_1m": 0.684,
+      "output_cost_per_1m": 3.42,
       "capabilities": [
         "chat",
         "function_calling",
@@ -21573,8 +20870,8 @@
         "text",
         "image"
       ],
-      "family": "kimi",
-      "release_date": "2026-04-20",
+      "family": "kimi-k2.6",
+      "release_date": "2026-04-21",
       "description": "Kimi K2.6",
       "reasoning": true,
       "supports_tool_call": true,
@@ -21583,7 +20880,8 @@
       "interleaved": {
         "field": "reasoning_details"
       },
-      "cache_read_cost_per_1m": 0.25,
+      "cache_read_cost_per_1m": 0.144,
+      "knowledge_cutoff": "2025-01",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -21594,6 +20892,42 @@
         0.0,
         1.0
       ]
+    },
+    "moonshotai/kimi-k2.6:free": {
+      "name": "moonshotai/kimi-k2.6:free",
+      "context_length": 262144,
+      "max_output_tokens": 262144,
+      "input_cost_per_1m": 0.0,
+      "output_cost_per_1m": 0.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "openrouter",
+      "modalities": [
+        "text",
+        "image"
+      ],
+      "family": "kimi-k2.6",
+      "release_date": "2026-04-21",
+      "description": "Kimi K2.6 (free)",
+      "reasoning": true,
+      "supports_temperature": false,
+      "supports_tool_call": true,
+      "supports_attachment": true,
+      "interleaved": {
+        "field": "reasoning_content"
+      },
+      "knowledge_cutoff": "2025-01",
+      "open_weights": true,
+      "supports_response_format": true,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
     },
     "morph/morph-v3-fast": {
       "name": "morph/morph-v3-fast",
@@ -21813,7 +21147,7 @@
         "chat"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "text"
@@ -21822,10 +21156,8 @@
       "release_date": "2025-08-26",
       "description": "Hermes 4 405B",
       "reasoning": true,
-      "supports_structured_output": true,
       "knowledge_cutoff": "2024-08-31",
       "open_weights": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -21845,7 +21177,7 @@
         "chat"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "text"
@@ -21854,10 +21186,8 @@
       "release_date": "2025-08-26",
       "description": "Hermes 4 70B",
       "reasoning": true,
-      "supports_structured_output": true,
       "knowledge_cutoff": "2024-08-31",
       "open_weights": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -21888,7 +21218,6 @@
       "description": "Llama 3.3 Nemotron Super 49B V1.5",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "knowledge_cutoff": "2024-03-31",
       "open_weights": true,
       "supports_response_format": true,
@@ -21922,7 +21251,6 @@
       "description": "Nemotron 3 Nano 30B A3B",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -22024,7 +21352,6 @@
       "description": "Nemotron 3 Super",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "knowledge_cutoff": "2024-04",
       "open_weights": true,
       "supports_response_format": true,
@@ -22129,7 +21456,6 @@
       "description": "Nemotron Nano 9B V2",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "knowledge_cutoff": "2025-03-31",
       "open_weights": true,
       "supports_response_format": true,
@@ -22193,11 +21519,11 @@
         "text"
       ],
       "family": "gpt",
-      "release_date": "2023-05-28",
-      "description": "GPT-3.5 Turbo",
+      "release_date": "2023-03-01",
+      "description": "GPT-3.5-turbo",
       "supports_tool_call": true,
       "supports_structured_output": true,
-      "knowledge_cutoff": "2021-09-30",
+      "knowledge_cutoff": "2021-09-01",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -22319,11 +21645,11 @@
         "text"
       ],
       "family": "gpt",
-      "release_date": "2023-05-28",
+      "release_date": "2023-11-06",
       "description": "GPT-4",
       "supports_tool_call": true,
       "supports_structured_output": true,
-      "knowledge_cutoff": "2021-09-30",
+      "knowledge_cutoff": "2023-11",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -22417,12 +21743,12 @@
         "image"
       ],
       "family": "gpt",
-      "release_date": "2024-04-09",
+      "release_date": "2023-11-06",
       "description": "GPT-4 Turbo",
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "knowledge_cutoff": "2023-12-31",
+      "knowledge_cutoff": "2023-12",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -22491,7 +21817,7 @@
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.5,
-      "knowledge_cutoff": "2024-06-30",
+      "knowledge_cutoff": "2024-04",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -22523,12 +21849,12 @@
       ],
       "family": "gpt-mini",
       "release_date": "2025-04-14",
-      "description": "GPT-4.1 Mini",
+      "description": "GPT-4.1 mini",
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.1,
-      "knowledge_cutoff": "2024-06-30",
+      "knowledge_cutoff": "2024-04",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -22558,14 +21884,14 @@
         "text",
         "pdf"
       ],
-      "family": "gpt",
+      "family": "gpt-nano",
       "release_date": "2025-04-14",
-      "description": "GPT-4.1 Nano",
+      "description": "GPT-4.1 nano",
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.025,
-      "knowledge_cutoff": "2024-06-30",
+      "knowledge_cutoff": "2024-04",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -22601,7 +21927,7 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "knowledge_cutoff": "2023-10-31",
+      "knowledge_cutoff": "2023-09",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -22637,7 +21963,7 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "knowledge_cutoff": "2023-10-31",
+      "knowledge_cutoff": "2023-09",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -22674,7 +22000,7 @@
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 1.25,
-      "knowledge_cutoff": "2023-10-31",
+      "knowledge_cutoff": "2023-09",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -22711,41 +22037,7 @@
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 1.25,
-      "knowledge_cutoff": "2023-10-31",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "openai/gpt-4o-audio-preview": {
-      "name": "openai/gpt-4o-audio-preview",
-      "context_length": 128000,
-      "max_output_tokens": 16384,
-      "input_cost_per_1m": 2.5,
-      "output_cost_per_1m": 10.0,
-      "capabilities": [
-        "chat",
-        "function_calling"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "audio",
-        "text"
-      ],
-      "family": "gpt",
-      "release_date": "2025-08-15",
-      "description": "GPT-4o Audio",
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "knowledge_cutoff": "2023-10-31",
+      "knowledge_cutoff": "2023-09",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -22777,12 +22069,12 @@
       ],
       "family": "gpt-mini",
       "release_date": "2024-07-18",
-      "description": "GPT-4o-mini",
+      "description": "GPT-4o mini",
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.075,
-      "knowledge_cutoff": "2023-10-31",
+      "knowledge_cutoff": "2023-09",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -22963,8 +22255,8 @@
         "image"
       ],
       "family": "gpt-codex",
-      "release_date": "2025-09-23",
-      "description": "GPT-5 Codex",
+      "release_date": "2025-09-15",
+      "description": "GPT-5-Codex",
       "reasoning": true,
       "supports_temperature": false,
       "supports_tool_call": true,
@@ -23063,7 +22355,7 @@
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.025,
-      "knowledge_cutoff": "2024-05-31",
+      "knowledge_cutoff": "2024-05-30",
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -23098,7 +22390,7 @@
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.01,
-      "knowledge_cutoff": "2024-05-31",
+      "knowledge_cutoff": "2024-05-30",
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -23177,7 +22469,7 @@
     "openai/gpt-5.1-chat": {
       "name": "openai/gpt-5.1-chat",
       "context_length": 128000,
-      "max_output_tokens": 16384,
+      "max_output_tokens": 32000,
       "input_cost_per_1m": 1.25,
       "output_cost_per_1m": 10.0,
       "capabilities": [
@@ -23201,7 +22493,7 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.125,
+      "cache_read_cost_per_1m": 0.13,
       "knowledge_cutoff": "2024-09-30",
       "supports_response_format": true,
       "supports_top_p": false
@@ -23227,13 +22519,13 @@
       ],
       "family": "gpt-codex",
       "release_date": "2025-11-13",
-      "description": "GPT-5.1-Codex",
+      "description": "GPT-5.1 Codex",
       "reasoning": true,
       "supports_temperature": false,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.125,
+      "cache_read_cost_per_1m": 0.13,
       "knowledge_cutoff": "2024-09-30",
       "supports_response_format": true,
       "supports_stop": false,
@@ -23261,8 +22553,8 @@
         "image"
       ],
       "family": "gpt-codex",
-      "release_date": "2025-12-04",
-      "description": "GPT-5.1-Codex-Max",
+      "release_date": "2025-11-13",
+      "description": "GPT-5.1 Codex Max",
       "reasoning": true,
       "supports_temperature": false,
       "supports_tool_call": true,
@@ -23279,7 +22571,7 @@
     "openai/gpt-5.1-codex-mini": {
       "name": "openai/gpt-5.1-codex-mini",
       "context_length": 400000,
-      "max_output_tokens": 128000,
+      "max_output_tokens": 100000,
       "input_cost_per_1m": 0.25,
       "output_cost_per_1m": 2.0,
       "capabilities": [
@@ -23297,13 +22589,13 @@
       ],
       "family": "gpt-codex",
       "release_date": "2025-11-13",
-      "description": "GPT-5.1-Codex-Mini",
+      "description": "GPT-5.1 Codex mini",
       "reasoning": true,
       "supports_temperature": false,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.03,
+      "cache_read_cost_per_1m": 0.025,
       "knowledge_cutoff": "2024-09-30",
       "supports_response_format": true,
       "supports_stop": false,
@@ -23331,7 +22623,7 @@
         "text"
       ],
       "family": "gpt",
-      "release_date": "2025-12-10",
+      "release_date": "2025-12-11",
       "description": "GPT-5.2",
       "reasoning": true,
       "supports_temperature": false,
@@ -23349,7 +22641,7 @@
     "openai/gpt-5.2-chat": {
       "name": "openai/gpt-5.2-chat",
       "context_length": 128000,
-      "max_output_tokens": 32000,
+      "max_output_tokens": 16384,
       "input_cost_per_1m": 1.75,
       "output_cost_per_1m": 14.0,
       "capabilities": [
@@ -23398,8 +22690,8 @@
         "image"
       ],
       "family": "gpt-codex",
-      "release_date": "2026-01-14",
-      "description": "GPT-5.2-Codex",
+      "release_date": "2025-12-11",
+      "description": "GPT-5.2 Codex",
       "reasoning": true,
       "supports_temperature": false,
       "supports_tool_call": true,
@@ -23433,7 +22725,7 @@
         "pdf"
       ],
       "family": "gpt-pro",
-      "release_date": "2025-12-10",
+      "release_date": "2025-12-11",
       "description": "GPT-5.2 Pro",
       "reasoning": true,
       "supports_temperature": false,
@@ -23498,8 +22790,8 @@
         "pdf"
       ],
       "family": "gpt-codex",
-      "release_date": "2026-02-24",
-      "description": "GPT-5.3-Codex",
+      "release_date": "2026-02-05",
+      "description": "GPT-5.3 Codex",
       "reasoning": true,
       "supports_temperature": false,
       "supports_tool_call": true,
@@ -23541,6 +22833,7 @@
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.25,
+      "knowledge_cutoff": "2025-08-31",
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -23596,7 +22889,7 @@
       ],
       "family": "gpt-mini",
       "release_date": "2026-03-17",
-      "description": "GPT-5.4 Mini",
+      "description": "GPT-5.4 mini",
       "reasoning": true,
       "supports_temperature": false,
       "supports_tool_call": true,
@@ -23631,7 +22924,7 @@
       ],
       "family": "gpt-nano",
       "release_date": "2026-03-17",
-      "description": "GPT-5.4 Nano",
+      "description": "GPT-5.4 nano",
       "reasoning": true,
       "supports_temperature": false,
       "supports_tool_call": true,
@@ -23700,7 +22993,7 @@
         "text"
       ],
       "family": "gpt",
-      "release_date": "2026-04-24",
+      "release_date": "2026-04-23",
       "description": "GPT-5.5",
       "reasoning": true,
       "supports_temperature": false,
@@ -23734,8 +23027,8 @@
         "image",
         "text"
       ],
-      "family": "gpt",
-      "release_date": "2026-04-24",
+      "family": "gpt-pro",
+      "release_date": "2026-04-23",
       "description": "GPT-5.5 Pro",
       "reasoning": true,
       "supports_temperature": false,
@@ -23916,7 +23209,7 @@
       "name": "openai/gpt-oss-20b",
       "context_length": 131072,
       "max_output_tokens": 131072,
-      "input_cost_per_1m": 0.03,
+      "input_cost_per_1m": 0.029,
       "output_cost_per_1m": 0.14,
       "capabilities": [
         "chat",
@@ -24000,7 +23293,6 @@
       "description": "gpt-oss-safeguard-20b",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "cache_read_cost_per_1m": 0.037,
       "open_weights": true,
       "supports_response_format": true,
@@ -24033,7 +23325,7 @@
         "pdf"
       ],
       "family": "o",
-      "release_date": "2024-12-17",
+      "release_date": "2024-12-05",
       "description": "o1",
       "reasoning": true,
       "supports_temperature": false,
@@ -24041,7 +23333,7 @@
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 7.5,
-      "knowledge_cutoff": "2023-10-31",
+      "knowledge_cutoff": "2023-09",
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -24066,14 +23358,14 @@
         "image",
         "pdf"
       ],
-      "family": "o",
+      "family": "o-pro",
       "release_date": "2025-03-19",
       "description": "o1-pro",
       "reasoning": true,
       "supports_temperature": false,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "knowledge_cutoff": "2023-10-31",
+      "knowledge_cutoff": "2023-09",
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -24108,7 +23400,7 @@
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.5,
-      "knowledge_cutoff": "2024-06-30",
+      "knowledge_cutoff": "2024-05",
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -24135,13 +23427,14 @@
         "pdf"
       ],
       "family": "o",
-      "release_date": "2025-10-10",
-      "description": "o3 Deep Research",
+      "release_date": "2024-06-26",
+      "description": "o3-deep-research",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 2.5,
+      "knowledge_cutoff": "2024-05",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -24169,16 +23462,16 @@
         "text",
         "pdf"
       ],
-      "family": "o",
-      "release_date": "2025-01-31",
-      "description": "o3 Mini",
+      "family": "o-mini",
+      "release_date": "2024-12-20",
+      "description": "o3-mini",
       "reasoning": true,
       "supports_temperature": false,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.55,
-      "knowledge_cutoff": "2023-10-31",
+      "knowledge_cutoff": "2024-05",
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -24237,15 +23530,15 @@
         "pdf",
         "image"
       ],
-      "family": "o",
+      "family": "o-pro",
       "release_date": "2025-06-10",
-      "description": "o3 Pro",
+      "description": "o3-pro",
       "reasoning": true,
       "supports_temperature": false,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "knowledge_cutoff": "2024-06-30",
+      "knowledge_cutoff": "2024-05",
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -24273,14 +23566,14 @@
       ],
       "family": "o-mini",
       "release_date": "2025-04-16",
-      "description": "o4 Mini",
+      "description": "o4-mini",
       "reasoning": true,
       "supports_temperature": false,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.275,
-      "knowledge_cutoff": "2024-06-30",
+      "knowledge_cutoff": "2024-05",
       "supports_response_format": true,
       "supports_stop": false,
       "supports_frequency_penalty": false,
@@ -24306,14 +23599,15 @@
         "image",
         "text"
       ],
-      "family": "o",
-      "release_date": "2025-10-10",
-      "description": "o4 Mini Deep Research",
+      "family": "o-mini",
+      "release_date": "2024-06-26",
+      "description": "o4-mini-deep-research",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.5,
+      "knowledge_cutoff": "2024-05",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -24676,8 +23970,8 @@
     },
     "poolside/laguna-m.1:free": {
       "name": "poolside/laguna-m.1:free",
-      "context_length": 131072,
-      "max_output_tokens": 8192,
+      "context_length": 262144,
+      "max_output_tokens": 32768,
       "input_cost_per_1m": 0.0,
       "output_cost_per_1m": 0.0,
       "capabilities": [
@@ -24709,8 +24003,8 @@
     },
     "poolside/laguna-xs.2:free": {
       "name": "poolside/laguna-xs.2:free",
-      "context_length": 131072,
-      "max_output_tokens": 8192,
+      "context_length": 262144,
+      "max_output_tokens": 32768,
       "input_cost_per_1m": 0.0,
       "output_cost_per_1m": 0.0,
       "capabilities": [
@@ -24815,11 +24109,10 @@
       "input_cost_per_1m": 0.04,
       "output_cost_per_1m": 0.1,
       "capabilities": [
-        "chat",
-        "function_calling"
+        "chat"
       ],
       "supports_streaming": true,
-      "supports_json_mode": true,
+      "supports_json_mode": false,
       "provider": "openrouter",
       "modalities": [
         "text"
@@ -24827,11 +24120,8 @@
       "family": "qwen",
       "release_date": "2024-10-16",
       "description": "Qwen2.5 7B Instruct",
-      "supports_tool_call": true,
-      "supports_structured_output": true,
       "knowledge_cutoff": "2024-06-30",
       "open_weights": true,
-      "supports_response_format": true,
       "temperature_range": [
         0.0,
         2.0
@@ -24844,7 +24134,7 @@
     "qwen/qwen-2.5-coder-32b-instruct": {
       "name": "qwen/qwen-2.5-coder-32b-instruct",
       "context_length": 32768,
-      "max_output_tokens": 8192,
+      "max_output_tokens": 32768,
       "input_cost_per_1m": 0.66,
       "output_cost_per_1m": 1.0,
       "capabilities": [
@@ -24891,7 +24181,6 @@
       "release_date": "2025-02-01",
       "description": "Qwen-Plus",
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "cache_read_cost_per_1m": 0.052,
       "cache_write_cost_per_1m": 0.325,
       "knowledge_cutoff": "2025-03-31",
@@ -24926,7 +24215,6 @@
       "description": "Qwen Plus 0728",
       "supports_tool_call": true,
       "supports_structured_output": true,
-      "cache_write_cost_per_1m": 0.325,
       "knowledge_cutoff": "2025-03-31",
       "supports_response_format": true,
       "temperature_range": [
@@ -25061,7 +24349,6 @@
       "description": "Qwen3 235B A22B",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "knowledge_cutoff": "2025-03-31",
       "open_weights": true,
       "supports_response_format": true,
@@ -25109,10 +24396,10 @@
     },
     "qwen/qwen3-235b-a22b-thinking-2507": {
       "name": "qwen/qwen3-235b-a22b-thinking-2507",
-      "context_length": 131072,
-      "max_output_tokens": 81920,
-      "input_cost_per_1m": 0.1495,
-      "output_cost_per_1m": 1.495,
+      "context_length": 262144,
+      "max_output_tokens": 262144,
+      "input_cost_per_1m": 0.1,
+      "output_cost_per_1m": 0.1,
       "capabilities": [
         "chat",
         "function_calling"
@@ -25129,6 +24416,7 @@
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
+      "cache_read_cost_per_1m": 0.1,
       "knowledge_cutoff": "2025-06-30",
       "open_weights": true,
       "supports_response_format": true,
@@ -25401,7 +24689,6 @@
       "release_date": "2025-09-17",
       "description": "Qwen3 Coder Flash",
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "cache_read_cost_per_1m": 0.039,
       "cache_write_cost_per_1m": 0.24375,
       "knowledge_cutoff": "2025-06-30",
@@ -25537,7 +24824,6 @@
       "release_date": "2025-09-23",
       "description": "Qwen3 Max",
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "cache_read_cost_per_1m": 0.156,
       "cache_write_cost_per_1m": 0.975,
       "knowledge_cutoff": "2025-06-30",
@@ -25743,7 +25029,6 @@
       "description": "Qwen3 VL 235B A22B Thinking",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "supports_attachment": true,
       "knowledge_cutoff": "2025-03-31",
       "open_weights": true,
@@ -25852,7 +25137,6 @@
       "release_date": "2025-10-23",
       "description": "Qwen3 VL 32B Instruct",
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "supports_attachment": true,
       "open_weights": true,
       "supports_response_format": true,
@@ -25939,7 +25223,7 @@
     "qwen/qwen3.5-122b-a10b": {
       "name": "qwen/qwen3.5-122b-a10b",
       "context_length": 262144,
-      "max_output_tokens": 65536,
+      "max_output_tokens": 262144,
       "input_cost_per_1m": 0.26,
       "output_cost_per_1m": 2.08,
       "capabilities": [
@@ -26013,7 +25297,7 @@
     "qwen/qwen3.5-35b-a3b": {
       "name": "qwen/qwen3.5-35b-a3b",
       "context_length": 262144,
-      "max_output_tokens": 81920,
+      "max_output_tokens": 262144,
       "input_cost_per_1m": 0.14,
       "output_cost_per_1m": 1.0,
       "capabilities": [
@@ -26074,7 +25358,6 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.195,
       "knowledge_cutoff": "2025-04",
       "open_weights": true,
       "supports_response_format": true,
@@ -26150,7 +25433,6 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_write_cost_per_1m": 0.08125,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -26187,7 +25469,6 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_write_cost_per_1m": 0.325,
       "knowledge_cutoff": "2025-04",
       "supports_response_format": true,
       "temperature_range": [
@@ -26225,6 +25506,7 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
+      "cache_write_cost_per_1m": 0.375,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -26237,9 +25519,9 @@
     },
     "qwen/qwen3.6-27b": {
       "name": "qwen/qwen3.6-27b",
-      "context_length": 262144,
-      "max_output_tokens": 81920,
-      "input_cost_per_1m": 0.32,
+      "context_length": 262140,
+      "max_output_tokens": 262140,
+      "input_cost_per_1m": 0.29,
       "output_cost_per_1m": 3.2,
       "capabilities": [
         "chat",
@@ -26274,9 +25556,9 @@
     },
     "qwen/qwen3.6-35b-a3b": {
       "name": "qwen/qwen3.6-35b-a3b",
-      "context_length": 262144,
-      "max_output_tokens": 262144,
-      "input_cost_per_1m": 0.15,
+      "context_length": 262140,
+      "max_output_tokens": 262140,
+      "input_cost_per_1m": 0.14,
       "output_cost_per_1m": 1.0,
       "capabilities": [
         "chat",
@@ -26298,7 +25580,6 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.05,
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -26408,6 +25689,40 @@
       "supports_attachment": true,
       "cache_write_cost_per_1m": 0.40625,
       "knowledge_cutoff": "2025-04",
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "qwen/qwen3.7-max": {
+      "name": "qwen/qwen3.7-max",
+      "context_length": 1000000,
+      "max_output_tokens": 65536,
+      "input_cost_per_1m": 1.25,
+      "output_cost_per_1m": 3.75,
+      "capabilities": [
+        "chat",
+        "function_calling"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "openrouter",
+      "modalities": [
+        "text"
+      ],
+      "family": "qwen",
+      "release_date": "2026-05-21",
+      "description": "Qwen3.7 Max",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "cache_read_cost_per_1m": 0.25,
+      "cache_write_cost_per_1m": 1.5625,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -26692,8 +26007,8 @@
     "stepfun/step-3.5-flash": {
       "name": "stepfun/step-3.5-flash",
       "context_length": 262144,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.1,
+      "max_output_tokens": 16384,
+      "input_cost_per_1m": 0.09,
       "output_cost_per_1m": 0.3,
       "capabilities": [
         "chat",
@@ -26710,9 +26025,46 @@
       "description": "Step 3.5 Flash",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
+      "cache_read_cost_per_1m": 0.02,
       "knowledge_cutoff": "2025-01",
       "open_weights": true,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "stepfun/step-3.7-flash": {
+      "name": "stepfun/step-3.7-flash",
+      "context_length": 256000,
+      "max_output_tokens": 256000,
+      "input_cost_per_1m": 0.2,
+      "output_cost_per_1m": 1.15,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "openrouter",
+      "modalities": [
+        "text",
+        "image",
+        "video"
+      ],
+      "family": "step",
+      "release_date": "2026-05-28",
+      "description": "Step 3.7 Flash",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.04,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -26786,8 +26138,8 @@
       "name": "tencent/hy3-preview",
       "context_length": 262144,
       "max_output_tokens": 262144,
-      "input_cost_per_1m": 0.066,
-      "output_cost_per_1m": 0.26,
+      "input_cost_per_1m": 0.063,
+      "output_cost_per_1m": 0.21,
       "capabilities": [
         "chat",
         "function_calling"
@@ -26803,7 +26155,7 @@
       "description": "Hy3 preview",
       "reasoning": true,
       "supports_tool_call": true,
-      "cache_read_cost_per_1m": 0.029,
+      "cache_read_cost_per_1m": 0.021,
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -27120,8 +26472,44 @@
         "image"
       ],
       "family": "grok",
-      "release_date": "2026-04-30",
+      "release_date": "2026-04-17",
       "description": "Grok 4.3",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.2,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "x-ai/grok-build-0.1": {
+      "name": "x-ai/grok-build-0.1",
+      "context_length": 256000,
+      "max_output_tokens": 256000,
+      "input_cost_per_1m": 1.0,
+      "output_cost_per_1m": 2.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "openrouter",
+      "modalities": [
+        "text",
+        "image"
+      ],
+      "family": "grok-build",
+      "release_date": "2026-04-16",
+      "description": "Grok Build 0.1",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
@@ -27154,93 +26542,16 @@
         "text"
       ],
       "family": "mimo",
-      "release_date": "2025-12-14",
+      "release_date": "2025-12-16",
       "description": "MiMo-V2-Flash",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "interleaved": {
         "field": "reasoning_details"
       },
       "cache_read_cost_per_1m": 0.01,
+      "knowledge_cutoff": "2024-12-01",
       "open_weights": true,
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "xiaomi/mimo-v2-omni": {
-      "name": "xiaomi/mimo-v2-omni",
-      "context_length": 262144,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.4,
-      "output_cost_per_1m": 2.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text",
-        "audio",
-        "image",
-        "video"
-      ],
-      "family": "mimo-v2-omni",
-      "release_date": "2026-03-18",
-      "description": "MiMo-V2-Omni",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "supports_attachment": true,
-      "interleaved": {
-        "field": "reasoning_details"
-      },
-      "cache_read_cost_per_1m": 0.08,
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "xiaomi/mimo-v2-pro": {
-      "name": "xiaomi/mimo-v2-pro",
-      "context_length": 1048576,
-      "max_output_tokens": 131072,
-      "input_cost_per_1m": 1.0,
-      "output_cost_per_1m": 3.0,
-      "capabilities": [
-        "chat",
-        "function_calling"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "openrouter",
-      "modalities": [
-        "text"
-      ],
-      "family": "mimo-v2-pro",
-      "release_date": "2026-03-18",
-      "description": "MiMo-V2-Pro",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_structured_output": true,
-      "interleaved": {
-        "field": "reasoning_details"
-      },
-      "cache_read_cost_per_1m": 0.2,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -27255,8 +26566,8 @@
       "name": "xiaomi/mimo-v2.5",
       "context_length": 1048576,
       "max_output_tokens": 131072,
-      "input_cost_per_1m": 0.4,
-      "output_cost_per_1m": 2.0,
+      "input_cost_per_1m": 0.14,
+      "output_cost_per_1m": 0.28,
       "capabilities": [
         "chat",
         "function_calling",
@@ -27271,17 +26582,17 @@
         "image",
         "video"
       ],
-      "family": "mimo-v2.5",
+      "family": "mimo",
       "release_date": "2026-04-22",
       "description": "MiMo-V2.5",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "supports_attachment": true,
       "interleaved": {
         "field": "reasoning_details"
       },
-      "cache_read_cost_per_1m": 0.08,
+      "cache_read_cost_per_1m": 0.0028,
+      "knowledge_cutoff": "2024-12",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -27296,9 +26607,9 @@
     "xiaomi/mimo-v2.5-pro": {
       "name": "xiaomi/mimo-v2.5-pro",
       "context_length": 1048576,
-      "max_output_tokens": 16384,
-      "input_cost_per_1m": 1.0,
-      "output_cost_per_1m": 3.0,
+      "max_output_tokens": 131072,
+      "input_cost_per_1m": 0.435,
+      "output_cost_per_1m": 0.87,
       "capabilities": [
         "chat",
         "function_calling"
@@ -27309,13 +26620,17 @@
       "modalities": [
         "text"
       ],
-      "family": "mimo-v2.5-pro",
+      "family": "mimo",
       "release_date": "2026-04-22",
       "description": "MiMo-V2.5-Pro",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
-      "cache_read_cost_per_1m": 0.2,
+      "interleaved": {
+        "field": "reasoning_content"
+      },
+      "cache_read_cost_per_1m": 0.0036,
+      "knowledge_cutoff": "2024-12",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -27375,13 +26690,12 @@
         "text"
       ],
       "family": "glm",
-      "release_date": "2025-07-25",
-      "description": "GLM 4.5",
+      "release_date": "2025-07-28",
+      "description": "GLM-4.5",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "cache_read_cost_per_1m": 0.11,
-      "knowledge_cutoff": "2024-12-31",
+      "knowledge_cutoff": "2025-04",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -27395,9 +26709,9 @@
     },
     "z-ai/glm-4.5-air": {
       "name": "z-ai/glm-4.5-air",
-      "context_length": 131072,
-      "max_output_tokens": 98304,
-      "input_cost_per_1m": 0.13,
+      "context_length": 131070,
+      "max_output_tokens": 131070,
+      "input_cost_per_1m": 0.125,
       "output_cost_per_1m": 0.85,
       "capabilities": [
         "chat",
@@ -27410,12 +26724,12 @@
         "text"
       ],
       "family": "glm-air",
-      "release_date": "2025-07-25",
-      "description": "GLM 4.5 Air",
+      "release_date": "2025-07-28",
+      "description": "GLM-4.5-Air",
       "reasoning": true,
       "supports_tool_call": true,
-      "cache_read_cost_per_1m": 0.025,
-      "knowledge_cutoff": "2024-12-31",
+      "cache_read_cost_per_1m": 0.06,
+      "knowledge_cutoff": "2025-04",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -27444,11 +26758,11 @@
         "text"
       ],
       "family": "glm-air",
-      "release_date": "2025-07-25",
+      "release_date": "2025-07-28",
       "description": "GLM 4.5 Air (free)",
       "reasoning": true,
       "supports_tool_call": true,
-      "knowledge_cutoff": "2024-12-31",
+      "knowledge_cutoff": "2025-04",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -27480,13 +26794,12 @@
       ],
       "family": "glm",
       "release_date": "2025-08-11",
-      "description": "GLM 4.5V",
+      "description": "GLM-4.5V",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.11,
-      "knowledge_cutoff": "2024-12-31",
+      "knowledge_cutoff": "2025-04",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -27516,12 +26829,12 @@
       ],
       "family": "glm",
       "release_date": "2025-09-30",
-      "description": "GLM 4.6",
+      "description": "GLM-4.6",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
       "cache_read_cost_per_1m": 0.08,
-      "knowledge_cutoff": "2025-03-31",
+      "knowledge_cutoff": "2025-04",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -27554,11 +26867,12 @@
       ],
       "family": "glm",
       "release_date": "2025-12-08",
-      "description": "GLM 4.6V",
+      "description": "GLM-4.6V",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.05,
+      "knowledge_cutoff": "2025-04",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -27588,7 +26902,7 @@
       ],
       "family": "glm",
       "release_date": "2025-12-22",
-      "description": "GLM 4.7",
+      "description": "GLM-4.7",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
@@ -27624,9 +26938,9 @@
       "modalities": [
         "text"
       ],
-      "family": "glm",
+      "family": "glm-flash",
       "release_date": "2026-01-19",
-      "description": "GLM 4.7 Flash",
+      "description": "GLM-4.7-Flash",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
@@ -27634,6 +26948,7 @@
         "field": "reasoning_details"
       },
       "cache_read_cost_per_1m": 0.01,
+      "knowledge_cutoff": "2025-04",
       "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
@@ -27663,7 +26978,7 @@
       ],
       "family": "glm",
       "release_date": "2026-02-11",
-      "description": "GLM 5",
+      "description": "GLM-5",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
@@ -27699,11 +27014,10 @@
         "text"
       ],
       "family": "glm",
-      "release_date": "2026-03-15",
-      "description": "GLM 5 Turbo",
+      "release_date": "2026-03-16",
+      "description": "GLM-5-Turbo",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "interleaved": {
         "field": "reasoning_content"
       },
@@ -27721,7 +27035,7 @@
     "z-ai/glm-5.1": {
       "name": "z-ai/glm-5.1",
       "context_length": 202752,
-      "max_output_tokens": 131072,
+      "max_output_tokens": 202800,
       "input_cost_per_1m": 0.98,
       "output_cost_per_1m": 3.08,
       "capabilities": [
@@ -27735,8 +27049,8 @@
         "text"
       ],
       "family": "glm",
-      "release_date": "2026-04-07",
-      "description": "GLM 5.1",
+      "release_date": "2026-03-27",
+      "description": "GLM-5.1",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_structured_output": true,
@@ -27744,7 +27058,6 @@
         "field": "reasoning_content"
       },
       "cache_read_cost_per_1m": 0.182,
-      "open_weights": true,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -27776,11 +27089,13 @@
       ],
       "family": "glm",
       "release_date": "2026-04-01",
-      "description": "GLM 5V Turbo",
+      "description": "GLM-5V-Turbo",
       "reasoning": true,
       "supports_tool_call": true,
-      "supports_structured_output": true,
       "supports_attachment": true,
+      "interleaved": {
+        "field": "reasoning_content"
+      },
       "cache_read_cost_per_1m": 0.24,
       "supports_response_format": true,
       "temperature_range": [
@@ -27907,8 +27222,8 @@
       "name": "~google/gemini-flash-latest",
       "context_length": 1048576,
       "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.5,
-      "output_cost_per_1m": 3.0,
+      "input_cost_per_1m": 1.5,
+      "output_cost_per_1m": 9.0,
       "capabilities": [
         "chat",
         "function_calling",
@@ -27920,9 +27235,9 @@
       "modalities": [
         "text",
         "image",
+        "video",
         "pdf",
-        "audio",
-        "video"
+        "audio"
       ],
       "family": "gemini-flash",
       "release_date": "2026-04-27",
@@ -27931,9 +27246,10 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.05,
+      "cache_read_cost_per_1m": 0.15,
       "cache_write_cost_per_1m": 0.083333,
-      "reasoning_cost_per_1m": 3.0,
+      "reasoning_cost_per_1m": 9.0,
+      "knowledge_cutoff": "2025-01-01",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -27987,10 +27303,10 @@
     },
     "~moonshotai/kimi-latest": {
       "name": "~moonshotai/kimi-latest",
-      "context_length": 262142,
-      "max_output_tokens": 262142,
-      "input_cost_per_1m": 0.73,
-      "output_cost_per_1m": 3.49,
+      "context_length": 262144,
+      "max_output_tokens": 262144,
+      "input_cost_per_1m": 0.684,
+      "output_cost_per_1m": 3.42,
       "capabilities": [
         "chat",
         "function_calling",
@@ -28010,7 +27326,7 @@
       "supports_tool_call": true,
       "supports_structured_output": true,
       "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.25,
+      "cache_read_cost_per_1m": 0.144,
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -28390,6 +27706,40 @@
       "supports_presence_penalty": false,
       "supports_top_p": false
     },
+    "claude-opus-4-8@default": {
+      "name": "claude-opus-4-8@default",
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
+      "input_cost_per_1m": 5.0,
+      "output_cost_per_1m": 25.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "vertex",
+      "modalities": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "family": "claude-opus",
+      "release_date": "2026-05-28",
+      "description": "Claude Opus 4.8",
+      "reasoning": true,
+      "supports_temperature": false,
+      "supports_tool_call": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.5,
+      "cache_write_cost_per_1m": 6.25,
+      "supports_response_format": true,
+      "supports_stop": false,
+      "supports_frequency_penalty": false,
+      "supports_presence_penalty": false,
+      "supports_top_p": false
+    },
     "claude-opus-4@20250514": {
       "name": "claude-opus-4@20250514",
       "context_length": 200000,
@@ -28468,8 +27818,8 @@
     },
     "claude-sonnet-4-6@default": {
       "name": "claude-sonnet-4-6@default",
-      "context_length": 200000,
-      "max_output_tokens": 64000,
+      "context_length": 1000000,
+      "max_output_tokens": 128000,
       "input_cost_per_1m": 3.0,
       "output_cost_per_1m": 15.0,
       "capabilities": [
@@ -28601,6 +27951,85 @@
       "supports_structured_output": true,
       "cache_read_cost_per_1m": 0.056,
       "open_weights": true,
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "gemini-2.5-flash-lite-preview-06-17": {
+      "name": "gemini-2.5-flash-lite-preview-06-17",
+      "context_length": 65536,
+      "max_output_tokens": 65536,
+      "input_cost_per_1m": 0.1,
+      "output_cost_per_1m": 0.4,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "vertex",
+      "modalities": [
+        "text",
+        "image",
+        "audio",
+        "video",
+        "pdf"
+      ],
+      "family": "gemini-flash-lite",
+      "release_date": "2025-06-17",
+      "description": "Gemini 2.5 Flash Lite Preview 06-17",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.025,
+      "knowledge_cutoff": "2025-01",
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
+    "gemini-2.5-flash-preview-09-2025": {
+      "name": "gemini-2.5-flash-preview-09-2025",
+      "context_length": 1048576,
+      "max_output_tokens": 65536,
+      "input_cost_per_1m": 0.3,
+      "output_cost_per_1m": 2.5,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "vertex",
+      "modalities": [
+        "text",
+        "image",
+        "audio",
+        "video",
+        "pdf"
+      ],
+      "family": "gemini-flash",
+      "release_date": "2025-09-25",
+      "description": "Gemini 2.5 Flash Preview 09-25",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.075,
+      "cache_write_cost_per_1m": 0.383,
+      "knowledge_cutoff": "2025-01",
       "supports_response_format": true,
       "temperature_range": [
         0.0,
@@ -28875,7 +28304,7 @@
       ],
       "family": "gemini-flash-lite",
       "release_date": "2024-12-11",
-      "description": "Gemini 2.0 Flash Lite",
+      "description": "Gemini 2.0 Flash-Lite",
       "supports_tool_call": true,
       "supports_attachment": true,
       "knowledge_cutoff": "2024-06",
@@ -28952,207 +28381,11 @@
       ],
       "family": "gemini-flash-lite",
       "release_date": "2025-06-17",
-      "description": "Gemini 2.5 Flash Lite",
+      "description": "Gemini 2.5 Flash-Lite",
       "reasoning": true,
       "supports_tool_call": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.01,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "vertex/gemini-2.5-flash-lite-preview-06-17": {
-      "name": "gemini-2.5-flash-lite-preview-06-17",
-      "context_length": 65536,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.1,
-      "output_cost_per_1m": 0.4,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "vertex",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-flash-lite",
-      "release_date": "2025-06-17",
-      "description": "Gemini 2.5 Flash Lite Preview 06-17",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.025,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "vertex/gemini-2.5-flash-lite-preview-09-2025": {
-      "name": "gemini-2.5-flash-lite-preview-09-2025",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.1,
-      "output_cost_per_1m": 0.4,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "vertex",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-flash-lite",
-      "release_date": "2025-09-25",
-      "description": "Gemini 2.5 Flash Lite Preview 09-25",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.025,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "vertex/gemini-2.5-flash-preview-04-17": {
-      "name": "gemini-2.5-flash-preview-04-17",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.15,
-      "output_cost_per_1m": 0.6,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "vertex",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-flash",
-      "release_date": "2025-04-17",
-      "description": "Gemini 2.5 Flash Preview 04-17",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.0375,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "vertex/gemini-2.5-flash-preview-05-20": {
-      "name": "gemini-2.5-flash-preview-05-20",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.15,
-      "output_cost_per_1m": 0.6,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "vertex",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-flash",
-      "release_date": "2025-05-20",
-      "description": "Gemini 2.5 Flash Preview 05-20",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.0375,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "vertex/gemini-2.5-flash-preview-09-2025": {
-      "name": "gemini-2.5-flash-preview-09-2025",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 0.3,
-      "output_cost_per_1m": 2.5,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "vertex",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-flash",
-      "release_date": "2025-09-25",
-      "description": "Gemini 2.5 Flash Preview 09-25",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.075,
-      "cache_write_cost_per_1m": 0.383,
       "knowledge_cutoff": "2025-01",
       "supports_response_format": true,
       "temperature_range": [
@@ -29192,84 +28425,6 @@
       "supports_tool_call": true,
       "supports_attachment": true,
       "cache_read_cost_per_1m": 0.125,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "vertex/gemini-2.5-pro-preview-05-06": {
-      "name": "gemini-2.5-pro-preview-05-06",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 1.25,
-      "output_cost_per_1m": 10.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "vertex",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-pro",
-      "release_date": "2025-05-06",
-      "description": "Gemini 2.5 Pro Preview 05-06",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.31,
-      "knowledge_cutoff": "2025-01",
-      "supports_response_format": true,
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "top_p_range": [
-        0.0,
-        1.0
-      ]
-    },
-    "vertex/gemini-2.5-pro-preview-06-05": {
-      "name": "gemini-2.5-pro-preview-06-05",
-      "context_length": 1048576,
-      "max_output_tokens": 65536,
-      "input_cost_per_1m": 1.25,
-      "output_cost_per_1m": 10.0,
-      "capabilities": [
-        "chat",
-        "function_calling",
-        "vision"
-      ],
-      "supports_streaming": true,
-      "supports_json_mode": true,
-      "provider": "vertex",
-      "modalities": [
-        "text",
-        "image",
-        "audio",
-        "video",
-        "pdf"
-      ],
-      "family": "gemini-pro",
-      "release_date": "2025-06-05",
-      "description": "Gemini 2.5 Pro Preview 06-05",
-      "reasoning": true,
-      "supports_tool_call": true,
-      "supports_attachment": true,
-      "cache_read_cost_per_1m": 0.31,
       "knowledge_cutoff": "2025-01",
       "supports_response_format": true,
       "temperature_range": [
@@ -29521,10 +28676,50 @@
         1.0
       ]
     },
+    "vertex/gemini-3.5-flash": {
+      "name": "gemini-3.5-flash",
+      "context_length": 1048576,
+      "max_output_tokens": 65536,
+      "input_cost_per_1m": 1.5,
+      "output_cost_per_1m": 9.0,
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "vision"
+      ],
+      "supports_streaming": true,
+      "supports_json_mode": true,
+      "provider": "vertex",
+      "modalities": [
+        "text",
+        "image",
+        "video",
+        "audio",
+        "pdf"
+      ],
+      "family": "gemini-flash",
+      "release_date": "2026-05-19",
+      "description": "Gemini 3.5 Flash",
+      "reasoning": true,
+      "supports_tool_call": true,
+      "supports_structured_output": true,
+      "supports_attachment": true,
+      "cache_read_cost_per_1m": 0.15,
+      "knowledge_cutoff": "2025-01",
+      "supports_response_format": true,
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "top_p_range": [
+        0.0,
+        1.0
+      ]
+    },
     "vertex/gemini-embedding-001": {
       "name": "gemini-embedding-001",
       "context_length": 2048,
-      "max_output_tokens": 3072,
+      "max_output_tokens": 1,
       "input_cost_per_1m": 0.15,
       "output_cost_per_1m": 0.0,
       "capabilities": [

@@ -106,10 +106,10 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
         "rerank": "claude-3-5-haiku-20241022",
     },
     ProviderType.GEMINI: {
-        "completion": "gemini-1.5-flash",
-        "completion_medium": "gemini-1.5-pro",
-        "embedding": "text-embedding-004",
-        "rerank": "gemini-1.5-flash",
+        "completion": "gemini-2.0-flash",
+        "completion_medium": "gemini-2.5-flash",
+        "embedding": "gemini-embedding-001",
+        "rerank": "gemini-2.0-flash",
     },
     ProviderType.DASHSCOPE: {
         "completion": "qwen-turbo",
@@ -118,8 +118,8 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
         "rerank": "qwen-turbo",
     },
     ProviderType.KIMI: {
-        "completion": "kimi-latest",
-        "completion_medium": "kimi-latest",
+        "completion": "kimi-k2.5",
+        "completion_medium": "kimi-k2-thinking",
         "embedding": "kimi-embedding-1",
         "rerank": "kimi-rerank-1",
     },
@@ -130,16 +130,16 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
         "rerank": "deepseek-chat",
     },
     ProviderType.MINIMAX: {
-        "completion": "abab6.5-chat",
-        "completion_medium": "abab6.5-chat",
+        "completion": "MiniMax-M2.5-highspeed",
+        "completion_medium": "MiniMax-M2.5",
         "embedding": "embo-01",
-        "rerank": "abab6.5-chat",
+        "rerank": "MiniMax-M2.5-highspeed",
     },
     ProviderType.ZAI: {
-        "completion": "glm-4-flash",
-        "completion_medium": "glm-4",
+        "completion": "glm-4.7-flash",
+        "completion_medium": "glm-5.1",
         "embedding": "embedding-3",
-        "rerank": "glm-4-flash",
+        "rerank": "glm-4.7-flash",
     },
     ProviderType.MISTRAL: {
         "completion": "mistral-small-latest",
@@ -149,13 +149,13 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
     },
     ProviderType.GROQ: {
         "completion": "llama-3.1-8b-instant",
-        "completion_medium": "llama-3.1-70b-versatile",
+        "completion_medium": "llama-3.3-70b-versatile",
         "embedding": "text-embedding-3-small",  # Uses OpenAI
         "rerank": "llama-3.1-8b-instant",
     },
     ProviderType.COHERE: {
-        "completion": "command-r-plus",
-        "completion_medium": "command-r-plus",
+        "completion": "command-r-08-2024",
+        "completion_medium": "command-r-plus-08-2024",
         "embedding": "embed-english-v3.0",
         "rerank": "rerank-english-v3.0",
     },
@@ -172,16 +172,16 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
         "rerank": "local-model",
     },
     ProviderType.BEDROCK: {
-        "completion": "anthropic.claude-3-haiku-20240307-v1:0",
-        "completion_medium": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "completion": "anthropic.claude-haiku-4-5-20251001-v1:0",
+        "completion_medium": "anthropic.claude-sonnet-4-6",
         "embedding": "amazon.titan-embed-text-v1",
-        "rerank": "anthropic.claude-3-haiku-20240307-v1:0",
+        "rerank": "anthropic.claude-haiku-4-5-20251001-v1:0",
     },
     ProviderType.VERTEX: {
-        "completion": "gemini-1.5-flash-001",
-        "completion_medium": "gemini-1.5-pro-001",
+        "completion": "gemini-2.5-flash",
+        "completion_medium": "gemini-3-pro-preview",
         "embedding": "textembedding-gecko",
-        "rerank": "gemini-1.5-flash-001",
+        "rerank": "gemini-2.5-flash",
     },
     ProviderType.AZURE_OPENAI: {
         "completion": "gpt-4o-mini",

@@ -106,6 +106,8 @@ PROVIDER_TYPE_MAP: dict[str, ProviderType] = {
 }
 
 PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
+    ("GOOGLE_API_KEY", "gemini"),
+    ("GOOGLE_GENERATIVE_AI_API_KEY", "gemini"),
     ("GEMINI_API_KEY", "gemini"),
     ("DASHSCOPE_API_KEY", "dashscope"),
     ("OPENAI_API_KEY", "openai"),
@@ -114,6 +116,7 @@ PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
     ("MINIMAX_API_KEY", "minimax"),
     ("ZAI_API_KEY", "zai"),
     ("ZHIPU_API_KEY", "zai"),
+    ("MOONSHOT_API_KEY", "kimi"),
     ("KIMI_API_KEY", "kimi"),
     ("ANTHROPIC_API_KEY", "anthropic"),
     ("OLLAMA_BASE_URL", "ollama"),
@@ -124,17 +127,17 @@ PROVIDER_AUTO_DETECT: list[tuple[str, str]] = [
 
 _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
     ProviderType.GEMINI: _ProviderEnvProfile(
-        api_key=_EnvField(("GEMINI_API_KEY",)),
+        api_key=_EnvField(("GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY")),
         llm_model=_EnvField(("GEMINI_MODEL",), "gemini-2.0-flash"),
-        embedding_model=_EnvField(("GEMINI_EMBEDDING_MODEL",), "text-embedding-004"),
+        embedding_model=_EnvField(("GEMINI_EMBEDDING_MODEL",), "gemini-embedding-001"),
         reranker_model=_EnvField(("GEMINI_RERANK_MODEL",), "gemini-2.0-flash"),
     ),
     ProviderType.ZAI: _ProviderEnvProfile(
         api_key=_EnvField(("ZAI_API_KEY", "ZHIPU_API_KEY")),
-        llm_model=_EnvField(("ZAI_MODEL", "ZHIPU_MODEL"), "glm-4-plus"),
-        llm_small_model=_EnvField(("ZAI_SMALL_MODEL", "ZHIPU_SMALL_MODEL"), "glm-4-flash"),
+        llm_model=_EnvField(("ZAI_MODEL", "ZHIPU_MODEL"), "glm-5.1"),
+        llm_small_model=_EnvField(("ZAI_SMALL_MODEL", "ZHIPU_SMALL_MODEL"), "glm-4.7-flash"),
         embedding_model=_EnvField(("ZAI_EMBEDDING_MODEL", "ZHIPU_EMBEDDING_MODEL"), "embedding-3"),
-        reranker_model=_EnvField(("ZAI_RERANK_MODEL", "ZHIPU_RERANK_MODEL"), "glm-4-flash"),
+        reranker_model=_EnvField(("ZAI_RERANK_MODEL", "ZHIPU_RERANK_MODEL"), "glm-4.7-flash"),
         base_url=_EnvField(
             ("ZAI_BASE_URL", "ZHIPU_BASE_URL"),
             "https://open.bigmodel.cn/api/paas/v4",
@@ -170,9 +173,9 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
     ProviderType.DEEPSEEK: _ProviderEnvProfile(
         api_key=_EnvField(("DEEPSEEK_API_KEY",)),
         llm_model=_EnvField(("DEEPSEEK_MODEL",), "deepseek-chat"),
-        llm_small_model=_EnvField(("DEEPSEEK_SMALL_MODEL",), "deepseek-coder"),
+        llm_small_model=_EnvField(("DEEPSEEK_SMALL_MODEL",), "deepseek-v4-flash"),
         reranker_model=_EnvField(("DEEPSEEK_RERANK_MODEL",), "deepseek-chat"),
-        base_url=_EnvField(("DEEPSEEK_BASE_URL",), "https://api.deepseek.com/v1"),
+        base_url=_EnvField(("DEEPSEEK_BASE_URL",), "https://api.deepseek.com"),
     ),
     ProviderType.MINIMAX: _ProviderEnvProfile(
         api_key=_EnvField(("MINIMAX_API_KEY",)),
@@ -180,7 +183,7 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
         llm_small_model=_EnvField(("MINIMAX_SMALL_MODEL",), "MiniMax-M2.5-highspeed"),
         embedding_model=_EnvField(("MINIMAX_EMBEDDING_MODEL",), "embo-01"),
         reranker_model=_EnvField(("MINIMAX_RERANK_MODEL",), "MiniMax-M2.5-highspeed"),
-        base_url=_EnvField(("MINIMAX_BASE_URL",), "https://api.minimax.io/v1"),
+        base_url=_EnvField(("MINIMAX_BASE_URL",), "https://api.minimax.io/anthropic/v1"),
     ),
     ProviderType.MINIMAX_CODING: _ProviderEnvProfile(
         api_key=_EnvField(("MINIMAX_API_KEY",)),
@@ -223,9 +226,9 @@ _ENV_PROFILES: dict[ProviderType, _ProviderEnvProfile] = {
         ),
     ),
     ProviderType.KIMI: _ProviderEnvProfile(
-        api_key=_EnvField(("KIMI_API_KEY",)),
-        llm_model=_EnvField(("KIMI_MODEL",), "moonshot-v1-8k"),
-        llm_small_model=_EnvField(("KIMI_SMALL_MODEL",), "moonshot-v1-8k"),
+        api_key=_EnvField(("MOONSHOT_API_KEY", "KIMI_API_KEY")),
+        llm_model=_EnvField(("KIMI_MODEL", "MOONSHOT_MODEL"), "kimi-k2.5"),
+        llm_small_model=_EnvField(("KIMI_SMALL_MODEL", "MOONSHOT_SMALL_MODEL"), "kimi-k2.5"),
         embedding_model=_EnvField(("KIMI_EMBEDDING_MODEL",), "kimi-embedding-1"),
         reranker_model=_EnvField(("KIMI_RERANK_MODEL",), "kimi-rerank-1"),
         base_url=_EnvField(("KIMI_BASE_URL",), "https://api.moonshot.cn/v1"),

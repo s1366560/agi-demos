@@ -58,7 +58,7 @@ const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
   mistral: 'Mistral',
   bedrock: 'AWS Bedrock',
   vertex: 'Google Vertex AI',
-  deepseek: 'Deepseek',
+  deepseek: 'DeepSeek',
   minimax: 'MiniMax',
   minimax_coding: 'MiniMax Coding',
   minimax_embedding: 'MiniMax Embedding',

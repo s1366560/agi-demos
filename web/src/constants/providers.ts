@@ -161,9 +161,9 @@ export const PROVIDERS: ProviderMeta[] = [
   },
   {
     value: 'deepseek',
-    label: 'Deepseek',
+    label: 'DeepSeek',
     icon: '🔍',
-    description: 'Deepseek-Chat, Deepseek-Coder (cost-effective)',
+    description: 'DeepSeek Chat and DeepSeek Coder models',
     apiKeyEnvVar: 'DEEPSEEK_API_KEY',
     apiKeyPlaceholder: 'sk-...',
     hasEmbedding: false,

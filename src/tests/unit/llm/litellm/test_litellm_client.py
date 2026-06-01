@@ -704,6 +704,7 @@ class TestLiteLLMClientDeepseek:
             # Check that the model has the deepseek prefix
             call_kwargs = mock_acompletion.call_args.kwargs
             assert "deepseek/" in call_kwargs["model"]
+            assert call_kwargs["api_base"] == "https://api.deepseek.com"
 
     @pytest.mark.asyncio
     async def test_deepseek_get_model_for_size_small(self, deepseek_client):

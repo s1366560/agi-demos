@@ -59,6 +59,39 @@ def test_build_provider_configs_splits_model_operations(monkeypatch):
 
 
 @pytest.mark.unit
+def test_build_provider_configs_supports_deepseek_bootstrap(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-deepseek")
+    monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+
+    configs = initializer._build_provider_configs("deepseek")
+
+    assert len(configs) == 1
+    assert configs[0].provider_type == ProviderType.DEEPSEEK
+    assert configs[0].operation_type == OperationType.LLM
+    assert configs[0].llm_model == "deepseek-chat"
+    assert configs[0].llm_small_model == "deepseek-v4-flash"
+    assert configs[0].base_url == "https://api.deepseek.com"
+    assert configs[0].pool_enabled is True
+
+
+@pytest.mark.unit
+def test_build_provider_configs_supports_models_dev_env_aliases(monkeypatch):
+    monkeypatch.setenv("MOONSHOT_API_KEY", "sk-moonshot")
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    monkeypatch.delenv("KIMI_MODEL", raising=False)
+    monkeypatch.delenv("MOONSHOT_MODEL", raising=False)
+
+    configs = initializer._build_provider_configs("kimi")
+
+    assert len(configs) == 2
+    assert configs[0].provider_type == ProviderType.KIMI
+    assert configs[0].operation_type == OperationType.LLM
+    assert configs[0].llm_model == "kimi-k2.5"
+    assert configs[0].llm_small_model == "kimi-k2.5"
+    assert configs[0].api_key == "sk-moonshot"
+
+
+@pytest.mark.unit
 async def test_initialize_defaults_falls_back_to_ollama_for_unknown_provider(monkeypatch):
     captured_config = {}
 

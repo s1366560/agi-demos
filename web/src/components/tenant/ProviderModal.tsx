@@ -110,7 +110,7 @@ const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
   { value: 'mistral', label: 'Mistral' },
   { value: 'bedrock', label: 'AWS Bedrock' },
   { value: 'vertex', label: 'Google Vertex AI' },
-  { value: 'deepseek', label: 'Deepseek' },
+  { value: 'deepseek', label: 'DeepSeek' },
   { value: 'minimax', label: 'MiniMax' },
   { value: 'minimax_coding', label: 'MiniMax Coding' },
   { value: 'minimax_embedding', label: 'MiniMax Embedding' },

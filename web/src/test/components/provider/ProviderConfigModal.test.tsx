@@ -31,13 +31,26 @@ describe('ProviderConfigModal', () => {
     vi.clearAllMocks();
     providerStore.fetchModelCatalog.mockResolvedValue(undefined);
     vi.mocked(providerAPI.detectEnvKeys).mockResolvedValue({ detected_providers: {} });
-    vi.mocked(providerAPI.listModels).mockResolvedValue({
-      provider_type: 'openai',
-      models: {
-        chat: ['gpt-4o'],
-        embedding: ['text-embedding-3-small'],
-        rerank: [],
-      },
+    vi.mocked(providerAPI.listModels).mockImplementation(async (providerType) => {
+      if (providerType === 'deepseek') {
+        return {
+          provider_type: 'deepseek',
+          models: {
+            chat: ['deepseek-chat', 'deepseek-coder'],
+            embedding: [],
+            rerank: [],
+          },
+        };
+      }
+
+      return {
+        provider_type: 'openai',
+        models: {
+          chat: ['gpt-4o'],
+          embedding: ['text-embedding-3-small'],
+          rerank: [],
+        },
+      };
     });
     vi.mocked(providerAPI.testConnection).mockResolvedValue({
       provider_id: 'draft-provider',
@@ -100,5 +113,42 @@ describe('ProviderConfigModal', () => {
     });
     expect(providerAPI.checkHealth).not.toHaveBeenCalled();
     expect(await screen.findByText('Connection test passed (123 ms).')).toBeInTheDocument();
+  });
+
+  it('exposes DeepSeek in the provider picker and configures it as an LLM provider', async () => {
+    const { container } = render(
+      <ProviderConfigModal isOpen onClose={vi.fn()} onSuccess={vi.fn()} />
+    );
+
+    const deepseekButton = await screen.findByRole('button', { name: /DeepSeek/i });
+    fireEvent.click(deepseekButton);
+
+    await waitFor(() => {
+      expect(providerAPI.listModels).toHaveBeenCalledWith('deepseek');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    const apiKeyInput = await waitFor(() => {
+      const input = container.querySelector('input[type="password"]');
+      expect(input).toBeTruthy();
+      return input as HTMLInputElement;
+    });
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-deepseek-test' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+
+    await waitFor(() => {
+      expect(providerAPI.testConnection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'DeepSeek',
+          provider_type: 'deepseek',
+          operation_type: 'llm',
+          api_key: 'sk-deepseek-test',
+          llm_model: 'deepseek-chat',
+          llm_small_model: 'deepseek-coder',
+        })
+      );
+    });
   });
 });

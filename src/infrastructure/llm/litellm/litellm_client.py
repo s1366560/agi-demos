@@ -127,9 +127,10 @@ def _strip_assistant_tool_calls(message: dict[str, Any]) -> dict[str, Any]:
 
 # Default API base URLs for known providers
 _DEFAULT_API_BASES: dict[str, str] = {
+    "deepseek": "https://api.deepseek.com",
     "zai": "https://open.bigmodel.cn/api/paas/v4",
     "kimi": "https://api.moonshot.cn/v1",
-    "minimax": "https://api.minimax.io/v1",
+    "minimax": "https://api.minimax.io/anthropic/v1",
     "openrouter": "https://openrouter.ai/api/v1",
     "ollama": "http://localhost:11434",
     "lmstudio": "http://localhost:1234/v1",
