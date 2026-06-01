@@ -217,16 +217,7 @@ const getDisplayItemKey = (item: DisplayItem, index: number): string => {
 
   if (item.kind === 'timeline') {
     const firstStep = item.steps[0];
-    const lastStep = item.steps.at(-1);
-    const statusSummary = item.steps.map((step) => step.status).join(',');
-    return [
-      'timeline',
-      String(item.startIndex),
-      String(item.steps.length),
-      firstStep?.id ?? 'first',
-      lastStep?.id ?? 'last',
-      statusSummary,
-    ].join(':');
+    return ['timeline', String(item.startIndex), firstStep?.id ?? 'first'].join(':');
   }
 
   if (item.kind === 'subagent') {
@@ -234,8 +225,6 @@ const getDisplayItemKey = (item: DisplayItem, index: number): string => {
       'subagent',
       item.group.subagentId || String(item.startIndex),
       String(item.startIndex),
-      String(item.group.events.length),
-      item.group.status,
     ].join(':');
   }
 
@@ -645,8 +634,8 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     }, []);
 
     useEffect(() => {
-      virtualizer.measure();
-    }, [virtualizer, displayMeasurementKey, streamingContent, streamingThought]);
+      virtualizerRef.current.measure();
+    }, [displayMeasurementKey]);
 
     useEffect(() => {
       if (lastConversationIdRef.current === conversationId) return;

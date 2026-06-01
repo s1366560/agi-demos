@@ -259,7 +259,7 @@ export function useMessageAreaScroll(
       // Clear switching flag when new messages arrive
       isSwitchingConversationRef.current = false;
 
-      if (isStreaming || isNearBottom(container, 200)) {
+      if (!userScrolledUpRef.current && (isStreaming || isNearBottom(container, 200))) {
         requestAnimationFrame(() => {
           if (containerRef.current) {
             containerRef.current.scrollTop = containerRef.current.scrollHeight;

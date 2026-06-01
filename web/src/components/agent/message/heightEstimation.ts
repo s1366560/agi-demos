@@ -59,6 +59,11 @@ export function estimateGroupedItemHeight(item: GroupedItem | DisplayItem): numb
       const content = event.content || '';
       return estimateMarkdownHeight(content);
     }
+    case 'text_end': {
+      const content =
+        'fullText' in event && typeof event.fullText === 'string' ? event.fullText : '';
+      return estimateMarkdownHeight(content);
+    }
     default:
       return 80;
   }

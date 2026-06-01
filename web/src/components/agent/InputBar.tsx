@@ -538,7 +538,10 @@ export const InputBar = memo<InputBarProps>(
           </div>
 
           {/* Text Area */}
-          <div className="min-w-0 flex-shrink-0 px-3 py-2 sm:px-4 relative overflow-visible">
+          <div
+            data-testid="chat-input-body"
+            className="relative flex min-h-0 min-w-0 flex-1 px-3 py-2 sm:px-4 overflow-visible"
+          >
             <SlashCommandDropdown
               ref={slashDropdownRef}
               query={slashQuery}
@@ -585,8 +588,9 @@ export const InputBar = memo<InputBarProps>(
               />
             )}
             <div
+              data-testid="chat-input-surface"
               className="
-                flex min-h-11 w-full min-w-0 flex-wrap items-center gap-1.5 rounded px-2 py-1.5
+                flex h-full min-h-11 w-full min-w-0 flex-wrap content-start items-start gap-1.5 rounded px-2 py-1.5
                 bg-slate-50/70 dark:bg-slate-900/40
                 transition-colors
               "

@@ -134,4 +134,15 @@ describe('InputBar autocomplete overlays', () => {
       'flex-wrap'
     );
   });
+
+  it('lets the input body absorb resized composer height before the toolbar', () => {
+    render(<InputBar onSend={vi.fn()} onAbort={vi.fn()} isStreaming={false} />);
+
+    expect(screen.getByTestId('chat-input-body')).toHaveClass('flex-1', 'min-h-0');
+    expect(screen.getByTestId('chat-input-surface')).toHaveClass(
+      'h-full',
+      'content-start',
+      'items-start'
+    );
+  });
 });

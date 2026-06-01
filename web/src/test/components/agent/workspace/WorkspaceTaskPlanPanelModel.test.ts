@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildWorkspaceTaskPlanRows } from '@/components/agent/workspace/WorkspaceTaskPlanPanelModel';
 
-import type { WorkspacePlanNode, WorkspacePlanSnapshot } from '@/types/workspace';
+import type { WorkspacePlanNode, WorkspacePlanSnapshot, WorkspaceTask } from '@/types/workspace';
 
 function planNode(overrides: Partial<WorkspacePlanNode>): WorkspacePlanNode {
   return {
@@ -45,6 +45,20 @@ function snapshot(nodes: WorkspacePlanNode[]): WorkspacePlanSnapshot {
   };
 }
 
+function workspaceTask(overrides: Partial<WorkspaceTask>): WorkspaceTask {
+  return {
+    id: 'task-1',
+    workspace_id: 'workspace-1',
+    title: 'Task title',
+    description: '',
+    status: 'in_progress',
+    priority: '',
+    metadata: {},
+    created_at: '2026-05-23T00:00:00Z',
+    ...overrides,
+  };
+}
+
 describe('buildWorkspaceTaskPlanRows', () => {
   it('handles plan nodes missing optional runtime fields without losing stable order', () => {
     const rows = buildWorkspaceTaskPlanRows(
@@ -76,6 +90,38 @@ describe('buildWorkspaceTaskPlanRows', () => {
       entityId: 'node-b-without-priority',
       progressPercent: 42,
       order: 1,
+    });
+  });
+
+  it('uses the linked plan node as the canonical runtime status for task rows', () => {
+    const rows = buildWorkspaceTaskPlanRows(
+      [
+        workspaceTask({
+          id: 'task-done-in-plan',
+          status: 'in_progress',
+          current_attempt_id: 'stale-task-attempt',
+        }),
+      ],
+      snapshot([
+        planNode({
+          id: 'node-done',
+          title: 'Done in plan',
+          intent: 'done',
+          execution: 'idle',
+          workspace_task_id: 'task-done-in-plan',
+          current_attempt_id: 'canonical-plan-attempt',
+          progress: { percent: 100, confidence: 1, note: 'accepted' },
+        }),
+      ]),
+      null
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      entityId: 'task-done-in-plan',
+      status: 'done',
+      attemptId: 'canonical-plan-attempt',
+      progressPercent: 100,
     });
   });
 });
