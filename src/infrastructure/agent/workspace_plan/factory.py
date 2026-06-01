@@ -24,6 +24,7 @@ from src.domain.ports.services.iteration_review_port import IterationReviewPort
 from src.domain.ports.services.task_allocator_port import Allocation, WorkspaceAgent
 from src.domain.ports.services.verifier_port import VerificationContext
 from src.domain.ports.services.workspace_supervisor_decision_port import (
+    WorkspaceSupervisorDecisionAction,
     WorkspaceSupervisorDecisionPort,
 )
 from src.domain.ports.services.workspace_verification_judge_port import (
@@ -120,6 +121,8 @@ def _make_sql_plan_event_sink(db: AsyncSession) -> PlanEventSink:
         )
         if event_type == "verification_completed":
             await _project_verification_to_workspace_task(db, node, payload)
+        if event_type == "supervisor_decision_completed":
+            await _project_supervisor_decision_to_workspace_task(db, node, payload)
         if event_type == "verification_retry_scheduled":
             await SqlWorkspacePlanOutboxRepository(db).enqueue(
                 plan_id=node.plan_id,
@@ -279,6 +282,145 @@ async def _project_verification_to_workspace_task(
                     test_commands=test_commands,
                     now=now,
                 )
+
+
+async def _project_supervisor_decision_to_workspace_task(
+    db: AsyncSession,
+    node: PlanNode,
+    payload: dict[str, Any],
+) -> bool:
+    """Project final agent-supervisor decisions over earlier verifier projections."""
+    action = payload.get("action")
+    if action == WorkspaceSupervisorDecisionAction.DISPOSE_NODE.value:
+        return await _project_supervisor_disposition_to_workspace_task(
+            db=db,
+            node=node,
+            payload=payload,
+        )
+    if action != WorkspaceSupervisorDecisionAction.ACCEPT_NODE.value:
+        return False
+    return await _project_supervisor_accept_decision_to_workspace_task(
+        db=db,
+        node=node,
+        payload=payload,
+    )
+
+
+async def _project_supervisor_accept_decision_to_workspace_task(
+    *,
+    db: AsyncSession,
+    node: PlanNode,
+    payload: dict[str, Any],
+) -> bool:
+    """Project an explicit supervisor accept verdict to task and attempt rows."""
+
+    attempt_id = _payload_string(payload, "attempt_id") or node.current_attempt_id
+    if not attempt_id:
+        return False
+
+    attempt = await db.get(WorkspaceTaskSessionAttemptModel, attempt_id)
+    if attempt is None:
+        return False
+
+    now = datetime.now(UTC)
+    summary = str(payload.get("rationale") or "accepted by workspace supervisor")
+    attempt.status = WorkspaceTaskSessionAttemptStatus.ACCEPTED.value
+    attempt.leader_feedback = summary
+    attempt.adjudication_reason = "supervisor_decision_accept_node"
+    attempt.completed_at = now
+    attempt.updated_at = now
+
+    if not node.workspace_task_id:
+        return False
+
+    task = await db.get(WorkspaceTaskModel, node.workspace_task_id)
+    if task is None:
+        return False
+
+    evidence_refs = _attempt_candidate_evidence_refs(attempt)
+    commit_ref = _first_prefixed_evidence_value(evidence_refs, "commit_ref:")
+    git_diff_summary = _first_prefixed_evidence_value(evidence_refs, "git_diff_summary:")
+    test_commands = [
+        ref.removeprefix("test_run:") for ref in evidence_refs if ref.startswith("test_run:")
+    ]
+    await _project_verification_to_task(
+        db=db,
+        task=task,
+        attempt_id=attempt_id,
+        passed=True,
+        hard_fail=False,
+        summary=summary,
+        evidence_refs=evidence_refs,
+        commit_ref=commit_ref,
+        git_diff_summary=git_diff_summary,
+        test_commands=test_commands,
+        now=now,
+    )
+    return True
+
+
+async def _project_supervisor_disposition_to_workspace_task(
+    *,
+    db: AsyncSession,
+    node: PlanNode,
+    payload: dict[str, Any],
+) -> bool:
+    """Project terminal supervisor disposition without rewriting attempt history."""
+    if not node.workspace_task_id:
+        return False
+
+    task = await db.get(WorkspaceTaskModel, node.workspace_task_id)
+    if task is None:
+        return False
+
+    now = datetime.now(UTC)
+    attempt_id = _payload_string(payload, "attempt_id") or node.current_attempt_id
+    event_payload = payload.get("event_payload")
+    disposition = "supervisor_agent_disposed_node"
+    if isinstance(event_payload, Mapping):
+        raw_disposition = event_payload.get("disposition")
+        if isinstance(raw_disposition, str) and raw_disposition.strip():
+            disposition = raw_disposition.strip()[:120]
+    rationale = _payload_string(payload, "rationale") or "disposed by workspace supervisor"
+    metadata = dict(task.metadata_json or {})
+    metadata[PENDING_LEADER_ADJUDICATION] = False
+    metadata["durable_plan_verdict"] = "disposed"
+    metadata["durable_plan_disposition"] = disposition
+    metadata["durable_plan_verification_summary"] = rationale
+    metadata["durable_plan_verified_at"] = now.isoformat().replace("+00:00", "Z")
+    metadata["last_attempt_status"] = "disposed"
+    metadata["last_worker_report_type"] = "disposed"
+    metadata[LAST_WORKER_REPORT_SUMMARY] = rationale
+    metadata[LAST_LEADER_ADJUDICATION_STATUS] = "disposed"
+    if attempt_id:
+        metadata["last_attempt_id"] = attempt_id
+        metadata[CURRENT_ATTEMPT_ID] = attempt_id
+    if isinstance(event_payload, Mapping):
+        for key in ("superseded_by_task_id", "superseded_by_node_id", "disposed_node_id"):
+            value = event_payload.get(key)
+            if isinstance(value, str) and value.strip():
+                metadata[key] = value.strip()
+    task.metadata_json = metadata
+    task.status = "done"
+    task.blocker_reason = None
+    task.completed_at = now
+    task.updated_at = now
+    await _reconcile_root_goal_if_present(db, task, metadata)
+    return True
+
+
+def _attempt_candidate_evidence_refs(attempt: WorkspaceTaskSessionAttemptModel) -> list[str]:
+    refs: list[str] = []
+    for raw_values in (
+        attempt.candidate_artifacts_json,
+        attempt.candidate_verifications_json,
+    ):
+        if not isinstance(raw_values, list):
+            continue
+        for raw_value in raw_values:
+            if isinstance(raw_value, str) and raw_value:
+                refs.append(raw_value)
+    return list(dict.fromkeys(refs))
 
 
 def _node_requires_pipeline_gate(node: PlanNode) -> bool:

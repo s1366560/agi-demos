@@ -4065,6 +4065,40 @@ async def _has_pending_supervisor_tick_job(
     return result.scalar_one_or_none() is not None
 
 
+async def _has_recent_terminal_attempt_reconcile_event(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan_id: str,
+    node_ids: list[str],
+) -> bool:
+    """Suppress steady-state terminal-attempt reconcile churn.
+
+    The snapshot self-healer is invoked on every UI poll. Without a recency
+    guard it re-enqueues a supervisor tick (and writes an event) every time the
+    same node still points at a terminal attempt, producing an unbounded busy
+    loop when the node can never reach a terminal state. We skip re-enqueuing
+    when an identical reconcile event was emitted within the suppression window.
+    """
+    if not node_ids:
+        return False
+    recent_cutoff = datetime.now(UTC) - timedelta(
+        seconds=_SNAPSHOT_RECOVERY_RECENT_JOB_SUPPRESSION_SECONDS
+    )
+    result = await session.execute(
+        refresh_select_statement(
+            select(WorkspacePlanEventModel.id)
+            .where(WorkspacePlanEventModel.workspace_id == workspace_id)
+            .where(WorkspacePlanEventModel.plan_id == plan_id)
+            .where(WorkspacePlanEventModel.event_type == "auto_terminal_attempt_reconcile_queued")
+            .where(WorkspacePlanEventModel.created_at >= recent_cutoff)
+            .where(WorkspacePlanEventModel.node_id.in_(node_ids))
+            .limit(1)
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def _enqueue_terminal_attempt_reconciliation(
     *,
     session: AsyncSession,
@@ -4079,6 +4113,13 @@ async def _enqueue_terminal_attempt_reconciliation(
         session=session,
         workspace_id=workspace_id,
         plan_id=plan.id,
+    ):
+        return 0
+    if await _has_recent_terminal_attempt_reconcile_event(
+        session=session,
+        workspace_id=workspace_id,
+        plan_id=plan.id,
+        node_ids=[node.id for node in nodes],
     ):
         return 0
     root_goal_task_id = plan.goal_node.workspace_task_id or ""

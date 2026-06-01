@@ -19,6 +19,8 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     _can_reflect_existing_pipeline_run,
     _needs_agent_managed_pipeline_proposal,
     _requires_preview_deployment,
+    _source_control_token,
+    _source_publish_dotenv_values,
 )
 from src.infrastructure.agent.workspace_plan.pipeline import (
     DRONE_DOCKER_DEPLOY_VALIDATION,
@@ -161,9 +163,17 @@ async def test_drone_cli_client_uses_official_env_and_build_commands() -> None:
     async def runner(args: tuple[str, ...], env: Mapping[str, str]) -> dict[str, str]:
         calls.append((args, env))
         if args[:3] == ("drone", "build", "create"):
-            return {"stdout": '{"number": 42, "status": "pending"}', "stderr": "", "returncode": "0"}
+            return {
+                "stdout": '{"number": 42, "status": "pending"}',
+                "stderr": "",
+                "returncode": "0",
+            }
         if args[:3] == ("drone", "build", "info"):
-            return {"stdout": '{"number": 42, "status": "success"}', "stderr": "", "returncode": "0"}
+            return {
+                "stdout": '{"number": 42, "status": "success"}',
+                "stderr": "",
+                "returncode": "0",
+            }
         if args[:3] == ("drone", "log", "view"):
             return {"stdout": "default/test log\n", "stderr": "", "returncode": "0"}
         return {"stdout": "", "stderr": "unexpected command", "returncode": "1"}
@@ -1997,6 +2007,21 @@ def test_drone_config_prefers_cli_environment_names(
 
     assert config.server_url == "https://drone-cli.example.test"
     assert config.token == "test-token"
+
+
+def test_source_publish_token_uses_dotenv_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    dotenv_path = tmp_path / ".env"
+    dotenv_path.write_text("GITHUB_TOKEN=dotenv-token\n", encoding="utf-8")
+    _source_publish_dotenv_values.cache_clear()
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setenv("MEMSTACK_DRONE_DOTENV_PATH", str(dotenv_path))
+
+    assert _source_control_token("GITHUB_TOKEN") == "dotenv-token"
+
+    _source_publish_dotenv_values.cache_clear()
 
 
 def test_drone_contract_uses_provider_config_without_preview_requirement() -> None:

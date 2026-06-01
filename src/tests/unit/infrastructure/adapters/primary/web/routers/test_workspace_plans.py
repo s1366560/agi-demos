@@ -1960,6 +1960,97 @@ async def test_snapshot_recovery_enqueues_tick_for_active_node_with_terminal_att
 
 
 @pytest.mark.asyncio
+async def test_snapshot_recovery_throttles_recent_terminal_attempt_reconcile_event(
+    db_session: AsyncSession,
+) -> None:
+    """A completed tick must not re-trigger reconcile churn within the suppression window."""
+    workspace_id = "workspace-plan-api-terminal-throttle"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-throttle",
+                workspace_id=workspace_id,
+                title="Root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-throttle",
+                workspace_id=workspace_id,
+                title="Task",
+                description="",
+                created_by="plan-api-user",
+                status="done",
+                metadata_json={},
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-throttle-accepted",
+                workspace_task_id="workspace-task-throttle",
+                root_goal_task_id="root-throttle",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="accepted",
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    goal_node_id = PlanNodeId(value="goal-api")
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[goal_node_id] = replace(
+        plan.nodes[goal_node_id],
+        workspace_task_id="root-throttle",
+    )
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        execution=TaskExecution.RUNNING,
+        updated_at=datetime.now(UTC),
+        workspace_task_id="workspace-task-throttle",
+        current_attempt_id="attempt-throttle-accepted",
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    first = await workspace_plans._recover_stale_attempts_for_snapshot(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        actor_id="plan-api-user",
+    )
+    assert first is True
+
+    # Simulate the supervisor tick finishing: clearing the pending-job guard must
+    # not allow the snapshot self-healer to re-enqueue while the event is recent.
+    outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
+        workspace_id,
+        limit=5,
+    )
+    for item in outbox:
+        if item.event_type == "supervisor_tick":
+            item.status = "completed"
+    await db_session.commit()
+
+    throttled = await workspace_plans._recover_stale_attempts_for_snapshot(
+        session=db_session,
+        workspace_id=workspace_id,
+        plan=plan,
+        actor_id="plan-api-user",
+    )
+
+    assert throttled is False
+    events = await SqlWorkspacePlanEventRepository(db_session).list_recent(
+        plan.id,
+        limit=10,
+    )
+    reconcile_events = [
+        event for event in events if event.event_type == "auto_terminal_attempt_reconcile_queued"
+    ]
+    assert len(reconcile_events) == 1
+
+
+@pytest.mark.asyncio
 async def test_snapshot_recovery_marks_awaiting_reported_attempt_node(
     db_session: AsyncSession,
 ) -> None:

@@ -17,10 +17,12 @@ import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import redis.asyncio as redis
+from dotenv import dotenv_values
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,6 +124,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKSPACE_PLAN_NODE_ID,
 )
 from src.infrastructure.agent.workspace_plan.factory import (
+    _project_supervisor_disposition_to_workspace_task,
     _project_verification_to_task,
     build_sql_orchestrator,
 )
@@ -526,6 +529,16 @@ async def _project_done_idle_disposition_nodes_after_tick(
     now = datetime.now(UTC)
     changed = False
     for node in list(plan.nodes.values()):
+        if _node_has_projectable_supervisor_disposition(node):
+            if await _project_supervisor_disposition_node_after_tick(
+                session=session,
+                workspace_id=workspace_id,
+                plan=plan,
+                node=node,
+                now=now,
+            ):
+                changed = True
+            continue
         if not _node_has_projectable_done_disposition(plan, node):
             continue
         task = await session.get(WorkspaceTaskModel, node.workspace_task_id)
@@ -563,6 +576,57 @@ async def _project_done_idle_disposition_nodes_after_tick(
     if changed:
         await repo.save(plan)
     return changed
+
+
+async def _project_supervisor_disposition_node_after_tick(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan: Plan,
+    node: PlanNode,
+    now: datetime,
+) -> bool:
+    if not node.workspace_task_id:
+        return False
+    task = await session.get(WorkspaceTaskModel, node.workspace_task_id)
+    if task is None or task.workspace_id != workspace_id:
+        return False
+    metadata = dict(node.metadata or {})
+    if (
+        task.status == "done"
+        and dict(task.metadata_json or {}).get("durable_plan_verdict") == "disposed"
+        and metadata.get("workspace_task_projection_status") == "done"
+    ):
+        return False
+    event_payload = metadata.get("last_supervisor_decision_event_payload")
+    payload: dict[str, Any] = {
+        "action": "dispose_node",
+        "attempt_id": node.current_attempt_id,
+        "rationale": _metadata_string(metadata.get("last_supervisor_decision_rationale"))
+        or _metadata_string(metadata.get("last_verification_summary"))
+        or "disposed by workspace supervisor",
+        "event_payload": event_payload if isinstance(event_payload, Mapping) else {},
+    }
+    _ = await _project_supervisor_disposition_to_workspace_task(
+        db=session,
+        node=node,
+        payload=payload,
+    )
+    metadata["workspace_task_projection_status"] = "done"
+    metadata["workspace_task_projected_at"] = now.isoformat().replace("+00:00", "Z")
+    metadata["last_supervisor_decision_action"] = "dispose_node"
+    plan.replace_node(replace(node, metadata=metadata, updated_at=now))
+    return True
+
+
+def _node_has_projectable_supervisor_disposition(node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    return (
+        node.intent is TaskIntent.DONE
+        and node.execution is TaskExecution.IDLE
+        and bool(node.workspace_task_id)
+        and metadata.get("verification_feedback_disposition") == "supervisor_agent_disposed_node"
+    )
 
 
 def _node_has_projectable_done_disposition(plan: Plan, node: PlanNode) -> bool:
@@ -4114,7 +4178,7 @@ async def _prepare_drone_source_ref(
 
     remote_url = _source_control_remote_url(source_control)
     token_env = _source_control_token_env(source_control)
-    token = os.getenv(token_env) if token_env else None
+    token = _source_control_token(token_env)
     publish = await _publish_git_ref_to_source_control(
         host_code_root=host_code_root,
         commit_ref=commit_ref,
@@ -4212,6 +4276,28 @@ def _source_control_token_env(source_control: Mapping[str, Any]) -> str | None:
     if provider == "gitlab":
         return "GITLAB_TOKEN"
     return "GITHUB_TOKEN"
+
+
+def _source_control_token(token_env: str | None) -> str | None:
+    if not token_env:
+        return None
+    value = _metadata_string(os.getenv(token_env))
+    if value:
+        return value
+    dotenv = _source_publish_dotenv_values(_source_publish_dotenv_path())
+    return _metadata_string(dotenv.get(token_env))
+
+
+def _source_publish_dotenv_path() -> str:
+    return os.getenv("MEMSTACK_DRONE_DOTENV_PATH", ".env")
+
+
+@lru_cache(maxsize=8)
+def _source_publish_dotenv_values(path: str) -> Mapping[str, str | None]:
+    dotenv_path = Path(path)
+    if not dotenv_path.exists() or not dotenv_path.is_file():
+        return {}
+    return dotenv_values(dotenv_path)
 
 
 def _is_safe_git_branch(value: str) -> bool:

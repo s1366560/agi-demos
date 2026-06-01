@@ -91,6 +91,7 @@ from src.infrastructure.agent.workspace.workspace_metadata_keys import (
     WORKTREE_SETUP,
 )
 from src.infrastructure.agent.workspace_plan.factory import (
+    _project_supervisor_decision_to_workspace_task,
     _project_verification_to_workspace_task,
     build_sql_orchestrator,
 )
@@ -928,6 +929,185 @@ async def test_pipeline_required_verification_waits_for_pipeline_before_acceptin
     assert task.metadata_json["durable_plan_raw_verification_summary"] == "verified before pipeline"
     assert task.metadata_json["last_attempt_status"] == "awaiting_pipeline"
     assert task.metadata_json["pipeline_candidate_commit_ref"] == "abc1234"
+
+
+@pytest.mark.asyncio
+async def test_supervisor_accept_decision_overrides_pipeline_pending_projection(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="exec-task-1",
+            workspace_id="workspace-1",
+            title="Execution task",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                WORKSPACE_PLAN_ID: "worker-plan-1",
+                WORKSPACE_PLAN_NODE_ID: "node-a",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                CURRENT_ATTEMPT_ID: "attempt-a",
+                PENDING_LEADER_ADJUDICATION: False,
+                "durable_plan_verdict": "pipeline_pending",
+                "last_attempt_status": "awaiting_pipeline",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-a",
+            workspace_task_id="exec-task-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="awaiting_leader_adjudication",
+            conversation_id="conversation-a",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="Implementation completed.",
+            candidate_artifacts_json=[
+                "src/swarm/service.ts",
+                "commit_ref:abc1234",
+                "git_diff_summary:implemented swarm service",
+            ],
+            candidate_verifications_json=[
+                "test_run:swarm 36/36 tests passed",
+                "tsc:swarm-zero-errors",
+            ],
+            leader_feedback=(
+                "durable plan verifier passed code checks; awaiting harness-native pipeline evidence"
+            ),
+            adjudication_reason="pipeline_gate_pending",
+        )
+    )
+    await db_session.flush()
+    node = PlanNode(
+        id="node-a",
+        plan_id="worker-plan-1",
+        parent_id=PlanNodeId("goal-a"),
+        kind=PlanNodeKind.TASK,
+        title="Implement feature",
+        workspace_task_id="exec-task-1",
+        current_attempt_id="attempt-a",
+        metadata={"pipeline_required": True},
+    )
+
+    await _project_supervisor_decision_to_workspace_task(
+        db_session,
+        node,
+        {
+            "action": "accept_node",
+            "rationale": "agent supervisor accepted current attempt",
+            "confidence": 0.95,
+        },
+    )
+    await db_session.flush()
+
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "attempt-a")
+    assert attempt is not None
+    assert attempt.status == "accepted"
+    assert attempt.completed_at is not None
+    assert attempt.leader_feedback == "agent supervisor accepted current attempt"
+    assert attempt.adjudication_reason == "supervisor_decision_accept_node"
+    task = await db_session.get(WorkspaceTaskModel, "exec-task-1")
+    assert task is not None
+    assert task.status == "done"
+    assert task.metadata_json["durable_plan_verdict"] == "accepted"
+    assert task.metadata_json["last_attempt_status"] == "accepted"
+    assert task.metadata_json["handoff_package"]["git_head"] == "abc1234"
+    assert task.metadata_json["handoff_package"]["test_commands"] == ["swarm 36/36 tests passed"]
+    assert task.metadata_json[PENDING_LEADER_ADJUDICATION] is False
+
+
+@pytest.mark.asyncio
+async def test_supervisor_dispose_decision_projects_task_without_accepting_attempt(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="exec-task-1",
+            workspace_id="workspace-1",
+            title="Execution task",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            blocker_reason="Maximum steps (80) exceeded",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                WORKSPACE_PLAN_ID: "worker-plan-1",
+                WORKSPACE_PLAN_NODE_ID: "node-a",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                CURRENT_ATTEMPT_ID: "attempt-a",
+                PENDING_LEADER_ADJUDICATION: False,
+                "durable_plan_verdict": "replan_requested",
+                "last_attempt_status": "rejected",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-a",
+            workspace_task_id="exec-task-1",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="rejected",
+            conversation_id="conversation-a",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="Maximum steps (80) exceeded",
+            leader_feedback="verification failed",
+            adjudication_reason="verification_failed",
+        )
+    )
+    await db_session.flush()
+    node = PlanNode(
+        id="node-a",
+        plan_id="worker-plan-1",
+        parent_id=PlanNodeId("goal-a"),
+        kind=PlanNodeKind.TASK,
+        title="Stale verification",
+        workspace_task_id="exec-task-1",
+        current_attempt_id="attempt-a",
+    )
+
+    changed = await _project_supervisor_decision_to_workspace_task(
+        db_session,
+        node,
+        {
+            "action": "dispose_node",
+            "rationale": "stale node structurally superseded by completed sibling",
+            "confidence": 0.95,
+            "event_payload": {
+                "disposed_node_id": "node-a",
+                "superseded_by_task_id": "sibling-task",
+            },
+        },
+    )
+    await db_session.flush()
+
+    assert changed is True
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "attempt-a")
+    assert attempt is not None
+    assert attempt.status == "rejected"
+    assert attempt.adjudication_reason == "verification_failed"
+    task = await db_session.get(WorkspaceTaskModel, "exec-task-1")
+    assert task is not None
+    assert task.status == "done"
+    assert task.blocker_reason is None
+    assert task.metadata_json["durable_plan_verdict"] == "disposed"
+    assert task.metadata_json["durable_plan_disposition"] == "supervisor_agent_disposed_node"
+    assert task.metadata_json["superseded_by_task_id"] == "sibling-task"
+    assert task.metadata_json["last_attempt_status"] == "disposed"
+    assert task.metadata_json[PENDING_LEADER_ADJUDICATION] is False
 
 
 @pytest.mark.asyncio
@@ -3778,6 +3958,112 @@ async def test_done_repair_disposition_projects_workspace_task(
 
 
 @pytest.mark.asyncio
+async def test_done_supervisor_dispose_disposition_projects_workspace_task(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="disposed-task",
+            workspace_id="workspace-1",
+            title="Stale verification",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            blocker_reason="Maximum steps (80) exceeded",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: "disposed-plan-1",
+                WORKSPACE_PLAN_NODE_ID: "disposed-node",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="disposed-attempt",
+            workspace_task_id="disposed-task",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status=WorkspaceTaskSessionAttemptStatus.REJECTED.value,
+            conversation_id="disposed-conversation",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="Maximum steps (80) exceeded",
+            adjudication_reason="verification_failed",
+        )
+    )
+    await db_session.flush()
+
+    plan = Plan(
+        id="disposed-plan-1",
+        workspace_id="workspace-1",
+        goal_id=PlanNodeId("disposed-root"),
+        status=PlanStatus.ACTIVE,
+    )
+    plan.add_node(
+        PlanNode(
+            id="disposed-root",
+            plan_id=plan.id,
+            parent_id=None,
+            kind=PlanNodeKind.GOAL,
+            title="Root",
+        )
+    )
+    plan.add_node(
+        PlanNode(
+            id="disposed-node",
+            plan_id=plan.id,
+            parent_id=plan.goal_id,
+            kind=PlanNodeKind.TASK,
+            title="Stale verification",
+            workspace_task_id="disposed-task",
+            current_attempt_id="disposed-attempt",
+            intent=TaskIntent.DONE,
+            execution=TaskExecution.IDLE,
+            metadata={
+                "verified_commit_ref": "stale-commit",
+                "verification_feedback_disposition": "supervisor_agent_disposed_node",
+                "last_supervisor_decision_rationale": (
+                    "stale node structurally superseded by completed sibling"
+                ),
+                "last_supervisor_decision_event_payload": {
+                    "disposed_node_id": "disposed-node",
+                    "superseded_by_task_id": "sibling-task",
+                },
+            },
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+
+    changed = await outbox_handlers._project_done_idle_disposition_nodes_after_tick(
+        session=db_session,
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+    )
+
+    assert changed is True
+    db_session.expire_all()
+    task = await db_session.get(WorkspaceTaskModel, "disposed-task")
+    assert task is not None
+    assert task.status == "done"
+    assert task.blocker_reason is None
+    assert task.metadata_json["durable_plan_verdict"] == "disposed"
+    assert task.metadata_json["durable_plan_disposition"] == "supervisor_agent_disposed_node"
+    assert task.metadata_json["superseded_by_task_id"] == "sibling-task"
+    attempt = await db_session.get(WorkspaceTaskSessionAttemptModel, "disposed-attempt")
+    assert attempt is not None
+    assert attempt.status == WorkspaceTaskSessionAttemptStatus.REJECTED.value
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    disposed = loaded.nodes[PlanNodeId("disposed-node")]
+    assert disposed.metadata["workspace_task_projection_status"] == "done"
+    assert disposed.metadata["last_supervisor_decision_action"] == "dispose_node"
+
+
+@pytest.mark.asyncio
 async def test_accepted_terminal_attempt_integrates_worktree_commit(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -4173,7 +4459,9 @@ async def test_prepare_attempt_worktree_defaults_to_attempt_scope_without_checkp
                 resolved_base_ref=request.base_ref,
             )
 
-    monkeypatch.setattr(outbox_handlers, "WorkspaceWorktreeAgentPreparer", FakeWorktreeAgentPreparer)
+    monkeypatch.setattr(
+        outbox_handlers, "WorkspaceWorktreeAgentPreparer", FakeWorktreeAgentPreparer
+    )
     task = WorkspaceTask(
         id="task-no-feature",
         workspace_id="workspace-1",
@@ -4246,7 +4534,9 @@ async def test_prepare_attempt_worktree_surfaces_structured_fallback_diagnostics
                 pruned_worktrees_count=3,
             )
 
-    monkeypatch.setattr(outbox_handlers, "WorkspaceWorktreeAgentPreparer", FakeWorktreeAgentPreparer)
+    monkeypatch.setattr(
+        outbox_handlers, "WorkspaceWorktreeAgentPreparer", FakeWorktreeAgentPreparer
+    )
     task = WorkspaceTask(
         id="task-fallback",
         workspace_id="workspace-1",
@@ -4334,7 +4624,9 @@ async def test_prepare_attempt_worktree_uses_runner_when_agent_contract_fails(
                 "stderr": "",
             }
 
-    monkeypatch.setattr(outbox_handlers, "WorkspaceWorktreeAgentPreparer", FakeWorktreeAgentPreparer)
+    monkeypatch.setattr(
+        outbox_handlers, "WorkspaceWorktreeAgentPreparer", FakeWorktreeAgentPreparer
+    )
     monkeypatch.setattr(outbox_handlers, "_WorkspaceSandboxCommandRunner", FakeRunner)
     task = WorkspaceTask(
         id="task-agent-contract-fallback",
