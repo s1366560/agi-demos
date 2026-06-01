@@ -230,6 +230,26 @@ class TestSystemPromptManager:
 
         assert "MemoryAnalysis" in prompt
         assert "Analyze memories" in prompt
+        assert "call `skill_loader` with the exact skill name first" in prompt
+
+    async def test_skill_section_lists_all_active_skill_names(self, manager, context):
+        """All active skill names should remain visible beyond the description preview."""
+        context.skills = [
+            {
+                "name": f"skill-{index}",
+                "description": f"Skill {index}",
+                "tools": ["MemorySearch"],
+                "status": "active",
+            }
+            for index in range(10)
+        ]
+
+        prompt = await manager.build_system_prompt(context)
+
+        assert "`skill-0`" in prompt
+        assert "`skill-9`" in prompt
+        assert "Additional active skills without expanded descriptions: 2." in prompt
+        assert "skill-9: Skill 9" not in prompt
 
     async def test_workspace_delegation_guidance_mentions_workspace_task_id(self, manager):
         """Tool guidance should expose workspace_task_id and leader adjudication guidance."""

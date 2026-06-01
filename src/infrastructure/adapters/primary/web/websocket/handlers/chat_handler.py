@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, Protocol, override
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
@@ -20,6 +20,14 @@ if TYPE_CHECKING:
     from src.application.services.agent_service import AgentService
 
 logger = logging.getLogger(__name__)
+
+
+class _RayCancelMethod(Protocol):
+    def remote(self, conversation_id: str) -> object: ...
+
+
+class _RayActorLike(Protocol):
+    cancel: _RayCancelMethod
 
 _CLIENT_APP_MODEL_CONTEXT_DENYLIST = frozenset(
     {
@@ -56,6 +64,44 @@ def _sanitize_client_app_model_context(value: object) -> dict[str, Any] | None:
         if isinstance(key, str) and key not in _CLIENT_APP_MODEL_CONTEXT_DENYLIST
     }
     return sanitized or None
+
+
+async def _cancel_ray_actor_chat(
+    actor: _RayActorLike, conversation_id: str
+) -> tuple[bool, Exception | None]:
+    from src.infrastructure.adapters.secondary.ray.client import await_ray
+
+    try:
+        cancelled = bool(await await_ray(actor.cancel.remote(conversation_id)))
+    except Exception as exc:
+        logger.error(
+            "[WS] Failed to cancel Ray actor for conversation %s: %s",
+            conversation_id,
+            exc,
+            exc_info=True,
+        )
+        return False, exc
+
+    if cancelled:
+        logger.info(
+            "[WS] Cancelled Ray actor execution for conversation %s",
+            conversation_id,
+        )
+    return cancelled, None
+
+
+async def _cancel_local_chat(conversation_id: str) -> bool:
+    from src.application.services.agent.runtime_bootstrapper import (
+        AgentRuntimeBootstrapper,
+    )
+
+    cancelled = await AgentRuntimeBootstrapper.cancel_local_chat(conversation_id)
+    if cancelled:
+        logger.info(
+            "[WS] Cancelled local execution for conversation %s",
+            conversation_id,
+        )
+    return cancelled
 
 
 class SendMessageHandler(WebSocketMessageHandler):
@@ -221,13 +267,9 @@ class StopSessionHandler(WebSocketMessageHandler):
                 cancelled = True
                 logger.info(f"[WS] Cancelled stream task for conversation {conversation_id}")
 
-            from src.application.services.agent.runtime_bootstrapper import (
-                AgentRuntimeBootstrapper,
-            )
             from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
                 SqlConversationRepository,
             )
-            from src.infrastructure.adapters.secondary.ray.client import await_ray
             from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
 
             conv_repo = SqlConversationRepository(context.db)
@@ -245,37 +287,21 @@ class StopSessionHandler(WebSocketMessageHandler):
                 agent_mode="default",
             )
 
+            actor_error: Exception | None = None
             if actor:
-                try:
-                    actor_cancelled = bool(await await_ray(actor.cancel.remote(conversation_id)))
-                except Exception as e:
-                    logger.error(
-                        "[WS] Failed to cancel Ray actor for conversation %s: %s",
-                        conversation_id,
-                        e,
-                        exc_info=True,
-                    )
-                    await context.send_error(
-                        "Failed to stop session",
-                        code="STOP_SESSION_FAILED",
-                        conversation_id=conversation_id,
-                    )
-                    return
-
+                actor_cancelled, actor_error = await _cancel_ray_actor_chat(actor, conversation_id)
                 cancelled = cancelled or actor_cancelled
-                if actor_cancelled:
-                    logger.info(
-                        "[WS] Cancelled Ray actor execution for conversation %s",
-                        conversation_id,
-                    )
-            else:
-                local_cancelled = await AgentRuntimeBootstrapper.cancel_local_chat(conversation_id)
-                cancelled = cancelled or local_cancelled
-                if local_cancelled:
-                    logger.info(
-                        "[WS] Cancelled local execution for conversation %s",
-                        conversation_id,
-                    )
+
+            local_cancelled = await _cancel_local_chat(conversation_id)
+            cancelled = cancelled or local_cancelled
+
+            if actor_error is not None and not cancelled:
+                await context.send_error(
+                    "Failed to stop session",
+                    code="STOP_SESSION_FAILED",
+                    conversation_id=conversation_id,
+                )
+                return
 
             if not cancelled:
                 await context.send_error(

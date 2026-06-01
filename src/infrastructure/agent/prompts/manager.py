@@ -640,19 +640,32 @@ Before answering questions about prior work, decisions, user preferences, people
         if not active_skills:
             return ""
 
-        # Limit to 5 skills to avoid prompt bloat
+        skill_names = ", ".join(f"`{s.get('name', 'unknown')}`" for s in active_skills)
+
+        # Keep descriptions bounded while still exposing every exact skill name
+        # so built-in agents can discover and load less frequently used skills.
         skill_descs = "\n".join(
             [
                 f"- {s.get('name', 'unknown')}: {s.get('description', '')} (tools: {', '.join(s.get('tools', []))})"
-                for s in active_skills[:5]
+                for s in active_skills[:8]
             ]
+        )
+        additional_count = max(len(active_skills) - 8, 0)
+        additional_note = (
+            f"\n\nAdditional active skills without expanded descriptions: {additional_count}."
+            if additional_count
+            else ""
         )
 
         return f"""## Available Skills (Pre-defined Tool Compositions)
 
-{skill_descs}
+Exact active skill names: {skill_names}
 
-When a skill matches the user's request, you can use its tools in sequence for optimal results."""
+{skill_descs}
+{additional_note}
+
+When a skill matches the user's request, call `skill_loader` with the exact skill name first,
+then follow the loaded skill instructions and use its tools in sequence for optimal results."""
 
     def _build_subagent_section(self, context: PromptContext) -> str:
         """

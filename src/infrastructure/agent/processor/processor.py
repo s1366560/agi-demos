@@ -1469,7 +1469,11 @@ class SessionProcessor:
                     result, had_tool_calls = self._classify_step_event(
                         event, result, had_tool_calls
                     )
-                    if result in (ProcessorResult.STOP, ProcessorResult.COMPACT):
+                    if result in (
+                        ProcessorResult.COMPLETE,
+                        ProcessorResult.STOP,
+                        ProcessorResult.COMPACT,
+                    ):
                         break
 
                 # Evaluate goal if no tool calls and still continuing
@@ -1824,6 +1828,7 @@ class SessionProcessor:
                 "verification_judgment",
                 "iteration_review",
                 "supervisor_decision",
+                "worktree_preparation",
             )
         )
 
