@@ -62,7 +62,7 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
       const conversation = await agentService.createConversation({
         project_id: projectId,
         title: t('project.agentTeammates.chatTitle', { name: displayName }),
-        agent_config: { agent_definition_id: agent.id },
+        agent_config: { selected_agent_id: agent.id },
       });
       void navigate(`/tenant/agent-workspace?conversation=${encodeURIComponent(conversation.id)}`);
     } catch (error) {

@@ -31,6 +31,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from src.domain.model.agent import Conversation, ConversationStatus
 from src.domain.model.agent.agent_mode import AgentMode
+from src.domain.model.agent.conversation.agent_config import normalize_agent_config
 from src.domain.model.agent.conversation.conversation_mode import ConversationMode
 from src.domain.model.agent.merge_strategy import MergeStrategy
 from src.domain.ports.repositories.agent_repository import ConversationRepository
@@ -105,6 +106,7 @@ class SqlConversationRepository(
         Args:
             conversation: Domain conversation entity to save
         """
+        agent_config = normalize_agent_config(conversation.agent_config)
         # Build the values dictionary for upsert
         values = {
             "id": conversation.id,
@@ -113,7 +115,7 @@ class SqlConversationRepository(
             "user_id": conversation.user_id,
             "title": conversation.title,
             "status": conversation.status.value,
-            "agent_config": conversation.agent_config,
+            "agent_config": agent_config,
             "meta": conversation.metadata,
             "message_count": conversation.message_count,
             "created_at": conversation.created_at,
@@ -148,7 +150,7 @@ class SqlConversationRepository(
                 set_={
                     "title": conversation.title,
                     "status": conversation.status.value,
-                    "agent_config": conversation.agent_config,
+                    "agent_config": agent_config,
                     "meta": conversation.metadata,
                     "message_count": conversation.message_count,
                     "updated_at": conversation.updated_at,
@@ -406,7 +408,7 @@ class SqlConversationRepository(
             return None
 
         metadata = dict(db_conversation.meta or {})
-        agent_config = dict(db_conversation.agent_config or {})
+        agent_config = normalize_agent_config(db_conversation.agent_config)
 
         workspace_id = self._text_or_none(getattr(db_conversation, "workspace_id", None))
         if workspace_id is None:
@@ -493,7 +495,7 @@ class SqlConversationRepository(
             user_id=domain_entity.user_id,
             title=domain_entity.title,
             status=domain_entity.status.value,
-            agent_config=domain_entity.agent_config,
+            agent_config=normalize_agent_config(domain_entity.agent_config),
             meta=domain_entity.metadata,
             message_count=domain_entity.message_count,
             created_at=domain_entity.created_at,

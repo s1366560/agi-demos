@@ -13,6 +13,7 @@ from src.domain.model.agent import (
     Conversation,
     ConversationStatus,
 )
+from src.domain.model.agent.conversation.agent_config import normalize_agent_config
 from src.domain.ports.repositories.agent_repository import (
     AgentExecutionEventRepository,
     AgentExecutionRepository,
@@ -63,7 +64,7 @@ class ConversationManager:
             user_id=user_id,
             title=title or "New Conversation",
             status=ConversationStatus.ACTIVE,
-            agent_config=agent_config or {},
+            agent_config=normalize_agent_config(agent_config),
             metadata={"created_at": datetime.now(UTC).isoformat()},
             message_count=0,
             created_at=datetime.now(UTC),

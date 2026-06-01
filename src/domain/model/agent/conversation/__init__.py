@@ -1,5 +1,11 @@
 """Conversation bounded context - conversations, messages, and attachments."""
 
+from src.domain.model.agent.conversation.agent_config import (
+    LEGACY_AGENT_DEFINITION_ID_KEY,
+    SELECTED_AGENT_ID_KEY,
+    normalize_agent_config,
+    selected_agent_id_from_config,
+)
 from src.domain.model.agent.conversation.attachment import (
     Attachment,
     AttachmentMetadata,
@@ -26,6 +32,8 @@ from src.domain.model.agent.conversation.message import (
 )
 
 __all__ = [
+    "LEGACY_AGENT_DEFINITION_ID_KEY",
+    "SELECTED_AGENT_ID_KEY",
     "Attachment",
     "AttachmentMetadata",
     "AttachmentPurpose",
@@ -45,4 +53,6 @@ __all__ = [
     "SenderNotInRosterError",
     "ToolCall",
     "ToolResult",
+    "normalize_agent_config",
+    "selected_agent_id_from_config",
 ]

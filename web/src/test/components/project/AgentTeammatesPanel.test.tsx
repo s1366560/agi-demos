@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentTeammatesPanel } from '@/components/project/AgentTeammatesPanel';
 import { definitionsService } from '@/services/agent/definitionsService';
+import { agentService } from '@/services/agentService';
 
 import type { AgentDefinition } from '@/types/multiAgent';
 
@@ -86,5 +87,37 @@ describe('AgentTeammatesPanel', () => {
     expect(await screen.findByText('Workspace Iteration Reviewer')).toBeInTheDocument();
     expect(container.querySelector('.ant-list-item-meta')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /start conversation/i })).toHaveClass('w-full');
+  });
+
+  it('starts conversations with the canonical selected agent id', async () => {
+    vi.mocked(definitionsService.list).mockResolvedValueOnce([makeAgent()]);
+    vi.mocked(agentService.createConversation).mockResolvedValueOnce({
+      id: 'conv-1',
+      project_id: 'project-1',
+      tenant_id: 'tenant-1',
+      user_id: 'user-1',
+      title: 'Workspace Iteration Reviewer',
+      status: 'active',
+      message_count: 0,
+      created_at: '2024-01-01T00:00:00Z',
+    });
+
+    renderPanel();
+
+    fireEvent.click(await screen.findByRole('button', { name: /start conversation/i }));
+
+    await waitFor(() => {
+      expect(agentService.createConversation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          project_id: 'project-1',
+          agent_config: { selected_agent_id: 'agent-1' },
+        })
+      );
+    });
+    expect(agentService.createConversation).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent_config: expect.objectContaining({ agent_definition_id: expect.any(String) }),
+      })
+    );
   });
 });

@@ -68,6 +68,35 @@ class TestSqlConversationRepositorySave:
         assert retrieved.current_mode == AgentMode.BUILD
 
     @pytest.mark.asyncio
+    async def test_save_normalizes_legacy_agent_definition_id(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
+        """Legacy create-conversation payloads persist the canonical selected agent id."""
+        conversation = Conversation(
+            id="conv-agent-config-legacy",
+            project_id="proj-1",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            title="Legacy Agent Config",
+            status=ConversationStatus.ACTIVE,
+            agent_config={"agent_definition_id": "agent-legacy", "other": "value"},
+            metadata={},
+            message_count=0,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            current_mode=AgentMode.BUILD,
+        )
+
+        await v2_conversation_repo.save(conversation)
+
+        retrieved = await v2_conversation_repo.find_by_id("conv-agent-config-legacy")
+        assert retrieved is not None
+        assert retrieved.agent_config == {
+            "selected_agent_id": "agent-legacy",
+            "other": "value",
+        }
+
+    @pytest.mark.asyncio
     async def test_save_upsert_existing_conversation(
         self, v2_conversation_repo: SqlConversationRepository
     ):
@@ -634,6 +663,39 @@ class TestSqlConversationRepositoryToDomain:
         assert retrieved.linked_workspace_task_id == "task-domain"
         assert retrieved.agent_config["selected_agent_id"] == "agent-domain"
 
+    @pytest.mark.asyncio
+    async def test_to_domain_normalizes_legacy_agent_definition_id(
+        self, v2_conversation_repo: SqlConversationRepository, db_session: AsyncSession
+    ):
+        """Old rows that stored agent_definition_id still expose selected_agent_id."""
+        db_session.add(
+            DBConversation(
+                id="conv-domain-agent-config-legacy",
+                project_id="proj-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title="Legacy Agent Config",
+                status="active",
+                agent_config={"agent_definition_id": "agent-legacy", "other": "value"},
+                meta={},
+                message_count=0,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+                current_mode="build",
+                participant_agents=[],
+                merge_strategy="result_only",
+            )
+        )
+        await db_session.commit()
+
+        retrieved = await v2_conversation_repo.find_by_id("conv-domain-agent-config-legacy")
+
+        assert retrieved is not None
+        assert retrieved.agent_config == {
+            "selected_agent_id": "agent-legacy",
+            "other": "value",
+        }
+
 
 class TestSqlConversationRepositoryToDb:
     """Tests for _to_db conversion."""
@@ -777,9 +839,7 @@ class TestSqlConversationRepositoryMultiAgent:
         assert reloaded.focused_agent_id is None
 
     @pytest.mark.asyncio
-    async def test_upsert_updates_roster(
-        self, v2_conversation_repo: SqlConversationRepository
-    ):
+    async def test_upsert_updates_roster(self, v2_conversation_repo: SqlConversationRepository):
         """Second save with roster changes must overwrite the persisted list."""
         conversation = Conversation(
             id="conv-upsert-roster",

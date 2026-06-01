@@ -20,6 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.configuration.config import Settings
 from src.domain.model.agent import Conversation
+from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 from src.infrastructure.agent.sisyphus.builtin_agent import DEFAULT_GENERAL_AGENT_ID
 
@@ -58,9 +59,7 @@ def _conversation_metadata(conversation: Conversation) -> dict[str, Any]:
 
 def _selected_agent_id_from_conversation(conversation: Conversation) -> str | None:
     agent_config = getattr(conversation, "agent_config", None)
-    if not isinstance(agent_config, dict):
-        return None
-    return _non_empty_string(agent_config.get("selected_agent_id"))
+    return selected_agent_id_from_config(agent_config if isinstance(agent_config, dict) else None)
 
 
 def _workspace_session_role_from_metadata(metadata: dict[str, Any]) -> str:

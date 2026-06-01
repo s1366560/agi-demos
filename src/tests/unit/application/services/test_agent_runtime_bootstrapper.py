@@ -182,6 +182,72 @@ async def test_start_chat_actor_local_mode_uses_local_only(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_start_chat_actor_accepts_legacy_agent_definition_id(
+    bootstrapper,
+    conversation,
+    tenant_agent_config,
+):
+    """Legacy conversation agent_config still selects the intended runtime agent."""
+    conversation.agent_config = {"agent_definition_id": "agent-legacy"}
+    _, factory, encryption_service = _build_provider_mocks()
+    settings = SimpleNamespace(
+        agent_runtime_mode="local",
+        agent_max_tokens=4096,
+        agent_max_steps=20,
+    )
+    fake_config_module = _build_fake_module(
+        "src.configuration.config",
+        get_settings=lambda: settings,
+    )
+    fake_provider_module = _build_fake_module(
+        "src.infrastructure.llm.provider_factory",
+        get_ai_service_factory=lambda: factory,
+    )
+    fake_encryption_module = _build_fake_module(
+        "src.infrastructure.security.encryption_service",
+        get_encryption_service=lambda: encryption_service,
+    )
+
+    with (
+        patch.dict(
+            "sys.modules",
+            {
+                "src.configuration.config": fake_config_module,
+                "src.infrastructure.llm.provider_factory": fake_provider_module,
+                "src.infrastructure.security.encryption_service": fake_encryption_module,
+            },
+        ),
+        patch.object(
+            bootstrapper,
+            "_register_project_local",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            bootstrapper,
+            "_load_tenant_agent_config",
+            new_callable=AsyncMock,
+            return_value=tenant_agent_config,
+        ),
+        patch.object(
+            bootstrapper,
+            "_start_local_chat",
+            new_callable=AsyncMock,
+        ) as local_chat_mock,
+    ):
+        await bootstrapper.start_chat_actor(
+            conversation=conversation,
+            message_id="msg-1",
+            user_message="hello",
+            conversation_context=[],
+        )
+
+    local_chat_mock.assert_awaited_once()
+    _conversation_id, _config, request = local_chat_mock.call_args.args
+    assert request.agent_id == "agent-legacy"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_start_chat_actor_local_workspace_worker_uses_subprocess(
     bootstrapper,
     conversation,
