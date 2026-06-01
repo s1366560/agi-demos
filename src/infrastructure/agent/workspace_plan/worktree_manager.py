@@ -448,12 +448,19 @@ class WorkspaceWorktreeManager:
         original_base_ref: str,
         setup_output: str,
     ) -> dict[str, object]:
-        fallback_reason = (
-            "base_ref_unusable" if "base_ref_unusable=" in setup_output else None
+        setup_fields = dict(worktree_setup_note_fields(setup_output))
+        fallback_reason = None
+        if "base_ref_unusable" in setup_fields:
+            fallback_reason = "base_ref_unusable"
+        elif "base_ref_sparse" in setup_fields:
+            fallback_reason = "base_ref_sparse"
+        resolved_base_ref = str(
+            setup_fields.get("fallback_base_ref")
+            or ("HEAD" if fallback_reason == "base_ref_unusable" else original_base_ref)
         )
         command = worktree_post_setup_diagnostics_command(
             sandbox_code_root=sandbox_code_root,
-            resolved_base_ref="HEAD" if fallback_reason else original_base_ref,
+            resolved_base_ref=resolved_base_ref,
         )
         try:
             result = await self._runner_factory(
@@ -462,7 +469,7 @@ class WorkspaceWorktreeManager:
             ).run_command(command, timeout=60)
         except Exception as exc:
             fields: dict[str, object] = {
-                "resolved_base_ref": "HEAD" if fallback_reason else original_base_ref,
+                "resolved_base_ref": resolved_base_ref,
                 "git_fsck_summary": f"diagnostics raised: {exc}",
             }
             if fallback_reason:
@@ -471,8 +478,10 @@ class WorkspaceWorktreeManager:
         fields = dict(worktree_setup_note_fields(str(result.get("stdout") or "")))
         if fallback_reason:
             fields["fallback_reason"] = fallback_reason
+        if "fallback_base_ref" in setup_fields:
+            fields["fallback_base_ref"] = setup_fields["fallback_base_ref"]
         if "resolved_base_ref" not in fields:
-            fields["resolved_base_ref"] = "HEAD" if fallback_reason else original_base_ref
+            fields["resolved_base_ref"] = resolved_base_ref
         return fields
 
 
@@ -526,6 +535,14 @@ def worktree_setup_command(
             (
                 'git cat-file -e "$R^{tree}" 2>/dev/null'
                 " || { echo base_ref_unusable=$R; R=HEAD; }"
+            ),
+            (
+                'RC=$(git ls-tree -r --name-only "$R" 2>/dev/null|head -2|wc -l);'
+                'if [ "$RC" -le 1 ];then '
+                'for FB in github/main origin/main memstack-source-publish/main main master;do '
+                'FC=$(git ls-tree -r --name-only "$FB" 2>/dev/null|head -2|wc -l);'
+                '[ "$FC" -gt "$RC" ]&&{ echo base_ref_sparse=$R;echo fallback_base_ref=$FB;R=$FB;break;};'
+                'done; fi'
             ),
             'N=$(basename "$PWD")',
             'F=$(dirname "$PWD")/.memstack/git-remotes/$N.git',

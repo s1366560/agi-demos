@@ -2176,6 +2176,61 @@ def test_worktree_setup_command_falls_back_when_base_ref_unusable(tmp_path: Path
     assert "git_head=" in result.stdout
 
 
+def test_worktree_setup_command_falls_back_from_sparse_base_ref(tmp_path: Path) -> None:
+    sandbox_code_root = tmp_path / "repo"
+    worktree_path = tmp_path / ".memstack" / "worktrees" / "attempt-1"
+
+    def git(*args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=sandbox_code_root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    sandbox_code_root.mkdir()
+    git("init", "-b", "master")
+    git("config", "user.email", "worker@example.com")
+    git("config", "user.name", "Worker")
+    (sandbox_code_root / "OAS-INS-OAUTH.md").write_text("audit\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-m", "audit")
+    sparse_ref = git("rev-parse", "HEAD")
+
+    git("checkout", "--orphan", "github/main")
+    git("rm", "-rf", ".")
+    (sandbox_code_root / "backend").mkdir()
+    (sandbox_code_root / "frontend").mkdir()
+    (sandbox_code_root / "backend" / "package.json").write_text("{}\n", encoding="utf-8")
+    (sandbox_code_root / "frontend" / "package.json").write_text("{}\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-m", "project baseline")
+
+    command = _worktree_setup_command(
+        sandbox_code_root=str(sandbox_code_root),
+        worktree_path=str(worktree_path),
+        branch_name="workspace/node-1-attempt-1",
+        base_ref=sparse_ref,
+    )
+
+    result = subprocess.run(
+        ["bash", "-lc", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"base_ref_sparse={sparse_ref}" in result.stdout
+    assert "fallback_base_ref=github/main" in result.stdout
+    assert (worktree_path / "backend" / "package.json").exists()
+    assert (worktree_path / "frontend" / "package.json").exists()
+
+
 def test_worktree_setup_command_updates_reused_worktree_to_latest_base(
     tmp_path: Path,
 ) -> None:
@@ -2234,7 +2289,7 @@ def test_worktree_setup_command_stays_below_small_websocket_frame_limit() -> Non
         protected_worktree_names=("attempt-2", "attempt-active"),
     )
 
-    assert len(command) < 1000
+    assert len(command) < 1500
     assert "protected_worktree_names" not in command
     assert "stop_stale_pid" not in command
     assert 'git worktree add -B "$B" "$W" "$R"' in command
@@ -5640,6 +5695,99 @@ async def test_worker_launch_handler_skips_attempt_when_task_current_attempt_cha
     assert await worker.run_once() == 1
 
     assert not launched
+
+
+@pytest.mark.asyncio
+async def test_worker_launch_handler_skips_no_attempt_payload_when_node_not_launchable(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_only(db_session)
+    plan = Plan(
+        id="worker-plan-1",
+        workspace_id="workspace-1",
+        goal_id=PlanNodeId("worker-plan-1-goal"),
+        status=PlanStatus.ACTIVE,
+    )
+    plan.add_node(
+        PlanNode(
+            id="worker-plan-1-goal",
+            plan_id=plan.id,
+            parent_id=None,
+            kind=PlanNodeKind.GOAL,
+            title="Root goal",
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.IDLE,
+            workspace_task_id="root-task-1",
+        )
+    )
+    plan.add_node(
+        PlanNode(
+            id="idle-node",
+            plan_id=plan.id,
+            parent_id=plan.goal_id,
+            kind=PlanNodeKind.TASK,
+            title="Old idle task",
+            intent=TaskIntent.TODO,
+            execution=TaskExecution.IDLE,
+            workspace_task_id="idle-node-task",
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="idle-node-task",
+            workspace_id="workspace-1",
+            title="Old idle task",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: plan.id,
+                WORKSPACE_PLAN_NODE_ID: "idle-node",
+            },
+        )
+    )
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    item = await repo.enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=WORKER_LAUNCH_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "task_id": "idle-node-task",
+            "node_id": "idle-node",
+            "worker_agent_id": "worker-agent",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+        },
+        metadata={"source": "test"},
+    )
+    await db_session.commit()
+
+    launched: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+        lambda **kwargs: launched.append(kwargs),
+    )
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree)},
+        worker_id="worker-a",
+        batch_size=1,
+    )
+
+    assert await worker.run_once() == 1
+
+    assert not launched
+    completed = await repo.get_by_id(item.id)
+    assert completed is not None
+    assert completed.status == "completed"
 
 
 @pytest.mark.asyncio

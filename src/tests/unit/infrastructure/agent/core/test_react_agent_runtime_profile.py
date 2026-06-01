@@ -101,7 +101,7 @@ class TestReActAgentRuntimeProfile:
         assert profile.effective_max_tokens == 1234
         assert profile.effective_max_steps == 4999
 
-    def test_workspace_worker_uses_explicit_agent_max_steps(self) -> None:
+    def test_workspace_plan_team_worker_inherits_tenant_max_steps(self) -> None:
         agent = ReActAgent(model="test-model", tools={})
         tenant_config = TenantAgentConfig.create_default("tenant-1")
         tenant_config_data = tenant_config.to_dict() | {"max_work_plan_steps": 4999}
@@ -120,7 +120,7 @@ class TestReActAgentRuntimeProfile:
             is_workspace_worker_runtime=True,
         )
 
-        assert profile.effective_max_steps == 80
+        assert profile.effective_max_steps == 4999
 
     def test_builtin_workspace_contract_agents_inherit_tenant_max_steps(self) -> None:
         agent = ReActAgent(model="test-model", tools={})

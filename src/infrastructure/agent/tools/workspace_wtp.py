@@ -37,7 +37,7 @@ import json
 import logging
 import os
 import re
-from typing import Any
+from typing import Any, cast
 
 from src.domain.events.agent_events import AgentMessageSentEvent
 from src.domain.model.workspace.wtp_envelope import WtpEnvelope, WtpValidationError, WtpVerb
@@ -332,10 +332,25 @@ def _enrich_envelope_for_supervisor(
 
 async def _publish_envelope_for_supervisor(envelope: WtpEnvelope) -> str | None:
     from src.infrastructure.agent.workspace.workspace_supervisor import (
+        publish_envelope,
         publish_envelope_default,
     )
 
-    return await publish_envelope_default(envelope)
+    entry_id = await publish_envelope_default(envelope)
+    if isinstance(entry_id, str) and entry_id.strip():
+        return entry_id
+    try:
+        from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+
+        redis_client = await get_redis_client()
+        return await publish_envelope(cast(Any, redis_client), envelope)
+    except Exception:
+        logger.exception(
+            "workspace_wtp supervisor publish fallback failed (verb=%s task=%s)",
+            envelope.verb.value,
+            envelope.task_id,
+        )
+        return None
 
 
 async def _send_envelope(

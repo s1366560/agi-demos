@@ -43,6 +43,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent,
     PlanModel,
     PlanNodeModel,
+    WorkspacePlanOutboxModel,
     WorkspaceTaskSessionAttemptModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
@@ -236,6 +237,7 @@ ScheduleTickCallable = Callable[[str, str], None]
 EnqueueResumeCallable = Callable[[WorkspaceTaskSessionAttempt, str, str], Awaitable[None]]
 CancelConversationCallable = Callable[[str], Awaitable[bool]]
 CleanupAttemptRuntimeCallable = Callable[[WorkspaceTaskSessionAttempt], Awaitable[int]]
+RuntimeActiveLookup = Callable[[str], Awaitable[bool]]
 
 
 class WorkspaceAttemptRecoveryService:
@@ -250,6 +252,7 @@ class WorkspaceAttemptRecoveryService:
         enqueue_resume: EnqueueResumeCallable | None = None,
         cancel_conversation: CancelConversationCallable | None = None,
         cleanup_attempt_runtime: CleanupAttemptRuntimeCallable | None = None,
+        runtime_active_lookup: RuntimeActiveLookup | None = None,
         liveness_lookup: LivenessLookup | None = None,
         stale_seconds: int = DEFAULT_STALE_SECONDS,
         startup_grace_seconds: int = DEFAULT_STARTUP_GRACE_SECONDS,
@@ -279,6 +282,7 @@ class WorkspaceAttemptRecoveryService:
         self._enqueue_resume = enqueue_resume
         self._cancel_conversation = cancel_conversation
         self._cleanup_attempt_runtime = cleanup_attempt_runtime
+        self._runtime_active_lookup = runtime_active_lookup
         self._liveness_lookup: LivenessLookup = liveness_lookup or (lambda: ())
         self._stale_seconds = stale_seconds
         self._startup_grace_seconds = startup_grace_seconds
@@ -334,7 +338,9 @@ class WorkspaceAttemptRecoveryService:
 
         Returns the number of attempts recovered.
         """
-        threshold = datetime.now(UTC) - timedelta(seconds=self._startup_grace_seconds)
+        now = datetime.now(UTC)
+        threshold = now - timedelta(seconds=self._startup_grace_seconds)
+        activity_threshold = now - timedelta(seconds=self._stale_seconds)
         recovered = await self._recover_finished_streams()
         recovered += await self._recover_error_events()
         total_candidates = 0
@@ -350,7 +356,10 @@ class WorkspaceAttemptRecoveryService:
             seen_attempt_ids.update(attempt.id for attempt in new_stale)
             batches += 1
             total_candidates += len(new_stale)
-            recovered += await self._recover_all(new_stale, RECOVERY_SUMMARY_RESTART)
+            candidates = await self._filter_active_outbox_attempts(new_stale)
+            candidates = await self._filter_active_runtime_attempts(candidates)
+            candidates = await self._filter_recently_active_attempts(candidates, activity_threshold)
+            recovered += await self._recover_all(candidates, RECOVERY_SUMMARY_RESTART)
             if len(stale) < self._max_attempts_per_sweep:
                 break
         if recovered:
@@ -377,6 +386,8 @@ class WorkspaceAttemptRecoveryService:
             return recovered
         live_ids = set(self._liveness_lookup() or ())
         candidates = [a for a in stale if a.id not in live_ids]
+        candidates = await self._filter_active_outbox_attempts(candidates)
+        candidates = await self._filter_active_runtime_attempts(candidates)
         candidates = await self._filter_recently_active_attempts(candidates, threshold)
         recovered += await self._recover_all(candidates, RECOVERY_SUMMARY_STALE)
         if recovered:
@@ -401,6 +412,8 @@ class WorkspaceAttemptRecoveryService:
             return recovered
         live_ids = set(self._liveness_lookup() or ())
         candidates = [attempt for attempt in stale if attempt.id not in live_ids]
+        candidates = await self._filter_active_outbox_attempts(candidates)
+        candidates = await self._filter_active_runtime_attempts(candidates)
         candidates = await self._filter_recently_active_attempts(candidates, threshold)
         recovered += await self._recover_all(candidates, RECOVERY_SUMMARY_STALE)
         if recovered:
@@ -482,6 +495,76 @@ class WorkspaceAttemptRecoveryService:
             for attempt in attempts
             if conversation_by_attempt.get(attempt.id) not in recently_active_conversations
         ]
+
+    async def _filter_active_outbox_attempts(
+        self,
+        attempts: list[WorkspaceTaskSessionAttempt],
+    ) -> list[WorkspaceTaskSessionAttempt]:
+        attempt_ids = [attempt.id for attempt in attempts if attempt.id]
+        if not attempt_ids:
+            return attempts
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(WorkspacePlanOutboxModel.payload_json["attempt_id"].as_string())
+                .where(WorkspacePlanOutboxModel.status == "processing")
+                .where(WorkspacePlanOutboxModel.payload_json["attempt_id"].as_string().in_(attempt_ids))
+            )
+            leased_attempt_ids = {attempt_id for (attempt_id,) in result.all() if attempt_id}
+        if not leased_attempt_ids:
+            return attempts
+        return [attempt for attempt in attempts if attempt.id not in leased_attempt_ids]
+
+    async def _filter_active_runtime_attempts(
+        self,
+        attempts: list[WorkspaceTaskSessionAttempt],
+    ) -> list[WorkspaceTaskSessionAttempt]:
+        if self._runtime_active_lookup is None or not attempts:
+            return attempts
+        candidates: list[WorkspaceTaskSessionAttempt] = []
+        skipped = 0
+        for attempt in attempts:
+            conversation_id = attempt.conversation_id
+            if not isinstance(conversation_id, str) or not conversation_id:
+                candidates.append(attempt)
+                continue
+            try:
+                runtime_active = await self._runtime_active_lookup(conversation_id)
+            except Exception:
+                logger.warning(
+                    "workspace_attempt_recovery.runtime_active_lookup_failed",
+                    exc_info=True,
+                    extra={
+                        "event": "workspace_attempt_recovery.runtime_active_lookup_failed",
+                        "attempt_id": attempt.id,
+                        "workspace_id": attempt.workspace_id,
+                        "conversation_id": conversation_id,
+                    },
+                )
+                candidates.append(attempt)
+                continue
+            if runtime_active:
+                skipped += 1
+                logger.info(
+                    "workspace_attempt_recovery.skip_active_runtime_attempt",
+                    extra={
+                        "event": "workspace_attempt_recovery.skip_active_runtime_attempt",
+                        "attempt_id": attempt.id,
+                        "workspace_task_id": attempt.workspace_task_id,
+                        "workspace_id": attempt.workspace_id,
+                        "conversation_id": conversation_id,
+                    },
+                )
+                continue
+            candidates.append(attempt)
+        if skipped:
+            logger.warning(
+                "workspace_attempt_recovery.active_runtime_skipped",
+                extra={
+                    "event": "workspace_attempt_recovery.active_runtime_skipped",
+                    "skipped": skipped,
+                },
+            )
+        return candidates
 
     async def _recover_error_events(self, *, workspace_id: str | None = None) -> int:
         """Recover active attempts whose agent stream already emitted an error event.

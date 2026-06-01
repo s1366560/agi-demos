@@ -5372,6 +5372,220 @@ class TestSupervisorTick:
             event for event in events if event[0] == "dispatch_deferred_dependency_projection"
         ]
 
+    async def test_tick_dispatches_plan_backlog_with_blocked_dirty_main_dependencies(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        for node_id, commit_ref in (("a", "commit-a"), ("b", "commit-b")):
+            node = plan.nodes[PlanNodeId(node_id)]
+            plan.replace_node(
+                replace(
+                    node,
+                    intent=TaskIntent.DONE,
+                    execution=TaskExecution.IDLE,
+                    current_attempt_id=f"attempt-{node_id}",
+                    depends_on=frozenset(),
+                    feature_checkpoint=FeatureCheckpoint(
+                        feature_id=f"feature-{node_id}",
+                        sequence=1,
+                        title=f"task {node_id}",
+                        worktree_path=f"/workspace/.memstack/worktrees/attempt-{node_id}",
+                        commit_ref=commit_ref,
+                    ),
+                    metadata={
+                        "terminal_attempt_status": "accepted",
+                        "verified_commit_ref": commit_ref,
+                        "worktree_integration_commit_ref": commit_ref,
+                        "worktree_integration_status": "blocked_dirty_main",
+                        "verification_evidence_refs": [f"commit_ref:{commit_ref}"],
+                    },
+                )
+            )
+        plan.add_node(
+            PlanNode(
+                id="backlog",
+                plan_id=plan.id,
+                parent_id=plan.goal_id,
+                kind=PlanNodeKind.TASK,
+                title="Implement planned backlog item",
+                intent=TaskIntent.TODO,
+                execution=TaskExecution.IDLE,
+                depends_on=frozenset({PlanNodeId("a"), PlanNodeId("b")}),
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-backlog",
+                    sequence=2,
+                    title="Implement planned backlog item",
+                    base_ref="HEAD",
+                ),
+                metadata={
+                    "iteration_phase": "plan",
+                    "scrum_artifact": "sprint_backlog",
+                },
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        dispatched_base_refs: list[str | None] = []
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="C",
+                    capabilities=frozenset({"codegen", "web_search"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, _alloc: Any, node: PlanNode) -> str:
+            dispatched.append(node.id)
+            dispatched_base_refs.append(
+                node.feature_checkpoint.base_ref if node.feature_checkpoint else None
+            )
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.allocations_made == 1
+        assert dispatched == ["backlog"]
+        assert dispatched_base_refs == ["commit-b"]
+        assert not [
+            event for event in events if event[0] == "dispatch_deferred_dependency_projection"
+        ]
+
+    async def test_tick_dispatches_test_verification_with_blocked_dirty_main_dependencies(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        for node_id, commit_ref in (("a", "commit-a"), ("b", "commit-b")):
+            node = plan.nodes[PlanNodeId(node_id)]
+            plan.replace_node(
+                replace(
+                    node,
+                    intent=TaskIntent.DONE,
+                    execution=TaskExecution.IDLE,
+                    current_attempt_id=f"attempt-{node_id}",
+                    depends_on=frozenset(),
+                    feature_checkpoint=FeatureCheckpoint(
+                        feature_id=f"feature-{node_id}",
+                        sequence=1,
+                        title=f"task {node_id}",
+                        worktree_path=f"/workspace/.memstack/worktrees/attempt-{node_id}",
+                        commit_ref=commit_ref,
+                    ),
+                    metadata={
+                        "terminal_attempt_status": "accepted",
+                        "verified_commit_ref": commit_ref,
+                        "worktree_integration_commit_ref": commit_ref,
+                        "worktree_integration_status": "blocked_dirty_main",
+                        "verification_evidence_refs": [f"commit_ref:{commit_ref}"],
+                    },
+                )
+            )
+        plan.add_node(
+            PlanNode(
+                id="verification",
+                plan_id=plan.id,
+                parent_id=plan.goal_id,
+                kind=PlanNodeKind.TASK,
+                title="Run journey verification",
+                intent=TaskIntent.TODO,
+                execution=TaskExecution.IDLE,
+                depends_on=frozenset({PlanNodeId("a"), PlanNodeId("b")}),
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-verification",
+                    sequence=2,
+                    title="Run journey verification",
+                    base_ref="HEAD",
+                ),
+                metadata={
+                    "iteration_phase": "test",
+                    "scrum_artifact": "verification",
+                },
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        dispatched_base_refs: list[str | None] = []
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="C",
+                    capabilities=frozenset({"codegen", "web_search"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, _alloc: Any, node: PlanNode) -> str:
+            dispatched.append(node.id)
+            dispatched_base_refs.append(
+                node.feature_checkpoint.base_ref if node.feature_checkpoint else None
+            )
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.allocations_made == 1
+        assert dispatched == ["verification"]
+        assert dispatched_base_refs == ["commit-b"]
+        assert not [
+            event for event in events if event[0] == "dispatch_deferred_dependency_projection"
+        ]
+
     async def test_tick_dispatches_release_candidate_with_blocked_dirty_main_dependencies(
         self,
     ) -> None:

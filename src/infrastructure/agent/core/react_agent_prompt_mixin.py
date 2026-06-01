@@ -391,12 +391,20 @@ class PromptMixin:
             if selected_agent is not None and selected_agent.has_explicit_max_tokens()
             else self.max_tokens
         )
+        agent_max_iterations_explicit = (
+            selected_agent is not None
+            and selected_agent.has_explicit_max_iterations()
+            and not (
+                is_workspace_worker_runtime
+                and _is_workspace_plan_team_agent(selected_agent)
+            )
+        )
         effective_max_steps = (
             selected_agent.max_iterations
-            if selected_agent is not None and selected_agent.has_explicit_max_iterations()
+            if selected_agent is not None and agent_max_iterations_explicit
             else tenant_agent_config.max_work_plan_steps
         )
-        if selected_agent is not None and not selected_agent.has_explicit_max_iterations():
+        if selected_agent is not None and not agent_max_iterations_explicit:
             logger.info(
                 "[ReActAgent] Agent %s uses implicit max_iterations=%s; "
                 "falling back to tenant max_work_plan_steps=%s",
@@ -444,3 +452,8 @@ class PromptMixin:
                 subagents=list(self.subagents or []),
             )
         )
+
+
+def _is_workspace_plan_team_agent(agent: Agent) -> bool:
+    metadata = dict(agent.metadata or {})
+    return metadata.get("created_by") == "workspace_plan_team_setup"

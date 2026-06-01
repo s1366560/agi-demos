@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -381,6 +381,9 @@ def _make_service(
     service._recover_finished_streams = AsyncMock(  # type: ignore[method-assign]
         return_value=0
     )
+    service._filter_active_outbox_attempts = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda attempts: attempts
+    )
     service._filter_recently_active_attempts = AsyncMock(  # type: ignore[method-assign]
         side_effect=lambda attempts, _threshold: attempts
     )
@@ -468,6 +471,108 @@ class TestStartupSweep:
         age_from_before = (before - older_than).total_seconds()
         assert age_from_after >= 5
         assert age_from_before < 10
+
+    @pytest.mark.asyncio
+    async def test_startup_sweep_skips_recently_active_attempts(self) -> None:
+        att = _make_attempt(attempt_id="att-active", workspace_task_id="task-1")
+        service, apply_report, schedule_tick = _make_service(stale_attempts=[att])
+        service._filter_recently_active_attempts = AsyncMock(  # type: ignore[method-assign]
+            return_value=[]
+        )
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 0
+        service._filter_recently_active_attempts.assert_awaited_once()  # type: ignore[attr-defined]
+        assert service._filter_recently_active_attempts.await_args.args[0] == [att]  # type: ignore[attr-defined]
+        apply_report.assert_not_awaited()
+        schedule_tick.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_startup_sweep_uses_stale_window_for_recent_activity(self) -> None:
+        att = _make_attempt(attempt_id="att-active-window", workspace_task_id="task-1")
+        service, _apply_report, _schedule_tick = _make_service(stale_attempts=[att])
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            before = datetime.now(UTC)
+            await service.startup_sweep()
+            after = datetime.now(UTC)
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        activity_threshold = service._filter_recently_active_attempts.await_args.args[1]  # type: ignore[attr-defined]
+        age_from_after = (after - activity_threshold).total_seconds()
+        age_from_before = (before - activity_threshold).total_seconds()
+        assert age_from_after >= 60
+        assert age_from_before < 65
+
+    @pytest.mark.asyncio
+    async def test_startup_sweep_skips_attempts_with_active_outbox_lease(self) -> None:
+        att = _make_attempt(attempt_id="att-leased", workspace_task_id="task-1")
+        service, apply_report, schedule_tick = _make_service(stale_attempts=[att])
+        service._filter_active_outbox_attempts = AsyncMock(  # type: ignore[method-assign]
+            return_value=[]
+        )
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 0
+        service._filter_active_outbox_attempts.assert_awaited_once_with([att])  # type: ignore[attr-defined]
+        service._filter_recently_active_attempts.assert_awaited_once_with([], ANY)  # type: ignore[attr-defined]
+        apply_report.assert_not_awaited()
+        schedule_tick.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_filter_active_outbox_attempts_skips_processing_attempt_after_lease_expiry(
+        self,
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        class _Result:
+            def all(self) -> list[tuple[str]]:
+                return [("att-processing",)]
+
+        class _Session:
+            async def execute(self, stmt: object) -> _Result:
+                captured["stmt"] = stmt
+                return _Result()
+
+        def _session_cm() -> Any:
+            class _CM:
+                async def __aenter__(self_inner) -> _Session:
+                    return _Session()
+
+                async def __aexit__(self_inner, *_a: object) -> None:
+                    return None
+
+            return _CM()
+
+        service = WorkspaceAttemptRecoveryService(
+            session_factory=_session_cm,
+            apply_report=AsyncMock(),
+            schedule_tick=MagicMock(),
+        )
+
+        active = _make_attempt(attempt_id="att-processing")
+        inactive = _make_attempt(attempt_id="att-idle")
+        remaining = await service._filter_active_outbox_attempts([active, inactive])
+
+        assert remaining == [inactive]
+        statement = str(captured["stmt"])
+        assert "workspace_plan_outbox.status = :status_1" in statement
+        assert "lease_expires_at" not in statement
 
     @pytest.mark.asyncio
     async def test_startup_sweep_drains_bounded_batches(self) -> None:
@@ -581,6 +686,44 @@ class TestStartupSweep:
         cancel_conversation.assert_awaited_once_with("conv-orphan")
         cleanup_attempt_runtime.assert_awaited_once_with(att)
         enqueue_resume.assert_awaited_once_with(att, RECOVERY_SUMMARY_RESTART, "user-1")
+
+    @pytest.mark.asyncio
+    async def test_startup_sweep_skips_attempt_with_active_local_runtime(self) -> None:
+        runtime_active_lookup = AsyncMock(return_value=True)
+        cancel_conversation = AsyncMock(return_value=True)
+        cleanup_attempt_runtime = AsyncMock(return_value=2)
+        att = _make_attempt(
+            attempt_id="att-active-runtime",
+            workspace_task_id="task-1",
+            conversation_id="conv-active-runtime",
+        )
+        service, apply_report, schedule_tick = _make_service(
+            stale_attempts=[att],
+            cancel_conversation=cancel_conversation,
+            cleanup_attempt_runtime=cleanup_attempt_runtime,
+            task_lookup={"task-1": "user-1"},
+            task_metadata_lookup={
+                "task-1": {
+                    WORKSPACE_PLAN_ID: "plan-1",
+                    WORKSPACE_PLAN_NODE_ID: "node-1",
+                }
+            },
+        )
+        service._runtime_active_lookup = runtime_active_lookup  # type: ignore[method-assign]
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 0
+        runtime_active_lookup.assert_awaited_once_with("conv-active-runtime")
+        cancel_conversation.assert_not_awaited()
+        cleanup_attempt_runtime.assert_not_awaited()
+        apply_report.assert_not_awaited()
+        schedule_tick.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_recovery_cleans_attempt_runtime_without_conversation_id(self) -> None:

@@ -2124,9 +2124,27 @@ def _repair_dependency_can_seed_downstream_worktree(
     return (
         (repair_dependency is not None and dependency_id == repair_dependency)
         or bool(_metadata_text(node.metadata.get("repair_for_node_id")))
+        or _node_is_iteration_plan_backlog(node)
+        or _node_is_iteration_test_verification(node)
         or _node_is_iteration_review_feedback(node)
         or _node_is_iteration_release_candidate(node)
         or _nodes_repair_same_original(node, dependency)
+    )
+
+
+def _node_is_iteration_plan_backlog(node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    return (
+        _metadata_text(metadata.get("iteration_phase")) == "plan"
+        and _metadata_text(metadata.get("scrum_artifact")) == "sprint_backlog"
+    )
+
+
+def _node_is_iteration_test_verification(node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    return (
+        _metadata_text(metadata.get("iteration_phase")) == "test"
+        and _metadata_text(metadata.get("scrum_artifact")) == "verification"
     )
 
 

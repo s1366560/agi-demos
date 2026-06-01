@@ -2500,7 +2500,7 @@ async def _ensure_leader_execution_team(
                     "workspace_id": workspace_id,
                     "workspace_role": "execution_worker",
                     "team_composition_id": composition_id,
-                    "max_iterations_explicit": True,
+                    "max_iterations_explicit": False,
                 },
             )
             agent = await registry.create(agent)
@@ -2543,7 +2543,7 @@ async def _ensure_leader_execution_team(
                     **dict(agent.metadata or {}),
                     "created_by": "workspace_plan_team_setup",
                     "workspace_id": workspace_id,
-                    "max_iterations_explicit": True,
+                    "max_iterations_explicit": False,
                 }
                 agent.updated_at = datetime.now(UTC)
                 await registry.update(agent)
@@ -2581,7 +2581,7 @@ async def _upgrade_existing_auto_team_agents(
             **dict(agent.metadata or {}),
             "created_by": "workspace_plan_team_setup",
             "workspace_id": workspace_id,
-            "max_iterations_explicit": True,
+            "max_iterations_explicit": False,
         }
         agent.updated_at = datetime.now(UTC)
         await registry.update(agent)
@@ -3073,25 +3073,24 @@ async def _stale_worker_launch_reason(
 ) -> str | None:
     """Return why a worker launch payload should no longer be scheduled."""
 
-    if not attempt_id:
-        return None
     reason: str | None = None
-    result = await session.execute(
-        select(
-            WorkspaceTaskSessionAttemptModel.workspace_task_id,
-            WorkspaceTaskSessionAttemptModel.workspace_id,
-            WorkspaceTaskSessionAttemptModel.status,
-        ).where(WorkspaceTaskSessionAttemptModel.id == attempt_id)
-    )
-    row = result.one_or_none()
-    if row is None:
-        reason = "attempt_missing"
-    else:
-        attempt_task_id, attempt_workspace_id, attempt_status = row
-        if attempt_task_id != task.id or attempt_workspace_id != task.workspace_id:
-            reason = "attempt_task_mismatch"
-        elif str(attempt_status) not in _WORKER_LAUNCHABLE_ATTEMPT_STATUS_VALUES:
-            reason = f"attempt_{attempt_status}"
+    if attempt_id:
+        result = await session.execute(
+            select(
+                WorkspaceTaskSessionAttemptModel.workspace_task_id,
+                WorkspaceTaskSessionAttemptModel.workspace_id,
+                WorkspaceTaskSessionAttemptModel.status,
+            ).where(WorkspaceTaskSessionAttemptModel.id == attempt_id)
+        )
+        row = result.one_or_none()
+        if row is None:
+            reason = "attempt_missing"
+        else:
+            attempt_task_id, attempt_workspace_id, attempt_status = row
+            if attempt_task_id != task.id or attempt_workspace_id != task.workspace_id:
+                reason = "attempt_task_mismatch"
+            elif str(attempt_status) not in _WORKER_LAUNCHABLE_ATTEMPT_STATUS_VALUES:
+                reason = f"attempt_{attempt_status}"
 
     current_task_attempt_id = _mapping_string(dict(task.metadata or {}), CURRENT_ATTEMPT_ID)
     if reason is None and current_task_attempt_id and current_task_attempt_id != attempt_id:

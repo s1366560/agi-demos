@@ -323,6 +323,7 @@ async def initialize_attempt_recovery() -> WorkspaceAttemptRecoveryService | Non
             enqueue_resume=_enqueue_handoff_resume,
             cancel_conversation=AgentRuntimeBootstrapper.cancel_local_chat,
             cleanup_attempt_runtime=_cleanup_attempt_runtime_processes,
+            runtime_active_lookup=AgentRuntimeBootstrapper.has_running_local_subprocess,
             liveness_lookup=_liveness_lookup,
             stale_seconds=stale_seconds,
             startup_grace_seconds=startup_grace_seconds,
