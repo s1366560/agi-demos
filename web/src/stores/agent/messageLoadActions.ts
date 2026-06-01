@@ -393,8 +393,7 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
           const currentMsgId = recoveredExecStatus?.current_message_id;
           if (typeof currentMsgId === 'string') {
             subscribeOpts.message_id = currentMsgId;
-          }
-          if (typeof response.last_time_us === 'number') {
+          } else if (typeof response.last_time_us === 'number') {
             subscribeOpts.from_time_us = response.last_time_us;
             if (typeof response.last_counter === 'number') {
               subscribeOpts.from_counter = response.last_counter;

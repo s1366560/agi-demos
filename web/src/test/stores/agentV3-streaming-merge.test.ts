@@ -332,7 +332,7 @@ describe('agentV3 Store - Timeline Merging During Streaming', () => {
       );
     });
 
-    it('should prefer the loaded history cursor over a newer execution status cursor', async () => {
+    it('should let the backend resolve the cursor for a running message subscription', async () => {
       const { result } = renderHook(() => useAgentV3Store());
       const historyEvent: TimelineEvent = {
         id: 'history-event-1',
@@ -375,11 +375,9 @@ describe('agentV3 Store - Timeline Merging During Streaming', () => {
       expect(agentService.subscribe).toHaveBeenCalledWith(
         'conv-cursor',
         expect.any(Object),
-        expect.objectContaining({
+        {
           message_id: 'msg-running',
-          from_time_us: historyEvent.eventTimeUs,
-          from_counter: historyEvent.eventCounter,
-        })
+        }
       );
     });
   });

@@ -2750,7 +2750,7 @@ async def _refresh_worker_agent_running_marker(
     conversation_id: str | None,
     attempt_id: str | None,
 ) -> None:
-    """Keep Redis agent-running liveness present for long workspace tool calls."""
+    """Keep an existing Redis agent-running marker alive for long workspace tool calls."""
 
     if not conversation_id or not attempt_id:
         return
@@ -2760,11 +2760,9 @@ async def _refresh_worker_agent_running_marker(
         redis = await get_redis_client()
         if await redis.exists(f"agent:finished:{conversation_id}"):
             return
-        await redis.setex(
-            f"agent:running:{conversation_id}",
-            WORKER_LAUNCH_COOLDOWN_SECONDS,
-            attempt_id,
-        )
+        running_key = f"agent:running:{conversation_id}"
+        if await redis.exists(running_key):
+            await redis.expire(running_key, WORKER_LAUNCH_COOLDOWN_SECONDS)
     except Exception:
         logger.debug(
             "workspace_worker_launch.running_marker_refresh_failed",

@@ -99,4 +99,28 @@ describe('agentService subscribe recovery options', () => {
       from_counter: 2,
     });
   });
+
+  it('replaces a stale cursor when resubscribing with only a running message id', () => {
+    const sendSpy = vi.spyOn(service, 'send').mockReturnValue(true);
+    vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
+
+    service.subscriptions.add('conv-5');
+    service.subscriptionOptions.set('conv-5', {
+      from_time_us: 999,
+      from_counter: 9,
+    });
+
+    agentService.subscribe('conv-5', {} as AgentStreamHandler, {
+      message_id: 'msg-running',
+    });
+
+    expect(sendSpy).toHaveBeenCalledWith({
+      type: 'subscribe',
+      conversation_id: 'conv-5',
+      message_id: 'msg-running',
+    });
+    expect(service.subscriptionOptions.get('conv-5')).toEqual({
+      message_id: 'msg-running',
+    });
+  });
 });

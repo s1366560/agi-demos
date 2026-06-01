@@ -89,6 +89,14 @@ async def _is_active_running_message(
         )
         return False
 
+    if not events:
+        logger.info(
+            "[WS] Skip recovery bridge for orphan running key: conv=%s message_id=%s",
+            conversation_id,
+            message_id,
+        )
+        return False
+
     for event in reversed(events):
         if _is_terminal_event_type(event.event_type):
             logger.info(

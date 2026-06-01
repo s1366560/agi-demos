@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import pytest
 
@@ -207,7 +207,7 @@ class TestWorkerLaunchHeartbeat:
     ) -> None:
         publish = AsyncMock(return_value="1-0")
         redis = AsyncMock()
-        redis.exists.return_value = 0
+        redis.exists.side_effect = [0, 1]
         monkeypatch.setattr(
             "src.infrastructure.agent.workspace.workspace_supervisor.publish_envelope_default",
             publish,
@@ -240,16 +240,19 @@ class TestWorkerLaunchHeartbeat:
         assert envelope.extra_metadata["leader_agent_id"] == "leader-1"
         assert envelope.extra_metadata["actor_user_id"] == "user-1"
         assert envelope.extra_metadata["source"] == "workspace_worker_launch"
-        redis.expire.assert_awaited_once_with(
-            "workspace:worker_launch:cooldown:conv-1",
-            wl.WORKER_LAUNCH_COOLDOWN_SECONDS,
+        redis.expire.assert_has_awaits(
+            [
+                call(
+                    "workspace:worker_launch:cooldown:conv-1",
+                    wl.WORKER_LAUNCH_COOLDOWN_SECONDS,
+                ),
+                call("agent:running:conv-1", wl.WORKER_LAUNCH_COOLDOWN_SECONDS),
+            ]
         )
-        redis.exists.assert_awaited_once_with("agent:finished:conv-1")
-        redis.setex.assert_awaited_once_with(
-            "agent:running:conv-1",
-            wl.WORKER_LAUNCH_COOLDOWN_SECONDS,
-            "attempt-1",
+        redis.exists.assert_has_awaits(
+            [call("agent:finished:conv-1"), call("agent:running:conv-1")]
         )
+        redis.setex.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_publish_worker_launch_heartbeat_does_not_resurrect_finished_agent(

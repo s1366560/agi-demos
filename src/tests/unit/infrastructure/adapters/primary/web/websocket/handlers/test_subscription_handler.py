@@ -23,7 +23,16 @@ def _build_context() -> SimpleNamespace:
     conversation_repo = SimpleNamespace(find_by_id=AsyncMock())
     event_repo = SimpleNamespace(
         get_last_event_time=AsyncMock(return_value=(0, 0)),
-        get_events_by_message=AsyncMock(return_value=[]),
+        get_events_by_message=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    conversation_id="conv-1",
+                    event_type="observe",
+                    event_time_us=100,
+                    event_counter=1,
+                )
+            ]
+        ),
     )
     redis_client = SimpleNamespace(get=AsyncMock(return_value=None))
     container = SimpleNamespace(
@@ -280,6 +289,27 @@ async def test_subscribe_skips_recovery_when_running_key_is_stale() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_subscribe_skips_recovery_when_running_key_has_no_persisted_events() -> None:
+    context = _build_context()
+    handler = SubscribeHandler()
+    conversation = SimpleNamespace(user_id="user-1")
+    context.get_scoped_container().conversation_repository().find_by_id.return_value = conversation
+    context.get_scoped_container().redis().get.return_value = b"attempt-1"
+    context.get_scoped_container().agent_execution_event_repository().get_events_by_message.return_value = []
+
+    await handler.handle(context, {"conversation_id": "conv-1"})
+
+    context.connection_manager.subscribe.assert_awaited_once_with("session-1", "conv-1")
+    context.connection_manager.try_start_bridge_task.assert_not_awaited()
+    context.send_ack.assert_awaited_once_with("subscribe", conversation_id="conv-1")
+    context.send_error.assert_not_awaited()
+    context.get_scoped_container().agent_execution_event_repository().get_events_by_message.assert_awaited_once_with(
+        "conv-1", "attempt-1"
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_subscribe_ignores_boolean_cursor_values(monkeypatch) -> None:
     context = _build_context()
     handler = SubscribeHandler()
@@ -340,8 +370,8 @@ async def test_subscribe_ignores_boolean_cursor_values(monkeypatch) -> None:
     context.send_error.assert_not_awaited()
     assert len(created_tasks) == 1
     stream_kwargs = stream_mock.call_args.kwargs
-    assert stream_kwargs["from_time_us"] is None
-    assert stream_kwargs["from_counter"] is None
+    assert stream_kwargs["from_time_us"] == 100
+    assert stream_kwargs["from_counter"] == 1
 
 
 @pytest.mark.unit
