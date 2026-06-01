@@ -25,11 +25,34 @@ _ = os.environ.setdefault("MEMSTACK_POSTGRES_POOL_MODE", "null")
 logger = logging.getLogger(__name__)
 
 
+def _initialize_local_worker_telemetry() -> bool:
+    """Initialize process-local Langfuse/LiteLLM observability."""
+    try:
+        from src.infrastructure.telemetry.config import configure_langfuse_llm_observability
+
+        return configure_langfuse_llm_observability()
+    except Exception:
+        logger.warning("Failed to initialize local worker telemetry", exc_info=True)
+        return False
+
+
+def _shutdown_local_worker_telemetry() -> None:
+    """Flush telemetry before the worker exits with os._exit."""
+    try:
+        from src.infrastructure.telemetry import shutdown_telemetry
+
+        shutdown_telemetry()
+    except Exception:
+        logger.debug("Failed to shutdown local worker telemetry", exc_info=True)
+
+
 async def _run(request_file: Path) -> int:
     from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
     from src.infrastructure.agent.actor.execution import execute_project_chat
     from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
     from src.infrastructure.agent.core.project_react_agent import ProjectReActAgent
+
+    _initialize_local_worker_telemetry()
 
     payload = _load_payload(request_file)
     config = ProjectAgentActorConfig(**payload["config"])
@@ -138,6 +161,7 @@ if __name__ == "__main__":
     except SystemExit as exc:
         exit_code = exc.code if isinstance(exc.code, int) else 1
     finally:
+        _shutdown_local_worker_telemetry()
         sys.stdout.flush()
         sys.stderr.flush()
         os._exit(exit_code)

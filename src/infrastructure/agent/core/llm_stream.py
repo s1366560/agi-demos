@@ -22,6 +22,7 @@ import os
 import time
 import uuid
 from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, cast
@@ -34,6 +35,22 @@ if TYPE_CHECKING:
 from src.infrastructure.agent.llm.token_sampler import BatchLogBuffer, TokenDeltaSampler
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _detached_otel_context() -> Iterator[None]:
+    """Run a LiteLLM request without inheriting the active HTTP/WebSocket trace."""
+    try:
+        from opentelemetry import context as otel_context
+    except Exception:
+        yield
+        return
+
+    token = otel_context.attach(otel_context.Context())
+    try:
+        yield
+    finally:
+        otel_context.detach(token)
 
 
 # ============================================================================
@@ -525,7 +542,9 @@ class LLMStream:
         if langfuse_context:
             client_langfuse_context = {
                 "trace_name": "agent_chat",
-                "trace_id": langfuse_context.get("conversation_id", request_id),
+                "trace_id": langfuse_context.get("trace_id"),
+                "session_id": langfuse_context.get("session_id")
+                or langfuse_context.get("conversation_id"),
                 "tags": [langfuse_context.get("tenant_id", "default")],
                 "extra": {
                     "user_id": langfuse_context.get("user_id"),
@@ -560,15 +579,16 @@ class LLMStream:
 
         try:
             # Use client's generate_stream (has circuit breaker + rate limiter)
-            async for chunk in self._llm_client.generate_stream(  # type: ignore[union-attr]
-                messages=messages,  # type: ignore[arg-type]
-                max_tokens=effective_max_tokens,
-                langfuse_context=client_langfuse_context,
-                **extra_kwargs,
-            ):
-                # Process raw LiteLLM chunk
-                async for event in self._process_chunk(chunk):
-                    yield event
+            with _detached_otel_context():
+                async for chunk in self._llm_client.generate_stream(  # type: ignore[union-attr]
+                    messages=messages,  # type: ignore[arg-type]
+                    max_tokens=effective_max_tokens,
+                    langfuse_context=client_langfuse_context,
+                    **extra_kwargs,
+                ):
+                    # Process raw LiteLLM chunk
+                    async for event in self._process_chunk(chunk):
+                        yield event
 
             # Finalize any pending state
             async for event in self._finalize():
@@ -621,11 +641,12 @@ class LLMStream:
         # Inject Langfuse metadata if provided
         if langfuse_context:
             langfuse_metadata = {
-                "trace_id": langfuse_context.get("conversation_id", request_id),
-                "session_id": langfuse_context.get("conversation_id", request_id),
+                "generation_name": "agent_chat",
+                "trace_id": langfuse_context.get("trace_id"),
+                "session_id": langfuse_context.get("session_id")
+                or langfuse_context.get("conversation_id"),
                 "trace_user_id": langfuse_context.get("user_id"),
                 "tags": [langfuse_context.get("tenant_id", "default")],
-                "trace_name": "agent_chat",
             }
             # Add extra metadata if provided
             if langfuse_context.get("extra"):
@@ -643,13 +664,14 @@ class LLMStream:
             # This blocks if we've exceeded the provider's concurrent request limit
             async with await rate_limiter.acquire(provider_type):
                 # Call LiteLLM streaming (now that we have a slot)
-                response = await litellm.acompletion(**kwargs)
-                stream_response = cast("litellm.CustomStreamWrapper", response)
+                with _detached_otel_context():
+                    response = await litellm.acompletion(**kwargs)
+                    stream_response = cast("litellm.CustomStreamWrapper", response)
 
-                async for chunk in stream_response:
-                    # Process each chunk and yield events
-                    async for event in self._process_chunk(chunk):
-                        yield event
+                    async for chunk in stream_response:
+                        # Process each chunk and yield events
+                        async for event in self._process_chunk(chunk):
+                            yield event
 
                 # Finalize any pending state
                 async for event in self._finalize():

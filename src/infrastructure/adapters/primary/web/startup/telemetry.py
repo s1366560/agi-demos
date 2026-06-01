@@ -1,7 +1,6 @@
 """Telemetry initialization for startup."""
 
 import logging
-import os
 
 from src.configuration.config import get_settings
 from src.infrastructure.telemetry import instrument_all, shutdown_telemetry
@@ -17,56 +16,39 @@ async def initialize_telemetry() -> bool:
     Returns:
         True if telemetry was initialized, False if disabled.
     """
-    if not settings.enable_telemetry:
+    initialized = False
+
+    if settings.enable_telemetry:
+        logger.info("Initializing OpenTelemetry...")
+        try:
+            from src.infrastructure.telemetry.config import configure_meter_provider
+
+            configure_meter_provider()
+
+            # Auto-instrument other libraries (httpx, sqlalchemy, redis)
+            instrumentation_results = instrument_all(auto_instrument=True)
+
+            logger.info(f"OpenTelemetry auto-instrumentation: {instrumentation_results}")
+            logger.info(
+                f"OpenTelemetry initialized (service={settings.service_name}, "
+                f"environment={settings.environment})"
+            )
+            initialized = True
+        except Exception as e:
+            logger.warning(f"Failed to initialize OpenTelemetry: {e}")
+    else:
         logger.info("OpenTelemetry disabled")
-        return False
-
-    logger.info("Initializing OpenTelemetry...")
-    try:
-        from src.infrastructure.telemetry.config import configure_meter_provider
-
-        configure_meter_provider()
-
-        # Auto-instrument other libraries (httpx, sqlalchemy, redis)
-        instrumentation_results = instrument_all(auto_instrument=True)
-
-        logger.info(f"OpenTelemetry auto-instrumentation: {instrumentation_results}")
-        logger.info(
-            f"OpenTelemetry initialized (service={settings.service_name}, "
-            f"environment={settings.environment})"
-        )
-    except Exception as e:
-        logger.warning(f"Failed to initialize OpenTelemetry: {e}")
-        return False
 
     # Initialize Langfuse LLM Observability (if enabled)
-    if settings.langfuse_enabled:
-        try:
-            import litellm
+    try:
+        from src.infrastructure.telemetry.config import configure_langfuse_llm_observability
 
-            # Set environment variables for LiteLLM Langfuse callback
-            if settings.langfuse_public_key:
-                os.environ["LANGFUSE_PUBLIC_KEY"] = settings.langfuse_public_key
-            if settings.langfuse_secret_key:
-                os.environ["LANGFUSE_SECRET_KEY"] = settings.langfuse_secret_key
-            os.environ["LANGFUSE_HOST"] = settings.langfuse_host
+        if configure_langfuse_llm_observability(settings_override=dict(settings.__dict__)):
+            initialized = True
+    except Exception as e:
+        logger.warning(f"Failed to initialize Langfuse callback: {e}. Tracing will be disabled.")
 
-            # Enable Langfuse callback for all LiteLLM calls
-            litellm.success_callback = ["langfuse"]
-            litellm.failure_callback = ["langfuse"]
-
-            logger.info(
-                f"Langfuse LLM observability enabled (host: {settings.langfuse_host}, "
-                f"sample_rate: {settings.langfuse_sample_rate})"
-            )
-        except Exception as e:
-            logger.warning(
-                f"Failed to initialize Langfuse callback: {e}. Tracing will be disabled."
-            )
-    else:
-        logger.info("Langfuse LLM observability disabled")
-
-    return True
+    return initialized
 
 
 def shutdown_telemetry_services() -> None:

@@ -280,6 +280,45 @@ class TestLiteLLMClient:
         assert kwargs["max_completion_tokens"] == 1024
         assert "max_tokens" not in kwargs
 
+    def test_build_completion_kwargs_maps_langfuse_otel_metadata(self, client):
+        """Should emit Langfuse OTEL metadata fields expected by LiteLLM."""
+        kwargs = client._build_completion_kwargs(
+            model="openai/gpt-4o",
+            messages=[{"role": "user", "content": "hello"}],
+            max_tokens=256,
+            langfuse_context={
+                "trace_name": "agent-step",
+                "conversation_id": "conv-123",
+                "user_id": "user-456",
+                "tags": ["tenant-1"],
+                "extra": {"project_id": "project-789"},
+            },
+        )
+
+        assert kwargs["metadata"] == {
+            "generation_name": "agent-step",
+            "session_id": "conv-123",
+            "trace_user_id": "user-456",
+            "tags": ["tenant-1"],
+            "project_id": "project-789",
+        }
+
+    def test_build_completion_kwargs_preserves_explicit_langfuse_trace_id(self, client):
+        """Should only set trace_id when caller provides a per-run trace id."""
+        kwargs = client._build_completion_kwargs(
+            model="openai/gpt-4o",
+            messages=[{"role": "user", "content": "hello"}],
+            max_tokens=256,
+            langfuse_context={
+                "trace_name": "agent-step",
+                "conversation_id": "conv-123",
+                "trace_id": "trace-456",
+            },
+        )
+
+        assert kwargs["metadata"]["trace_id"] == "trace-456"
+        assert kwargs["metadata"]["session_id"] == "conv-123"
+
     @pytest.mark.asyncio
     async def test_generate_stream_accepts_model_override_kwarg(self, client):
         """Should allow per-call model override without duplicate kwargs errors."""

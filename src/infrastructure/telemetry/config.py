@@ -6,6 +6,8 @@ for distributed tracing and metrics collection.
 
 import contextlib
 import logging
+import os
+from base64 import b64encode
 from typing import Any
 
 from opentelemetry import metrics, trace
@@ -21,8 +23,6 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import (
     BatchSpanProcessor,
-    ConsoleSpanExporter,
-    SimpleSpanProcessor,
 )
 from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
@@ -35,18 +35,21 @@ _TRACER_PROVIDER: TracerProvider | None = None
 _METER_PROVIDER: MeterProvider | None = None
 # Flag to control telemetry globally (for testing)
 _TELEMETRY_ENABLED: bool | None = None
+_LANGFUSE_SPAN_EXPORTER_CONFIGURED: bool = False
 
 
 def _reset_providers() -> None:
     """Reset global providers (for testing)."""
     global _TRACER_PROVIDER, _METER_PROVIDER, _TELEMETRY_ENABLED
+    global _LANGFUSE_SPAN_EXPORTER_CONFIGURED
     _TRACER_PROVIDER = None
     _METER_PROVIDER = None
     _TELEMETRY_ENABLED = None
+    _LANGFUSE_SPAN_EXPORTER_CONFIGURED = False
 
     # Also clear global meter provider
     with contextlib.suppress(Exception):
-                metrics.set_meter_provider(None)  # type: ignore[arg-type]
+        metrics.set_meter_provider(None)  # type: ignore[arg-type]
 
 
 def _create_resource(settings_override: dict[str, Any] | None = None) -> Resource:
@@ -70,7 +73,7 @@ def _create_resource(settings_override: dict[str, Any] | None = None) -> Resourc
     return Resource.create(attributes)
 
 
-def _create_trace_exporter(settings_override: dict[str, Any] | None = None) -> Any:
+def _create_trace_exporter(settings_override: dict[str, Any] | None = None) -> Any | None:
     """Create appropriate trace exporter based on configuration."""
     settings = settings_override or get_settings().__dict__
 
@@ -87,10 +90,8 @@ def _create_trace_exporter(settings_override: dict[str, Any] | None = None) -> A
         else:
             # gRPC exporter (default)
             return GRPCTraceExporter(endpoint=endpoint, insecure=True)
-    else:
-        # Fall back to console exporter for development
-        logger.info("No OTLP endpoint configured, using console exporter")
-        return ConsoleSpanExporter()
+    logger.info("No OTLP endpoint configured; trace export disabled")
+    return None
 
 
 def _get_sampler(settings_override: dict[str, Any] | None = None) -> TraceIdRatioBased:
@@ -105,6 +106,106 @@ def _get_sampler(settings_override: dict[str, Any] | None = None) -> TraceIdRati
     else:
         # 10% sampling in production
         return TraceIdRatioBased(0.1)
+
+
+def configure_langfuse_span_exporter(
+    settings_override: dict[str, Any] | None = None,
+    provider: TracerProvider | None = None,
+    force_reset: bool = False,
+) -> bool:
+    """Attach a Langfuse OTLP exporter to the app tracer provider.
+
+    LiteLLM's ``langfuse_otel`` callback reuses an existing global OpenTelemetry
+    provider when one is already configured. In that mode LiteLLM emits spans to
+    the app provider, so the app provider itself must export those spans to
+    Langfuse.
+    """
+    global _LANGFUSE_SPAN_EXPORTER_CONFIGURED
+
+    settings = settings_override or get_settings().__dict__
+    if not settings.get("langfuse_enabled", False):
+        return False
+
+    if _LANGFUSE_SPAN_EXPORTER_CONFIGURED and not force_reset:
+        return True
+
+    public_key = settings.get("langfuse_public_key")
+    secret_key = settings.get("langfuse_secret_key")
+    host = settings.get("langfuse_host")
+
+    if not public_key or not secret_key or not host:
+        logger.warning("Langfuse exporter skipped: missing host or API keys")
+        return False
+
+    tracer_provider = provider or _TRACER_PROVIDER
+    if tracer_provider is None:
+        current_provider = trace.get_tracer_provider()
+        if isinstance(current_provider, TracerProvider):
+            tracer_provider = current_provider
+
+    if tracer_provider is None:
+        logger.warning("Langfuse exporter skipped: no SDK tracer provider configured")
+        return False
+
+    endpoint = f"{str(host).rstrip('/')}/api/public/otel/v1/traces"
+    auth_token = b64encode(f"{public_key}:{secret_key}".encode()).decode("ascii")
+    exporter = HTTPTraceExporter(
+        endpoint=endpoint,
+        headers={"Authorization": f"Basic {auth_token}"},
+    )
+    tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
+    _LANGFUSE_SPAN_EXPORTER_CONFIGURED = True
+
+    logger.info("Langfuse OTLP span exporter configured (host: %s)", host)
+    return True
+
+
+def configure_langfuse_llm_observability(
+    settings_override: dict[str, Any] | None = None,
+) -> bool:
+    """Configure LiteLLM's Langfuse OTel callback for the current process."""
+    settings = settings_override or get_settings().__dict__
+    if not settings.get("langfuse_enabled", False):
+        logger.info("Langfuse LLM observability disabled")
+        return False
+
+    public_key = settings.get("langfuse_public_key")
+    secret_key = settings.get("langfuse_secret_key")
+    host = settings.get("langfuse_host")
+    if not public_key or not secret_key or not host:
+        logger.warning("Langfuse LLM observability skipped: missing host or API keys")
+        return False
+
+    try:
+        import litellm
+
+        os.environ["LANGFUSE_PUBLIC_KEY"] = str(public_key)
+        os.environ["LANGFUSE_SECRET_KEY"] = str(secret_key)
+        os.environ["LANGFUSE_HOST"] = str(host)
+        os.environ["LANGFUSE_OTEL_HOST"] = str(host)
+
+        if settings.get("enable_telemetry", True):
+            configure_tracer_provider(settings_override=settings_override)
+        else:
+            configure_langfuse_span_exporter(settings_override=settings_override)
+
+        existing_callbacks = list(getattr(litellm, "callbacks", []) or [])
+        litellm.callbacks = [callback for callback in existing_callbacks if callback != "langfuse"]
+        if "langfuse_otel" not in litellm.callbacks:
+            litellm.callbacks.append("langfuse_otel")
+
+        logger.info(
+            "Langfuse LLM observability enabled (host: %s, sample_rate: %s)",
+            host,
+            settings.get("langfuse_sample_rate", 1.0),
+        )
+        return True
+    except Exception as e:
+        logger.warning(
+            "Failed to initialize Langfuse callback: %s. Tracing will be disabled.",
+            e,
+        )
+        return False
 
 
 def configure_tracer_provider(
@@ -134,6 +235,10 @@ def configure_tracer_provider(
         return None
 
     if _TRACER_PROVIDER is not None and not force_reset:
+        configure_langfuse_span_exporter(
+            settings_override=settings_override,
+            provider=_TRACER_PROVIDER,
+        )
         return _TRACER_PROVIDER
 
     try:
@@ -143,11 +248,14 @@ def configure_tracer_provider(
 
         provider = TracerProvider(resource=resource, sampler=sampler)
 
-        # Use BatchSpanProcessor for better performance
-        if isinstance(exporter, ConsoleSpanExporter):
-            provider.add_span_processor(SimpleSpanProcessor(exporter))
-        else:
+        if exporter is not None:
             provider.add_span_processor(BatchSpanProcessor(exporter))
+
+        configure_langfuse_span_exporter(
+            settings_override=settings_override,
+            provider=provider,
+            force_reset=force_reset,
+        )
 
         # Set global tracer provider
         trace.set_tracer_provider(provider)
@@ -270,6 +378,7 @@ def shutdown_telemetry() -> None:
     This function should be called during application shutdown.
     """
     global _TRACER_PROVIDER, _METER_PROVIDER, _TELEMETRY_ENABLED
+    global _LANGFUSE_SPAN_EXPORTER_CONFIGURED
 
     if _TRACER_PROVIDER is not None:
         try:
@@ -291,6 +400,7 @@ def shutdown_telemetry() -> None:
 
     # Reset the enabled flag
     _TELEMETRY_ENABLED = None
+    _LANGFUSE_SPAN_EXPORTER_CONFIGURED = False
 
 
 # Export globals for module-level access in tests

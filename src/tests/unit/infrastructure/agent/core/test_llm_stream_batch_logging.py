@@ -395,8 +395,12 @@ class TestSamplerConfiguration:
 class _FakeLLMClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.current_span_valid_during_call: bool | None = None
 
     async def generate_stream(self, **kwargs: Any) -> AsyncGenerator[Any, None]:
+        from opentelemetry import trace
+
+        self.current_span_valid_during_call = trace.get_current_span().get_span_context().is_valid
         self.calls.append(dict(kwargs))
         if False:
             yield None
@@ -453,3 +457,38 @@ class TestLLMStreamClientModelOverride:
         call = fake_client.calls[0]
         assert call["model"] == "openai/o3"
         assert "temperature" not in call
+
+    @pytest.mark.asyncio
+    async def test_generate_with_client_detaches_active_otel_span_for_langfuse(self) -> None:
+        from opentelemetry import trace
+        from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
+
+        config = StreamConfig(model="openai/gpt-4o", max_tokens=128)
+        fake_client = _FakeLLMClient()
+        stream = LLMStream(config, llm_client=fake_client)
+        span_context = SpanContext(
+            trace_id=0x1234567890ABCDEF1234567890ABCDEF,
+            span_id=0x1234567890ABCDEF,
+            is_remote=False,
+            trace_flags=TraceFlags(TraceFlags.SAMPLED),
+        )
+
+        with trace.use_span(NonRecordingSpan(span_context)):
+            async for _ in stream._generate_with_client(
+                messages=[{"role": "user", "content": "hello"}],
+                request_id="req-3",
+                langfuse_context={"conversation_id": "conv-123", "tenant_id": "tenant-1"},
+            ):
+                pass
+
+        assert fake_client.current_span_valid_during_call is False
+        assert fake_client.calls[0]["langfuse_context"] == {
+            "trace_name": "agent_chat",
+            "trace_id": None,
+            "session_id": "conv-123",
+            "tags": ["tenant-1"],
+            "extra": {
+                "user_id": None,
+                "project_id": None,
+            },
+        }

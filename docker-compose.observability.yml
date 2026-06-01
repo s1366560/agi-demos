@@ -56,8 +56,8 @@ services:
   # ============================================
   # Langfuse V3 LLM Observability (self-hosted)
   # ============================================
-  # Access UI at http://localhost:3001
-  # Create a project and get API keys from the UI
+  # Access UI at http://localhost:${LANGFUSE_PORT:-3004}
+  # Local dev project and API keys are provisioned by LANGFUSE_INIT_*.
   # Requires: ClickHouse, Redis, PostgreSQL, MinIO
 
   # Langfuse Web UI
@@ -65,16 +65,28 @@ services:
     image: langfuse/langfuse:3
     container_name: memstack-langfuse-web
     restart: always
+    cpus: 1.0
+    mem_limit: 2g
     ports:
-      - "3001:3000"
+      - "${LANGFUSE_PORT:-3004}:3000"
     environment: &langfuse-env
       # Core settings
-      NEXTAUTH_URL: http://localhost:3001
+      NEXTAUTH_URL: http://localhost:${LANGFUSE_PORT:-3004}
       NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-memstack-langfuse-secret-change-in-production}
       SALT: ${LANGFUSE_SALT:-memstack-langfuse-salt-change-in-production}
       ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
       TELEMETRY_ENABLED: "false"
       LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+      # Headless dev initialization keeps local Langfuse usable without a UI setup step.
+      LANGFUSE_INIT_ORG_ID: ${LANGFUSE_INIT_ORG_ID:-memstack-dev}
+      LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME:-MemStack Dev}
+      LANGFUSE_INIT_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID:-memstack}
+      LANGFUSE_INIT_PROJECT_NAME: ${LANGFUSE_INIT_PROJECT_NAME:-MemStack}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-lf_pk_memstack_dev}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-lf_sk_memstack_dev}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-admin@memstack.ai}
+      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-MemStack Admin}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-adminpassword}
       # PostgreSQL
       DATABASE_URL: postgresql://postgres:langfuse_password@langfuse-db:5432/langfuse
       # ClickHouse
@@ -112,25 +124,22 @@ services:
       langfuse-minio:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/public/health"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget --quiet --tries=1 --spider http://$(hostname):3000/api/public/health",
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-        reservations:
-          cpus: '0.1'
-          memory: 256M
-
   # Langfuse Background Worker
   langfuse-worker:
     image: langfuse/langfuse-worker:3
     container_name: memstack-langfuse-worker
     restart: always
+    cpus: 1.0
+    mem_limit: 2g
     environment:
       <<: *langfuse-env
     depends_on:
@@ -142,15 +151,6 @@ services:
         condition: service_healthy
       langfuse-minio:
         condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-        reservations:
-          cpus: '0.1'
-          memory: 256M
-
   # Langfuse PostgreSQL Database
   langfuse-db:
     image: postgres:16-alpine

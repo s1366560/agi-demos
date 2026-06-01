@@ -30,6 +30,7 @@ from slowapi.errors import RateLimitExceeded
 from src.configuration.config import get_settings
 from src.infrastructure.adapters.primary.web.middleware import (
     configure_exception_handlers,
+    install_api_access_log_middleware,
 )
 from src.infrastructure.adapters.primary.web.routers import (
     admin_dlq,
@@ -610,6 +611,8 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
         configure_tracer_provider()
         if instrument_fastapi(app):
             logger.info("FastAPI instrumented for OpenTelemetry")
+
+    install_api_access_log_middleware(app)
 
     # P0-4: with ``redirect_slashes=False`` we must still tolerate clients that
     # send the alternate trailing-slash form. A 307/308 redirect would strip the

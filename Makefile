@@ -805,7 +805,7 @@ obs-ui: ## Show observability UI URLs
 	@echo "   Jaeger UI:        http://localhost:16686"
 	@echo "   Prometheus:       http://localhost:9090"
 	@echo "   Grafana:          http://localhost:3003 (admin/admin)"
-	@echo "   Langfuse UI:      http://localhost:3001"
+	@echo "   Langfuse UI:      http://localhost:$${LANGFUSE_PORT:-3004}"
 	@echo "   OTLP Endpoint:    http://localhost:4318 (HTTP), grpc://localhost:4317 (gRPC)"
 	@echo ""
 	@echo " Set environment variables to enable OTel in the API:"

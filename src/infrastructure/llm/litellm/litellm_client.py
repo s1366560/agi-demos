@@ -384,14 +384,23 @@ class LiteLLMClient(LLMClient):
             kwargs["api_base"] = self._api_base
 
         if langfuse_context:
+            trace_id = langfuse_context.get("trace_id")
+            session_id = langfuse_context.get("session_id") or langfuse_context.get(
+                "conversation_id"
+            )
             langfuse_metadata = {
-                "trace_name": langfuse_context.get("trace_name", "llm_call"),
-                "trace_id": langfuse_context.get("trace_id"),
+                "generation_name": langfuse_context.get("generation_name")
+                or langfuse_context.get("trace_name", "llm_call"),
+                "trace_id": trace_id,
+                "session_id": session_id,
+                "trace_user_id": langfuse_context.get("user_id"),
                 "tags": langfuse_context.get("tags", []),
             }
             if langfuse_context.get("extra"):
                 langfuse_metadata.update(langfuse_context["extra"])
-            kwargs["metadata"] = langfuse_metadata
+            kwargs["metadata"] = {
+                key: value for key, value in langfuse_metadata.items() if value is not None
+            }
 
         settings = get_settings()
         kwargs["num_retries"] = settings.llm_max_retries
