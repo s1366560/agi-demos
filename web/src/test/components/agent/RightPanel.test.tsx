@@ -110,6 +110,25 @@ function mockWorkspaceSnapshot() {
       counts: {},
       nodes: [
         {
+          id: 'goal-1',
+          parent_id: null,
+          kind: 'goal',
+          title: 'Complete workspace delivery',
+          description: '',
+          depends_on: [],
+          acceptance_criteria: [],
+          recommended_capabilities: [],
+          intent: 'todo',
+          execution: 'pending',
+          progress: { percent: 0, confidence: 0.8, note: '' },
+          assignee_agent_id: null,
+          current_attempt_id: null,
+          workspace_task_id: null,
+          priority: 0,
+          metadata: {},
+          created_at: '2026-05-01T00:00:00Z',
+        },
+        {
           id: 'task-1',
           parent_id: 'goal-1',
           kind: 'task',
@@ -118,9 +137,9 @@ function mockWorkspaceSnapshot() {
           depends_on: [],
           acceptance_criteria: [],
           recommended_capabilities: [],
-          intent: 'in_progress',
-          execution: 'running',
-          progress: { percent: 50, confidence: 0.8, note: '' },
+          intent: 'done',
+          execution: 'completed',
+          progress: { percent: 100, confidence: 0.8, note: '' },
           assignee_agent_id: null,
           current_attempt_id: 'attempt-1',
           workspace_task_id: 'workspace-task-1',
@@ -133,6 +152,14 @@ function mockWorkspaceSnapshot() {
     blackboard: [],
     outbox: [],
     events: [],
+    root_goal: {
+      id: 'goal-1',
+      workspace_id: 'ws-1',
+      title: 'Complete workspace delivery',
+      status: 'done',
+      created_at: '2026-05-01T00:00:00Z',
+      updated_at: '2026-05-01T00:00:00Z',
+    },
   };
 }
 
@@ -357,14 +384,18 @@ describe('RightPanel (Refactored)', () => {
 
     expect(await screen.findByText('Workspace deploy task')).toBeInTheDocument();
     expect(screen.getByText('1 item')).toBeInTheDocument();
+    expect(screen.getByText('2/2 plan nodes done')).toBeInTheDocument();
+    expect(screen.getByText('100%')).toBeInTheDocument();
     expect(screen.getByTestId('workspace-task-plan-row-task-1')).toHaveAttribute(
       'data-current-workspace-task',
       'true'
     );
     expect(workspaceTaskService.list).toHaveBeenCalledWith('ws-1');
     expect(workspacePlanService.getSnapshot).toHaveBeenCalledWith('ws-1', {
-      outboxLimit: 8,
-      eventLimit: 20,
+      outboxLimit: 0,
+      eventLimit: 0,
+      includeDetails: false,
+      recoverStaleAttempts: false,
     });
   });
 

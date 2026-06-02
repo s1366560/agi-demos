@@ -93,7 +93,7 @@ describe('buildWorkspaceTaskPlanRows', () => {
     });
   });
 
-  it('uses the linked plan node as the canonical runtime status for task rows', () => {
+  it('uses the linked plan node as the canonical runtime status for plan rows', () => {
     const rows = buildWorkspaceTaskPlanRows(
       [
         workspaceTask({
@@ -113,15 +113,54 @@ describe('buildWorkspaceTaskPlanRows', () => {
           progress: { percent: 100, confidence: 1, note: 'accepted' },
         }),
       ]),
+      'task-done-in-plan'
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      entityId: 'node-done',
+      status: 'done',
+      attemptId: 'canonical-plan-attempt',
+      progressPercent: 100,
+      source: 'plan',
+      isCurrent: true,
+    });
+  });
+
+  it('does not render stale workspace task projections when a plan snapshot is present', () => {
+    const rows = buildWorkspaceTaskPlanRows(
+      [
+        workspaceTask({
+          id: 'stale-running-task',
+          title: 'Stale running task',
+          status: 'in_progress',
+        }),
+        workspaceTask({
+          id: 'current-plan-task',
+          title: 'Projected title',
+          status: 'in_progress',
+        }),
+      ],
+      snapshot([
+        planNode({
+          id: 'current-plan-node',
+          title: 'Current plan title',
+          intent: 'done',
+          execution: 'idle',
+          workspace_task_id: 'current-plan-task',
+          progress: { percent: 100, confidence: 1, note: 'accepted' },
+        }),
+      ]),
       null
     );
 
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
-      entityId: 'task-done-in-plan',
+      entityId: 'current-plan-node',
+      title: 'Current plan title',
       status: 'done',
-      attemptId: 'canonical-plan-attempt',
-      progressPercent: 100,
+      source: 'plan',
     });
+    expect(rows.some((row) => row.title === 'Stale running task')).toBe(false);
   });
 });

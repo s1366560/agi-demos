@@ -835,6 +835,7 @@ export function GoalsTab({
   objectives,
   tasks,
   agents = [],
+  completionRatio,
   workspaceId,
   tenantId,
   projectId,
@@ -950,6 +951,7 @@ export function GoalsTab({
       <ObjectiveList
         objectives={objectives}
         tasks={tasks}
+        completionRatio={completionRatio}
         onDelete={onDeleteObjective}
         onProject={onProjectObjective}
         onCreate={onCreateObjective}
@@ -1223,7 +1225,7 @@ export function GoalsTab({
         </section>
       )}
 
-      <TaskBoard workspaceId={workspaceId} showAutonomyAction={false} />
+      <TaskBoard workspaceId={workspaceId} tasks={tasks} showAutonomyAction={false} />
     </div>
   );
 }

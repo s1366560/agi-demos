@@ -581,7 +581,12 @@ export const RightPanel = memo<RightPanelProps>(
 
         const [tasksResult, snapshotResult, agentsResult] = await Promise.allSettled([
           workspaceTaskService.list(workspaceId),
-          workspacePlanService.getSnapshot(workspaceId, { outboxLimit: 8, eventLimit: 20 }),
+          workspacePlanService.getSnapshot(workspaceId, {
+            outboxLimit: 0,
+            eventLimit: 0,
+            includeDetails: false,
+            recoverStaleAttempts: false,
+          }),
           agentsRequest,
         ]);
 

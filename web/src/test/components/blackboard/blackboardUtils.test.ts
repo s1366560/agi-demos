@@ -4,6 +4,8 @@ import {
   buildBlackboardNotes,
   buildBlackboardStats,
   buildCanvasActors,
+  calculateWorkspacePlanCompletionRatio,
+  calculateWorkspaceTaskCompletionRatio,
   groupTasksByStatus,
 } from '@/components/blackboard/blackboardUtils';
 
@@ -14,6 +16,7 @@ import type {
   Workspace,
   WorkspaceAgent,
   WorkspacePlan,
+  WorkspacePlanRootGoal,
   WorkspaceTask,
 } from '@/types/workspace';
 
@@ -144,60 +147,77 @@ describe('blackboardUtils', () => {
     expect(stats.pendingAdjudicationTasks).toBe(1);
   });
 
-  it('uses durable plan intent counts before stale task projections', () => {
+  it('uses direct workspace task counts instead of durable plan intent projections', () => {
+    const tasks: WorkspaceTask[] = [
+      { ...BASE_TASK, id: 'done-task', status: 'done' },
+      { ...BASE_TASK, id: 'stale-running-1', status: 'in_progress' },
+      { ...BASE_TASK, id: 'stale-running-2', status: 'in_progress' },
+    ];
+    const stats = buildBlackboardStats(tasks, [], [], []);
+
+    expect(stats.totalTasks).toBe(3);
+    expect(stats.completedTasks).toBe(1);
+    expect(stats.todoTasks).toBe(0);
+    expect(stats.inProgressTasks).toBe(2);
+    expect(stats.completionRatio).toBe(33);
+    expect(calculateWorkspaceTaskCompletionRatio(tasks)).toBe(stats.completionRatio);
+  });
+
+  it('uses current plan nodes before workspace-wide historical tasks when a plan is provided', () => {
+    const tasks: WorkspaceTask[] = [
+      { ...BASE_TASK, id: 'old-done-task', status: 'done' },
+      { ...BASE_TASK, id: 'stale-running-task', status: 'in_progress' },
+      { ...BASE_TASK, id: 'extra-root-task', status: 'in_progress' },
+    ];
     const plan: WorkspacePlan = {
-      id: 'plan-1',
+      id: 'plan-current',
       workspace_id: 'ws-1',
-      goal_id: 'goal-1',
+      goal_id: 'goal-current',
       status: 'active',
       created_at: '2026-03-30T08:00:00Z',
-      nodes: [],
-      counts: {
-        'intent:done': 12,
-        'intent:todo': 2,
-        'intent:in_progress': 0,
-        'intent:blocked': 0,
-      },
+      nodes: Array.from({ length: 52 }, (_, index) => ({
+        id: `node-${String(index)}`,
+        parent_id: null,
+        kind: 'task',
+        title: `Task ${String(index)}`,
+        description: '',
+        depends_on: [],
+        acceptance_criteria: [],
+        recommended_capabilities: [],
+        intent: index < 51 ? 'done' : 'todo',
+        execution: 'idle',
+        progress: { percent: index < 51 ? 100 : 0, confidence: 1, note: '' },
+        assignee_agent_id: null,
+        current_attempt_id: null,
+        workspace_task_id: index < 51 ? `task-${String(index)}` : null,
+        priority: index,
+        metadata: {},
+        created_at: '2026-03-30T08:00:00Z',
+      })),
+      counts: {},
+    };
+    const rootGoal: WorkspacePlanRootGoal = {
+      id: 'root-task',
+      title: 'Current root',
+      status: 'done',
+    };
+    plan.nodes[51] = {
+      ...plan.nodes[51],
+      id: 'node-goal',
+      kind: 'goal',
+      title: 'Current root',
+      intent: 'todo',
+      workspace_task_id: null,
     };
 
-    const stats = buildBlackboardStats(
-      [
-        { ...BASE_TASK, id: 'done-task', status: 'done' },
-        { ...BASE_TASK, id: 'stale-running-1', status: 'in_progress' },
-        { ...BASE_TASK, id: 'stale-running-2', status: 'in_progress' },
-      ],
-      [],
-      [],
-      [],
-      {
-        ...plan,
-        nodes: Array.from({ length: 14 }, (_, index) => ({
-          id: `node-${String(index)}`,
-          parent_id: null,
-          kind: 'task',
-          title: `Task ${String(index)}`,
-          description: '',
-          depends_on: [],
-          acceptance_criteria: [],
-          recommended_capabilities: [],
-          intent: index < 12 ? 'done' : 'todo',
-          execution: 'idle',
-          progress: { percent: index < 12 ? 100 : 0, confidence: 1, note: '' },
-          assignee_agent_id: null,
-          current_attempt_id: null,
-          workspace_task_id: null,
-          priority: index,
-          metadata: {},
-          created_at: '2026-03-30T08:00:00Z',
-        })),
-      }
-    );
+    const stats = buildBlackboardStats(tasks, [], [], [], plan, rootGoal);
 
-    expect(stats.totalTasks).toBe(14);
-    expect(stats.completedTasks).toBe(12);
-    expect(stats.todoTasks).toBe(2);
+    expect(stats.totalTasks).toBe(52);
+    expect(stats.completedTasks).toBe(52);
+    expect(stats.todoTasks).toBe(0);
     expect(stats.inProgressTasks).toBe(0);
-    expect(stats.completionRatio).toBe(86);
+    expect(stats.completionRatio).toBe(100);
+    expect(calculateWorkspacePlanCompletionRatio(plan, rootGoal)).toBe(stats.completionRatio);
   });
 
   it('assigns fallback actor coordinates without colliding with the central blackboard', () => {

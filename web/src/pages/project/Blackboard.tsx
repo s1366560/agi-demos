@@ -32,6 +32,7 @@ import type {
   Workspace,
   WorkspaceCollaborationMode,
   WorkspacePlan,
+  WorkspacePlanRootGoal,
   WorkspaceUseCase,
 } from '@/types/workspace';
 
@@ -190,7 +191,9 @@ export function Blackboard() {
   const [loadedStatsPlan, setLoadedStatsPlan] = useState<{
     workspaceId: string;
     plan: WorkspacePlan | null;
+    rootGoal: WorkspacePlanRootGoal | null;
   } | null>(null);
+
   useEffect(() => {
     if (!selectedWorkspaceId) {
       return;
@@ -198,15 +201,24 @@ export function Blackboard() {
 
     let cancelled = false;
     workspacePlanService
-      .getSnapshot(selectedWorkspaceId, { outboxLimit: 0, eventLimit: 0 })
+      .getSnapshot(selectedWorkspaceId, {
+        outboxLimit: 0,
+        eventLimit: 0,
+        includeDetails: false,
+        recoverStaleAttempts: false,
+      })
       .then((snapshot) => {
         if (!cancelled) {
-          setLoadedStatsPlan({ workspaceId: selectedWorkspaceId, plan: snapshot.plan ?? null });
+          setLoadedStatsPlan({
+            workspaceId: selectedWorkspaceId,
+            plan: snapshot.plan ?? null,
+            rootGoal: snapshot.root_goal ?? null,
+          });
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setLoadedStatsPlan({ workspaceId: selectedWorkspaceId, plan: null });
+          setLoadedStatsPlan({ workspaceId: selectedWorkspaceId, plan: null, rootGoal: null });
         }
       });
 
@@ -214,11 +226,14 @@ export function Blackboard() {
       cancelled = true;
     };
   }, [selectedWorkspaceId, planRefreshToken]);
+
   const statsPlan =
     loadedStatsPlan?.workspaceId === selectedWorkspaceId ? loadedStatsPlan.plan : null;
+  const statsRootGoal =
+    loadedStatsPlan?.workspaceId === selectedWorkspaceId ? loadedStatsPlan.rootGoal : null;
   const shellStats = useMemo(
-    () => buildBlackboardStats(tasks, posts, agents, topologyNodes, statsPlan),
-    [agents, posts, statsPlan, tasks, topologyNodes]
+    () => buildBlackboardStats(tasks, posts, agents, topologyNodes, statsPlan, statsRootGoal),
+    [agents, posts, statsPlan, statsRootGoal, tasks, topologyNodes]
   );
   const agentWorkspacePath = useMemo(
     () =>
@@ -421,6 +436,7 @@ export function Blackboard() {
               activeTab={activeTab}
               onActiveTabChange={handleTabChange}
               statsPlan={statsPlan}
+              statsRootGoal={statsRootGoal}
               planRefreshToken={planRefreshToken}
               agentWorkspacePath={agentWorkspacePath}
               onLoadReplies={handleLoadReplies}

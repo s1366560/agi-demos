@@ -12,6 +12,7 @@ import type { CyberObjective, WorkspaceTask } from '@/types/workspace';
 export interface ObjectiveListProps {
   objectives: CyberObjective[];
   tasks?: WorkspaceTask[] | undefined;
+  completionRatio?: number | undefined;
   onEdit?: ((objective: CyberObjective) => void) | undefined;
   onDelete?: ((objectiveId: string) => void) | undefined;
   onProject?: ((objectiveId: string) => void) | undefined;
@@ -22,6 +23,7 @@ export interface ObjectiveListProps {
 export const ObjectiveList: React.FC<ObjectiveListProps> = ({
   objectives,
   tasks,
+  completionRatio,
   onEdit,
   onDelete,
   onProject,
@@ -102,6 +104,7 @@ export const ObjectiveList: React.FC<ObjectiveListProps> = ({
               <ObjectiveCard
                 objective={parent}
                 tasks={tasks}
+                completionRatio={completionRatio}
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onProject={onProject}
@@ -114,6 +117,7 @@ export const ObjectiveList: React.FC<ObjectiveListProps> = ({
                       key={child.id}
                       objective={child}
                       tasks={tasks}
+                      completionRatio={completionRatio}
                       onEdit={onEdit}
                       onDelete={onDelete}
                       onProject={onProject}

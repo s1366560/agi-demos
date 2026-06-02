@@ -1,4 +1,4 @@
-import { deriveObjectiveProgressPct } from '@/utils/objectiveProgress';
+import { toPercent } from '@/utils/objectiveProgress';
 import { hasPendingLeaderAdjudication } from '@/utils/workspaceTaskProjection';
 
 import type {
@@ -9,6 +9,7 @@ import type {
   Workspace,
   WorkspaceAgent,
   WorkspacePlan,
+  WorkspacePlanRootGoal,
   WorkspaceTask,
   WorkspaceTaskStatus,
 } from '@/types/workspace';
@@ -94,26 +95,7 @@ const PRIORITY_RANK: Record<string, number> = {
 
 const TASK_STATUSES: WorkspaceTaskStatus[] = ['todo', 'in_progress', 'done', 'blocked'];
 
-function getPlanIntentCount(plan: WorkspacePlan, status: WorkspaceTaskStatus): number {
-  const count = plan.counts[`intent:${status}`];
-  if (typeof count === 'number') {
-    return count;
-  }
-  return plan.nodes.filter((node) => node.intent === status).length;
-}
-
-function buildTaskCounts(tasks: WorkspaceTask[], plan?: WorkspacePlan | null) {
-  if (plan && plan.nodes.length > 0) {
-    const totalTasks = plan.nodes.length;
-    return {
-      totalTasks,
-      todoTasks: getPlanIntentCount(plan, 'todo'),
-      inProgressTasks: getPlanIntentCount(plan, 'in_progress'),
-      completedTasks: getPlanIntentCount(plan, 'done'),
-      blockedTasks: getPlanIntentCount(plan, 'blocked'),
-    };
-  }
-
+function buildTaskCounts(tasks: WorkspaceTask[]) {
   return {
     totalTasks: tasks.length,
     todoTasks: tasks.filter((task) => task.status === 'todo').length,
@@ -121,6 +103,49 @@ function buildTaskCounts(tasks: WorkspaceTask[], plan?: WorkspacePlan | null) {
     completedTasks: tasks.filter((task) => task.status === 'done').length,
     blockedTasks: tasks.filter((task) => task.status === 'blocked').length,
   };
+}
+
+function planNodeIntent(
+  node: WorkspacePlan['nodes'][number],
+  rootGoal?: WorkspacePlanRootGoal | null
+) {
+  if (node.kind === 'goal' && rootGoal?.status === 'done') {
+    return 'done';
+  }
+  return node.intent;
+}
+
+function buildPlanNodeCounts(plan: WorkspacePlan, rootGoal?: WorkspacePlanRootGoal | null) {
+  return {
+    totalTasks: plan.nodes.length,
+    todoTasks: plan.nodes.filter((node) => planNodeIntent(node, rootGoal) === 'todo').length,
+    inProgressTasks: plan.nodes.filter((node) => planNodeIntent(node, rootGoal) === 'in_progress')
+      .length,
+    completedTasks: plan.nodes.filter((node) => planNodeIntent(node, rootGoal) === 'done').length,
+    blockedTasks: plan.nodes.filter((node) => planNodeIntent(node, rootGoal) === 'blocked').length,
+  };
+}
+
+export function getWorkspacePlanCompletionCounts(
+  plan: WorkspacePlan,
+  rootGoal?: WorkspacePlanRootGoal | null
+) {
+  return buildPlanNodeCounts(plan, rootGoal);
+}
+
+export function calculateWorkspaceTaskCompletionRatio(tasks: WorkspaceTask[]): number {
+  const { totalTasks, completedTasks } = buildTaskCounts(tasks);
+
+  return totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+}
+
+export function calculateWorkspacePlanCompletionRatio(
+  plan: WorkspacePlan,
+  rootGoal?: WorkspacePlanRootGoal | null
+): number {
+  const { totalTasks, completedTasks } = buildPlanNodeCounts(plan, rootGoal);
+
+  return totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 }
 
 function hasHexPosition(
@@ -169,12 +194,12 @@ export function buildBlackboardStats(
   posts: BlackboardPost[],
   agents: WorkspaceAgent[],
   topologyNodes: TopologyNode[],
-  plan?: WorkspacePlan | null
+  plan?: WorkspacePlan | null,
+  rootGoal?: WorkspacePlanRootGoal | null
 ): BlackboardStats {
-  const { totalTasks, todoTasks, inProgressTasks, completedTasks, blockedTasks } = buildTaskCounts(
-    tasks,
-    plan
-  );
+  const { totalTasks, todoTasks, inProgressTasks, completedTasks, blockedTasks } = plan
+    ? buildPlanNodeCounts(plan, rootGoal)
+    : buildTaskCounts(tasks);
   const pendingAdjudicationTasks = tasks.filter(hasPendingLeaderAdjudication).length;
   const activeAgents = agents.filter(
     (agent) => agent.is_active || agent.status === 'running' || agent.status === 'busy'
@@ -196,7 +221,9 @@ export function buildBlackboardStats(
     discussions,
     openPosts,
     pinnedPosts,
-    completionRatio: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+    completionRatio: plan
+      ? calculateWorkspacePlanCompletionRatio(plan, rootGoal)
+      : calculateWorkspaceTaskCompletionRatio(tasks),
   };
 }
 
@@ -344,8 +371,7 @@ export function buildCanvasLinks(
 export function buildBlackboardNotes(
   workspace: Workspace | null,
   objectives: CyberObjective[],
-  posts: BlackboardPost[],
-  tasks: WorkspaceTask[] = []
+  posts: BlackboardPost[]
 ): BlackboardNoteCard[] {
   const notes: BlackboardNoteCard[] = [];
 
@@ -365,7 +391,7 @@ export function buildBlackboardNotes(
       title: objective.title,
       summary:
         objective.description?.trim() ||
-        `Progress ${String(deriveObjectiveProgressPct(objective, tasks))}% · ${objective.obj_type.replace('_', ' ')}`,
+        `Progress ${String(toPercent(objective.progress))}% · ${objective.obj_type.replace('_', ' ')}`,
     });
   }
 

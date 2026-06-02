@@ -10,7 +10,11 @@ import { useCurrentProject, useProjectStore } from '@/stores/project';
 import { useCurrentTenant } from '@/stores/tenant';
 import { useWorkspaceActions, useWorkspaceLoading, useWorkspaces } from '@/stores/workspace';
 
-import { workspaceObjectiveService, workspaceTaskService } from '@/services/workspaceService';
+import {
+  workspaceObjectiveService,
+  workspacePlanService,
+  workspaceTaskService,
+} from '@/services/workspaceService';
 
 import { formatDistanceToNow } from '@/utils/date';
 import {
@@ -19,16 +23,21 @@ import {
   getWorkspaceUseCase,
 } from '@/utils/workspaceConfig';
 
+import {
+  calculateWorkspacePlanCompletionRatio,
+  getWorkspacePlanCompletionCounts,
+} from '@/components/blackboard/blackboardUtils';
 import { EmptyStateSimple } from '@/components/shared/ui/EmptyStateVariant';
 
 import type {
   CyberObjective,
   WorkspaceCollaborationMode,
+  WorkspacePlanSnapshot,
   WorkspaceTask,
   WorkspaceUseCase,
 } from '@/types/workspace';
 
-type SummarySource = 'objectives' | 'tasks' | 'empty';
+type SummarySource = 'objectives' | 'plan' | 'tasks' | 'empty';
 
 interface ObjectiveSummary {
   source: SummarySource;
@@ -95,6 +104,19 @@ function summarizeTasks(tasks: WorkspaceTask[]): ObjectiveSummary {
     objectives: 0,
     avgProgress: Math.round((completed / total) * 100),
     completed,
+    loading: false,
+  };
+}
+
+function summarizePlanSnapshot(snapshot: WorkspacePlanSnapshot | null): ObjectiveSummary | null {
+  if (!snapshot?.plan || snapshot.plan.nodes.length === 0) return null;
+  const counts = getWorkspacePlanCompletionCounts(snapshot.plan, snapshot.root_goal ?? null);
+  return {
+    source: 'plan',
+    total: counts.totalTasks,
+    objectives: 0,
+    avgProgress: calculateWorkspacePlanCompletionRatio(snapshot.plan, snapshot.root_goal ?? null),
+    completed: counts.completedTasks,
     loading: false,
   };
 }
@@ -166,21 +188,31 @@ export function WorkspaceList() {
       await Promise.all(
         ids.map(async (id) => {
           try {
-            const [items, tasks] = await Promise.all([
+            const [items, planSnapshot] = await Promise.all([
               workspaceObjectiveService.list(tenantId, projectId, id).catch(() => []),
-              workspaceTaskService.list(id).catch(() => []),
+              workspacePlanService
+                .getSnapshot(id, {
+                  outboxLimit: 0,
+                  eventLimit: 0,
+                  includeDetails: false,
+                  recoverStaleAttempts: false,
+                })
+                .catch(() => null),
             ]);
             if (cancelled) return;
             const fromObjectives = summarizeObjectives(items);
+            const fromPlan = summarizePlanSnapshot(planSnapshot);
             // Prefer objectives when they exist AND have any progress.
-            // Otherwise fall back to task completion rate so cards
-            // remain informative for workspaces that rely on tasks only.
+            // Otherwise use current plan nodes before falling back to historical
+            // workspace task projections.
             const useObjectives = fromObjectives !== null && fromObjectives.avgProgress > 0;
             const summary = useObjectives
               ? fromObjectives
-              : fromObjectives && tasks.length === 0
-                ? fromObjectives
-                : summarizeTasks(tasks);
+              : fromPlan
+                ? fromPlan
+                : fromObjectives
+                  ? fromObjectives
+                  : summarizeTasks(await workspaceTaskService.list(id).catch(() => []));
             setSummaries((prev) => ({ ...prev, [id]: summary }));
           } catch {
             if (cancelled) return;
@@ -378,7 +410,7 @@ export function WorkspaceList() {
                                       summary.objectives > 0 ? summary.objectives : summary.total,
                                     defaultValue: `${String(summary.objectives > 0 ? summary.objectives : summary.total)} objectives`,
                                   })
-                                : summary.source === 'tasks'
+                                : summary.source === 'plan' || summary.source === 'tasks'
                                   ? t('tenant.workspaceList.tasksCount', {
                                       count: summary.total,
                                       defaultValue: `${String(summary.total)} tasks`,

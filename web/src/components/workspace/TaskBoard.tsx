@@ -38,6 +38,7 @@ import type {
 
 interface TaskBoardProps {
   workspaceId: string;
+  tasks?: WorkspaceTask[] | undefined;
   showAutonomyAction?: boolean;
 }
 
@@ -143,10 +144,14 @@ const COLUMN_CONFIG: {
   },
 ];
 
-export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId, showAutonomyAction = true }) => {
+export const TaskBoard: React.FC<TaskBoardProps> = ({
+  workspaceId,
+  tasks: directTasks,
+  showAutonomyAction = true,
+}) => {
   const { t } = useTranslation();
   const message = useLazyMessage();
-  const tasks = useWorkspaceTasks();
+  const storeTasks = useWorkspaceTasks();
   const agents = useWorkspaceAgents();
 
   const [showArchived, setShowArchived] = useState(false);
@@ -166,10 +171,10 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({ workspaceId, showAutonomyA
   const [experienceError, setExperienceError] = useState<string | null>(null);
 
   const workspaceTasks = useMemo(() => {
-    return tasks
+    return (directTasks ?? storeTasks)
       .filter((task) => task.workspace_id === workspaceId)
       .filter((task) => showArchived || !task.archived_at);
-  }, [tasks, workspaceId, showArchived]);
+  }, [directTasks, showArchived, storeTasks, workspaceId]);
 
   const columns = useMemo(() => {
     const grouped: Record<WorkspaceTaskStatus, typeof workspaceTasks> = {

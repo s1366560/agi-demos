@@ -75,6 +75,14 @@ function rowIsCurrent(
   );
 }
 
+function planNodeProgressPercent(node: WorkspacePlanNode): number | undefined {
+  return (node as { progress?: { percent?: number } }).progress?.percent;
+}
+
+function planNodeOrder(node: WorkspacePlanNode, fallback: number): number {
+  return (node as { priority?: number }).priority ?? fallback;
+}
+
 export function buildWorkspaceTaskPlanRows(
   tasks: WorkspaceTask[],
   snapshot: WorkspacePlanSnapshot | null,
@@ -83,53 +91,48 @@ export function buildWorkspaceTaskPlanRows(
   const planNodes = (snapshot?.plan?.nodes ?? []).filter(
     (node) => node.kind === 'task' || node.kind === 'verify'
   );
-  const nodeByWorkspaceTaskId = new Map<string, WorkspacePlanNode>();
-  for (const node of planNodes) {
-    if (node.workspace_task_id) {
-      nodeByWorkspaceTaskId.set(node.workspace_task_id, node);
-    }
+
+  if (snapshot?.plan) {
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    return planNodes
+      .map((node, index) => {
+        const task = node.workspace_task_id ? taskById.get(node.workspace_task_id) : undefined;
+        return {
+          id: `plan:${node.id}`,
+          entityId: node.id,
+          title: node.title || task?.title || node.id,
+          description: node.description || task?.description || task?.blocker_reason,
+          status: statusFromPlanNode(node),
+          source: 'plan' as const,
+          kind: node.kind,
+          updatedAt: node.updated_at ?? node.completed_at ?? task?.updated_at ?? task?.created_at,
+          progressPercent: planNodeProgressPercent(node),
+          attemptId: node.current_attempt_id ?? task?.current_attempt_id,
+          isCurrent: rowIsCurrent(currentWorkspaceTaskId, node.workspace_task_id, node.id),
+          order: planNodeOrder(node, index),
+        };
+      })
+      .sort(sortWorkspaceTaskPlanRows);
   }
 
-  const rows: WorkspaceTaskPlanRow[] = tasks.map((task, index) => {
-    const node = nodeByWorkspaceTaskId.get(task.id);
-    return {
+  return tasks
+    .map((task, index) => ({
       id: `task:${task.id}`,
       entityId: task.id,
-      title: taskTitle(task, node),
-      description: task.description || node?.description || task.blocker_reason,
-      status: node ? statusFromPlanNode(node) : task.status,
-      source: 'task',
-      kind: node?.kind,
+      title: taskTitle(task),
+      description: task.description || task.blocker_reason,
+      status: task.status,
+      source: 'task' as const,
       updatedAt: task.updated_at ?? task.created_at,
-      progressPercent: node?.progress?.percent,
-      attemptId: node?.current_attempt_id ?? task.current_attempt_id,
-      isCurrent: rowIsCurrent(currentWorkspaceTaskId, task.id, node?.id),
-      order: node?.priority ?? taskPriorityOrder(task, index),
-    };
-  });
+      attemptId: task.current_attempt_id,
+      isCurrent: rowIsCurrent(currentWorkspaceTaskId, task.id),
+      order: taskPriorityOrder(task, index),
+    }))
+    .sort(sortWorkspaceTaskPlanRows);
+}
 
-  const taskIds = new Set(tasks.map((task) => task.id));
-  planNodes.forEach((node, index) => {
-    if (node.workspace_task_id && taskIds.has(node.workspace_task_id)) return;
-    rows.push({
-      id: `plan:${node.id}`,
-      entityId: node.id,
-      title: node.title || node.id,
-      description: node.description,
-      status: statusFromPlanNode(node),
-      source: 'plan',
-      kind: node.kind,
-      updatedAt: node.updated_at ?? node.completed_at ?? node.created_at,
-      progressPercent: node.progress?.percent,
-      attemptId: node.current_attempt_id,
-      isCurrent: rowIsCurrent(currentWorkspaceTaskId, node.workspace_task_id, node.id),
-      order: node.priority ?? tasks.length + index,
-    });
-  });
-
-  return rows.sort((a, b) => {
-    const statusDelta = WORKSPACE_STATUS_ORDER[a.status] - WORKSPACE_STATUS_ORDER[b.status];
-    if (statusDelta !== 0) return statusDelta;
-    return a.order - b.order || a.title.localeCompare(b.title);
-  });
+function sortWorkspaceTaskPlanRows(a: WorkspaceTaskPlanRow, b: WorkspaceTaskPlanRow): number {
+  const statusDelta = WORKSPACE_STATUS_ORDER[a.status] - WORKSPACE_STATUS_ORDER[b.status];
+  if (statusDelta !== 0) return statusDelta;
+  return a.order - b.order || a.title.localeCompare(b.title);
 }

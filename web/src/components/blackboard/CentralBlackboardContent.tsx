@@ -41,6 +41,7 @@ import type {
   Workspace,
   WorkspaceAgent,
   WorkspacePlan,
+  WorkspacePlanRootGoal,
   WorkspaceTask,
 } from '@/types/workspace';
 
@@ -63,6 +64,7 @@ export interface CentralBlackboardContentProps {
   activeTab: BlackboardTab;
   onActiveTabChange: (nextTab: BlackboardTab) => void;
   statsPlan?: WorkspacePlan | null | undefined;
+  statsRootGoal?: WorkspacePlanRootGoal | null | undefined;
   planRefreshToken?: number | undefined;
   agentWorkspacePath: string;
   onLoadReplies: (postId: string) => Promise<boolean>;
@@ -124,6 +126,7 @@ export function CentralBlackboardContent({
   activeTab,
   onActiveTabChange,
   statsPlan,
+  statsRootGoal,
   planRefreshToken,
   agentWorkspacePath,
   onLoadReplies,
@@ -226,16 +229,16 @@ export function CentralBlackboardContent({
   });
 
   const stats = useMemo(
-    () => buildBlackboardStats(tasks, posts, agents, topologyNodes, statsPlan),
-    [agents, posts, statsPlan, tasks, topologyNodes]
+    () => buildBlackboardStats(tasks, posts, agents, topologyNodes, statsPlan, statsRootGoal),
+    [agents, posts, statsPlan, statsRootGoal, tasks, topologyNodes]
   );
   const notes = useMemo(
-    () => buildBlackboardNotes(workspace, objectives, posts, tasks),
-    [objectives, posts, tasks, workspace]
+    () => buildBlackboardNotes(workspace, objectives, posts),
+    [objectives, posts, workspace]
   );
   const tabSummaries = useMemo<Partial<Record<BlackboardTab, string | number>>>(() => {
     const summaries: Partial<Record<BlackboardTab, string | number>> = {
-      goals: tasks.length,
+      goals: stats.totalTasks,
       discussion: posts.length,
       collaboration: agents.length,
       members: agents.length,
@@ -254,7 +257,7 @@ export function CentralBlackboardContent({
     objectives.length,
     posts,
     stats.completionRatio,
-    tasks.length,
+    stats.totalTasks,
     topologyNodes.length,
     workspace?.description,
   ]);

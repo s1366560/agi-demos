@@ -62,7 +62,13 @@ const {
     ),
     statusListeners,
     mockListByProject: vi.fn().mockResolvedValue([]),
-    mockGetPlanSnapshot: vi.fn(),
+    mockGetPlanSnapshot: vi.fn().mockResolvedValue({
+      workspace_id: 'ws-1',
+      plan: null,
+      blackboard: [],
+      outbox: [],
+      events: [],
+    }),
     storeStateRef: { current: {} as Record<string, unknown> },
   };
 });
@@ -154,15 +160,8 @@ vi.mock('@/services/unifiedEventService', () => ({
 }));
 
 vi.mock('@/components/blackboard/CentralBlackboardContent', () => ({
-  CentralBlackboardContent: (props: {
-    activeTab: string;
-    statsPlan?: { counts?: Record<string, number> } | null;
-  }) => (
-    <div
-      data-testid="central-blackboard-content"
-      data-active-tab={props.activeTab}
-      data-stats-plan-done={String(props.statsPlan?.counts?.['intent:done'] ?? '')}
-    />
+  CentralBlackboardContent: (props: { activeTab: string }) => (
+    <div data-testid="central-blackboard-content" data-active-tab={props.activeTab} />
   ),
 }));
 
@@ -204,42 +203,6 @@ function makeWorkspaces(count = 2): Workspace[] {
   return Array.from({ length: count }, (_, i) =>
     makeWorkspace({ id: `ws-${i + 1}`, name: `Workspace ${i + 1}` })
   );
-}
-
-function makePlanSnapshot(counts: Record<string, number>) {
-  return {
-    workspace_id: 'ws-1',
-    plan: {
-      id: 'plan-1',
-      workspace_id: 'ws-1',
-      goal_id: 'goal-1',
-      status: 'active',
-      created_at: '2026-03-30T08:00:00Z',
-      counts,
-      nodes: Array.from({ length: 14 }, (_, index) => ({
-        id: `node-${String(index)}`,
-        parent_id: null,
-        kind: 'task',
-        title: `Task ${String(index)}`,
-        description: '',
-        depends_on: [],
-        acceptance_criteria: [],
-        recommended_capabilities: [],
-        intent: index < (counts['intent:done'] ?? 0) ? 'done' : 'todo',
-        execution: 'idle',
-        progress: { percent: 0, confidence: 1, note: '' },
-        assignee_agent_id: null,
-        current_attempt_id: null,
-        workspace_task_id: null,
-        priority: index,
-        metadata: {},
-        created_at: '2026-03-30T08:00:00Z',
-      })),
-    },
-    blackboard: [],
-    outbox: [],
-    events: [],
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -419,17 +382,28 @@ describe('Blackboard', () => {
     expect(screen.getByText('blackboard.summary.openThreads')).toBeInTheDocument();
   });
 
-  it('prefers durable plan intent counts for summary metrics when task projections are stale', async () => {
+  it('uses current plan nodes for summary metrics when a plan snapshot exists', async () => {
     const workspaces = makeWorkspaces(1);
     mockListByProject.mockResolvedValue(workspaces);
-    mockGetPlanSnapshot.mockResolvedValue(
-      makePlanSnapshot({
-        'intent:done': 12,
-        'intent:todo': 2,
-        'intent:in_progress': 0,
-        'intent:blocked': 0,
-      })
-    );
+    mockGetPlanSnapshot.mockResolvedValue({
+      workspace_id: 'ws-1',
+      plan: {
+        id: 'plan-1',
+        workspace_id: 'ws-1',
+        goal_id: 'goal-1',
+        status: 'active',
+        created_at: '2026-03-30T08:00:00Z',
+        nodes: [
+          { id: 'node-1', intent: 'done' },
+          { id: 'node-2', intent: 'done' },
+          { id: 'node-3', intent: 'todo' },
+        ],
+        counts: {},
+      },
+      blackboard: [],
+      outbox: [],
+      events: [],
+    });
 
     storeStateRef.current = {
       ...storeStateRef.current,
@@ -445,13 +419,9 @@ describe('Blackboard', () => {
     renderBlackboard();
 
     await waitFor(() => {
-      expect(screen.getByText('86%')).toBeInTheDocument();
+      expect(screen.getByText('67%')).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId('central-blackboard-content')).toHaveAttribute(
-      'data-stats-plan-done',
-      '12'
-    );
     expect(screen.queryByText('33%')).not.toBeInTheDocument();
   });
 

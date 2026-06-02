@@ -4,14 +4,14 @@ import { useTranslation } from 'react-i18next';
 
 import { AlertCircle, CheckCircle2, Circle, GitBranch, Loader2 } from 'lucide-react';
 
-import { statusFromPlanNode } from './WorkspaceTaskPlanPanelModel';
+import {
+  calculateWorkspacePlanCompletionRatio,
+  getWorkspacePlanCompletionCounts,
+} from '@/components/blackboard/blackboardUtils';
 
 import type { WorkspacePlanSnapshot, WorkspaceTaskStatus } from '@/types/workspace';
 
-import type {
-  WorkspaceTaskPanelView,
-  WorkspaceTaskPlanRow,
-} from './WorkspaceTaskPlanPanelModel';
+import type { WorkspaceTaskPanelView, WorkspaceTaskPlanRow } from './WorkspaceTaskPlanPanelModel';
 import type { TFunction } from 'i18next';
 
 const WORKSPACE_STATUS_CONFIG: Record<
@@ -73,11 +73,16 @@ function formatWorkspaceTimestamp(value: string | null | undefined, locale: stri
 }
 
 function planTaskStats(snapshot: WorkspacePlanSnapshot | null) {
-  const planNodes = (snapshot?.plan?.nodes ?? []).filter(
-    (node) => node.kind === 'task' || node.kind === 'verify'
-  );
-  const done = planNodes.filter((node) => statusFromPlanNode(node) === 'done').length;
-  return { total: planNodes.length, done };
+  if (!snapshot?.plan) {
+    return { total: 0, done: 0, completion: 0 };
+  }
+
+  const counts = getWorkspacePlanCompletionCounts(snapshot.plan, snapshot.root_goal ?? null);
+  return {
+    total: counts.totalTasks,
+    done: counts.completedTasks,
+    completion: calculateWorkspacePlanCompletionRatio(snapshot.plan, snapshot.root_goal ?? null),
+  };
 }
 
 interface WorkspaceTaskPlanPanelProps {
@@ -173,8 +178,6 @@ export const WorkspaceTaskPlanPanel = memo<WorkspaceTaskPlanPanelProps>(
   ({ rows, snapshot, loading, error, view }) => {
     const { t, i18n } = useTranslation();
     const stats = planTaskStats(snapshot);
-    const rowDone = rows.filter((row) => row.status === 'done').length;
-    const pct = rows.length > 0 ? Math.round((rowDone / rows.length) * 100) : 0;
     const hasPlan = Boolean(snapshot?.plan);
     const locale = i18n.language || 'en';
 
@@ -223,13 +226,13 @@ export const WorkspaceTaskPlanPanel = memo<WorkspaceTaskPlanPanelProps>(
                 ) : loading ? (
                   <span>{tFallback(t, 'agent.rightPanel.workspacePlan.loading', 'Loading')}</span>
                 ) : (
-                  <span>{pct}%</span>
+                  <span>{stats.completion}%</span>
                 )}
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
                 <div
                   className="h-full rounded-full bg-emerald-500 transition-[width] duration-500 dark:bg-emerald-400"
-                  style={{ width: `${String(pct)}%` }}
+                  style={{ width: `${String(stats.completion)}%` }}
                 />
               </div>
             </div>
