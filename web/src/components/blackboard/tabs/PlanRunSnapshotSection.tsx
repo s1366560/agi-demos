@@ -1940,7 +1940,6 @@ export function PlanRunSnapshotSection({
                       setSelectedNodeId(nodeId);
                     }}
                     minHeight={640}
-                    fitToWidth
                   />
                 </div>
               ) : filteredNodes.length > 0 ? (

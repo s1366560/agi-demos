@@ -540,7 +540,8 @@ describe('StatusTab', () => {
     expect(dagWorkspace.className).not.toContain('2xl:grid-cols');
     const graph = await screen.findByTestId('execution-dag-graph');
     expect(graph).toHaveStyle({ minHeight: '640px' });
-    expect(graph).toHaveAttribute('data-fit-to-width', 'true');
+    expect(graph).not.toHaveAttribute('data-fit-to-width');
+    expect(screen.getByLabelText('Zoom level')).toHaveValue('100');
     fireEvent.click(screen.getByRole('button', { name: 'blackboard.planRunListView' }));
     expect(screen.queryByTestId('execution-dag-graph')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'blackboard.planRunGraphView' })).toBeInTheDocument();
