@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildBlackboardTaskBoardTasks,
   buildBlackboardNotes,
   buildBlackboardStats,
   buildCanvasActors,
@@ -218,6 +219,81 @@ describe('blackboardUtils', () => {
     expect(stats.inProgressTasks).toBe(0);
     expect(stats.completionRatio).toBe(100);
     expect(calculateWorkspacePlanCompletionRatio(plan, rootGoal)).toBe(stats.completionRatio);
+  });
+
+  it('builds task-board rows from current plan nodes instead of historical tasks', () => {
+    const tasks: WorkspaceTask[] = [
+      { ...BASE_TASK, id: 'old-done-task', status: 'done' },
+      { ...BASE_TASK, id: 'stale-running-task', status: 'in_progress' },
+      { ...BASE_TASK, id: 'extra-running-task', status: 'in_progress' },
+    ];
+    const plan: WorkspacePlan = {
+      id: 'plan-current',
+      workspace_id: 'ws-1',
+      goal_id: 'goal-current',
+      status: 'active',
+      created_at: '2026-03-30T08:00:00Z',
+      nodes: [
+        {
+          id: 'node-root',
+          parent_id: null,
+          kind: 'goal',
+          title: 'Current root',
+          description: 'Root goal',
+          depends_on: [],
+          acceptance_criteria: [],
+          recommended_capabilities: [],
+          intent: 'todo',
+          execution: 'idle',
+          progress: { percent: 0, confidence: 1, note: '' },
+          assignee_agent_id: null,
+          current_attempt_id: null,
+          workspace_task_id: null,
+          priority: 0,
+          metadata: {},
+          created_at: '2026-03-30T08:00:00Z',
+        },
+        {
+          id: 'node-child',
+          parent_id: 'node-root',
+          kind: 'task',
+          title: 'Current child',
+          description: 'Child task',
+          depends_on: [],
+          acceptance_criteria: [],
+          recommended_capabilities: [],
+          intent: 'done',
+          execution: 'idle',
+          progress: { percent: 100, confidence: 1, note: '' },
+          assignee_agent_id: 'agent-1',
+          current_attempt_id: 'attempt-1',
+          workspace_task_id: 'task-current-child',
+          priority: 1,
+          metadata: { iteration_index: 1 },
+          created_at: '2026-03-30T08:10:00Z',
+        },
+      ],
+      counts: {},
+    };
+    const rootGoal: WorkspacePlanRootGoal = {
+      id: 'root-task',
+      title: 'Current root',
+      status: 'done',
+      goal_health: 'achieved',
+      remediation_status: 'none',
+      evidence_grade: 'pass',
+      completed_at: '2026-03-30T09:00:00Z',
+    };
+
+    const taskBoardTasks = buildBlackboardTaskBoardTasks(tasks, 'ws-1', plan, rootGoal);
+
+    expect(taskBoardTasks).toHaveLength(2);
+    expect(taskBoardTasks.map((task) => task.title)).toEqual(['Current root', 'Current child']);
+    expect(taskBoardTasks.map((task) => task.status)).toEqual(['done', 'done']);
+    expect(taskBoardTasks[0].metadata.source_plan_node_only).toBe(true);
+    expect(taskBoardTasks[0].metadata.task_role).toBe('goal_root');
+    expect(taskBoardTasks[1].id).toBe('task-current-child');
+    expect(taskBoardTasks[1].metadata.source_plan_projection).toBe(true);
   });
 
   it('assigns fallback actor coordinates without colliding with the central blackboard', () => {

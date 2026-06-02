@@ -6,8 +6,9 @@ import { TaskBoard } from '@/components/workspace/TaskBoard';
 import { workspaceAutonomyService, workspaceTaskService } from '@/services/workspaceService';
 import { render, screen, fireEvent } from '@/test/utils';
 
+import type { WorkspaceAgent, WorkspaceTask } from '@/types/workspace';
+
 vi.mock('@/stores/workspace', () => ({
-  useWorkspaceTasks: vi.fn(),
   useWorkspaceAgents: vi.fn(),
 }));
 
@@ -25,27 +26,53 @@ vi.mock('@/services/workspaceService', () => ({
   },
 }));
 
+function renderTaskBoard({
+  tasks = [],
+  showAutonomyAction,
+}: {
+  tasks?: Partial<WorkspaceTask>[];
+  agents?: Partial<WorkspaceAgent>[];
+  showAutonomyAction?: boolean;
+}) {
+  const normalizedTasks = tasks.map((task, index) => ({
+    workspace_id: 'ws-1',
+    title: `Task ${String(index + 1)}`,
+    status: 'todo',
+    metadata: {},
+    created_at: '2026-04-17T05:00:00Z',
+    ...task,
+    id: task.id ?? `task-${String(index + 1)}`,
+  })) as WorkspaceTask[];
+
+  return render(
+    <TaskBoard
+      workspaceId="ws-1"
+      tasks={normalizedTasks}
+      showAutonomyAction={showAutonomyAction}
+    />
+  );
+}
+
 describe('TaskBoard', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { useWorkspaceAgents } = await import('@/stores/workspace');
+    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
   });
 
-  it('renders workspace tasks and triggers create action', async () => {
-    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
-
-    vi.mocked(useWorkspaceTasks).mockReturnValue([
-      { id: 'task-1', title: 'Define scope', status: 'todo', workspace_id: 'ws-1' },
-      { id: 'task-2', title: 'Ignore me', status: 'todo', workspace_id: 'ws-2' },
-    ] as any);
-    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
+  it('renders provided workspace tasks and triggers create action', async () => {
     vi.mocked(workspaceTaskService.create).mockResolvedValue({ id: 'task-3' } as any);
 
-    render(<TaskBoard workspaceId="ws-1" />);
+    renderTaskBoard({
+      tasks: [
+        { id: 'task-1', title: 'Define scope', status: 'todo', workspace_id: 'ws-1' },
+        { id: 'task-2', title: 'Ignore me', status: 'todo', workspace_id: 'ws-2' },
+      ],
+    });
 
     expect(screen.getByText('Define scope')).toBeInTheDocument();
     expect(screen.queryByText('Ignore me')).not.toBeInTheDocument();
 
-    // Open the add form first (hidden by default in kanban view)
     const addButtons = screen.getAllByRole('button', { name: 'workspaceDetail.taskBoard.add' });
     await act(async () => {
       fireEvent.click(addButtons[0]);
@@ -64,39 +91,31 @@ describe('TaskBoard', () => {
     expect(workspaceTaskService.create).toHaveBeenCalledWith('ws-1', { title: 'Build MVP' });
   });
 
-  it('labels the show archived switch', async () => {
-    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
-
-    vi.mocked(useWorkspaceTasks).mockReturnValue([] as any);
-    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
-
-    render(<TaskBoard workspaceId="ws-1" />);
+  it('labels the show archived switch', () => {
+    renderTaskBoard({});
 
     expect(
       screen.getByRole('switch', { name: 'workspaceDetail.taskBoard.showArchived' })
     ).toBeInTheDocument();
   });
 
-  it('renders root goal health, remediation, and evidence grade badges', async () => {
-    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
-
-    vi.mocked(useWorkspaceTasks).mockReturnValue([
-      {
-        id: 'task-root-1',
-        title: 'Prepare rollback checklist',
-        status: 'blocked',
-        workspace_id: 'ws-1',
-        metadata: {
-          task_role: 'goal_root',
-          goal_health: 'blocked',
-          remediation_status: 'replan_required',
-          goal_evidence: { verification_grade: 'warn' },
+  it('renders root goal health, remediation, and evidence grade badges', () => {
+    renderTaskBoard({
+      tasks: [
+        {
+          id: 'task-root-1',
+          title: 'Prepare rollback checklist',
+          status: 'blocked',
+          workspace_id: 'ws-1',
+          metadata: {
+            task_role: 'goal_root',
+            goal_health: 'blocked',
+            remediation_status: 'replan_required',
+            goal_evidence: { verification_grade: 'warn' },
+          },
         },
-      },
-    ] as any);
-    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
-
-    render(<TaskBoard workspaceId="ws-1" />);
+      ],
+    });
 
     expect(screen.getByText('Prepare rollback checklist')).toBeInTheDocument();
     expect(screen.getByText(/Root goal/i)).toBeInTheDocument();
@@ -106,25 +125,7 @@ describe('TaskBoard', () => {
   });
 
   it('renders pending leader adjudication details for worker-reported tasks', async () => {
-    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
-
-    vi.mocked(useWorkspaceTasks).mockReturnValue([
-      {
-        id: 'task-child-1',
-        title: 'Draft checklist',
-        status: 'in_progress',
-        workspace_id: 'ws-1',
-        pending_leader_adjudication: true,
-        current_attempt_number: 2,
-        current_attempt_worker_binding_id: 'binding-1',
-        metadata: {
-          last_worker_report_type: 'completed',
-          last_worker_report_summary: 'Checklist drafted successfully',
-          last_worker_report_artifacts: ['artifact:checklist'],
-          last_worker_report_verifications: ['worker_report:completed'],
-        },
-      },
-    ] as any);
+    const { useWorkspaceAgents } = await import('@/stores/workspace');
     vi.mocked(useWorkspaceAgents).mockReturnValue([
       {
         id: 'binding-1',
@@ -136,7 +137,25 @@ describe('TaskBoard', () => {
       },
     ] as any);
 
-    render(<TaskBoard workspaceId="ws-1" />);
+    renderTaskBoard({
+      tasks: [
+        {
+          id: 'task-child-1',
+          title: 'Draft checklist',
+          status: 'in_progress',
+          workspace_id: 'ws-1',
+          pending_leader_adjudication: true,
+          current_attempt_number: 2,
+          current_attempt_worker_binding_id: 'binding-1',
+          metadata: {
+            last_worker_report_type: 'completed',
+            last_worker_report_summary: 'Checklist drafted successfully',
+            last_worker_report_artifacts: ['artifact:checklist'],
+            last_worker_report_verifications: ['worker_report:completed'],
+          },
+        },
+      ],
+    });
 
     expect(screen.getByText(/Pending adjudication/i)).toBeInTheDocument();
     expect(
@@ -158,30 +177,27 @@ describe('TaskBoard', () => {
     expect(screen.getByText(/workspaceDetail\.taskBoard\.attemptNumber #2/i)).toBeInTheDocument();
   });
 
-  it('renders code context and launch anomaly signals for software tasks', async () => {
-    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
-
-    vi.mocked(useWorkspaceTasks).mockReturnValue([
-      {
-        id: 'task-code-1',
-        title: 'Fix routes',
-        status: 'in_progress',
-        workspace_id: 'ws-1',
-        metadata: {
-          current_attempt_id: 'attempt-1',
-          launch_state: 'no_terminal_event',
-          durable_plan_verdict: 'replan_requested',
-          code_context: {
-            sandbox_code_root: '/workspace/my-evo',
-            loaded_agents_files: ['/workspace/my-evo/AGENTS.md'],
-            agents_digest: 'abcdef1234567890',
+  it('renders code context and launch anomaly signals for software tasks', () => {
+    renderTaskBoard({
+      tasks: [
+        {
+          id: 'task-code-1',
+          title: 'Fix routes',
+          status: 'in_progress',
+          workspace_id: 'ws-1',
+          metadata: {
+            current_attempt_id: 'attempt-1',
+            launch_state: 'no_terminal_event',
+            durable_plan_verdict: 'replan_requested',
+            code_context: {
+              sandbox_code_root: '/workspace/my-evo',
+              loaded_agents_files: ['/workspace/my-evo/AGENTS.md'],
+              agents_digest: 'abcdef1234567890',
+            },
           },
         },
-      },
-    ] as any);
-    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
-
-    render(<TaskBoard workspaceId="ws-1" />);
+      ],
+    });
 
     expect(screen.getByText('Fix routes')).toBeInTheDocument();
     expect(screen.getByText(/no terminal event/i)).toBeInTheDocument();
@@ -193,20 +209,6 @@ describe('TaskBoard', () => {
   });
 
   it('opens the task experience panel with evidence details', async () => {
-    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
-
-    vi.mocked(useWorkspaceTasks).mockReturnValue([
-      {
-        id: 'task-detail-1',
-        title: 'Show execution evidence',
-        status: 'in_progress',
-        workspace_id: 'ws-1',
-        current_attempt_id: 'attempt-1',
-        current_attempt_conversation_id: 'conv-1',
-        metadata: {},
-      },
-    ] as any);
-    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
     vi.mocked(workspaceTaskService.getExperience).mockResolvedValue({
       task_id: 'task-detail-1',
       workspace_id: 'ws-1',
@@ -249,7 +251,19 @@ describe('TaskBoard', () => {
     } as any);
     vi.mocked(workspaceTaskService.getExecutionSession).mockResolvedValue(null as any);
 
-    render(<TaskBoard workspaceId="ws-1" />);
+    renderTaskBoard({
+      tasks: [
+        {
+          id: 'task-detail-1',
+          title: 'Show execution evidence',
+          status: 'in_progress',
+          workspace_id: 'ws-1',
+          current_attempt_id: 'attempt-1',
+          current_attempt_conversation_id: 'conv-1',
+          metadata: {},
+        },
+      ],
+    });
 
     await act(async () => {
       fireEvent.click(
@@ -263,18 +277,7 @@ describe('TaskBoard', () => {
   });
 
   it('uses workspace binding ids for assigned agent selection state', async () => {
-    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
-
-    vi.mocked(useWorkspaceTasks).mockReturnValue([
-      {
-        id: 'task-assign-1',
-        title: 'Execute root goal',
-        status: 'todo',
-        workspace_id: 'ws-1',
-        assignee_agent_id: 'agent-1',
-        workspace_agent_id: 'binding-1',
-      },
-    ] as any);
+    const { useWorkspaceAgents } = await import('@/stores/workspace');
     vi.mocked(useWorkspaceAgents).mockReturnValue([
       {
         id: 'binding-1',
@@ -283,23 +286,59 @@ describe('TaskBoard', () => {
       },
     ] as any);
 
-    render(<TaskBoard workspaceId="ws-1" />);
+    renderTaskBoard({
+      tasks: [
+        {
+          id: 'task-assign-1',
+          title: 'Execute root goal',
+          status: 'todo',
+          workspace_id: 'ws-1',
+          assignee_agent_id: 'agent-1',
+          workspace_agent_id: 'binding-1',
+        },
+      ],
+    });
 
     expect(screen.getByText('Worker A')).toBeInTheDocument();
   });
 
-  it('triggers forced autonomy tick from the task board header', async () => {
-    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
+  it('renders plan-projected tasks as read-only board rows', () => {
+    renderTaskBoard({
+      tasks: [
+        {
+          id: 'task-plan-1',
+          title: 'Projected task',
+          status: 'done',
+          workspace_id: 'ws-1',
+          metadata: {
+            source_plan_projection: true,
+            source_plan_node_id: 'node-1',
+          },
+        },
+      ],
+    });
 
-    vi.mocked(useWorkspaceTasks).mockReturnValue([] as any);
-    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
+    expect(screen.getByText('Projected task')).toBeInTheDocument();
+    expect(
+      screen.getAllByLabelText('workspaceDetail.taskBoard.assignee').find((element) => {
+        return element.tagName === 'INPUT';
+      })
+    ).toBeDisabled();
+    expect(
+      screen.getAllByLabelText('workspaceDetail.taskBoard.status').find((element) => {
+        return element.tagName === 'INPUT';
+      })
+    ).toBeDisabled();
+  });
+
+  it('triggers forced autonomy tick from the task board header', async () => {
     vi.mocked(workspaceAutonomyService.tick).mockResolvedValue({
       triggered: true,
       root_task_id: 'root-1',
       reason: 'triggered',
     });
 
-    render(<TaskBoard workspaceId="ws-1" />);
+    renderTaskBoard({});
 
     await act(async () => {
       fireEvent.click(
@@ -310,13 +349,8 @@ describe('TaskBoard', () => {
     expect(workspaceAutonomyService.tick).toHaveBeenCalledWith('ws-1', { force: true });
   });
 
-  it('can hide the forced autonomy action when embedded in goals', async () => {
-    const { useWorkspaceTasks, useWorkspaceAgents } = await import('@/stores/workspace');
-
-    vi.mocked(useWorkspaceTasks).mockReturnValue([] as any);
-    vi.mocked(useWorkspaceAgents).mockReturnValue([] as any);
-
-    render(<TaskBoard workspaceId="ws-1" showAutonomyAction={false} />);
+  it('can hide the forced autonomy action when embedded in goals', () => {
+    renderTaskBoard({ showAutonomyAction: false });
 
     expect(
       screen.queryByRole('button', { name: 'workspaceDetail.taskBoard.forceAutonomy' })

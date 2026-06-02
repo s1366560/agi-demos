@@ -9,6 +9,7 @@ import type {
   Workspace,
   WorkspaceAgent,
   WorkspacePlan,
+  WorkspacePlanNode,
   WorkspacePlanRootGoal,
   WorkspaceTask,
   WorkspaceTaskStatus,
@@ -131,6 +132,74 @@ export function getWorkspacePlanCompletionCounts(
   rootGoal?: WorkspacePlanRootGoal | null
 ) {
   return buildPlanNodeCounts(plan, rootGoal);
+}
+
+function taskStatusFromPlanNode(
+  node: WorkspacePlanNode,
+  rootGoal?: WorkspacePlanRootGoal | null
+): WorkspaceTaskStatus {
+  const intent = planNodeIntent(node, rootGoal);
+  if (intent === 'done') return 'done';
+  if (intent === 'blocked') return 'blocked';
+  if (
+    intent === 'in_progress' ||
+    node.execution === 'dispatched' ||
+    node.execution === 'running' ||
+    node.execution === 'reported' ||
+    node.execution === 'verifying'
+  ) {
+    return 'in_progress';
+  }
+  return 'todo';
+}
+
+export function buildBlackboardTaskBoardTasks(
+  tasks: WorkspaceTask[],
+  workspaceId: string,
+  plan?: WorkspacePlan | null,
+  rootGoal?: WorkspacePlanRootGoal | null
+): WorkspaceTask[] {
+  if (!plan) {
+    return tasks;
+  }
+
+  return plan.nodes.map((node) => {
+    const isRootGoal = node.kind === 'goal';
+    return {
+      id: node.workspace_task_id ?? `plan-node:${node.id}`,
+      workspace_id: workspaceId,
+      title: node.title || node.id,
+      description: node.description,
+      assignee_agent_id: node.assignee_agent_id ?? undefined,
+      current_attempt_id: node.current_attempt_id ?? undefined,
+      status: taskStatusFromPlanNode(node, rootGoal),
+      metadata: {
+        ...node.metadata,
+        source_plan_id: plan.id,
+        source_plan_node_id: node.id,
+        source_plan_node_kind: node.kind,
+        source_plan_node_execution: node.execution,
+        source_plan_node_intent: node.intent,
+        source_plan_projection: true,
+        source_plan_node_only: !node.workspace_task_id,
+        ...(isRootGoal
+          ? {
+              task_role: 'goal_root',
+              goal_health: rootGoal?.goal_health,
+              remediation_status: rootGoal?.remediation_status,
+              goal_evidence: rootGoal?.evidence_grade
+                ? { verification_grade: rootGoal.evidence_grade }
+                : undefined,
+            }
+          : {}),
+      },
+      created_at: node.created_at,
+      updated_at: node.updated_at ?? undefined,
+      completed_at:
+        node.completed_at ??
+        (isRootGoal && rootGoal?.completed_at ? rootGoal.completed_at : undefined),
+    };
+  });
 }
 
 export function calculateWorkspaceTaskCompletionRatio(tasks: WorkspaceTask[]): number {

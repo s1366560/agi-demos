@@ -13,7 +13,7 @@ import {
   Plus,
 } from 'lucide-react';
 
-import { useWorkspaceAgents, useWorkspaceTasks } from '@/stores/workspace';
+import { useWorkspaceAgents } from '@/stores/workspace';
 
 import { workspaceAutonomyService, workspaceTaskService } from '@/services/workspaceService';
 
@@ -38,7 +38,7 @@ import type {
 
 interface TaskBoardProps {
   workspaceId: string;
-  tasks?: WorkspaceTask[] | undefined;
+  tasks: WorkspaceTask[];
   showAutonomyAction?: boolean;
 }
 
@@ -146,12 +146,11 @@ const COLUMN_CONFIG: {
 
 export const TaskBoard: React.FC<TaskBoardProps> = ({
   workspaceId,
-  tasks: directTasks,
+  tasks,
   showAutonomyAction = true,
 }) => {
   const { t } = useTranslation();
   const message = useLazyMessage();
-  const storeTasks = useWorkspaceTasks();
   const agents = useWorkspaceAgents();
 
   const [showArchived, setShowArchived] = useState(false);
@@ -171,10 +170,10 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
   const [experienceError, setExperienceError] = useState<string | null>(null);
 
   const workspaceTasks = useMemo(() => {
-    return (directTasks ?? storeTasks)
+    return tasks
       .filter((task) => task.workspace_id === workspaceId)
       .filter((task) => showArchived || !task.archived_at);
-  }, [directTasks, showArchived, storeTasks, workspaceId]);
+  }, [showArchived, tasks, workspaceId]);
 
   const columns = useMemo(() => {
     const grouped: Record<WorkspaceTaskStatus, typeof workspaceTasks> = {
@@ -532,10 +531,11 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                     colTasks.map((task) => {
                       const isDone = task.status === 'done';
                       const isBlocked = task.status === 'blocked';
+                      const taskMetadata = task.metadata;
+                      const isPlanProjection = taskMetadata.source_plan_projection === true;
+                      const canOpenTaskDetails = taskMetadata.source_plan_node_only !== true;
                       const { isRootGoal, goalHealth, remediationStatus, verificationGrade } =
-                        getRootGoalDisplayState(
-                          task.metadata as Record<string, unknown> | undefined
-                        );
+                        getRootGoalDisplayState(taskMetadata);
                       const {
                         pending,
                         reportTypeLabel,
@@ -674,8 +674,12 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                                   'workspaceDetail.taskBoard.openDetails',
                                   'Open task details'
                                 )}
+                                disabled={!canOpenTaskDetails}
                                 className="h-6 w-6 shrink-0 text-text-muted hover:text-text-primary dark:text-text-muted dark:hover:text-text-inverse"
                                 onClick={() => {
+                                  if (!canOpenTaskDetails) {
+                                    return;
+                                  }
                                   setSelectedTaskId(task.id);
                                 }}
                               />
@@ -769,6 +773,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                               size="small"
                               value={resolveAssignedAgentValue(task)}
                               options={agentOptions}
+                              disabled={isPlanProjection}
                               onChange={(value) => {
                                 void handleAgentAssign(task.id, value);
                               }}
@@ -780,6 +785,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                               size="small"
                               value={task.status}
                               options={statusOptions}
+                              disabled={isPlanProjection}
                               onChange={(value) => {
                                 void handleStatusChange(task.id, value as WorkspaceTaskStatus);
                               }}

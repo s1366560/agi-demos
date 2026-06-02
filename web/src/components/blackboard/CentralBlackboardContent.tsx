@@ -304,6 +304,8 @@ export function CentralBlackboardContent({
               workspaceId={workspaceId}
               tenantId={tenantId}
               projectId={projectId}
+              plan={statsPlan}
+              rootGoal={statsRootGoal}
               onDeleteObjective={(objectiveId) => {
                 void actions.handleDeleteObjective(objectiveId);
               }}
