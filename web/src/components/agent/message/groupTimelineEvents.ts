@@ -81,6 +81,87 @@ const SUBAGENT_EVENT_TYPES = new Set([
   'background_launched',
 ]);
 
+const HITL_REQUEST_EVENT_TYPES = new Set([
+  'clarification_asked',
+  'decision_asked',
+  'env_var_requested',
+  'permission_asked',
+  'permission_requested',
+]);
+
+const HITL_RESPONSE_TO_REQUEST_EVENT_TYPE: Record<string, string> = {
+  clarification_answered: 'clarification_asked',
+  decision_answered: 'decision_asked',
+  env_var_provided: 'env_var_requested',
+  permission_replied: 'permission_asked',
+  permission_granted: 'permission_asked',
+};
+
+function getRequestId(event: TimelineEvent): string | undefined {
+  const value = (event as unknown as Record<string, unknown>).requestId;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function isAnsweredHITLEvent(event: TimelineEvent, timeline: TimelineEvent[]): boolean {
+  const record = event as unknown as Record<string, unknown>;
+  if (record.answered === true) return true;
+
+  const requestId = getRequestId(event);
+  if (!requestId) return false;
+
+  return timeline.some((candidate) => {
+    const requestType = HITL_RESPONSE_TO_REQUEST_EVENT_TYPE[candidate.type];
+    return requestType === event.type && getRequestId(candidate) === requestId;
+  });
+}
+
+function getHITLStepOutput(event: TimelineEvent): Record<string, unknown> {
+  const record = event as unknown as Record<string, unknown>;
+  if (event.type === 'env_var_requested') {
+    const values = record.values;
+    const providedVariables = record.providedVariables;
+    return {
+      status: 'submitted',
+      variables: Array.isArray(providedVariables)
+        ? providedVariables
+        : values && typeof values === 'object' && !Array.isArray(values)
+          ? Object.keys(values)
+          : undefined,
+    };
+  }
+  if (event.type === 'permission_asked' || event.type === 'permission_requested') {
+    return { status: record.granted === false ? 'denied' : 'submitted' };
+  }
+  if (event.type === 'decision_asked') {
+    return { status: 'submitted', decision: record.decision };
+  }
+  return { status: 'submitted', answer: record.answer };
+}
+
+function findHITLRequestForAct(
+  timeline: TimelineEvent[],
+  actIndex: number
+): TimelineEvent | undefined {
+  for (let i = actIndex + 1; i < timeline.length; i++) {
+    const candidate = timeline[i];
+    if (!candidate) continue;
+
+    if (candidate.type === 'observe') continue;
+    if (candidate.type === 'act') return undefined;
+    if (HITL_REQUEST_EVENT_TYPES.has(candidate.type)) return candidate;
+    if (SUBAGENT_EVENT_TYPES.has(candidate.type)) return undefined;
+    if (
+      candidate.type === 'assistant_message' ||
+      candidate.type === 'user_message' ||
+      candidate.type === 'text_end'
+    ) {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
 export function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
   const result: GroupedItem[] = [];
   let currentSteps: TimelineStep[] = [];
@@ -154,12 +235,17 @@ export function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
         }
       }
 
+      const hitlRequest = obs ? undefined : findHITLRequestForAct(timeline, i);
+      const hitlAnswered = hitlRequest ? isAnsweredHITLEvent(hitlRequest, timeline) : false;
+
       const step: TimelineStep = {
         id: act.execution_id || act.id || `step-${String(i)}`,
         toolName: act.toolName || 'unknown',
-        status: obs ? (obs.isError ? 'error' : 'success') : 'running',
+        status: obs ? (obs.isError ? 'error' : 'success') : hitlAnswered ? 'success' : 'running',
         input: act.toolInput,
-        output: obs?.toolOutput,
+        output:
+          obs?.toolOutput ??
+          (hitlAnswered && hitlRequest ? getHITLStepOutput(hitlRequest) : undefined),
         isError: obs?.isError,
         duration: obs && act.timestamp && obs.timestamp ? obs.timestamp - act.timestamp : undefined,
         todoTitle: todoTitleById.get(getTodoId(act.toolInput) ?? ''),

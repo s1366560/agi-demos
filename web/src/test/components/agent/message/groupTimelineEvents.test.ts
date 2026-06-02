@@ -111,3 +111,68 @@ describe('groupTimelineEvents SubAgent grouping', () => {
     expect(grouped[1]?.kind).toBe('subagent');
   });
 });
+
+describe('groupTimelineEvents HITL tool completion', () => {
+  const createEnvVarTimeline = (answered: boolean): TimelineEvent[] =>
+    [
+      {
+        id: 'act-request-env',
+        type: 'act',
+        timestamp: 1,
+        eventTimeUs: 1_000,
+        eventCounter: 0,
+        toolName: 'Request Env Var',
+        toolInput: {
+          tool_name: 'bash',
+          fields: [
+            {
+              variable_name: 'GITHUB_TOKEN',
+              display_name: 'GitHub Personal Access Token',
+            },
+          ],
+        },
+      },
+      {
+        id: 'env-requested',
+        type: 'env_var_requested',
+        timestamp: 2,
+        eventTimeUs: 2_000,
+        eventCounter: 0,
+        requestId: 'hitl-env-1',
+        toolName: 'bash',
+        fields: [
+          {
+            variable_name: 'GITHUB_TOKEN',
+            display_name: 'GitHub Personal Access Token',
+            is_required: true,
+            is_secret: true,
+          },
+        ],
+        message: 'Please provide a token',
+        answered,
+        values: answered ? { GITHUB_TOKEN: 'redacted' } : undefined,
+      },
+    ] as unknown as TimelineEvent[];
+
+  it('keeps a HITL tool call running until the request is answered', () => {
+    const grouped = groupTimelineEvents(createEnvVarTimeline(false));
+
+    expect(grouped[0]?.kind).toBe('timeline');
+    if (grouped[0]?.kind !== 'timeline') return;
+    expect(grouped[0].steps).toHaveLength(1);
+    expect(grouped[0].steps[0]?.status).toBe('running');
+  });
+
+  it('marks a HITL tool call successful after the request is answered', () => {
+    const grouped = groupTimelineEvents(createEnvVarTimeline(true));
+
+    expect(grouped[0]?.kind).toBe('timeline');
+    if (grouped[0]?.kind !== 'timeline') return;
+    expect(grouped[0].steps).toHaveLength(1);
+    expect(grouped[0].steps[0]?.status).toBe('success');
+    expect(grouped[0].steps[0]?.output).toEqual({
+      status: 'submitted',
+      variables: ['GITHUB_TOKEN'],
+    });
+  });
+});
