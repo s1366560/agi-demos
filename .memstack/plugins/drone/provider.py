@@ -50,6 +50,11 @@ _DOCKER_BUILD_STEP_SERVICE_RE = re.compile(
     re.I,
 )
 _DOCKER_HOST_TCP_RE = re.compile(r"\bDOCKER_HOST\s*=\s*tcp://", re.I)
+_DRONE_SELF_CLEANUP_RE = re.compile(
+    r"docker\s+ps\b[\s\S]{0,240}grep\s+-E\b[^\n]*\^\\?\([^'\"]*drone-"
+    r"[\s\S]{0,240}(?:xargs\b[\s\S]{0,160})?docker\s+rm\s+-f\b",
+    re.I,
+)
 _HOST_DOCKER_SOCKET = "/var/run/docker.sock"
 _DOCKER_DEPLOY_CONTAINER_RUNNING_RE = re.compile(
     r"\bcontainer\s+[a-z0-9_.-]+\s+is\s+running\b",
@@ -1726,6 +1731,14 @@ def _host_docker_deploy_step_boundary_issue(
                 f"{step_name!r} sets DOCKER_HOST=tcp://... but this provider boundary "
                 "uses the mounted Unix socket /var/run/docker.sock."
             )
+        if _drone_step_removes_drone_runner_containers(step):
+            return (
+                "Drone build .drone.yml preflight failed; host Docker deploy step "
+                f"{step_name!r} bulk-removes containers matching `drone-*`. The Drone "
+                "Docker runner step container also uses that prefix, so the deploy step can "
+                "delete itself and exit 137. Remove the `drone-*` cleanup target and only "
+                "remove explicit app or sidecar container names."
+            )
     return None
 
 
@@ -1777,6 +1790,14 @@ def _drone_step_sets_tcp_docker_host(step: Mapping[str, Any]) -> bool:
     elif isinstance(raw_environment, list):
         values.extend(str(item) for item in raw_environment)
     return any(_DOCKER_HOST_TCP_RE.search(value) is not None for value in values)
+
+
+def _drone_step_removes_drone_runner_containers(step: Mapping[str, Any]) -> bool:
+    raw_commands = step.get("commands")
+    if not isinstance(raw_commands, list):
+        return False
+    command_text = "\n".join(command for command in raw_commands if isinstance(command, str))
+    return _DRONE_SELF_CLEANUP_RE.search(command_text) is not None
 
 
 def _drone_yaml_defines_dind_service(parsed: object) -> bool:

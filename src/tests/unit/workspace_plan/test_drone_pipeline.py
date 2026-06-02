@@ -651,6 +651,66 @@ steps:
 
 
 @pytest.mark.asyncio
+async def test_drone_pipeline_provider_preflights_drone_self_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    (tmp_path / ".drone.yml").write_text(
+        """
+kind: pipeline
+type: docker
+name: workspace-ci
+steps:
+  - name: deploy
+    image: docker:27-cli
+    volumes:
+      - name: docker-sock
+        path: /var/run/docker.sock
+    commands:
+      - docker ps -a --format '{{.Names}}' | grep -E '^(my-evo-|workspace-|drone-)' | xargs -r docker rm -f 2>/dev/null || true
+      - docker run -d --name my-evo-app my-evo:drone-docker-e2e
+volumes:
+  - name: docker-sock
+    host:
+      path: /var/run/docker.sock
+""".lstrip(),
+        encoding="utf-8",
+    )
+    client = _FakeDroneClient({"number": 42, "status": "success"})
+
+    result = await DronePipelineProvider(client=client, sleep=lambda _: _noop()).run(
+        PipelineContractSpec(
+            provider=DRONE_PROVIDER,
+            code_root=str(tmp_path),
+            provider_config={"repo": "octo/hello", "branch": "main"},
+            deploy=PipelineDeploySpec(
+                enabled=True,
+                mode="docker",
+                docker={
+                    "runner_docker_socket": "/var/run/docker.sock",
+                    "runner_docker_socket_volume": "docker-sock",
+                    "deploy_services": [
+                        {
+                            "service_id": "my-evo-app",
+                            "container_name": "my-evo-app",
+                            "required": True,
+                        },
+                    ],
+                },
+            ),
+        )
+    )
+
+    assert result.status == "failed"
+    assert "bulk-removes containers matching `drone-*`" in result.reason
+    assert "exit 137" in result.reason
+    assert "drone:configuration_failed" in result.evidence_refs
+    assert client.created == []
+
+
+@pytest.mark.asyncio
 async def test_drone_pipeline_provider_accepts_host_docker_socket_boundary(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Any,

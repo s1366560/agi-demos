@@ -75,6 +75,11 @@ _PARTIAL_TEST_SUMMARY_CUE_PATTERN = re.compile(
     r"\b(comprehensive|e2e|pass(?:ed|ing)?|results?|summary|suite)\b",
     re.I,
 )
+_DRONE_SELF_CLEANUP_RE = re.compile(
+    r"docker\s+ps\b[\s\S]{0,240}grep\s+-E\b[^\n]*\^\\?\([^'\"]*drone-"
+    r"[\s\S]{0,240}(?:xargs\b[\s\S]{0,160})?docker\s+rm\s+-f\b",
+    re.I,
+)
 _FAILED_TEST_DISPOSITION_PREFIXES = (
     "contract_disposition:",
     "failed_test_disposition:",
@@ -1020,7 +1025,7 @@ def _recent_git_status_from_results(results: list[CriterionResult]) -> str:
     return ""
 
 
-def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
+def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912, PLR0915
     ctx: VerificationContext,
     result: WorkspaceVerificationJudgeResult,
     results: list[CriterionResult],
@@ -1113,6 +1118,36 @@ def _coerce_judge_result_for_required_context(  # noqa: C901, PLR0911, PLR0912
             next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
             repair_brief=result.repair_brief,
             feedback_items=(deploy_semantics_feedback, *result.feedback_items),
+            confidence=max(result.confidence, 0.9),
+        )
+    self_cleanup_feedback = _drone_docker_deploy_self_cleanup_feedback(results)
+    if self_cleanup_feedback is not None:
+        return WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale=(
+                "Drone docker-deploy exited 137 because the deploy cleanup command can remove "
+                "the current Drone runner step container. This is a `.drone.yml` defect, not "
+                f"an infrastructure retry. Judge rationale: {result.rationale}"
+            ),
+            failed_criteria=(
+                "ci_pipeline",
+                "drone_docker_deploy_self_cleanup",
+                *result.failed_criteria,
+            ),
+            satisfied_guard_failures=result.satisfied_guard_failures,
+            required_next_action=(
+                "Fix `.drone.yml` docker-deploy cleanup so it never removes containers "
+                "matching `drone-*`. The Drone Docker runner step container uses that prefix, "
+                "so commands like `docker ps -a --format '{{.Names}}' | grep -E "
+                "'^(...|drone-)' | xargs docker rm -f` can delete the running deploy step "
+                "and produce exit 137. Remove the `drone-*` cleanup target and delete only "
+                "explicit app/dependency sidecar container names before `docker run`. Preserve "
+                "host Docker socket mounts, deploy-local image tags, sidecars, runtime env, "
+                "health-log diagnostics, commit, and rerun Drone."
+            ),
+            next_action_kind=WorkspaceVerificationNextActionKind.RETRY_SAME_NODE,
+            repair_brief=result.repair_brief,
+            feedback_items=(self_cleanup_feedback, *result.feedback_items),
             confidence=max(result.confidence, 0.9),
         )
     external_registry_feedback = _drone_external_registry_transient_failure_feedback(results)
@@ -2141,6 +2176,35 @@ def _drone_docker_deploy_container_name_conflict_feedback(
             "drone_deploy:retry_cleanup",
         ),
         failure_signature="drone-docker-deploy-container-name-conflict",
+    )
+
+
+def _drone_docker_deploy_self_cleanup_feedback(
+    results: list[CriterionResult],
+) -> WorkspaceVerificationFeedbackItem | None:
+    text = "\n".join(result.message for result in results if result.message)
+    normalized = text.lower()
+    if not (
+        "failing stage" in normalized
+        and "deploy" in normalized
+        and ("exited 137" in normalized or "exit 137" in normalized or "sigkill" in normalized)
+        and _DRONE_SELF_CLEANUP_RE.search(text)
+    ):
+        return None
+    return WorkspaceVerificationFeedbackItem(
+        target_layer=WorkspaceVerificationFeedbackTargetLayer.WORKER,
+        feedback_kind=WorkspaceVerificationFeedbackKind.PRODUCT_CODE_FAILURE,
+        severity=WorkspaceVerificationFeedbackSeverity.BLOCKING,
+        recommended_action=WorkspaceVerificationRecommendedAction.RETRY_WORKER,
+        summary=(
+            "The deploy cleanup command matches `drone-*`, which can delete the current Drone "
+            "Docker runner step container and cause exit 137."
+        ),
+        evidence_refs=(
+            "drone_error:deploy_self_cleanup_137",
+            "drone_deploy:remove_drone_prefix_cleanup",
+        ),
+        failure_signature="drone-docker-deploy-self-cleanup-137",
     )
 
 

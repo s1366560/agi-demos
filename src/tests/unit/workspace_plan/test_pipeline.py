@@ -1948,6 +1948,60 @@ async def test_verifier_routes_deploy_container_name_conflict_to_worker() -> Non
 
 
 @pytest.mark.asyncio
+async def test_verifier_routes_deploy_self_cleanup_137_to_worker() -> None:
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.RETRY_INFRASTRUCTURE,
+            rationale="deploy step exited 137",
+            failed_criteria=("ci_pipeline",),
+            required_next_action="retry infrastructure",
+            confidence=0.8,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "pipeline_last_summary": (
+                "Drone build s1366560/my-evo#422 finished with status success; "
+                "failing stage workspace-ci/deploy exited 137; "
+                "+ docker ps -a --format '{{.Names}}' | grep -E "
+                "'^(evomap-|my-evo-|workspace-|drone-)' | xargs -r docker rm -f "
+                "2>/dev/null || true"
+            ),
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            stdout="worker completed",
+        )
+    )
+
+    judge_result = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "workspace_verification_judge"
+    )
+    feedback = judge_result.criterion.spec["feedback_items"][0]
+    assert not report.passed
+    assert judge_result.criterion.spec["judge_verdict"] == "needs_rework"
+    assert judge_result.criterion.spec["next_action_kind"] == "retry_same_node"
+    assert "never removes containers matching `drone-*`" in judge_result.criterion.spec[
+        "required_next_action"
+    ]
+    assert feedback["target_layer"] == "worker"
+    assert feedback["failure_signature"] == "drone-docker-deploy-self-cleanup-137"
+
+
+@pytest.mark.asyncio
 async def test_verifier_routes_deploy_network_exists_to_worker() -> None:
     judge = _FakeVerificationJudge(
         WorkspaceVerificationJudgeResult(
