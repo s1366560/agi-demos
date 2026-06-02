@@ -923,18 +923,15 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         )
 
         action = decision.action
-        if (
-            action
-            in {
-                WorkspaceSupervisorDecisionAction.CREATE_REPAIR_NODE,
-                WorkspaceSupervisorDecisionAction.MARK_BLOCKED_HUMAN,
-                WorkspaceSupervisorDecisionAction.REPLAN_NODE,
-                WorkspaceSupervisorDecisionAction.RETRY_SAME_NODE,
-            }
-            and (
-                _should_request_pipeline_from_report(node, report)
-                or _decision_requests_platform_pipeline(decision, report)
-            )
+        if action in {
+            WorkspaceSupervisorDecisionAction.ACCEPT_NODE,
+            WorkspaceSupervisorDecisionAction.CREATE_REPAIR_NODE,
+            WorkspaceSupervisorDecisionAction.MARK_BLOCKED_HUMAN,
+            WorkspaceSupervisorDecisionAction.REPLAN_NODE,
+            WorkspaceSupervisorDecisionAction.RETRY_SAME_NODE,
+        } and (
+            _should_request_pipeline_from_report(node, report)
+            or _decision_requests_platform_pipeline(decision, report)
         ):
             evidenced_node = _node_with_verification_evidence(
                 node,
@@ -961,9 +958,10 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
             return True, 0, 0
 
         if action is WorkspaceSupervisorDecisionAction.ACCEPT_NODE:
-            accepted_node = _node_with_verification_evidence(
+            accepted_node = _node_with_supervisor_decision_disposition(
                 node,
                 report,
+                decision=decision,
                 artifacts=ctx.artifacts,
             )
             plan.replace_node(

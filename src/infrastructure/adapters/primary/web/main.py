@@ -246,11 +246,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     except Exception:
         logger.exception("Failed to start skill evolution plugin")
 
+    # Start Workspace Plan V2 durable outbox worker before recovery sweeps so
+    # recovered/queued plan jobs keep draining even if a sweep performs slow
+    # runtime reconciliation.
+    await initialize_workspace_plan_outbox_worker(redis_client=cast(Redis | None, redis_client))
+
     # Start attempt recovery service (restart-safe orphaned-attempt watchdog)
     await initialize_attempt_recovery()
-
-    # Start Workspace Plan V2 durable outbox worker
-    await initialize_workspace_plan_outbox_worker(redis_client=cast(Redis | None, redis_client))
 
     # Start Blackboard transactional outbox dispatcher
     await initialize_blackboard_outbox_dispatcher(redis_client=cast(Redis | None, redis_client))

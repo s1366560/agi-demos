@@ -4046,6 +4046,7 @@ async def test_publish_git_ref_to_source_control_uses_temp_worktree_when_candida
 
 
 def test_commit_ref_token_accepts_hash_prefix_and_rejects_notes() -> None:
+    assert _commit_ref_token("abc123") == "abc123"
     assert _commit_ref_token("c459cc73 (second evidence commit)") == "c459cc73"
     assert _commit_ref_token("2055a373e2dfecf90f03c687fcecffa8be330746") == (
         "2055a373e2dfecf90f03c687fcecffa8be330746"
@@ -4545,6 +4546,116 @@ async def test_accepted_terminal_attempt_integrates_worktree_commit(
     assert event.payload_json["worktree_path"] == (
         "/workspace/.memstack/worktrees/attempt-integrate"
     )
+
+
+@pytest.mark.asyncio
+async def test_accepted_terminal_attempt_skips_invalid_commit_ref_for_integration(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    workspace = (
+        await db_session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "workspace-1"))
+    ).scalar_one()
+    workspace.metadata_json = {"code_context": {"sandbox_code_root": "/workspace/my-evo"}}
+    task = WorkspaceTaskModel(
+        id="task-integrate-valid-ref",
+        workspace_id="workspace-1",
+        title="Integrate accepted commit with noisy evidence",
+        description="Project accepted worktree commit when early evidence contains a bad SHA.",
+        created_by="worker-user-1",
+        status="in_progress",
+        priority=0,
+        metadata_json={
+            AUTONOMY_SCHEMA_VERSION_KEY: 1,
+            ROOT_GOAL_TASK_ID: "root-task-1",
+            "feature_checkpoint": {
+                "feature_id": "feature-integrate-valid-ref",
+                "worktree_path": "${sandbox_code_root}/../.memstack/worktrees/attempt-integrate",
+                "branch_name": "workspace/node-integrate-attempt",
+            },
+        },
+    )
+    task_id = task.id
+    invalid_commit_ref = "68413fe68413fe68413fe68413fe68413fe68413fe"
+    valid_commit_ref = "68413fe"
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-integrate-valid-ref",
+        workspace_task_id=task.id,
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=1,
+        status="accepted",
+        conversation_id="conversation-integrate-valid-ref",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_summary="done",
+        candidate_artifacts_json=[
+            f"commit_ref:{invalid_commit_ref}",
+            "changed_file:src/example.py",
+        ],
+        candidate_verifications_json=[
+            f"commit_ref:{valid_commit_ref}",
+            "test_run:pytest",
+        ],
+    )
+    db_session.add_all([task, attempt])
+    await db_session.flush()
+
+    commands: list[str] = []
+
+    class FakeRunner:
+        def __init__(self, *, project_id: str, tenant_id: str) -> None:
+            assert project_id == "worker-project-1"
+            assert tenant_id == "worker-tenant-1"
+
+        async def run_command(self, command: str, *, timeout: int) -> dict[str, object]:
+            assert timeout == 120
+            commands.append(command)
+            return {"exit_code": 0, "stdout": "status=merged\ngit_head=def5678\n", "stderr": ""}
+
+    monkeypatch.setattr(outbox_handlers, "_WorkspaceSandboxCommandRunner", FakeRunner)
+    node = PlanNode(
+        id="node-integrate-valid-ref",
+        plan_id="worker-plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Integrate accepted commit with noisy evidence",
+        workspace_task_id=task.id,
+        current_attempt_id=attempt.id,
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-integrate-valid-ref",
+            worktree_path="${sandbox_code_root}/../.memstack/worktrees/attempt-integrate",
+            branch_name="workspace/node-integrate-attempt",
+        ),
+    )
+
+    result = await outbox_handlers._project_accepted_terminal_attempt_to_task(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=node,
+        attempt=attempt,
+        summary="accepted",
+        now=datetime.now(UTC),
+    )
+
+    assert result["worktree_integration_status"] == "merged"
+    assert result["worktree_integration_commit_ref"] == valid_commit_ref
+    assert commands
+    assert f"CMT={valid_commit_ref}" in commands[0]
+    assert invalid_commit_ref not in commands[0]
+    db_session.expire_all()
+    projected_task = await db_session.get(WorkspaceTaskModel, task_id)
+    assert projected_task is not None
+    assert projected_task.metadata_json["feature_checkpoint"]["commit_ref"] == valid_commit_ref
+    event = (
+        await db_session.execute(
+            select(WorkspacePlanEventModel).where(
+                WorkspacePlanEventModel.event_type == "accepted_worktree_integrated"
+            )
+        )
+    ).scalar_one()
+    assert event.payload_json["commit_ref"] == valid_commit_ref
 
 
 @pytest.mark.asyncio

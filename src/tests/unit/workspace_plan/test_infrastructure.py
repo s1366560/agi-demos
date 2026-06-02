@@ -4325,6 +4325,128 @@ class TestSupervisorTick:
         node = reloaded.nodes[PlanNodeId("a")]
         assert node.intent is TaskIntent.DONE
         assert node.execution is TaskExecution.IDLE
+        assert node.metadata["last_supervisor_decision_action"] == "accept_node"
+        assert node.metadata["last_supervisor_decision_rationale"] == (
+            "verifier failure is already resolved by the linked attempt"
+        )
+
+    async def test_tick_agent_supervisor_accept_decision_requests_pipeline_for_gate_gap(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={
+                    "pipeline_required": True,
+                    "pipeline_status": "failed",
+                    "pipeline_gate_status": "failed",
+                },
+            )
+        )
+        await repo.save(plan)
+
+        class _PipelineGateGapVerifier:
+            async def verify(self, ctx: VerificationContext) -> VerificationReport:
+                return VerificationReport(
+                    node_id=ctx.node.id,
+                    attempt_id=ctx.attempt_id,
+                    results=(
+                        CriterionResult(
+                            criterion=AcceptanceCriterion(
+                                kind=CriterionKind.CI_PIPELINE,
+                                spec={"name": "ci_pipeline"},
+                                required=True,
+                            ),
+                            passed=False,
+                            confidence=1.0,
+                            message="missing harness-native CI pipeline evidence",
+                        ),
+                        CriterionResult(
+                            criterion=AcceptanceCriterion(
+                                kind=CriterionKind.CUSTOM,
+                                spec={
+                                    "name": "workspace_verification_judge",
+                                    "judge_verdict": "needs_rework",
+                                    "next_action_kind": "retry_same_node",
+                                    "failed_criteria": [
+                                        "Drone CI status=success evidence missing",
+                                        "memstack-source-publish/main not fast-forwarded",
+                                    ],
+                                },
+                                required=True,
+                            ),
+                            passed=False,
+                            confidence=0.8,
+                            message=(
+                                "platform harness must publish the worktree commit to "
+                                "memstack-source-publish/main and re-trigger Drone"
+                            ),
+                        ),
+                    ),
+                )
+
+        provider = _StaticSupervisorDecisionProvider(
+            WorkspaceSupervisorDecisionResult(
+                action=WorkspaceSupervisorDecisionAction.ACCEPT_NODE,
+                rationale="the implementation is correct but Drone evidence is missing",
+                confidence=0.88,
+            )
+        )
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("pipeline request should not redispatch in the same tick")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid, node=node, attempt_id=node.current_attempt_id
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_PipelineGateGapVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            supervisor_decision_provider=provider,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        assert report.nodes_completed == 0
+        pipeline_events = [event for event in events if event[0] == "pipeline_run_requested"]
+        assert len(pipeline_events) == 1
+        assert pipeline_events[0][2]["reason"] == "supervisor_decision_platform_harness_pipeline"
+        assert pipeline_events[0][2]["overrode_action"] == "accept_node"
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.intent is TaskIntent.IN_PROGRESS
+        assert node.metadata["pipeline_status"] == "requested"
+        assert node.metadata["pipeline_gate_status"] == "requested"
 
     async def test_tick_agent_supervisor_pipeline_decision_emits_pipeline_event(self) -> None:
         repo = InMemoryPlanRepository()

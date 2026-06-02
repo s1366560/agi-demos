@@ -1722,7 +1722,7 @@ async def _project_accepted_terminal_attempt_to_task(
     if task is None or task.workspace_id != workspace_id:
         return {}
     evidence_refs = _accepted_attempt_evidence_refs(attempt)
-    commit_ref = _first_prefixed_ref(evidence_refs, "commit_ref:")
+    commit_ref = _first_valid_commit_ref(evidence_refs)
     if not commit_ref and not _accepted_attempt_has_same_verified_no_output_projection(
         node, attempt
     ):
@@ -1784,6 +1784,15 @@ def _first_prefixed_ref(refs: Iterable[str], prefix: str) -> str | None:
         artifact_prefix = f"artifact:{prefix}"
         if ref.startswith(artifact_prefix):
             return ref.removeprefix(artifact_prefix)
+    return None
+
+
+def _first_valid_commit_ref(refs: Iterable[str]) -> str | None:
+    for ref in refs:
+        value = _prefixed_ref(ref, "commit_ref:")
+        token = _commit_ref_token(value)
+        if token:
+            return token
     return None
 
 
@@ -2279,7 +2288,7 @@ def _commit_ref_token(value: object) -> str | None:
     if not isinstance(value, str):
         return None
     token = value.strip().split(maxsplit=1)[0] if value.strip() else ""
-    if re.fullmatch(r"[0-9A-Fa-f]{7,40}", token):
+    if re.fullmatch(r"[0-9A-Fa-f]{6,40}", token):
         return token
     return None
 
@@ -2482,8 +2491,9 @@ def _attempt_commit_refs(
     refs: list[str] = []
     for ref in _accepted_attempt_evidence_refs(attempt):
         value = _prefixed_ref(ref, "commit_ref:")
-        if value:
-            refs.append(value)
+        token = _commit_ref_token(value)
+        if token:
+            refs.append(token)
     return tuple(dict.fromkeys(refs))
 
 
