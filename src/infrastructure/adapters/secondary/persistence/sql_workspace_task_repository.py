@@ -1,6 +1,6 @@
 """SQLAlchemy repository for WorkspaceTask persistence."""
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.workspace_task import (
@@ -27,6 +27,20 @@ class SqlWorkspaceTaskRepository(
 
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
+
+    async def acquire_root_reconciliation_lock(self, root_goal_task_id: str) -> None:
+        """Serialize root-goal progress projection for a single root task."""
+        if not root_goal_task_id:
+            raise ValueError("root_goal_task_id cannot be empty")
+        bind = self._session.get_bind()
+        dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
+        if dialect_name != "postgresql":
+            return
+        with self._session.no_autoflush:
+            _ = await self._session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+                {"lock_key": f"workspace_root_progress:{root_goal_task_id}"},
+            )
 
     async def find_by_workspace(
         self,
@@ -73,6 +87,39 @@ class SqlWorkspaceTaskRepository(
                 == root_goal_task_id
             )
             .where(WorkspaceTaskModel.archived_at.is_(None))
+            .order_by(WorkspaceTaskModel.created_at.asc())
+        )
+        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        rows = result.scalars().all()
+        return [t for row in rows if (t := self._to_domain(row)) is not None]
+
+    async def find_current_plan_children_by_root_goal_task_id(
+        self,
+        workspace_id: str,
+        root_goal_task_id: str,
+    ) -> list[WorkspaceTask]:
+        """List root children whose durable plan node still exists."""
+        from src.infrastructure.adapters.secondary.persistence.models import PlanNodeModel
+
+        query = (
+            select(WorkspaceTaskModel)
+            .join(
+                PlanNodeModel,
+                PlanNodeModel.workspace_task_id == WorkspaceTaskModel.id,
+            )
+            .where(WorkspaceTaskModel.workspace_id == workspace_id)
+            .where(
+                WorkspaceTaskModel.metadata_json["root_goal_task_id"].as_string()
+                == root_goal_task_id
+            )
+            .where(WorkspaceTaskModel.archived_at.is_(None))
+            .where(
+                PlanNodeModel.plan_id == WorkspaceTaskModel.metadata_json["workspace_plan_id"].as_string()
+            )
+            .where(
+                PlanNodeModel.id
+                == WorkspaceTaskModel.metadata_json["workspace_plan_node_id"].as_string()
+            )
             .order_by(WorkspaceTaskModel.created_at.asc())
         )
         result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))

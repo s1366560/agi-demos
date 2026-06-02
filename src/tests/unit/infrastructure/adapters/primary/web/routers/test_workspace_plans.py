@@ -460,6 +460,63 @@ async def test_get_workspace_plan_snapshot_returns_plan_blackboard_and_outbox(
 
 
 @pytest.mark.asyncio
+async def test_get_workspace_plan_snapshot_lightweight_mode_is_read_only(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-lightweight"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+
+    async def fail_if_worker_started(_request: Request) -> None:
+        raise AssertionError("lightweight snapshot must not start the outbox worker")
+
+    async def fail_if_recovery_runs(**_kwargs: object) -> bool:
+        raise AssertionError("lightweight snapshot must not run recovery")
+
+    monkeypatch.setattr(
+        workspace_plans,
+        "_ensure_plan_outbox_worker_running",
+        fail_if_worker_started,
+    )
+    monkeypatch.setattr(
+        workspace_plans,
+        "_recover_stale_attempts_for_snapshot",
+        fail_if_recovery_runs,
+    )
+
+    response = await workspace_plans.get_workspace_plan_snapshot(
+        workspace_id=workspace_id,
+        request=cast(Request, SimpleNamespace()),
+        outbox_limit=0,
+        event_limit=0,
+        include_details=False,
+        recover_stale_attempts=False,
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert workspace_service.calls == [(workspace_id, "plan-api-user")]
+    assert response.plan is not None
+    assert response.plan.id == plan.id
+    assert response.iteration is None
+    assert response.blackboard == []
+    assert response.outbox == []
+    assert response.events == []
+    assert response.iteration_runs == []
+    assert response.run_health is None
+
+
+@pytest.mark.asyncio
 async def test_get_workspace_plan_snapshot_exposes_and_selects_goal_plan_history(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -1235,9 +1292,10 @@ async def test_stale_plan_node_recovery_enqueues_handoff_resume(
     outbox = await SqlWorkspacePlanOutboxRepository(db_session).list_by_workspace(
         workspace_id, limit=5
     )
-    assert outbox[0].event_type == "handoff_resume"
-    assert outbox[0].payload_json["node_id"] == "task-api"
-    assert outbox[0].payload_json["force_schedule"] is True
+    assert outbox[0].event_type == "supervisor_tick"
+    assert outbox[0].payload_json["retry_node_id"] == "task-api"
+    assert outbox[0].payload_json["retry_attempt_id"] == "attempt-stale"
+    assert outbox[0].payload_json["retry_reason"] == "stale_plan_node_no_terminal_worker_report"
     events = await SqlWorkspacePlanEventRepository(db_session).list_recent(
         plan.id,
         limit=5,
@@ -1307,7 +1365,7 @@ async def test_stale_plan_node_recovery_throttles_recent_completed_handoff_resum
         == 1
     )
     outbox = await outbox_repo.list_by_workspace(workspace_id, limit=5)
-    assert [item.payload_json["previous_attempt_id"] for item in outbox[:2]] == [
+    assert [item.payload_json["retry_attempt_id"] for item in outbox[:2]] == [
         "attempt-next",
         "attempt-stale",
     ]
@@ -1504,6 +1562,94 @@ async def test_snapshot_recovery_skips_stale_node_with_live_worker(
     class _Redis:
         async def exists(self, key: str) -> int:
             return 1 if key == "agent:running:conversation-live" else 0
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
+        AsyncMock(return_value=_Redis()),
+    )
+
+    stale_nodes = workspace_plans._stale_running_nodes(plan)
+
+    assert [node.id for node in stale_nodes] == ["task-api"]
+    assert (
+        await workspace_plans._nodes_without_live_worker(
+            session=db_session,
+            nodes=stale_nodes,
+        )
+        == []
+    )
+
+
+@pytest.mark.asyncio
+async def test_snapshot_recovery_skips_dispatched_node_with_live_worker(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-dispatched-live-worker"
+    await _seed_workspace(db_session, workspace_id)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="root-api",
+                workspace_id=workspace_id,
+                title="Root",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            WorkspaceTaskModel(
+                id="workspace-task-api",
+                workspace_id=workspace_id,
+                title="Task",
+                description="",
+                created_by="plan-api-user",
+                status="in_progress",
+                metadata_json={},
+            ),
+            Conversation(
+                id="conversation-dispatched-live",
+                project_id="plan-api-project",
+                tenant_id="plan-api-tenant",
+                user_id="plan-api-user",
+                title="Worker",
+                status="active",
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="attempt-dispatched-live",
+                workspace_task_id="workspace-task-api",
+                root_goal_task_id="root-api",
+                workspace_id=workspace_id,
+                attempt_number=1,
+                status="running",
+                conversation_id="conversation-dispatched-live",
+            ),
+            AgentExecutionEvent(
+                id="event-dispatched-live-heartbeat",
+                conversation_id="conversation-dispatched-live",
+                event_type="context_status",
+                event_data={},
+                event_time_us=1,
+                event_counter=0,
+                created_at=datetime.now(UTC),
+            ),
+        ]
+    )
+    plan = _make_plan(workspace_id)
+    task_node_id = PlanNodeId(value="task-api")
+    plan.nodes[task_node_id] = replace(
+        plan.nodes[task_node_id],
+        execution=TaskExecution.DISPATCHED,
+        updated_at=datetime.now(UTC)
+        - timedelta(seconds=workspace_plans._SNAPSHOT_RECOVERY_DISPATCH_STALE_SECONDS + 1),
+        workspace_task_id="workspace-task-api",
+        current_attempt_id="attempt-dispatched-live",
+    )
+    await db_session.flush()
+
+    class _Redis:
+        async def exists(self, key: str) -> int:
+            return 1 if key == "agent:running:conversation-dispatched-live" else 0
 
     monkeypatch.setattr(
         "src.infrastructure.agent.state.agent_worker_state.get_redis_client",
@@ -2674,10 +2820,10 @@ async def test_snapshot_recovery_resumes_blocked_recovery_node_without_attempt(
         workspace_id,
         limit=5,
     )
-    assert outbox[0].event_type == "handoff_resume"
-    assert outbox[0].payload_json["node_id"] == "task-api"
-    assert outbox[0].payload_json["previous_attempt_id"] is None
-    assert outbox[0].payload_json["reason"] == "retry"
+    assert outbox[0].event_type == "supervisor_tick"
+    assert outbox[0].payload_json["retry_node_id"] == "task-api"
+    assert outbox[0].payload_json["retry_attempt_id"] is None
+    assert outbox[0].payload_json["retry_reason"] == "stale_plan_node_no_terminal_worker_report"
     events = await SqlWorkspacePlanEventRepository(db_session).list_recent(
         plan.id,
         limit=5,

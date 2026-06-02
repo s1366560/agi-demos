@@ -793,6 +793,136 @@ async def test_reconcile_root_progress_prefers_durable_plan_children_over_legacy
 
 
 @pytest.mark.unit
+async def test_reconcile_root_progress_ignores_stale_plan_projected_children() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["api:test"],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+    )
+    current_plan_child = _child_task(
+        task_id="current-plan-child",
+        metadata={
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "workspace_plan_id": "plan-1",
+            "workspace_plan_node_id": "node-current",
+            "lineage_source": "agent",
+        },
+    )
+    stale_plan_child = _child_task(
+        task_id="stale-plan-child",
+        metadata={
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "workspace_plan_id": "plan-1",
+            "workspace_plan_node_id": "node-stale",
+            "lineage_source": "agent",
+        },
+    )
+    stale_plan_child.status = WorkspaceTaskStatus.IN_PROGRESS
+
+    class Repo:
+        async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
+            return root if task_id == root.id else None
+
+        async def find_by_root_goal_task_id(
+            self,
+            workspace_id: str,
+            root_goal_task_id: str,
+        ) -> list[WorkspaceTask]:
+            assert workspace_id == "ws-1"
+            assert root_goal_task_id == "root-1"
+            return [current_plan_child, stale_plan_child]
+
+        async def find_current_plan_children_by_root_goal_task_id(
+            self,
+            workspace_id: str,
+            root_goal_task_id: str,
+        ) -> list[WorkspaceTask]:
+            assert workspace_id == "ws-1"
+            assert root_goal_task_id == "root-1"
+            return [current_plan_child]
+
+        async def save(self, task: WorkspaceTask) -> WorkspaceTask:
+            return task
+
+    reconciled = await reconcile_root_goal_progress(
+        task_repo=Repo(),
+        workspace_id="ws-1",
+        root_goal_task_id="root-1",
+    )
+
+    assert reconciled is not None
+    assert reconciled.metadata["goal_progress_summary"] == (
+        "1/1 child tasks done; 0 in progress; 0 blocked; 0/1 assigned"
+    )
+    assert reconciled.metadata["active_child_task_ids"] == []
+    assert reconciled.metadata["remediation_status"] == "ready_for_completion"
+    assert reconciled.metadata["goal_health"] == "achieved"
+
+
+@pytest.mark.unit
+async def test_reconcile_root_progress_acquires_repo_lock_before_reads() -> None:
+    root = _root_task(
+        {
+            "autonomy_schema_version": 1,
+            "task_role": "goal_root",
+            "goal_origin": "human_defined",
+            "goal_source_refs": ["api:test"],
+            "root_goal_policy": {
+                "mutable_by_agent": True,
+                "completion_requires_external_proof": True,
+            },
+        }
+    )
+    child = _child_task(
+        task_id="plan-child-done",
+        metadata={
+            "task_role": "execution_task",
+            "root_goal_task_id": "root-1",
+            "workspace_plan_id": "plan-1",
+        },
+    )
+    calls: list[str] = []
+
+    class Repo:
+        async def acquire_root_reconciliation_lock(self, root_goal_task_id: str) -> None:
+            calls.append(f"lock:{root_goal_task_id}")
+
+        async def find_by_id(self, task_id: str) -> WorkspaceTask | None:
+            calls.append(f"find:{task_id}")
+            return root if task_id == root.id else None
+
+        async def find_by_root_goal_task_id(
+            self,
+            workspace_id: str,
+            root_goal_task_id: str,
+        ) -> list[WorkspaceTask]:
+            calls.append(f"children:{workspace_id}:{root_goal_task_id}")
+            return [child]
+
+        async def save(self, task: WorkspaceTask) -> WorkspaceTask:
+            calls.append(f"save:{task.id}")
+            return task
+
+    reconciled = await reconcile_root_goal_progress(
+        task_repo=Repo(),
+        workspace_id="ws-1",
+        root_goal_task_id="root-1",
+    )
+
+    assert reconciled is not None
+    assert calls[:3] == ["lock:root-1", "find:root-1", "children:ws-1:root-1"]
+
+
+@pytest.mark.unit
 def test_workspace_type_metadata_can_drive_completion_policy_when_root_has_no_type() -> None:
     root = _root_task(
         {

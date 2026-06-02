@@ -8,6 +8,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
 from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttempt,
     WorkspaceTaskSessionAttemptStatus,
@@ -571,8 +572,46 @@ class TestStartupSweep:
 
         assert remaining == [inactive]
         statement = str(captured["stmt"])
-        assert "workspace_plan_outbox.status = :status_1" in statement
+        assert "workspace_plan_outbox.status IN" in statement
+        assert "workspace_plan_outbox.event_type IN" in statement
         assert "lease_expires_at" not in statement
+
+    @pytest.mark.asyncio
+    async def test_filter_active_outbox_attempts_skips_pending_deferred_launch(self) -> None:
+        captured: dict[str, object] = {}
+
+        class _Result:
+            def all(self) -> list[tuple[str]]:
+                return [("att-pending",)]
+
+        class _Session:
+            async def execute(self, stmt: object) -> _Result:
+                captured["stmt"] = stmt
+                return _Result()
+
+        def _session_cm() -> Any:
+            class _CM:
+                async def __aenter__(self_inner) -> _Session:
+                    return _Session()
+
+                async def __aexit__(self_inner, *_a: object) -> None:
+                    return None
+
+            return _CM()
+
+        service = WorkspaceAttemptRecoveryService(
+            session_factory=_session_cm,
+            apply_report=AsyncMock(),
+            schedule_tick=MagicMock(),
+        )
+
+        active = _make_attempt(attempt_id="att-pending")
+        inactive = _make_attempt(attempt_id="att-idle")
+        remaining = await service._filter_active_outbox_attempts([active, inactive])
+
+        assert remaining == [inactive]
+        statement = str(captured["stmt"])
+        assert "pending" in statement or "POSTCOMPILE" in statement
 
     @pytest.mark.asyncio
     async def test_startup_sweep_drains_bounded_batches(self) -> None:
@@ -619,7 +658,9 @@ class TestStartupSweep:
         enqueue_resume.assert_awaited_once_with(att, RECOVERY_SUMMARY_RESTART, "user-1")
 
     @pytest.mark.asyncio
-    async def test_plan_linked_attempt_resumes_without_fake_worker_report(self) -> None:
+    async def test_plan_linked_attempt_reschedules_supervisor_without_fake_worker_report(
+        self,
+    ) -> None:
         enqueue_resume = AsyncMock()
         saves: list[WorkspaceTaskSessionAttempt] = []
         att = _make_attempt(attempt_id="att-plan", workspace_task_id="task-1")
@@ -645,7 +686,7 @@ class TestStartupSweep:
 
         assert recovered == 1
         apply_report.assert_not_awaited()
-        enqueue_resume.assert_awaited_once_with(att, RECOVERY_SUMMARY_RESTART, "user-1")
+        enqueue_resume.assert_not_awaited()
         schedule_tick.assert_called_once_with("ws-1", "user-1")
         assert len(saves) == 1
         assert saves[0].status == WorkspaceTaskSessionAttemptStatus.BLOCKED
@@ -685,7 +726,8 @@ class TestStartupSweep:
         assert recovered == 1
         cancel_conversation.assert_awaited_once_with("conv-orphan")
         cleanup_attempt_runtime.assert_awaited_once_with(att)
-        enqueue_resume.assert_awaited_once_with(att, RECOVERY_SUMMARY_RESTART, "user-1")
+        enqueue_resume.assert_not_awaited()
+        _schedule_tick.assert_called_once_with("ws-1", "user-1")
 
     @pytest.mark.asyncio
     async def test_startup_sweep_skips_attempt_with_active_local_runtime(self) -> None:
@@ -759,7 +801,8 @@ class TestStartupSweep:
         assert recovered == 1
         cancel_conversation.assert_not_awaited()
         cleanup_attempt_runtime.assert_awaited_once_with(att)
-        enqueue_resume.assert_awaited_once_with(att, RECOVERY_SUMMARY_RESTART, "user-1")
+        enqueue_resume.assert_not_awaited()
+        _schedule_tick.assert_called_once_with("ws-1", "user-1")
 
     @pytest.mark.asyncio
     async def test_paused_plan_linked_attempt_does_not_enqueue_resume_or_tick(self) -> None:
@@ -970,6 +1013,9 @@ class TestStartupSweep:
             cleanup_attempt_runtime=cleanup_attempt_runtime,
             task_lookup={"task-1": "user-1"},
         )
+        service._enqueue_verification_retry_supervisor_tick = AsyncMock(  # type: ignore[method-assign]
+            return_value=False
+        )
         for p in service._patches:  # type: ignore[attr-defined]
             p.start()
         try:
@@ -981,11 +1027,52 @@ class TestStartupSweep:
         assert recovered == 1
         apply_report.assert_not_awaited()
         cleanup_attempt_runtime.assert_awaited_once_with(att)
+        service._enqueue_verification_retry_supervisor_tick.assert_not_awaited()  # type: ignore[attr-defined]
         schedule_tick.assert_called_once_with("ws-1", "user-1")
         assert len(service._saves) == 1  # type: ignore[attr-defined]
         assert (
             service._saves[0].status  # type: ignore[attr-defined]
             == WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION
+        )
+
+    @pytest.mark.asyncio
+    async def test_awaiting_leader_attempt_under_completed_root_is_cancelled(self) -> None:
+        cleanup_attempt_runtime = AsyncMock(return_value=1)
+        att = _make_attempt(
+            workspace_task_id="task-1",
+            root_goal_task_id="root-1",
+            status=WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION,
+        )
+        service, apply_report, schedule_tick = _make_service(
+            stale_attempts=[att],
+            cleanup_attempt_runtime=cleanup_attempt_runtime,
+            task_lookup={"task-1": "user-1", "root-1": "user-1"},
+            task_status_lookup={
+                "task-1": WorkspaceTaskStatus.IN_PROGRESS,
+                "root-1": WorkspaceTaskStatus.DONE,
+            },
+            task_metadata_lookup={"task-1": {"root_goal_task_id": "root-1"}},
+        )
+        service._enqueue_verification_retry_supervisor_tick = AsyncMock(  # type: ignore[method-assign]
+            return_value=False
+        )
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 0
+        apply_report.assert_not_awaited()
+        cleanup_attempt_runtime.assert_awaited_once_with(att)
+        service._enqueue_verification_retry_supervisor_tick.assert_not_awaited()  # type: ignore[attr-defined]
+        schedule_tick.assert_not_called()
+        assert len(service._saves) == 1  # type: ignore[attr-defined]
+        assert (
+            service._saves[0].status  # type: ignore[attr-defined]
+            == WorkspaceTaskSessionAttemptStatus.CANCELLED
         )
 
     @pytest.mark.asyncio
@@ -1010,6 +1097,9 @@ class TestStartupSweep:
             enqueue_resume=enqueue_resume,
         )
         service._plan_recovery_suppressed = AsyncMock(return_value=False)  # type: ignore[method-assign]
+        service._enqueue_verification_retry_supervisor_tick = AsyncMock(  # type: ignore[method-assign]
+            return_value=False
+        )
         for p in service._patches:  # type: ignore[attr-defined]
             p.start()
         try:
@@ -1021,6 +1111,7 @@ class TestStartupSweep:
         assert recovered == 1
         apply_report.assert_not_awaited()
         enqueue_resume.assert_awaited_once()
+        service._enqueue_verification_retry_supervisor_tick.assert_not_awaited()  # type: ignore[attr-defined]
         schedule_tick.assert_called_once_with("ws-1", "user-1")
         assert len(service._saves) == 1  # type: ignore[attr-defined]
         assert (
@@ -1048,6 +1139,9 @@ class TestStartupSweep:
             },
         )
         service._plan_recovery_suppressed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+        service._enqueue_verification_retry_supervisor_tick = AsyncMock(  # type: ignore[method-assign]
+            return_value=False
+        )
         for p in service._patches:  # type: ignore[attr-defined]
             p.start()
         try:
@@ -1059,7 +1153,58 @@ class TestStartupSweep:
         assert recovered == 0
         apply_report.assert_not_awaited()
         cleanup_attempt_runtime.assert_awaited_once_with(att)
+        service._enqueue_verification_retry_supervisor_tick.assert_not_awaited()  # type: ignore[attr-defined]
         schedule_tick.assert_not_called()
+        assert len(service._saves) == 1  # type: ignore[attr-defined]
+        assert (
+            service._saves[0].status  # type: ignore[attr-defined]
+            == WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION
+        )
+
+    @pytest.mark.asyncio
+    async def test_plan_suppressed_verification_retry_reschedules_tick(self) -> None:
+        cleanup_attempt_runtime = AsyncMock(return_value=1)
+        att = _make_attempt(
+            attempt_id="att-awaiting-retry-paused",
+            workspace_task_id="task-1",
+            status=WorkspaceTaskSessionAttemptStatus.AWAITING_LEADER_ADJUDICATION,
+        )
+        att.adjudication_reason = "verification_retry_scheduled"
+        service, apply_report, schedule_tick = _make_service(
+            stale_attempts=[att],
+            cleanup_attempt_runtime=cleanup_attempt_runtime,
+            task_lookup={"task-1": "user-1"},
+            task_metadata_lookup={
+                "task-1": {
+                    WORKSPACE_PLAN_ID: "plan-1",
+                    WORKSPACE_PLAN_NODE_ID: "node-1",
+                }
+            },
+        )
+        service._plan_recovery_suppressed = AsyncMock(return_value=True)  # type: ignore[method-assign]
+        service._enqueue_verification_retry_supervisor_tick = AsyncMock(  # type: ignore[method-assign]
+            return_value=True
+        )
+        for p in service._patches:  # type: ignore[attr-defined]
+            p.start()
+        try:
+            recovered = await service.startup_sweep()
+        finally:
+            for p in service._patches:  # type: ignore[attr-defined]
+                p.stop()
+
+        assert recovered == 1
+        apply_report.assert_not_awaited()
+        cleanup_attempt_runtime.assert_awaited_once_with(att)
+        service._enqueue_verification_retry_supervisor_tick.assert_awaited_once_with(  # type: ignore[attr-defined]
+            attempt=att,
+            parent_metadata={
+                WORKSPACE_PLAN_ID: "plan-1",
+                WORKSPACE_PLAN_NODE_ID: "node-1",
+            },
+            attempt_summary=RECOVERY_SUMMARY_RESTART,
+        )
+        schedule_tick.assert_called_once_with("ws-1", "user-1")
         assert len(service._saves) == 1  # type: ignore[attr-defined]
         assert (
             service._saves[0].status  # type: ignore[attr-defined]

@@ -110,6 +110,7 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     _node_worker_brief,
     _persisted_attempt_leader_agent_id,
     _prepare_attempt_worktree_if_available,
+    _resolve_actor_user_id,
     _WorkspaceSandboxCommandRunner,
     _worktree_integration_command,
     _worktree_setup_command,
@@ -2302,7 +2303,7 @@ def test_worktree_integration_command_blocks_dirty_main_checkout() -> None:
         commit_ref="abc1234",
     )
 
-    assert "git merge-base --is-ancestor abc1234 HEAD" in command
+    assert 'git merge-base --is-ancestor "$RESOLVED_COMMIT" HEAD' in command
     assert 'dirty="$(git status --porcelain)"' in command
     assert 'echo "status=blocked_dirty_main"' in command
     assert "dirty_signature=%s" in command
@@ -2310,9 +2311,9 @@ def test_worktree_integration_command_blocks_dirty_main_checkout() -> None:
     assert "frontend/tests/screenshots/*" in command
     assert 'echo "generated_dirty_cleaned=true"' in command
     assert "git hash-object --stdin" in command
-    assert "git merge --no-edit abc1234" in command
+    assert 'git merge --no-edit "$RESOLVED_COMMIT"' in command
     assert "refusing to merge unrelated histories" in command
-    assert "git merge --no-edit --allow-unrelated-histories -X theirs abc1234" in command
+    assert 'git merge --no-edit --allow-unrelated-histories -X theirs "$RESOLVED_COMMIT"' in command
     assert 'echo "reason=merge_failed_aborted"' in command
     assert "git merge --abort" in command
 
@@ -2443,6 +2444,68 @@ def test_worktree_integration_command_cleans_generated_artifacts_before_merge(
         encoding="utf-8"
     ) == "base\n"
     assert not (repo / "ITERATION-REPORT-20260520.md").exists()
+    assert git(repo, "status", "--short") == ""
+
+
+def test_worktree_integration_command_commits_staged_bootstrap_before_merge(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    worktree_path = tmp_path / "attempt"
+    repo.mkdir()
+
+    def git(cwd: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.stdout.strip()
+
+    git(repo, "init", "-b", "master")
+    git(repo, "config", "user.email", "worker@example.com")
+    git(repo, "config", "user.name", "Worker")
+    (repo / "frontend").mkdir()
+    (repo / "frontend/.gitkeep").write_text("", encoding="utf-8")
+    git(repo, "add", "frontend/.gitkeep")
+    git(repo, "commit", "-m", "init")
+
+    git(repo, "checkout", "--orphan", "attempt")
+    (repo / "src").mkdir()
+    (repo / "src/app.ts").write_text("candidate\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "candidate")
+    commit_ref = git(repo, "rev-parse", "HEAD")
+    git(repo, "checkout", "master")
+    git(repo, "worktree", "add", str(worktree_path), "attempt")
+
+    (repo / "README.md").write_text("bootstrap baseline\n", encoding="utf-8")
+    git(repo, "add", "README.md")
+    (repo / "frontend/e2e-test-output.txt").write_text("transient output\n", encoding="utf-8")
+
+    command = _worktree_integration_command(
+        sandbox_code_root=str(repo),
+        worktree_path=str(worktree_path),
+        commit_ref=commit_ref,
+    )
+    result = subprocess.run(
+        ["bash", "-lc", command],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "generated_dirty_cleaned=true" in result.stdout
+    assert "baseline_dirty_committed=true" in result.stdout
+    assert "unrelated_history_retry=true" in result.stdout
+    assert "status=merged" in result.stdout
+    assert (repo / "README.md").read_text(encoding="utf-8") == "bootstrap baseline\n"
+    assert (repo / "src/app.ts").read_text(encoding="utf-8") == "candidate\n"
+    assert not (repo / "frontend/e2e-test-output.txt").exists()
     assert git(repo, "status", "--short") == ""
 
 
@@ -2840,6 +2903,46 @@ def test_pipeline_commit_ref_prefers_summary_commit_when_artifacts_include_prior
     assert outbox_handlers._pipeline_commit_ref(node, current_attempt=attempt) == "be55379"
 
 
+def test_pipeline_commit_ref_prefers_clean_worktree_commit_over_later_fallback_ref() -> None:
+    node = PlanNode(
+        id="node-deploy",
+        plan_id="plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Deploy feature",
+        current_attempt_id="attempt-current",
+        execution=TaskExecution.REPORTED,
+    )
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-current",
+        workspace_task_id="task-1",
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=35,
+        status="awaiting_leader_adjudication",
+        conversation_id="conversation-current",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_summary=(
+            "The worktree is clean at commit 42f842d. The platform harness must publish "
+            "42f842d (or 60599e4 if only the fix commit is needed) and re-trigger Drone."
+        ),
+        candidate_artifacts_json=[
+            "commit_ref:42f842d539abe7a6fb453a2241a897db4912d407",
+            "commit_ref:60599e43701142335ec8b5aba90fc95ddaddf5d2",
+        ],
+        candidate_verifications_json=[
+            "preflight:git-status",
+            "commit_ref:42f842d539abe7a6fb453a2241a897db4912d407",
+        ],
+    )
+
+    assert (
+        outbox_handlers._pipeline_commit_ref(node, current_attempt=attempt)
+        == "42f842d539abe7a6fb453a2241a897db4912d407"
+    )
+
+
 def test_pipeline_commit_ref_prefers_verified_commit_over_repair_history() -> None:
     node = PlanNode(
         id="node-deploy",
@@ -3176,6 +3279,68 @@ async def test_prepare_drone_source_ref_skips_publish_without_attempt_id(
 
 
 @pytest.mark.asyncio
+async def test_pipeline_repair_source_commit_ref_uses_source_verification_attempt(
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="attempt-source",
+            workspace_task_id="task-source",
+            root_goal_task_id="root-task",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status=WorkspaceTaskSessionAttemptStatus.REJECTED.value,
+            candidate_artifacts_json=["commit_ref:fa6a7d1b635fc14f6115da32f131a29bdb70f7df"],
+            candidate_verifications_json=["commit_ref:fa6a7d1", "worker_report:completed"],
+        )
+    )
+    await db_session.flush()
+    plan = Plan(
+        id="plan-1",
+        workspace_id="workspace-1",
+        goal_id=PlanNodeId("root-node"),
+        status=PlanStatus.ACTIVE,
+    )
+    plan.add_node(
+        PlanNode(
+            id="root-node",
+            plan_id=plan.id,
+            kind=PlanNodeKind.GOAL,
+            title="Root",
+        )
+    )
+    plan.add_node(
+        PlanNode(
+            id="node-original",
+            plan_id=plan.id,
+            kind=PlanNodeKind.TASK,
+            parent_id=plan.goal_id,
+            title="Original deploy",
+            metadata={"source_verification_attempt_id": "attempt-source"},
+        )
+    )
+    plan.add_node(
+        PlanNode(
+            id="node-repair",
+            plan_id=plan.id,
+            kind=PlanNodeKind.TASK,
+            parent_id=plan.goal_id,
+            title="Repair deploy",
+            current_attempt_id="attempt-repair",
+            metadata={"repair_for_node_id": "node-original"},
+        )
+    )
+
+    commit_ref = await outbox_handlers._pipeline_repair_source_commit_ref(
+        session=db_session,
+        plan=plan,
+        node=plan.nodes[PlanNodeId("node-repair")],
+    )
+
+    assert commit_ref == "fa6a7d1"
+
+
+@pytest.mark.asyncio
 async def test_publish_git_ref_to_source_control_fast_forwards_and_pushes(
     tmp_path: Path,
 ) -> None:
@@ -3498,6 +3663,53 @@ async def test_publish_git_ref_to_source_control_retries_temp_push_when_remote_a
     assert git(remote, "show", "refs/heads/main:remote.txt") == "remote advance"
     git(remote, "merge-base", "--is-ancestor", repair_commit, "refs/heads/main")
     assert git(repo, "status", "--short") == "?? local-note.txt"
+
+
+@pytest.mark.asyncio
+async def test_merge_remote_branch_force_refreshes_publish_tracking_ref(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, ...]] = []
+
+    async def fake_run_git_command(
+        cwd: Path,
+        args: tuple[str, ...],
+        *,
+        env: Mapping[str, str],
+        timeout: int = 60,
+    ) -> dict[str, str]:
+        assert cwd == tmp_path
+        assert env == {}
+        calls.append(args)
+        if args[0] == "fetch":
+            return {"exit_code": "0", "stdout": "", "stderr": ""}
+        if args == (
+            "merge-base",
+            "--is-ancestor",
+            "refs/remotes/memstack-source-publish/main",
+            "HEAD",
+        ):
+            return {"exit_code": "0", "stdout": "", "stderr": ""}
+        return {"exit_code": "1", "stdout": "", "stderr": "unexpected command"}
+
+    monkeypatch.setattr(outbox_handlers, "_run_git_command", fake_run_git_command)
+
+    result = await outbox_handlers._merge_remote_branch_for_publish(
+        worktree_path=tmp_path,
+        candidate_ref="candidate",
+        remote="https://github.com/example/repo.git",
+        branch="main",
+        env={},
+    )
+
+    assert result == {"status": "skipped", "reason": None}
+    assert calls[0] == (
+        "fetch",
+        "--no-tags",
+        "https://github.com/example/repo.git",
+        "+refs/heads/main:refs/remotes/memstack-source-publish/main",
+    )
 
 
 @pytest.mark.asyncio
@@ -4316,7 +4528,7 @@ async def test_accepted_terminal_attempt_integrates_worktree_commit(
     assert result["worktree_integration_commit_ref"] == "abc1234"
     assert commands
     assert "cd /workspace/my-evo" in commands[0]
-    assert "git merge --no-edit abc1234" in commands[0]
+    assert 'git merge --no-edit "$RESOLVED_COMMIT"' in commands[0]
     db_session.expire_all()
     projected_task = await db_session.get(WorkspaceTaskModel, task_id)
     assert projected_task is not None
@@ -4333,6 +4545,114 @@ async def test_accepted_terminal_attempt_integrates_worktree_commit(
     assert event.payload_json["worktree_path"] == (
         "/workspace/.memstack/worktrees/attempt-integrate"
     )
+
+
+@pytest.mark.asyncio
+async def test_accepted_terminal_attempt_records_resolved_worktree_commit(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    workspace = (
+        await db_session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "workspace-1"))
+    ).scalar_one()
+    workspace.metadata_json = {"code_context": {"sandbox_code_root": "/workspace/my-evo"}}
+    task = WorkspaceTaskModel(
+        id="task-integrate-resolved",
+        workspace_id="workspace-1",
+        title="Integrate accepted repaired commit",
+        description="Project accepted worktree commit with repaired SHA.",
+        created_by="worker-user-1",
+        status="in_progress",
+        priority=0,
+        metadata_json={
+            AUTONOMY_SCHEMA_VERSION_KEY: 1,
+            ROOT_GOAL_TASK_ID: "root-task-1",
+            "feature_checkpoint": {
+                "feature_id": "feature-integrate-resolved",
+                "worktree_path": "${sandbox_code_root}/../.memstack/worktrees/attempt-integrate",
+                "branch_name": "workspace/node-integrate-attempt",
+            },
+        },
+    )
+    task_id = task.id
+    bad_commit_ref = "8f7d695a0b46e24fe07bdc28c40b7b0cb1ce3d37"
+    actual_commit_ref = "8f7d695b3438acc8dc469f9f527e143731e00802"
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-integrate-resolved",
+        workspace_task_id=task.id,
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=1,
+        status="accepted",
+        conversation_id="conversation-integrate-resolved",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_summary="done",
+        candidate_artifacts_json=[f"commit_ref:{bad_commit_ref}", "changed_file:src/example.py"],
+        candidate_verifications_json=[f"commit_ref:{bad_commit_ref}", "test_run:pytest"],
+    )
+    db_session.add_all([task, attempt])
+    await db_session.flush()
+
+    class FakeRunner:
+        def __init__(self, *, project_id: str, tenant_id: str) -> None:
+            assert project_id == "worker-project-1"
+            assert tenant_id == "worker-tenant-1"
+
+        async def run_command(self, command: str, *, timeout: int) -> dict[str, object]:
+            assert timeout == 120
+            assert 'cut -c1-12' in command
+            return {
+                "exit_code": 0,
+                "stdout": (
+                    f"commit_ref_repaired_from={bad_commit_ref}\n"
+                    f"resolved_commit_ref={actual_commit_ref}\n"
+                    "status=merged\n"
+                    "git_head=def5678\n"
+                ),
+                "stderr": "",
+            }
+
+    monkeypatch.setattr(outbox_handlers, "_WorkspaceSandboxCommandRunner", FakeRunner)
+    node = PlanNode(
+        id="node-integrate-resolved",
+        plan_id="worker-plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Integrate accepted repaired commit",
+        workspace_task_id=task.id,
+        current_attempt_id=attempt.id,
+        feature_checkpoint=FeatureCheckpoint(
+            feature_id="feature-integrate-resolved",
+            worktree_path="${sandbox_code_root}/../.memstack/worktrees/attempt-integrate",
+            branch_name="workspace/node-integrate-attempt",
+        ),
+    )
+
+    result = await outbox_handlers._project_accepted_terminal_attempt_to_task(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=node,
+        attempt=attempt,
+        summary="accepted",
+        now=datetime.now(UTC),
+    )
+
+    assert result["worktree_integration_status"] == "merged"
+    assert result["worktree_integration_commit_ref"] == actual_commit_ref
+    db_session.expire_all()
+    projected_task = await db_session.get(WorkspaceTaskModel, task_id)
+    assert projected_task is not None
+    assert projected_task.metadata_json["feature_checkpoint"]["commit_ref"] == actual_commit_ref
+    event = (
+        await db_session.execute(
+            select(WorkspacePlanEventModel).where(
+                WorkspacePlanEventModel.event_type == "accepted_worktree_integrated"
+            )
+        )
+    ).scalar_one()
+    assert event.payload_json["commit_ref"] == actual_commit_ref
 
 
 @pytest.mark.asyncio
@@ -4427,7 +4747,7 @@ async def test_accepted_terminal_attempt_uses_feature_checkpoint_commit_ref(
     assert result["worktree_integration_status"] == "merged"
     assert result["worktree_integration_commit_ref"] == "abc1234"
     assert commands
-    assert "git merge --no-edit abc1234" in commands[0]
+    assert 'git merge --no-edit "$RESOLVED_COMMIT"' in commands[0]
 
 
 @pytest.mark.asyncio
@@ -4556,7 +4876,38 @@ async def test_blocked_dirty_main_projection_waits_until_dirty_signature_changes
         "status=dirty\n"
         "dirty_signature=sig-current\n"
         "dirty_generated_only=true\n"
+        "dirty_has_generated=true\n"
         " M frontend/tests/screenshots/01-homepage.png\n"
+    )
+    assert not await outbox_handlers._accepted_attempt_projection_complete_for_node(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=node,
+        attempt=attempt,
+    )
+
+    runner_result["stdout"] = (
+        "status=dirty\n"
+        "dirty_signature=sig-current\n"
+        "dirty_generated_only=false\n"
+        "dirty_has_generated=true\n"
+        "A  README.md\n"
+        "?? frontend/e2e-test-output.txt\n"
+    )
+    assert not await outbox_handlers._accepted_attempt_projection_complete_for_node(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=node,
+        attempt=attempt,
+    )
+
+    runner_result["stdout"] = (
+        "status=dirty\n"
+        "dirty_signature=sig-current\n"
+        "dirty_generated_only=false\n"
+        "dirty_has_generated=false\n"
+        "staged_bootstrap_only=true\n"
+        "A  README.md\n"
     )
     assert not await outbox_handlers._accepted_attempt_projection_complete_for_node(
         session=db_session,
@@ -5403,6 +5754,126 @@ async def test_worker_launch_handler_defers_when_active_worker_capacity_reached(
 
 
 @pytest.mark.asyncio
+async def test_worker_launch_handler_ignores_stale_active_worker_capacity(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _seed_workspace_and_plan(db_session)
+    stale_at = datetime(2025, 1, 1, tzinfo=UTC)
+    db_session.add_all(
+        [
+            WorkspaceTaskModel(
+                id="stale-active-worker-task",
+                workspace_id="workspace-1",
+                title="Stale running task",
+                description="",
+                created_by="worker-user-1",
+                status="in_progress",
+                priority=0,
+                metadata_json={
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    TASK_ROLE: "execution_task",
+                    ROOT_GOAL_TASK_ID: "root-task-1",
+                },
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="stale-active-worker-attempt",
+                workspace_task_id="stale-active-worker-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=1,
+                status="running",
+                conversation_id="stale-active-worker-conversation",
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+                created_at=stale_at,
+                updated_at=stale_at,
+            ),
+            WorkspaceTaskModel(
+                id="fresh-queued-worker-task",
+                workspace_id="workspace-1",
+                title="Queued worker task",
+                description="",
+                created_by="worker-user-1",
+                status="in_progress",
+                priority=0,
+                assignee_agent_id="worker-agent",
+                metadata_json={
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    TASK_ROLE: "execution_task",
+                    ROOT_GOAL_TASK_ID: "root-task-1",
+                    CURRENT_ATTEMPT_ID: "fresh-queued-worker-attempt",
+                },
+            ),
+            WorkspaceTaskSessionAttemptModel(
+                id="fresh-queued-worker-attempt",
+                workspace_task_id="fresh-queued-worker-task",
+                root_goal_task_id="root-task-1",
+                workspace_id="workspace-1",
+                attempt_number=1,
+                status="running",
+                conversation_id=None,
+                worker_agent_id="worker-agent",
+                leader_agent_id=BUILTIN_SISYPHUS_ID,
+            ),
+        ]
+    )
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    item = await repo.enqueue(
+        plan_id="worker-plan-1",
+        workspace_id="workspace-1",
+        event_type=WORKER_LAUNCH_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "task_id": "fresh-queued-worker-task",
+            "worker_agent_id": "worker-agent",
+            "actor_user_id": "worker-user-1",
+            "leader_agent_id": BUILTIN_SISYPHUS_ID,
+            "attempt_id": "fresh-queued-worker-attempt",
+        },
+        metadata={"source": "test"},
+        max_attempts=9,
+    )
+    await db_session.commit()
+
+    monkeypatch.setenv("WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE", "1")
+    monkeypatch.setenv("WORKSPACE_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS", "60")
+    launched: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "src.infrastructure.agent.workspace.worker_launch.schedule_worker_session",
+        lambda **kwargs: launched.append(kwargs),
+    )
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree)
+        },
+        worker_id="worker-a",
+        batch_size=1,
+    )
+
+    assert await worker.run_once() == 1
+    assert len(launched) == 1
+    assert launched[0]["attempt_id"] == "fresh-queued-worker-attempt"
+    original = await repo.get_by_id(item.id)
+    assert original is not None
+    assert original.status == "completed"
+    deferred_jobs = list(
+        (
+            await db_session.execute(
+                select(WorkspacePlanOutboxModel)
+                .where(WorkspacePlanOutboxModel.event_type == WORKER_LAUNCH_EVENT)
+                .where(WorkspacePlanOutboxModel.id != item.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert deferred_jobs == []
+
+
+@pytest.mark.asyncio
 async def test_worker_launch_handler_skips_terminal_stale_attempt_before_capacity_defer(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -5864,6 +6335,144 @@ async def test_supervisor_tick_handler_advances_sql_plan_from_outbox(
 
 
 @pytest.mark.asyncio
+async def test_supervisor_tick_handler_skips_retry_superseded_by_newer_completed_tick(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    stale = await repo.enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={"workspace_id": "workspace-1"},
+    )
+    newer = await repo.enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={"workspace_id": "workspace-1"},
+    )
+    stale.status = "failed"
+    stale.attempt_count = 1
+    stale.created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    stale.next_attempt_at = datetime(2026, 1, 1, tzinfo=UTC)
+    stale.last_error = "deadlock detected"
+    newer.status = "completed"
+    newer.attempt_count = 1
+    newer.created_at = datetime(2026, 1, 1, 0, 1, tzinfo=UTC)
+    newer.processed_at = datetime(2026, 1, 1, 0, 2, tzinfo=UTC)
+    await db_session.commit()
+
+    async def dispatcher(
+        _workspace_id: str,
+        _allocation: Allocation,
+        _node: PlanNode,
+    ) -> str:
+        raise AssertionError("superseded supervisor tick should not run")
+
+    async def agent_pool(_workspace_id: str) -> list[WorkspaceAgent]:
+        raise AssertionError("superseded supervisor tick should not load agents")
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+                agent_pool=agent_pool,
+                dispatcher=dispatcher,
+            )
+        },
+        worker_id="worker-a",
+        batch_size=1,
+    )
+
+    assert await worker.run_once() == 1
+    loaded = await repo.get_by_id(stale.id)
+    assert loaded is not None
+    assert loaded.status == "completed"
+    assert loaded.last_error is None
+
+
+@pytest.mark.asyncio
+async def test_supervisor_tick_handler_skips_tick_superseded_by_newer_pipeline_request(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    repo = SqlWorkspacePlanOutboxRepository(db_session)
+    stale = await repo.enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={"workspace_id": "workspace-1"},
+    )
+    pipeline_request = await repo.enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=outbox_handlers.PIPELINE_RUN_REQUESTED_EVENT,
+        payload={
+            "workspace_id": "workspace-1",
+            "plan_id": plan.id,
+            "node_id": "node-1",
+            "attempt_id": "attempt-1",
+        },
+    )
+    stale.created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    pipeline_request.created_at = datetime(2026, 1, 1, 0, 1, tzinfo=UTC)
+    await db_session.commit()
+
+    async def dispatcher(
+        _workspace_id: str,
+        _allocation: Allocation,
+        _node: PlanNode,
+    ) -> str:
+        raise AssertionError("superseded supervisor tick should not dispatch work")
+
+    async def agent_pool(_workspace_id: str) -> list[WorkspaceAgent]:
+        raise AssertionError("superseded supervisor tick should not load agents")
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+                agent_pool=agent_pool,
+                dispatcher=dispatcher,
+            )
+        },
+        worker_id="worker-a",
+        batch_size=1,
+    )
+
+    assert await worker.run_once() == 1
+    loaded_stale = await repo.get_by_id(stale.id)
+    loaded_pipeline_request = await repo.get_by_id(pipeline_request.id)
+    assert loaded_stale is not None
+    assert loaded_stale.status == "completed"
+    assert loaded_stale.last_error is None
+    assert loaded_pipeline_request is not None
+    assert loaded_pipeline_request.status == "pending"
+    assert loaded_pipeline_request.attempt_count == 0
+
+
+@pytest.mark.asyncio
 async def test_supervisor_tick_releases_node_when_current_attempt_is_missing(
     db_session: AsyncSession,
 ) -> None:
@@ -6061,6 +6670,117 @@ async def test_supervisor_tick_reconciles_reported_attempt_before_verification(
     )
     assert "auto_reported_attempt_reconciled" in events
     assert "verification_completed" in events
+
+
+@pytest.mark.asyncio
+async def test_supervisor_tick_reconciles_verifying_reported_attempt(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+    orchestrator = build_sql_orchestrator(
+        db_session,
+        config=OrchestratorConfig(heartbeat_seconds=3600),
+    )
+    plan = await orchestrator.start_goal(
+        workspace_id="workspace-1",
+        title="Ship a durable plan",
+        start_supervisor=False,
+    )
+    leaf = plan.leaf_tasks()[0]
+    db_session.add(
+        WorkspaceTaskModel(
+            id="verifying-reported-node-task",
+            workspace_id="workspace-1",
+            title="Reported projection",
+            description="",
+            created_by="worker-user-1",
+            status="in_progress",
+            priority=0,
+            assignee_agent_id="worker-agent",
+            metadata_json={
+                AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                TASK_ROLE: "execution_task",
+                ROOT_GOAL_TASK_ID: "root-task-1",
+                WORKSPACE_PLAN_ID: plan.id,
+                WORKSPACE_PLAN_NODE_ID: leaf.id,
+                CURRENT_ATTEMPT_ID: "verifying-reported-attempt",
+                LAST_WORKER_REPORT_ATTEMPT_ID: "verifying-reported-attempt",
+                LAST_WORKER_REPORT_SUMMARY: "worker completed with evidence",
+                "last_worker_report_type": "completed",
+                "last_attempt_status": "awaiting_leader_adjudication",
+            },
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="verifying-reported-attempt",
+            workspace_task_id="verifying-reported-node-task",
+            root_goal_task_id="root-task-1",
+            workspace_id="workspace-1",
+            attempt_number=1,
+            status="awaiting_leader_adjudication",
+            conversation_id="reported-conversation",
+            worker_agent_id="worker-agent",
+            leader_agent_id=BUILTIN_SISYPHUS_ID,
+            candidate_summary="worker completed with evidence",
+            candidate_verifications_json=[
+                "preflight:read-progress",
+                "preflight:git-status",
+                "test_run:pytest focused",
+            ],
+        )
+    )
+    plan.replace_node(
+        replace(
+            leaf,
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.VERIFYING,
+            current_attempt_id="verifying-reported-attempt",
+            workspace_task_id="verifying-reported-node-task",
+            acceptance_criteria=(
+                AcceptanceCriterion(
+                    kind=CriterionKind.CUSTOM,
+                    spec={
+                        "name": "terminal_worker_report_present",
+                        "requires_terminal_worker_report": True,
+                    },
+                    required=False,
+                ),
+            ),
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+    await SqlWorkspacePlanOutboxRepository(db_session).enqueue(
+        plan_id=plan.id,
+        workspace_id="workspace-1",
+        event_type=SUPERVISOR_TICK_EVENT,
+        payload={"workspace_id": "workspace-1"},
+    )
+    await db_session.commit()
+
+    async def agent_pool(_workspace_id: str) -> list[WorkspaceAgent]:
+        return []
+
+    worker = WorkspacePlanOutboxWorker(
+        session_factory=_session_factory(db_session),
+        handlers={
+            SUPERVISOR_TICK_EVENT: make_supervisor_tick_handler(
+                config=OrchestratorConfig(heartbeat_seconds=3600),
+                agent_pool=agent_pool,
+            )
+        },
+        worker_id="worker-a",
+        batch_size=1,
+    )
+
+    assert await worker.run_once() == 1
+    loaded = await SqlPlanRepository(db_session).get(plan.id)
+    assert loaded is not None
+    reconciled_leaf = loaded.leaf_tasks()[0]
+    assert reconciled_leaf.intent is TaskIntent.DONE
+    assert reconciled_leaf.execution is TaskExecution.IDLE
+    assert reconciled_leaf.metadata["reported_attempt_status"] == "awaiting_leader_adjudication"
+    assert reconciled_leaf.metadata["last_verification_attempt_id"] == "verifying-reported-attempt"
 
 
 @pytest.mark.asyncio
@@ -9100,3 +9820,27 @@ async def _seed_workspace_only(db_session: AsyncSession, *, include_worker: bool
         )
     db_session.add_all(rows)
     await db_session.flush()
+
+
+@pytest.mark.unit
+async def test_resolve_actor_user_id_falls_back_when_payload_user_is_not_member(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session)
+
+    assert (
+        await _resolve_actor_user_id(
+            db_session,
+            "workspace-1",
+            {"actor_user_id": "worker-user-1"},
+        )
+        == "worker-user-1"
+    )
+    assert (
+        await _resolve_actor_user_id(
+            db_session,
+            "workspace-1",
+            {"actor_user_id": "workspace-plan:system"},
+        )
+        == "worker-user-1"
+    )

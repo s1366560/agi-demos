@@ -718,6 +718,10 @@ async def reconcile_root_goal_progress(
     workspace_id: str,
     root_goal_task_id: str,
 ) -> WorkspaceTask | None:
+    acquire_lock = getattr(task_repo, "acquire_root_reconciliation_lock", None)
+    if acquire_lock is not None:
+        await acquire_lock(root_goal_task_id)
+
     root_task = await task_repo.find_by_id(root_goal_task_id)
     if (
         root_task is None
@@ -727,6 +731,15 @@ async def reconcile_root_goal_progress(
         return None
 
     raw_child_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
+    find_current_plan_children = getattr(
+        task_repo,
+        "find_current_plan_children_by_root_goal_task_id",
+        None,
+    )
+    if find_current_plan_children is not None:
+        current_plan_children = await find_current_plan_children(workspace_id, root_goal_task_id)
+        if current_plan_children:
+            raw_child_tasks = current_plan_children
     child_tasks = select_root_progress_child_tasks(raw_child_tasks)
     active_child_task_ids = [
         task.id

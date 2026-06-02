@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-from collections.abc import Mapping
+import os
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from typing import TYPE_CHECKING, Any, Protocol
 
 from src.domain.ports.services.workspace_supervisor_decision_port import (
@@ -30,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 _VALID_ACTIONS = {item.value for item in WorkspaceSupervisorDecisionAction}
 _MISSING_CONTRACT_RETRY_ATTEMPTS = 1
+_DEFAULT_SUPERVISOR_DECISION_TURN_TIMEOUT_SECONDS = 300
+_MAX_SUPERVISOR_DECISION_TURN_TIMEOUT_SECONDS = 1800
 
 
 class WorkspaceSupervisorAgentTurnRunner(Protocol):
@@ -48,6 +52,26 @@ class WorkspaceSupervisorAgentTurnRunner(Protocol):
     ) -> dict[str, Any] | None: ...
 
 
+class _WorkspaceContractAgentService(Protocol):
+    def stream_chat_v2(  # noqa: PLR0913
+        self,
+        conversation_id: str,
+        user_message: str,
+        project_id: str,
+        user_id: str,
+        tenant_id: str,
+        preferred_language: str | None = None,
+        attachment_ids: list[str] | None = None,
+        file_metadata: list[dict[str, Any]] | None = None,
+        forced_skill_name: str | None = None,
+        app_model_context: dict[str, Any] | None = None,
+        image_attachments: list[str] | None = None,
+        agent_id: str | None = None,
+        mentions: list[str] | None = None,
+        api_auth_token: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]: ...
+
+
 class RuntimeWorkspaceSupervisorAgentTurnRunner:
     """Run the builtin supervisor through the normal project ReAct runtime."""
 
@@ -58,12 +82,18 @@ class RuntimeWorkspaceSupervisorAgentTurnRunner:
         project_id: str,
         max_steps: int = 8,
         max_tokens: int = 8192,
+        turn_timeout_seconds: float | None = None,
     ) -> None:
         super().__init__()
         self._tenant_id = tenant_id
         self._project_id = project_id
         self._max_steps = max_steps
         self._max_tokens = max_tokens
+        self._turn_timeout_seconds = (
+            turn_timeout_seconds
+            if turn_timeout_seconds is not None
+            else _supervisor_decision_turn_timeout_seconds()
+        )
         self._last_diagnostics: dict[str, Any] = {}
 
     @property
@@ -86,6 +116,7 @@ class RuntimeWorkspaceSupervisorAgentTurnRunner:
             async_session_factory,
         )
         from src.infrastructure.agent.workspace.contract_agent_runtime import (
+            cancel_workspace_contract_chat,
             create_workspace_contract_agent_service,
             recover_workspace_contract_payload,
             resolve_workspace_actor_user_id,
@@ -126,6 +157,7 @@ class RuntimeWorkspaceSupervisorAgentTurnRunner:
             "observed_tools": [],
             "decision_submitted": False,
             "runtime_path": "agent_service.stream_chat_v2",
+            "turn_timeout_seconds": self._turn_timeout_seconds,
         }
         recovered_payload = await recover_workspace_contract_payload(
             conversation_id=conversation_id,
@@ -188,26 +220,21 @@ class RuntimeWorkspaceSupervisorAgentTurnRunner:
         async with async_session_factory() as db:
             llm = await create_llm_client(self._tenant_id)
             agent_service = await create_workspace_contract_agent_service(db=db, llm=llm)
-            async for event in agent_service.stream_chat_v2(
+            payload = await self._stream_decision_payload(
+                agent_service=agent_service,
+                cancel_workspace_contract_chat=cancel_workspace_contract_chat,
                 conversation_id=conversation_id,
-                user_message=user_prompt,
-                user_id=resolved_actor_user_id,
-                project_id=self._project_id,
-                tenant_id=self._tenant_id,
-                agent_id=supervisor_agent.id,
+                user_prompt=user_prompt,
+                resolved_actor_user_id=resolved_actor_user_id,
+                supervisor_agent_id=supervisor_agent.id,
+                workspace_id=workspace_id,
+                plan_id=plan_id,
+                node_id=node_id,
                 app_model_context=app_model_context,
-            ):
-                diagnostics["event_count"] += 1
-                tool_name = _tool_name_from_event(event)
-                if tool_name:
-                    observed_tools = diagnostics["observed_tools"]
-                    if tool_name not in observed_tools:
-                        observed_tools.append(tool_name)
-                payload = _supervisor_decision_from_event(event)
-                if payload is not None:
-                    diagnostics["decision_submitted"] = True
-                    self._last_diagnostics = diagnostics
-                    return payload
+                diagnostics=diagnostics,
+            )
+            if payload is not None:
+                return payload
         recovered_payload = await recover_workspace_contract_payload(
             conversation_id=conversation_id,
             extract_payload=_supervisor_decision_from_event,
@@ -218,6 +245,63 @@ class RuntimeWorkspaceSupervisorAgentTurnRunner:
             self._last_diagnostics = diagnostics
             return recovered_payload
         self._last_diagnostics = diagnostics
+        return None
+
+    async def _stream_decision_payload(
+        self,
+        *,
+        agent_service: _WorkspaceContractAgentService,
+        cancel_workspace_contract_chat: Callable[[str], Awaitable[None]],
+        conversation_id: str,
+        user_prompt: str,
+        resolved_actor_user_id: str,
+        supervisor_agent_id: str,
+        workspace_id: str,
+        plan_id: str,
+        node_id: str,
+        app_model_context: Mapping[str, Any],
+        diagnostics: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        try:
+            async with asyncio.timeout(self._turn_timeout_seconds):
+                async for event in agent_service.stream_chat_v2(
+                    conversation_id=conversation_id,
+                    user_message=user_prompt,
+                    user_id=resolved_actor_user_id,
+                    project_id=self._project_id,
+                    tenant_id=self._tenant_id,
+                    agent_id=supervisor_agent_id,
+                    app_model_context=dict(app_model_context),
+                ):
+                    diagnostics["event_count"] += 1
+                    tool_name = _tool_name_from_event(event)
+                    if tool_name:
+                        observed_tools = diagnostics["observed_tools"]
+                        if tool_name not in observed_tools:
+                            observed_tools.append(tool_name)
+                    payload = _supervisor_decision_from_event(event)
+                    if payload is not None:
+                        diagnostics["decision_submitted"] = True
+                        self._last_diagnostics = diagnostics
+                        await cancel_workspace_contract_chat(conversation_id)
+                        return payload
+        except TimeoutError:
+            diagnostics["timed_out"] = True
+            self._last_diagnostics = diagnostics
+            await cancel_workspace_contract_chat(conversation_id)
+            logger.warning(
+                "Workspace supervisor decision contract turn timed out",
+                extra={
+                    "conversation_id": conversation_id,
+                    "workspace_id": workspace_id,
+                    "plan_id": plan_id,
+                    "node_id": node_id,
+                    "timeout_seconds": self._turn_timeout_seconds,
+                },
+            )
+        except asyncio.CancelledError:
+            await cancel_workspace_contract_chat(conversation_id)
+            raise
         return None
 
 
@@ -472,6 +556,19 @@ def _optional_nonnegative_int(value: object) -> int | None:
     except ValueError:
         return None
     return max(0, parsed)
+
+
+def _supervisor_decision_turn_timeout_seconds() -> int:
+    raw_value = os.getenv("WORKSPACE_SUPERVISOR_DECISION_TIMEOUT_SECONDS")
+    if raw_value is None:
+        return _DEFAULT_SUPERVISOR_DECISION_TURN_TIMEOUT_SECONDS
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return _DEFAULT_SUPERVISOR_DECISION_TURN_TIMEOUT_SECONDS
+    if parsed <= 0:
+        return _DEFAULT_SUPERVISOR_DECISION_TURN_TIMEOUT_SECONDS
+    return min(parsed, _MAX_SUPERVISOR_DECISION_TURN_TIMEOUT_SECONDS)
 
 
 __all__ = [

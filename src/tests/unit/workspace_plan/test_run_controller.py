@@ -159,6 +159,35 @@ async def test_run_controller_completion_gate_blocks_on_retry_queue(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_run_controller_completion_gate_ignores_other_plan_retry_queue(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_plan(db_session)
+    db_session.add(
+        WorkspacePlanOutboxModel(
+            id="old-outbox-1",
+            plan_id="old-plan-1",
+            workspace_id="run-workspace-1",
+            event_type="supervisor_tick",
+            status="dead_letter",
+            payload_json={},
+            metadata_json={},
+        )
+    )
+    await db_session.flush()
+
+    result = await WorkspaceRunController(db_session).tick(
+        plan_id="run-plan-1",
+        reason="unit_test",
+        runner=lambda: _tick_report(),
+    )
+
+    assert result.completion_gate["allowed"] is True
+    assert result.retry_queue == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_run_controller_completion_gate_blocks_on_active_attempt(
     db_session: AsyncSession,
 ) -> None:
@@ -187,6 +216,9 @@ async def test_run_controller_completion_gate_blocks_on_active_attempt(
             candidate_verifications_json=[],
         )
     )
+    node = await db_session.get(PlanNodeModel, "run-goal-1")
+    assert node is not None
+    node.current_attempt_id = "attempt-1"
     await db_session.flush()
 
     result = await WorkspaceRunController(db_session).tick(
@@ -198,6 +230,93 @@ async def test_run_controller_completion_gate_blocks_on_active_attempt(
     assert result.completion_gate["allowed"] is False
     assert result.blocked_reason == "running workspace task attempts remain"
     assert result.active_attempts[0]["attempt_id"] == "attempt-1"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_run_controller_completion_gate_ignores_done_task_dangling_attempt(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="done-run-task-1",
+            workspace_id="run-workspace-1",
+            title="Done run task",
+            description="",
+            created_by="run-user-1",
+            status="done",
+            priority=0,
+            metadata_json={},
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="done-attempt-1",
+            workspace_task_id="done-run-task-1",
+            root_goal_task_id="done-run-task-1",
+            workspace_id="run-workspace-1",
+            attempt_number=1,
+            status="running",
+            candidate_artifacts_json=[],
+            candidate_verifications_json=[],
+        )
+    )
+    node = await db_session.get(PlanNodeModel, "run-goal-1")
+    assert node is not None
+    node.current_attempt_id = "done-attempt-1"
+    await db_session.flush()
+
+    result = await WorkspaceRunController(db_session).tick(
+        plan_id="run-plan-1",
+        reason="unit_test",
+        runner=lambda: _tick_report(),
+    )
+
+    assert result.completion_gate["allowed"] is True
+    assert result.active_attempts == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_run_controller_completion_gate_ignores_other_plan_active_attempt(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_plan(db_session)
+    db_session.add(
+        WorkspaceTaskModel(
+            id="old-run-task-1",
+            workspace_id="run-workspace-1",
+            title="Old run task",
+            description="",
+            created_by="run-user-1",
+            status="in_progress",
+            priority=0,
+            metadata_json={},
+        )
+    )
+    db_session.add(
+        WorkspaceTaskSessionAttemptModel(
+            id="old-attempt-1",
+            workspace_task_id="old-run-task-1",
+            root_goal_task_id="old-run-task-1",
+            workspace_id="run-workspace-1",
+            attempt_number=1,
+            status="running",
+            candidate_artifacts_json=[],
+            candidate_verifications_json=[],
+        )
+    )
+    await db_session.flush()
+
+    result = await WorkspaceRunController(db_session).tick(
+        plan_id="run-plan-1",
+        reason="unit_test",
+        runner=lambda: _tick_report(),
+    )
+
+    assert result.completion_gate["allowed"] is True
+    assert result.active_attempts == []
 
 
 @pytest.mark.unit

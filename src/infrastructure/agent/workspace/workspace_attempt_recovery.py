@@ -31,7 +31,7 @@ import logging
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
@@ -45,6 +45,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     PlanNodeModel,
     WorkspacePlanOutboxModel,
     WorkspaceTaskSessionAttemptModel,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
+    SqlWorkspacePlanOutboxRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
     SqlWorkspaceTaskRepository,
@@ -506,7 +509,8 @@ class WorkspaceAttemptRecoveryService:
         async with self._session_factory() as session:
             result = await session.execute(
                 select(WorkspacePlanOutboxModel.payload_json["attempt_id"].as_string())
-                .where(WorkspacePlanOutboxModel.status == "processing")
+                .where(WorkspacePlanOutboxModel.status.in_(("pending", "failed", "processing")))
+                .where(WorkspacePlanOutboxModel.event_type.in_(("handoff_resume", "worker_launch")))
                 .where(WorkspacePlanOutboxModel.payload_json["attempt_id"].as_string().in_(attempt_ids))
             )
             leased_attempt_ids = {attempt_id for (attempt_id,) in result.all() if attempt_id}
@@ -900,13 +904,32 @@ class WorkspaceAttemptRecoveryService:
                     status=WorkspaceTaskSessionAttemptStatus.CANCELLED,
                 )
                 continue
-            actor_user_id, parent_status, parent_metadata = resolution
+            actor_user_id, parent_status, parent_metadata, root_status = resolution
             is_v2_plan_linked = self._is_v2_plan_linked(parent_metadata)
             plan_recovery_suppressed = (
                 await self._plan_recovery_suppressed(parent_metadata)
                 if is_v2_plan_linked
                 else False
             )
+            if root_status in terminal_parent_statuses and parent_status not in terminal_parent_statuses:
+                assert root_status is not None
+                logger.info(
+                    "workspace_attempt_recovery.root_already_terminal",
+                    extra={
+                        "event": "workspace_attempt_recovery.root_already_terminal",
+                        "attempt_id": attempt.id,
+                        "workspace_task_id": attempt.workspace_task_id,
+                        "root_goal_task_id": attempt.root_goal_task_id,
+                        "root_status": root_status.value if root_status else None,
+                    },
+                )
+                await self._cancel_attempt_runtime(attempt, reason=attempt_summary)
+                await self._quiet_finalize_attempt(
+                    attempt,
+                    reason=f"root_{root_status.value}",
+                    status=self._terminal_status_for_parent(root_status),
+                )
+                continue
             awaiting_recovered = await self._recover_awaiting_leader_attempt(
                 attempt=attempt,
                 parent_status=parent_status,
@@ -945,6 +968,7 @@ class WorkspaceAttemptRecoveryService:
                     attempt,
                     attempt_summary=attempt_summary,
                     actor_user_id=actor_user_id,
+                    parent_metadata=parent_metadata,
                     plan_recovery_suppressed=plan_recovery_suppressed,
                     scheduled_roots=scheduled_roots,
                 )
@@ -1048,7 +1072,7 @@ class WorkspaceAttemptRecoveryService:
                 status=self._terminal_status_for_parent(parent_status),
             )
             return 0
-        if plan_recovery_suppressed:
+        if plan_recovery_suppressed and attempt.adjudication_reason != "verification_retry_scheduled":
             await self._cancel_attempt_runtime(attempt, reason=attempt_summary)
             await self._touch_awaiting_leader_attempt(attempt)
             logger.info(
@@ -1087,6 +1111,12 @@ class WorkspaceAttemptRecoveryService:
             )
             return 1
         await self._cancel_attempt_runtime(attempt, reason=attempt_summary)
+        if attempt.adjudication_reason == "verification_retry_scheduled":
+            await self._enqueue_verification_retry_supervisor_tick(
+                attempt=attempt,
+                parent_metadata=parent_metadata,
+                attempt_summary=attempt_summary,
+            )
         await self._touch_awaiting_leader_attempt(attempt)
         scheduled_roots.add((attempt.workspace_id, actor_user_id))
         logger.warning(
@@ -1100,6 +1130,87 @@ class WorkspaceAttemptRecoveryService:
             },
         )
         return 1
+
+    async def _enqueue_verification_retry_supervisor_tick(
+        self,
+        *,
+        attempt: WorkspaceTaskSessionAttempt,
+        parent_metadata: Mapping[str, object],
+        attempt_summary: str,
+        retry_reason: str = "verification_retry_scheduled",
+    ) -> bool:
+        plan_id = parent_metadata.get(WORKSPACE_PLAN_ID)
+        node_id = parent_metadata.get(WORKSPACE_PLAN_NODE_ID)
+        if not isinstance(plan_id, str) or not plan_id:
+            return False
+        if not isinstance(node_id, str) or not node_id:
+            return False
+        try:
+            async with self._session_factory() as session:
+                duplicate = await session.execute(
+                    select(WorkspacePlanOutboxModel.id)
+                    .where(WorkspacePlanOutboxModel.plan_id == plan_id)
+                    .where(WorkspacePlanOutboxModel.workspace_id == attempt.workspace_id)
+                    .where(WorkspacePlanOutboxModel.event_type == "supervisor_tick")
+                    .where(WorkspacePlanOutboxModel.status.in_(("pending", "failed", "processing")))
+                    .where(
+                        or_(
+                            WorkspacePlanOutboxModel.payload_json[
+                                "retry_attempt_id"
+                            ].as_string()
+                            == attempt.id,
+                            WorkspacePlanOutboxModel.metadata_json["attempt_id"].as_string()
+                            == attempt.id,
+                        )
+                    )
+                    .limit(1)
+                )
+                if duplicate.scalar_one_or_none() is not None:
+                    return False
+                await SqlWorkspacePlanOutboxRepository(session).enqueue(
+                    plan_id=plan_id,
+                    workspace_id=attempt.workspace_id,
+                    event_type="supervisor_tick",
+                    payload={
+                        "workspace_id": attempt.workspace_id,
+                        "retry_node_id": node_id,
+                        "retry_attempt_id": attempt.id,
+                        "retry_reason": retry_reason,
+                    },
+                    metadata={
+                        "source_event_type": "attempt_recovery",
+                        "node_id": node_id,
+                        "attempt_id": attempt.id,
+                        "reason": attempt_summary,
+                    },
+                )
+                await session.commit()
+        except Exception:
+            logger.warning(
+                "workspace_attempt_recovery.enqueue_verification_retry_tick_failed",
+                exc_info=True,
+                extra={
+                    "event": "workspace_attempt_recovery.enqueue_verification_retry_tick_failed",
+                    "attempt_id": attempt.id,
+                    "workspace_id": attempt.workspace_id,
+                    "workspace_task_id": attempt.workspace_task_id,
+                    "plan_id": plan_id,
+                    "node_id": node_id,
+                },
+            )
+            return False
+        logger.warning(
+            "workspace_attempt_recovery.verification_retry_tick_enqueued",
+            extra={
+                "event": "workspace_attempt_recovery.verification_retry_tick_enqueued",
+                "attempt_id": attempt.id,
+                "workspace_id": attempt.workspace_id,
+                "workspace_task_id": attempt.workspace_task_id,
+                "plan_id": plan_id,
+                "node_id": node_id,
+            },
+        )
+        return True
 
     @staticmethod
     def _awaiting_verification_retry_needs_worker_resume(
@@ -1120,6 +1231,7 @@ class WorkspaceAttemptRecoveryService:
         *,
         attempt_summary: str,
         actor_user_id: str,
+        parent_metadata: Mapping[str, object],
         plan_recovery_suppressed: bool,
         scheduled_roots: set[tuple[str, str]],
     ) -> int:
@@ -1141,20 +1253,22 @@ class WorkspaceAttemptRecoveryService:
                 },
             )
             return 1
-        await self._enqueue_resume_if_configured(
+        tick_enqueued = await self._enqueue_verification_retry_supervisor_tick(
             attempt=attempt,
-            summary=attempt_summary,
-            actor_user_id=actor_user_id,
+            parent_metadata=parent_metadata,
+            attempt_summary=attempt_summary,
+            retry_reason="stale_plan_node_no_terminal_worker_report",
         )
         scheduled_roots.add((attempt.workspace_id, actor_user_id))
         logger.warning(
-            "workspace_attempt_recovery.plan_attempt_resumed",
+            "workspace_attempt_recovery.plan_attempt_supervisor_rescheduled",
             extra={
-                "event": "workspace_attempt_recovery.plan_attempt_resumed",
+                "event": "workspace_attempt_recovery.plan_attempt_supervisor_rescheduled",
                 "attempt_id": attempt.id,
                 "workspace_task_id": attempt.workspace_task_id,
                 "workspace_id": attempt.workspace_id,
                 "reason": attempt_summary,
+                "tick_enqueued": tick_enqueued,
             },
         )
         return 1
@@ -1299,7 +1413,7 @@ class WorkspaceAttemptRecoveryService:
 
     async def _resolve_parent_task(
         self, workspace_task_id: str
-    ) -> tuple[str, WorkspaceTaskStatus, Mapping[str, object]] | None:
+    ) -> tuple[str, WorkspaceTaskStatus, Mapping[str, object], WorkspaceTaskStatus | None] | None:
         """Return parent execution context or None if the task is gone."""
         try:
             async with self._session_factory() as session:
@@ -1310,7 +1424,17 @@ class WorkspaceAttemptRecoveryService:
                 if not task.created_by:
                     return None
                 metadata = task.metadata if isinstance(task.metadata, Mapping) else {}
-                return task.created_by, task.status, metadata
+                root_status: WorkspaceTaskStatus | None = None
+                root_goal_task_id = metadata.get("root_goal_task_id")
+                if (
+                    isinstance(root_goal_task_id, str)
+                    and root_goal_task_id
+                    and root_goal_task_id != workspace_task_id
+                ):
+                    root_task = await task_repo.find_by_id(root_goal_task_id)
+                    if root_task is not None:
+                        root_status = root_task.status
+                return task.created_by, task.status, metadata, root_status
         except Exception:
             logger.exception(
                 "workspace_attempt_recovery.resolve_parent_failed task=%s",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Mapping
@@ -96,6 +97,7 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
             async_session_factory,
         )
         from src.infrastructure.agent.workspace.contract_agent_runtime import (
+            cancel_workspace_contract_chat,
             create_workspace_contract_agent_service,
             recover_workspace_contract_payload,
             resolve_workspace_actor_user_id,
@@ -193,26 +195,34 @@ class RuntimeWorkspaceVerifierAgentTurnRunner:
         async with async_session_factory() as db:
             llm = await create_llm_client(self._tenant_id)
             agent_service = await create_workspace_contract_agent_service(db=db, llm=llm)
-            async for event in agent_service.stream_chat_v2(
-                conversation_id=conversation_id,
-                user_message=user_prompt,
-                user_id=resolved_actor_user_id,
-                project_id=self._project_id,
-                tenant_id=self._tenant_id,
-                agent_id=verifier_agent.id,
-                app_model_context=app_model_context,
-            ):
-                diagnostics["event_count"] += 1
-                tool_name = _tool_name_from_event(event)
-                if tool_name:
-                    observed_tools = diagnostics["observed_tools"]
-                    if tool_name not in observed_tools:
-                        observed_tools.append(tool_name)
-                payload = _verification_judgment_from_event(event)
-                if payload is not None:
-                    diagnostics["judgment_submitted"] = True
-                    self._last_diagnostics = diagnostics
-                    return payload
+            try:
+                async for event in agent_service.stream_chat_v2(
+                    conversation_id=conversation_id,
+                    user_message=user_prompt,
+                    user_id=resolved_actor_user_id,
+                    project_id=self._project_id,
+                    tenant_id=self._tenant_id,
+                    agent_id=verifier_agent.id,
+                    app_model_context=app_model_context,
+                ):
+                    diagnostics["event_count"] += 1
+                    tool_name = _tool_name_from_event(event)
+                    if tool_name:
+                        observed_tools = diagnostics["observed_tools"]
+                        if tool_name not in observed_tools:
+                            observed_tools.append(tool_name)
+                    payload = _verification_judgment_from_event(event)
+                    if payload is not None:
+                        diagnostics["judgment_submitted"] = True
+                        self._last_diagnostics = diagnostics
+                        await cancel_workspace_contract_chat(conversation_id)
+                        return payload
+            except TimeoutError:
+                await cancel_workspace_contract_chat(conversation_id)
+                raise
+            except asyncio.CancelledError:
+                await cancel_workspace_contract_chat(conversation_id)
+                raise
         recovered_payload = await recover_workspace_contract_payload(
             conversation_id=conversation_id,
             extract_payload=_verification_judgment_from_event,

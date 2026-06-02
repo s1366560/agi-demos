@@ -22,6 +22,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
@@ -129,6 +130,9 @@ ProgressSink = Callable[[GoalProgress], Awaitable[None]]
 PlanEventSink = Callable[[str, PlanNode, str, dict[str, Any]], Awaitable[None]]
 """Called for durable, auditable plan lifecycle events."""
 
+TransactionCheckpoint = Callable[[], Awaitable[None]]
+"""Persists and releases any transaction held by the caller before slow side effects."""
+
 
 class WorkspaceSupervisor(WorkspaceSupervisorPort):
     """Async single-writer supervisor. One instance per process is fine — it
@@ -150,6 +154,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         event_sink: PlanEventSink | None = None,
         iteration_reviewer: IterationReviewPort | None = None,
         supervisor_decision_provider: WorkspaceSupervisorDecisionPort | None = None,
+        transaction_checkpoint: TransactionCheckpoint | None = None,
         heartbeat_seconds: float = 10.0,
         max_dispatches_per_tick: int = 2,
     ) -> None:
@@ -168,6 +173,7 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         self._event_sink = event_sink
         self._iteration_reviewer = iteration_reviewer
         self._supervisor_decision_provider = supervisor_decision_provider
+        self._transaction_checkpoint = transaction_checkpoint
         self._heartbeat = heartbeat_seconds
         self._max_dispatches_per_tick = max_dispatches_per_tick
 
@@ -323,6 +329,12 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                 if _node_retry_not_before(node) > datetime.now(UTC):
                     continue
                 plan.replace_node(_force_execution(node, TaskExecution.VERIFYING))
+                if not await self._checkpoint_transaction(
+                    plan,
+                    errors,
+                    label=f"before_verify({node.id})",
+                ):
+                    continue
                 ctx = await self._attempt_context(workspace_id, node)
                 report = await self._verifier.verify(ctx)
                 await self._emit_event(
@@ -347,6 +359,12 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                         },
                     )
                 verifies_ran += 1
+                if not await self._checkpoint_transaction(
+                    plan,
+                    errors,
+                    label=f"before_supervisor_decision({node.id})",
+                ):
+                    continue
                 (
                     handled_by_agent,
                     completed_by_agent,
@@ -767,6 +785,15 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
                     "max_dispatches_per_tick": self._max_dispatches_per_tick,
                 },
             )
+        if ready_to_dispatch and not await self._checkpoint_before_dispatch(plan, errors):
+            return TickReport(
+                workspace_id=workspace_id,
+                allocations_made=allocs_made,
+                verifications_ran=verifies_ran,
+                nodes_completed=nodes_done,
+                nodes_blocked=nodes_blocked,
+                errors=tuple(errors),
+            )
         if ready_to_dispatch:
             try:
                 pool = await self._agent_pool(workspace_id)
@@ -827,7 +854,27 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
             errors=tuple(errors),
         )
 
-    async def _apply_agent_supervisor_decision(  # noqa: PLR0911
+    async def _checkpoint_before_dispatch(self, plan: Plan, errors: list[str]) -> bool:
+        return await self._checkpoint_transaction(plan, errors, label="before_dispatch")
+
+    async def _checkpoint_transaction(
+        self,
+        plan: Plan,
+        errors: list[str],
+        *,
+        label: str,
+    ) -> bool:
+        if self._transaction_checkpoint is None:
+            return True
+        try:
+            await self._repo.save(plan)
+            await self._transaction_checkpoint()
+            return True
+        except Exception as exc:
+            errors.append(f"transaction_checkpoint({label}): {exc}")
+            return False
+
+    async def _apply_agent_supervisor_decision(  # noqa: C901, PLR0911
         self,
         *,
         workspace_id: str,
@@ -876,6 +923,40 @@ class WorkspaceSupervisor(WorkspaceSupervisorPort):
         )
 
         action = decision.action
+        if (
+            action
+            in {
+                WorkspaceSupervisorDecisionAction.CREATE_REPAIR_NODE,
+                WorkspaceSupervisorDecisionAction.MARK_BLOCKED_HUMAN,
+                WorkspaceSupervisorDecisionAction.REPLAN_NODE,
+                WorkspaceSupervisorDecisionAction.RETRY_SAME_NODE,
+            }
+            and (
+                _should_request_pipeline_from_report(node, report)
+                or _decision_requests_platform_pipeline(decision, report)
+            )
+        ):
+            evidenced_node = _node_with_verification_evidence(
+                node,
+                report,
+                artifacts=ctx.artifacts,
+            )
+            pipeline_node = _node_with_pipeline_request(evidenced_node, report)
+            plan.replace_node(pipeline_node)
+            await self._emit_event(
+                errors,
+                workspace_id,
+                pipeline_node,
+                "pipeline_run_requested",
+                {
+                    "attempt_id": report.attempt_id,
+                    "summary": decision.rationale or report.summary(),
+                    "reason": "supervisor_decision_platform_harness_pipeline",
+                    "overrode_action": action.value,
+                },
+            )
+            return True, 0, 0
+
         if action is WorkspaceSupervisorDecisionAction.NOOP:
             return True, 0, 0
 
@@ -2125,6 +2206,7 @@ def _repair_dependency_can_seed_downstream_worktree(
         (repair_dependency is not None and dependency_id == repair_dependency)
         or bool(_metadata_text(node.metadata.get("repair_for_node_id")))
         or _node_is_iteration_plan_backlog(node)
+        or _node_is_iteration_increment(node)
         or _node_is_iteration_test_verification(node)
         or _node_is_iteration_review_feedback(node)
         or _node_is_iteration_release_candidate(node)
@@ -2137,6 +2219,14 @@ def _node_is_iteration_plan_backlog(node: PlanNode) -> bool:
     return (
         _metadata_text(metadata.get("iteration_phase")) == "plan"
         and _metadata_text(metadata.get("scrum_artifact")) == "sprint_backlog"
+    )
+
+
+def _node_is_iteration_increment(node: PlanNode) -> bool:
+    metadata = dict(node.metadata or {})
+    return (
+        _metadata_text(metadata.get("iteration_phase")) == "implement"
+        and _metadata_text(metadata.get("scrum_artifact")) == "increment"
     )
 
 
@@ -2843,27 +2933,131 @@ def _should_request_pipeline_from_report(node: PlanNode, report: VerificationRep
     if not pipeline_failures:
         has_pipeline_bridge_failure = any(
             _is_pipeline_only_judge_failure(result)
+            or _is_pipeline_human_block_judge_failure(result)
             or _is_pipeline_trigger_infrastructure_failure(result)
             or _is_pipeline_blocked_worker_report_failure(result)
             for result in non_pipeline_failures
         )
         return has_pipeline_bridge_failure and all(
             _is_pipeline_only_judge_failure(result)
+            or _is_pipeline_human_block_judge_failure(result)
             or _is_pipeline_trigger_infrastructure_failure(result)
             or _is_pipeline_blocked_worker_report_failure(result)
+            or _is_preflight_evidence_failure(result)
             or _is_verification_judge_inconclusive_failure(result)
             for result in non_pipeline_failures
         )
     pipeline_missing_evidence = _pipeline_failures_are_missing_evidence(pipeline_failures)
     pipeline_runtime_retryable = _pipeline_failures_are_runtime_retryable(pipeline_failures)
     pipeline_can_request_run = pipeline_missing_evidence or pipeline_runtime_retryable
+    if pipeline_can_request_run and _platform_pipeline_known_good_commit_ref_from_report(report):
+        return True
     return all(
         _is_pipeline_only_judge_failure(result)
+        or _is_pipeline_human_block_judge_failure(result)
         or (pipeline_missing_evidence and _is_pipeline_missing_evidence_judge_failure(result))
+        or (pipeline_can_request_run and _is_feature_checkpoint_evidence_gap(result))
+        or (pipeline_can_request_run and _is_pipeline_publish_gap_judge_failure(result))
         or _is_pipeline_trigger_infrastructure_failure(result)
         or (pipeline_can_request_run and _is_verification_judge_inconclusive_failure(result))
         for result in non_pipeline_failures
     )
+
+
+def _platform_pipeline_known_good_commit_ref_from_report(report: VerificationReport) -> str | None:
+    summary = report.summary()
+    if not isinstance(summary, str):
+        return None
+    normalized = summary.lower()
+    if not (
+        "missing harness-native ci pipeline evidence" in normalized
+        or "harness-native ci pipeline evidence" in normalized
+    ):
+        return None
+    if not any(
+        marker in normalized
+        for marker in (
+            "platform harness",
+            "source_publish",
+            "source publish",
+            "memstack-source-publish",
+            "re-trigger drone",
+            "retrigger drone",
+            "trigger drone",
+            "known-good fix exists at commit",
+        )
+    ):
+        return None
+    patterns = (
+        r"\bknown-good\s+fix\s+exists\s+at\s+commit\s+([0-9A-Fa-f]{7,40})",
+        r"\bplatform\s+harness\s+must\s+(?:perform\s+)?source[_ -]?publish\s+of\s+commit\s+([0-9A-Fa-f]{7,40})",
+        r"\bplatform\s+harness\s+must\s+publish\s+commit\s+([0-9A-Fa-f]{7,40})",
+        r"\bcommitted\s+as\s+([0-9A-Fa-f]{7,40})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, summary, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _decision_requests_platform_pipeline(
+    decision: WorkspaceSupervisorDecisionResult,
+    report: VerificationReport,
+) -> bool:
+    if decision.action is WorkspaceSupervisorDecisionAction.REQUEST_PIPELINE:
+        return True
+    if decision.action is not WorkspaceSupervisorDecisionAction.RETRY_SAME_NODE:
+        return False
+    failed_required = report.failed_required
+    pipeline_failures = [
+        result for result in failed_required if result.criterion.kind in _PIPELINE_CRITERION_KINDS
+    ]
+    if not (
+        _pipeline_failures_are_missing_evidence(pipeline_failures)
+        or _pipeline_failures_are_runtime_retryable(pipeline_failures)
+    ):
+        return False
+    if any(
+        result.criterion.kind is CriterionKind.CUSTOM
+        and _judge_feedback_has_product_code_retry(result.criterion.spec)
+        for result in failed_required
+    ):
+        return False
+    markers: list[object] = [decision.rationale]
+    for item in decision.feedback_items:
+        markers.extend(
+            [
+                item.get("target_layer"),
+                item.get("feedback_kind"),
+                item.get("recommended_action"),
+                item.get("summary"),
+                item.get("failure_signature"),
+            ]
+        )
+        markers.extend(_string_list(item.get("evidence_refs")))
+    normalized = "\n".join(str(marker).lower() for marker in markers if marker)
+    if not _is_pipeline_failure_marker(normalized):
+        return False
+    has_platform_harness_action = any(
+        token in normalized
+        for token in (
+            "platform harness",
+            "source_publish",
+            "source publish",
+            "source-publish",
+            "memstack-source-publish",
+            "fast-forward",
+            "fast forward",
+            "publish the",
+            "publish commit",
+            "re-trigger drone",
+            "retrigger drone",
+            "trigger drone",
+            "harness-native ci",
+        )
+    )
+    return has_platform_harness_action
 
 
 def _should_wait_for_pending_pipeline_from_report(
@@ -2942,6 +3136,8 @@ def _is_pipeline_runtime_retry_marker(value: object) -> bool:
             "all connection attempts failed",
             "failed to connect",
             "couldn't connect",
+            "ssl_error_syscall",
+            "ssl_connect",
             "connection reset",
             "connection refused",
             "temporarily unavailable",
@@ -3018,6 +3214,127 @@ def _is_pipeline_missing_evidence_judge_failure(result: CriterionResult) -> bool
     return bool(failed) and all(_is_pipeline_failure_marker(item) for item in failed)
 
 
+def _is_feature_checkpoint_evidence_gap(result: CriterionResult) -> bool:
+    if result.criterion.kind is not CriterionKind.CUSTOM:
+        return False
+    name = str(result.criterion.spec.get("name") or "").strip().lower()
+    message = str(result.message or "").strip().lower()
+    return (
+        name in {"feature_checkpoint_evidence_recorded", "feature_checkpoint_evidence"}
+        or "missing feature checkpoint evidence" in message
+    ) and any(token in message for token in ("commit_ref", "git_diff_summary", "worktree"))
+
+
+def _is_pipeline_publish_gap_judge_failure(result: CriterionResult) -> bool:
+    spec = result.criterion.spec
+    if result.criterion.kind is not CriterionKind.CUSTOM:
+        return False
+    if spec.get("name") != "workspace_verification_judge":
+        return False
+    if _judge_feedback_has_product_code_retry(spec):
+        return False
+
+    markers: list[object] = [
+        result.message,
+        spec.get("required_next_action"),
+        spec.get("failure_signature"),
+        spec.get("summary"),
+        spec.get("rationale"),
+    ]
+    markers.extend(_string_list(spec.get("failed_criteria")))
+    feedback_items = spec.get("feedback_items")
+    if isinstance(feedback_items, list):
+        for item in feedback_items:
+            if not isinstance(item, Mapping):
+                continue
+            markers.extend(
+                [
+                    item.get("target_layer"),
+                    item.get("feedback_kind"),
+                    item.get("recommended_action"),
+                    item.get("summary"),
+                    item.get("failure_signature"),
+                ]
+            )
+            markers.extend(_string_list(item.get("evidence_refs")))
+
+    normalized = "\n".join(str(marker).lower() for marker in markers if marker)
+    if not _is_pipeline_failure_marker(normalized):
+        return False
+    has_platform_publish_gap = any(
+        token in normalized
+        for token in (
+            "platform harness must publish",
+            "platform harness",
+            "source_publish",
+            "source publish",
+            "source-publish",
+            "memstack-source-publish",
+            "publish the fix",
+            "publish commit",
+            "re-trigger drone",
+            "retrigger drone",
+            "trigger drone",
+            "no live drone build",
+            "missing harness-native ci pipeline evidence",
+        )
+    )
+    has_worker_code_gap = any(
+        token in normalized
+        for token in (
+            "do not change .drone.yml",
+            "yaml fix is correct",
+            "worktree is clean",
+            "committed a legitimate",
+            "substantive fix is real",
+        )
+    )
+    return has_platform_publish_gap and has_worker_code_gap
+
+
+def _judge_feedback_has_product_code_retry(spec: Mapping[str, Any]) -> bool:
+    feedback_items = spec.get("feedback_items")
+    if not isinstance(feedback_items, list):
+        return False
+    for item in feedback_items:
+        if not isinstance(item, Mapping):
+            continue
+        feedback_kind = str(item.get("feedback_kind") or "").strip().lower()
+        failure_signature = str(item.get("failure_signature") or "").strip().lower()
+        if feedback_kind == "product_code_failure":
+            return True
+        if failure_signature.startswith("product-code"):
+            return True
+    return False
+
+
+def _is_pipeline_human_block_judge_failure(result: CriterionResult) -> bool:
+    spec = result.criterion.spec
+    if result.criterion.kind is not CriterionKind.CUSTOM:
+        return False
+    if spec.get("name") != "workspace_verification_judge":
+        return False
+    if spec.get("next_action_kind") != "human_required":
+        return False
+    feedback_items = spec.get("feedback_items")
+    if not isinstance(feedback_items, list) or not feedback_items:
+        return False
+    if not all(
+        isinstance(item, Mapping) and _feedback_item_is_platform_pipeline_bridge_failure(item)
+        for item in feedback_items
+    ):
+        return False
+    markers: list[object] = [
+        result.message,
+        spec.get("required_next_action"),
+        spec.get("failure_signature"),
+        spec.get("summary"),
+        spec.get("rationale"),
+    ]
+    markers.extend(_string_list(spec.get("failed_criteria")))
+    return any(_is_pipeline_failure_marker(marker) for marker in markers)
+
+
 def _feedback_items_require_worker_retry(feedback_items: list[object]) -> bool:
     has_worker_retry = False
     has_stale_or_obsolete_disposition = False
@@ -3083,6 +3400,39 @@ def _feedback_item_is_pipeline_evidence_gap(item: Mapping[str, object]) -> bool:
             "not yet on main",
             "publish",
             "trigger",
+        )
+    )
+
+
+def _feedback_item_is_platform_pipeline_bridge_failure(item: Mapping[str, object]) -> bool:
+    target_layer = str(item.get("target_layer") or "").strip().lower()
+    feedback_kind = str(item.get("feedback_kind") or "").strip().lower()
+    recommended_action = str(item.get("recommended_action") or "").strip().lower()
+    if target_layer not in {"human", "runtime", "planner"}:
+        return False
+    if feedback_kind != "runtime_infra_failure":
+        return False
+    if recommended_action not in {"escalate_human", "create_repair_node", "request_pipeline"}:
+        return False
+    markers = [
+        item.get("summary"),
+        item.get("failure_signature"),
+    ]
+    markers.extend(_string_list(item.get("evidence_refs")))
+    normalized = "\n".join(str(marker).lower() for marker in markers if marker)
+    if not any(_is_pipeline_failure_marker(marker) for marker in markers):
+        return False
+    return any(
+        token in normalized
+        for token in (
+            "github_token",
+            "drone_token",
+            "platform harness",
+            "platform ref",
+            "source-publish",
+            "memstack-source-publish",
+            "github/main",
+            "git push",
         )
     )
 
@@ -3165,6 +3515,14 @@ def _is_pipeline_blocked_worker_report_failure(result: CriterionResult) -> bool:
     return _is_pipeline_failure_marker(text)
 
 
+def _is_preflight_evidence_failure(result: CriterionResult) -> bool:
+    if result.criterion.kind is not CriterionKind.CUSTOM:
+        return False
+    if result.criterion.spec.get("name") != "preflight_evidence_recorded":
+        return False
+    return "missing preflight evidence" in str(result.message or "").strip().lower()
+
+
 def _is_pipeline_failure_marker(value: object) -> bool:
     marker = value.strip().lower() if isinstance(value, str) else ""
     return bool(marker) and (
@@ -3242,6 +3600,7 @@ def _pipeline_gate_status(node: PlanNode) -> str:
 def _node_with_pipeline_request(node: PlanNode, report: VerificationReport) -> PlanNode:
     metadata = dict(node.metadata)
     request_count = _coerce_positive_int(metadata.get("pipeline_request_count")) + 1
+    source_commit_ref = _platform_pipeline_known_good_commit_ref_from_report(report)
     metadata.update(
         {
             "pipeline_required": True,
@@ -3257,6 +3616,12 @@ def _node_with_pipeline_request(node: PlanNode, report: VerificationReport) -> P
     )
     if report.attempt_id:
         metadata["last_verification_attempt_id"] = report.attempt_id
+    if source_commit_ref:
+        metadata["verified_commit_ref"] = source_commit_ref
+        metadata["source_publish_source_commit_ref"] = source_commit_ref
+        evidence_refs = list(_string_list(metadata.get("verification_evidence_refs")))
+        evidence_refs.append(f"commit_ref:{source_commit_ref}")
+        metadata["verification_evidence_refs"] = list(dict.fromkeys(evidence_refs))
     return replace(
         node,
         intent=TaskIntent.IN_PROGRESS,
@@ -3571,10 +3936,18 @@ def _node_with_supervisor_decision_repair_brief(
     metadata["last_supervisor_decision_action"] = decision.action.value
     metadata["last_supervisor_decision_rationale"] = decision.rationale
     metadata["last_supervisor_decision_confidence"] = decision.confidence
+    if decision.action is WorkspaceSupervisorDecisionAction.CREATE_REPAIR_NODE:
+        metadata["last_verification_judge_verdict"] = "needs_rework"
+        metadata["last_verification_judge_next_action_kind"] = "create_repair_node"
+        metadata["last_verification_judge_required_next_action"] = decision.rationale
     if decision.repair_brief:
         metadata["last_supervisor_decision_repair_brief"] = dict(decision.repair_brief)
+        if decision.action is WorkspaceSupervisorDecisionAction.CREATE_REPAIR_NODE:
+            metadata["last_verification_judge_repair_brief"] = dict(decision.repair_brief)
     if decision.feedback_items:
         metadata["last_supervisor_decision_feedback_items"] = list(decision.feedback_items)
+        if decision.action is WorkspaceSupervisorDecisionAction.CREATE_REPAIR_NODE:
+            metadata["last_verification_feedback_items"] = list(decision.feedback_items)
     return replace(node, metadata=metadata, updated_at=datetime.now(UTC))
 
 

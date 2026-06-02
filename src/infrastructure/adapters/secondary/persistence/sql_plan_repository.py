@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -43,9 +43,11 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 class SqlPlanRepository(PlanRepositoryPort):
     """AsyncSession-backed persistence for :class:`Plan` aggregates.
 
-    Uses per-workspace *last writer wins*: :meth:`save` replaces the entire
-    node set for the plan id. The supervisor enforces single-writer-per-
-    workspace so this is safe in practice.
+    Uses per-plan *last writer wins*: :meth:`save` updates the persisted node
+    set to match the aggregate. A PostgreSQL transaction-level advisory lock
+    serializes concurrent aggregate saves for the same plan, while existing
+    nodes are updated in-place to avoid broad delete/reinsert lock conflicts
+    with runtime progress writers.
 
     Callers are responsible for ``await db.commit()`` (follows the repo-layer
     convention documented in ``AGENTS.md``).
@@ -55,7 +57,8 @@ class SqlPlanRepository(PlanRepositoryPort):
         self._db = db
 
     async def save(self, plan: Plan) -> None:
-        existing = await self._db.get(PlanModel, plan.id)
+        await self._lock_plan_for_save(plan.id)
+        existing = await self._get_existing_plan_for_update(plan.id)
         if existing is None:
             model = PlanModel(
                 id=plan.id,
@@ -71,13 +74,45 @@ class SqlPlanRepository(PlanRepositoryPort):
             existing.goal_id = plan.goal_id.value
             existing.status = plan.status.value
             existing.updated_at = plan.updated_at or datetime.now(UTC)
-            # Drop stale nodes; replacement happens below via fresh inserts.
-            await self._db.execute(delete(PlanNodeModel).where(PlanNodeModel.plan_id == plan.id))
 
+        existing_nodes = await self._get_existing_node_models(plan.id)
+        current_node_ids = {node.id for node in plan.nodes.values()}
+        stale_node_ids = set(existing_nodes) - current_node_ids
+        if stale_node_ids:
+            await self._db.execute(
+                delete(PlanNodeModel).where(
+                    PlanNodeModel.plan_id == plan.id,
+                    PlanNodeModel.id.in_(stale_node_ids),
+                )
+            )
         for node in plan.nodes.values():
-            self._db.add(_plan_node_to_model(node))
+            node_model = existing_nodes.get(node.id)
+            if node_model is None:
+                self._db.add(_plan_node_to_model(node))
+            else:
+                _apply_plan_node_to_model(node, node_model)
 
         await self._db.flush()
+
+    async def _lock_plan_for_save(self, plan_id: str) -> None:
+        bind = self._db.get_bind()
+        dialect_name = getattr(getattr(bind, "dialect", None), "name", None)
+        if dialect_name != "postgresql":
+            return
+        await self._db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:plan_id, 0))"),
+            {"plan_id": f"workspace_plan:{plan_id}"},
+        )
+
+    async def _get_existing_plan_for_update(self, plan_id: str) -> PlanModel | None:
+        stmt = select(PlanModel).where(PlanModel.id == plan_id).with_for_update()
+        result = await self._db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def _get_existing_node_models(self, plan_id: str) -> dict[str, PlanNodeModel]:
+        stmt = select(PlanNodeModel).where(PlanNodeModel.plan_id == plan_id)
+        result = await self._db.execute(refresh_select_statement(stmt))
+        return {model.id: model for model in result.scalars().all()}
 
     async def get(self, plan_id: str) -> Plan | None:
         stmt = (
@@ -143,47 +178,53 @@ def _plan_from_model(model: PlanModel) -> Plan:
 
 
 def _plan_node_to_model(node: PlanNode) -> PlanNodeModel:
-    return PlanNodeModel(
+    model = PlanNodeModel(
         id=node.id,
         plan_id=node.plan_id,
-        parent_id=node.parent_id.value if node.parent_id is not None else None,
-        kind=node.kind.value,
-        title=node.title,
-        description=node.description,
-        depends_on=[d.value for d in node.depends_on],
-        inputs_schema=dict(node.inputs_schema),
-        outputs_schema=dict(node.outputs_schema),
-        acceptance_criteria=[_criterion_to_json(c) for c in node.acceptance_criteria],
-        feature_checkpoint=(
-            node.feature_checkpoint.to_json() if node.feature_checkpoint is not None else None
-        ),
-        handoff_package=(
-            node.handoff_package.to_json() if node.handoff_package is not None else None
-        ),
-        recommended_capabilities=[
-            {"name": c.name, "weight": c.weight} for c in node.recommended_capabilities
-        ],
-        preferred_agent_id=node.preferred_agent_id,
-        estimated_effort={
-            "minutes": node.estimated_effort.minutes,
-            "confidence": node.estimated_effort.confidence,
-        },
-        priority=node.priority,
-        intent=node.intent.value,
-        execution=node.execution.value,
-        progress={
-            "percent": node.progress.percent,
-            "confidence": node.progress.confidence,
-            "note": node.progress.note,
-        },
-        assignee_agent_id=node.assignee_agent_id,
-        current_attempt_id=node.current_attempt_id,
-        workspace_task_id=node.workspace_task_id,
-        metadata_json=dict(node.metadata),
-        created_at=node.created_at,
-        updated_at=node.updated_at,
-        completed_at=node.completed_at,
     )
+    _apply_plan_node_to_model(node, model)
+    return model
+
+
+def _apply_plan_node_to_model(node: PlanNode, model: PlanNodeModel) -> None:
+    model.plan_id = node.plan_id
+    model.parent_id = node.parent_id.value if node.parent_id is not None else None
+    model.kind = node.kind.value
+    model.title = node.title
+    model.description = node.description
+    model.depends_on = [d.value for d in node.depends_on]
+    model.inputs_schema = dict(node.inputs_schema)
+    model.outputs_schema = dict(node.outputs_schema)
+    model.acceptance_criteria = [_criterion_to_json(c) for c in node.acceptance_criteria]
+    model.feature_checkpoint = (
+        node.feature_checkpoint.to_json() if node.feature_checkpoint is not None else None
+    )
+    model.handoff_package = (
+        node.handoff_package.to_json() if node.handoff_package is not None else None
+    )
+    model.recommended_capabilities = [
+        {"name": c.name, "weight": c.weight} for c in node.recommended_capabilities
+    ]
+    model.preferred_agent_id = node.preferred_agent_id
+    model.estimated_effort = {
+        "minutes": node.estimated_effort.minutes,
+        "confidence": node.estimated_effort.confidence,
+    }
+    model.priority = node.priority
+    model.intent = node.intent.value
+    model.execution = node.execution.value
+    model.progress = {
+        "percent": node.progress.percent,
+        "confidence": node.progress.confidence,
+        "note": node.progress.note,
+    }
+    model.assignee_agent_id = node.assignee_agent_id
+    model.current_attempt_id = node.current_attempt_id
+    model.workspace_task_id = node.workspace_task_id
+    model.metadata_json = dict(node.metadata)
+    model.created_at = node.created_at
+    model.updated_at = node.updated_at
+    model.completed_at = node.completed_at
 
 
 def _plan_node_from_model(model: PlanNodeModel) -> PlanNode:

@@ -54,6 +54,9 @@ from src.domain.model.workspace.workspace_task_session_attempt import (
     WorkspaceTaskSessionAttempt,
     WorkspaceTaskSessionAttemptStatus,
 )
+from src.domain.model.workspace_plan import Plan
+from src.domain.model.workspace_plan.plan import PlanStatus
+from src.domain.model.workspace_plan.plan_node import PlanNodeKind, TaskExecution, TaskIntent
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.sql_blackboard_repository import (
     SqlBlackboardRepository,
@@ -438,8 +441,10 @@ async def _ensure_root_goal_evidence(
     if not isinstance(root_task_id, str) or not isinstance(workspace_id, str):
         return False, "root auto-complete cannot resolve root task/workspace id"
 
-    child_tasks = select_root_progress_child_tasks(
-        await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
+    child_tasks = await _load_current_root_progress_children(
+        task_repo=task_repo,
+        workspace_id=workspace_id,
+        root_task_id=root_task_id,
     )
     synthesized = synthesize_goal_evidence_from_children(
         root_task=root_task,
@@ -461,6 +466,32 @@ async def _ensure_root_goal_evidence(
     if not evaluation.allowed:
         return False, evaluation.reason or "root auto-complete evidence is insufficient"
     return True, None
+
+
+async def _load_current_root_progress_children(
+    *,
+    task_repo: SqlWorkspaceTaskRepository,
+    workspace_id: str,
+    root_task_id: str,
+) -> list[WorkspaceTask]:
+    """Load the child tasks that currently drive root-goal progress."""
+
+    current_plan_children_loader = getattr(
+        task_repo,
+        "find_current_plan_children_by_root_goal_task_id",
+        None,
+    )
+    if current_plan_children_loader is not None:
+        maybe_current_plan_children = current_plan_children_loader(workspace_id, root_task_id)
+        if inspect.isawaitable(maybe_current_plan_children):
+            current_plan_children = await maybe_current_plan_children
+        else:
+            current_plan_children = []
+        if current_plan_children:
+            return current_plan_children
+    return select_root_progress_child_tasks(
+        await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
+    )
 
 
 def _existing_goal_evidence_allows_completion(
@@ -526,8 +557,8 @@ async def _workspace_run_gate_allows_root_completion(
         root_metadata=root_metadata,
     )
     controller = WorkspaceRunController(session)
-    retry_queue = await controller.retry_queue(workspace_id)
-    active_attempts = await controller.active_attempts(workspace_id)
+    retry_queue = await controller.retry_queue(workspace_id, plan_id=plan.id)
+    active_attempts = await controller.active_attempts(workspace_id, plan_id=plan.id)
     gate = completion_gate_for_plan(
         plan,
         retry_queue=retry_queue,
@@ -537,12 +568,67 @@ async def _workspace_run_gate_allows_root_completion(
     if gate.get("allowed") is True:
         return True, None
     reasons = gate.get("blocked_reasons")
+    if _effectively_complete_plan_tail_allows_root_completion(
+        plan=plan,
+        gate=gate,
+        retry_queue=retry_queue,
+        active_attempts=active_attempts,
+    ):
+        return True, None
     reason = (
         str(reasons[0])
         if isinstance(reasons, list) and reasons
         else "workspace run completion gate blocked"
     )
     return False, reason
+
+
+def _active_plan_is_effectively_complete(plan: Plan) -> bool:
+    if plan.status is not PlanStatus.ACTIVE:
+        return False
+
+    saw_non_goal_node = False
+    for node in plan.nodes.values():
+        if node.node_id == plan.goal_id or node.kind is PlanNodeKind.GOAL:
+            continue
+        saw_non_goal_node = True
+        if node.intent is not TaskIntent.DONE:
+            return False
+        if node.execution is not TaskExecution.IDLE:
+            return False
+    return saw_non_goal_node
+
+
+def _effectively_complete_plan_tail_allows_root_completion(
+    *,
+    plan: Plan,
+    gate: Mapping[str, Any],
+    retry_queue: Sequence[Mapping[str, Any]],
+    active_attempts: Sequence[Mapping[str, Any]],
+) -> bool:
+    if not _active_plan_is_effectively_complete(plan):
+        return False
+    if active_attempts:
+        return False
+
+    non_tick_retry = [
+        item
+        for item in retry_queue
+        if item.get("event_type") != "supervisor_tick" or item.get("status") != "processing"
+    ]
+    if non_tick_retry:
+        return False
+
+    reasons = gate.get("blocked_reasons")
+    if not isinstance(reasons, list) or not reasons:
+        return False
+    allowed_tail_reasons = {
+        "plan status is active",
+        "active or retryable outbox items remain",
+        "required acceptance criteria lack verifier evidence",
+        "accepted worktree integration is incomplete",
+    }
+    return all(str(reason) in allowed_tail_reasons for reason in reasons)
 
 
 async def _record_root_auto_complete_failure(
@@ -610,14 +696,17 @@ async def auto_complete_ready_root(  # noqa: PLR0911 — pre-existing; not touch
     (e.g. autonomy ticks) remain resilient.
     """
     try:
-        children = await task_repo.find_by_root_goal_task_id(workspace_id, root_task.id)
+        children = await _load_current_root_progress_children(
+            task_repo=task_repo,
+            workspace_id=workspace_id,
+            root_task_id=root_task.id,
+        )
     except Exception:
         logger.warning("auto_complete_ready_root: find_by_root_goal_task_id failed", exc_info=True)
         return None
-    scoped_children = select_root_progress_child_tasks(children)
     execution_children = [
         c
-        for c in scoped_children
+        for c in children
         if (getattr(c, "metadata", {}) or {}).get(TASK_ROLE) == "execution_task"
     ]
     if not execution_children:

@@ -9,9 +9,19 @@ import pytest
 from src.application.schemas.workspace_agent_autonomy import GoalCandidateRecordModel
 from src.application.services.workspace_mention_router import WorkspaceMentionRouter
 from src.domain.model.workspace.workspace_task import WorkspaceTaskStatus
+from src.domain.model.workspace_plan import Plan, PlanStatus
+from src.domain.model.workspace_plan.plan_node import (
+    PlanNode,
+    PlanNodeId,
+    PlanNodeKind,
+    TaskExecution,
+    TaskIntent,
+)
 from src.infrastructure.agent.workspace.dispatcher.retry_policy import DEFAULT_RETRY_POLICY
 from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+    _active_plan_is_effectively_complete,
     _background_tasks,
+    _effectively_complete_plan_tail_allows_root_completion,
     _ensure_execution_attempt,
     _launch_workspace_retry_attempt,
     _mark_workspace_plan_node_reported,
@@ -63,8 +73,114 @@ def _attempt(
     return attempt
 
 
+def _plan_with_nodes(*, status: PlanStatus, nodes: list[PlanNode]) -> Plan:
+    plan = Plan(
+        id="plan-1",
+        workspace_id="ws-1",
+        goal_id=PlanNodeId("goal-1"),
+        status=status,
+    )
+    for node in nodes:
+        plan.add_node(node)
+    return plan
+
+
+def _goal_node() -> PlanNode:
+    return PlanNode(
+        id="goal-1",
+        plan_id="plan-1",
+        kind=PlanNodeKind.GOAL,
+        title="Ship goal",
+        intent=TaskIntent.TODO,
+        execution=TaskExecution.IDLE,
+    )
+
+
+def _task_node(
+    *,
+    intent: TaskIntent = TaskIntent.DONE,
+    execution: TaskExecution = TaskExecution.IDLE,
+    current_attempt_id: str | None = None,
+) -> PlanNode:
+    return PlanNode(
+        id="task-1",
+        plan_id="plan-1",
+        parent_id=PlanNodeId("goal-1"),
+        kind=PlanNodeKind.TASK,
+        title="Done task",
+        intent=intent,
+        execution=execution,
+        current_attempt_id=current_attempt_id,
+    )
+
+
 @pytest.mark.unit
 class TestWorkspaceGoalRuntime:
+    def test_active_plan_effectively_complete_allows_idle_root_tail(self) -> None:
+        plan = _plan_with_nodes(
+            status=PlanStatus.ACTIVE,
+            nodes=[_goal_node(), _task_node(current_attempt_id="attempt-1")],
+        )
+
+        assert _active_plan_is_effectively_complete(plan) is True
+
+    def test_active_plan_effectively_complete_rejects_remaining_work(self) -> None:
+        active_task = _plan_with_nodes(
+            status=PlanStatus.ACTIVE,
+            nodes=[
+                _goal_node(),
+                _task_node(
+                    intent=TaskIntent.IN_PROGRESS,
+                    execution=TaskExecution.RUNNING,
+                    current_attempt_id="attempt-1",
+                ),
+            ],
+        )
+        completed_plan = _plan_with_nodes(
+            status=PlanStatus.COMPLETED,
+            nodes=[_goal_node(), _task_node()],
+        )
+
+        assert _active_plan_is_effectively_complete(active_task) is False
+        assert _active_plan_is_effectively_complete(completed_plan) is False
+
+    def test_effectively_complete_plan_tail_allows_only_metadata_tail_blockers(self) -> None:
+        plan = _plan_with_nodes(
+            status=PlanStatus.ACTIVE,
+            nodes=[_goal_node(), _task_node(current_attempt_id="attempt-1")],
+        )
+        gate = {
+            "blocked_reasons": [
+                "plan status is active",
+                "active or retryable outbox items remain",
+                "required acceptance criteria lack verifier evidence",
+                "accepted worktree integration is incomplete",
+            ],
+        }
+
+        assert (
+            _effectively_complete_plan_tail_allows_root_completion(
+                plan=plan,
+                gate=gate,
+                retry_queue=[
+                    {"event_type": "supervisor_tick", "status": "processing"},
+                ],
+                active_attempts=[],
+            )
+            is True
+        )
+        assert (
+            _effectively_complete_plan_tail_allows_root_completion(
+                plan=plan,
+                gate=gate,
+                retry_queue=[
+                    {"event_type": "worker_launch", "status": "pending"},
+                ],
+                active_attempts=[],
+            )
+            is False
+        )
+
     async def test_mark_plan_node_reported_updates_visible_progress(self) -> None:
         node = MagicMock()
         node.progress = {"percent": 0.0, "confidence": 1.0, "note": "old progress"}

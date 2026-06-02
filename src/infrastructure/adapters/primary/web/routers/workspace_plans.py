@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import replace
@@ -11,7 +12,7 @@ from typing import Any, Protocol, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.workspace_service import WorkspaceService
@@ -3622,7 +3623,7 @@ def _exclude_live_attempt_nodes(
     return [
         node
         for node in nodes
-        if node.execution is not TaskExecution.RUNNING
+        if node.execution not in {TaskExecution.DISPATCHED, TaskExecution.RUNNING}
         or not node.current_attempt_id
         or node.current_attempt_id not in live_attempt_ids
     ]
@@ -3749,7 +3750,8 @@ async def _nodes_without_live_worker(
     attempt_ids = [
         node.current_attempt_id
         for node in nodes
-        if node.execution is TaskExecution.RUNNING and node.current_attempt_id
+        if node.execution in {TaskExecution.DISPATCHED, TaskExecution.RUNNING}
+        and node.current_attempt_id
     ]
     if not attempt_ids:
         return nodes
@@ -3854,32 +3856,85 @@ async def _has_pending_node_recovery_job(
             .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
             .where(WorkspacePlanOutboxModel.plan_id == plan_id)
             .where(
-                WorkspacePlanOutboxModel.event_type.in_([HANDOFF_RESUME_EVENT, WORKER_LAUNCH_EVENT])
+                WorkspacePlanOutboxModel.event_type.in_(
+                    [HANDOFF_RESUME_EVENT, WORKER_LAUNCH_EVENT, SUPERVISOR_TICK_EVENT]
+                )
             )
             .where(WorkspacePlanOutboxModel.status.in_(["pending", "processing", "failed"]))
-            .where(WorkspacePlanOutboxModel.payload_json["node_id"].as_string() == node_id)
+            .where(
+                or_(
+                    WorkspacePlanOutboxModel.payload_json["node_id"].as_string() == node_id,
+                    WorkspacePlanOutboxModel.payload_json["retry_node_id"].as_string() == node_id,
+                )
+            )
             .limit(1)
         )
     )
     if result.scalar_one_or_none() is not None:
         return True
-    if not previous_attempt_id:
-        return False
     recent_cutoff = datetime.now(UTC) - timedelta(
         seconds=_SNAPSHOT_RECOVERY_RECENT_JOB_SUPPRESSION_SECONDS
     )
+    if not previous_attempt_id:
+        result = await session.execute(
+            refresh_select_statement(
+                select(WorkspacePlanOutboxModel.id)
+                .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
+                .where(WorkspacePlanOutboxModel.plan_id == plan_id)
+                .where(
+                    WorkspacePlanOutboxModel.event_type.in_(
+                        [HANDOFF_RESUME_EVENT, SUPERVISOR_TICK_EVENT]
+                    )
+                )
+                .where(WorkspacePlanOutboxModel.status == "completed")
+                .where(WorkspacePlanOutboxModel.created_at >= recent_cutoff)
+                .where(
+                    or_(
+                        WorkspacePlanOutboxModel.payload_json["node_id"].as_string() == node_id,
+                        WorkspacePlanOutboxModel.payload_json["retry_node_id"].as_string()
+                        == node_id,
+                    )
+                )
+                .limit(1)
+            )
+        )
+        if result.scalar_one_or_none() is not None:
+            return True
+        result = await session.execute(
+            refresh_select_statement(
+                select(WorkspacePlanEventModel.id)
+                .where(WorkspacePlanEventModel.workspace_id == workspace_id)
+                .where(WorkspacePlanEventModel.plan_id == plan_id)
+                .where(WorkspacePlanEventModel.event_type == "auto_stale_node_recovery_queued")
+                .where(WorkspacePlanEventModel.created_at >= recent_cutoff)
+                .where(WorkspacePlanEventModel.node_id == node_id)
+                .limit(1)
+            )
+        )
+        return result.scalar_one_or_none() is not None
     result = await session.execute(
         refresh_select_statement(
             select(WorkspacePlanOutboxModel.id)
             .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
             .where(WorkspacePlanOutboxModel.plan_id == plan_id)
-            .where(WorkspacePlanOutboxModel.event_type == HANDOFF_RESUME_EVENT)
+            .where(
+                WorkspacePlanOutboxModel.event_type.in_([HANDOFF_RESUME_EVENT, SUPERVISOR_TICK_EVENT])
+            )
             .where(WorkspacePlanOutboxModel.status == "completed")
             .where(WorkspacePlanOutboxModel.created_at >= recent_cutoff)
-            .where(WorkspacePlanOutboxModel.payload_json["node_id"].as_string() == node_id)
             .where(
-                WorkspacePlanOutboxModel.payload_json["previous_attempt_id"].as_string()
-                == previous_attempt_id
+                or_(
+                    WorkspacePlanOutboxModel.payload_json["node_id"].as_string() == node_id,
+                    WorkspacePlanOutboxModel.payload_json["retry_node_id"].as_string() == node_id,
+                )
+            )
+            .where(
+                or_(
+                    WorkspacePlanOutboxModel.payload_json["previous_attempt_id"].as_string()
+                    == previous_attempt_id,
+                    WorkspacePlanOutboxModel.payload_json["retry_attempt_id"].as_string()
+                    == previous_attempt_id,
+                )
             )
             .limit(1)
         )
@@ -3895,6 +3950,192 @@ async def _has_pending_node_recovery_job(
             .where(WorkspacePlanEventModel.created_at >= recent_cutoff)
             .where(WorkspacePlanEventModel.node_id == node_id)
             .where(WorkspacePlanEventModel.attempt_id == previous_attempt_id)
+            .limit(1)
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
+def _platform_pipeline_commit_ref_from_text(text: str) -> str | None:
+    normalized = text.lower()
+    if not (
+        "harness-native ci pipeline evidence" in normalized
+        or "platform harness" in normalized
+        or "memstack-source-publish" in normalized
+    ):
+        return None
+    if not any(
+        marker in normalized
+        for marker in (
+            "platform harness",
+            "source_publish",
+            "source publish",
+            "memstack-source-publish",
+            "re-trigger drone",
+            "retrigger drone",
+            "trigger drone",
+            "known-good fix exists at commit",
+        )
+    ):
+        return None
+    patterns = (
+        r"\bknown-good\s+fix\s+exists\s+at\s+commit\s+([0-9A-Fa-f]{7,40})",
+        r"\bplatform\s+harness\s+must\s+(?:perform\s+)?source[_ -]?publish\s+of\s+commit\s+([0-9A-Fa-f]{7,40})",
+        r"\bplatform\s+harness\s+must\s+publish\s+commit\s+([0-9A-Fa-f]{7,40})",
+        r"\bcommitted\s+as\s+([0-9A-Fa-f]{7,40})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return None
+
+
+async def _latest_platform_pipeline_recovery_candidate(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    node: PlanNode,
+) -> tuple[str, str, str] | None:
+    if not node.workspace_task_id:
+        return None
+    result = await session.execute(
+        refresh_select_statement(
+            select(
+                WorkspaceTaskSessionAttemptModel.id,
+                WorkspaceTaskSessionAttemptModel.candidate_summary,
+                WorkspaceTaskSessionAttemptModel.leader_feedback,
+            )
+            .where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
+            .where(WorkspaceTaskSessionAttemptModel.workspace_task_id == node.workspace_task_id)
+            .where(WorkspaceTaskSessionAttemptModel.status.in_(["rejected", "blocked"]))
+            .order_by(WorkspaceTaskSessionAttemptModel.created_at.desc())
+            .limit(8)
+        )
+    )
+    for attempt_id, summary, feedback in result.all():
+        text = "\n".join(part for part in (summary, feedback) if isinstance(part, str) and part)
+        commit_ref = _platform_pipeline_commit_ref_from_text(text)
+        if commit_ref:
+            return str(attempt_id), commit_ref, text[:2000]
+    return None
+
+
+async def _enqueue_pipeline_run_for_stale_candidate(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan: Plan,
+    node: PlanNode,
+    actor_id: str,
+) -> bool:
+    candidate = await _latest_platform_pipeline_recovery_candidate(
+        session=session,
+        workspace_id=workspace_id,
+        node=node,
+    )
+    if candidate is None:
+        return False
+    attempt_id, commit_ref, summary = candidate
+    if await _has_active_pipeline_request_for_node(
+        session=session,
+        workspace_id=workspace_id,
+        plan_id=plan.id,
+        node_id=node.id,
+    ):
+        return True
+    now = datetime.now(UTC)
+    metadata = dict(node.metadata or {})
+    metadata.update(
+        {
+            "pipeline_required": True,
+            "pipeline_provider": metadata.get("pipeline_provider") or "sandbox_native",
+            "pipeline_status": "requested",
+            "pipeline_gate_status": "requested",
+            "pipeline_requested_at": now.isoformat().replace("+00:00", "Z"),
+            "pipeline_request_reason": "snapshot_known_good_platform_publish_gap",
+            "last_verification_attempt_id": attempt_id,
+            "last_verification_summary": summary,
+            "last_verification_passed": False,
+            "last_verification_hard_fail": False,
+            "verified_commit_ref": commit_ref,
+            "source_publish_source_commit_ref": commit_ref,
+        }
+    )
+    evidence_refs = _metadata_string_values(metadata.get("verification_evidence_refs"))
+    evidence_refs.append(f"commit_ref:{commit_ref}")
+    metadata["verification_evidence_refs"] = list(dict.fromkeys(evidence_refs))
+    repaired = replace(
+        node,
+        intent=TaskIntent.IN_PROGRESS,
+        execution=TaskExecution.IDLE,
+        metadata=metadata,
+        updated_at=now,
+    )
+    plan.replace_node(repaired)
+    await SqlPlanRepository(session).save(plan)
+    outbox = await SqlWorkspacePlanOutboxRepository(session).enqueue(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        event_type=PIPELINE_RUN_REQUESTED_EVENT,
+        payload={
+            "workspace_id": workspace_id,
+            "plan_id": plan.id,
+            "node_id": node.id,
+            "attempt_id": attempt_id,
+            "reason": "snapshot known-good fix requires platform source_publish and CI rerun",
+        },
+        metadata={
+            "source": "workspace_plan.snapshot_known_good_pipeline_recovery",
+            "node_id": node.id,
+            "attempt_id": attempt_id,
+            "source_commit_ref": commit_ref,
+        },
+    )
+    _ = await SqlWorkspacePlanEventRepository(session).append(
+        plan_id=plan.id,
+        workspace_id=workspace_id,
+        node_id=node.id,
+        attempt_id=attempt_id,
+        event_type="pipeline_run_requested",
+        source="workspace_plan_snapshot",
+        actor_id=actor_id,
+        payload={
+            "reason": "snapshot_known_good_platform_publish_gap",
+            "commit_ref": commit_ref,
+            "outbox_id": outbox.id,
+        },
+    )
+    await session.commit()
+    logger.warning(
+        "workspace_plan.snapshot_known_good_pipeline_recovery_queued",
+        extra={
+            "event": "workspace_plan.snapshot_known_good_pipeline_recovery_queued",
+            "workspace_id": workspace_id,
+            "plan_id": plan.id,
+            "node_id": node.id,
+            "attempt_id": attempt_id,
+            "commit_ref": commit_ref,
+        },
+    )
+    return True
+
+
+async def _has_active_pipeline_request_for_node(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    plan_id: str,
+    node_id: str,
+) -> bool:
+    result = await session.execute(
+        refresh_select_statement(
+            select(WorkspacePlanOutboxModel.id)
+            .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
+            .where(WorkspacePlanOutboxModel.plan_id == plan_id)
+            .where(WorkspacePlanOutboxModel.event_type == PIPELINE_RUN_REQUESTED_EVENT)
+            .where(WorkspacePlanOutboxModel.status.in_(["pending", "processing", "failed"]))
+            .where(WorkspacePlanOutboxModel.payload_json["node_id"].as_string() == node_id)
             .limit(1)
         )
     )
@@ -4295,6 +4536,15 @@ async def _enqueue_stale_plan_node_recovery(
             node_id=node.id,
         ):
             continue
+        if await _enqueue_pipeline_run_for_stale_candidate(
+            session=session,
+            workspace_id=workspace_id,
+            plan=plan,
+            node=node,
+            actor_id=actor_id,
+        ):
+            enqueued += 1
+            continue
         if await _has_pending_node_recovery_job(
             session=session,
             workspace_id=workspace_id,
@@ -4306,21 +4556,19 @@ async def _enqueue_stale_plan_node_recovery(
         _ = await repo.enqueue(
             plan_id=plan.id,
             workspace_id=workspace_id,
-            event_type=HANDOFF_RESUME_EVENT,
+            event_type=SUPERVISOR_TICK_EVENT,
             payload={
                 "workspace_id": workspace_id,
-                "task_id": node.workspace_task_id,
-                "node_id": node.id,
-                "worker_agent_id": node.assignee_agent_id,
                 "actor_user_id": actor_id,
-                "previous_attempt_id": node.current_attempt_id,
                 "root_goal_task_id": root_goal_task_id,
+                "retry_node_id": node.id,
+                "retry_attempt_id": node.current_attempt_id,
+                "retry_reason": "stale_plan_node_no_terminal_worker_report",
                 "summary": "auto_recovery_stale_plan_node_no_terminal_worker_report",
-                "reason": "retry",
-                "force_schedule": True,
             },
             metadata={
                 "source": "workspace_plan.snapshot_stale_node_recovery",
+                "node_id": node.id,
                 "previous_attempt_id": node.current_attempt_id,
             },
         )
@@ -4505,6 +4753,8 @@ async def get_workspace_plan_snapshot(
     request: Request,
     outbox_limit: int = Query(20, ge=0, le=100),
     event_limit: int = Query(50, ge=0, le=200),
+    include_details: bool = Query(True),
+    recover_stale_attempts: bool = Query(True),
     plan_id: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -4517,7 +4767,8 @@ async def get_workspace_plan_snapshot(
             db=db,
             current_user=current_user,
         )
-        await _ensure_plan_outbox_worker_running(request)
+        if include_details:
+            await _ensure_plan_outbox_worker_running(request)
         plan_repo = SqlPlanRepository(db)
         plans = await plan_repo.list_by_workspace(workspace_id)
         if not plans:
@@ -4531,7 +4782,7 @@ async def get_workspace_plan_snapshot(
                 raise ValueError(f"workspace plan not found: {selected_plan_id}")
             plans = [*plans, plan]
         selected_is_latest = plan.id == latest_plan_id
-        if selected_is_latest:
+        if selected_is_latest and include_details and recover_stale_attempts:
             if await _recover_stale_attempts_for_snapshot(
                 session=db,
                 workspace_id=workspace_id,
@@ -4545,6 +4796,19 @@ async def get_workspace_plan_snapshot(
                 plan = plans[0]
                 selected_plan_id = plan.id
                 selected_is_latest = True
+
+        root_goal = await _load_root_goal_response(
+            db,
+            workspace_id=workspace_id,
+            plan=plan,
+            allow_workspace_fallback=selected_is_latest,
+        )
+        if not include_details:
+            return WorkspacePlanSnapshotResponse(
+                workspace_id=workspace_id,
+                plan=_to_plan_response(plan),
+                root_goal=root_goal,
+            )
 
         blackboard_entries = await SqlWorkspacePlanBlackboard(db).list(plan.id)
         result = await db.execute(
@@ -4568,12 +4832,6 @@ async def get_workspace_plan_snapshot(
             )
         )
         event_items = list(event_result.scalars().all())
-        root_goal = await _load_root_goal_response(
-            db,
-            workspace_id=workspace_id,
-            plan=plan,
-            allow_workspace_fallback=selected_is_latest,
-        )
         delivery = await _to_delivery_summary(db, plan=plan)
         ledger_attempts = await _load_plan_attempts_for_snapshot(
             session=db,

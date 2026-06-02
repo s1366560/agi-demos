@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import TextClause
 
 from src.domain.model.workspace_plan import (
     AcceptanceCriterion,
@@ -242,6 +245,30 @@ async def test_save_replaces_existing_nodes(
     assert loaded.status is PlanStatus.ACTIVE
     assert len(loaded.nodes) == 1
     assert PlanNodeId(value="task-1") not in loaded.nodes
+
+
+@pytest.mark.asyncio
+async def test_save_lock_uses_postgres_transaction_advisory_lock() -> None:
+    class FakePostgresSession:
+        def __init__(self) -> None:
+            self.statement: TextClause | None = None
+            self.params: dict[str, Any] | None = None
+
+        def get_bind(self) -> SimpleNamespace:
+            return SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+
+        async def execute(self, statement: TextClause, params: dict[str, Any]) -> None:
+            self.statement = statement
+            self.params = params
+
+    fake_session = FakePostgresSession()
+    repo = SqlPlanRepository(cast(AsyncSession, fake_session))
+
+    await repo._lock_plan_for_save("plan-1")
+
+    assert fake_session.statement is not None
+    assert "pg_advisory_xact_lock" in str(fake_session.statement)
+    assert fake_session.params == {"plan_id": "workspace_plan:plan-1"}
 
 
 @pytest.mark.asyncio

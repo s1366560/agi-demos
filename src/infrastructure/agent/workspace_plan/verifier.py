@@ -53,7 +53,7 @@ from src.infrastructure.agent.workspace_plan.worktree_manager import is_generate
 logger = logging.getLogger(__name__)
 
 _VERIFICATION_JUDGE_TIMEOUT_SECONDS_ENV = "WORKSPACE_VERIFICATION_JUDGE_TIMEOUT_SECONDS"
-_DEFAULT_VERIFICATION_JUDGE_TIMEOUT_SECONDS = 180.0
+_DEFAULT_VERIFICATION_JUDGE_TIMEOUT_SECONDS = 900.0
 _CHANGE_EVIDENCE_PHASES = {"implement", "test", "deploy"}
 _NO_OUTPUT_SENTINELS = {
     "(no output)",
@@ -961,6 +961,12 @@ def _metadata_summary(ctx: VerificationContext) -> dict[str, Any]:
         "external_id",
         "preflight_checks",
         "preview_url",
+        "source_publish_branch",
+        "source_publish_commit_ref",
+        "source_publish_provider",
+        "source_publish_reason",
+        "source_publish_source_commit_ref",
+        "source_publish_status",
         "verification_commands",
         "write_set",
     )
@@ -1726,10 +1732,15 @@ def _drone_external_registry_transient_failure_feedback(
             "failed to resolve source metadata",
         )
     )
+    has_external_clone = "github.com" in text and (
+        "git fetch origin" in text or "cloning with" in text or "unable to access" in text
+    )
     has_transient_network_failure = any(
         token in text
         for token in (
             "tls handshake timeout",
+            "ssl_error_syscall",
+            "ssl_connect",
             "i/o timeout",
             "net/http: request canceled",
             "context deadline exceeded",
@@ -1737,20 +1748,21 @@ def _drone_external_registry_transient_failure_feedback(
             "connection reset by peer",
         )
     )
-    if not (has_external_registry and has_transient_network_failure):
+    if not ((has_external_registry or has_external_clone) and has_transient_network_failure):
         return None
+    target = "GitHub clone/fetch" if has_external_clone and not has_external_registry else "registry"
     return WorkspaceVerificationFeedbackItem(
         target_layer=WorkspaceVerificationFeedbackTargetLayer.RUNTIME,
         feedback_kind=WorkspaceVerificationFeedbackKind.RUNTIME_INFRA_FAILURE,
         severity=WorkspaceVerificationFeedbackSeverity.WARNING,
         recommended_action=WorkspaceVerificationRecommendedAction.RETRY_INFRA,
         summary=(
-            "Drone failed while pulling an external registry image or manifest due to a "
-            "transient network/TLS timeout. Retry the pipeline for the same commit."
+            f"Drone failed during external {target} access due to a transient network/TLS "
+            "error. Retry the pipeline for the same commit."
         ),
         evidence_refs=(
             "drone_error:external_registry_transient_timeout",
-            "drone_stage:docker-build",
+            "drone_stage:clone" if has_external_clone and not has_external_registry else "drone_stage:docker-build",
         ),
         failure_signature="drone-external-registry-transient-timeout",
     )

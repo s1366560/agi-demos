@@ -1085,6 +1085,8 @@ class TestBuildBrief:
             "do not use localhost",
             "sandbox worker may not have DRONE_TOKEN",
             "platform harness can trigger and verify Drone",
+            "Do not wait for source-publish or memstack-source-publish refs to auto-sync",
+            "call the required workspace_report_* contract tool",
             "verify every `steps[].commands[]` item is a string",
             'echo "label: value"',
             "Keep host.docker.internal:<port> for plugins/docker build/push settings",
@@ -1806,6 +1808,28 @@ services:
         assert policy["allowed_verification_script_paths"] == ["workspace-persistence.test.ts"]
         assert "workspace-persistence.test.ts" in brief
         assert "drone test log evidence" not in policy["allowed_verification_script_paths"]
+
+    def test_system_context_allowlists_contract_named_verification_script_path(self) -> None:
+        task = _make_task(
+            title="Extend frontend/e2e/journey.spec.ts with OAuth login coverage",
+            description=(
+                "Add OAuth assertions to frontend/e2e/journey.spec.ts, run the full "
+                "Playwright suite, and record the new total."
+            ),
+        )
+
+        system_context = wl._build_worker_system_context(
+            workspace_id="w",
+            task=task,
+            attempt_id="att-2",
+            leader_agent_id="L",
+            plan_node_metadata={"iteration_phase": "test"},
+        )
+
+        policy = system_context["workspace_verification_integrity"]
+        assert policy["protected_script_changes"] is True
+        assert policy["allow_verification_script_changes"] is False
+        assert policy["allowed_verification_script_paths"] == ["frontend/e2e/journey.spec.ts"]
 
     def test_system_context_honors_explicit_failed_tests_contract(self) -> None:
         task = _make_task(

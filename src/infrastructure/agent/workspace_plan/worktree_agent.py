@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
 import posixpath
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from typing import TYPE_CHECKING, Any, Protocol
 
 from src.infrastructure.agent.sisyphus.builtin_agent import (
@@ -30,6 +32,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _MISSING_CONTRACT_RETRY_ATTEMPTS = 1
+_DEFAULT_WORKTREE_MANAGER_TURN_TIMEOUT_SECONDS = 300
+_MAX_WORKTREE_MANAGER_TURN_TIMEOUT_SECONDS = 1800
 
 
 class WorkspaceWorktreeAgentTurnRunner(Protocol):
@@ -49,6 +53,20 @@ class WorkspaceWorktreeAgentTurnRunner(Protocol):
     ) -> dict[str, Any] | None: ...
 
 
+class _WorkspaceContractAgentService(Protocol):
+    def stream_chat_v2(
+        self,
+        *,
+        conversation_id: str,
+        user_message: str,
+        user_id: str,
+        project_id: str,
+        tenant_id: str,
+        agent_id: str,
+        app_model_context: dict[str, Any] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]: ...
+
+
 class RuntimeWorkspaceWorktreeAgentTurnRunner:
     """Run the builtin worktree manager through the normal project ReAct runtime."""
 
@@ -59,12 +77,18 @@ class RuntimeWorkspaceWorktreeAgentTurnRunner:
         project_id: str,
         max_steps: int = 8,
         max_tokens: int = 8192,
+        turn_timeout_seconds: float | None = None,
     ) -> None:
         super().__init__()
         self._tenant_id = tenant_id
         self._project_id = project_id
         self._max_steps = max_steps
         self._max_tokens = max_tokens
+        self._turn_timeout_seconds = (
+            turn_timeout_seconds
+            if turn_timeout_seconds is not None
+            else _worktree_manager_turn_timeout_seconds()
+        )
         self._last_diagnostics: dict[str, Any] = {}
 
     @property
@@ -121,6 +145,7 @@ class RuntimeWorkspaceWorktreeAgentTurnRunner:
             "observed_tools": [],
             "preparation_submitted": False,
             "runtime_path": "agent_service.stream_chat_v2",
+            "turn_timeout_seconds": self._turn_timeout_seconds,
         }
         recovered_payload = await recover_workspace_contract_payload(
             conversation_id=conversation_id,
@@ -178,26 +203,20 @@ class RuntimeWorkspaceWorktreeAgentTurnRunner:
         async with async_session_factory() as db:
             llm = await create_llm_client(self._tenant_id)
             agent_service = await create_workspace_contract_agent_service(db=db, llm=llm)
-            async for event in agent_service.stream_chat_v2(
+            payload = await self._stream_preparation_payload(
+                agent_service=agent_service,
                 conversation_id=conversation_id,
-                user_message=user_prompt,
-                user_id=resolved_actor_user_id,
-                project_id=self._project_id,
-                tenant_id=self._tenant_id,
-                agent_id=worktree_agent.id,
+                user_prompt=user_prompt,
+                resolved_actor_user_id=resolved_actor_user_id,
+                worktree_agent_id=worktree_agent.id,
+                workspace_id=workspace_id,
+                task_id=task_id,
+                attempt_id=attempt_id,
                 app_model_context=app_model_context,
-            ):
-                diagnostics["event_count"] += 1
-                tool_name = _tool_name_from_event(event)
-                if tool_name:
-                    observed_tools = diagnostics["observed_tools"]
-                    if tool_name not in observed_tools:
-                        observed_tools.append(tool_name)
-                payload = _worktree_preparation_from_event(event)
-                if payload is not None:
-                    diagnostics["preparation_submitted"] = True
-                    self._last_diagnostics = diagnostics
-                    return payload
+                diagnostics=diagnostics,
+            )
+            if payload is not None:
+                return payload
         recovered_payload = await recover_workspace_contract_payload(
             conversation_id=conversation_id,
             extract_payload=_worktree_preparation_from_event,
@@ -208,6 +227,66 @@ class RuntimeWorkspaceWorktreeAgentTurnRunner:
             self._last_diagnostics = diagnostics
             return recovered_payload
         self._last_diagnostics = diagnostics
+        return None
+
+    async def _stream_preparation_payload(
+        self,
+        *,
+        agent_service: _WorkspaceContractAgentService,
+        conversation_id: str,
+        user_prompt: str,
+        resolved_actor_user_id: str,
+        worktree_agent_id: str,
+        workspace_id: str,
+        task_id: str,
+        attempt_id: str | None,
+        app_model_context: Mapping[str, Any],
+        diagnostics: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        from src.infrastructure.agent.workspace.contract_agent_runtime import (
+            cancel_workspace_contract_chat,
+        )
+
+        try:
+            async with asyncio.timeout(self._turn_timeout_seconds):
+                async for event in agent_service.stream_chat_v2(
+                    conversation_id=conversation_id,
+                    user_message=user_prompt,
+                    user_id=resolved_actor_user_id,
+                    project_id=self._project_id,
+                    tenant_id=self._tenant_id,
+                    agent_id=worktree_agent_id,
+                    app_model_context=dict(app_model_context),
+                ):
+                    diagnostics["event_count"] += 1
+                    tool_name = _tool_name_from_event(event)
+                    if tool_name:
+                        observed_tools = diagnostics["observed_tools"]
+                        if tool_name not in observed_tools:
+                            observed_tools.append(tool_name)
+                    payload = _worktree_preparation_from_event(event)
+                    if payload is not None:
+                        diagnostics["preparation_submitted"] = True
+                        self._last_diagnostics = diagnostics
+                        await cancel_workspace_contract_chat(conversation_id)
+                        return payload
+        except TimeoutError:
+            diagnostics["timed_out"] = True
+            self._last_diagnostics = diagnostics
+            await cancel_workspace_contract_chat(conversation_id)
+            logger.warning(
+                "Workspace worktree-manager contract turn timed out",
+                extra={
+                    "conversation_id": conversation_id,
+                    "workspace_id": workspace_id,
+                    "task_id": task_id,
+                    "attempt_id": attempt_id,
+                    "timeout_seconds": self._turn_timeout_seconds,
+                },
+            )
+        except asyncio.CancelledError:
+            await cancel_workspace_contract_chat(conversation_id)
+            raise
         return None
 
 
@@ -347,6 +426,19 @@ def _worktree_preparation_from_event(event: Mapping[str, Any]) -> dict[str, Any]
         tool_name=WORKSPACE_SUBMIT_WORKTREE_PREPARATION_TOOL_NAME,
         payload_key="worktree_preparation",
     )
+
+
+def _worktree_manager_turn_timeout_seconds() -> int:
+    raw_value = os.getenv("WORKSPACE_WORKTREE_MANAGER_TIMEOUT_SECONDS")
+    if raw_value is None:
+        return _DEFAULT_WORKTREE_MANAGER_TURN_TIMEOUT_SECONDS
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return _DEFAULT_WORKTREE_MANAGER_TURN_TIMEOUT_SECONDS
+    if parsed <= 0:
+        return _DEFAULT_WORKTREE_MANAGER_TURN_TIMEOUT_SECONDS
+    return min(parsed, _MAX_WORKTREE_MANAGER_TURN_TIMEOUT_SECONDS)
 
 
 def _tool_name_from_event(event: Mapping[str, Any]) -> str | None:

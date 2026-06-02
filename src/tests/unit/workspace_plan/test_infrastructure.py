@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -88,6 +89,7 @@ from src.infrastructure.agent.workspace_plan.verifier import (
     RegexCriterionRunner,
     SchemaCriterionRunner,
     _reported_changed_paths,
+    _verification_judge_timeout_seconds,
 )
 
 # ---------------------------------------------------------------------------
@@ -853,6 +855,13 @@ class TestVerifier:
         assert "not an automatic rejection" in prompt
         assert "stale, nonexistent, or no longer applicable" in prompt
         assert "terminal_worker_report_completed" in prompt
+
+    def test_verification_judge_timeout_default_allows_long_contract_turns(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("WORKSPACE_VERIFICATION_JUDGE_TIMEOUT_SECONDS", raising=False)
+
+        assert _verification_judge_timeout_seconds() == 900.0
 
     def test_iteration_reviewer_prompt_preserves_attempt_worktree_contract(self) -> None:
         prompt = build_builtin_workspace_iteration_reviewer_agent(
@@ -2998,6 +3007,19 @@ class _AlwaysPassVerifier:
 
 
 @dataclass
+class _CheckpointAwareVerifier:
+    checkpoint_count: Callable[[], int]
+
+    async def verify(self, ctx: VerificationContext) -> VerificationReport:
+        assert self.checkpoint_count() >= 1
+        return VerificationReport(
+            node_id=ctx.node.id,
+            attempt_id=ctx.attempt_id,
+            results=(),
+        )
+
+
+@dataclass
 class _StaticSupervisorDecisionProvider:
     result: WorkspaceSupervisorDecisionResult
     requests: list[WorkspaceSupervisorDecisionRequest] = field(default_factory=list)
@@ -4081,6 +4103,148 @@ def _supervisor_for_iteration_review(
 
 
 class TestSupervisorTick:
+    async def test_tick_checkpoints_before_long_verifier_and_decision_calls(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+            )
+        )
+        await repo.save(plan)
+
+        checkpoint_count = 0
+
+        def checkpoints() -> int:
+            return checkpoint_count
+
+        async def checkpoint() -> None:
+            nonlocal checkpoint_count
+            checkpoint_count += 1
+
+        class _CheckpointAwareDecisionProvider(_StaticSupervisorDecisionProvider):
+            async def decide(
+                self,
+                request: WorkspaceSupervisorDecisionRequest,
+            ) -> WorkspaceSupervisorDecisionResult:
+                assert checkpoint_count >= 2
+                return await super().decide(request)
+
+        provider = _CheckpointAwareDecisionProvider(
+            WorkspaceSupervisorDecisionResult(
+                action=WorkspaceSupervisorDecisionAction.ACCEPT_NODE,
+                rationale="attempt satisfies the node",
+                confidence=0.9,
+            )
+        )
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            return None
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid, node=node, attempt_id=node.current_attempt_id
+            )
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_CheckpointAwareVerifier(checkpoints),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            supervisor_decision_provider=provider,
+            transaction_checkpoint=checkpoint,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.errors == ()
+        assert checkpoint_count >= 2
+        assert provider.requests
+
+    async def test_tick_checkpoints_verified_state_before_dispatching_new_work(self) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+            )
+        )
+        await repo.save(plan)
+
+        provider = _StaticSupervisorDecisionProvider(
+            WorkspaceSupervisorDecisionResult(
+                action=WorkspaceSupervisorDecisionAction.ACCEPT_NODE,
+                rationale="attempt satisfies the node",
+                confidence=0.9,
+            )
+        )
+        checkpointed = False
+        dispatched: list[tuple[str, str]] = []
+
+        async def checkpoint() -> None:
+            nonlocal checkpointed
+            checkpointed = True
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="Code",
+                    capabilities=frozenset({"codegen"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, alloc: Any, node: PlanNode) -> str | None:
+            assert checkpointed
+            dispatched.append((alloc.agent_id, node.id))
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid, node=node, attempt_id=node.current_attempt_id
+            )
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            supervisor_decision_provider=provider,
+            transaction_checkpoint=checkpoint,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.errors == ()
+        assert report.nodes_completed == 1
+        assert checkpointed is True
+        assert dispatched == [("ag-code", "b")]
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        assert reloaded.nodes[PlanNodeId("a")].intent is TaskIntent.DONE
+        assert reloaded.nodes[PlanNodeId("b")].execution is TaskExecution.DISPATCHED
+
     async def test_tick_applies_agent_supervisor_accept_decision(self) -> None:
         repo = InMemoryPlanRepository()
         plan = _plan_with_two_tasks()
@@ -4232,6 +4396,250 @@ class TestSupervisorTick:
         assert node.metadata["pipeline_status"] == "requested"
         assert node.metadata["pipeline_gate_status"] == "requested"
 
+    async def test_tick_agent_supervisor_retry_decision_requests_pipeline_for_gate_gap(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={
+                    "pipeline_required": True,
+                    "pipeline_status": "failed",
+                    "pipeline_gate_status": "failed",
+                },
+            )
+        )
+        await repo.save(plan)
+
+        class _PipelineGateGapVerifier:
+            async def verify(self, ctx: VerificationContext) -> VerificationReport:
+                return VerificationReport(
+                    node_id=ctx.node.id,
+                    attempt_id=ctx.attempt_id,
+                    results=(
+                        CriterionResult(
+                            criterion=AcceptanceCriterion(
+                                kind=CriterionKind.CI_PIPELINE,
+                                spec={"name": "ci_pipeline"},
+                                required=True,
+                            ),
+                            passed=False,
+                            confidence=1.0,
+                            message="missing harness-native CI pipeline evidence",
+                        ),
+                        CriterionResult(
+                            criterion=AcceptanceCriterion(
+                                kind=CriterionKind.CUSTOM,
+                                spec={
+                                    "name": "workspace_verification_judge",
+                                    "judge_verdict": "needs_rework",
+                                    "next_action_kind": "retry_same_node",
+                                    "failed_criteria": [
+                                        "Drone CI status=success evidence missing",
+                                        "memstack-source-publish/main not fast-forwarded",
+                                    ],
+                                },
+                                required=True,
+                            ),
+                            passed=False,
+                            confidence=0.8,
+                            message=(
+                                "platform harness must publish the worktree commit to "
+                                "memstack-source-publish/main and re-trigger Drone"
+                            ),
+                        ),
+                    ),
+                )
+
+        provider = _StaticSupervisorDecisionProvider(
+            WorkspaceSupervisorDecisionResult(
+                action=WorkspaceSupervisorDecisionAction.RETRY_SAME_NODE,
+                rationale=(
+                    "retry same node after platform harness push to "
+                    "memstack-source-publish/main and Drone re-trigger"
+                ),
+                confidence=0.88,
+            )
+        )
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("pipeline request should not redispatch in the same tick")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid, node=node, attempt_id=node.current_attempt_id
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_PipelineGateGapVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            supervisor_decision_provider=provider,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        pipeline_events = [event for event in events if event[0] == "pipeline_run_requested"]
+        retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
+        assert len(pipeline_events) == 1
+        assert retry_events == []
+        assert pipeline_events[0][2]["reason"] == "supervisor_decision_platform_harness_pipeline"
+        assert pipeline_events[0][2]["overrode_action"] == "retry_same_node"
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        node = reloaded.nodes[PlanNodeId("a")]
+        assert node.metadata["pipeline_status"] == "requested"
+        assert node.metadata["pipeline_gate_status"] == "requested"
+
+    async def test_tick_agent_supervisor_retry_decision_rationale_can_request_pipeline(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={
+                    "pipeline_required": True,
+                    "pipeline_status": "failed",
+                    "pipeline_gate_status": "failed",
+                },
+            )
+        )
+        await repo.save(plan)
+
+        class _PipelinePublishGapVerifier:
+            async def verify(self, ctx: VerificationContext) -> VerificationReport:
+                return VerificationReport(
+                    node_id=ctx.node.id,
+                    attempt_id=ctx.attempt_id,
+                    results=(
+                        CriterionResult(
+                            criterion=AcceptanceCriterion(
+                                kind=CriterionKind.CUSTOM,
+                                spec={"name": "feature_checkpoint_evidence_recorded"},
+                                required=True,
+                            ),
+                            passed=False,
+                            confidence=1.0,
+                            message="missing feature checkpoint evidence: commit_ref or git_diff_summary",
+                        ),
+                        CriterionResult(
+                            criterion=AcceptanceCriterion(
+                                kind=CriterionKind.CI_PIPELINE,
+                                spec={"name": "ci_pipeline"},
+                                required=True,
+                            ),
+                            passed=False,
+                            confidence=1.0,
+                            message="missing harness-native CI pipeline evidence",
+                        ),
+                        CriterionResult(
+                            criterion=AcceptanceCriterion(
+                                kind=CriterionKind.CUSTOM,
+                                spec={
+                                    "name": "workspace_verification_judge",
+                                    "judge_verdict": "needs_rework",
+                                    "next_action_kind": "retry_same_node",
+                                },
+                                required=True,
+                            ),
+                            passed=False,
+                            confidence=0.8,
+                            message=(
+                                "The YAML fix is correct and the worktree is clean, "
+                                "but no live Drone build exists for the post-fix commit."
+                            ),
+                        ),
+                    ),
+                )
+
+        provider = _StaticSupervisorDecisionProvider(
+            WorkspaceSupervisorDecisionResult(
+                action=WorkspaceSupervisorDecisionAction.RETRY_SAME_NODE,
+                rationale=(
+                    "The substantive fix is real. The platform harness must "
+                    "fast-forward memstack-source-publish/main and re-trigger "
+                    "Drone before the worker can capture harness-native CI evidence."
+                ),
+                confidence=0.85,
+            )
+        )
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("platform pipeline request should not launch another worker")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid, node=node, attempt_id=node.current_attempt_id
+            )
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_PipelinePublishGapVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            supervisor_decision_provider=provider,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        pipeline_events = [event for event in events if event[0] == "pipeline_run_requested"]
+        retry_events = [event for event in events if event[0] == "verification_retry_scheduled"]
+        assert len(pipeline_events) == 1
+        assert retry_events == []
+        assert pipeline_events[0][2]["reason"] == "supervisor_decision_platform_harness_pipeline"
+        assert pipeline_events[0][2]["overrode_action"] == "retry_same_node"
+
     async def test_tick_agent_supervisor_retry_decision_schedules_followup_tick(
         self,
     ) -> None:
@@ -4305,6 +4713,94 @@ class TestSupervisorTick:
         assert len(retry_events) == 1
         assert retry_events[0][2]["attempt_id"] == "attempt-a"
         assert retry_events[0][2]["retry_not_before"] == node.metadata["retry_not_before"]
+
+    async def test_tick_agent_supervisor_create_repair_node_overrides_retry_metadata(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        a = plan.nodes[PlanNodeId("a")]
+        plan.replace_node(
+            replace(
+                a,
+                intent=TaskIntent.IN_PROGRESS,
+                execution=TaskExecution.REPORTED,
+                current_attempt_id="attempt-a",
+                metadata={
+                    **a.metadata,
+                    "last_verification_judge_next_action_kind": "retry_same_node",
+                    "same_conversation_repair_turn_count": 99,
+                },
+            )
+        )
+        await repo.save(plan)
+
+        provider = _StaticSupervisorDecisionProvider(
+            WorkspaceSupervisorDecisionResult(
+                action=WorkspaceSupervisorDecisionAction.CREATE_REPAIR_NODE,
+                rationale="Fix src/oauth/service.ts: MockUser is missing avatar.",
+                confidence=0.88,
+                feedback_items=(
+                    {
+                        "target_layer": "worker",
+                        "feedback_kind": "product_code_failure",
+                        "recommended_action": "fix_code_and_rerun_drone",
+                        "summary": "Add avatar to MockUser, then rerun backend build.",
+                        "failure_signature": "mockuser-avatar-missing",
+                    },
+                ),
+            )
+        )
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return []
+
+        async def dispatcher(_wid: str, _alloc: Any, _node: PlanNode) -> str | None:
+            raise AssertionError("repair node creation should not dispatch in the same tick")
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(
+                workspace_id=wid, node=node, attempt_id=node.current_attempt_id
+            )
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_RetryableInfrastructureVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            heartbeat_seconds=0.05,
+            supervisor_decision_provider=provider,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.verifications_ran == 1
+        reloaded = await repo.get_by_workspace("ws-1")
+        assert reloaded is not None
+        original = reloaded.nodes[PlanNodeId("a")]
+        assert original.intent is TaskIntent.TODO
+        assert original.execution is TaskExecution.IDLE
+        assert original.current_attempt_id is None
+        assert original.metadata["last_verification_judge_next_action_kind"] == "create_repair_node"
+        assert original.metadata["last_verification_feedback_items"][0]["failure_signature"] == (
+            "mockuser-avatar-missing"
+        )
+        repair_nodes = [
+            node
+            for node in reloaded.nodes.values()
+            if node.metadata.get("repair_for_node_id") == "a"
+        ]
+        assert len(repair_nodes) == 1
+        repair = repair_nodes[0]
+        assert repair.intent is TaskIntent.TODO
+        assert repair.metadata["repair_failure_signature"] == "mockuser-avatar-missing"
+        assert repair.metadata["source_verification_judge_next_action_kind"] == (
+            "create_repair_node"
+        )
 
     async def test_tick_does_not_human_block_without_explicit_agent_payload(self) -> None:
         repo = InMemoryPlanRepository()
@@ -5474,6 +5970,113 @@ class TestSupervisorTick:
 
         assert report.allocations_made == 1
         assert dispatched == ["backlog"]
+        assert dispatched_base_refs == ["commit-b"]
+        assert not [
+            event for event in events if event[0] == "dispatch_deferred_dependency_projection"
+        ]
+
+    async def test_tick_dispatches_implementation_increment_with_blocked_dirty_main_dependencies(
+        self,
+    ) -> None:
+        repo = InMemoryPlanRepository()
+        plan = _plan_with_two_tasks()
+        for node_id, commit_ref in (("a", "commit-a"), ("b", "commit-b")):
+            node = plan.nodes[PlanNodeId(node_id)]
+            plan.replace_node(
+                replace(
+                    node,
+                    intent=TaskIntent.DONE,
+                    execution=TaskExecution.IDLE,
+                    current_attempt_id=f"attempt-{node_id}",
+                    depends_on=frozenset(),
+                    feature_checkpoint=FeatureCheckpoint(
+                        feature_id=f"feature-{node_id}",
+                        sequence=1,
+                        title=f"task {node_id}",
+                        worktree_path=f"/workspace/.memstack/worktrees/attempt-{node_id}",
+                        commit_ref=commit_ref,
+                    ),
+                    metadata={
+                        "terminal_attempt_status": "accepted",
+                        "verified_commit_ref": commit_ref,
+                        "worktree_integration_commit_ref": commit_ref,
+                        "worktree_integration_status": "blocked_dirty_main",
+                        "verification_evidence_refs": [f"commit_ref:{commit_ref}"],
+                    },
+                )
+            )
+        plan.add_node(
+            PlanNode(
+                id="increment",
+                plan_id=plan.id,
+                parent_id=plan.goal_id,
+                kind=PlanNodeKind.TASK,
+                title="Implement sprint increment",
+                intent=TaskIntent.TODO,
+                execution=TaskExecution.IDLE,
+                depends_on=frozenset({PlanNodeId("a"), PlanNodeId("b")}),
+                feature_checkpoint=FeatureCheckpoint(
+                    feature_id="feature-increment",
+                    sequence=2,
+                    title="Implement sprint increment",
+                    base_ref="HEAD",
+                ),
+                metadata={
+                    "iteration_phase": "implement",
+                    "scrum_artifact": "increment",
+                },
+            )
+        )
+        await repo.save(plan)
+
+        dispatched: list[str] = []
+        dispatched_base_refs: list[str | None] = []
+        events: list[tuple[str, str, dict[str, Any]]] = []
+
+        async def agent_pool(_wid: str) -> list[WorkspaceAgent]:
+            return [
+                WorkspaceAgent(
+                    agent_id="ag-code",
+                    display_name="C",
+                    capabilities=frozenset({"codegen", "web_search"}),
+                )
+            ]
+
+        async def dispatcher(_wid: str, _alloc: Any, node: PlanNode) -> str:
+            dispatched.append(node.id)
+            dispatched_base_refs.append(
+                node.feature_checkpoint.base_ref if node.feature_checkpoint else None
+            )
+            return f"attempt-{node.id}"
+
+        async def attempt_ctx(wid: str, node: PlanNode) -> VerificationContext:
+            return VerificationContext(workspace_id=wid, node=node)
+
+        async def event_sink(
+            _wid: str,
+            node: PlanNode,
+            event_type: str,
+            payload: dict[str, Any],
+        ) -> None:
+            events.append((event_type, node.id, payload))
+
+        sup = WorkspaceSupervisor(
+            plan_repo=repo,
+            allocator=CapabilityAllocator(),
+            verifier=_AlwaysPassVerifier(),
+            projector=ProgressProjector(),
+            planner=LLMGoalPlanner(decomposer=None),
+            agent_pool=agent_pool,
+            dispatcher=dispatcher,
+            attempt_context=attempt_ctx,
+            event_sink=event_sink,
+            heartbeat_seconds=0.05,
+        )
+
+        report = await sup.tick("ws-1")
+
+        assert report.allocations_made == 1
+        assert dispatched == ["increment"]
         assert dispatched_base_refs == ["commit-b"]
         assert not [
             event for event in events if event[0] == "dispatch_deferred_dependency_projection"

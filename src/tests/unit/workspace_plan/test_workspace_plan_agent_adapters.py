@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
@@ -40,6 +41,7 @@ from src.infrastructure.agent.workspace_plan.iteration_review import (
     _iteration_review_from_event,
 )
 from src.infrastructure.agent.workspace_plan.supervisor_decision import (
+    RuntimeWorkspaceSupervisorAgentTurnRunner,
     WorkspaceSupervisorAgentDecisionProvider,
 )
 from src.infrastructure.agent.workspace_plan.verification_judge import (
@@ -164,6 +166,8 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
     persist_calls: list[dict[str, Any]],
     stream_calls: list[dict[str, Any]],
     actor_user_id: str | None = "user-1",
+    cancel_calls: list[str] | None = None,
+    stream_factory: Any | None = None,
 ) -> None:
     async def fake_resolve_workspace_actor_user_id(
         *,
@@ -180,6 +184,10 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
     async def fake_recover_workspace_contract_payload(**kwargs: Any) -> dict[str, Any] | None:
         _ = kwargs
         return None
+
+    async def fake_cancel_workspace_contract_chat(conversation_id: str) -> None:
+        if cancel_calls is not None:
+            cancel_calls.append(conversation_id)
 
     async def fake_create_llm_client(tenant_id: str) -> str:
         return f"llm:{tenant_id}"
@@ -201,6 +209,8 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
     class FakeAgentService:
         def stream_chat_v2(self, **kwargs: Any) -> Any:
             stream_calls.append(kwargs)
+            if stream_factory is not None:
+                return stream_factory()
 
             async def _events() -> Any:
                 for event in events:
@@ -238,6 +248,11 @@ def _patch_contract_agent_stream_runtime(  # noqa: C901
         contract_agent_runtime,
         "recover_workspace_contract_payload",
         fake_recover_workspace_contract_payload,
+    )
+    monkeypatch.setattr(
+        contract_agent_runtime,
+        "cancel_workspace_contract_chat",
+        fake_cancel_workspace_contract_chat,
     )
     monkeypatch.setattr(
         session_conversations,
@@ -490,6 +505,52 @@ async def test_supervisor_agent_decision_provider_retries_missing_contract_submi
     assert result.confidence == 0.73
 
 
+async def test_runtime_supervisor_agent_turn_runner_times_out_and_cancels_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    persist_calls: list[dict[str, Any]] = []
+    stream_calls: list[dict[str, Any]] = []
+    cancel_calls: list[str] = []
+
+    async def never_events() -> Any:
+        await asyncio.sleep(10)
+        if False:
+            yield {}
+
+    _patch_contract_agent_stream_runtime(
+        monkeypatch,
+        events=[],
+        persist_calls=persist_calls,
+        stream_calls=stream_calls,
+        actor_user_id="workspace-created-user",
+        cancel_calls=cancel_calls,
+        stream_factory=never_events,
+    )
+
+    runner = RuntimeWorkspaceSupervisorAgentTurnRunner(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        turn_timeout_seconds=0.01,
+    )
+
+    result = await runner.run_decision_turn(
+        supervisor_agent=SimpleNamespace(id=BUILTIN_WORKSPACE_SUPERVISOR_ID),
+        user_prompt="decide",
+        workspace_id="ws-1",
+        plan_id="plan-1",
+        node_id="node-1",
+        attempt_id="attempt-1",
+        linked_workspace_task_id="task-1",
+    )
+
+    assert result is None
+    assert persist_calls
+    assert stream_calls
+    assert runner.last_diagnostics["timed_out"] is True
+    assert runner.last_diagnostics["event_count"] == 0
+    assert cancel_calls == [runner.last_diagnostics["conversation_id"]]
+
+
 async def test_worktree_agent_preparer_uses_builtin_agent_turn_runner() -> None:
     runner = _WorktreePreparationRunner(
         {
@@ -722,6 +783,7 @@ async def test_runtime_workspace_verifier_persists_linked_workspace_task(
 ) -> None:
     persist_calls: list[dict[str, Any]] = []
     stream_calls: list[dict[str, Any]] = []
+    cancel_calls: list[str] = []
     _patch_contract_agent_stream_runtime(
         monkeypatch,
         events=[
@@ -740,6 +802,7 @@ async def test_runtime_workspace_verifier_persists_linked_workspace_task(
         ],
         persist_calls=persist_calls,
         stream_calls=stream_calls,
+        cancel_calls=cancel_calls,
     )
 
     runner = RuntimeWorkspaceVerifierAgentTurnRunner(tenant_id="tenant-1", project_id="project-1")
@@ -775,6 +838,7 @@ async def test_runtime_workspace_verifier_persists_linked_workspace_task(
         stream_calls[0]["app_model_context"]["workspace_binding"]["linked_workspace_task_id"]
         == "task-1"
     )
+    assert cancel_calls == [stream_calls[0]["conversation_id"]]
 
 
 async def test_runtime_workspace_verifier_ignores_unpersisted_session(
@@ -1097,6 +1161,50 @@ async def test_runtime_worktree_manager_persists_linked_workspace_task(
         == "task-1"
     )
     assert stream_calls[0]["app_model_context"]["worktree_manager"]["task_id"] == "task-1"
+
+
+async def test_runtime_worktree_manager_turn_runner_times_out_and_cancels_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    persist_calls: list[dict[str, Any]] = []
+    stream_calls: list[dict[str, Any]] = []
+    cancel_calls: list[str] = []
+
+    async def never_events() -> Any:
+        await asyncio.sleep(10)
+        if False:
+            yield {}
+
+    _patch_contract_agent_stream_runtime(
+        monkeypatch,
+        events=[],
+        persist_calls=persist_calls,
+        stream_calls=stream_calls,
+        actor_user_id="workspace-created-user",
+        cancel_calls=cancel_calls,
+        stream_factory=never_events,
+    )
+
+    runner = RuntimeWorkspaceWorktreeAgentTurnRunner(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        turn_timeout_seconds=0.01,
+    )
+
+    result = await runner.run_preparation_turn(
+        worktree_agent=SimpleNamespace(id=BUILTIN_WORKSPACE_WORKTREE_MANAGER_ID),
+        user_prompt="prepare",
+        workspace_id="ws-1",
+        task_id="task-1",
+        attempt_id="attempt-1",
+    )
+
+    assert result is None
+    assert persist_calls
+    assert stream_calls
+    assert runner.last_diagnostics["timed_out"] is True
+    assert runner.last_diagnostics["event_count"] == 0
+    assert cancel_calls == [runner.last_diagnostics["conversation_id"]]
 
 
 def test_planning_contract_event_parser_accepts_observe_result_metadata() -> None:

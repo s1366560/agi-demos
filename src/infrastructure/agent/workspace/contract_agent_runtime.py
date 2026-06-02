@@ -181,12 +181,37 @@ async def create_workspace_contract_agent_service(
     return DIContainer(db=db, redis_client=redis_client).agent_service(llm)
 
 
+async def cancel_workspace_contract_chat(conversation_id: str) -> None:
+    """Best-effort cancellation for local contract-agent turns that already reached terminal state."""
+    try:
+        from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
+
+        _ = await AgentRuntimeBootstrapper.cancel_local_chat(conversation_id)
+    except Exception:
+        logger.debug(
+            "workspace_contract_runtime.cancel_chat_failed",
+            extra={"conversation_id": conversation_id},
+            exc_info=True,
+        )
+    try:
+        from src.infrastructure.agent.actor.state.running_state import clear_agent_running
+
+        await clear_agent_running(conversation_id)
+    except Exception:
+        logger.debug(
+            "workspace_contract_runtime.clear_running_failed",
+            extra={"conversation_id": conversation_id},
+            exc_info=True,
+        )
+
+
 def _slug(value: str, *, limit: int = 48) -> str:
     normalized = re.sub(r"[^A-Za-z0-9_.-]+", "-", value.strip())
     return normalized.strip("-")[:limit]
 
 
 __all__ = [
+    "cancel_workspace_contract_chat",
     "contract_tool_payload_from_event",
     "create_workspace_contract_agent_service",
     "recover_workspace_contract_payload",

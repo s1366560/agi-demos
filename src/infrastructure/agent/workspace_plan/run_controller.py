@@ -19,8 +19,10 @@ from src.domain.ports.services.workspace_supervisor_port import TickReport
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     PlanModel,
+    PlanNodeModel,
     WorkspaceModel,
     WorkspacePlanOutboxModel,
+    WorkspaceTaskModel,
     WorkspaceTaskSessionAttemptModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_plan_repository import SqlPlanRepository
@@ -147,8 +149,15 @@ class WorkspaceRunController:
             resolved_plan_id or (plan.id if plan else None),
             resolved_workspace_id,
         )
-        retry_queue = await self.retry_queue(resolved_workspace_id, limit=50)
-        active_attempts = await self.active_attempts(resolved_workspace_id)
+        retry_queue = await self.retry_queue(
+            resolved_workspace_id,
+            plan_id=resolved_plan_id,
+            limit=50,
+        )
+        active_attempts = await self.active_attempts(
+            resolved_workspace_id,
+            plan_id=resolved_plan_id,
+        )
         completion_gate = completion_gate_for_plan(
             refreshed_plan,
             retry_queue=retry_queue,
@@ -266,32 +275,60 @@ class WorkspaceRunController:
                 return None, str(workspace_row.id)
         return plan_id, workspace_id
 
-    async def retry_queue(self, workspace_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+    async def retry_queue(
+        self,
+        workspace_id: str,
+        *,
+        plan_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        stmt = (
+            select(WorkspacePlanOutboxModel)
+            .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
+            .where(WorkspacePlanOutboxModel.status.in_(tuple(_ACTIVE_OUTBOX_STATUSES)))
+        )
+        if plan_id:
+            stmt = stmt.where(WorkspacePlanOutboxModel.plan_id == plan_id)
         result = await self._session.execute(
             refresh_select_statement(
-                select(WorkspacePlanOutboxModel)
-                .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
-                .where(WorkspacePlanOutboxModel.status.in_(tuple(_ACTIVE_OUTBOX_STATUSES)))
-                .order_by(
+                stmt.order_by(
                     WorkspacePlanOutboxModel.created_at.asc(),
                     WorkspacePlanOutboxModel.id.asc(),
-                )
-                .limit(limit)
+                ).limit(limit)
             )
         )
         return [_outbox_row(item) for item in result.scalars().all()]
 
-    async def active_attempts(self, workspace_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+    async def active_attempts(
+        self,
+        workspace_id: str,
+        *,
+        plan_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        stmt = (
+            select(WorkspaceTaskSessionAttemptModel)
+            .join(
+                WorkspaceTaskModel,
+                WorkspaceTaskModel.id == WorkspaceTaskSessionAttemptModel.workspace_task_id,
+            )
+            .where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
+            .where(WorkspaceTaskSessionAttemptModel.status.in_(tuple(_ACTIVE_ATTEMPT_STATUSES)))
+            .where(WorkspaceTaskModel.status.not_in(("done", "blocked")))
+        )
+        if plan_id:
+            current_attempt_ids = (
+                select(PlanNodeModel.current_attempt_id)
+                .where(PlanNodeModel.plan_id == plan_id)
+                .where(PlanNodeModel.current_attempt_id.is_not(None))
+            )
+            stmt = stmt.where(WorkspaceTaskSessionAttemptModel.id.in_(current_attempt_ids))
         result = await self._session.execute(
             refresh_select_statement(
-                select(WorkspaceTaskSessionAttemptModel)
-                .where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
-                .where(WorkspaceTaskSessionAttemptModel.status.in_(tuple(_ACTIVE_ATTEMPT_STATUSES)))
-                .order_by(
+                stmt.order_by(
                     WorkspaceTaskSessionAttemptModel.created_at.asc(),
                     WorkspaceTaskSessionAttemptModel.id.asc(),
-                )
-                .limit(limit)
+                ).limit(limit)
             )
         )
         return [_attempt_row(item) for item in result.scalars().all()]

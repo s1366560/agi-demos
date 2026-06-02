@@ -517,8 +517,6 @@ def _workspace_verification_integrity_context(
     allow_failed_tests = (
         task_meta.get("allow_failed_tests") is True or node_meta.get("allow_failed_tests") is True
     )
-    allowed_script_paths = _verification_script_change_allowlist(task_meta, node_meta)
-    source = "workspace_plan_node_metadata" if node_phase else "workspace_task_metadata"
     contract_hints = [
         text[:1200]
         for text in (
@@ -527,6 +525,15 @@ def _workspace_verification_integrity_context(
         )
         if text
     ]
+    allowed_script_paths = list(
+        dict.fromkeys(
+            [
+                *_verification_script_change_allowlist(task_meta, node_meta),
+                *_iter_verification_script_scope_paths(contract_hints),
+            ]
+        )
+    )
+    source = "workspace_plan_node_metadata" if node_phase else "workspace_task_metadata"
     return {
         "source": source,
         "iteration_phase": phase.lower(),
@@ -706,6 +713,14 @@ def _workspace_delivery_cicd_context(  # noqa: C901, PLR0915
                     "drone CLI in its environment; do not treat those sandbox-local absences "
                     "as a hard blocker. Commit or report the required .drone.yml/config state "
                     "so the platform harness can trigger and verify Drone."
+                ),
+                (
+                    "Do not wait for source-publish or memstack-source-publish refs to "
+                    "auto-sync with a worker worktree, and do not retry GitHub pushes to "
+                    "advance them from the sandbox. After committing the desired worktree "
+                    "state, call the required workspace_report_* contract tool with the "
+                    "worktree commit ref and let the platform harness perform source_publish "
+                    "and Drone triggering."
                 ),
                 (
                     "If there are no deploy-code changes to commit, report the clean worktree "

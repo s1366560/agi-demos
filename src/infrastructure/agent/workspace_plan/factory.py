@@ -1067,6 +1067,7 @@ def build_sql_orchestrator(
         event_sink=event_sink or _make_sql_plan_event_sink(db),
         iteration_reviewer=iteration_reviewer,
         supervisor_decision_provider=supervisor_decision_provider,
+        transaction_checkpoint=db.commit,
         heartbeat_seconds=cfg.heartbeat_seconds,
         max_dispatches_per_tick=cfg.max_dispatches_per_tick,
     )

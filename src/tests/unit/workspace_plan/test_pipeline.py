@@ -11,10 +11,12 @@ import pytest
 from src.domain.model.workspace_plan import (
     AcceptanceCriterion,
     CriterionKind,
+    CriterionResult,
     PlanNode,
     PlanNodeKind,
     TaskExecution,
     TaskIntent,
+    VerificationReport,
 )
 from src.domain.ports.services.verifier_port import VerificationContext
 from src.domain.ports.services.workspace_verification_judge_port import (
@@ -45,7 +47,10 @@ from src.infrastructure.agent.workspace_plan.pipeline import (
     SandboxNativePipelineProvider,
     build_pipeline_contract_from_metadata,
 )
-from src.infrastructure.agent.workspace_plan.supervisor import _should_request_pipeline_from_report
+from src.infrastructure.agent.workspace_plan.supervisor import (
+    _node_with_pipeline_request,
+    _should_request_pipeline_from_report,
+)
 from src.infrastructure.agent.workspace_plan.verifier import AcceptanceCriterionVerifier
 
 
@@ -586,6 +591,63 @@ async def test_verifier_hides_pending_pipeline_terminal_metadata_from_judge() ->
 
 
 @pytest.mark.asyncio
+async def test_verifier_includes_source_publish_metadata_in_judge_request() -> None:
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.NEEDS_REWORK,
+            rationale="current pipeline failed after source publish",
+            failed_criteria=("ci_pipeline",),
+            required_next_action="fix frontend build",
+            confidence=0.8,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "pipeline_gate_status": "failed",
+            "pipeline_run_id": "run-current",
+            "source_publish_status": "published",
+            "source_publish_source_commit_ref": "42f842d539abe7a6fb453a2241a897db4912d407",
+            "source_publish_commit_ref": "42f842d539abe7a6fb453a2241a897db4912d407",
+            "source_publish_branch": "main",
+            "source_publish_provider": "git",
+            "pipeline_failure_summary": "Drone #399 failed at frontend-build",
+            "pipeline_evidence_refs": ["ci_pipeline:failed", "pipeline_run:failed:run-current"],
+        }
+    )
+
+    await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-3",
+            stdout="worktree is clean at commit 42f842d539abe7a6fb453a2241a897db4912d407",
+            artifacts={
+                "candidate_artifacts": [
+                    "commit_ref:42f842d539abe7a6fb453a2241a897db4912d407"
+                ],
+                "candidate_verifications": ["worker_report:completed"],
+            },
+        )
+    )
+
+    assert judge.requests
+    request = judge.requests[0]
+    assert request.task_metadata["source_publish_status"] == "published"
+    assert (
+        request.task_metadata["source_publish_source_commit_ref"]
+        == "42f842d539abe7a6fb453a2241a897db4912d407"
+    )
+    assert (
+        request.task_metadata["source_publish_commit_ref"]
+        == "42f842d539abe7a6fb453a2241a897db4912d407"
+    )
+
+
+@pytest.mark.asyncio
 async def test_verifier_times_out_slow_verification_judge(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WORKSPACE_VERIFICATION_JUDGE_TIMEOUT_SECONDS", "0.01")
     judge = _SlowVerificationJudge()
@@ -680,6 +742,277 @@ async def test_supervisor_requests_pipeline_for_missing_drone_evidence_feedback(
                 "candidate_verifications": ["worker_report:completed"],
             },
         )
+    )
+
+    assert _should_request_pipeline_from_report(node, report)
+
+
+def test_supervisor_requests_pipeline_for_platform_harness_blocked_worker_report() -> None:
+    node = _node(metadata={"iteration_phase": "deploy"})
+    report = VerificationReport(
+        node_id=node.id,
+        attempt_id="attempt-platform",
+        results=(
+            CriterionResult(
+                criterion=AcceptanceCriterion(
+                    kind=CriterionKind.CUSTOM,
+                    spec={"name": "terminal_worker_report_completed"},
+                    required=True,
+                ),
+                passed=False,
+                confidence=1.0,
+                message=(
+                    "worker report type 'blocked' is not a completion report: "
+                    "sandbox lacks DRONE_TOKEN/GITHUB_TOKEN and cannot fast-forward "
+                    "memstack-source-publish/main or trigger Drone from outside the "
+                    "platform harness"
+                ),
+            ),
+            CriterionResult(
+                criterion=AcceptanceCriterion(
+                    kind=CriterionKind.CUSTOM,
+                    spec={"name": "preflight_evidence_recorded"},
+                    required=True,
+                ),
+                passed=False,
+                confidence=1.0,
+                message="missing preflight evidence: read-progress, git-status",
+            ),
+            CriterionResult(
+                criterion=AcceptanceCriterion(
+                    kind=CriterionKind.CUSTOM,
+                    spec={
+                        "name": "workspace_verification_judge",
+                        "judge_verdict": "needs_rework",
+                        "next_action_kind": "create_repair_node",
+                        "failed_criteria": [
+                            "memstack-source-publish/main not fast-forwarded",
+                            "Drone CI status=success evidence missing",
+                        ],
+                        "feedback_items": [
+                            {
+                                "target_layer": "runtime",
+                                "feedback_kind": "runtime_infra_failure",
+                                "recommended_action": "create_repair_node",
+                                "summary": (
+                                    "Platform harness must publish source and trigger Drone; "
+                                    "sandbox worker has no credentials."
+                                ),
+                                "failure_signature": "drone-retrigger-needs-platform-harness",
+                            }
+                        ],
+                    },
+                    required=True,
+                ),
+                passed=False,
+                confidence=0.7,
+                message=(
+                    "judge verdict=needs_rework; next_action_kind=create_repair_node; "
+                    "memstack-source-publish/main must be fast-forwarded and Drone triggered"
+                ),
+            ),
+        ),
+    )
+
+    assert _should_request_pipeline_from_report(node, report)
+
+
+def test_supervisor_requests_pipeline_when_fix_waits_for_platform_publish() -> None:
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "pipeline_gate_status": "failed",
+        }
+    )
+    report = VerificationReport(
+        node_id=node.id,
+        attempt_id="attempt-platform-publish",
+        results=(
+            CriterionResult(
+                criterion=AcceptanceCriterion(
+                    kind=CriterionKind.CI_PIPELINE,
+                    spec={"name": "ci_pipeline"},
+                    required=True,
+                ),
+                passed=False,
+                confidence=0.9,
+                message="missing harness-native CI pipeline evidence",
+            ),
+            CriterionResult(
+                criterion=AcceptanceCriterion(
+                    kind=CriterionKind.CUSTOM,
+                    spec={"name": "feature_checkpoint_evidence_recorded"},
+                    required=True,
+                ),
+                passed=False,
+                confidence=0.9,
+                message="missing feature checkpoint evidence: commit_ref or git_diff_summary",
+            ),
+            CriterionResult(
+                criterion=AcceptanceCriterion(
+                    kind=CriterionKind.CUSTOM,
+                    spec={
+                        "name": "workspace_verification_judge",
+                        "judge_verdict": "needs_rework",
+                        "next_action_kind": "retry_same_node",
+                        "failed_criteria": [
+                            "missing harness-native CI pipeline evidence",
+                            "missing feature checkpoint evidence",
+                        ],
+                        "required_next_action": (
+                            "Platform harness must publish commit 7c97cc5 to "
+                            "memstack-source-publish/main and re-trigger Drone."
+                        ),
+                    },
+                    required=True,
+                ),
+                passed=False,
+                confidence=0.8,
+                message=(
+                    "The YAML fix is correct, the worktree is clean, and the "
+                    "substantive fix is real. No live Drone build has run on "
+                    "7c97cc5 yet; platform harness must publish the fix and "
+                    "re-trigger Drone."
+                ),
+            ),
+        ),
+    )
+
+    assert _should_request_pipeline_from_report(node, report)
+
+
+def test_supervisor_requests_pipeline_for_stale_attempt_with_known_good_fix() -> None:
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "pipeline_gate_status": "failed",
+        }
+    )
+    report = VerificationReport(
+        node_id=node.id,
+        attempt_id="attempt-stale",
+        results=(
+            CriterionResult(
+                criterion=AcceptanceCriterion(
+                    kind=CriterionKind.CUSTOM,
+                    spec={"name": "terminal_worker_report_completed"},
+                    required=True,
+                ),
+                passed=False,
+                confidence=1.0,
+                message=(
+                    "worker report type 'blocked' is not a completion report: "
+                    "Agent subprocess failed with exit code -15"
+                ),
+            ),
+            CriterionResult(
+                criterion=AcceptanceCriterion(
+                    kind=CriterionKind.CI_PIPELINE,
+                    spec={"name": "ci_pipeline"},
+                    required=True,
+                ),
+                passed=False,
+                confidence=1.0,
+                message="missing harness-native CI pipeline evidence",
+            ),
+            CriterionResult(
+                criterion=AcceptanceCriterion(
+                    kind=CriterionKind.CUSTOM,
+                    spec={
+                        "name": "workspace_verification_judge",
+                        "judge_verdict": "needs_rework",
+                        "next_action_kind": "retry_same_node",
+                    },
+                    required=True,
+                ),
+                passed=False,
+                confidence=0.8,
+                message=(
+                    "A known-good fix exists at commit "
+                    "7c97cc5a9bffce99742bccfcced99ece7862f2fa but it is "
+                    "not in current HEAD. Platform harness must perform "
+                    "source_publish of commit "
+                    "7c97cc5a9bffce99742bccfcced99ece7862f2fa and re-trigger Drone."
+                ),
+            ),
+        ),
+    )
+
+    assert _should_request_pipeline_from_report(node, report)
+    requested = _node_with_pipeline_request(node, report)
+    assert (
+        requested.metadata["verified_commit_ref"]
+        == "7c97cc5a9bffce99742bccfcced99ece7862f2fa"
+    )
+    assert (
+        requested.metadata["source_publish_source_commit_ref"]
+        == "7c97cc5a9bffce99742bccfcced99ece7862f2fa"
+    )
+
+
+def test_supervisor_requests_pipeline_for_platform_ref_human_block_judge() -> None:
+    node = _node(metadata={"iteration_phase": "deploy"})
+    report = VerificationReport(
+        node_id=node.id,
+        attempt_id="attempt-platform-human",
+        results=(
+            CriterionResult(
+                criterion=AcceptanceCriterion(
+                    kind=CriterionKind.CUSTOM,
+                    spec={"name": "terminal_worker_report_completed"},
+                    required=True,
+                ),
+                passed=False,
+                confidence=1.0,
+                message=(
+                    "worker report type 'blocked' is not a completion report: "
+                    "memstack-source-publish/main is at ef94fd1 and the sandbox has "
+                    "no GITHUB_TOKEN or DRONE_TOKEN"
+                ),
+            ),
+            CriterionResult(
+                criterion=AcceptanceCriterion(
+                    kind=CriterionKind.CUSTOM,
+                    spec={
+                        "name": "workspace_verification_judge",
+                        "judge_verdict": "blocked_human_required",
+                        "next_action_kind": "human_required",
+                        "failed_criteria": [
+                            "terminal_worker_report_completed: worker report type 'blocked'",
+                            "Drone CI status=success evidence missing",
+                        ],
+                        "feedback_items": [
+                            {
+                                "target_layer": "human",
+                                "feedback_kind": "runtime_infra_failure",
+                                "recommended_action": "escalate_human",
+                                "summary": (
+                                    "GitHub push access required: github/main and "
+                                    "memstack-source-publish/main are at ef94fd1. "
+                                    "Sandbox cannot push because no GITHUB_TOKEN or "
+                                    "DRONE_TOKEN is available."
+                                ),
+                                "failure_signature": (
+                                    "drone-ci-blocked-no-github-push-access-ef94fd1-diverged"
+                                ),
+                            }
+                        ],
+                    },
+                    required=True,
+                ),
+                passed=False,
+                confidence=0.95,
+                message=(
+                    "judge verdict=blocked_human_required; Drone builds ran against "
+                    "pre-slim ef94fd1 and github/main must be advanced before the "
+                    "platform can capture a green Drone build"
+                ),
+            ),
+        ),
     )
 
     assert _should_request_pipeline_from_report(node, report)
@@ -2101,6 +2434,65 @@ async def test_verifier_routes_external_registry_tls_timeout_to_pipeline_retry()
     assert feedback["target_layer"] == "runtime"
     assert feedback["recommended_action"] == "retry_infra"
     assert feedback["failure_signature"] == "drone-external-registry-transient-timeout"
+    assert _should_request_pipeline_from_report(node, report)
+
+
+@pytest.mark.asyncio
+async def test_verifier_routes_drone_clone_ssl_error_to_pipeline_retry() -> None:
+    judge = _FakeVerificationJudge(
+        WorkspaceVerificationJudgeResult(
+            verdict=WorkspaceVerificationJudgeVerdict.BLOCKED_HUMAN_REQUIRED,
+            rationale="clone failed",
+            failed_criteria=("ci_pipeline",),
+            confidence=0.95,
+        )
+    )
+    verifier = AcceptanceCriterionVerifier(verification_judge=judge)
+    node = _node(
+        metadata={
+            "iteration_phase": "deploy",
+            "pipeline_required": True,
+            "pipeline_status": "failed",
+            "pipeline_gate_status": "failed",
+            "source_publish_commit_ref": "e971d7a",
+            "last_worker_report_type": "completed",
+            "last_worker_report_attempt_id": "attempt-1",
+            "pipeline_last_summary": (
+                "Drone build s1366560/my-evo#395 finished with status failure; "
+                "failing stage workspace-ci/clone exited 1; Cloning with 0 retries\n"
+                "Initialized empty Git repository in /drone/src/.git/\n"
+                "+ git fetch origin +refs/heads/main:\n"
+                "fatal: unable to access 'https://github.com/s1366560/my-evo.git/': "
+                "OpenSSL SSL_connect: SSL_ERROR_SYSCALL in connection to github.com:443"
+            ),
+        }
+    )
+
+    report = await verifier.verify(
+        VerificationContext(
+            workspace_id="ws-1",
+            node=node,
+            attempt_id="attempt-1",
+            stdout="worker completed",
+            artifacts={
+                "candidate_artifacts": ["commit_ref:e971d7a"],
+                "candidate_verifications": ["worker_report:completed"],
+            },
+        )
+    )
+
+    judge_result = next(
+        result
+        for result in report.results
+        if result.criterion.spec.get("name") == "retryable_infrastructure_failure"
+    )
+    feedback = judge_result.criterion.spec["feedback_items"][0]
+    assert not report.passed
+    assert judge_result.criterion.spec["judge_verdict"] == "retry_infrastructure"
+    assert feedback["target_layer"] == "runtime"
+    assert feedback["recommended_action"] == "retry_infra"
+    assert feedback["failure_signature"] == "drone-external-registry-transient-timeout"
+    assert "drone_stage:clone" in feedback["evidence_refs"]
     assert _should_request_pipeline_from_report(node, report)
 
 

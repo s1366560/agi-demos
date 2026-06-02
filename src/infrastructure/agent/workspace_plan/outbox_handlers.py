@@ -74,6 +74,7 @@ from src.domain.ports.services.workspace_verification_judge_port import (
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentExecutionEvent,
     WorkspacePipelineRunModel,
     WorkspacePlanEventModel,
     WorkspacePlanOutboxModel,
@@ -200,6 +201,9 @@ PIPELINE_LOGS_SYNC_EVENT = "pipeline_logs_sync"
 logger = logging.getLogger(__name__)
 _WORKER_LAUNCH_MAX_ACTIVE_ENV = "WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE"
 _WORKER_LAUNCH_DEFER_SECONDS_ENV = "WORKSPACE_WORKER_LAUNCH_DEFER_SECONDS"
+_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV = (
+    "WORKSPACE_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS"
+)
 _PLAN_TERMINAL_ATTEMPT_MAX_RETRIES_ENV = "WORKSPACE_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES"
 _REPAIR_TURN_REUSE_ENABLED_ENV = "WORKSPACE_REPAIR_TURN_REUSE_ENABLED"
 _REPAIR_TURN_REUSE_MAX_ENV = "WORKSPACE_REPAIR_TURN_REUSE_MAX"
@@ -207,6 +211,7 @@ _DEFAULT_SOFTWARE_WORKSPACE_MAX_SUBTASKS = 6
 _MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS = 12
 _DEFAULT_WORKER_LAUNCH_MAX_ACTIVE = 4
 _DEFAULT_WORKER_LAUNCH_DEFER_SECONDS = 20
+_DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS = 300
 _DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES = 3
 _DEFAULT_REPAIR_TURN_REUSE_MAX = 2
 _REPAIR_TURN_METADATA_KEY = "current_repair_turn"
@@ -328,6 +333,12 @@ def make_supervisor_tick_handler(
         leader_agent_id = (
             _payload_string(payload, "leader_agent_id") or WORKSPACE_PLAN_SYSTEM_ACTOR_ID
         )
+        if await _supervisor_tick_superseded_by_newer_completion(
+            session=session,
+            item=item,
+            workspace_id=workspace_id,
+        ):
+            return
 
         async def _run_existing_tick() -> TickReport:
             if item.plan_id:
@@ -413,6 +424,14 @@ def make_supervisor_tick_handler(
                     )
                     or projected_done_nodes
                 )
+                projected_done_nodes = (
+                    await _reconcile_done_workspace_task_nodes_after_tick(
+                        session=session,
+                        plan_id=item.plan_id,
+                        workspace_id=workspace_id,
+                    )
+                    or projected_done_nodes
+                )
             if projected_done_nodes:
                 await _enqueue_followup_supervisor_tick_after_terminal_reconcile(
                     session=session,
@@ -420,6 +439,13 @@ def make_supervisor_tick_handler(
                     workspace_id=workspace_id,
                     payload=payload,
                 )
+            await _auto_complete_ready_root_after_tick(
+                session=session,
+                workspace_id=workspace_id,
+                root_task_id=_payload_string(payload, "root_task_id"),
+                actor_user_id=await _resolve_actor_user_id(session, workspace_id, payload),
+                leader_agent_id=leader_agent_id,
+            )
             return report
 
         _ = await WorkspaceRunController(session).tick(
@@ -432,6 +458,50 @@ def make_supervisor_tick_handler(
         )
 
     return _handle
+
+
+async def _supervisor_tick_superseded_by_newer_completion(
+    *,
+    session: AsyncSession,
+    item: WorkspacePlanOutboxModel,
+    workspace_id: str,
+) -> bool:
+    if item.event_type != SUPERVISOR_TICK_EVENT or not item.plan_id:
+        return False
+    result = await session.execute(
+        select(WorkspacePlanOutboxModel.id)
+        .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
+        .where(WorkspacePlanOutboxModel.plan_id == item.plan_id)
+        .where(WorkspacePlanOutboxModel.event_type == PIPELINE_RUN_REQUESTED_EVENT)
+        .where(WorkspacePlanOutboxModel.status.in_(("pending", "processing", "completed")))
+        .where(WorkspacePlanOutboxModel.created_at > item.created_at)
+        .limit(1)
+    )
+    newer_pipeline_request_id = result.scalar_one_or_none()
+    if newer_pipeline_request_id is not None:
+        logger.info(
+            "workspace supervisor tick superseded by newer pipeline request",
+            extra={
+                "workspace_id": workspace_id,
+                "plan_id": item.plan_id,
+                "outbox_id": item.id,
+                "pipeline_request_outbox_id": newer_pipeline_request_id,
+            },
+        )
+        return True
+    if int(item.attempt_count or 0) <= 1:
+        return False
+    result = await session.execute(
+        select(WorkspacePlanOutboxModel.id)
+        .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
+        .where(WorkspacePlanOutboxModel.plan_id == item.plan_id)
+        .where(WorkspacePlanOutboxModel.event_type == SUPERVISOR_TICK_EVENT)
+        .where(WorkspacePlanOutboxModel.status == "completed")
+        .where(WorkspacePlanOutboxModel.id != item.id)
+        .where(WorkspacePlanOutboxModel.created_at > item.created_at)
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None
 
 
 async def _project_done_idle_accepted_attempts_after_tick(
@@ -700,6 +770,110 @@ async def _project_done_idle_disposition_nodes_after_tick(
     if changed:
         await repo.save(plan)
     return changed
+
+
+async def _reconcile_done_workspace_task_nodes_after_tick(
+    *,
+    session: AsyncSession,
+    plan_id: str,
+    workspace_id: str,
+) -> bool:
+    """Keep plan-node state aligned when the linked workspace task is already done."""
+
+    repo = SqlPlanRepository(session)
+    plan = await repo.get(plan_id)
+    if plan is None or plan.workspace_id != workspace_id:
+        return False
+
+    now = datetime.now(UTC)
+    changed = False
+    for node in list(plan.nodes.values()):
+        if (
+            node.intent is TaskIntent.DONE
+            and node.execution is TaskExecution.IDLE
+        ) or not node.workspace_task_id:
+            continue
+        if node.execution in {
+            TaskExecution.DISPATCHED,
+            TaskExecution.RUNNING,
+            TaskExecution.VERIFYING,
+            TaskExecution.REPORTED,
+        }:
+            continue
+        task = await session.get(WorkspaceTaskModel, node.workspace_task_id)
+        if task is None or task.workspace_id != workspace_id or task.status != "done":
+            continue
+
+        metadata = dict(node.metadata or {})
+        metadata["workspace_task_projection_status"] = "done"
+        metadata["workspace_task_projected_at"] = now.isoformat().replace("+00:00", "Z")
+        metadata["workspace_task_done_reconciled_at"] = now.isoformat().replace("+00:00", "Z")
+        metadata["workspace_task_done_reconciled_from_task_id"] = task.id
+        if task.completed_at is not None:
+            metadata["workspace_task_completed_at"] = task.completed_at.isoformat().replace(
+                "+00:00",
+                "Z",
+            )
+        if not metadata.get("last_verification_summary"):
+            task_metadata = dict(task.metadata_json or {})
+            summary = task_metadata.get("last_verification_summary") or task_metadata.get(
+                "completion_summary"
+            )
+            if isinstance(summary, str) and summary.strip():
+                metadata["last_verification_summary"] = summary.strip()
+        plan.replace_node(
+            replace(
+                node,
+                intent=TaskIntent.DONE,
+                execution=TaskExecution.IDLE,
+                metadata=metadata,
+                updated_at=now,
+                completed_at=node.completed_at or task.completed_at or now,
+            )
+        )
+        changed = True
+
+    if changed:
+        await repo.save(plan)
+    return changed
+
+
+async def _auto_complete_ready_root_after_tick(
+    *,
+    session: AsyncSession,
+    workspace_id: str,
+    root_task_id: str | None,
+    actor_user_id: str,
+    leader_agent_id: str | None,
+) -> WorkspaceTask | None:
+    if not root_task_id:
+        return None
+    from src.infrastructure.agent.workspace.workspace_goal_runtime import (
+        auto_complete_ready_root,
+    )
+
+    task_repo = SqlWorkspaceTaskRepository(session)
+    root_task = await task_repo.find_by_id(root_task_id)
+    if root_task is None or root_task.workspace_id != workspace_id:
+        return None
+    task_service = WorkspaceTaskService(
+        workspace_repo=SqlWorkspaceRepository(session),
+        workspace_member_repo=SqlWorkspaceMemberRepository(session),
+        workspace_agent_repo=SqlWorkspaceAgentRepository(session),
+        workspace_task_repo=task_repo,
+    )
+    command_service = WorkspaceTaskCommandService(task_service)
+    completed = await auto_complete_ready_root(
+        workspace_id=workspace_id,
+        actor_user_id=actor_user_id,
+        root_task=root_task,
+        task_repo=task_repo,
+        command_service=command_service,
+        leader_agent_id=leader_agent_id,
+    )
+    if completed is not None:
+        await session.flush()
+    return completed
 
 
 async def _project_supervisor_disposition_node_after_tick(
@@ -1465,6 +1639,7 @@ async def _reconcile_plan_nodes_with_reported_attempts(
         recoverable_execution = node.execution in {
             TaskExecution.DISPATCHED,
             TaskExecution.RUNNING,
+            TaskExecution.VERIFYING,
         }
         recoverable_in_progress_idle = (
             node.intent is TaskIntent.IN_PROGRESS
@@ -1719,9 +1894,15 @@ async def _blocked_dirty_main_projection_still_current(
     )
     if signature_status is None:
         return False
-    status, current_signature, dirty_generated_only = signature_status
+    status, current_signature, dirty_generated_only, dirty_has_generated, staged_bootstrap_only = (
+        signature_status
+    )
     return bool(
-        not dirty_generated_only and status == "dirty" and current_signature == stored_signature
+        not dirty_generated_only
+        and not dirty_has_generated
+        and not staged_bootstrap_only
+        and status == "dirty"
+        and current_signature == stored_signature
     )
 
 
@@ -1730,7 +1911,7 @@ async def _run_worktree_dirty_signature_command(
     project_id: str,
     tenant_id: str,
     command: str,
-) -> tuple[str, str, bool] | None:
+) -> tuple[str, str, bool, bool, bool] | None:
     try:
         result = await _WorkspaceSandboxCommandRunner(
             project_id=project_id,
@@ -1746,7 +1927,13 @@ async def _run_worktree_dirty_signature_command(
     dirty_generated_only = (
         _integration_output_field("dirty_generated_only", stdout, stderr).lower() == "true"
     )
-    return status, dirty_signature, dirty_generated_only
+    dirty_has_generated = (
+        _integration_output_field("dirty_has_generated", stdout, stderr).lower() == "true"
+    )
+    staged_bootstrap_only = (
+        _integration_output_field("staged_bootstrap_only", stdout, stderr).lower() == "true"
+    )
+    return status, dirty_signature, dirty_generated_only, dirty_has_generated, staged_bootstrap_only
 
 
 def _integration_commit_ref_from_metadata(metadata: Mapping[str, object]) -> str | None:
@@ -1867,6 +2054,10 @@ async def _integrate_accepted_attempt_worktree(  # noqa: PLR0911
     output = _compact_command_output(stdout or stderr)
     command_status = _integration_status_from_output(stdout, stderr)
     dirty_signature = _integration_output_field("dirty_signature", stdout, stderr) or None
+    resolved_commit_ref = (
+        _commit_ref_token(_integration_output_field("resolved_commit_ref", stdout, stderr))
+        or commit_token
+    )
     exit_code = int(result.get("exit_code") or 0)
     if exit_code == 0 and command_status in {"merged", "already_merged"}:
         status = command_status
@@ -1883,7 +2074,7 @@ async def _integrate_accepted_attempt_worktree(  # noqa: PLR0911
         attempt=attempt,
         status=status,
         summary=summary,
-        commit_ref=commit_token,
+        commit_ref=resolved_commit_ref,
         worktree_path=worktree_path,
         dirty_signature=dirty_signature,
         now=now,
@@ -1974,6 +2165,15 @@ async def _record_worktree_integration_result(
         now=now,
     )
     metadata.update(integration_metadata)
+    if commit_ref:
+        feature_checkpoint = metadata.get("feature_checkpoint")
+        if isinstance(feature_checkpoint, dict):
+            feature_checkpoint["commit_ref"] = commit_ref
+            metadata["feature_checkpoint"] = feature_checkpoint
+        handoff = metadata.get("handoff_package")
+        if isinstance(handoff, dict):
+            handoff["git_head"] = commit_ref
+            metadata["handoff_package"] = handoff
     task.metadata_json = metadata
     task.updated_at = now
     await SqlWorkspacePlanEventRepository(session).append(
@@ -3044,13 +3244,95 @@ async def _should_defer_worker_launch(
 
 async def _active_worker_conversation_count(session: AsyncSession, workspace_id: str) -> int:
     result = await session.execute(
-        select(func.count())
-        .select_from(WorkspaceTaskSessionAttemptModel)
+        select(
+            WorkspaceTaskSessionAttemptModel.conversation_id,
+            WorkspaceTaskSessionAttemptModel.updated_at,
+            WorkspaceTaskSessionAttemptModel.created_at,
+        )
         .where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
         .where(WorkspaceTaskSessionAttemptModel.status == "running")
         .where(WorkspaceTaskSessionAttemptModel.conversation_id.is_not(None))
     )
-    return int(result.scalar_one() or 0)
+    rows = [
+        (conversation_id, updated_at, created_at)
+        for conversation_id, updated_at, created_at in result.all()
+        if isinstance(conversation_id, str) and conversation_id
+    ]
+    if not rows:
+        return 0
+
+    conversation_ids = [conversation_id for conversation_id, _, _ in rows]
+    running_marker_ids = await _worker_launch_running_conversation_ids(conversation_ids)
+    event_activity = await _latest_worker_conversation_events(
+        session=session,
+        conversation_ids=[
+            conversation_id
+            for conversation_id, _, _ in rows
+            if conversation_id not in running_marker_ids
+        ],
+    )
+    cutoff = datetime.now(UTC) - timedelta(seconds=_worker_launch_active_event_grace_seconds())
+
+    active_count = len(running_marker_ids)
+    for conversation_id, updated_at, created_at in rows:
+        if conversation_id in running_marker_ids:
+            continue
+        last_activity = event_activity.get(conversation_id) or updated_at or created_at
+        if last_activity is not None and _ensure_aware_utc(last_activity) >= cutoff:
+            active_count += 1
+    return active_count
+
+
+async def _worker_launch_running_conversation_ids(conversation_ids: Iterable[str]) -> set[str]:
+    unique_ids = [conversation_id for conversation_id in dict.fromkeys(conversation_ids) if conversation_id]
+    if not unique_ids:
+        return set()
+    try:
+        from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+
+        redis_client = await get_redis_client()
+        checks = await asyncio.gather(
+            *(redis_client.exists(f"agent:running:{conversation_id}") for conversation_id in unique_ids),
+            return_exceptions=True,
+        )
+    except Exception:
+        logger.debug(
+            "workspace worker launch active marker lookup failed",
+            exc_info=True,
+            extra={"event": "workspace_plan.worker_launch.active_marker_lookup_failed"},
+        )
+        return set()
+    return {
+        conversation_id
+        for conversation_id, marker in zip(unique_ids, checks, strict=False)
+        if not isinstance(marker, Exception) and bool(marker)
+    }
+
+
+async def _latest_worker_conversation_events(
+    *,
+    session: AsyncSession,
+    conversation_ids: Iterable[str],
+) -> dict[str, datetime]:
+    unique_ids = [conversation_id for conversation_id in dict.fromkeys(conversation_ids) if conversation_id]
+    if not unique_ids:
+        return {}
+    result = await session.execute(
+        select(AgentExecutionEvent.conversation_id, func.max(AgentExecutionEvent.created_at))
+        .where(AgentExecutionEvent.conversation_id.in_(unique_ids))
+        .group_by(AgentExecutionEvent.conversation_id)
+    )
+    return {
+        conversation_id: created_at
+        for conversation_id, created_at in result.all()
+        if isinstance(conversation_id, str) and created_at is not None
+    }
+
+
+def _ensure_aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 async def _attempt_has_conversation(session: AsyncSession, attempt_id: str) -> bool:
@@ -3186,6 +3468,13 @@ def _worker_launch_max_active() -> int:
 
 def _worker_launch_defer_seconds() -> int:
     return _positive_int_env(_WORKER_LAUNCH_DEFER_SECONDS_ENV, _DEFAULT_WORKER_LAUNCH_DEFER_SECONDS)
+
+
+def _worker_launch_active_event_grace_seconds() -> int:
+    return _positive_int_env(
+        _WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV,
+        _DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS,
+    )
 
 
 def _plan_terminal_attempt_max_retries() -> int:
@@ -3951,6 +4240,13 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             current_attempt=current_attempt,
             attempt_id=attempt_id,
         )
+        if attempt_id and not requested_source_commit_ref:
+            requested_source_commit_ref = await _pipeline_repair_source_commit_ref(
+                session=session,
+                plan=plan,
+                node=node,
+                current_attempt=current_attempt,
+            )
         source_publish_result: PipelineRunResult | None = None
         source_publish_metadata: dict[str, Any] = {}
         if contract.provider == DRONE_PROVIDER:
@@ -3966,6 +4262,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
                 attempt_id=attempt_id,
                 current_attempt=current_attempt,
                 contract=contract,
+                source_commit_ref=requested_source_commit_ref,
             )
             requested_source_commit_ref = (
                 _commit_ref_token(source_publish_metadata.get("source_publish_source_commit_ref"))
@@ -4062,12 +4359,7 @@ def make_pipeline_run_requested_handler(  # noqa: C901, PLR0915
             plan_id=plan_id,
             node_id=node_id,
             attempt_id=attempt_id,
-            commit_ref=_pipeline_run_commit_ref(
-                contract,
-                node=node,
-                current_attempt=current_attempt,
-                attempt_id=attempt_id,
-            ),
+            commit_ref=requested_source_commit_ref,
             provider=contract.provider,
             metadata={
                 "reason": payload.get("reason") or "pipeline_gate_required",
@@ -4283,6 +4575,7 @@ async def _prepare_drone_source_ref(
     attempt_id: str | None,
     current_attempt: WorkspaceTaskSessionAttemptModel | None = None,
     contract: PipelineContractSpec,
+    source_commit_ref: str | None = None,
 ) -> tuple[PipelineContractSpec, dict[str, Any], PipelineRunResult | None]:
     source_control = _drone_source_control_config(
         workspace_metadata=workspace_metadata,
@@ -4303,7 +4596,7 @@ async def _prepare_drone_source_ref(
         )
         return replace(contract, provider_config=provider_config), metadata, None
 
-    commit_ref = _pipeline_commit_ref(node, current_attempt=current_attempt)
+    commit_ref = source_commit_ref or _pipeline_commit_ref(node, current_attempt=current_attempt)
     if not commit_ref:
         return (
             contract,
@@ -4778,7 +5071,7 @@ async def _merge_remote_branch_for_publish(  # noqa: PLR0911
     remote_ref = f"refs/remotes/memstack-source-publish/{branch}"
     fetch = await _run_git_command(
         worktree_path,
-        ("fetch", "--no-tags", remote, f"refs/heads/{branch}:{remote_ref}"),
+        ("fetch", "--no-tags", remote, f"+refs/heads/{branch}:{remote_ref}"),
         env=env,
         timeout=180,
     )
@@ -6081,6 +6374,67 @@ def _pipeline_commit_ref(
     )
 
 
+async def _pipeline_repair_source_commit_ref(
+    *,
+    session: AsyncSession,
+    plan: Plan,
+    node: PlanNode,
+    current_attempt: WorkspaceTaskSessionAttemptModel | None = None,
+    visited_node_ids: frozenset[str] = frozenset(),
+) -> str | None:
+    commit_ref = _pipeline_commit_ref(node, current_attempt=current_attempt)
+    if commit_ref:
+        return commit_ref
+
+    metadata = dict(node.metadata or {})
+    source_attempt_id = _metadata_string(metadata.get("source_verification_attempt_id"))
+    if source_attempt_id:
+        source_attempt = await _load_plan_attempt(session, source_attempt_id)
+        if source_attempt is not None:
+            commit_ref = _attempt_commit_ref(source_attempt)
+            if commit_ref:
+                return commit_ref
+
+    repair_for_node_id = _metadata_string(metadata.get("repair_for_node_id"))
+    if (
+        not repair_for_node_id
+        or repair_for_node_id == node.id
+        or repair_for_node_id in visited_node_ids
+    ):
+        return None
+
+    repaired_node = plan.nodes.get(PlanNodeId(repair_for_node_id))
+    if repaired_node is None:
+        return None
+    return await _pipeline_repair_source_commit_ref(
+        session=session,
+        plan=plan,
+        node=repaired_node,
+        current_attempt=None,
+        visited_node_ids=visited_node_ids | frozenset({node.id}),
+    )
+
+
+def _attempt_commit_ref(
+    attempt: WorkspaceTaskSessionAttempt | WorkspaceTaskSessionAttemptModel,
+) -> str | None:
+    verification_refs = _attempt_list_field(
+        attempt,
+        domain_field="candidate_verifications",
+        model_field="candidate_verifications_json",
+    )
+    artifact_refs = _attempt_list_field(
+        attempt,
+        domain_field="candidate_artifacts",
+        model_field="candidate_artifacts_json",
+    )
+    return _preferred_report_commit_ref(
+        verification_refs=verification_refs,
+        artifact_refs=artifact_refs,
+        summary=getattr(attempt, "candidate_summary", None),
+    )
+
+
 def _pipeline_run_commit_ref(
     contract: PipelineContractSpec,
     *,
@@ -6152,15 +6506,45 @@ def _summary_report_commit_ref(
 ) -> str | None:
     if not isinstance(summary, str) or not candidates:
         return None
-    candidate_by_lower = {candidate.lower(): candidate for candidate in candidates}
+    current_ref_patterns = (
+        r"\bworktree\s+(?:is\s+)?clean\s+at\s+commit\s+([0-9A-Fa-f]{7,40})",
+        r"\bcurrent\s+(?:worktree\s+)?commit\s+([0-9A-Fa-f]{7,40})",
+        r"\bworktree\s+commit\s+([0-9A-Fa-f]{7,40})",
+    )
+    for pattern in current_ref_patterns:
+        for match in re.finditer(pattern, summary, flags=re.IGNORECASE):
+            candidate = _candidate_for_summary_commit_token(match.group(1), candidates)
+            if candidate:
+                return candidate
     matching_tokens = [
-        match.group(1).lower()
+        match.group(1)
         for match in re.finditer(r"(?<![0-9A-Fa-f])([0-9A-Fa-f]{7,40})(?![0-9A-Fa-f])", summary)
-        if match.group(1).lower() in candidate_by_lower
+        if _candidate_for_summary_commit_token(match.group(1), candidates)
     ]
     if not matching_tokens:
         return None
-    return candidate_by_lower[matching_tokens[-1]]
+    return _candidate_for_summary_commit_token(matching_tokens[-1], candidates)
+
+
+def _candidate_for_summary_commit_token(token: str, candidates: list[str]) -> str | None:
+    normalized = token.strip().lower()
+    if not normalized:
+        return None
+    for candidate in candidates:
+        candidate_normalized = candidate.strip().lower()
+        if candidate_normalized == normalized:
+            return candidate
+    if len(normalized) < 7:
+        return None
+    for candidate in candidates:
+        candidate_normalized = candidate.strip().lower()
+        short_len = min(len(candidate_normalized), len(normalized))
+        if short_len >= 7 and (
+            candidate_normalized.startswith(normalized)
+            or normalized.startswith(candidate_normalized)
+        ):
+            return candidate
+    return None
 
 
 def _prefixed_ref_values(refs: list[str], prefix: str) -> list[str]:
@@ -7044,7 +7428,12 @@ async def _resolve_actor_user_id(
 ) -> str:
     direct = _payload_string(payload, "actor_user_id") or _payload_string(payload, "created_by")
     if direct:
-        return direct
+        member = await SqlWorkspaceMemberRepository(session).find_by_workspace_and_user(
+            workspace_id,
+            direct,
+        )
+        if member is not None:
+            return direct
     workspace = await SqlWorkspaceRepository(session).find_by_id(workspace_id)
     if workspace is None:
         raise ValueError(f"Workspace {workspace_id} not found")
