@@ -1152,7 +1152,7 @@ class TestStartupSweep:
 
         assert recovered == 0
         apply_report.assert_not_awaited()
-        cleanup_attempt_runtime.assert_awaited_once_with(att)
+        cleanup_attempt_runtime.assert_not_awaited()
         service._enqueue_verification_retry_supervisor_tick.assert_not_awaited()  # type: ignore[attr-defined]
         schedule_tick.assert_not_called()
         assert len(service._saves) == 1  # type: ignore[attr-defined]

@@ -511,7 +511,9 @@ class WorkspaceAttemptRecoveryService:
                 select(WorkspacePlanOutboxModel.payload_json["attempt_id"].as_string())
                 .where(WorkspacePlanOutboxModel.status.in_(("pending", "failed", "processing")))
                 .where(WorkspacePlanOutboxModel.event_type.in_(("handoff_resume", "worker_launch")))
-                .where(WorkspacePlanOutboxModel.payload_json["attempt_id"].as_string().in_(attempt_ids))
+                .where(
+                    WorkspacePlanOutboxModel.payload_json["attempt_id"].as_string().in_(attempt_ids)
+                )
             )
             leased_attempt_ids = {attempt_id for (attempt_id,) in result.all() if attempt_id}
         if not leased_attempt_ids:
@@ -911,7 +913,10 @@ class WorkspaceAttemptRecoveryService:
                 if is_v2_plan_linked
                 else False
             )
-            if root_status in terminal_parent_statuses and parent_status not in terminal_parent_statuses:
+            if (
+                root_status in terminal_parent_statuses
+                and parent_status not in terminal_parent_statuses
+            ):
                 assert root_status is not None
                 logger.info(
                     "workspace_attempt_recovery.root_already_terminal",
@@ -1072,8 +1077,10 @@ class WorkspaceAttemptRecoveryService:
                 status=self._terminal_status_for_parent(parent_status),
             )
             return 0
-        if plan_recovery_suppressed and attempt.adjudication_reason != "verification_retry_scheduled":
-            await self._cancel_attempt_runtime(attempt, reason=attempt_summary)
+        if (
+            plan_recovery_suppressed
+            and attempt.adjudication_reason != "verification_retry_scheduled"
+        ):
             await self._touch_awaiting_leader_attempt(attempt)
             logger.info(
                 "workspace_attempt_recovery.skip_plan_suppressed_awaiting_leader",
@@ -1155,9 +1162,7 @@ class WorkspaceAttemptRecoveryService:
                     .where(WorkspacePlanOutboxModel.status.in_(("pending", "failed", "processing")))
                     .where(
                         or_(
-                            WorkspacePlanOutboxModel.payload_json[
-                                "retry_attempt_id"
-                            ].as_string()
+                            WorkspacePlanOutboxModel.payload_json["retry_attempt_id"].as_string()
                             == attempt.id,
                             WorkspacePlanOutboxModel.metadata_json["attempt_id"].as_string()
                             == attempt.id,

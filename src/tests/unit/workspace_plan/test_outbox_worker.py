@@ -4602,7 +4602,7 @@ async def test_accepted_terminal_attempt_records_resolved_worktree_commit(
 
         async def run_command(self, command: str, *, timeout: int) -> dict[str, object]:
             assert timeout == 120
-            assert 'cut -c1-12' in command
+            assert "cut -c1-12" in command
             return {
                 "exit_code": 0,
                 "stdout": (
@@ -4795,6 +4795,8 @@ async def test_blocked_dirty_main_projection_waits_until_dirty_signature_changes
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv(outbox_handlers._BLOCKED_DIRTY_MAIN_SIGNATURE_TTL_ENV, "0")
+    outbox_handlers._blocked_dirty_main_projection_cache.clear()
     await _seed_workspace_and_plan(db_session)
     workspace = (
         await db_session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "workspace-1"))
@@ -4938,6 +4940,134 @@ async def test_blocked_dirty_main_projection_waits_until_dirty_signature_changes
         node=node,
         attempt=attempt,
     )
+
+
+@pytest.mark.asyncio
+async def test_blocked_dirty_main_projection_reuses_recent_dirty_signature_check(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(outbox_handlers._BLOCKED_DIRTY_MAIN_SIGNATURE_TTL_ENV, "30")
+    outbox_handlers._blocked_dirty_main_projection_cache.clear()
+    await _seed_workspace_and_plan(db_session)
+    workspace = (
+        await db_session.execute(select(WorkspaceModel).where(WorkspaceModel.id == "workspace-1"))
+    ).scalar_one()
+    workspace.metadata_json = {"code_context": {"sandbox_code_root": "/workspace/my-evo"}}
+    task = WorkspaceTaskModel(
+        id="task-blocked-integration-cache",
+        workspace_id="workspace-1",
+        title="Blocked accepted integration",
+        description="Accepted commit blocked by dirty main checkout.",
+        created_by="worker-user-1",
+        status="completed",
+        priority=0,
+        metadata_json={AUTONOMY_SCHEMA_VERSION_KEY: 1, ROOT_GOAL_TASK_ID: "root-task-1"},
+    )
+    attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-blocked-integration-cache",
+        workspace_task_id=task.id,
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=1,
+        status="accepted",
+        conversation_id="conversation-blocked-integration-cache",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_summary="done",
+        candidate_artifacts_json=["commit_ref:abc1234"],
+        candidate_verifications_json=["commit_ref:abc1234"],
+    )
+    second_task = WorkspaceTaskModel(
+        id="task-blocked-integration-cache-2",
+        workspace_id="workspace-1",
+        title="Second blocked accepted integration",
+        description="Another accepted commit blocked by the same dirty main checkout.",
+        created_by="worker-user-1",
+        status="completed",
+        priority=0,
+        metadata_json={AUTONOMY_SCHEMA_VERSION_KEY: 1, ROOT_GOAL_TASK_ID: "root-task-1"},
+    )
+    second_attempt = WorkspaceTaskSessionAttemptModel(
+        id="attempt-blocked-integration-cache-2",
+        workspace_task_id=second_task.id,
+        root_goal_task_id="root-task-1",
+        workspace_id="workspace-1",
+        attempt_number=1,
+        status="accepted",
+        conversation_id="conversation-blocked-integration-cache-2",
+        worker_agent_id="worker-agent",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+        candidate_summary="done",
+        candidate_artifacts_json=["commit_ref:def5678"],
+        candidate_verifications_json=["commit_ref:def5678"],
+    )
+    db_session.add_all([task, attempt, second_task, second_attempt])
+    await db_session.flush()
+
+    commands: list[str] = []
+
+    class FakeRunner:
+        def __init__(self, *, project_id: str, tenant_id: str) -> None:
+            assert project_id == "worker-project-1"
+            assert tenant_id == "worker-tenant-1"
+
+        async def run_command(self, command: str, *, timeout: int) -> dict[str, object]:
+            commands.append(command)
+            return {
+                "exit_code": 0,
+                "stdout": "status=dirty\ndirty_signature=sig-current\n M scratch.js\n",
+                "stderr": "",
+            }
+
+    monkeypatch.setattr(outbox_handlers, "_WorkspaceSandboxCommandRunner", FakeRunner)
+    node = PlanNode(
+        id="node-blocked-integration-cache",
+        plan_id="worker-plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Blocked accepted integration",
+        workspace_task_id=task.id,
+        current_attempt_id=attempt.id,
+        metadata={
+            "terminal_attempt_status": "accepted",
+            "last_verification_attempt_id": attempt.id,
+            "verified_commit_ref": "abc1234",
+            "worktree_integration_status": "blocked_dirty_main",
+            "worktree_integration_dirty_signature": "sig-current",
+        },
+    )
+    second_node = PlanNode(
+        id="node-blocked-integration-cache-2",
+        plan_id="worker-plan-1",
+        kind=PlanNodeKind.TASK,
+        parent_id=PlanNodeId("root-node"),
+        title="Second blocked accepted integration",
+        workspace_task_id=second_task.id,
+        current_attempt_id=second_attempt.id,
+        metadata={
+            "terminal_attempt_status": "accepted",
+            "last_verification_attempt_id": second_attempt.id,
+            "verified_commit_ref": "def5678",
+            "worktree_integration_status": "blocked_dirty_main",
+            "worktree_integration_dirty_signature": "sig-current",
+        },
+    )
+
+    assert await outbox_handlers._accepted_attempt_projection_complete_for_node(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=node,
+        attempt=attempt,
+    )
+    assert await outbox_handlers._accepted_attempt_projection_complete_for_node(
+        session=db_session,
+        workspace_id="workspace-1",
+        node=second_node,
+        attempt=second_attempt,
+    )
+    assert len(commands) == 1
+    outbox_handlers._blocked_dirty_main_projection_cache.clear()
 
 
 @pytest.mark.asyncio
@@ -6248,7 +6378,9 @@ async def test_worker_launch_handler_skips_no_attempt_payload_when_node_not_laun
     )
     worker = WorkspacePlanOutboxWorker(
         session_factory=_session_factory(db_session),
-        handlers={WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree)},
+        handlers={
+            WORKER_LAUNCH_EVENT: make_worker_launch_handler(worktree_preparer=_noop_worktree)
+        },
         worker_id="worker-a",
         batch_size=1,
     )

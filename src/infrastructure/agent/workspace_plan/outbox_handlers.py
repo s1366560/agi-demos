@@ -13,6 +13,7 @@ import re
 import shlex
 import shutil
 import tempfile
+import time
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import replace
@@ -201,12 +202,11 @@ PIPELINE_LOGS_SYNC_EVENT = "pipeline_logs_sync"
 logger = logging.getLogger(__name__)
 _WORKER_LAUNCH_MAX_ACTIVE_ENV = "WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE"
 _WORKER_LAUNCH_DEFER_SECONDS_ENV = "WORKSPACE_WORKER_LAUNCH_DEFER_SECONDS"
-_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV = (
-    "WORKSPACE_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS"
-)
+_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV = "WORKSPACE_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS"
 _PLAN_TERMINAL_ATTEMPT_MAX_RETRIES_ENV = "WORKSPACE_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES"
 _REPAIR_TURN_REUSE_ENABLED_ENV = "WORKSPACE_REPAIR_TURN_REUSE_ENABLED"
 _REPAIR_TURN_REUSE_MAX_ENV = "WORKSPACE_REPAIR_TURN_REUSE_MAX"
+_BLOCKED_DIRTY_MAIN_SIGNATURE_TTL_ENV = "WORKSPACE_BLOCKED_DIRTY_MAIN_SIGNATURE_TTL_SECONDS"
 _DEFAULT_SOFTWARE_WORKSPACE_MAX_SUBTASKS = 6
 _MAX_WORKSPACE_DECOMPOSER_MAX_SUBTASKS = 12
 _DEFAULT_WORKER_LAUNCH_MAX_ACTIVE = 4
@@ -214,7 +214,9 @@ _DEFAULT_WORKER_LAUNCH_DEFER_SECONDS = 20
 _DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS = 300
 _DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES = 3
 _DEFAULT_REPAIR_TURN_REUSE_MAX = 2
+_DEFAULT_BLOCKED_DIRTY_MAIN_SIGNATURE_TTL_SECONDS = 30
 _REPAIR_TURN_METADATA_KEY = "current_repair_turn"
+_blocked_dirty_main_projection_cache: dict[tuple[str, str, str], tuple[bool, float]] = {}
 _TERMINAL_ATTEMPT_STATUS_VALUES = frozenset(
     {
         "accepted",
@@ -789,8 +791,7 @@ async def _reconcile_done_workspace_task_nodes_after_tick(
     changed = False
     for node in list(plan.nodes.values()):
         if (
-            node.intent is TaskIntent.DONE
-            and node.execution is TaskExecution.IDLE
+            node.intent is TaskIntent.DONE and node.execution is TaskExecution.IDLE
         ) or not node.workspace_task_id:
             continue
         if node.execution in {
@@ -1854,7 +1855,7 @@ async def _accepted_attempt_projection_complete_for_node(
     )
 
 
-async def _blocked_dirty_main_projection_still_current(
+async def _blocked_dirty_main_projection_still_current(  # noqa: PLR0911
     *,
     session: AsyncSession,
     workspace_id: str,
@@ -1886,6 +1887,16 @@ async def _blocked_dirty_main_projection_still_current(
     if not sandbox_code_root:
         return False
 
+    cache_ttl_seconds = _blocked_dirty_main_signature_ttl_seconds()
+    cache_key = (workspace_id, str(sandbox_code_root), stored_signature)
+    if cache_ttl_seconds > 0:
+        cached = _blocked_dirty_main_projection_cache.get(cache_key)
+        if cached is not None:
+            cached_result, cached_at = cached
+            if time.monotonic() - cached_at <= cache_ttl_seconds:
+                return cached_result
+            _blocked_dirty_main_projection_cache.pop(cache_key, None)
+
     command = _worktree_dirty_signature_command(sandbox_code_root=str(sandbox_code_root))
     signature_status = await _run_worktree_dirty_signature_command(
         project_id=workspace.project_id,
@@ -1897,13 +1908,27 @@ async def _blocked_dirty_main_projection_still_current(
     status, current_signature, dirty_generated_only, dirty_has_generated, staged_bootstrap_only = (
         signature_status
     )
-    return bool(
+    still_current = bool(
         not dirty_generated_only
         and not dirty_has_generated
         and not staged_bootstrap_only
         and status == "dirty"
         and current_signature == stored_signature
     )
+    if cache_ttl_seconds > 0:
+        _blocked_dirty_main_projection_cache[cache_key] = (still_current, time.monotonic())
+    return still_current
+
+
+def _blocked_dirty_main_signature_ttl_seconds() -> int:
+    raw_value = os.getenv(_BLOCKED_DIRTY_MAIN_SIGNATURE_TTL_ENV)
+    if raw_value is None:
+        return _DEFAULT_BLOCKED_DIRTY_MAIN_SIGNATURE_TTL_SECONDS
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return _DEFAULT_BLOCKED_DIRTY_MAIN_SIGNATURE_TTL_SECONDS
+    return max(0, parsed)
 
 
 async def _run_worktree_dirty_signature_command(
@@ -3284,7 +3309,9 @@ async def _active_worker_conversation_count(session: AsyncSession, workspace_id:
 
 
 async def _worker_launch_running_conversation_ids(conversation_ids: Iterable[str]) -> set[str]:
-    unique_ids = [conversation_id for conversation_id in dict.fromkeys(conversation_ids) if conversation_id]
+    unique_ids = [
+        conversation_id for conversation_id in dict.fromkeys(conversation_ids) if conversation_id
+    ]
     if not unique_ids:
         return set()
     try:
@@ -3292,7 +3319,10 @@ async def _worker_launch_running_conversation_ids(conversation_ids: Iterable[str
 
         redis_client = await get_redis_client()
         checks = await asyncio.gather(
-            *(redis_client.exists(f"agent:running:{conversation_id}") for conversation_id in unique_ids),
+            *(
+                redis_client.exists(f"agent:running:{conversation_id}")
+                for conversation_id in unique_ids
+            ),
             return_exceptions=True,
         )
     except Exception:
@@ -3314,7 +3344,9 @@ async def _latest_worker_conversation_events(
     session: AsyncSession,
     conversation_ids: Iterable[str],
 ) -> dict[str, datetime]:
-    unique_ids = [conversation_id for conversation_id in dict.fromkeys(conversation_ids) if conversation_id]
+    unique_ids = [
+        conversation_id for conversation_id in dict.fromkeys(conversation_ids) if conversation_id
+    ]
     if not unique_ids:
         return {}
     result = await session.execute(
