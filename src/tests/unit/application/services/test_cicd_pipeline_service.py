@@ -251,6 +251,20 @@ async def test_run_pipeline_requires_repository_before_workspace_selection(
     assert exc_info.value.code == "repo_required"
 
 
+async def test_run_pipeline_rejects_nested_repository_slug(
+    db_session: AsyncSession,
+    test_project_db: Any,
+) -> None:
+    _ = test_project_db
+    await _seed_conversation(db_session)
+    service = CicdPipelineService(db_session)
+
+    with pytest.raises(CicdPipelineError) as exc_info:
+        await service.run_pipeline(_request(repository="owner/repo/extra"))
+
+    assert exc_info.value.code == "repo_required"
+
+
 async def test_run_pipeline_failed_provider_result_is_persisted_as_failed_run(
     db_session: AsyncSession,
     test_project_db: Any,

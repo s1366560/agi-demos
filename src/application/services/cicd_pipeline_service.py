@@ -298,9 +298,12 @@ def _strip(value: str | None) -> str | None:
 
 def _normalize_repository(repository: str | None) -> str | None:
     value = _strip(repository)
-    if value is None or "/" not in value:
+    if value is None:
         return None
-    owner, repo = value.split("/", 1)
+    parts = value.split("/")
+    if len(parts) != 2:
+        return None
+    owner, repo = parts
     owner = owner.strip()
     repo = repo.strip()
     if not owner or not repo:

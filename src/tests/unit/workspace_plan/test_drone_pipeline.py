@@ -256,6 +256,43 @@ async def test_drone_pipeline_provider_records_successful_build(
     assert result.status == "success"
 
 
+def test_drone_pipeline_config_rejects_nested_repository_slug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DRONE_SERVER_URL", "https://drone.example.test")
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+
+    with pytest.raises(ValueError, match="delivery_cicd.drone.repo must be '<owner>/<repo>'"):
+        DronePipelineConfig.from_contract(
+            PipelineContractSpec(
+                provider=DRONE_PROVIDER,
+                provider_config={"repo": "octo/hello/extra"},
+            )
+        )
+
+
+def test_drone_pipeline_config_reports_custom_server_env_name(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+) -> None:
+    monkeypatch.delenv("TENANT_DRONE_SERVER", raising=False)
+    monkeypatch.delenv("DRONE_SERVER", raising=False)
+    monkeypatch.delenv("DRONE_SERVER_URL", raising=False)
+    monkeypatch.setenv("DRONE_TOKEN", "test-token")
+    monkeypatch.setenv("MEMSTACK_DRONE_DOTENV_PATH", str(tmp_path / "missing.env"))
+
+    with pytest.raises(ValueError, match="TENANT_DRONE_SERVER is required"):
+        DronePipelineConfig.from_contract(
+            PipelineContractSpec(
+                provider=DRONE_PROVIDER,
+                provider_config={
+                    "repo": "octo/hello",
+                    "drone_server_env": "TENANT_DRONE_SERVER",
+                },
+            )
+        )
+
+
 @pytest.mark.asyncio
 async def test_drone_pipeline_provider_falls_back_to_http_when_cli_is_missing(
     monkeypatch: pytest.MonkeyPatch,

@@ -178,15 +178,19 @@ class DronePipelineConfig:
     def from_contract(cls, contract: PipelineContractSpec) -> DronePipelineConfig:
         raw = dict(contract.provider_config or {})
         repo_slug = _string(raw.get("repo") or raw.get("repository"))
-        if not repo_slug or "/" not in repo_slug:
+        if not repo_slug:
             raise DroneConfigurationError("delivery_cicd.drone.repo must be '<owner>/<repo>'")
-        owner, repo = repo_slug.split("/", 1)
+        parts = repo_slug.split("/")
+        if len(parts) != 2:
+            raise DroneConfigurationError("delivery_cicd.drone.repo must be '<owner>/<repo>'")
+        owner, repo = parts
         owner = owner.strip()
         repo = repo.strip()
         if not owner or not repo:
             raise DroneConfigurationError("delivery_cicd.drone.repo must be '<owner>/<repo>'")
 
         server_url = _string(raw.get("server_url"))
+        server_url_env = DRONE_SERVER_ENV
         if not server_url:
             server_url_env = (
                 _string(raw.get("drone_server_env"))
@@ -200,7 +204,7 @@ class DronePipelineConfig:
             if not server_url:
                 server_url = _server_url_from_environment(raw.get("environment"))
         if not server_url:
-            raise DroneConfigurationError(f"{DRONE_SERVER_ENV} is required for Drone CI/CD")
+            raise DroneConfigurationError(f"{server_url_env} is required for Drone CI/CD")
 
         token_env = (
             _string(raw.get("drone_token_env")) or _string(raw.get("token_env")) or DRONE_TOKEN_ENV
