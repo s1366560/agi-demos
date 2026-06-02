@@ -476,6 +476,8 @@ def _workspace_absolute_paths(command: str) -> tuple[str, ...]:
         if index in message_token_indexes and "$(" not in token and "`" not in token:
             continue
         cleaned = token.strip("'\"")
+        if _is_http_url_token(cleaned):
+            continue
         if cleaned == "/workspace" or cleaned.startswith("/workspace/"):
             raw_path = cleaned
         elif "/workspace/" in cleaned:
@@ -487,6 +489,10 @@ def _workspace_absolute_paths(command: str) -> tuple[str, ...]:
         if raw_path:
             paths.append(posixpath.normpath(raw_path))
     return tuple(paths)
+
+
+def _is_http_url_token(token: str) -> bool:
+    return bool(re.match(r"^https?://", token, re.I))
 
 
 def _workspace_git_commit_message_token_indexes(tokens: list[str]) -> set[int]:

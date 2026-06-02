@@ -8,6 +8,7 @@ inheritance.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections.abc import Mapping
 from pathlib import Path
@@ -360,6 +361,8 @@ class PromptMixin:
             logger.exception("[ReActAgent] Failed DB lookup for agent definition: %s", agent_id)
             return None
         finally:
+            with contextlib.suppress(Exception):
+                await session.rollback()
             await session.close()
 
     def _build_runtime_profile(

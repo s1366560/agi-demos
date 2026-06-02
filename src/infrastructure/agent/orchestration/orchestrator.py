@@ -7,11 +7,12 @@ and stopping agents.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.agent_role import AgentRoleResolver
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PARENT_AGENT_IDS = frozenset({"__system__"})
+_RegistryResult = TypeVar("_RegistryResult")
 
 
 @dataclass
@@ -107,6 +109,16 @@ class AgentOrchestrator:
         self._db_session = db_session
         self._spawn_executor = spawn_executor
 
+    async def _release_read_transaction(self) -> None:
+        """Release a read-only transaction held by the shared registry session."""
+        if self._db_session is None:
+            return
+        in_transaction = getattr(self._db_session, "in_transaction", None)
+        if callable(in_transaction) and not in_transaction():
+            return
+        with contextlib.suppress(Exception):
+            await self._db_session.rollback()
+
     @staticmethod
     def _is_system_parent_agent(agent_ref: str) -> bool:
         """Return whether an agent reference is an explicit trusted system parent."""
@@ -123,23 +135,32 @@ class AgentOrchestrator:
         effective_tenant_id = tenant_id or None
         effective_project_id = project_id or None
 
-        agent = await self._agent_registry.get_by_id(
-            agent_ref,
-            tenant_id=effective_tenant_id,
-            project_id=effective_project_id,
-        )
-        if agent is None and effective_tenant_id is not None:
-            agent = await self._agent_registry.get_by_name(effective_tenant_id, agent_ref)
-        if agent is None:
-            return None
-        if effective_tenant_id is not None and agent.tenant_id != effective_tenant_id:
-            return None
-        if effective_project_id is not None and agent.project_id not in (
-            None,
-            effective_project_id,
-        ):
-            return None
-        return agent
+        try:
+            agent = await self._agent_registry.get_by_id(
+                agent_ref,
+                tenant_id=effective_tenant_id,
+                project_id=effective_project_id,
+            )
+            if agent is None and effective_tenant_id is not None:
+                agent = await self._agent_registry.get_by_name(effective_tenant_id, agent_ref)
+            if agent is None:
+                return None
+            if effective_tenant_id is not None and agent.tenant_id != effective_tenant_id:
+                return None
+            if effective_project_id is not None and agent.project_id not in (
+                None,
+                effective_project_id,
+            ):
+                return None
+            return agent
+        finally:
+            await self._release_read_transaction()
+
+    async def _read_registry(self, operation: Awaitable[_RegistryResult]) -> _RegistryResult:
+        try:
+            return await operation
+        finally:
+            await self._release_read_transaction()
 
     async def _resolve_message_sender(
         self,
@@ -699,10 +720,12 @@ class AgentOrchestrator:
         discoverable_only: bool = True,
     ) -> list[Agent]:
         """List available agents for a project."""
-        agents = await self._agent_registry.list_by_project(
-            project_id=project_id,
-            tenant_id=tenant_id,
-            enabled_only=True,
+        agents = await self._read_registry(
+            self._agent_registry.list_by_project(
+                project_id=project_id,
+                tenant_id=tenant_id,
+                enabled_only=True,
+            )
         )
         if discoverable_only:
             agents = [a for a in agents if a.discoverable]
@@ -755,7 +778,7 @@ class AgentOrchestrator:
 
     async def get_agent(self, agent_id: str) -> Agent | None:
         """Get an agent definition by ID."""
-        return await self._agent_registry.get_by_id(agent_id)
+        return await self._read_registry(self._agent_registry.get_by_id(agent_id))
 
     async def get_agent_by_name(
         self,
@@ -763,7 +786,7 @@ class AgentOrchestrator:
         name: str,
     ) -> Agent | None:
         """Get an agent definition by name within a tenant."""
-        return await self._agent_registry.get_by_name(tenant_id, name)
+        return await self._read_registry(self._agent_registry.get_by_name(tenant_id, name))
 
     async def create_agent(self, agent: Agent) -> Agent:
         """Create a new agent definition.

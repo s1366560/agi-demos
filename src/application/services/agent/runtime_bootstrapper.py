@@ -585,14 +585,40 @@ class AgentRuntimeBootstrapper:
 
     @classmethod
     async def has_running_local_subprocess(cls, conversation_id: str) -> bool:
-        """Return True when a detached local workspace worker is still alive."""
+        """Return True when this API process still owns a live local worker."""
         async with cls._local_chat_lock:
             process = cls._local_subprocesses.get(conversation_id)
             if process is not None and getattr(process, "returncode", None) is None:
-                return True
-        return bool(
-            await asyncio.to_thread(cls._find_orphan_local_subprocess_pids, conversation_id)
-        )
+                pid = getattr(process, "pid", None)
+                if isinstance(pid, int) and pid > 0:
+                    if await asyncio.to_thread(cls._local_subprocess_pid_is_running, pid):
+                        return True
+                    cls._local_subprocesses.pop(conversation_id, None)
+                    request_path = cls._local_subprocess_request_paths.pop(conversation_id, None)
+                    if request_path is not None:
+                        with contextlib.suppress(OSError):
+                            request_path.unlink()
+                else:
+                    return True
+        return False
+
+    @staticmethod
+    def _local_subprocess_pid_is_running(pid: int) -> bool:
+        """Check the OS process table for a tracked detached worker PID."""
+        try:
+            result = subprocess.run(
+                ["ps", "-o", "stat=", "-p", str(pid)],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+        except Exception:
+            return True
+        if result.returncode != 0:
+            return False
+        status = result.stdout.strip()
+        return bool(status) and not status.startswith("Z")
 
     @staticmethod
     def _find_orphan_local_subprocess_pids(conversation_id: str) -> list[int]:

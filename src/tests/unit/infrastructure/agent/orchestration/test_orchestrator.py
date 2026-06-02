@@ -58,10 +58,33 @@ class _OrchestratorFixture:
         )
 
 
+class _OrchestratorDbFixture(_OrchestratorFixture):
+    """Fixture variant with the long-lived DB session used by local workers."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.db_session = Mock()
+        self.db_session.in_transaction = Mock(return_value=True)
+        self.db_session.rollback = AsyncMock()
+        self.orchestrator = AgentOrchestrator(
+            self.agent_registry,
+            self.session_registry,
+            self.spawn_manager,
+            self.message_bus,
+            db_session=self.db_session,
+        )
+
+
 @pytest.fixture
 def fx() -> _OrchestratorFixture:
     """Create an AgentOrchestrator with all four dependencies mocked."""
     return _OrchestratorFixture()
+
+
+@pytest.fixture
+def db_fx() -> _OrchestratorDbFixture:
+    """Create an AgentOrchestrator with a shared registry DB session."""
+    return _OrchestratorDbFixture()
 
 
 def _make_agent(**overrides: Any) -> Mock:
@@ -127,6 +150,56 @@ def _make_session(**overrides: Any) -> AgentSession:
 # ---------------------------------------------------------------------------
 # spawn_agent
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestRegistryTransactions:
+    """Ensure read-only registry calls do not leave long-lived transactions open."""
+
+    async def test_get_agent_rolls_back_read_transaction(
+        self, db_fx: _OrchestratorDbFixture
+    ) -> None:
+        agent = _make_agent(id="agent-1")
+        db_fx.agent_registry.get_by_id = AsyncMock(return_value=agent)
+
+        result = await db_fx.orchestrator.get_agent("agent-1")
+
+        assert result is agent
+        db_fx.db_session.rollback.assert_awaited_once()
+
+    async def test_list_agents_rolls_back_read_transaction(
+        self, db_fx: _OrchestratorDbFixture
+    ) -> None:
+        agent = _make_agent(id="agent-1", discoverable=True)
+        db_fx.agent_registry.list_by_project = AsyncMock(return_value=[agent])
+
+        result = await db_fx.orchestrator.list_agents("proj-1", "tenant-1")
+
+        assert result == [agent]
+        db_fx.db_session.rollback.assert_awaited_once()
+
+    async def test_spawn_resolution_releases_registry_read_transactions(
+        self, db_fx: _OrchestratorDbFixture
+    ) -> None:
+        parent_agent = _make_agent(id="parent-1")
+        target_agent = _make_agent(id="target-1")
+        db_fx.agent_registry.get_by_id = AsyncMock(side_effect=[parent_agent, target_agent])
+        db_fx.spawn_manager.get_spawn_depth = AsyncMock(return_value=0)
+        db_fx.spawn_manager.max_spawn_depth = 3
+        db_fx.spawn_manager.register_spawn = AsyncMock(return_value=_make_spawn_record())
+        db_fx.session_registry.register = AsyncMock(return_value=_make_session())
+        db_fx.message_bus.send_message = AsyncMock(return_value="msg-id-1")
+
+        await db_fx.orchestrator.spawn_agent(
+            parent_agent_id="parent-1",
+            target_agent_id="target-1",
+            message="hello",
+            mode=SpawnMode.RUN,
+            parent_session_id="parent-sess",
+            project_id="proj-1",
+        )
+
+        assert db_fx.db_session.rollback.await_count == 2
 
 
 @pytest.mark.unit

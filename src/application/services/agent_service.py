@@ -14,6 +14,7 @@ MCP (Model Context Protocol) Support:
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import time as time_module
@@ -166,6 +167,16 @@ class AgentService(AgentServicePort):
             redis_client=self._redis_client,
             skill_service=self._skill_service,
         )
+
+    async def _release_db_read_transaction(self) -> None:
+        """Release read-only work before entering long-lived actor/Redis streams."""
+        if self._db_session is None:
+            return
+        in_transaction = getattr(self._db_session, "in_transaction", None)
+        if callable(in_transaction) and not in_transaction():
+            return
+        with contextlib.suppress(Exception):
+            await self._db_session.rollback()
 
     async def _build_react_agent_async(self, project_id: str, user_id: str, tenant_id: str) -> None:
         # Deprecated: Agent execution moved to Ray Actors
@@ -365,6 +376,7 @@ class AgentService(AgentServicePort):
                 conversation=conversation,
                 exclude_event_id=user_msg_event.id,
             )
+            await self._release_db_read_transaction()
 
             # Start Ray Actor
             actor_id = await self._start_chat_actor(
@@ -1112,8 +1124,10 @@ class AgentService(AgentServicePort):
                 ):
                     last_event_time_us = replay_last_event_time_us
                     last_event_counter = replay_last_event_counter
+                await self._release_db_read_transaction()
             except Exception as e:
                 logger.warning(f"[AgentService] Failed to replay events: {e}")
+                await self._release_db_read_transaction()
                 saw_complete = False
 
         # If completion already happened, replay text_delta from Redis Stream once

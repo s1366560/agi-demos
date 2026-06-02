@@ -978,8 +978,13 @@ async def test_cancel_local_chat_terminates_orphaned_subprocess(monkeypatch) -> 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_has_running_local_subprocess_reflects_process_returncode() -> None:
+async def test_has_running_local_subprocess_reflects_process_returncode(monkeypatch) -> None:
     """Snapshot recovery can use the tracked detached worker as a liveness signal."""
+    monkeypatch.setattr(
+        AgentRuntimeBootstrapper,
+        "_local_subprocess_pid_is_running",
+        staticmethod(lambda _pid: True),
+    )
     AgentRuntimeBootstrapper._local_subprocesses["conv-running"] = _FakeProcess(pid=444)
     AgentRuntimeBootstrapper._local_subprocesses["conv-finished"] = _FakeProcess(
         pid=555,
@@ -989,3 +994,44 @@ async def test_has_running_local_subprocess_reflects_process_returncode() -> Non
     assert await AgentRuntimeBootstrapper.has_running_local_subprocess("conv-running") is True
     assert await AgentRuntimeBootstrapper.has_running_local_subprocess("conv-finished") is False
     assert await AgentRuntimeBootstrapper.has_running_local_subprocess("conv-missing") is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_has_running_local_subprocess_drops_dead_tracked_pid(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """A stale tracked Process object should not suppress workspace recovery forever."""
+    request_path = tmp_path / "request.json"
+    request_path.write_text("{}", encoding="utf-8")
+    AgentRuntimeBootstrapper._local_subprocesses["conv-stale"] = _FakeProcess(pid=444)
+    AgentRuntimeBootstrapper._local_subprocess_request_paths["conv-stale"] = request_path
+
+    monkeypatch.setattr(
+        AgentRuntimeBootstrapper,
+        "_local_subprocess_pid_is_running",
+        staticmethod(lambda _pid: False),
+    )
+    monkeypatch.setattr(
+        AgentRuntimeBootstrapper,
+        "_find_orphan_local_subprocess_pids",
+        staticmethod(lambda _conversation_id: []),
+    )
+
+    assert await AgentRuntimeBootstrapper.has_running_local_subprocess("conv-stale") is False
+    assert "conv-stale" not in AgentRuntimeBootstrapper._local_subprocesses
+    assert not request_path.exists()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_has_running_local_subprocess_ignores_orphaned_processes(monkeypatch) -> None:
+    """Lost orphan workers should be cancellable, but must not suppress recovery."""
+    monkeypatch.setattr(
+        AgentRuntimeBootstrapper,
+        "_find_orphan_local_subprocess_pids",
+        staticmethod(lambda _conversation_id: [444]),
+    )
+
+    assert await AgentRuntimeBootstrapper.has_running_local_subprocess("conv-orphan") is False
