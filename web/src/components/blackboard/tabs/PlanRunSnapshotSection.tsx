@@ -61,6 +61,7 @@ import {
   FILTERS,
   formatRelative,
   formatTime,
+  iterationNodeIndex,
   matchesFilter,
   nodeWriteSet,
   outboxNodeId,
@@ -864,6 +865,7 @@ export function PlanRunSnapshotSection({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedDetailTab, setSelectedDetailTab] = useState<DetailTabId>('story');
   const [dagViewMode, setDagViewMode] = useState<DagViewMode>('graph');
+  const [dagIterationScope, setDagIterationScope] = useState<number | 'all' | null>(null);
   const [filter, setFilter] = useState<NodeFilter>('all');
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -991,24 +993,6 @@ export function PlanRunSnapshotSection({
         }),
     [filter, normalizedQuery, runnableNodes]
   );
-  const executionDagModel = useMemo(
-    () => buildWorkspaceExecutionDag(snapshot, agents),
-    [agents, snapshot]
-  );
-  const dimmedDagNodeIds = useMemo(
-    () => workspaceDagDimmedNodeIds(executionDagModel, snapshot, filter, query),
-    [executionDagModel, filter, query, snapshot]
-  );
-  const selectedNode = useMemo(() => {
-    return nodes.find((node) => node.id === selectedNodeId) ?? filteredNodes[0] ?? nodes[0] ?? null;
-  }, [filteredNodes, nodes, selectedNodeId]);
-
-  useEffect(() => {
-    if (selectedNode && selectedNode.id !== selectedNodeId) {
-      setSelectedNodeId(selectedNode.id);
-    }
-  }, [selectedNode, selectedNodeId]);
-
   const plan = snapshot?.plan ?? null;
   const planHistory = snapshot?.plan_history ?? [];
   const selectedPlanHistory =
@@ -1030,6 +1014,59 @@ export function PlanRunSnapshotSection({
   const latestEvent = events[0] ?? null;
   const isStale = lastUpdatedAt ? Date.now() - lastUpdatedAt.getTime() > 20000 : false;
   const iterationRuns = useMemo(() => buildIterationRuns(snapshot, taskList), [snapshot, taskList]);
+  const currentIterationIndex = iteration?.current_iteration ?? iterationRuns.at(-1)?.index ?? 1;
+  const dagIterationIndex =
+    dagIterationScope === 'all' ? null : (dagIterationScope ?? currentIterationIndex);
+  const graphScopedNodes = useMemo(
+    () =>
+      dagIterationIndex
+        ? runnableNodes.filter((node) => iterationNodeIndex(node) === dagIterationIndex)
+        : runnableNodes,
+    [dagIterationIndex, runnableNodes]
+  );
+  const graphScopedNodeIds = useMemo(
+    () => new Set(graphScopedNodes.map((node) => node.id)),
+    [graphScopedNodes]
+  );
+  const graphFilteredNodes = useMemo(
+    () => filteredNodes.filter((node) => graphScopedNodeIds.has(node.id)),
+    [filteredNodes, graphScopedNodeIds]
+  );
+  const executionDagModel = useMemo(
+    () =>
+      buildWorkspaceExecutionDag(snapshot, agents, {
+        iterationIndex: dagIterationIndex,
+      }),
+    [agents, dagIterationIndex, snapshot]
+  );
+  const dimmedDagNodeIds = useMemo(
+    () => workspaceDagDimmedNodeIds(executionDagModel, snapshot, filter, query),
+    [executionDagModel, filter, query, snapshot]
+  );
+  const selectedNode = useMemo(() => {
+    const selected = nodes.find((node) => node.id === selectedNodeId) ?? null;
+    if (selected && (dagViewMode !== 'graph' || graphScopedNodeIds.has(selected.id))) {
+      return selected;
+    }
+    if (dagViewMode === 'graph') {
+      return graphFilteredNodes[0] ?? graphScopedNodes[0] ?? filteredNodes[0] ?? nodes[0] ?? null;
+    }
+    return selected ?? filteredNodes[0] ?? nodes[0] ?? null;
+  }, [
+    dagViewMode,
+    filteredNodes,
+    graphFilteredNodes,
+    graphScopedNodeIds,
+    graphScopedNodes,
+    nodes,
+    selectedNodeId,
+  ]);
+
+  useEffect(() => {
+    if (selectedNode && selectedNode.id !== selectedNodeId) {
+      setSelectedNodeId(selectedNode.id);
+    }
+  }, [selectedNode, selectedNodeId]);
   const selectedIterationRun = useMemo(() => {
     return (
       iterationRuns.find((run) => run.index === selectedIterationIndex) ??
@@ -1777,6 +1814,55 @@ export function PlanRunSnapshotSection({
                     </button>
                   </div>
                 </div>
+                {dagViewMode === 'graph' && (
+                  <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDagIterationScope(null);
+                      }}
+                      className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors ${
+                        dagIterationScope === null
+                          ? 'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark'
+                          : 'border-border-light bg-surface-light text-text-secondary hover:bg-surface-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt'
+                      }`}
+                    >
+                      <Repeat2 className="h-3.5 w-3.5" aria-hidden />
+                      {t('blackboard.planRunCurrentIterationGraph', 'Current iteration')}
+                    </button>
+                    {iterationRuns.map((run) => (
+                      <button
+                        key={run.index}
+                        type="button"
+                        onClick={() => {
+                          setDagIterationScope(run.index);
+                        }}
+                        className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors ${
+                          dagIterationScope === run.index
+                            ? 'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark'
+                            : 'border-border-light bg-surface-light text-text-secondary hover:bg-surface-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt'
+                        }`}
+                      >
+                        {t('blackboard.iterationLabel', 'Iteration {{index}}', {
+                          index: run.index,
+                        })}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDagIterationScope('all');
+                      }}
+                      className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors ${
+                        dagIterationScope === 'all'
+                          ? 'border-info-border bg-info-bg text-status-text-info dark:border-info-border-dark dark:bg-info-bg-dark dark:text-status-text-info-dark'
+                          : 'border-border-light bg-surface-light text-text-secondary hover:bg-surface-muted dark:border-border-dark dark:bg-surface-dark dark:text-text-muted dark:hover:bg-surface-dark-alt'
+                      }`}
+                    >
+                      {t('blackboard.planRunAllIterationsGraph', 'All iterations')}
+                    </button>
+                  </div>
+                )}
                 <div className="mt-3 flex min-w-0 flex-col gap-2 md:flex-row md:items-start">
                   <label className="relative min-w-0 md:w-56 md:shrink-0">
                     <span className="sr-only">
@@ -1827,6 +1913,7 @@ export function PlanRunSnapshotSection({
                   selectedNodeId={selectedNode?.id ?? null}
                   onSelectIteration={(index) => {
                     setSelectedIterationIndex(index);
+                    setDagIterationScope(index);
                     closeSelectedTask();
                   }}
                   onSelectNode={(nodeId) => {

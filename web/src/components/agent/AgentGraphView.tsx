@@ -160,7 +160,6 @@ export const AgentGraphView = memo<AgentGraphViewProps>(
         })
         .catch((error: unknown) => {
           if (active) {
-            setWorkspaceSnapshot(null);
             setWorkspaceError(
               error instanceof Error ? error.message : 'Workspace graph unavailable'
             );
@@ -207,7 +206,7 @@ export const AgentGraphView = memo<AgentGraphViewProps>(
 
     if (!shouldUseGraphRun) {
       const isWorkspaceActive = Boolean(workspaceId);
-      if (isWorkspaceActive && isWorkspaceLoading) {
+      if (isWorkspaceActive && isWorkspaceLoading && !workspaceSnapshot) {
         return (
           <div className="flex min-h-[320px] flex-col items-center justify-center p-6 text-center text-sm text-text-muted">
             <Loader2 className="h-8 w-8 animate-spin text-text-muted motion-reduce:animate-none" />
@@ -237,7 +236,25 @@ export const AgentGraphView = memo<AgentGraphViewProps>(
                 </div>
               ) : null}
             </div>
-            <div className="min-h-0 flex-1 overflow-auto p-3">
+            <div className="relative min-h-0 flex-1 overflow-auto p-3">
+              {isWorkspaceLoading ? (
+                <div
+                  aria-label={t('agent.graphView.refreshingWorkspaceGraph', {
+                    defaultValue: 'Refreshing workspace graph',
+                  })}
+                  className="pointer-events-none absolute right-5 top-5 z-20 h-2 w-2 rounded-full bg-text-muted/45"
+                  data-testid="workspace-graph-refreshing"
+                  title={t('agent.graphView.refreshingWorkspaceGraph', {
+                    defaultValue: 'Refreshing workspace graph',
+                  })}
+                >
+                  <span className="sr-only">
+                    {t('agent.graphView.refreshingWorkspaceGraph', {
+                      defaultValue: 'Refreshing workspace graph',
+                    })}
+                  </span>
+                </div>
+              ) : null}
               <ExecutionDagGraph
                 model={model}
                 selectedNodeId={selectedNodeId}

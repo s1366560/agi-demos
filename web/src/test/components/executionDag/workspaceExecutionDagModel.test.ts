@@ -98,6 +98,25 @@ describe('workspaceExecutionDagModel', () => {
     });
   });
 
+  it('can scope the workspace graph to one plan iteration', () => {
+    const model = buildWorkspaceExecutionDag(
+      snapshot([
+        node({ id: 'task-a', title: 'Previous implementation', metadata: { iteration_index: 1 } }),
+        node({ id: 'task-b', title: 'Current verification', metadata: { iteration_index: 2 } }),
+      ]),
+      agents,
+      { iterationIndex: 2 }
+    );
+
+    expect(model?.nodes.map((item) => item.id)).toEqual(['root:plan-1', 'task-b']);
+    expect(model?.edges).toContainEqual({
+      id: 'hierarchy:root:plan-1:task-b',
+      sourceId: 'root:plan-1',
+      targetId: 'task-b',
+      kind: 'hierarchy',
+    });
+  });
+
   it('resolves workspace agent labels by binding id or agent id', () => {
     expect(resolveWorkspaceAgentLabel('binding-1', agents)).toBe('Implementer');
     expect(resolveWorkspaceAgentLabel('agent-1', agents)).toBe('Implementer');

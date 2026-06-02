@@ -5452,6 +5452,8 @@
         "current": "当前",
         "empty": "暂无工作空间任务或计划。工作空间开始执行后会显示在这里。",
         "emptyLane": "空。",
+        "iterationTitle": "第 {{index}} 次迭代",
+        "unassignedIteration": "未分配迭代",
         "status": {
           "todo": "待办",
           "in_progress": "进行中",

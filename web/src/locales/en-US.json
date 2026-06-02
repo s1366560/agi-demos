@@ -5429,6 +5429,8 @@
         "current": "Current",
         "empty": "No workspace tasks or plan yet. They will appear here when the workspace starts execution.",
         "emptyLane": "Empty.",
+        "iterationTitle": "Iteration {{index}}",
+        "unassignedIteration": "No iteration",
         "status": {
           "todo": "Todo",
           "in_progress": "In progress",

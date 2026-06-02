@@ -1,10 +1,17 @@
-
 import type { NodeFilter } from '@/components/blackboard/tabs/planRunSnapshotModel';
-import { matchesFilter, shortId } from '@/components/blackboard/tabs/planRunSnapshotModel';
+import {
+  iterationNodeIndex,
+  matchesFilter,
+  shortId,
+} from '@/components/blackboard/tabs/planRunSnapshotModel';
 
 import type { WorkspaceAgent, WorkspacePlanNode, WorkspacePlanSnapshot } from '@/types/workspace';
 
 import type { ExecutionDagEdge, ExecutionDagModel, ExecutionDagNode } from './types';
+
+interface WorkspaceExecutionDagOptions {
+  iterationIndex?: number | null | undefined;
+}
 
 function readText(value: unknown): string {
   return typeof value === 'string' ? value : '';
@@ -84,14 +91,20 @@ function rootDagNodeId(snapshot: WorkspacePlanSnapshot): string {
 
 export function buildWorkspaceExecutionDag(
   snapshot: WorkspacePlanSnapshot | null,
-  agents: WorkspaceAgent[]
+  agents: WorkspaceAgent[],
+  options: WorkspaceExecutionDagOptions = {}
 ): ExecutionDagModel | null {
   if (!snapshot?.plan) {
     return null;
   }
 
   const planNodes = snapshot.plan.nodes;
-  const runnableNodes = planNodes.filter((node) => node.kind === 'task' || node.kind === 'verify');
+  const runnableNodes = planNodes.filter((node) => {
+    if (node.kind !== 'task' && node.kind !== 'verify') {
+      return false;
+    }
+    return !options.iterationIndex || iterationNodeIndex(node) === options.iterationIndex;
+  });
   const structuralNodes = planNodes.filter((node) => {
     if (node.kind === 'task' || node.kind === 'verify') {
       return false;

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildWorkspaceTaskPlanRows } from '@/components/agent/workspace/WorkspaceTaskPlanPanelModel';
+import {
+  buildWorkspaceTaskPlanIterationGroups,
+  buildWorkspaceTaskPlanRows,
+} from '@/components/agent/workspace/WorkspaceTaskPlanPanelModel';
 
 import type { WorkspacePlanNode, WorkspacePlanSnapshot, WorkspaceTask } from '@/types/workspace';
 
@@ -89,6 +92,7 @@ describe('buildWorkspaceTaskPlanRows', () => {
     expect(rows[1]).toMatchObject({
       entityId: 'node-b-without-priority',
       progressPercent: 42,
+      iterationIndex: null,
       order: 1,
     });
   });
@@ -124,6 +128,7 @@ describe('buildWorkspaceTaskPlanRows', () => {
       progressPercent: 100,
       source: 'plan',
       isCurrent: true,
+      iterationIndex: null,
     });
   });
 
@@ -162,5 +167,87 @@ describe('buildWorkspaceTaskPlanRows', () => {
       source: 'plan',
     });
     expect(rows.some((row) => row.title === 'Stale running task')).toBe(false);
+  });
+
+  it('preserves plan-node iteration metadata and groups rows by iteration before status', () => {
+    const rows = buildWorkspaceTaskPlanRows(
+      [],
+      snapshot([
+        planNode({
+          id: 'iteration-2-done',
+          title: 'Second iteration done',
+          intent: 'done',
+          priority: 1,
+          metadata: { iteration_index: 2 },
+        }),
+        planNode({
+          id: 'iteration-1-todo',
+          title: 'First iteration todo',
+          intent: 'todo',
+          priority: 2,
+          metadata: { iteration_index: '1' },
+        }),
+        planNode({
+          id: 'iteration-1-running',
+          title: 'First iteration running',
+          intent: 'in_progress',
+          priority: 1,
+          metadata: { iteration_index: 1 },
+        }),
+      ]),
+      null
+    );
+
+    expect(rows.map((row) => row.entityId)).toEqual([
+      'iteration-1-running',
+      'iteration-1-todo',
+      'iteration-2-done',
+    ]);
+
+    const groups = buildWorkspaceTaskPlanIterationGroups(rows);
+    expect(groups).toEqual([
+      {
+        id: 'iteration:1',
+        iterationIndex: 1,
+        rows: [rows[0], rows[1]],
+      },
+      {
+        id: 'iteration:2',
+        iterationIndex: 2,
+        rows: [rows[2]],
+      },
+    ]);
+  });
+
+  it('places task-only rows without iteration metadata in an unassigned group', () => {
+    const rows = buildWorkspaceTaskPlanRows(
+      [
+        workspaceTask({
+          id: 'task-with-iteration',
+          title: 'Task with iteration',
+          status: 'done',
+          metadata: { iteration_index: 3 },
+        }),
+        workspaceTask({
+          id: 'task-without-iteration',
+          title: 'Task without iteration',
+          status: 'todo',
+        }),
+      ],
+      null,
+      null
+    );
+
+    const groups = buildWorkspaceTaskPlanIterationGroups(rows);
+
+    expect(groups.map((group) => group.id)).toEqual(['iteration:3', 'iteration:unassigned']);
+    expect(groups[0].rows[0]).toMatchObject({
+      entityId: 'task-with-iteration',
+      iterationIndex: 3,
+    });
+    expect(groups[1].rows[0]).toMatchObject({
+      entityId: 'task-without-iteration',
+      iterationIndex: null,
+    });
   });
 });

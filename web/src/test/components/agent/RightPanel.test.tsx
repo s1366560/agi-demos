@@ -90,6 +90,8 @@ import { workspacePlanService, workspaceTaskService } from '@/services/workspace
 // eslint-disable-next-line no-restricted-imports
 import { useGraphStore } from '@/stores/graphStore';
 // eslint-disable-next-line no-restricted-imports
+import { useWorkspaceStore } from '@/stores/workspace';
+// eslint-disable-next-line no-restricted-imports
 import { RightPanel } from '@/components/agent/RightPanel';
 // eslint-disable-next-line no-restricted-imports
 import { ResizeHandle } from '@/components/agent/rightPanel/ResizeHandle';
@@ -144,10 +146,31 @@ function mockWorkspaceSnapshot() {
           current_attempt_id: 'attempt-1',
           workspace_task_id: 'workspace-task-1',
           priority: 1,
-          metadata: {},
+          metadata: { iteration_index: 1 },
           created_at: '2026-05-01T00:00:00Z',
         },
       ],
+    },
+    iteration: {
+      current_iteration: 1,
+      loop_label: 'Iteration loop',
+      cadence: 'manual',
+      loop_status: 'active',
+      max_iterations: 3,
+      completed_iterations: [],
+      current_sprint_goal: 'Ship workspace delivery',
+      review_summary: '',
+      stop_reason: '',
+      active_phase: 'execute',
+      active_phase_label: 'Execute',
+      next_action: '',
+      task_count: 1,
+      task_budget: 1,
+      phases: [],
+      deliverables: [],
+      feedback_items: [],
+      history: [],
+      actions: {},
     },
     blackboard: [],
     outbox: [],
@@ -250,6 +273,7 @@ describe('RightPanel (Refactored)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useGraphStore.getState().clearAll();
+    useWorkspaceStore.setState({ planRefreshCounters: {} });
     vi.mocked(workspaceTaskService.list).mockResolvedValue([]);
     vi.mocked(workspacePlanService.getSnapshot).mockResolvedValue(mockWorkspaceSnapshot() as any);
     vi.mocked(agentGraphApi.getGraph).mockResolvedValue({
@@ -428,6 +452,68 @@ describe('RightPanel (Refactored)', () => {
       recoverStaleAttempts: false,
     });
     expect(agentGraphApi.getGraph).not.toHaveBeenCalled();
+  });
+
+  it('should keep the workspace execution graph mounted during background refresh', async () => {
+    vi.mocked(workspacePlanService.getSnapshot).mockResolvedValueOnce(
+      mockWorkspaceSnapshot() as any
+    );
+
+    renderRightPanel(
+      <RightPanel
+        tasks={[]}
+        conversationId="conv-1"
+        workspaceId="ws-1"
+        currentWorkspaceTaskId="workspace-task-1"
+      />
+    );
+
+    fireEvent.click(screen.getByText('Graph'));
+    expect(await screen.findByTestId('execution-dag-graph')).toBeInTheDocument();
+
+    vi.mocked(workspacePlanService.getSnapshot).mockImplementationOnce(
+      () => new Promise(() => undefined)
+    );
+
+    act(() => {
+      useWorkspaceStore.setState({ planRefreshCounters: { 'ws-1': 1 } });
+    });
+
+    const refreshIndicator = await screen.findByTestId('workspace-graph-refreshing');
+    expect(refreshIndicator).toHaveClass('absolute');
+    expect(refreshIndicator).toHaveClass('h-2');
+    expect(refreshIndicator).toHaveClass('w-2');
+    expect(screen.getByTestId('execution-dag-graph')).toBeInTheDocument();
+    expect(screen.queryByText('Loading workspace graph')).not.toBeInTheDocument();
+  });
+
+  it('should keep the latest workspace execution graph when refresh fails', async () => {
+    vi.mocked(workspacePlanService.getSnapshot).mockResolvedValueOnce(
+      mockWorkspaceSnapshot() as any
+    );
+
+    renderRightPanel(
+      <RightPanel
+        tasks={[]}
+        conversationId="conv-1"
+        workspaceId="ws-1"
+        currentWorkspaceTaskId="workspace-task-1"
+      />
+    );
+
+    fireEvent.click(screen.getByText('Graph'));
+    expect(await screen.findByTestId('execution-dag-graph')).toBeInTheDocument();
+
+    vi.mocked(workspacePlanService.getSnapshot).mockRejectedValueOnce(new Error('network blip'));
+
+    act(() => {
+      useWorkspaceStore.setState({ planRefreshCounters: { 'ws-1': 1 } });
+    });
+
+    expect(
+      await screen.findByText('Showing the latest available workspace graph.')
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('execution-dag-graph')).toBeInTheDocument();
   });
 
   it('should ignore graph runs from a different conversation', () => {

@@ -20,7 +20,14 @@ export interface WorkspaceTaskPlanRow {
   progressPercent?: number | undefined;
   attemptId?: string | null | undefined;
   isCurrent: boolean;
+  iterationIndex: number | null;
   order: number;
+}
+
+export interface WorkspaceTaskPlanIterationGroup {
+  id: string;
+  iterationIndex: number | null;
+  rows: WorkspaceTaskPlanRow[];
 }
 
 const WORKSPACE_STATUS_ORDER: Record<WorkspaceTaskStatus, number> = {
@@ -83,6 +90,28 @@ function planNodeOrder(node: WorkspacePlanNode, fallback: number): number {
   return (node as { priority?: number }).priority ?? fallback;
 }
 
+function planNodeIterationIndex(node: WorkspacePlanNode): number | null {
+  const value = node.metadata.iteration_index;
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === 'string' && /^\d+$/.test(value)) {
+    return Math.max(1, Number(value));
+  }
+  return null;
+}
+
+function taskIterationIndex(task: WorkspaceTask): number | null {
+  const value = task.metadata.iteration_index;
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+  if (typeof value === 'string' && /^\d+$/.test(value)) {
+    return Math.max(1, Number(value));
+  }
+  return null;
+}
+
 export function buildWorkspaceTaskPlanRows(
   tasks: WorkspaceTask[],
   snapshot: WorkspacePlanSnapshot | null,
@@ -109,6 +138,7 @@ export function buildWorkspaceTaskPlanRows(
           progressPercent: planNodeProgressPercent(node),
           attemptId: node.current_attempt_id ?? task?.current_attempt_id,
           isCurrent: rowIsCurrent(currentWorkspaceTaskId, node.workspace_task_id, node.id),
+          iterationIndex: planNodeIterationIndex(node),
           order: planNodeOrder(node, index),
         };
       })
@@ -126,12 +156,41 @@ export function buildWorkspaceTaskPlanRows(
       updatedAt: task.updated_at ?? task.created_at,
       attemptId: task.current_attempt_id,
       isCurrent: rowIsCurrent(currentWorkspaceTaskId, task.id),
+      iterationIndex: taskIterationIndex(task),
       order: taskPriorityOrder(task, index),
     }))
     .sort(sortWorkspaceTaskPlanRows);
 }
 
+export function buildWorkspaceTaskPlanIterationGroups(
+  rows: WorkspaceTaskPlanRow[]
+): WorkspaceTaskPlanIterationGroup[] {
+  const groups = new Map<number | null, WorkspaceTaskPlanRow[]>();
+
+  for (const row of rows) {
+    const currentRows = groups.get(row.iterationIndex) ?? [];
+    currentRows.push(row);
+    groups.set(row.iterationIndex, currentRows);
+  }
+
+  return [...groups.entries()]
+    .sort(([left], [right]) => {
+      if (left === right) return 0;
+      if (left === null) return 1;
+      if (right === null) return -1;
+      return left - right;
+    })
+    .map(([iterationIndex, groupRows]) => ({
+      id: iterationIndex === null ? 'iteration:unassigned' : `iteration:${String(iterationIndex)}`,
+      iterationIndex,
+      rows: groupRows,
+    }));
+}
+
 function sortWorkspaceTaskPlanRows(a: WorkspaceTaskPlanRow, b: WorkspaceTaskPlanRow): number {
+  const iterationDelta =
+    (a.iterationIndex ?? Number.MAX_SAFE_INTEGER) - (b.iterationIndex ?? Number.MAX_SAFE_INTEGER);
+  if (iterationDelta !== 0) return iterationDelta;
   const statusDelta = WORKSPACE_STATUS_ORDER[a.status] - WORKSPACE_STATUS_ORDER[b.status];
   if (statusDelta !== 0) return statusDelta;
   return a.order - b.order || a.title.localeCompare(b.title);

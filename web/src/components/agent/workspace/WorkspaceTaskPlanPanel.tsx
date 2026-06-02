@@ -1,18 +1,34 @@
-import { memo } from 'react';
+import { memo, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { AlertCircle, CheckCircle2, Circle, GitBranch, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronRight, Circle, GitBranch, Loader2 } from 'lucide-react';
 
 import {
   calculateWorkspacePlanCompletionRatio,
   getWorkspacePlanCompletionCounts,
 } from '@/components/blackboard/blackboardUtils';
 
-import type { WorkspacePlanSnapshot, WorkspaceTaskStatus } from '@/types/workspace';
+import {
+  buildWorkspaceTaskPlanIterationGroups,
+  type WorkspaceTaskPanelView,
+  type WorkspaceTaskPlanRow,
+} from './WorkspaceTaskPlanPanelModel';
 
-import type { WorkspaceTaskPanelView, WorkspaceTaskPlanRow } from './WorkspaceTaskPlanPanelModel';
+import type {
+  WorkspacePlanSnapshot,
+  WorkspaceTaskStatus,
+} from '@/types/workspace';
+
 import type { TFunction } from 'i18next';
+
+interface WorkspaceTaskPlanLaneGroupsProps {
+  groups: ReturnType<typeof buildWorkspaceTaskPlanIterationGroups>;
+  currentIterationGroupId: string | null;
+  defaultExpandedIterationGroupId: string | null;
+  locale: string;
+  t: TFunction;
+}
 
 const WORKSPACE_STATUS_CONFIG: Record<
   WorkspaceTaskStatus,
@@ -43,8 +59,6 @@ const WORKSPACE_STATUS_CONFIG: Record<
     bar: 'bg-emerald-500 dark:bg-emerald-400',
   },
 };
-
-const WORKSPACE_LANE_ORDER: WorkspaceTaskStatus[] = ['in_progress', 'todo', 'blocked', 'done'];
 
 function tFallback(t: TFunction, key: string, fallback: string): string {
   const translated = t(key, fallback);
@@ -83,6 +97,16 @@ function planTaskStats(snapshot: WorkspacePlanSnapshot | null) {
     done: counts.completedTasks,
     completion: calculateWorkspacePlanCompletionRatio(snapshot.plan, snapshot.root_goal ?? null),
   };
+}
+
+function iterationGroupTitle(iterationIndex: number | null, t: TFunction): string {
+  if (iterationIndex === null) {
+    return tFallback(t, 'agent.rightPanel.workspacePlan.unassignedIteration', 'No iteration');
+  }
+  return t('agent.rightPanel.workspacePlan.iterationTitle', {
+    defaultValue: 'Iteration {{index}}',
+    index: iterationIndex,
+  });
 }
 
 interface WorkspaceTaskPlanPanelProps {
@@ -174,12 +198,112 @@ const WorkspaceTaskPlanRowItem = memo<{ row: WorkspaceTaskPlanRow; locale: strin
 
 WorkspaceTaskPlanRowItem.displayName = 'WorkspaceTaskPlanRowItem';
 
+const WorkspaceTaskPlanLaneGroups = memo<WorkspaceTaskPlanLaneGroupsProps>(
+  ({ groups, currentIterationGroupId, defaultExpandedIterationGroupId, locale, t }) => {
+    const [expandedIterationGroupIds, setExpandedIterationGroupIds] = useState<Set<string>>(() =>
+      defaultExpandedIterationGroupId ? new Set([defaultExpandedIterationGroupId]) : new Set()
+    );
+
+    const toggleIterationGroup = (groupId: string) => {
+      setExpandedIterationGroupIds((current) => {
+        const next = new Set(current);
+        if (next.has(groupId)) {
+          next.delete(groupId);
+        } else {
+          next.add(groupId);
+        }
+        return next;
+      });
+    };
+
+    return (
+      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+        {groups.map((group) => {
+          const isCurrentIteration = currentIterationGroupId === group.id;
+          const isExpanded = expandedIterationGroupIds.has(group.id);
+          return (
+            <section
+              key={group.id}
+              className="rounded-md border border-slate-200/80 bg-slate-50/60 dark:border-slate-700/70 dark:bg-slate-900/30"
+            >
+              <button
+                type="button"
+                className={`flex w-full items-center gap-2 px-2.5 py-2 text-left transition-colors ${
+                  isExpanded
+                    ? 'border-b border-slate-200/70 dark:border-slate-700/60'
+                    : 'hover:bg-slate-100/70 dark:hover:bg-slate-800/40'
+                }`}
+                aria-expanded={isExpanded}
+                onClick={() => {
+                  toggleIterationGroup(group.id);
+                }}
+              >
+                <ChevronRight
+                  size={14}
+                  className={`shrink-0 text-slate-400 transition-transform ${
+                    isExpanded ? 'rotate-90' : ''
+                  }`}
+                />
+                <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                  {iterationGroupTitle(group.iterationIndex, t)}
+                </span>
+                {isCurrentIteration ? (
+                  <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                    {tFallback(t, 'agent.rightPanel.workspacePlan.current', 'Current')}
+                  </span>
+                ) : null}
+                <span className="ml-auto rounded bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  {group.rows.length}
+                </span>
+              </button>
+              {isExpanded ? (
+                <div className="space-y-2 p-2">
+                  {group.rows.map((row) => (
+                    <WorkspaceTaskPlanRowItem key={row.id} row={row} locale={locale} />
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          );
+        })}
+      </div>
+    );
+  }
+);
+
+WorkspaceTaskPlanLaneGroups.displayName = 'WorkspaceTaskPlanLaneGroups';
+
 export const WorkspaceTaskPlanPanel = memo<WorkspaceTaskPlanPanelProps>(
   ({ rows, snapshot, loading, error, view }) => {
     const { t, i18n } = useTranslation();
     const stats = planTaskStats(snapshot);
     const hasPlan = Boolean(snapshot?.plan);
     const locale = i18n.language || 'en';
+    const iterationGroups = useMemo(() => buildWorkspaceTaskPlanIterationGroups(rows), [rows]);
+    const currentIterationGroupId = useMemo(() => {
+      const currentIterationValue = snapshot?.iteration?.current_iteration;
+      const currentIteration =
+        typeof currentIterationValue === 'number'
+          ? currentIterationValue
+          : typeof currentIterationValue === 'string' && /^\d+$/.test(currentIterationValue)
+            ? Number(currentIterationValue)
+            : null;
+      if (currentIteration === null) return null;
+
+      const exactGroup = iterationGroups.find((group) => group.iterationIndex === currentIteration);
+      if (exactGroup) return exactGroup.id;
+
+      return (
+        [...iterationGroups]
+          .filter(
+            (group) => group.iterationIndex !== null && group.iterationIndex <= currentIteration
+          )
+          .sort((left, right) => (right.iterationIndex ?? 0) - (left.iterationIndex ?? 0))[0]?.id ??
+        null
+      );
+    }, [iterationGroups, snapshot?.iteration?.current_iteration]);
+    const defaultExpandedIterationGroupId =
+      currentIterationGroupId ?? iterationGroups[0]?.id ?? null;
 
     if (!loading && rows.length === 0 && !hasPlan) {
       return (
@@ -240,41 +364,14 @@ export const WorkspaceTaskPlanPanel = memo<WorkspaceTaskPlanPanelProps>(
         </div>
 
         {view === 'lanes' ? (
-          <div className="flex-1 space-y-3 overflow-y-auto p-3">
-            {WORKSPACE_LANE_ORDER.map((status) => {
-              const config = WORKSPACE_STATUS_CONFIG[status];
-              const laneRows = rows.filter((row) => row.status === status);
-              return (
-                <section
-                  key={status}
-                  className="rounded-md border border-slate-200/70 bg-slate-50/50 dark:border-slate-700/60 dark:bg-slate-900/30"
-                >
-                  <div className="flex items-center gap-2 px-2.5 py-1.5">
-                    <span className={`h-1.5 w-1.5 rounded-full ${config.bar}`} />
-                    <span className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-600 dark:text-slate-300">
-                      {t(`agent.rightPanel.workspacePlan.status.${status}`, {
-                        defaultValue: config.label,
-                      })}
-                    </span>
-                    <span className="ml-auto rounded bg-slate-200/80 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                      {laneRows.length}
-                    </span>
-                  </div>
-                  {laneRows.length === 0 ? (
-                    <p className="px-3 pb-2 text-[11px] text-slate-400 dark:text-slate-500">
-                      {t('agent.rightPanel.workspacePlan.emptyLane', { defaultValue: 'Empty.' })}
-                    </p>
-                  ) : (
-                    <div className="space-y-1.5 p-2 pt-0">
-                      {laneRows.map((row) => (
-                        <WorkspaceTaskPlanRowItem key={row.id} row={row} locale={locale} />
-                      ))}
-                    </div>
-                  )}
-                </section>
-              );
-            })}
-          </div>
+          <WorkspaceTaskPlanLaneGroups
+            key={defaultExpandedIterationGroupId ?? 'empty'}
+            groups={iterationGroups}
+            currentIterationGroupId={currentIterationGroupId}
+            defaultExpandedIterationGroupId={defaultExpandedIterationGroupId}
+            locale={locale}
+            t={t}
+          />
         ) : (
           <div className="flex-1 space-y-2 overflow-y-auto p-3">
             {rows.map((row) => (
