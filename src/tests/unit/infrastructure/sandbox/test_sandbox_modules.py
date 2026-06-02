@@ -315,6 +315,8 @@ class TestContainerManager:
         mock_docker = MagicMock()
         manager = ContainerManager(mock_docker)
 
+        assert manager._default_memory_limit == "8g"
+
         name = manager._generate_container_name("sandbox-12345678-abcd")
         assert name == "memstack-sandbox-sandbox-"
 

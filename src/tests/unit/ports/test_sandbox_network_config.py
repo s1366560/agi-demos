@@ -10,6 +10,7 @@ class TestSandboxNetworkConfig:
         """默认应该启用网络隔离."""
         config = SandboxConfig(image="sandbox-mcp-server:latest")
 
+        assert config.memory_limit == "8G"
         assert config.network_isolated is True
         assert config.network_mode == "bridge"
 

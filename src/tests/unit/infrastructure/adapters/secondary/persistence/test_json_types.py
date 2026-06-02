@@ -171,7 +171,7 @@ class TestSandboxConfig:
     def test_default_values(self):
         config = SandboxConfig()
         assert config.provider == "docker"
-        assert config.memory_limit == "2g"
+        assert config.memory_limit == "8g"
         assert config.timeout_seconds == 300
 
     def test_custom_config(self):

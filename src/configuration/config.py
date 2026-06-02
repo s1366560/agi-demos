@@ -350,7 +350,7 @@ class Settings(BaseSettings):
     sandbox_timeout_seconds: int = Field(
         default=300, alias="SANDBOX_TIMEOUT_SECONDS"
     )  # Increased from 60 to 300 (5 minutes)
-    sandbox_memory_limit: str = Field(default="2G", alias="SANDBOX_MEMORY_LIMIT")
+    sandbox_memory_limit: str = Field(default="8G", alias="SANDBOX_MEMORY_LIMIT")
     sandbox_cpu_limit: str = Field(default="2", alias="SANDBOX_CPU_LIMIT")
     sandbox_network_isolated: bool = Field(default=True, alias="SANDBOX_NETWORK_ISOLATED")
     sandbox_profile_type: str = Field(default="standard", alias="SANDBOX_PROFILE_TYPE")

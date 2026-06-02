@@ -38,7 +38,7 @@ class SandboxConfig:
     image: str  # Required - no default, must be provided by caller
     provider: SandboxProvider = SandboxProvider.DOCKER
     cpu_limit: str = "2"
-    memory_limit: str = "2G"
+    memory_limit: str = "8G"
     timeout_seconds: int = 60
     network_isolated: bool = True
     network_mode: str = "bridge"  # bridge, none, host, container:<name>

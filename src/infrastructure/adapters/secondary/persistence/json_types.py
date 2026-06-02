@@ -81,7 +81,7 @@ class SandboxConfig(BaseModel):
 
     provider: str = "docker"
     image: str | None = None
-    memory_limit: str = "2g"
+    memory_limit: str = "8g"
     cpu_limit: float = 1.0
     timeout_seconds: int = 300
     mount_paths: list[str] = Field(default_factory=list)

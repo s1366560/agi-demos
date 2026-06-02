@@ -166,7 +166,7 @@ class MCPSandboxAdapter(SandboxPort):
         self,
         mcp_image: str = DEFAULT_SANDBOX_IMAGE,
         default_timeout: int = 60,
-        default_memory_limit: str = "2g",
+        default_memory_limit: str = "8g",
         default_cpu_limit: str = "2",
         host_port_start: int = 18765,
         desktop_port_start: int = 16080,

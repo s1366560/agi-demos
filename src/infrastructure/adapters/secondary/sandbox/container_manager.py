@@ -45,7 +45,7 @@ class ContainerManager:
         self,
         docker_client: docker.DockerClient,
         image: str = DEFAULT_SANDBOX_IMAGE,
-        default_memory_limit: str = "2g",
+        default_memory_limit: str = "8g",
         default_cpu_limit: str = "2",
         container_name_prefix: str = "memstack-sandbox",
     ) -> None:
@@ -55,7 +55,7 @@ class ContainerManager:
         Args:
             docker_client: Docker client instance
             image: Default Docker image for sandboxes
-            default_memory_limit: Default memory limit (e.g., "2g")
+            default_memory_limit: Default memory limit (e.g., "8g")
             default_cpu_limit: Default CPU limit
             container_name_prefix: Prefix for container names
         """

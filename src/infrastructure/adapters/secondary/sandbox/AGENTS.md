@@ -25,7 +25,7 @@ Two sandbox adapters for executing code in isolated environments. Both implement
 - Container labels: `memstack.project_id`, `memstack.project.id` (for cleanup/discovery)
 - State machine: CREATING -> READY -> BUSY -> READY (or ERROR/STOPPED)
 - Max concurrent sandboxes: 10 (default)
-- Resource limits: 2GB memory, 2 CPU cores per container
+- Resource limits: 8GB memory, 2 CPU cores per container
 
 ## LocalSandboxAdapter Internals
 - Connects to user's local machine via ngrok or Cloudflare tunnel URL

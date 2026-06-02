@@ -77,7 +77,7 @@ class TestListProfiles:
 
         assert standard is not None
         assert standard["desktop_enabled"] is True
-        assert standard["memory_limit"] == "2g"
+        assert standard["memory_limit"] == "8g"
         assert standard["cpu_limit"] == "2"
 
     def test_full_profile_config(self, client: TestClient) -> None:

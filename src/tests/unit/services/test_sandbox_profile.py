@@ -45,7 +45,7 @@ class TestSandboxProfile:
             description="标准 sandbox",
             profile_type=SandboxProfileType.STANDARD,
             desktop_enabled=True,
-            memory_limit="2g",
+            memory_limit="8g",
             cpu_limit="2",
             timeout_seconds=3600,
             preinstalled_tools=["python", "node", "java"],
@@ -53,7 +53,7 @@ class TestSandboxProfile:
         )
 
         assert profile.desktop_enabled is True
-        assert profile.memory_limit == "2g"
+        assert profile.memory_limit == "8g"
         assert profile.cpu_limit == "2"
         assert profile.max_instances == 5
 
@@ -133,7 +133,7 @@ class TestSandboxProfileFunctions:
 
         assert profile.profile_type == SandboxProfileType.STANDARD
         assert profile.desktop_enabled is True
-        assert profile.memory_limit == "2g"
+        assert profile.memory_limit == "8g"
 
     def test_get_profile_full(self) -> None:
         """应该获取 full 配置."""
