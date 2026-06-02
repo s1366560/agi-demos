@@ -392,6 +392,143 @@ class TestAgentWorkerSandboxConsistency:
         finally:
             worker_state._mcp_sandbox_adapter = original_adapter
 
+    async def test_project_sandbox_tools_cache_reuses_loaded_wrappers(
+        self, mock_sandbox_adapter, monkeypatch
+    ):
+        """Avoid repeated DB sandbox resolution when agent sessions rebuild quickly."""
+        from src.domain.model.sandbox.project_sandbox import ProjectSandbox, ProjectSandboxStatus
+
+        existing_sandbox = ProjectSandbox(
+            id="assoc-1",
+            project_id="test-proj",
+            tenant_id="test-tenant",
+            sandbox_id="db-sandbox-id",
+            status=ProjectSandboxStatus.RUNNING,
+        )
+
+        mock_repo = MagicMock()
+        mock_repo.find_by_project = AsyncMock(return_value=existing_sandbox)
+
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock()
+
+        mock_sandbox_adapter._active_sandboxes["db-sandbox-id"] = MagicMock()
+        mock_sandbox_adapter.list_tools = AsyncMock(return_value=[{"name": "bash"}])
+
+        import src.infrastructure.agent.state.agent_worker_state as worker_state
+
+        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        worker_state._project_sandbox_tools_cache.clear()
+
+        try:
+            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+
+            with monkeypatch.context() as m:
+                m.setattr(
+                    "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+                    MagicMock(return_value=mock_session),
+                )
+                m.setattr(
+                    "src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository.SqlProjectSandboxRepository",
+                    MagicMock(return_value=mock_repo),
+                )
+
+                from src.infrastructure.agent.state.agent_worker_state import (
+                    _get_or_load_project_sandbox_tools,
+                )
+
+                first = await _get_or_load_project_sandbox_tools(
+                    project_id="test-proj",
+                    tenant_id="test-tenant",
+                    redis_client=None,
+                    ttl_seconds=300,
+                )
+                second = await _get_or_load_project_sandbox_tools(
+                    project_id="test-proj",
+                    tenant_id="test-tenant",
+                    redis_client=None,
+                    ttl_seconds=300,
+                )
+
+                assert set(first) == {"bash"}
+                assert set(second) == {"bash"}
+                mock_repo.find_by_project.assert_awaited_once_with("test-proj")
+                mock_sandbox_adapter.connect_mcp.assert_awaited_once_with("db-sandbox-id")
+                mock_sandbox_adapter.list_tools.assert_awaited_once_with("db-sandbox-id")
+
+        finally:
+            worker_state._project_sandbox_tools_cache.clear()
+            worker_state._mcp_sandbox_adapter = original_adapter
+
+    async def test_project_sandbox_tools_force_refresh_bypasses_cache(
+        self, mock_sandbox_adapter, monkeypatch
+    ):
+        """Force refresh must still re-resolve sandbox tools."""
+        from src.domain.model.sandbox.project_sandbox import ProjectSandbox, ProjectSandboxStatus
+
+        existing_sandbox = ProjectSandbox(
+            id="assoc-1",
+            project_id="test-proj",
+            tenant_id="test-tenant",
+            sandbox_id="db-sandbox-id",
+            status=ProjectSandboxStatus.RUNNING,
+        )
+
+        mock_repo = MagicMock()
+        mock_repo.find_by_project = AsyncMock(return_value=existing_sandbox)
+
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock()
+
+        mock_sandbox_adapter._active_sandboxes["db-sandbox-id"] = MagicMock()
+        mock_sandbox_adapter.list_tools = AsyncMock(return_value=[{"name": "bash"}])
+
+        import src.infrastructure.agent.state.agent_worker_state as worker_state
+
+        original_adapter = getattr(worker_state, "_mcp_sandbox_adapter", None)
+        worker_state._project_sandbox_tools_cache.clear()
+
+        try:
+            worker_state._mcp_sandbox_adapter = mock_sandbox_adapter
+
+            with monkeypatch.context() as m:
+                m.setattr(
+                    "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+                    MagicMock(return_value=mock_session),
+                )
+                m.setattr(
+                    "src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository.SqlProjectSandboxRepository",
+                    MagicMock(return_value=mock_repo),
+                )
+
+                from src.infrastructure.agent.state.agent_worker_state import (
+                    _get_or_load_project_sandbox_tools,
+                )
+
+                await _get_or_load_project_sandbox_tools(
+                    project_id="test-proj",
+                    tenant_id="test-tenant",
+                    redis_client=None,
+                    ttl_seconds=300,
+                )
+                await _get_or_load_project_sandbox_tools(
+                    project_id="test-proj",
+                    tenant_id="test-tenant",
+                    redis_client=None,
+                    ttl_seconds=300,
+                    force_refresh=True,
+                )
+
+                assert mock_repo.find_by_project.await_count == 2
+                assert mock_sandbox_adapter.connect_mcp.await_count == 2
+                assert mock_sandbox_adapter.list_tools.await_count == 2
+
+        finally:
+            worker_state._project_sandbox_tools_cache.clear()
+            worker_state._mcp_sandbox_adapter = original_adapter
+
     async def test_load_project_sandbox_tools_recovers_stale_db_sandbox(
         self, mock_sandbox_adapter, monkeypatch
     ):

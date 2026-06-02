@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast, override
 
@@ -143,6 +144,8 @@ _agent_orchestrator: Any | None = None  # AgentOrchestrator (multi-agent)
 # Tool set cache (by project_id key)
 _tools_cache: dict[str, dict[str, Any]] = {}
 _tools_cache_lock = asyncio.Lock()
+_project_sandbox_tools_cache: dict[str, tuple[dict[str, Any], float]] = {}
+_project_sandbox_tools_cache_lock = asyncio.Lock()
 
 # Custom tool diagnostics cache (by project_id key)
 _custom_tool_diagnostics: dict[str, list[Any]] = {}
@@ -366,11 +369,13 @@ def clear_state() -> None:
         _agent_graph_service, \
         _tenant_graph_services, \
         _tools_cache, \
+        _project_sandbox_tools_cache, \
         _skills_cache, \
         _skill_loader_cache
     _agent_graph_service = None
     _tenant_graph_services.clear()
     _tools_cache.clear()
+    _project_sandbox_tools_cache.clear()
     _skills_cache.clear()
     _skill_loader_cache.clear()
 
@@ -416,7 +421,14 @@ async def get_or_create_tools(
     tools = await _get_or_create_builtin_tools(project_id, redis_client)
 
     # 2. Load Project Sandbox MCP tools (if sandbox exists for project)
-    await _add_sandbox_tools(tools, project_id, tenant_id, redis_client)
+    await _add_sandbox_tools(
+        tools,
+        project_id,
+        tenant_id,
+        redis_client,
+        mcp_tools_ttl_seconds=kwargs.get("mcp_tools_ttl_seconds", 300),
+        force_mcp_refresh=bool(kwargs.get("force_mcp_refresh", False)),
+    )
 
     # 3. Add SkillLoaderTool
     await _add_skill_loader_tool(tools, tenant_id, project_id, agent_mode)
@@ -528,15 +540,20 @@ async def _add_sandbox_tools(
     project_id: str,
     tenant_id: str,
     redis_client: Any,
+    *,
+    mcp_tools_ttl_seconds: int = 300,
+    force_mcp_refresh: bool = False,
 ) -> None:
     """Load and add Project Sandbox MCP tools."""
     if _mcp_sandbox_adapter is None:
         return
     try:
-        sandbox_tools = await _load_project_sandbox_tools(
+        sandbox_tools = await _get_or_load_project_sandbox_tools(
             project_id=project_id,
             tenant_id=tenant_id,
             redis_client=redis_client,
+            ttl_seconds=mcp_tools_ttl_seconds,
+            force_refresh=force_mcp_refresh,
         )
         if sandbox_tools:
             tools.update(sandbox_tools)
@@ -548,6 +565,49 @@ async def _add_sandbox_tools(
         logger.warning(
             f"Agent Worker: Failed to load Project Sandbox tools for project {project_id}: {e}"
         )
+
+
+async def _get_or_load_project_sandbox_tools(
+    project_id: str,
+    tenant_id: str,
+    redis_client: Any,
+    *,
+    ttl_seconds: int = 300,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
+    """Return cached project sandbox tools or load them from the sandbox.
+
+    The sandbox ID is stable for a project during normal operation. Caching the
+    wrappers prevents repeated DB sandbox lookups and MCP tool-list calls when
+    chat/session infrastructure rebuilds an agent in quick succession.
+    """
+    cache_key = f"{tenant_id}:{project_id}"
+    now = time.time()
+
+    if not force_refresh and ttl_seconds > 0:
+        async with _project_sandbox_tools_cache_lock:
+            cached = _project_sandbox_tools_cache.get(cache_key)
+            if cached is not None:
+                cached_tools, fetched_at = cached
+                if now - fetched_at <= ttl_seconds:
+                    logger.debug(
+                        "Agent Worker: Project sandbox tools cache hit for project %s",
+                        project_id,
+                    )
+                    return dict(cached_tools)
+                _project_sandbox_tools_cache.pop(cache_key, None)
+
+    sandbox_tools = await _load_project_sandbox_tools(
+        project_id=project_id,
+        tenant_id=tenant_id,
+        redis_client=redis_client,
+    )
+
+    if ttl_seconds > 0 and sandbox_tools:
+        async with _project_sandbox_tools_cache_lock:
+            _project_sandbox_tools_cache[cache_key] = (dict(sandbox_tools), now)
+
+    return dict(sandbox_tools)
 
 
 async def _add_skill_loader_tool(
@@ -2898,6 +2958,9 @@ def invalidate_tools_cache(project_id: str | None = None) -> None:
     global _tools_cache
     if project_id:
         _tools_cache.pop(project_id, None)
+        for key in list(_project_sandbox_tools_cache):
+            if key.endswith(f":{project_id}"):
+                _project_sandbox_tools_cache.pop(key, None)
         _custom_tool_diagnostics.pop(project_id, None)
         logger.info(
             "Agent Worker: Tool cache invalidated for project %s",
@@ -2905,6 +2968,7 @@ def invalidate_tools_cache(project_id: str | None = None) -> None:
         )
     else:
         _tools_cache.clear()
+        _project_sandbox_tools_cache.clear()
         _custom_tool_diagnostics.clear()
         logger.info("Agent Worker: All tool caches invalidated")
 
