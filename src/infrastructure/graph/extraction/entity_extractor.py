@@ -633,21 +633,25 @@ class EntityExtractor:
         unique_entities = []
         duplicate_map = {}  # new_entity_name -> existing_entity_uuid
 
-        # Get existing embeddings while preserving the same index space.
         existing_with_embeddings = [e for e in existing_entities if e.name_embedding]
-        existing_embeddings = [
-            cast(list[float], e.name_embedding) for e in existing_with_embeddings
-        ]
-        existing_names = [e.name for e in existing_with_embeddings]
-        existing_uuids = [e.uuid for e in existing_with_embeddings]
-
-        if not existing_embeddings:
+        if not existing_with_embeddings:
             return new_entities, {}
 
         for new_entity in new_entities:
             if not new_entity.name_embedding:
                 unique_entities.append(new_entity)
                 continue
+
+            compatible_existing = [
+                e
+                for e in existing_with_embeddings
+                if len(cast(list[float], e.name_embedding)) == len(new_entity.name_embedding)
+            ]
+            if not compatible_existing:
+                unique_entities.append(new_entity)
+                continue
+
+            existing_embeddings = [cast(list[float], e.name_embedding) for e in compatible_existing]
 
             # Find most similar existing entity
             similarities = await self._embedding_service.find_most_similar(
@@ -659,11 +663,12 @@ class EntityExtractor:
             if similarities and similarities[0][1] >= similarity_threshold:
                 # Found a duplicate
                 idx, score = similarities[0]
-                existing_name = existing_names[idx]
-                existing_uuid = existing_uuids[idx]
+                existing_entity = compatible_existing[idx]
+                existing_name = existing_entity.name
+                existing_uuid = existing_entity.uuid
 
                 # Additional check: entity types should be compatible
-                existing_type = existing_with_embeddings[idx].entity_type
+                existing_type = existing_entity.entity_type
                 if self._types_compatible(new_entity.entity_type, existing_type):
                     logger.debug(
                         f"Entity '{new_entity.name}' matches '{existing_name}' "

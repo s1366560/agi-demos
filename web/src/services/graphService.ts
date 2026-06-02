@@ -70,11 +70,20 @@ export interface EntityTypeStats {
 
 export interface EntityRelationships {
   relationships: Array<{
-    relationship_type: string;
-    target_entity_name?: string | undefined;
-    target_entity_type?: string | undefined;
-    source_entity_name: string;
-    source_entity_type: string;
+    edge_id: string;
+    relation_type: string;
+    direction: 'outgoing' | 'incoming';
+    fact: string;
+    score: number;
+    created_at?: string | undefined;
+    updated_at?: string | undefined;
+    related_entity: {
+      uuid: string;
+      name: string;
+      entity_type: string;
+      summary: string;
+      created_at?: string | undefined;
+    };
   }>;
   total: number;
 }

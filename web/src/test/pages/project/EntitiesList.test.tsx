@@ -4,10 +4,11 @@
  * TDD: Tests written first for the new compound component API.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { EntitiesList } from '../../../pages/project/EntitiesList';
+import { graphService } from '../../../services/graphService';
 
 // Mock the dependencies
 vi.mock('../../../services/graphService', () => ({
@@ -86,6 +87,27 @@ async function waitForFiltersReady(): Promise<void> {
 describe('EntitiesList Compound Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(graphService.getEntityTypes).mockResolvedValue({
+      entity_types: [
+        { entity_type: 'Person', count: 10 },
+        { entity_type: 'Organization', count: 5 },
+      ],
+      total: 15,
+    });
+    vi.mocked(graphService.listEntities).mockResolvedValue({
+      items: [
+        { uuid: '1', name: 'Entity 1', entity_type: 'Person', summary: 'Summary 1' },
+        { uuid: '2', name: 'Entity 2', entity_type: 'Organization', summary: 'Summary 2' },
+      ],
+      total: 2,
+      limit: 50,
+      offset: 0,
+      has_more: false,
+    });
+    vi.mocked(graphService.getEntityRelationships).mockResolvedValue({
+      relationships: [],
+      total: 0,
+    });
   });
 
   describe('Root Component', () => {
@@ -274,6 +296,42 @@ describe('EntitiesList Compound Component', () => {
       );
 
       expect(screen.queryByTestId('entities-detail')).not.toBeInTheDocument();
+    });
+
+    it('should render entity relationships from graph API fields', async () => {
+      vi.mocked(graphService.getEntityRelationships).mockResolvedValueOnce({
+        relationships: [
+          {
+            edge_id: 'edge-1',
+            relation_type: '关联至',
+            direction: 'incoming',
+            fact: 'EvoMap 关联至 evomap.ai',
+            score: 0.8,
+            created_at: undefined,
+            related_entity: {
+              uuid: 'related-1',
+              name: 'EvoMap',
+              entity_type: 'Organization',
+              summary: '',
+            },
+          },
+        ],
+        total: 1,
+      });
+
+      render(<EntitiesList projectId="test-project-1" />);
+
+      await waitForEntityGrid();
+      const entityButton = screen.getByText('Entity 1').closest('button');
+      expect(entityButton).toBeTruthy();
+      fireEvent.click(entityButton as HTMLButtonElement);
+
+      await waitFor(() => {
+        expect(screen.getByText('关联至')).toBeInTheDocument();
+      });
+      expect(screen.getByText('EvoMap 关联至 evomap.ai')).toBeInTheDocument();
+      expect(screen.getByText('EvoMap')).toBeInTheDocument();
+      expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
     });
   });
 

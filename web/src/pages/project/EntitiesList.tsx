@@ -303,19 +303,14 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
     const loadRelationships = async (entityUuid: string) => {
       try {
         const result = await graphService.getEntityRelationships(entityUuid, { limit: 50 });
-        const mappedRelationships: Relationship[] = result.relationships.map((rel) => ({
-          edge_id: `${rel.source_entity_name}-${rel.relationship_type}-${rel.target_entity_name || ''}`,
-          relation_type: rel.relationship_type,
-          direction: rel.target_entity_name ? 'outgoing' : 'incoming',
-          fact: `${rel.source_entity_name} ${rel.relationship_type} ${rel.target_entity_name || ''}`,
-          score: 0,
-          created_at: undefined,
-          related_entity: {
-            uuid: '',
-            name: rel.target_entity_name || rel.source_entity_name,
-            entity_type: rel.target_entity_type || rel.source_entity_type,
-            summary: '',
-          },
+        const mappedRelationships: Relationship[] = result.relationships.map((rel, index) => ({
+          edge_id: rel.edge_id || `${entityUuid}-${rel.relation_type}-${String(index)}`,
+          relation_type: rel.relation_type,
+          direction: rel.direction,
+          fact: rel.fact,
+          score: rel.score,
+          created_at: rel.created_at,
+          related_entity: rel.related_entity,
         }));
         setRelationships(mappedRelationships);
       } catch (err) {

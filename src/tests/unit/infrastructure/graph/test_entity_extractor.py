@@ -194,6 +194,33 @@ class TestEntityDeduplication:
         assert unique == []
         assert duplicate_map == {"Ada": "existing-ada"}
 
+    async def test_deduplicate_entity_nodes_skips_vector_dedup_for_mismatched_dimensions(
+        self,
+        extractor,
+    ):
+        existing = EntityNode(
+            uuid="existing-alicia",
+            name="Alicia",
+            entity_type="Person",
+            summary="Researcher",
+            name_embedding=[0.1] * 1536,
+        )
+        extracted = EntityNode(
+            uuid="new-alice",
+            name="Alice",
+            entity_type="Person",
+            summary="Engineer",
+            name_embedding=[0.2] * 1024,
+        )
+
+        unique, duplicate_map = await extractor.deduplicate_entity_nodes(
+            new_entities=[extracted],
+            existing_entities=[existing],
+        )
+
+        assert unique == [extracted]
+        assert duplicate_map == {}
+
 
 @pytest.mark.unit
 class TestEntityTypeResolution:
