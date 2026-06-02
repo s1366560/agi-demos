@@ -32,9 +32,14 @@ import {
   Download,
   RefreshCw,
   AlertCircle,
-  Box,
   Power,
   RotateCcw,
+  Database,
+  Network,
+  Server,
+  ShieldAlert,
+  SlidersHorizontal,
+  Wrench,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -67,15 +72,152 @@ const getProjectSettingsErrorMessage = (error: unknown, fallback: string) => {
   return err.response?.data?.detail ?? err.message ?? fallback;
 };
 
+const panelClass =
+  'rounded-md bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.08)] dark:bg-slate-950 dark:shadow-[0_0_0_1px_rgba(148,163,184,0.16)]';
+
+const fieldClass =
+  'h-9 w-full rounded border border-gray-200 bg-white px-3 text-sm text-gray-950 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-900 focus:ring-2 focus:ring-gray-950/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-slate-300 dark:focus:ring-white/10';
+
+const textareaClass = `${fieldClass} h-auto min-h-24 py-2 resize-none`;
+
+const secondaryButtonClass =
+  'inline-flex min-h-9 items-center justify-center gap-2 rounded border border-gray-200 bg-white px-3 text-sm font-medium text-gray-900 transition-colors hover:border-gray-300 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-slate-600 dark:hover:bg-slate-900';
+
+const primaryButtonClass =
+  'inline-flex min-h-9 items-center justify-center gap-2 rounded bg-gray-950 px-3 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-slate-200';
+
+const dangerButtonClass =
+  'inline-flex min-h-9 items-center justify-center gap-2 rounded bg-red-600 px-3 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50';
+
+interface SettingsSectionProps {
+  id?: string;
+  icon: React.ReactNode;
+  title: string;
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+  tone?: 'default' | 'danger';
+}
+
+const SettingsSection: React.FC<SettingsSectionProps> = ({
+  id,
+  icon,
+  title,
+  aside,
+  children,
+  tone = 'default',
+}) => (
+  <section
+    id={id}
+    className={`${panelClass} overflow-hidden ${
+      tone === 'danger' ? 'shadow-[0_0_0_1px_rgba(220,38,38,0.22)]' : ''
+    }`}
+  >
+    <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-3">
+        <div
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded border ${
+            tone === 'danger'
+              ? 'border-red-200 bg-red-50 text-red-600 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300'
+              : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+          }`}
+        >
+          {icon}
+        </div>
+        <h2
+          className={`truncate text-base font-semibold ${
+            tone === 'danger' ? 'text-red-900 dark:text-red-200' : 'text-gray-950 dark:text-white'
+          }`}
+        >
+          {title}
+        </h2>
+      </div>
+      {aside}
+    </div>
+    <div className="p-5">{children}</div>
+  </section>
+);
+
+interface FieldProps {
+  label: string;
+  children: React.ReactNode;
+  span?: 'full';
+}
+
+const Field: React.FC<FieldProps> = ({ label, children, span }) => (
+  <label className={`block min-w-0 ${span === 'full' ? 'sm:col-span-2' : ''}`}>
+    <span className="mb-1.5 block text-xs font-medium text-gray-600 dark:text-slate-400">
+      {label}
+    </span>
+    {children}
+  </label>
+);
+
+interface ToggleRowProps {
+  id: string;
+  checked: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+  tone?: 'default' | 'danger';
+}
+
+const ToggleRow: React.FC<ToggleRowProps> = ({
+  id,
+  checked,
+  label,
+  onChange,
+  tone = 'default',
+}) => (
+  <label
+    htmlFor={id}
+    className={`flex cursor-pointer items-center justify-between gap-4 rounded border px-3 py-2.5 transition-colors ${
+      tone === 'danger'
+        ? 'border-red-200 bg-red-50/70 text-red-900 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200'
+        : 'border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:bg-slate-900'
+    }`}
+  >
+    <span className="text-sm font-medium">{label}</span>
+    <input
+      type="checkbox"
+      id={id}
+      checked={checked}
+      onChange={(e) => {
+        onChange(e.target.checked);
+      }}
+      className="h-4 w-4 rounded border-gray-300 text-gray-950 focus:ring-gray-950 dark:border-slate-600 dark:bg-slate-900 dark:text-white dark:focus:ring-white"
+    />
+  </label>
+);
+
+interface SaveButtonProps {
+  isSaving: boolean;
+  label: string;
+  savingLabel: string;
+  onClick: () => void;
+}
+
+const SaveButton: React.FC<SaveButtonProps> = ({ isSaving, label, savingLabel, onClick }) => (
+  <button type="button" onClick={onClick} disabled={isSaving} className={primaryButtonClass}>
+    <Save className="h-4 w-4" />
+    {isSaving ? savingLabel : label}
+  </button>
+);
+
 // ============================================================================
 // Sub-Components
 // ============================================================================
 
 // Header Sub-Component
 const Header: React.FC<ProjectSettingsHeaderProps> = ({ title }) => (
-  <div className="flex items-center space-x-2 mb-6">
-    <SettingsIcon className="h-6 w-6 text-gray-600 dark:text-slate-400" />
-    <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">{title}</h1>
+  <div className="flex flex-col gap-2 border-b border-gray-100 pb-5 dark:border-slate-800 sm:flex-row sm:items-end sm:justify-between">
+    <div className="min-w-0">
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-normal text-gray-500 dark:text-slate-500">
+        <SettingsIcon className="h-4 w-4" />
+        MemStack
+      </div>
+      <h1 className="truncate text-2xl font-semibold tracking-normal text-gray-950 dark:text-white">
+        {title}
+      </h1>
+    </div>
   </div>
 );
 Header.displayName = 'ProjectSettings.Header';
@@ -90,10 +232,10 @@ const Message: React.FC<ProjectSettingsMessageProps> = ({ message, onClose }) =>
 
   return (
     <div
-      className={`p-4 rounded-md ${
+      className={`rounded-md px-4 py-3 text-sm shadow-[0_0_0_1px_rgba(0,0,0,0.08)] ${
         isSuccess
-          ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300'
-          : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300'
+          ? 'bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-300'
+          : 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-300'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
@@ -131,15 +273,21 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
   }, [onSave]);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        {t('project.settings.basicTitle')}
-      </h2>
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-            {t('project.settings.basicName')} *
-          </label>
+    <SettingsSection
+      id="basic"
+      icon={<SlidersHorizontal className="h-4 w-4" />}
+      title={t('project.settings.basicTitle')}
+      aside={
+        <SaveButton
+          isSaving={isSaving}
+          label={t('project.settings.basicSave')}
+          savingLabel={t('project.settings.basicSaving')}
+          onClick={handleSaveClick}
+        />
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label={`${t('project.settings.basicName')} *`} span="full">
           <input
             type="text"
             aria-label={t('project.settings.basicName')}
@@ -147,14 +295,11 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
             onChange={(e) => {
               onNameChange(e.target.value);
             }}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
+            className={fieldClass}
           />
-        </div>
+        </Field>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-            {t('project.settings.basicDescription')}
-          </label>
+        <Field label={t('project.settings.basicDescription')} span="full">
           <textarea
             aria-label={t('project.settings.basicDescription')}
             value={data.description}
@@ -162,38 +307,20 @@ const Basic: React.FC<ProjectSettingsBasicProps> = ({
               onDescriptionChange(e.target.value);
             }}
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white resize-none"
+            className={textareaClass}
           />
-        </div>
+        </Field>
 
-        <div className="flex items-center space-x-2">
-          <input
-            type="checkbox"
+        <div className="sm:col-span-2">
+          <ToggleRow
             id="isPublic"
             checked={data.isPublic}
-            onChange={(e) => {
-              onIsPublicChange(e.target.checked);
-            }}
-            className="rounded border-gray-300 dark:border-slate-600"
+            label={t('project.settings.basicPublic')}
+            onChange={onIsPublicChange}
           />
-          <label htmlFor="isPublic" className="text-sm text-gray-700 dark:text-slate-300">
-            {t('project.settings.basicPublic')}
-          </label>
-        </div>
-
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleSaveClick}
-            disabled={isSaving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <Save className="h-4 w-4" />
-            {isSaving ? t('project.settings.basicSaving') : t('project.settings.basicSave')}
-          </button>
         </div>
       </div>
-    </div>
+    </SettingsSection>
   );
 };
 Basic.displayName = 'ProjectSettings.Basic';
@@ -215,62 +342,54 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
   }, [onSave]);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        {t('project.settings.memoryTitle')}
-      </h2>
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              {t('project.settings.memoryMaxEpisodes')}
-            </label>
-            <input
-              type="number"
-              aria-label={t('project.settings.memoryMaxEpisodes')}
-              value={data.maxEpisodes}
-              onChange={(e) => {
-                onMaxEpisodesChange(Number(e.target.value));
-              }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              {t('project.settings.memoryRetention')}
-            </label>
-            <input
-              type="number"
-              aria-label={t('project.settings.memoryRetention')}
-              value={data.retentionDays}
-              onChange={(e) => {
-                onRetentionDaysChange(Number(e.target.value));
-              }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
+    <SettingsSection
+      id="memory"
+      icon={<Database className="h-4 w-4" />}
+      title={t('project.settings.memoryTitle')}
+      aside={
+        <SaveButton
+          isSaving={isSaving}
+          label={t('project.settings.memorySave')}
+          savingLabel={t('project.settings.basicSaving')}
+          onClick={handleSaveClick}
+        />
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label={t('project.settings.memoryMaxEpisodes')}>
           <input
-            type="checkbox"
+            type="number"
+            aria-label={t('project.settings.memoryMaxEpisodes')}
+            value={data.maxEpisodes}
+            onChange={(e) => {
+              onMaxEpisodesChange(Number(e.target.value));
+            }}
+            className={fieldClass}
+          />
+        </Field>
+        <Field label={t('project.settings.memoryRetention')}>
+          <input
+            type="number"
+            aria-label={t('project.settings.memoryRetention')}
+            value={data.retentionDays}
+            onChange={(e) => {
+              onRetentionDaysChange(Number(e.target.value));
+            }}
+            className={fieldClass}
+          />
+        </Field>
+
+        <div className="sm:col-span-2">
+          <ToggleRow
             id="autoRefresh"
             checked={data.autoRefresh}
-            onChange={(e) => {
-              onAutoRefreshChange(e.target.checked);
-            }}
-            className="rounded border-gray-300 dark:border-slate-600"
+            label={t('project.settings.memoryAutoRefresh')}
+            onChange={onAutoRefreshChange}
           />
-          <label htmlFor="autoRefresh" className="text-sm text-gray-700 dark:text-slate-300">
-            {t('project.settings.memoryAutoRefresh')}
-          </label>
         </div>
 
         {data.autoRefresh && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              {t('project.settings.memoryInterval')}
-            </label>
+          <Field label={t('project.settings.memoryInterval')} span="full">
             <input
               type="number"
               aria-label={t('project.settings.memoryInterval')}
@@ -278,24 +397,12 @@ const Memory: React.FC<ProjectSettingsMemoryProps> = ({
               onChange={(e) => {
                 onRefreshIntervalChange(Number(e.target.value));
               }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
+              className={fieldClass}
             />
-          </div>
+          </Field>
         )}
-
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleSaveClick}
-            disabled={isSaving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <Save className="h-4 w-4" />
-            {isSaving ? t('project.settings.basicSaving') : t('project.settings.memorySave')}
-          </button>
-        </div>
       </div>
-    </div>
+    </SettingsSection>
   );
 };
 Memory.displayName = 'ProjectSettings.Memory';
@@ -317,46 +424,52 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
   }, [onSave]);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        {t('project.settings.graphTitle')}
-      </h2>
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              {t('project.settings.graphMaxNodes')}
-            </label>
-            <input
-              type="number"
-              aria-label={t('project.settings.graphMaxNodes')}
-              value={data.maxNodes}
-              onChange={(e) => {
-                onMaxNodesChange(Number(e.target.value));
-              }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-              {t('project.settings.graphMaxEdges')}
-            </label>
-            <input
-              type="number"
-              aria-label={t('project.settings.graphMaxEdges')}
-              value={data.maxEdges}
-              onChange={(e) => {
-                onMaxEdgesChange(Number(e.target.value));
-              }}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
-            />
-          </div>
-        </div>
+    <SettingsSection
+      id="graph"
+      icon={<Network className="h-4 w-4" />}
+      title={t('project.settings.graphTitle')}
+      aside={
+        <SaveButton
+          isSaving={isSaving}
+          label={t('project.settings.graphSave')}
+          savingLabel={t('project.settings.basicSaving')}
+          onClick={handleSaveClick}
+        />
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label={t('project.settings.graphMaxNodes')}>
+          <input
+            type="number"
+            aria-label={t('project.settings.graphMaxNodes')}
+            value={data.maxNodes}
+            onChange={(e) => {
+              onMaxNodesChange(Number(e.target.value));
+            }}
+            className={fieldClass}
+          />
+        </Field>
+        <Field label={t('project.settings.graphMaxEdges')}>
+          <input
+            type="number"
+            aria-label={t('project.settings.graphMaxEdges')}
+            value={data.maxEdges}
+            onChange={(e) => {
+              onMaxEdgesChange(Number(e.target.value));
+            }}
+            className={fieldClass}
+          />
+        </Field>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-            {t('project.settings.graphThreshold')}: {data.similarityThreshold}
-          </label>
+        <div className="sm:col-span-2">
+          <div className="mb-2 flex items-center justify-between gap-4">
+            <span className="text-xs font-medium text-gray-600 dark:text-slate-400">
+              {t('project.settings.graphThreshold')}
+            </span>
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-900 dark:bg-slate-800 dark:text-slate-100">
+              {data.similarityThreshold}
+            </span>
+          </div>
           <input
             type="range"
             aria-label={t('project.settings.graphThreshold')}
@@ -367,38 +480,20 @@ const Graph: React.FC<ProjectSettingsGraphProps> = ({
             onChange={(e) => {
               onSimilarityThresholdChange(Number(e.target.value));
             }}
-            className="w-full"
+            className="h-2 w-full accent-gray-950 dark:accent-white"
           />
         </div>
 
-        <div className="flex items-center space-x-2">
-          <input
-            type="checkbox"
+        <div className="sm:col-span-2">
+          <ToggleRow
             id="communityDetection"
             checked={data.communityDetection}
-            onChange={(e) => {
-              onCommunityDetectionChange(e.target.checked);
-            }}
-            className="rounded border-gray-300 dark:border-slate-600"
+            label={t('project.settings.graphCommunityDetection')}
+            onChange={onCommunityDetectionChange}
           />
-          <label htmlFor="communityDetection" className="text-sm text-gray-700 dark:text-slate-300">
-            {t('project.settings.graphCommunityDetection')}
-          </label>
-        </div>
-
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleSaveClick}
-            disabled={isSaving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <Save className="h-4 w-4" />
-            {isSaving ? t('project.settings.basicSaving') : t('project.settings.graphSave')}
-          </button>
         </div>
       </div>
-    </div>
+    </SettingsSection>
   );
 };
 Graph.displayName = 'ProjectSettings.Graph';
@@ -424,39 +519,26 @@ const Advanced: React.FC<ProjectSettingsAdvancedProps> = ({
   }, [onRebuildCommunities]);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        {t('project.settings.advancedTitle')}
-      </h2>
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-          <button
-            type="button"
-            onClick={handleExport}
-            className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 sm:flex-none"
-          >
-            <Download className="h-4 w-4" />
-            {t('project.settings.advancedExport')}
-          </button>
-          <button
-            type="button"
-            onClick={handleClearCache}
-            className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 sm:flex-none"
-          >
-            <RefreshCw className="h-4 w-4" />
-            {t('project.settings.advancedClearCache')}
-          </button>
-          <button
-            type="button"
-            onClick={handleRebuild}
-            className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md border border-gray-300 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800 sm:flex-none"
-          >
-            <RefreshCw className="h-4 w-4" />
-            {t('project.settings.advancedRebuild')}
-          </button>
-        </div>
+    <SettingsSection
+      id="advanced"
+      icon={<Wrench className="h-4 w-4" />}
+      title={t('project.settings.advancedTitle')}
+    >
+      <div className="grid gap-3 sm:grid-cols-3">
+        <button type="button" onClick={handleExport} className={secondaryButtonClass}>
+          <Download className="h-4 w-4" />
+          {t('project.settings.advancedExport')}
+        </button>
+        <button type="button" onClick={handleClearCache} className={secondaryButtonClass}>
+          <RefreshCw className="h-4 w-4" />
+          {t('project.settings.advancedClearCache')}
+        </button>
+        <button type="button" onClick={handleRebuild} className={secondaryButtonClass}>
+          <RefreshCw className="h-4 w-4" />
+          {t('project.settings.advancedRebuild')}
+        </button>
       </div>
-    </div>
+    </SettingsSection>
   );
 };
 Advanced.displayName = 'ProjectSettings.Advanced';
@@ -470,10 +552,12 @@ const Danger: React.FC<ProjectSettingsDangerProps> = ({ projectName: _projectNam
   }, [onDelete]);
 
   return (
-    <div className="bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 p-6">
-      <h2 className="text-lg font-semibold text-red-900 dark:text-red-300 mb-4">
-        {t('project.settings.dangerTitle')}
-      </h2>
+    <SettingsSection
+      id="danger"
+      icon={<ShieldAlert className="h-4 w-4" />}
+      title={t('project.settings.dangerTitle')}
+      tone="danger"
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-sm text-red-800 dark:text-red-300 mb-1">
@@ -486,13 +570,13 @@ const Danger: React.FC<ProjectSettingsDangerProps> = ({ projectName: _projectNam
         <button
           type="button"
           onClick={handleDelete}
-          className="flex min-h-10 items-center justify-center gap-2 rounded-md bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700 sm:flex-none"
+          className={`${dangerButtonClass} sm:flex-none`}
         >
           <Trash2 className="h-4 w-4" />
           {t('project.settings.dangerDelete')}
         </button>
       </div>
-    </div>
+    </SettingsSection>
   );
 };
 Danger.displayName = 'ProjectSettings.Danger';
@@ -572,25 +656,19 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
 
   const statusColor =
     sandboxInfo?.status === 'running'
-      ? 'text-green-500'
+      ? 'text-green-600 dark:text-green-400'
       : sandboxInfo?.status === 'terminated'
-        ? 'text-gray-400'
+        ? 'text-gray-500 dark:text-slate-500'
         : sandboxInfo?.status === 'error'
-          ? 'text-red-500'
-          : 'text-yellow-500';
+          ? 'text-red-600 dark:text-red-400'
+          : 'text-yellow-600 dark:text-yellow-400';
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Box className="h-5 w-5 text-purple-500" />
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-          {t('project.settings.sandboxSectionTitle')}
-        </h3>
-      </div>
-      <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
-        {t('project.settings.sandboxDescription')}
-      </p>
-
+    <SettingsSection
+      id="sandbox"
+      icon={<Server className="h-4 w-4" />}
+      title={t('project.settings.sandboxSectionTitle')}
+    >
       {loading ? (
         <div className="text-sm text-gray-400">{t('project.settings.sandboxLoading')}</div>
       ) : !sandboxInfo ? (
@@ -600,17 +678,17 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
       ) : (
         <div className="space-y-4">
           {/* Status Row */}
-          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
-            <div>
-              <span className="text-gray-500 dark:text-slate-400">
+          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+            <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/70">
+              <span className="block text-xs text-gray-500 dark:text-slate-400">
                 {t('project.settings.sandboxStatusLabel')}:
-              </span>{' '}
+              </span>
               <span className={`font-medium ${statusColor}`}>{sandboxInfo.status}</span>
             </div>
-            <div>
-              <span className="text-gray-500 dark:text-slate-400">
+            <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/70">
+              <span className="block text-xs text-gray-500 dark:text-slate-400">
                 {t('project.settings.sandboxIdLabel')}:
-              </span>{' '}
+              </span>
               <span className="break-all font-mono text-xs text-gray-600 dark:text-slate-300">
                 {sandboxInfo.sandbox_id ? sandboxInfo.sandbox_id.slice(0, 12) + '...' : '-'}
               </span>
@@ -631,7 +709,7 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
 
           {/* Resource Stats (only when running) */}
           {stats && (
-            <div className="grid grid-cols-1 gap-4 rounded-md bg-gray-50 p-3 text-sm dark:bg-slate-800/50 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 rounded border border-gray-200 bg-gray-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900/70 sm:grid-cols-2">
               <div>
                 <span className="text-gray-500 dark:text-slate-400">
                   {t('project.settings.sandboxCpuLabel')}:
@@ -653,14 +731,14 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
           )}
 
           {/* Action Buttons */}
-          <div className="flex flex-wrap gap-2 pt-2 sm:gap-3">
+          <div className="flex flex-wrap gap-2 pt-2">
             <button
               type="button"
               onClick={() => {
                 void handleRestart();
               }}
               disabled={actionLoading || sandboxInfo.status === 'terminated'}
-              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:flex-none"
+              className={`${secondaryButtonClass} flex-1 sm:flex-none`}
             >
               <RotateCcw className="h-4 w-4" />
               {t('project.settings.sandboxRestart')}
@@ -671,7 +749,7 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
                 void handleTerminate();
               }}
               disabled={actionLoading || sandboxInfo.status === 'terminated'}
-              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-600 dark:bg-slate-800 dark:text-red-400 dark:hover:bg-red-900/20 sm:flex-none"
+              className="inline-flex min-h-9 flex-1 items-center justify-center gap-2 rounded border border-red-200 bg-white px-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/70 dark:bg-slate-950 dark:text-red-400 dark:hover:bg-red-950/30 sm:flex-none"
             >
               <Power className="h-4 w-4" />
               {t('project.settings.sandboxTerminate')}
@@ -682,7 +760,7 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
                 void fetchSandboxInfo();
               }}
               disabled={actionLoading}
-              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:flex-none"
+              className={`${secondaryButtonClass} flex-1 sm:flex-none`}
             >
               <RefreshCw className="h-4 w-4" />
               {t('common.refresh')}
@@ -690,7 +768,7 @@ const Sandbox: React.FC<ProjectSettingsSandboxProps> = ({ projectId }) => {
           </div>
         </div>
       )}
-    </div>
+    </SettingsSection>
   );
 };
 Sandbox.displayName = 'ProjectSettings.Sandbox';
@@ -970,43 +1048,79 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
     return <NoProject />;
   }
 
+  const sectionLinks = [
+    { href: '#basic', label: t('project.settings.basicTitle'), icon: SlidersHorizontal },
+    { href: '#memory', label: t('project.settings.memoryTitle'), icon: Database },
+    { href: '#graph', label: t('project.settings.graphTitle'), icon: Network },
+    { href: '#advanced', label: t('project.settings.advancedTitle'), icon: Wrench },
+    { href: '#sandbox', label: t('project.settings.sandboxSectionTitle'), icon: Server },
+    { href: '#danger', label: t('project.settings.dangerTitle'), icon: ShieldAlert },
+  ];
+
   return (
-    <div className={`space-y-6 p-4 sm:p-6 lg:p-8 ${className}`}>
+    <div className={`min-h-full bg-gray-50/70 p-4 dark:bg-slate-950 sm:p-6 lg:p-8 ${className}`}>
       <Header title={t('project.settings.title')} />
       <Message message={message} onClose={clearMessage} />
-      <Basic
-        data={{ name, description, isPublic }}
-        isSaving={isSaving}
-        onNameChange={setName}
-        onDescriptionChange={setDescription}
-        onIsPublicChange={setIsPublic}
-        onSave={handleSaveBasicSettings}
-      />
-      <Memory
-        data={{ maxEpisodes, retentionDays, autoRefresh, refreshInterval }}
-        isSaving={isSaving}
-        onMaxEpisodesChange={setMaxEpisodes}
-        onRetentionDaysChange={setRetentionDays}
-        onAutoRefreshChange={setAutoRefresh}
-        onRefreshIntervalChange={setRefreshInterval}
-        onSave={handleSaveMemoryRules}
-      />
-      <Graph
-        data={{ maxNodes, maxEdges, similarityThreshold, communityDetection }}
-        isSaving={isSaving}
-        onMaxNodesChange={setMaxNodes}
-        onMaxEdgesChange={setMaxEdges}
-        onSimilarityThresholdChange={setSimilarityThreshold}
-        onCommunityDetectionChange={setCommunityDetection}
-        onSave={handleSaveGraphConfig}
-      />
-      <Advanced
-        onExportData={handleExportData}
-        onClearCache={handleClearCache}
-        onRebuildCommunities={handleRebuildCommunities}
-      />
-      <Sandbox projectId={currentProject.id} />
-      <Danger projectName={currentProject.name} onDelete={handleDeleteProject} />
+      <div className="mt-6 grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="lg:sticky lg:top-20 lg:self-start">
+          <div className={`${panelClass} overflow-hidden`}>
+            <div className="border-b border-gray-100 px-4 py-4 dark:border-slate-800">
+              <p className="truncate text-sm font-semibold text-gray-950 dark:text-white">{name}</p>
+              <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-slate-500">
+                {description || t('project.settings.basicDescription')}
+              </p>
+            </div>
+            <nav className="p-2">
+              {sectionLinks.map(({ href, label, icon: Icon }) => (
+                <a
+                  key={href}
+                  href={href}
+                  className="flex min-h-9 items-center gap-2 rounded px-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white"
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="truncate">{label}</span>
+                </a>
+              ))}
+            </nav>
+          </div>
+        </aside>
+
+        <div className="space-y-5">
+          <Basic
+            data={{ name, description, isPublic }}
+            isSaving={isSaving}
+            onNameChange={setName}
+            onDescriptionChange={setDescription}
+            onIsPublicChange={setIsPublic}
+            onSave={handleSaveBasicSettings}
+          />
+          <Memory
+            data={{ maxEpisodes, retentionDays, autoRefresh, refreshInterval }}
+            isSaving={isSaving}
+            onMaxEpisodesChange={setMaxEpisodes}
+            onRetentionDaysChange={setRetentionDays}
+            onAutoRefreshChange={setAutoRefresh}
+            onRefreshIntervalChange={setRefreshInterval}
+            onSave={handleSaveMemoryRules}
+          />
+          <Graph
+            data={{ maxNodes, maxEdges, similarityThreshold, communityDetection }}
+            isSaving={isSaving}
+            onMaxNodesChange={setMaxNodes}
+            onMaxEdgesChange={setMaxEdges}
+            onSimilarityThresholdChange={setSimilarityThreshold}
+            onCommunityDetectionChange={setCommunityDetection}
+            onSave={handleSaveGraphConfig}
+          />
+          <Advanced
+            onExportData={handleExportData}
+            onClearCache={handleClearCache}
+            onRebuildCommunities={handleRebuildCommunities}
+          />
+          <Sandbox projectId={currentProject.id} />
+          <Danger projectName={currentProject.name} onDelete={handleDeleteProject} />
+        </div>
+      </div>
     </div>
   );
 };
