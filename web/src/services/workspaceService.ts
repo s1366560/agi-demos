@@ -525,7 +525,13 @@ export const workspaceAutonomyService = {
 export const workspacePlanService = {
   getSnapshot: async (
     workspaceId: string,
-    options: { outboxLimit?: number; eventLimit?: number; planId?: string } = {}
+    options: {
+      outboxLimit?: number;
+      eventLimit?: number;
+      includeDetails?: boolean;
+      recoverStaleAttempts?: boolean;
+      planId?: string;
+    } = {}
   ): Promise<WorkspacePlanSnapshot> => {
     const params = new URLSearchParams();
     if (options.outboxLimit !== undefined) {
@@ -533,6 +539,12 @@ export const workspacePlanService = {
     }
     if (options.eventLimit !== undefined) {
       params.set('event_limit', String(options.eventLimit));
+    }
+    if (options.includeDetails !== undefined) {
+      params.set('include_details', String(options.includeDetails));
+    }
+    if (options.recoverStaleAttempts !== undefined) {
+      params.set('recover_stale_attempts', String(options.recoverStaleAttempts));
     }
     if (options.planId) {
       params.set('plan_id', options.planId);

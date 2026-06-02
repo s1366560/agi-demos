@@ -15,7 +15,6 @@ import { buildChatExecutionDag } from '@/components/executionDag/chatExecutionDa
 import { ExecutionDagGraph } from '@/components/executionDag/ExecutionDagGraph';
 import { buildWorkspaceExecutionDag } from '@/components/executionDag/workspaceExecutionDagModel';
 
-
 import type { WorkspacePlanSnapshot } from '@/types/workspace';
 
 export interface AgentGraphViewProps {
@@ -148,7 +147,12 @@ export const AgentGraphView = memo<AgentGraphViewProps>(
         }
       });
       workspacePlanService
-        .getSnapshot(workspaceId, { outboxLimit: 20, eventLimit: 80 })
+        .getSnapshot(workspaceId, {
+          outboxLimit: 0,
+          eventLimit: 0,
+          includeDetails: false,
+          recoverStaleAttempts: false,
+        })
         .then((snapshot) => {
           if (active) {
             setWorkspaceSnapshot(snapshot);
@@ -170,7 +174,7 @@ export const AgentGraphView = memo<AgentGraphViewProps>(
       return () => {
         active = false;
       };
-    }, [currentWorkspaceTaskId, shouldUseGraphRun, workspaceId, workspacePlanRefresh]);
+    }, [shouldUseGraphRun, workspaceId, workspacePlanRefresh]);
 
     useEffect(() => {
       let active = true;

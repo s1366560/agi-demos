@@ -190,10 +190,12 @@ describe('workspaceService', () => {
     const result = await workspacePlanService.getSnapshot('ws-1', {
       outboxLimit: 8,
       eventLimit: 8,
+      includeDetails: false,
+      recoverStaleAttempts: false,
     });
 
     expect(apiFetch.get).toHaveBeenCalledWith(
-      '/workspaces/ws-1/plan?outbox_limit=8&event_limit=8',
+      '/workspaces/ws-1/plan?outbox_limit=8&event_limit=8&include_details=false&recover_stale_attempts=false',
       {
         retry: { maxRetries: 1 },
       }

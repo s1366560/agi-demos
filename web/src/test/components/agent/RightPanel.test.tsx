@@ -391,8 +391,10 @@ describe('RightPanel (Refactored)', () => {
       'true'
     );
     expect(workspacePlanService.getSnapshot).toHaveBeenCalledWith('ws-1', {
-      outboxLimit: 20,
-      eventLimit: 80,
+      outboxLimit: 0,
+      eventLimit: 0,
+      includeDetails: false,
+      recoverStaleAttempts: false,
     });
     expect(agentGraphApi.getGraph).not.toHaveBeenCalled();
   });
