@@ -960,6 +960,64 @@ class TestBuiltinCommands:
             "preferred_language": "zh-CN",
         }
 
+    async def test_goal_creates_workspace_when_conversation_is_unbound(
+        self, registry_with_builtins: CommandRegistry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from src.infrastructure.agent.commands import goal_mode
+
+        captured_workspace: dict[str, str | None] = {}
+        captured_goal: dict[str, str | None] = {}
+
+        async def fake_create_workspace_for_goal(**kwargs: str | None) -> str:
+            captured_workspace.update(kwargs)
+            return "ws-created"
+
+        async def fake_create_workspace_goal(**kwargs: str | None) -> goal_mode.GoalCommandOutcome:
+            captured_goal.update(kwargs)
+            return goal_mode.GoalCommandOutcome(
+                root_task_id="root-created",
+                workspace_id=str(kwargs["workspace_id"]),
+                scheduled=True,
+            )
+
+        monkeypatch.setattr(
+            goal_mode,
+            "create_workspace_for_goal",
+            fake_create_workspace_for_goal,
+        )
+        monkeypatch.setattr(goal_mode, "create_workspace_goal", fake_create_workspace_goal)
+        invocation = registry_with_builtins.parse_and_resolve("/goal Ship the release")
+        assert invocation is not None
+
+        result = await invocation.definition.handler(
+            invocation,
+            {
+                "user_id": "user-1",
+                "tenant_id": "tenant-1",
+                "project_id": "project-1",
+                "conversation_id": "conv-1",
+                "runtime_context": {"preferred_language": "zh-CN"},
+            },
+        )
+
+        assert isinstance(result, ReplyResult)
+        assert "Goal created: root-created" in result.text
+        assert "Workspace created: ws-created" in result.text
+        assert captured_workspace == {
+            "tenant_id": "tenant-1",
+            "project_id": "project-1",
+            "actor_user_id": "user-1",
+            "goal_text": "Ship the release",
+            "conversation_id": "conv-1",
+        }
+        assert captured_goal == {
+            "workspace_id": "ws-created",
+            "actor_user_id": "user-1",
+            "goal_text": "Ship the release",
+            "conversation_id": "conv-1",
+            "preferred_language": "zh-CN",
+        }
+
     async def test_goal_status_lists_workspace_roots(
         self, registry_with_builtins: CommandRegistry, monkeypatch: pytest.MonkeyPatch
     ) -> None:

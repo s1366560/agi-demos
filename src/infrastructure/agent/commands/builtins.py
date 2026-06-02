@@ -322,15 +322,18 @@ async def _handle_context(
     return ReplyResult(text="\n".join(lines))
 
 
-async def _handle_goal(  # noqa: PLR0911
+async def _handle_goal(  # noqa: C901, PLR0911
     invocation: CommandInvocation,
     context: dict[str, Any],
 ) -> CommandResult:
     """Create a workspace-backed standing goal."""
     from src.infrastructure.agent.commands.goal_mode import (
+        create_workspace_for_goal,
         create_workspace_goal,
         list_workspace_goals,
         resolve_preferred_language,
+        resolve_project_id,
+        resolve_tenant_id,
         resolve_workspace_id,
     )
 
@@ -344,18 +347,17 @@ async def _handle_goal(  # noqa: PLR0911
             level="warning",
         )
 
-    workspace_id = resolve_workspace_id(context)
-    if not workspace_id:
-        return ReplyResult(
-            text="/goal requires a workspace-linked conversation.",
-            level="warning",
-        )
-
     actor_user_id = context.get("user_id")
     if not isinstance(actor_user_id, str) or not actor_user_id.strip():
         return ReplyResult(text="/goal requires an authenticated user.", level="error")
 
+    workspace_id = resolve_workspace_id(context)
     if not goal_text or goal_text.lower() == "status":
+        if not workspace_id:
+            return ReplyResult(
+                text="/goal status requires a workspace-linked conversation.",
+                level="warning",
+            )
         try:
             goals = await list_workspace_goals(
                 workspace_id=workspace_id,
@@ -374,13 +376,37 @@ async def _handle_goal(  # noqa: PLR0911
         lines.extend(f"- {goal.root_task_id} [{goal.status}] {goal.title}" for goal in goals)
         return ReplyResult(text="\n".join(lines))
 
+    conversation_id = context.get("conversation_id")
+    conversation_id_value = conversation_id if isinstance(conversation_id, str) else None
+    workspace_created = False
+    if not workspace_id:
+        tenant_id = resolve_tenant_id(context)
+        project_id = resolve_project_id(context)
+        if not tenant_id or not project_id:
+            return ReplyResult(
+                text="/goal requires a workspace-linked conversation or tenant/project context.",
+                level="warning",
+            )
+        try:
+            workspace_id = await create_workspace_for_goal(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                actor_user_id=actor_user_id,
+                goal_text=goal_text,
+                conversation_id=conversation_id_value,
+            )
+            workspace_created = True
+        except PermissionError:
+            return ReplyResult(text="Access denied for this project.", level="error")
+        except ValueError as exc:
+            return ReplyResult(text=str(exc), level="error")
+
     try:
-        conversation_id = context.get("conversation_id")
         outcome = await create_workspace_goal(
             workspace_id=workspace_id,
             actor_user_id=actor_user_id,
             goal_text=goal_text,
-            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+            conversation_id=conversation_id_value,
             preferred_language=resolve_preferred_language(context),
         )
     except PermissionError:
@@ -389,10 +415,15 @@ async def _handle_goal(  # noqa: PLR0911
         return ReplyResult(text=str(exc), level="error")
 
     tick_line = "Autonomy tick scheduled." if outcome.scheduled else "Autonomy tick queued."
+    workspace_line = (
+        f"Workspace created: {outcome.workspace_id}"
+        if workspace_created
+        else f"Workspace: {outcome.workspace_id}"
+    )
     return ReplyResult(
         text=(
             f"Goal created: {outcome.root_task_id}\n"
-            f"Workspace: {outcome.workspace_id}\n"
+            f"{workspace_line}\n"
             f"{tick_line}"
         )
     )
