@@ -1,0 +1,92 @@
+{
+  "id": "github-plugin",
+  "kind": "runtime_tool",
+  "name": "GitHub Plugin",
+  "description": "GitHub REST API runtime tool for repositories, issues, pull requests, commits, search, and files.",
+  "version": "1.0.0",
+  "channels": [],
+  "providers": ["github"],
+  "skills": ["github"],
+  "contracts": {
+    "tools": ["github"],
+    "skills": ["github"],
+    "commands": ["github"],
+    "services": ["github:defaults", "github:secret_paths"]
+  },
+  "activation": {
+    "onStartup": false,
+    "onTools": ["github"],
+    "onCommands": ["github"]
+  },
+  "commandAliases": [
+    {
+      "name": "github",
+      "kind": "runtime-slash",
+      "description": "Run a GitHub REST API operation through the configured plugin.",
+      "tool": "github"
+    }
+  ],
+  "toolMetadata": {
+    "github": {
+      "description": "Call common GitHub REST API operations with token-env based authentication.",
+      "requiresRepository": false,
+      "sideEffects": ["external_api_read", "external_api_write"]
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "api_base_url": {
+        "type": "string",
+        "default": "https://api.github.com"
+      },
+      "token_env": {
+        "type": "string",
+        "default": "GITHUB_TOKEN"
+      },
+      "default_owner": {
+        "type": "string"
+      },
+      "default_repo": {
+        "type": "string"
+      },
+      "timeout_seconds": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 30
+      },
+      "output_limit_chars": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 40000
+      }
+    }
+  },
+  "uiHints": {
+    "api_base_url": {
+      "label": "GitHub API Base URL",
+      "placeholder": "https://api.github.com"
+    },
+    "token_env": {
+      "label": "Token Env",
+      "placeholder": "GITHUB_TOKEN",
+      "sensitive": true
+    },
+    "default_owner": {
+      "label": "Default Owner"
+    },
+    "default_repo": {
+      "label": "Default Repository"
+    },
+    "timeout_seconds": {
+      "label": "Timeout Seconds"
+    },
+    "output_limit_chars": {
+      "label": "Output Limit Characters"
+    }
+  },
+  "providerAuthEnvVars": {
+    "github": ["GITHUB_TOKEN"]
+  }
+}
