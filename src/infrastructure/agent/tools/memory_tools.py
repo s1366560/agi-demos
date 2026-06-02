@@ -416,9 +416,6 @@ async def _background_sync_created_memory(
     from src.infrastructure.adapters.secondary.persistence.sql_chunk_repository import (
         SqlChunkRepository,
     )
-    from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
-        SqlMemoryRepository,
-    )
     from src.infrastructure.memory.chunk_sync import upsert_memory_chunks
 
     try:
@@ -441,20 +438,18 @@ async def _background_sync_created_memory(
         _ = await graph_service.add_episode(episode)
     except Exception as graph_err:
         logger.warning("memory_create: failed to queue graph processing: %s", graph_err)
-        session = session_factory()
-        try:
-            repo = SqlMemoryRepository(session)
-            memory = await repo.find_by_id(memory_id)
-            if memory is not None:
-                memory.processing_status = "FAILED"
-                _ = await repo.save(memory)
-                await session.commit()
-        except Exception as status_err:
-            logger.warning("memory_create: failed to mark memory sync failure: %s", status_err)
-            await session.rollback()
-        finally:
-            await session.close()
+        await _mark_created_memory_processing_status(
+            session_factory=session_factory,
+            memory_id=memory_id,
+            processing_status="FAILED",
+        )
         return
+
+    await _mark_created_memory_processing_status(
+        session_factory=session_factory,
+        memory_id=memory_id,
+        processing_status="COMPLETED",
+    )
 
     session = session_factory()
     try:
@@ -471,6 +466,36 @@ async def _background_sync_created_memory(
         await session.commit()
     except Exception as chunk_err:
         logger.warning("memory_create: failed to sync searchable chunks: %s", chunk_err)
+        await session.rollback()
+    finally:
+        await session.close()
+
+
+async def _mark_created_memory_processing_status(
+    *,
+    session_factory: Callable[..., Any],
+    memory_id: str,
+    processing_status: str,
+) -> None:
+    from src.infrastructure.adapters.secondary.persistence.sql_memory_repository import (
+        SqlMemoryRepository,
+    )
+
+    session = session_factory()
+    try:
+        repo = SqlMemoryRepository(session)
+        memory = await repo.find_by_id(memory_id)
+        if memory is not None:
+            memory.processing_status = processing_status
+            _ = await repo.save(memory)
+            await session.commit()
+    except Exception as status_err:
+        logger.warning(
+            "memory_create: failed to mark memory %s as %s: %s",
+            memory_id,
+            processing_status,
+            status_err,
+        )
         await session.rollback()
     finally:
         await session.close()

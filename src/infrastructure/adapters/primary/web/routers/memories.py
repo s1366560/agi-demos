@@ -1,5 +1,6 @@
 """Memories API endpoints."""
 
+import json
 import logging
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -192,6 +193,110 @@ async def _has_memory_share_edit_permission(
     return any(
         (share.permissions or {}).get("edit") is True for share in share_result.scalars().all()
     )
+
+
+def _decode_graph_json_property(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return decoded if isinstance(decoded, dict) else {}
+    return {}
+
+
+async def _get_memory_graph_context(
+    memory_id: str,
+    graph_service: GraphServicePort | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Load graph entities and relationships connected to a memory episode."""
+    if graph_service is None:
+        return [], []
+
+    driver = getattr(graph_service, "driver", None)
+    if driver is None:
+        return [], []
+
+    try:
+        entity_records, _, _ = await driver.execute_query(
+            """
+            MATCH (episode:Episodic)
+            WHERE episode.memory_id = $memory_id OR episode.uuid = $memory_id
+            MATCH (episode)-[:MENTIONS]->(entity:Entity)
+            RETURN DISTINCT
+                entity.uuid AS id,
+                entity.name AS name,
+                coalesce(entity.entity_type, 'Entity') AS type,
+                entity.summary AS summary,
+                entity.attributes AS attributes
+            ORDER BY name
+            """,
+            memory_id=memory_id,
+        )
+        entities = [
+            {
+                "id": record["id"],
+                "uuid": record["id"],
+                "name": record["name"] or record["id"],
+                "type": record["type"] or "Entity",
+                "entity_type": record["type"] or "Entity",
+                "summary": record["summary"] or "",
+                "properties": _decode_graph_json_property(record["attributes"]),
+                "confidence": 1.0,
+            }
+            for record in entity_records
+            if record["id"] is not None
+        ]
+
+        relationship_records, _, _ = await driver.execute_query(
+            """
+            MATCH (episode:Episodic)
+            WHERE episode.memory_id = $memory_id OR episode.uuid = $memory_id
+            MATCH (episode)-[:MENTIONS]->(source:Entity)
+            MATCH (episode)-[:MENTIONS]->(target:Entity)
+            MATCH (source)-[relationship]->(target)
+            WHERE source <> target AND NOT type(relationship) IN ['MENTIONS', 'BELONGS_TO']
+            RETURN DISTINCT
+                coalesce(relationship.uuid, elementId(relationship)) AS id,
+                source.uuid AS source_id,
+                target.uuid AS target_id,
+                type(relationship) AS type,
+                relationship.fact AS fact,
+                relationship.summary AS summary,
+                relationship.weight AS weight,
+                relationship.episodes AS episodes
+            ORDER BY type
+            """,
+            memory_id=memory_id,
+        )
+        relationships = [
+            {
+                "id": record["id"],
+                "uuid": record["id"],
+                "source_id": record["source_id"],
+                "target_id": record["target_id"],
+                "source_uuid": record["source_id"],
+                "target_uuid": record["target_id"],
+                "type": record["type"],
+                "relationship_type": record["type"],
+                "properties": {
+                    "fact": record["fact"] or "",
+                    "summary": record["summary"] or "",
+                    "weight": record["weight"],
+                    "episodes": record["episodes"] or [],
+                },
+                "confidence": record["weight"] if record["weight"] is not None else 1.0,
+            }
+            for record in relationship_records
+            if record["source_id"] is not None and record["target_id"] is not None
+        ]
+    except Exception as e:
+        logger.warning("Failed to load graph context for memory %s: %s", memory_id, e)
+        return [], []
+
+    return entities, relationships
 
 
 async def _has_project_admin_access(
@@ -639,6 +744,7 @@ async def get_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    graph_service: GraphServicePort | None = Depends(get_graph_service),
 ) -> Any:
     """Get a specific memory."""
     result = await db.execute(
@@ -649,26 +755,19 @@ async def get_memory(
     if not memory:
         raise HTTPException(status_code=404, detail=_("Memory not found"))
 
-    # Check access
-    # Simplified: Check if user has access to project
-    user_project_result = await db.execute(
-        refresh_select_statement(
-            select(UserProject).where(
-                UserProject.user_id == current_user.id,
-                UserProject.project_id == memory.project_id,
-            )
-        )
-    )
-    if not user_project_result.scalar_one_or_none():
-        # Check ownership
-        project_result = await db.execute(
-            refresh_select_statement(select(Project).where(Project.id == memory.project_id))
-        )
-        project = project_result.scalar_one_or_none()
-        if not project or project.owner_id != current_user.id:
-            raise HTTPException(status_code=403, detail=_("Access denied"))
+    await _verify_memory_read_access(cast(Memory, memory), current_user, db)
 
-    return MemoryResponse.from_orm(memory)
+    response = MemoryResponse.from_orm(memory)
+    graph_entities, graph_relationships = await _get_memory_graph_context(memory_id, graph_service)
+    if graph_entities or graph_relationships:
+        return response.model_copy(
+            update={
+                "entities": graph_entities or response.entities,
+                "relationships": graph_relationships or response.relationships,
+            }
+        )
+
+    return response
 
 
 @router.delete("/memories/{memory_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
