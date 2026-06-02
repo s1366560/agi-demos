@@ -242,3 +242,9 @@ def test_summarize_and_restore_a2ui_action_response(
     }
     get_settings.cache_clear()
     monkeypatch.setattr(hitl_utils, "_hitl_stream_encryption_service", None)
+
+
+@pytest.mark.unit
+def test_missing_hitl_state_is_permanent_resume_error() -> None:
+    assert hitl_utils.is_permanent_hitl_resume_error("HITL state not found or expired") is True
+    assert hitl_utils.is_permanent_hitl_resume_error("temporary transport error") is False

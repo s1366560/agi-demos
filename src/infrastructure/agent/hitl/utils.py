@@ -81,36 +81,28 @@ class HITLRequestRecord(Protocol):
     """Attribute-based view of a persisted HITL request."""
 
     @property
-    def id(self) -> str:
-        ...
+    def id(self) -> str: ...
 
     @property
-    def request_type(self) -> object:
-        ...
+    def request_type(self) -> object: ...
 
     @property
-    def question(self) -> str | None:
-        ...
+    def question(self) -> str | None: ...
 
     @property
-    def options(self) -> object:
-        ...
+    def options(self) -> object: ...
 
     @property
-    def context(self) -> object:
-        ...
+    def context(self) -> object: ...
 
     @property
-    def metadata(self) -> object:
-        ...
+    def metadata(self) -> object: ...
 
     @property
-    def response(self) -> object:
-        ...
+    def response(self) -> object: ...
 
     @property
-    def response_metadata(self) -> object:
-        ...
+    def response_metadata(self) -> object: ...
 
 
 _hitl_stream_encryption_service: EncryptionService | None = None
@@ -402,8 +394,10 @@ def is_permanent_hitl_resume_error(error_message: str | None) -> bool:
     """Return True when a continue_chat error is a terminal validation rejection."""
     if not isinstance(error_message, str):
         return False
-    return error_message.startswith("Rejected ") or error_message.startswith(
-        "Unsupported HITL type:"
+    return (
+        error_message == "HITL state not found or expired"
+        or error_message.startswith("Rejected ")
+        or error_message.startswith("Unsupported HITL type:")
     )
 
 

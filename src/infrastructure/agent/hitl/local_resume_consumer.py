@@ -454,16 +454,30 @@ class LocalHITLResumeConsumer:
         try:
             async with async_session_factory() as session:
                 repo = SqlHITLRequestRepository(session)
-                if await repo.claim_for_processing(
-                    request_id,
-                    lease_owner=self._worker_id,
-                ) is None:
+                if (
+                    await repo.claim_for_processing(
+                        request_id,
+                        lease_owner=self._worker_id,
+                    )
+                    is None
+                ):
                     logger.info(
                         "[LocalHITL] Request already claimed for processing: %s",
                         request_id,
                     )
                     return False
                 await session.commit()
+
+            if not await self._has_recoverable_hitl_state(request_id):
+                from src.infrastructure.agent.hitl.coordinator import complete_hitl_request
+
+                await complete_hitl_request(request_id, lease_owner=self._worker_id)
+                logger.warning(
+                    "[LocalHITL] Permanently completed orphaned fallback resume: "
+                    "request_id=%s error=HITL state not found or expired",
+                    request_id,
+                )
+                return True
 
             settings = get_settings()
             agent_mode = await load_hitl_snapshot_agent_mode(request_id) or "default"
@@ -538,6 +552,20 @@ class LocalHITLResumeConsumer:
             )
             await self._revert_processing_request(request_id)
             return False
+
+    async def _has_recoverable_hitl_state(self, request_id: str) -> bool:
+        """Return True when Redis or DB snapshots can resume a HITL request."""
+        from src.infrastructure.agent.actor.state.snapshot_repo import load_hitl_snapshot
+        from src.infrastructure.agent.hitl.state_store import HITLStateStore
+        from src.infrastructure.agent.state.agent_worker_state import get_redis_client
+
+        redis_client = await get_redis_client()
+        if redis_client is not None:
+            state = await HITLStateStore(redis_client).load_state_by_request(request_id)
+            if state is not None:
+                return True
+
+        return await load_hitl_snapshot(request_id) is not None
 
     async def _ack(self, stream_key: str | bytes, msg_id: str | bytes) -> None:
         try:

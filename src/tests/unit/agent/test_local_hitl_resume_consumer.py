@@ -392,6 +392,7 @@ async def test_resume_via_continue_reverts_processing_request_on_error(monkeypat
         "load_hitl_snapshot_agent_mode",
         AsyncMock(return_value="plan"),
     )
+    monkeypatch.setattr(consumer, "_has_recoverable_hitl_state", AsyncMock(return_value=True))
     monkeypatch.setattr(project_agent_mod, "ProjectReActAgent", lambda _config: fake_agent)
     monkeypatch.setattr(
         execution_mod,
@@ -412,6 +413,44 @@ async def test_resume_via_continue_reverts_processing_request_on_error(monkeypat
     repo.claim_for_processing.assert_awaited_once_with("req-1", lease_owner=consumer._worker_id)
     repo.revert_to_answered.assert_awaited_once_with("req-1", lease_owner=consumer._worker_id)
     fake_agent.stop.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_resume_via_continue_completes_orphaned_missing_state(monkeypatch) -> None:
+    consumer = LocalHITLResumeConsumer(MagicMock())
+    repo = MagicMock()
+    repo.claim_for_processing = AsyncMock(return_value=SimpleNamespace(id="req-1"))
+    repo.revert_to_answered = AsyncMock()
+
+    session = AsyncMock()
+    session_cm = AsyncMock()
+    session_cm.__aenter__.return_value = session
+    session_cm.__aexit__.return_value = False
+
+    complete_request = AsyncMock(return_value=True)
+    agent_factory = MagicMock()
+
+    monkeypatch.setattr(database_mod, "async_session_factory", lambda: session_cm)
+    monkeypatch.setattr(hitl_repo_mod, "SqlHITLRequestRepository", lambda _session: repo)
+    monkeypatch.setattr(consumer, "_has_recoverable_hitl_state", AsyncMock(return_value=False))
+    monkeypatch.setattr(coordinator_mod, "complete_hitl_request", complete_request)
+    monkeypatch.setattr(project_agent_mod, "ProjectReActAgent", agent_factory)
+
+    result = await consumer._resume_via_continue(
+        "tenant-1",
+        "project-1",
+        "req-1",
+        {"answer": "ok"},
+        "conv-1",
+        "msg-1",
+    )
+
+    assert result is True
+    repo.claim_for_processing.assert_awaited_once_with("req-1", lease_owner=consumer._worker_id)
+    complete_request.assert_awaited_once_with("req-1", lease_owner=consumer._worker_id)
+    repo.revert_to_answered.assert_not_awaited()
+    agent_factory.assert_not_called()
 
 
 @pytest.mark.unit
