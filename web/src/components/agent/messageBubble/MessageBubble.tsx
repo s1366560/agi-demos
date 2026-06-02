@@ -114,6 +114,7 @@ const SummaryPill: React.FC<{ label: string; value: string }> = ({ label, value 
 
 const USER_MESSAGE_MAX_WIDTH_CLASSES = 'max-w-[85%] md:max-w-[75%] lg:max-w-[70%]';
 const SANDBOX_FILE_LINK_PREFIX = '#sandbox-file:';
+const CANVAS_FORCE_VIEW_MODE_EVENT = 'canvas:force-view-mode';
 const SANDBOX_FILE_PATH_PATTERN =
   /(^|[\s:：([（])((?:\/workspace\/|~\/|(?:output|outputs|artifacts|input|inputs|tmp|workspace)\/)[^\s)\]）}>`"']*\.[A-Za-z0-9]{1,12})/g;
 const TEXT_FILE_EXTENSIONS = new Set([
@@ -192,6 +193,22 @@ function getCanvasTypeForSandboxPath(path: string): CanvasContentType {
   return 'code';
 }
 
+function getCanvasTypeForSandboxFile(path: string, mimeType?: string | null): CanvasContentType {
+  const mime = (mimeType ?? '').toLowerCase();
+  if (mime.includes('markdown')) return 'markdown';
+  if (
+    mime.includes('json') ||
+    mime.includes('csv') ||
+    mime.includes('xml') ||
+    mime.includes('yaml') ||
+    mime.includes('toml')
+  ) {
+    return 'data';
+  }
+  if (mime.includes('html') || mime.includes('svg')) return 'preview';
+  return getCanvasTypeForSandboxPath(path);
+}
+
 function getMimeTypeForSandboxPath(path: string): string | undefined {
   const ext = getFileExtension(path);
   if (ext === 'md' || ext === 'markdown') return 'text/markdown';
@@ -204,6 +221,54 @@ function getMimeTypeForSandboxPath(path: string): string | undefined {
     return `image/${ext === 'jpg' ? 'jpeg' : ext}`;
   if (TEXT_FILE_EXTENSIONS.has(ext)) return 'text/plain';
   return undefined;
+}
+
+function isPdfSandboxFile(path: string, mimeType?: string | null): boolean {
+  return (
+    (mimeType ?? '').toLowerCase().includes('application/pdf') || getFileExtension(path) === 'pdf'
+  );
+}
+
+function shouldPreviewSandboxFileByUrl(path: string, mimeType?: string | null): boolean {
+  const mime = (mimeType ?? '').toLowerCase();
+  return (
+    isPdfSandboxFile(path, mime) ||
+    mime.startsWith('image/') ||
+    mime.startsWith('video/') ||
+    mime.startsWith('audio/') ||
+    isOfficeMimeType(mime) ||
+    isOfficeExtension(path)
+  );
+}
+
+function openSandboxUrlPreviewTab(params: {
+  id: string;
+  title: string;
+  url: string;
+  mimeType?: string | undefined;
+  artifactId?: string | undefined;
+}) {
+  const mimeType = params.mimeType || getMimeTypeForSandboxPath(params.title);
+  useCanvasStore.getState().openTab({
+    id: params.id,
+    title: params.title,
+    type: 'preview',
+    content: params.url,
+    mimeType,
+    pdfVerified: isPdfSandboxFile(params.title, mimeType) || undefined,
+    artifactId: params.artifactId,
+    artifactUrl: params.url,
+  });
+  useLayoutModeStore.getState().setMode('canvas');
+  requestCanvasViewMode();
+}
+
+function requestCanvasViewMode() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(CANVAS_FORCE_VIEW_MODE_EVENT));
+  window.setTimeout(() => {
+    window.dispatchEvent(new CustomEvent(CANVAS_FORCE_VIEW_MODE_EVENT));
+  }, 0);
 }
 
 function escapeMarkdownLinkText(value: string): string {
@@ -264,6 +329,25 @@ function pathMatchesArtifact(path: string, artifact: Artifact): boolean {
   );
 }
 
+function getCurrentProjectId(): string | null {
+  const activeProjectId = useSandboxStore.getState().activeProjectId;
+  if (activeProjectId) return activeProjectId;
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get('projectId');
+}
+
+async function findArtifactForSandboxPath(path: string): Promise<Artifact | undefined> {
+  const storeArtifacts = Array.from(useSandboxStore.getState().artifacts.values());
+  const storeArtifact = storeArtifacts.find((item) => pathMatchesArtifact(path, item));
+  if (storeArtifact) return storeArtifact;
+
+  const projectId = getCurrentProjectId();
+  if (!projectId) return undefined;
+
+  const { artifacts } = await artifactService.list(projectId, { limit: 500 });
+  return artifacts.find((item) => pathMatchesArtifact(path, item));
+}
+
 async function openArtifactInCanvas(artifact: Artifact, requestedPath: string): Promise<boolean> {
   const url = artifact.url || artifact.previewUrl;
   if (!url || !isSafeArtifactUrl(url)) return false;
@@ -271,46 +355,33 @@ async function openArtifactInCanvas(artifact: Artifact, requestedPath: string): 
   const title = artifact.filename || getFileNameFromPath(requestedPath);
   const mime = (artifact.mimeType || getMimeTypeForSandboxPath(title) || '').toLowerCase();
 
-  if (
-    mime.startsWith('image/') ||
-    mime.startsWith('video/') ||
-    mime.startsWith('audio/') ||
-    isOfficeMimeType(mime) ||
-    isOfficeExtension(title)
-  ) {
-    useCanvasStore.getState().openTab({
+  if (shouldPreviewSandboxFileByUrl(title, mime)) {
+    openSandboxUrlPreviewTab({
       id: artifact.id,
       title,
-      type: 'preview',
-      content: url,
-      mimeType: artifact.mimeType,
+      url,
+      mimeType: mime,
       artifactId: artifact.id,
-      artifactUrl: url,
     });
-    useLayoutModeStore.getState().setMode('canvas');
     return true;
   }
 
   const response = await fetchArtifactResource(url);
   if (!response.ok) return false;
   const responseType = response.headers.get('content-type')?.toLowerCase() || '';
-  if (responseType.includes('application/pdf')) {
-    useCanvasStore.getState().openTab({
+  if (shouldPreviewSandboxFileByUrl(title, responseType)) {
+    openSandboxUrlPreviewTab({
       id: artifact.id,
       title,
-      type: 'preview',
-      content: url,
-      mimeType: 'application/pdf',
-      pdfVerified: true,
+      url,
+      mimeType: responseType || mime,
       artifactId: artifact.id,
-      artifactUrl: url,
     });
-    useLayoutModeStore.getState().setMode('canvas');
     return true;
   }
 
   const content = await response.text();
-  const contentType = getCanvasTypeForSandboxPath(title);
+  const contentType = getCanvasTypeForSandboxFile(title, responseType || mime);
   useCanvasStore.getState().openTab({
     id: artifact.id,
     title,
@@ -322,19 +393,19 @@ async function openArtifactInCanvas(artifact: Artifact, requestedPath: string): 
     artifactUrl: url,
   });
   useLayoutModeStore.getState().setMode('canvas');
+  requestCanvasViewMode();
   return true;
 }
 
 async function openSandboxPathInCanvas(path: string): Promise<void> {
-  const artifacts = Array.from(useSandboxStore.getState().artifacts.values());
-  const artifact = artifacts.find((item) => pathMatchesArtifact(path, item));
-  if (artifact) {
-    try {
+  try {
+    const artifact = await findArtifactForSandboxPath(path);
+    if (artifact) {
       const opened = await openArtifactInCanvas(artifact, path);
       if (opened) return;
-    } catch {
-      // Fall back to direct sandbox read below.
     }
+  } catch {
+    // Fall back to direct sandbox read below.
   }
 
   const normalizedPath = normalizeSandboxPath(path);
@@ -344,16 +415,18 @@ async function openSandboxPathInCanvas(path: string): Promise<void> {
   if (!result.success || result.isError) return;
 
   const title = getFileNameFromPath(path);
-  const type = getCanvasTypeForSandboxPath(path);
+  const mimeType = getMimeTypeForSandboxPath(path);
+  const type = getCanvasTypeForSandboxFile(path, mimeType);
   useCanvasStore.getState().openTab({
     id: `${SANDBOX_FILE_LINK_PREFIX}${normalizedPath}`,
     title,
     type,
     content: result.content,
     language: getFileExtension(path) || undefined,
-    mimeType: getMimeTypeForSandboxPath(path),
+    mimeType,
   });
   useLayoutModeStore.getState().setMode('canvas');
+  requestCanvasViewMode();
 }
 
 const ExecutionSummaryPanel: React.FC<{
@@ -1417,13 +1490,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
           artifactUrl: url,
         });
       } else {
-        // Determine canvas content type from artifact category
-        const typeMap: Record<string, 'code' | 'markdown' | 'data'> = {
-          code: 'code',
-          document: 'markdown',
-          data: 'data',
-        };
-        const contentType = typeMap[event.category] || 'code';
+        const contentType = getCanvasTypeForSandboxFile(event.filename, responseType || mime);
         const ext = event.filename.split('.').pop()?.toLowerCase();
 
         canvasOpenTab({
@@ -1437,6 +1504,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
         });
       }
       setLayoutMode('canvas');
+      requestCanvasViewMode();
     } catch {
       // Silently fail - user can still download the file directly
     }

@@ -33,6 +33,16 @@ interface ArtifactCreatedItemProps {
   event: ArtifactCreatedEvent & { error?: string | undefined };
 }
 
+const CANVAS_FORCE_VIEW_MODE_EVENT = 'canvas:force-view-mode';
+
+function requestCanvasViewMode() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(CANVAS_FORCE_VIEW_MODE_EVENT));
+  window.setTimeout(() => {
+    window.dispatchEvent(new CustomEvent(CANVAS_FORCE_VIEW_MODE_EVENT));
+  }, 0);
+}
+
 function getCategoryIcon(category: string) {
   switch (category) {
     case 'image':
@@ -111,6 +121,33 @@ const CATEGORY_CONTENT_TYPE_MAP: Record<string, CanvasContentType> = {
   data: 'data',
 };
 
+function getArtifactExtension(filename: string): string {
+  const name = filename.split(/[\\/]/).filter(Boolean).at(-1) ?? filename;
+  const dotIndex = name.lastIndexOf('.');
+  return dotIndex >= 0 ? name.slice(dotIndex + 1).toLowerCase() : '';
+}
+
+function getCanvasContentTypeForArtifact(
+  filename: string,
+  mimeType: string,
+  category: string
+): CanvasContentType {
+  const ext = getArtifactExtension(filename);
+  const mime = mimeType.toLowerCase();
+  if (ext === 'md' || ext === 'markdown' || mime.includes('markdown')) return 'markdown';
+  if (
+    ['json', 'jsonl', 'csv', 'tsv', 'xml', 'yaml', 'yml', 'toml'].includes(ext) ||
+    mime.includes('json') ||
+    mime.includes('csv') ||
+    mime.includes('xml') ||
+    mime.includes('yaml') ||
+    mime.includes('toml')
+  ) {
+    return 'data';
+  }
+  return CATEGORY_CONTENT_TYPE_MAP[category] || 'code';
+}
+
 function isCanvasCompatible(category: string, mimeType: string): boolean {
   return (
     CANVAS_COMPATIBLE_CATEGORIES.includes(category) ||
@@ -162,6 +199,7 @@ export const ArtifactCreatedItem = memo(
         if (currentMode !== 'canvas') {
           useLayoutModeStore.getState().setMode('canvas');
         }
+        requestCanvasViewMode();
         return;
       }
 
@@ -186,6 +224,7 @@ export const ArtifactCreatedItem = memo(
           if (currentMode !== 'canvas') {
             useLayoutModeStore.getState().setMode('canvas');
           }
+          requestCanvasViewMode();
           return;
         }
         const content = await response.text();
@@ -203,8 +242,11 @@ export const ArtifactCreatedItem = memo(
             artifactUrl: url,
           });
         } else {
-          const contentType: CanvasContentType =
-            CATEGORY_CONTENT_TYPE_MAP[event.category] || 'code';
+          const contentType = getCanvasContentTypeForArtifact(
+            event.filename,
+            responseType || mime,
+            event.category
+          );
           const ext = event.filename.split('.').pop()?.toLowerCase();
 
           useCanvasStore.getState().openTab({
@@ -222,6 +264,7 @@ export const ArtifactCreatedItem = memo(
         if (currentMode !== 'canvas') {
           useLayoutModeStore.getState().setMode('canvas');
         }
+        requestCanvasViewMode();
       } catch {
         // Silently fail -- user can still download
       }

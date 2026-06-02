@@ -68,6 +68,26 @@ import { A2UISurfaceRenderer } from './A2UISurfaceRenderer';
 import { SelectionToolbar } from './SelectionToolbar';
 import { useSyntaxHighlighter } from './useSyntaxHighlighter';
 
+const CANVAS_FORCE_VIEW_MODE_EVENT = 'canvas:force-view-mode';
+
+function getCanvasTitleExtension(title: string): string {
+  const filename = title.split(/[\\/]/).filter(Boolean).at(-1) ?? title;
+  const dotIndex = filename.lastIndexOf('.');
+  return dotIndex >= 0 ? filename.slice(dotIndex + 1).toLowerCase() : '';
+}
+
+function getRenderableCanvasType(tab: CanvasTab): CanvasContentType {
+  if (tab.type !== 'code') return tab.type;
+  const extension = getCanvasTitleExtension(tab.title);
+  const language = tab.language?.toLowerCase();
+  const mimeType = tab.mimeType?.toLowerCase();
+  if (extension === 'md' || extension === 'markdown' || language === 'md' || language === 'markdown') {
+    return 'markdown';
+  }
+  if (mimeType?.includes('markdown')) return 'markdown';
+  return tab.type;
+}
+
 const typeIcon = (type: CanvasContentType, size = 14) => {
   switch (type) {
     case 'code':
@@ -1222,18 +1242,19 @@ const CanvasContent = memo<{
   onContentChange: (content: string) => void;
 }>(({ tab, editMode, onContentChange }) => {
   const { t } = useTranslation();
+  const renderType = getRenderableCanvasType(tab);
   const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(
-    tab.type === 'markdown' ? tab.content : undefined
+    renderType === 'markdown' ? tab.content : undefined
   );
   const highlighter = useSyntaxHighlighter();
 
-  if (editMode && (tab.type === 'code' || tab.type === 'markdown' || tab.type === 'data')) {
+  if (editMode && (renderType === 'code' || renderType === 'markdown' || renderType === 'data')) {
     const bgClass =
-      tab.type === 'code'
+      renderType === 'code'
         ? 'bg-slate-900 text-slate-200'
         : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200';
     return (
-      <div className={`h-full overflow-auto ${tab.type === 'code' ? 'bg-slate-900' : ''}`}>
+      <div className={`h-full overflow-auto ${renderType === 'code' ? 'bg-slate-900' : ''}`}>
         <textarea
           value={tab.content}
           onChange={(e) => {
@@ -1246,7 +1267,7 @@ const CanvasContent = memo<{
     );
   }
 
-  switch (tab.type) {
+  switch (renderType) {
     case 'code':
       return (
         <div className="h-full overflow-auto bg-slate-900 rounded-b-lg">
@@ -1767,6 +1788,16 @@ export const CanvasPanel = memo<{
     prevActiveTabRef.current =
       activeTabId && activeTabType ? { id: activeTabId, type: activeTabType } : null;
   }, [activeTabId, activeTabType]);
+
+  useEffect(() => {
+    const handleForceViewMode = () => {
+      setEditMode(false);
+    };
+    window.addEventListener(CANVAS_FORCE_VIEW_MODE_EVENT, handleForceViewMode);
+    return () => {
+      window.removeEventListener(CANVAS_FORCE_VIEW_MODE_EVENT, handleForceViewMode);
+    };
+  }, []);
 
   // Teardown ALL MCP App instances on page unload / navigate away
   useEffect(() => {
