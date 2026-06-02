@@ -274,6 +274,20 @@ class TestConfigureMeterProvider:
         # Cleanup
         config._reset_providers()
 
+    def test_default_provider_does_not_export_console_json(self):
+        """Default metrics should stay in-process and not print raw JSON to api.log."""
+        config._reset_providers()
+
+        provider = config.configure_meter_provider(
+            settings_override={"enable_telemetry": True},
+            force_reset=True,
+        )
+
+        assert provider is not None
+        assert provider._sdk_config.metric_readers == ()
+
+        config._reset_providers()
+
 
 class TestGetTracer:
     """Tests for get_tracer function."""

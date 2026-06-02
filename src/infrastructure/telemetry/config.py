@@ -18,7 +18,6 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
     OTLPSpanExporter as HTTPTraceExporter,
 )
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import (
@@ -308,12 +307,7 @@ def configure_meter_provider(
     try:
         resource = _create_resource(settings_override)
 
-        # Use console exporter for metrics (can be replaced with OTLP)
-        metric_exporter = ConsoleMetricExporter()
-
-        reader = PeriodicExportingMetricReader(metric_exporter, export_interval_millis=60000)
-
-        provider = MeterProvider(resource=resource, metric_readers=[reader])
+        provider = MeterProvider(resource=resource)
 
         # Set global meter provider
         metrics.set_meter_provider(provider)
