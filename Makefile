@@ -37,6 +37,8 @@ COMPOSE_CMD ?= docker compose -f $(COMPOSE_BASE)
 COMPOSE_ALL ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_ACTOR)
 COMPOSE_RAY_DEV_CMD ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_RAY_DEV)
 COMPOSE_DRONE ?= docker compose -f $(COMPOSE_BASE) -f .memstack/plugins/drone/docker-compose.yml
+OBS_SHARED_SERVICES ?= postgres redis minio minio-setup
+OBS_STACK_SERVICES ?= langfuse-db-init langfuse-storage-setup langfuse-clickhouse langfuse-web langfuse-worker prometheus grafana otel-collector jaeger
 
 help: ## Show this help message
 	@echo "MemStack Development Commands"
@@ -772,21 +774,21 @@ docker-clean: ## Clean up containers, volumes, and orphans
 # Observability Stack (OpenTelemetry, Jaeger, Prometheus, Grafana)
 # =============================================================================
 
-obs-start: ## Start observability services (Langfuse, OTel, Prometheus, Grafana, Jaeger)
+obs-start: ## Start observability services with shared backend middleware
 	@echo " Starting observability stack..."
-	@$(COMPOSE_CMD) -f $(COMPOSE_OBS) up -d
+	@$(COMPOSE_CMD) -f $(COMPOSE_OBS) up -d $(OBS_SHARED_SERVICES) $(OBS_STACK_SERVICES)
 	@echo " Observability services started"
 	@$(MAKE) obs-ui
 
 obs-stop: ## Stop observability services
 	@echo " Stopping observability services..."
-	@$(COMPOSE_CMD) -f $(COMPOSE_OBS) stop 2>/dev/null || true
+	@$(COMPOSE_CMD) -f $(COMPOSE_OBS) stop $(OBS_STACK_SERVICES) 2>/dev/null || true
 	@echo " Observability services stopped"
 
 obs-status: ## Show observability service status
 	@echo " Observability Service Status"
 	@echo "==============================="
-	@$(COMPOSE_CMD) -f $(COMPOSE_OBS) ps 2>/dev/null || echo "  Services not running"
+	@$(COMPOSE_CMD) -f $(COMPOSE_OBS) ps $(OBS_SHARED_SERVICES) $(OBS_STACK_SERVICES) 2>/dev/null || echo "  Services not running"
 	@echo ""
 	@echo "Port Status:"
 	@lsof -i :16686 2>/dev/null | grep -q LISTEN && echo "  16686 (Jaeger UI):         In use" || echo "  16686 (Jaeger UI):         Free"
@@ -797,7 +799,7 @@ obs-status: ## Show observability service status
 
 obs-logs: ## Show observability service logs
 	@echo " Showing observability logs (Ctrl+C to exit)..."
-	@$(COMPOSE_CMD) -f $(COMPOSE_OBS) logs -f
+	@$(COMPOSE_CMD) -f $(COMPOSE_OBS) logs -f $(OBS_STACK_SERVICES)
 
 obs-ui: ## Show observability UI URLs
 	@echo " Observability UI"
