@@ -163,6 +163,8 @@ describe('AuditLogs', () => {
       isolation_mode_counts: { sandbox: 2, host: 1 },
       latest_timestamp: '2026-04-15T09:00:00Z',
     });
+
+    mockExportLogs.mockResolvedValue(new Blob(['ok']));
   });
 
   it('loads and renders runtime hook summary when switching views', async () => {
@@ -230,6 +232,102 @@ describe('AuditLogs', () => {
       expect(mockGetRuntimeHookSummary).toHaveBeenLastCalledWith(
         'tenant-1',
         expect.objectContaining({ hook_name: 'before_response' })
+      );
+    });
+  });
+
+  it('passes actor filters to generic audit log queries', async () => {
+    render(<AuditLogs />);
+
+    await waitFor(() => {
+      expect(mockList).toHaveBeenCalledWith(
+        'tenant-1',
+        expect.objectContaining({ page: 1, page_size: 20 })
+      );
+    });
+
+    mockList.mockClear();
+
+    fireEvent.change(screen.getByPlaceholderText('Filter by actor...'), {
+      target: { value: 'system' },
+    });
+
+    await waitFor(() => {
+      expect(mockList).toHaveBeenLastCalledWith(
+        'tenant-1',
+        expect.objectContaining({ actor: 'system', page: 1, page_size: 20 })
+      );
+    });
+  });
+
+  it('clears generic audit filters and reloads the first page', async () => {
+    render(<AuditLogs />);
+
+    await waitFor(() => {
+      expect(mockList).toHaveBeenCalledWith(
+        'tenant-1',
+        expect.objectContaining({ page: 1, page_size: 20 })
+      );
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('Filter by actor...'), {
+      target: { value: 'system' },
+    });
+
+    await waitFor(() => {
+      expect(mockList).toHaveBeenLastCalledWith(
+        'tenant-1',
+        expect.objectContaining({ actor: 'system' })
+      );
+    });
+
+    mockList.mockClear();
+
+    fireEvent.click(screen.getByLabelText('Clear filters'));
+
+    await waitFor(() => {
+      expect(mockList).toHaveBeenLastCalledWith(
+        'tenant-1',
+        expect.not.objectContaining({ actor: 'system' })
+      );
+      expect(mockList).toHaveBeenLastCalledWith(
+        'tenant-1',
+        expect.objectContaining({ page: 1, page_size: 20 })
+      );
+    });
+  });
+
+  it('exports runtime hook audit logs with the active hook filters', async () => {
+    render(<AuditLogs />);
+
+    await waitFor(() => {
+      expect(mockList).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByTestId('audit-view-runtime-hooks'));
+
+    await waitFor(() => {
+      expect(mockListRuntimeHooks).toHaveBeenCalled();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('Filter by hook name...'), {
+      target: { value: 'before_response' },
+    });
+
+    await waitFor(() => {
+      expect(mockGetRuntimeHookSummary).toHaveBeenLastCalledWith(
+        'tenant-1',
+        expect.objectContaining({ hook_name: 'before_response' })
+      );
+    });
+
+    fireEvent.click(screen.getByText('Export CSV'));
+
+    await waitFor(() => {
+      expect(mockExportLogs).toHaveBeenCalledWith(
+        'tenant-1',
+        'csv',
+        expect.objectContaining({ hook_name: 'before_response', page: 1, page_size: 20 })
       );
     });
   });

@@ -6,8 +6,9 @@ from collections import Counter
 from datetime import datetime
 from typing import Any, override
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from src.domain.model.audit.audit_entry import AuditEntry
 from src.domain.ports.repositories.audit_repository import AuditRepository
@@ -33,7 +34,7 @@ class SqlAuditRepository(AuditRepository):
     ) -> list[AuditEntry]:
         stmt = (
             select(AuditLog)
-            .where(AuditLog.tenant_id == tenant_id)
+            .where(self._tenant_scope(tenant_id))
             .order_by(AuditLog.timestamp.desc())
             .limit(limit)
             .offset(offset)
@@ -43,7 +44,7 @@ class SqlAuditRepository(AuditRepository):
 
     @override
     async def count_by_tenant(self, tenant_id: str) -> int:
-        stmt = select(func.count()).select_from(AuditLog).where(AuditLog.tenant_id == tenant_id)
+        stmt = select(func.count()).select_from(AuditLog).where(self._tenant_scope(tenant_id))
         result = await self._session.execute(refresh_select_statement(stmt))
         count: Any = result.scalar_one()
         return int(count)
@@ -63,7 +64,7 @@ class SqlAuditRepository(AuditRepository):
         limit: int = 50,
         offset: int = 0,
     ) -> list[AuditEntry]:
-        base: Select[Any] = select(AuditLog).where(AuditLog.tenant_id == tenant_id)
+        base: Select[Any] = select(AuditLog).where(self._tenant_scope(tenant_id))
         filtered = self._apply_filters(
             base,
             action=action,
@@ -92,7 +93,7 @@ class SqlAuditRepository(AuditRepository):
         end_time: datetime | None = None,
     ) -> int:
         base: Select[Any] = (
-            select(func.count()).select_from(AuditLog).where(AuditLog.tenant_id == tenant_id)
+            select(func.count()).select_from(AuditLog).where(self._tenant_scope(tenant_id))
         )
         filtered = self._apply_filters(
             base,
@@ -122,7 +123,7 @@ class SqlAuditRepository(AuditRepository):
         end_time: datetime | None = None,
     ) -> dict[str, object]:
         """Return aggregate counts for audit entries matching the filters."""
-        base: Select[Any] = select(AuditLog).where(AuditLog.tenant_id == tenant_id)
+        base: Select[Any] = select(AuditLog).where(self._tenant_scope(tenant_id))
         filtered = self._apply_filters(
             base,
             action=action,
@@ -181,6 +182,11 @@ class SqlAuditRepository(AuditRepository):
         if end_time is not None:
             stmt = stmt.where(AuditLog.timestamp <= end_time)
         return stmt
+
+    @staticmethod
+    def _tenant_scope(tenant_id: str) -> ColumnElement[bool]:
+        """Include tenant-owned rows and legacy system rows without tenant scope."""
+        return or_(AuditLog.tenant_id == tenant_id, AuditLog.tenant_id.is_(None))
 
     @staticmethod
     def _to_domain(row: AuditLog) -> AuditEntry:

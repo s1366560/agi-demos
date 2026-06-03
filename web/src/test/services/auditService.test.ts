@@ -105,4 +105,48 @@ describe('auditService', () => {
       }
     );
   });
+
+  it('exports generic audit logs with generic filters', async () => {
+    const { httpClient } = await import('../../services/client/httpClient');
+    vi.mocked(httpClient.get).mockResolvedValueOnce(new Blob(['ok']));
+
+    await auditService.exportLogs('tenant-1', 'json', {
+      page: 1,
+      page_size: 20,
+      action: 'tenant.updated',
+      resource_type: 'tenant',
+      actor: 'system',
+      from_date: '2026-04-15',
+      to_date: '2026-04-16',
+    });
+
+    expect(httpClient.get).toHaveBeenCalledWith(
+      '/tenants/tenant-1/audit-logs/export?format=json&action=tenant.updated&resource_type=tenant&actor=system&start_time=2026-04-15&end_time=2026-04-16',
+      {
+        responseType: 'blob',
+      }
+    );
+  });
+
+  it('exports runtime hook audit logs with hook-specific filters', async () => {
+    const { httpClient } = await import('../../services/client/httpClient');
+    vi.mocked(httpClient.get).mockResolvedValueOnce(new Blob(['ok']));
+
+    await auditService.exportLogs('tenant-1', 'csv', {
+      page: 1,
+      page_size: 20,
+      action: 'runtime_hook.custom_execution_succeeded',
+      hook_name: 'before_response',
+      executor_kind: 'script',
+      hook_family: 'mutating',
+      isolation_mode: 'sandbox',
+    });
+
+    expect(httpClient.get).toHaveBeenCalledWith(
+      '/tenants/tenant-1/audit-logs/export?format=csv&action=runtime_hook.custom_execution_succeeded&hook_name=before_response&executor_kind=script&hook_family=mutating&isolation_mode=sandbox',
+      {
+        responseType: 'blob',
+      }
+    );
+  });
 });

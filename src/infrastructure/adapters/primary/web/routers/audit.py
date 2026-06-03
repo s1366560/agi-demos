@@ -211,7 +211,7 @@ async def list_runtime_hook_audit_logs(
 
 
 @router.get("/export", response_model=None)
-async def export_audit_logs(
+async def export_audit_logs(  # noqa: PLR0913
     tenant_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -219,21 +219,44 @@ async def export_audit_logs(
     action: str | None = Query(default=None),
     resource_type: str | None = Query(default=None),
     actor: str | None = Query(default=None),
+    hook_name: str | None = Query(default=None),
+    executor_kind: str | None = Query(default=None),
+    hook_family: str | None = Query(default=None),
+    isolation_mode: str | None = Query(default=None),
     start_time: datetime | None = Query(default=None),
     end_time: datetime | None = Query(default=None),
 ) -> Response:
     await require_tenant_access(db, current_user, tenant_id)
     service = _build_service(db)
-    items, _total = await service.list_entries_filtered(
-        tenant_id,
-        action=action,
-        resource_type=resource_type,
-        actor=actor,
-        start_time=start_time,
-        end_time=end_time,
-        limit=AUDIT_EXPORT_LIMIT,
-        offset=0,
+    is_runtime_hook_export = (
+        hook_name is not None
+        or executor_kind is not None
+        or hook_family is not None
+        or isolation_mode is not None
+        or (action is not None and action.startswith("runtime_hook."))
     )
+    if is_runtime_hook_export:
+        items, _total = await service.list_runtime_hook_entries(
+            tenant_id,
+            action=action,
+            hook_name=hook_name,
+            executor_kind=executor_kind,
+            hook_family=hook_family,
+            isolation_mode=isolation_mode,
+            limit=AUDIT_EXPORT_LIMIT,
+            offset=0,
+        )
+    else:
+        items, _total = await service.list_entries_filtered(
+            tenant_id,
+            action=action,
+            resource_type=resource_type,
+            actor=actor,
+            start_time=start_time,
+            end_time=end_time,
+            limit=AUDIT_EXPORT_LIMIT,
+            offset=0,
+        )
     body = _render_audit_export(items, export_format)
     extension = "json" if export_format == "json" else "csv"
     media_type = "application/json" if export_format == "json" else "text/csv"

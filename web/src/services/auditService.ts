@@ -148,14 +148,29 @@ export const auditService = {
       }
     ),
 
-  exportLogs: (tenantId: string, format: 'csv' | 'json', params?: AuditListParams) => {
+  exportLogs: (
+    tenantId: string,
+    format: 'csv' | 'json',
+    params?: AuditListParams | RuntimeHookAuditListParams
+  ) => {
+    const exportParams = params as
+      | Partial<AuditListParams & RuntimeHookAuditListParams>
+      | undefined;
     const queryParams = new URLSearchParams();
     queryParams.set('format', format);
-    if (params?.action) queryParams.set('action', params.action);
-    if (params?.resource_type) queryParams.set('resource_type', params.resource_type);
-    if (params?.actor) queryParams.set('actor', params.actor);
-    if (params?.from_date) queryParams.set('start_time', params.from_date);
-    if (params?.to_date) queryParams.set('end_time', params.to_date);
+    if (exportParams?.action) queryParams.set('action', exportParams.action);
+    if (exportParams?.resource_type) queryParams.set('resource_type', exportParams.resource_type);
+    if (exportParams?.actor) queryParams.set('actor', exportParams.actor);
+    if (exportParams?.from_date) queryParams.set('start_time', exportParams.from_date);
+    if (exportParams?.to_date) queryParams.set('end_time', exportParams.to_date);
+    if (exportParams?.hook_name) queryParams.set('hook_name', exportParams.hook_name);
+    if (exportParams?.executor_kind) {
+      queryParams.set('executor_kind', exportParams.executor_kind);
+    }
+    if (exportParams?.hook_family) queryParams.set('hook_family', exportParams.hook_family);
+    if (exportParams?.isolation_mode) {
+      queryParams.set('isolation_mode', exportParams.isolation_mode);
+    }
 
     return httpClient.get<Blob>(
       `/tenants/${tenantId}/audit-logs/export?${queryParams.toString()}`,

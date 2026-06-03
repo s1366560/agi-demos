@@ -43,7 +43,11 @@ interface AuditState {
     tenantId: string,
     params?: RuntimeHookAuditSummaryParams
   ) => Promise<void>;
-  exportLogs: (tenantId: string, format: 'csv' | 'json', params?: AuditListParams) => Promise<void>;
+  exportLogs: (
+    tenantId: string,
+    format: 'csv' | 'json',
+    params?: AuditListParams | RuntimeHookAuditListParams
+  ) => Promise<void>;
   clearError: () => void;
   reset: () => void;
 }
@@ -143,7 +147,11 @@ export const useAuditStore = create<AuditState>()(
           }
         },
 
-        exportLogs: async (tenantId: string, format: 'csv' | 'json', params?: AuditListParams) => {
+        exportLogs: async (
+          tenantId: string,
+          format: 'csv' | 'json',
+          params?: AuditListParams | RuntimeHookAuditListParams
+        ) => {
           try {
             const blob = await auditService.exportLogs(tenantId, format, params);
             const url = window.URL.createObjectURL(blob);

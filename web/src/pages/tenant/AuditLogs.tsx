@@ -16,6 +16,7 @@ import {
   Boxes,
   Braces,
   Download,
+  FilterX,
   History,
   RefreshCw,
   Search as SearchIcon,
@@ -318,10 +319,12 @@ export const AuditLogs: React.FC = () => {
 
   const [viewMode, setViewMode] = useState<AuditViewMode>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [actorFilter, setActorFilter] = useState('');
   const [actionFilter, setActionFilter] = useState('');
   const [resourceTypeFilter, setResourceTypeFilter] = useState('');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
+  const [datePickerResetKey, setDatePickerResetKey] = useState(0);
   const [runtimeActionFilter, setRuntimeActionFilter] = useState('');
   const [hookNameFilter, setHookNameFilter] = useState('');
   const [executorKindFilter, setExecutorKindFilter] = useState('');
@@ -443,12 +446,13 @@ export const AuditLogs: React.FC = () => {
       page: currentPage,
       page_size: PAGE_SIZE,
     };
+    if (actorFilter) params.actor = actorFilter;
     if (actionFilter) params.action = actionFilter;
     if (resourceTypeFilter) params.resource_type = resourceTypeFilter;
     if (fromDate) params.from_date = fromDate;
     if (toDate) params.to_date = toDate;
     return params;
-  }, [currentPage, actionFilter, resourceTypeFilter, fromDate, toDate]);
+  }, [currentPage, actorFilter, actionFilter, resourceTypeFilter, fromDate, toDate]);
 
   const buildRuntimeHookParams = useCallback((): RuntimeHookAuditListParams => {
     const params: RuntimeHookAuditListParams = {
@@ -524,12 +528,35 @@ export const AuditLogs: React.FC = () => {
     setCurrentPage(newPage);
   }, []);
 
+  const clearCurrentFilters = useCallback(() => {
+    setCurrentPage(1);
+    setSelectedEntry(null);
+
+    if (viewMode === 'runtime-hooks') {
+      setRuntimeActionFilter('');
+      setHookNameFilter('');
+      setExecutorKindFilter('');
+      setHookFamilyFilter('');
+      setIsolationModeFilter('');
+      return;
+    }
+
+    setActorFilter('');
+    setActionFilter('');
+    setResourceTypeFilter('');
+    setFromDate('');
+    setToDate('');
+    setDatePickerResetKey((key) => key + 1);
+  }, [viewMode]);
+
   const handleExport = useCallback(
     async (format: 'csv' | 'json') => {
-      if (!tenantId || viewMode === 'runtime-hooks') return;
+      if (!tenantId) return;
       setIsExporting(true);
       try {
-        await exportLogs(tenantId, format, buildGenericParams());
+        const params =
+          viewMode === 'runtime-hooks' ? buildRuntimeHookParams() : buildGenericParams();
+        await exportLogs(tenantId, format, params);
         message?.success(t('tenant.auditLogs.exportSuccess'));
       } catch {
         // handled by store
@@ -537,7 +564,7 @@ export const AuditLogs: React.FC = () => {
         setIsExporting(false);
       }
     },
-    [tenantId, viewMode, exportLogs, buildGenericParams, message, t]
+    [tenantId, viewMode, exportLogs, buildGenericParams, buildRuntimeHookParams, message, t]
   );
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
@@ -653,32 +680,28 @@ export const AuditLogs: React.FC = () => {
             <RefreshCw size={16} />
           </button>
 
-          {viewMode === 'all' && (
-            <>
-              <button
-                type="button"
-                disabled={isExporting}
-                onClick={() => {
-                  void handleExport('csv');
-                }}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50"
-              >
-                <Download size={16} />
-                {t('tenant.auditLogs.exportCsv')}
-              </button>
-              <button
-                type="button"
-                disabled={isExporting}
-                onClick={() => {
-                  void handleExport('json');
-                }}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
-              >
-                <Braces size={16} />
-                {t('tenant.auditLogs.exportJson')}
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            disabled={isExporting}
+            onClick={() => {
+              void handleExport('csv');
+            }}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors disabled:opacity-50"
+          >
+            <Download size={16} />
+            {t('tenant.auditLogs.exportCsv')}
+          </button>
+          <button
+            type="button"
+            disabled={isExporting}
+            onClick={() => {
+              void handleExport('json');
+            }}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+          >
+            <Braces size={16} />
+            {t('tenant.auditLogs.exportJson')}
+          </button>
         </div>
       </div>
 
@@ -813,9 +836,38 @@ export const AuditLogs: React.FC = () => {
               options={runtimeHookIsolationOptions}
               placeholder={t('tenant.auditLogs.runtimeHookSummary.filterIsolationMode')}
             />
+            <button
+              type="button"
+              onClick={clearCurrentFilters}
+              aria-label={t('tenant.auditLogs.clearFilters')}
+              title={t('tenant.auditLogs.clearFilters')}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              <FilterX size={16} />
+            </button>
           </div>
         ) : (
           <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1">
+              <Search
+                id="audit-actor-search"
+                aria-label={t('tenant.auditLogs.filterActorPlaceholder')}
+                placeholder={t('tenant.auditLogs.filterActorPlaceholder')}
+                value={actorFilter}
+                onChange={(e) => {
+                  setCurrentPage(1);
+                  setSelectedEntry(null);
+                  setActorFilter(e.target.value);
+                }}
+                allowClear
+                enterButton={
+                  <>
+                    <span className="sr-only">{t('common.search', 'Search')}</span>
+                    <SearchIcon size={16} aria-hidden="true" />
+                  </>
+                }
+              />
+            </div>
             <div className="flex-1">
               <Search
                 id="audit-action-search"
@@ -849,6 +901,7 @@ export const AuditLogs: React.FC = () => {
               placeholder={t('tenant.auditLogs.filterResourceType')}
             />
             <DatePicker
+              key={`from-${String(datePickerResetKey)}`}
               aria-label={t('tenant.auditLogs.filterFromDate')}
               placeholder={t('tenant.auditLogs.filterFromDate')}
               className="w-full sm:w-40"
@@ -859,6 +912,7 @@ export const AuditLogs: React.FC = () => {
               }}
             />
             <DatePicker
+              key={`to-${String(datePickerResetKey)}`}
               aria-label={t('tenant.auditLogs.filterToDate')}
               placeholder={t('tenant.auditLogs.filterToDate')}
               className="w-full sm:w-40"
@@ -868,6 +922,15 @@ export const AuditLogs: React.FC = () => {
                 setToDate(typeof dateString === 'string' ? dateString : '');
               }}
             />
+            <button
+              type="button"
+              onClick={clearCurrentFilters}
+              aria-label={t('tenant.auditLogs.clearFilters')}
+              title={t('tenant.auditLogs.clearFilters')}
+              className="inline-flex items-center justify-center gap-2 px-3 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              <FilterX size={16} />
+            </button>
           </div>
         )}
       </div>
@@ -1165,7 +1228,7 @@ export const AuditLogs: React.FC = () => {
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  IP
+                  {t('tenant.auditLogs.ipAddress')}
                 </p>
                 <p className="text-sm text-slate-900 dark:text-white font-mono">
                   {selectedEntry.ip_address ?? '-'}
@@ -1176,7 +1239,7 @@ export const AuditLogs: React.FC = () => {
             {selectedEntry.user_agent && (
               <div>
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  User Agent
+                  {t('tenant.auditLogs.userAgent')}
                 </p>
                 <p className="text-sm text-slate-600 dark:text-slate-300 break-all">
                   {selectedEntry.user_agent}
