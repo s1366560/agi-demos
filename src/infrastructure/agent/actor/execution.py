@@ -177,6 +177,10 @@ _SKIP_PERSIST_EVENT_TYPES = {
     "text_start",
 }
 _MESSAGE_EVENT_TYPES = {"user_message", "assistant_message"}
+_TERMINAL_WORKSPACE_STATUS_MESSAGES = {
+    "goal_achieved:workspace_contract_submitted": "Workspace contract submitted.",
+    "goal_achieved:workspace_terminal_report": "Workspace terminal report submitted.",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +196,7 @@ class _EventSideEffects:
     is_error: bool = False
     error_message: str | None = None
     summary_data: dict[str, Any] | None = None
+    should_flush_events: bool = False
 
 
 @dataclass
@@ -240,6 +245,87 @@ def _sanitize_persistable_event(event: _PersistableEvent | None) -> _Persistable
     )
 
 
+def _terminal_workspace_status_event(
+    event_data: dict[str, Any],
+    *,
+    event_time_us: int,
+    event_counter: int,
+    has_assistant_message: bool,
+) -> tuple[_PersistableEvent | None, bool]:
+    """Build a visible history item for terminal workspace status events."""
+    status = str(event_data.get("status", ""))
+    content = _TERMINAL_WORKSPACE_STATUS_MESSAGES.get(status)
+    if not content or has_assistant_message:
+        return None, False
+    return (
+        _PersistableEvent(
+            event_type="assistant_message",
+            event_data={
+                "content": content,
+                "message_id": str(uuid.uuid4()),
+                "role": "assistant",
+                "source": "terminal_workspace_status",
+                "status": status,
+            },
+            event_time_us=event_time_us,
+            event_counter=event_counter,
+        ),
+        True,
+    )
+
+
+def _complete_event_for_persistence(
+    raw_event_data: dict[str, Any],
+    event_data: dict[str, Any],
+    *,
+    event_time_us: int,
+    event_counter: int,
+    has_text_end_messages: bool,
+    has_complete_assistant_message: bool,
+) -> tuple[_PersistableEvent | None, bool]:
+    """Build persistence payload for complete events."""
+    if not (has_text_end_messages or has_complete_assistant_message):
+        content = str(event_data.get("content", "")).strip()
+        has_completion_metadata = any(
+            raw_event_data.get(field)
+            for field in ("artifacts", "trace_url", "execution_summary")
+        )
+        if not (content or has_completion_metadata):
+            return None, False
+        complete_event_data: dict[str, Any] = {
+            "content": content,
+            "message_id": str(uuid.uuid4()),
+            "role": "assistant",
+            "source": "complete",
+        }
+        if raw_event_data.get("artifacts"):
+            complete_event_data["artifacts"] = raw_event_data["artifacts"]
+        if raw_event_data.get("trace_url"):
+            complete_event_data["trace_url"] = raw_event_data["trace_url"]
+        if raw_event_data.get("execution_summary"):
+            complete_event_data["execution_summary"] = raw_event_data["execution_summary"]
+        return (
+            _PersistableEvent(
+                event_type="assistant_message",
+                event_data=complete_event_data,
+                event_time_us=event_time_us,
+                event_counter=event_counter,
+            ),
+            True,
+        )
+    if has_text_end_messages:
+        return (
+            _PersistableEvent(
+                event_type="complete",
+                event_data=event_data,
+                event_time_us=event_time_us,
+                event_counter=event_counter,
+            ),
+            False,
+        )
+    return None, False
+
+
 def _extract_event_side_effects(event: dict[str, Any]) -> _EventSideEffects:
     """Extract side-effect information from a streaming event.
 
@@ -254,6 +340,9 @@ def _extract_event_side_effects(event: dict[str, Any]) -> _EventSideEffects:
     elif event_type == "error":
         side.is_error = True
         side.error_message = event.get("data", {}).get("message", "Unknown error")
+    elif event_type == "status":
+        status = event.get("data", {}).get("status")
+        side.should_flush_events = status in _TERMINAL_WORKSPACE_STATUS_MESSAGES
     elif event_type == "context_summary_generated":
         side.summary_data = event.get("data")
     elif event_type == "mcp_app_result":
@@ -332,6 +421,29 @@ async def _flush_remaining_events(
             events=remaining,
             correlation_id=correlation_id,
         )
+
+
+async def _flush_if_requested(
+    side_effects: _EventSideEffects,
+    state: _StreamState,
+    *,
+    conversation_id: str,
+    message_id: str,
+    correlation_id: str | None,
+    last_persist: float,
+) -> None:
+    """Persist terminal events immediately so cancellation cannot hide them."""
+    if not side_effects.should_flush_events or state.persisted_count >= len(state.events):
+        return
+    await _flush_remaining_events(
+        state.events,
+        state.persisted_count,
+        conversation_id,
+        message_id,
+        correlation_id,
+    )
+    state.persisted_count = len(state.events)
+    state.last_persist = last_persist
 
 
 def _record_chat_metrics(
@@ -701,7 +813,8 @@ async def execute_project_chat(
                 redis_client=redis_client,
             )
 
-            ss.apply_side_effects(_extract_event_side_effects(event))
+            side_effects = _extract_event_side_effects(event)
+            ss.apply_side_effects(side_effects)
 
             now = time_module.time()
             ss.last_refresh = await _maybe_refresh_ttl(
@@ -717,6 +830,14 @@ async def execute_project_chat(
                 request.conversation_id,
                 request.message_id,
                 request.correlation_id,
+            )
+            await _flush_if_requested(
+                side_effects,
+                ss,
+                conversation_id=request.conversation_id,
+                message_id=request.message_id,
+                correlation_id=request.correlation_id,
+                last_persist=now,
             )
 
         await _flush_remaining_events(
@@ -942,7 +1063,8 @@ async def continue_project_chat(
                 redis_client=redis_client,
             )
 
-            ss.apply_side_effects(_extract_event_side_effects(event))
+            side_effects = _extract_event_side_effects(event)
+            ss.apply_side_effects(side_effects)
 
             now = time_module.time()
             ss.last_refresh = await _maybe_refresh_ttl(
@@ -958,6 +1080,14 @@ async def continue_project_chat(
                 state.conversation_id,
                 state.message_id,
                 state.correlation_id,
+            )
+            await _flush_if_requested(
+                side_effects,
+                ss,
+                conversation_id=state.conversation_id,
+                message_id=state.message_id,
+                correlation_id=state.correlation_id,
+                last_persist=now,
             )
 
         await _flush_remaining_events(
@@ -1190,37 +1320,28 @@ def _prepare_event_for_persistence(
                     )
                     next_has_text_end_messages = True
             elif event_type == "complete":
-                if not (has_text_end_messages or has_complete_assistant_message):
-                    content = str(event_data.get("content", "")).strip()
-                    has_completion_metadata = any(
-                        raw_event_data.get(field)
-                        for field in ("artifacts", "trace_url", "execution_summary")
-                    )
-                    if content or has_completion_metadata:
-                        complete_event_data: dict[str, Any] = {
-                            "content": content,
-                            "message_id": str(uuid.uuid4()),
-                            "role": "assistant",
-                            "source": "complete",
-                        }
-                        if raw_event_data.get("artifacts"):
-                            complete_event_data["artifacts"] = raw_event_data["artifacts"]
-                        if raw_event_data.get("trace_url"):
-                            complete_event_data["trace_url"] = raw_event_data["trace_url"]
-                        if raw_event_data.get("execution_summary"):
-                            complete_event_data["execution_summary"] = raw_event_data[
-                                "execution_summary"
-                            ]
-                        persistable_event = _PersistableEvent(
-                            event_type="assistant_message",
-                            event_data=complete_event_data,
-                            event_time_us=evt_time_us,
-                            event_counter=evt_counter,
-                        )
-                        next_has_complete_assistant_message = True
-                elif has_text_end_messages:
+                persistable_event, complete_created_message = _complete_event_for_persistence(
+                    raw_event_data,
+                    event_data,
+                    event_time_us=evt_time_us,
+                    event_counter=evt_counter,
+                    has_text_end_messages=has_text_end_messages,
+                    has_complete_assistant_message=has_complete_assistant_message,
+                )
+                if complete_created_message:
+                    next_has_complete_assistant_message = True
+            elif event_type == "status":
+                persistable_event, status_created_message = _terminal_workspace_status_event(
+                    event_data,
+                    event_time_us=evt_time_us,
+                    event_counter=evt_counter,
+                    has_assistant_message=(has_text_end_messages or has_complete_assistant_message),
+                )
+                if status_created_message:
+                    next_has_complete_assistant_message = True
+                if persistable_event is None:
                     persistable_event = _PersistableEvent(
-                        event_type="complete",
+                        event_type=event_type,
                         event_data=event_data,
                         event_time_us=evt_time_us,
                         event_counter=evt_counter,
