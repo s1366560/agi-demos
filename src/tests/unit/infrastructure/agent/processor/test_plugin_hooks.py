@@ -8,12 +8,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.infrastructure.agent.core.message import ToolPart, ToolState
 from src.infrastructure.agent.plugins.registry import AgentPluginRegistry, HookDispatchResult
 from src.infrastructure.agent.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,
 )
+from src.infrastructure.agent.tools.result import ToolResult
 
 
 def _make_registry(hook_side_effect=None):
@@ -143,6 +145,58 @@ class TestNotifyPluginHookHelper:
         assert fields["task_authority"] == "workspace"
         assert fields["workspace_id"] == "ws-1"
         assert fields["runtime_context"]["workspace_session_role"] == "worker"
+
+    def test_runtime_hook_context_exposes_conversation_id(self):
+        """Tool hooks need a stable turn key shared with after_turn_complete."""
+        proc = _make_processor(registry=None)
+        proc._langfuse_context = {"conversation_id": "conv-1"}
+
+        fields = proc._runtime_hook_context_fields()
+
+        assert fields["conversation_id"] == "conv-1"
+
+    async def test_after_tool_execution_includes_tool_result_metadata(self):
+        """Skill evolution needs skill_loader metadata for dynamic skill attribution."""
+
+        async def execute(**kwargs):
+            return ToolResult(
+                output="loaded",
+                metadata={"name": "dynamic-skill", "skill_id": "skill-1"},
+            )
+
+        registry = _make_registry()
+        tool = ToolDefinition(
+            name="skill_loader",
+            description="Load a skill",
+            parameters={"type": "object", "properties": {}, "required": []},
+            execute=execute,
+        )
+        proc = _make_processor(registry=registry, tools=[tool])
+        proc._langfuse_context = {"conversation_id": "conv-1"}
+        proc._pending_tool_calls["call-1"] = ToolPart(
+            call_id="call-1",
+            tool="skill_loader",
+            input={"name": "dynamic-skill"},
+            status=ToolState.RUNNING,
+        )
+
+        async for _event in proc._execute_tool(
+            "sess-1",
+            "call-1",
+            "skill_loader",
+            {"name": "dynamic-skill"},
+        ):
+            pass
+
+        after_tool_call = next(
+            call for call in registry.apply_hook.call_args_list if call.args[0] == "after_tool_execution"
+        )
+        payload = after_tool_call.kwargs["payload"]
+        assert payload["conversation_id"] == "conv-1"
+        assert payload["result_metadata"] == {
+            "name": "dynamic-skill",
+            "skill_id": "skill-1",
+        }
 
 
 @pytest.mark.unit

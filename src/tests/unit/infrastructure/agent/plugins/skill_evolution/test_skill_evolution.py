@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import tempfile
 from pathlib import Path
@@ -83,9 +84,7 @@ class TestSkillSessionGroup:
         )
 
         group = SkillSessionGroup(skill_name="test-skill")
-        for i, (success, score) in enumerate(
-            [(True, 0.9), (False, 0.5), (True, 0.8)]
-        ):
+        for i, (success, score) in enumerate([(True, 0.9), (False, 0.5), (True, 0.8)]):
             group.add(
                 SkillEvolutionSession(
                     id=f"s{i}",
@@ -169,6 +168,91 @@ class TestSessionCollector:
         assert trajectory["tool_call_count"] == 1
         assert trajectory["user_query"] == "read the file"
 
+    @pytest.mark.asyncio
+    async def test_capture_from_hook_records_loaded_skill_names(self, monkeypatch) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution import (
+            session_collector as collector_module,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.session_collector import (
+            SessionCollector,
+        )
+
+        class FakeSessionContext:
+            async def __aenter__(self) -> FakeSessionContext:
+                return self
+
+            async def __aexit__(self, *args: object) -> None:
+                return None
+
+            async def commit(self) -> None:
+                return None
+
+        repo = MagicMock()
+        repo.save_session = AsyncMock()
+        monkeypatch.setattr(collector_module, "_get_repo", lambda _db: repo)
+
+        await SessionCollector(SkillEvolutionConfig()).capture_from_hook(
+            {
+                "tenant_id": "t1",
+                "project_id": "p1",
+                "conversation_id": "c1",
+                "user_message": "use loaded skills",
+                "final_content": "done",
+                "loaded_skill_names": ["dynamic-a", "dynamic-b", "dynamic-a"],
+                "conversation_context": [{"role": "assistant", "content": "done"}],
+                "success": True,
+            },
+            session_factory=lambda: FakeSessionContext(),
+        )
+
+        saved_sessions = [call.args[0] for call in repo.save_session.await_args_list]
+        assert [session.skill_name for session in saved_sessions] == [
+            "dynamic-a",
+            "dynamic-b",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_matched_skill_takes_precedence_over_loaded_skill_names(
+        self, monkeypatch
+    ) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution import (
+            session_collector as collector_module,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.session_collector import (
+            SessionCollector,
+        )
+
+        class FakeSessionContext:
+            async def __aenter__(self) -> FakeSessionContext:
+                return self
+
+            async def __aexit__(self, *args: object) -> None:
+                return None
+
+            async def commit(self) -> None:
+                return None
+
+        repo = MagicMock()
+        repo.save_session = AsyncMock()
+        monkeypatch.setattr(collector_module, "_get_repo", lambda _db: repo)
+
+        await SessionCollector(SkillEvolutionConfig()).capture_from_hook(
+            {
+                "tenant_id": "t1",
+                "conversation_id": "c1",
+                "user_message": "forced skill",
+                "final_content": "done",
+                "matched_skill_name": "forced-skill",
+                "loaded_skill_names": ["dynamic-skill"],
+                "conversation_context": [],
+                "success": True,
+            },
+            session_factory=lambda: FakeSessionContext(),
+        )
+
+        saved_sessions = [call.args[0] for call in repo.save_session.await_args_list]
+        assert [session.skill_name for session in saved_sessions] == ["forced-skill"]
+
 
 class TestSessionSummarizer:
     @pytest.mark.asyncio
@@ -229,6 +313,67 @@ class TestSessionSummarizer:
             ]
         }
         assert summary == "The skill needs clearer verification guidance."
+
+    @pytest.mark.asyncio
+    async def test_summarize_falls_back_when_llm_returns_non_json(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.summarizer import (
+            SessionSummarizer,
+        )
+
+        llm_client = MagicMock()
+        llm_client.generate = AsyncMock(return_value={"content": "not json"})
+        session = SkillEvolutionSession(
+            id="s-fallback",
+            skill_name="test-skill",
+            tenant_id="t1",
+            conversation_id="c1",
+            user_query="query",
+            trajectory={"steps": [], "final_response": "done"},
+            success=True,
+        )
+
+        trajectory, summary = await SessionSummarizer(SkillEvolutionConfig())._summarize_one(
+            session, llm_client
+        )
+
+        assert trajectory == {"steps": [], "final_response": "done"}
+        assert "Automatic fallback summary" in summary
+        assert "not json" in summary
+
+
+class TestSessionJudge:
+    @pytest.mark.asyncio
+    async def test_judge_falls_back_when_llm_returns_non_json(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.session_judge import (
+            SessionJudge,
+        )
+
+        llm_client = MagicMock()
+        llm_client.generate = AsyncMock(return_value={"content": "plain text"})
+        session = SkillEvolutionSession(
+            id="j-fallback",
+            skill_name="test-skill",
+            tenant_id="t1",
+            conversation_id="c1",
+            user_query="query",
+            summary="summary",
+            trajectory={"steps": []},
+            success=True,
+            tool_call_count=1,
+        )
+
+        scores, overall = await SessionJudge(SkillEvolutionConfig())._judge_one(session, llm_client)
+
+        assert scores["task_completion"] == 0.65
+        assert scores["tool_usage"] == 0.55
+        assert "Automatic fallback score" in str(scores["rationale"])
+        assert 0.0 < overall < 1.0
 
 
 class TestSkillMerger:
@@ -442,6 +587,242 @@ class TestHookRegistration:
         )
         assert plugin.config.enabled is False
 
+    @pytest.mark.asyncio
+    async def test_skill_loader_hook_attributes_next_turn_capture(self) -> None:
+        from src.infrastructure.agent.plugins.registry import AgentPluginRegistry
+        from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
+        from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
+        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
+            _after_tool_execution,
+            _after_turn_complete,
+        )
+
+        collector = MagicMock()
+        collector.capture_from_hook = AsyncMock()
+        previous_collector = plugin_module._collector
+        previous_session_factory = plugin_module._session_factory
+        plugin_module._collector = collector
+        plugin_module._session_factory = object()
+        plugin_module._loaded_skill_names_by_turn.clear()
+
+        registry = AgentPluginRegistry()
+        api = PluginRuntimeApi("skill-evolution", registry=registry)
+        api.register_hook("after_tool_execution", _after_tool_execution)
+        api.register_hook("after_turn_complete", _after_turn_complete)
+
+        try:
+            await registry.apply_hook(
+                "after_tool_execution",
+                payload={
+                    "tool_name": "skill_loader",
+                    "conversation_id": "conv-1",
+                    "result_metadata": {"name": "dynamic-skill"},
+                },
+            )
+            await registry.apply_hook(
+                "after_turn_complete",
+                payload={
+                    "tenant_id": "t1",
+                    "conversation_id": "conv-1",
+                    "user_message": "use the dynamic skill",
+                    "final_content": "done",
+                    "conversation_context": [],
+                    "success": True,
+                },
+            )
+        finally:
+            plugin_module._collector = previous_collector
+            plugin_module._session_factory = previous_session_factory
+            plugin_module._loaded_skill_names_by_turn.clear()
+
+        captured_payload = collector.capture_from_hook.await_args.args[0]
+        assert captured_payload["loaded_skill_names"] == ["dynamic-skill"]
+
+    @pytest.mark.asyncio
+    async def test_after_turn_capture_schedules_autonomous_evolution(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution import plugin as plugin_module
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.plugin import (
+            _after_turn_complete,
+        )
+
+        collector = MagicMock()
+        collector.capture_from_hook = AsyncMock(
+            return_value=[
+                SkillEvolutionSession(
+                    id="evs-1",
+                    skill_name="dynamic-skill",
+                    tenant_id="tenant-1",
+                    project_id="project-1",
+                    conversation_id="conv-1",
+                    user_query="use skill",
+                ),
+                SkillEvolutionSession(
+                    id="evs-2",
+                    skill_name="__no_skill__",
+                    tenant_id="tenant-1",
+                    conversation_id="conv-2",
+                    user_query="plain chat",
+                ),
+            ]
+        )
+        scheduler = MagicMock()
+        previous_collector = plugin_module._collector
+        previous_session_factory = plugin_module._session_factory
+        previous_scheduler = plugin_module._scheduler
+        plugin_module._collector = collector
+        plugin_module._session_factory = object()
+        plugin_module._scheduler = scheduler
+
+        try:
+            await _after_turn_complete(
+                {
+                    "tenant_id": "tenant-1",
+                    "conversation_id": "conv-1",
+                    "user_message": "use skill",
+                    "final_content": "done",
+                    "conversation_context": [],
+                    "success": True,
+                }
+            )
+        finally:
+            plugin_module._collector = previous_collector
+            plugin_module._session_factory = previous_session_factory
+            plugin_module._scheduler = previous_scheduler
+
+        scheduler.schedule_run.assert_called_once_with(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            skill_name="dynamic-skill",
+            reason="capture",
+        )
+
+
+class TestEvolutionScheduler:
+    def _make_scheduler(self, session_factory=None):
+        from src.infrastructure.agent.plugins.skill_evolution.scheduler import (
+            EvolutionScheduler,
+        )
+
+        return EvolutionScheduler(
+            config=SkillEvolutionConfig(enabled=True, evolution_interval_minutes=60),
+            summarizer=MagicMock(),
+            judge=MagicMock(),
+            aggregator=MagicMock(),
+            engine=MagicMock(),
+            llm_provider_manager=MagicMock(),
+            session_factory=session_factory or MagicMock(),
+        )
+
+    @pytest.mark.asyncio
+    async def test_capture_requests_are_coalesced_per_tenant_project_skill(self) -> None:
+        scheduler = self._make_scheduler()
+        scheduler._running = True
+        scheduler._execute_cycle = AsyncMock(return_value={"jobs": 1})
+
+        first = scheduler.schedule_run(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            skill_name="skill-a",
+            delay_seconds=0,
+        )
+        second = scheduler.schedule_run(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            skill_name="skill-a",
+            delay_seconds=0,
+        )
+
+        assert first is True
+        assert second is False
+        await asyncio.gather(*list(scheduler._pending_tasks.values()))
+        scheduler._execute_cycle.assert_awaited_once_with(
+            tenant_id="tenant-1",
+            project_id="project-1",
+            skill_name="skill-a",
+        )
+
+    @pytest.mark.asyncio
+    async def test_start_schedules_startup_sweep_without_waiting_for_interval(self) -> None:
+        scheduler = self._make_scheduler()
+        scheduler._execute_all_tenants = AsyncMock()
+
+        await scheduler.start()
+        await asyncio.sleep(0.2)
+        await scheduler.stop()
+
+        scheduler._execute_all_tenants.assert_awaited_once_with(reason="startup")
+
+    @pytest.mark.asyncio
+    async def test_saturated_batch_schedules_backlog_continuation(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.scheduler import (
+            _EvolutionRunRequest,
+        )
+
+        scheduler = self._make_scheduler()
+        scheduler._running = True
+        scheduler._delayed_execute_request = AsyncMock()
+
+        scheduler._schedule_backlog_continuation(
+            _EvolutionRunRequest("tenant-1"),
+            {"summarized": scheduler._config.max_sessions_per_batch, "judged": 0},
+        )
+
+        assert len(scheduler._pending_tasks) == 1
+        await asyncio.gather(*list(scheduler._pending_tasks.values()))
+        scheduler._delayed_execute_request.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_discover_tenants_orders_by_captured_session_volume(self) -> None:
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+
+        with tempfile.TemporaryDirectory(prefix="skill-evolution-tenants-") as tmp:
+            engine = create_async_engine(f"sqlite+aiosqlite:///{Path(tmp) / 'tenants.db'}")
+            session_factory = async_sessionmaker(engine, expire_on_commit=False)
+            async with engine.begin() as conn:
+                await conn.run_sync(
+                    lambda sync_conn: SkillEvolutionSession.__table__.create(
+                        sync_conn,
+                        checkfirst=True,
+                    )
+                )
+
+            async with session_factory() as db:
+                db.add_all(
+                    [
+                        SkillEvolutionSession(
+                            id=f"large-{i}",
+                            skill_name="skill-a",
+                            tenant_id="tenant-large",
+                            conversation_id=f"conv-large-{i}",
+                            user_query="q",
+                        )
+                        for i in range(3)
+                    ]
+                    + [
+                        SkillEvolutionSession(
+                            id="small-1",
+                            skill_name="skill-b",
+                            tenant_id="tenant-small",
+                            conversation_id="conv-small-1",
+                            user_query="q",
+                        )
+                    ]
+                )
+                await db.commit()
+
+            scheduler = self._make_scheduler(session_factory=session_factory)
+            tenants = await scheduler._discover_tenants()
+            await engine.dispose()
+
+        assert tenants[:2] == ["tenant-large", "tenant-small"]
+
 
 class TestSkillEvolutionEndToEnd:
     @pytest.mark.asyncio
@@ -549,9 +930,7 @@ class TestSkillEvolutionEndToEnd:
                     SkillEvolutionJob.__table__,
                 ):
                     await conn.run_sync(
-                        lambda sync_conn, table=table: table.create(
-                            sync_conn, checkfirst=True
-                        )
+                        lambda sync_conn, table=table: table.create(sync_conn, checkfirst=True)
                     )
 
             async with session_factory() as db:
@@ -624,9 +1003,7 @@ class TestSkillEvolutionEndToEnd:
                 ).scalar_one()
                 job = (
                     await db.execute(
-                        select(SkillEvolutionJob).where(
-                            SkillEvolutionJob.skill_name == skill_name
-                        )
+                        select(SkillEvolutionJob).where(SkillEvolutionJob.skill_name == skill_name)
                     )
                 ).scalar_one()
                 version = (

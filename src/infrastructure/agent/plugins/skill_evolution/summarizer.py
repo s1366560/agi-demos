@@ -64,9 +64,7 @@ class SessionSummarizer:
         count = 0
         for session in sessions:
             try:
-                trajectory, summary_text = await self._summarize_one(
-                    session, llm_client
-                )
+                trajectory, summary_text = await self._summarize_one(session, llm_client)
                 await repo.update_summary(
                     session.id,
                     trajectory=trajectory,
@@ -74,9 +72,7 @@ class SessionSummarizer:
                 )
                 count += 1
             except Exception:
-                logger.exception(
-                    "Failed to summarize session %s", session.id
-                )
+                logger.exception("Failed to summarize session %s", session.id)
         if count:
             logger.info("Summarized %d skill evolution sessions", count)
         return count
@@ -87,9 +83,7 @@ class SessionSummarizer:
         llm_client: LLMClient,
     ) -> tuple[dict[str, Any], str]:
         raw_trajectory = session.trajectory or {}
-        steps_json = json.dumps(
-            raw_trajectory.get("steps", []), ensure_ascii=False
-        )
+        steps_json = json.dumps(raw_trajectory.get("steps", []), ensure_ascii=False)
 
         user_prompt = (
             f"Skill: {session.skill_name}\n"
@@ -111,7 +105,14 @@ class SessionSummarizer:
         )
 
         content = _extract_content(response)
-        parsed = json.loads(content)
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            logger.warning(
+                "Skill evolution summarizer received non-JSON response for session %s",
+                session.id,
+            )
+            return _fallback_summary(session, raw_trajectory, content)
 
         trajectory = parsed.get("trajectory", raw_trajectory)
         if isinstance(trajectory, list):
@@ -121,6 +122,22 @@ class SessionSummarizer:
         summary = parsed.get("summary", "")
 
         return trajectory, summary
+
+
+def _fallback_summary(
+    session: SkillEvolutionSession,
+    raw_trajectory: dict[str, Any],
+    content: str,
+) -> tuple[dict[str, Any], str]:
+    trajectory = raw_trajectory if isinstance(raw_trajectory, dict) else {}
+    final_response = str(trajectory.get("final_response", "")).strip()
+    response_note = f" Final response: {final_response[:500]}" if final_response else ""
+    content_note = f" Raw model response: {content[:300]}" if content else ""
+    summary = (
+        "Automatic fallback summary: the summarizer model did not return valid JSON. "
+        f"User query: {session.user_query[:500]}.{response_note}{content_note}"
+    )
+    return trajectory, summary
 
 
 def _extract_content(response: dict[str, Any]) -> str:

@@ -253,6 +253,16 @@ def _apply_manifest_metadata(current: dict[str, Any], metadata: dict[str, Any] |
         current["command_aliases"] = [
             dict(item) for item in command_aliases if isinstance(item, dict)
         ]
+    skill_definitions = metadata.get("skill_definitions")
+    if isinstance(skill_definitions, list):
+        current["skill_definitions"] = [
+            dict(item) for item in skill_definitions if isinstance(item, dict)
+        ]
+    tool_definitions = metadata.get("tool_definitions")
+    if isinstance(tool_definitions, list):
+        current["tool_definitions"] = [
+            dict(item) for item in tool_definitions if isinstance(item, dict)
+        ]
     tool_metadata = metadata.get("tool_metadata")
     if isinstance(tool_metadata, dict):
         current["tool_metadata"] = _normalize_object_map(tool_metadata)

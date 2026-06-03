@@ -173,6 +173,104 @@ class _MemoryEvolutionRepository:
             if session.tenant_id == tenant_id and session.skill_name == skill_name
         )
 
+    async def get_overview_stats(self, *, tenant_id: str) -> dict[str, object]:
+        sessions = [
+            session
+            for session in self._db.evolution_sessions
+            if session.tenant_id == tenant_id
+        ]
+        jobs = [
+            job for job in self._db.evolution_jobs if job.tenant_id == tenant_id
+        ]
+        scores = [
+            session.overall_score
+            for session in sessions
+            if getattr(session, "overall_score", None) is not None
+        ]
+        return {
+            "total_sessions": len(sessions),
+            "skill_sessions": sum(1 for s in sessions if s.skill_name != "__no_skill__"),
+            "no_skill_sessions": sum(1 for s in sessions if s.skill_name == "__no_skill__"),
+            "unprocessed_sessions": sum(1 for s in sessions if not s.processed),
+            "processed_sessions": sum(1 for s in sessions if s.processed),
+            "scored_sessions": len(scores),
+            "successful_sessions": sum(1 for s in sessions if s.success),
+            "avg_score": sum(scores) / len(scores) if scores else None,
+            "total_jobs": len(jobs),
+            "pending_jobs": sum(1 for j in jobs if j.status == "pending_review"),
+            "applied_jobs": sum(1 for j in jobs if j.status == "applied"),
+            "skipped_jobs": sum(1 for j in jobs if j.status == "skipped"),
+        }
+
+    async def get_skill_session_summaries(
+        self,
+        *,
+        tenant_id: str,
+        limit: int = 50,
+    ) -> list[dict[str, object]]:
+        sessions = [
+            session
+            for session in self._db.evolution_sessions
+            if session.tenant_id == tenant_id
+        ]
+        jobs = [
+            job for job in self._db.evolution_jobs if job.tenant_id == tenant_id
+        ]
+        summaries: list[dict[str, object]] = []
+        for skill_name in sorted({session.skill_name for session in sessions}):
+            skill_sessions = [session for session in sessions if session.skill_name == skill_name]
+            skill_jobs = [job for job in jobs if job.skill_name == skill_name]
+            scores = [
+                session.overall_score
+                for session in skill_sessions
+                if getattr(session, "overall_score", None) is not None
+            ]
+            summaries.append(
+                {
+                    "skill_name": skill_name,
+                    "session_count": len(skill_sessions),
+                    "success_count": sum(1 for session in skill_sessions if session.success),
+                    "unprocessed_count": sum(
+                        1 for session in skill_sessions if not session.processed
+                    ),
+                    "scored_count": len(scores),
+                    "avg_score": sum(scores) / len(scores) if scores else None,
+                    "latest_session_at": max(
+                        session.created_at for session in skill_sessions
+                    ),
+                    "job_count": len(skill_jobs),
+                    "pending_job_count": sum(
+                        1 for job in skill_jobs if job.status == "pending_review"
+                    ),
+                    "latest_job_at": (
+                        max(job.created_at for job in skill_jobs) if skill_jobs else None
+                    ),
+                }
+            )
+        return sorted(
+            summaries,
+            key=lambda summary: (
+                summary["skill_name"] == "__no_skill__",
+                -int(summary["session_count"]),
+                str(summary["skill_name"]),
+            ),
+        )[:limit]
+
+    async def list_recent_sessions(
+        self,
+        *,
+        tenant_id: str,
+        skill_name: str | None = None,
+        limit: int = 50,
+    ) -> list[SimpleNamespace]:
+        sessions = [
+            session
+            for session in self._db.evolution_sessions
+            if session.tenant_id == tenant_id
+            and (skill_name is None or session.skill_name == skill_name)
+        ]
+        return sorted(sessions, key=lambda session: session.created_at, reverse=True)[:limit]
+
 
 @pytest.mark.unit
 async def test_create_skill_sanitizes_domain_validation_error(
@@ -606,6 +704,86 @@ async def test_get_skill_evolution_returns_route_and_trigger_metadata(
     assert response.trigger.manual_trigger.endswith(f"/skills/{skill.id}/evolution/run")
     assert [entry.kind for entry in response.route] == ["version", "evolution_job"]
     assert response.jobs[0].rationale == "Observed repeated missing setup step"
+
+
+@pytest.mark.unit
+async def test_get_skill_evolution_overview_returns_global_capture_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created_at = datetime.now(UTC)
+    db = SimpleNamespace(
+        evolution_jobs=[
+            SimpleNamespace(
+                id="job-1",
+                tenant_id="tenant-1",
+                skill_name="alpha-skill",
+                action="improve_skill",
+                status="pending_review",
+                rationale="Missing setup step",
+                session_ids=["s1"],
+                skill_version_id=None,
+                created_at=created_at,
+                applied_at=None,
+            )
+        ],
+        evolution_sessions=[
+            SimpleNamespace(
+                id="s1",
+                tenant_id="tenant-1",
+                project_id="project-1",
+                skill_name="alpha-skill",
+                conversation_id="conv-1",
+                user_query="Use alpha",
+                summary="Strong run",
+                judge_scores={"overall": 0.9},
+                overall_score=0.9,
+                success=True,
+                execution_time_ms=1200,
+                tool_call_count=2,
+                processed=True,
+                created_at=created_at,
+            ),
+            SimpleNamespace(
+                id="s2",
+                tenant_id="tenant-1",
+                project_id=None,
+                skill_name="__no_skill__",
+                conversation_id="conv-2",
+                user_query="No skill",
+                summary=None,
+                judge_scores=None,
+                overall_score=None,
+                success=True,
+                execution_time_ms=300,
+                tool_call_count=0,
+                processed=False,
+                created_at=created_at,
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.skill_evolution.repository."
+        "SkillEvolutionRepository",
+        _MemoryEvolutionRepository,
+    )
+
+    response = await router.get_skill_evolution_overview(
+        skill_limit=20,
+        session_limit=20,
+        job_limit=20,
+        db=db,
+        tenant={"id": "tenant-1"},
+    )
+
+    assert response.stats.total_sessions == 2
+    assert response.stats.skill_sessions == 1
+    assert response.stats.no_skill_sessions == 1
+    assert response.stats.pending_jobs == 1
+    assert response.skills[0].skill_name == "alpha-skill"
+    assert response.skills[0].session_count == 1
+    assert response.recent_sessions[0].id in {"s1", "s2"}
+    assert response.recent_jobs[0].id == "job-1"
+    assert response.trigger.manual_trigger == "/api/v1/skills/{skill_id}/evolution/run"
 
 
 @pytest.mark.unit

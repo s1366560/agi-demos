@@ -1542,10 +1542,23 @@ def _register_skill_evolution_hook(registry: AgentPluginRegistry) -> None:
     """
     from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
     from src.infrastructure.agent.plugins.skill_evolution.plugin import (
+        _after_tool_execution,
         _after_turn_complete,
     )
 
     api = PluginRuntimeApi("skill-evolution", registry=registry)
+    api.register_hook(
+        "after_tool_execution",
+        _after_tool_execution,
+        hook_family="observer",
+        priority=30,
+        display_name="Skill evolution skill_loader tracking",
+        description=(
+            "Tracks skill_loader calls so dynamically loaded SKILL.md usage "
+            "can be attributed during after-turn evolution capture."
+        ),
+        overwrite=True,
+    )
     api.register_hook(
         "after_turn_complete",
         _after_turn_complete,

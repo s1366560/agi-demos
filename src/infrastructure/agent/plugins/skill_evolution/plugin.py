@@ -34,25 +34,33 @@ async def _after_turn_complete(payload: Mapping[str, Any]) -> dict[str, Any]:
     Checks whether a skill was matched during the turn and, if so,
     persists a SkillEvolutionSession for later evolution analysis.
     """
+    result_payload = dict(payload)
+    key = _turn_key(payload)
+    loaded_skill_names = _loaded_skill_names_by_turn.pop(key, []) if key else []
+    if loaded_skill_names and not result_payload.get("loaded_skill_names"):
+        result_payload["loaded_skill_names"] = loaded_skill_names
+
     collector = _get_collector()
     if collector is None:
-        return dict(payload)
+        return result_payload
 
     try:
-        await collector.capture_from_hook(
-            payload,
+        captured_sessions = await collector.capture_from_hook(
+            result_payload,
             session_factory=_get_session_factory(),
         )
+        _schedule_captured_sessions(captured_sessions)
     except Exception:
         logger.exception("Skill evolution session capture failed")
 
-    return dict(payload)
+    return result_payload
 
 
 _collector: Any = None
 _config: Any = None
 _session_factory: Any = None
 _scheduler: Any = None
+_loaded_skill_names_by_turn: dict[str, list[str]] = {}
 
 
 def _get_collector() -> Any:  # noqa: ANN401
@@ -61,6 +69,74 @@ def _get_collector() -> Any:  # noqa: ANN401
 
 def _get_session_factory() -> Any:  # noqa: ANN401
     return _session_factory
+
+
+def _get_scheduler() -> Any:  # noqa: ANN401
+    return _scheduler
+
+
+def _turn_key(payload: Mapping[str, Any]) -> str | None:
+    conversation_id = payload.get("conversation_id")
+    if isinstance(conversation_id, str) and conversation_id.strip():
+        return f"conversation:{conversation_id.strip()}"
+    session_id = payload.get("session_id")
+    if isinstance(session_id, str) and session_id.strip():
+        return f"session:{session_id.strip()}"
+    return None
+
+
+async def _after_tool_execution(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Hook handler: remember successful skill_loader calls for turn attribution."""
+    result_payload = dict(payload)
+    if payload.get("tool_name") != "skill_loader" or payload.get("error"):
+        return result_payload
+
+    metadata = payload.get("result_metadata")
+    if not isinstance(metadata, Mapping):
+        return result_payload
+
+    skill_name = metadata.get("name")
+    if not isinstance(skill_name, str) or not skill_name.strip():
+        return result_payload
+
+    key = _turn_key(payload)
+    if key is None:
+        return result_payload
+
+    loaded = _loaded_skill_names_by_turn.setdefault(key, [])
+    normalized = skill_name.strip()
+    if normalized not in loaded:
+        loaded.append(normalized)
+    result_payload["loaded_skill_names"] = list(loaded)
+    return result_payload
+
+
+def _schedule_captured_sessions(sessions: object) -> None:
+    scheduler = _get_scheduler()
+    if scheduler is None or not isinstance(sessions, list):
+        return
+
+    for session in sessions:
+        skill_name = getattr(session, "skill_name", None)
+        tenant_id = getattr(session, "tenant_id", None)
+        if (
+            not isinstance(skill_name, str)
+            or not skill_name.strip()
+            or skill_name == "__no_skill__"
+            or not isinstance(tenant_id, str)
+            or not tenant_id.strip()
+        ):
+            continue
+
+        try:
+            scheduler.schedule_run(
+                tenant_id=tenant_id.strip(),
+                project_id=getattr(session, "project_id", None),
+                skill_name=skill_name.strip(),
+                reason="capture",
+            )
+        except Exception:
+            logger.exception("Failed to schedule autonomous skill evolution for '%s'", skill_name)
 
 
 class SkillEvolutionPlugin:
@@ -138,6 +214,18 @@ class SkillEvolutionPlugin:
 
     def setup(self, api: PluginRuntimeApi) -> None:
         """Register hooks with the plugin runtime."""
+        api.register_hook(
+            "after_tool_execution",
+            _after_tool_execution,
+            hook_family="observer",
+            priority=30,
+            display_name="Skill evolution skill_loader tracking",
+            description=(
+                "Tracks skill_loader calls so dynamically loaded SKILL.md usage "
+                "can be attributed during after-turn evolution capture."
+            ),
+            overwrite=True,
+        )
         api.register_hook(
             "after_turn_complete",
             _after_turn_complete,

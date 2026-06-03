@@ -8,6 +8,8 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 from .discovery import DiscoveredPlugin, discover_plugins
@@ -155,6 +157,21 @@ class PluginRuntimeManager:
                         state_entry.get("command_aliases"),
                         plugin.command_aliases,
                     ),
+                    "skill_definitions": _coalesce_object_list(
+                        state_entry.get("skill_definitions"),
+                        _load_plugin_skill_definitions(plugin),
+                    ),
+                    "tool_definitions": _coalesce_tool_definitions(
+                        state_entry.get("tool_definitions"),
+                        contracts=_coalesce_string_list_map(
+                            state_entry.get("contracts"),
+                            plugin.contracts,
+                        ),
+                        tool_metadata=_coalesce_nested_dict(
+                            state_entry.get("tool_metadata"),
+                            plugin.tool_metadata,
+                        ),
+                    ),
                     "tool_metadata": _coalesce_nested_dict(
                         state_entry.get("tool_metadata"),
                         plugin.tool_metadata,
@@ -211,6 +228,21 @@ class PluginRuntimeManager:
                     "command_aliases": _coalesce_object_list(
                         state_entry.get("command_aliases"),
                         None,
+                    ),
+                    "skill_definitions": _coalesce_object_list(
+                        state_entry.get("skill_definitions"),
+                        None,
+                    ),
+                    "tool_definitions": _coalesce_tool_definitions(
+                        state_entry.get("tool_definitions"),
+                        contracts=_coalesce_string_list_map(
+                            state_entry.get("contracts"),
+                            None,
+                        ),
+                        tool_metadata=_coalesce_nested_dict(
+                            state_entry.get("tool_metadata"),
+                            None,
+                        ),
                     ),
                     "tool_metadata": _coalesce_nested_dict(
                         state_entry.get("tool_metadata"),
@@ -556,13 +588,57 @@ def _coalesce_nested_dict(
 
 def _coalesce_object_list(
     preferred: Any,
-    fallback: tuple[dict[str, Any], ...] | None,
+    fallback: Sequence[dict[str, Any]] | None,
 ) -> list[dict[str, Any]]:
     if isinstance(preferred, list):
         normalized = [dict(item) for item in preferred if isinstance(item, dict)]
         if normalized:
             return normalized
     return [dict(item) for item in fallback or ()]
+
+
+def _coalesce_tool_definitions(
+    preferred: Any,
+    *,
+    contracts: dict[str, list[str]],
+    tool_metadata: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    explicit = _coalesce_object_list(preferred, None)
+    if explicit:
+        return explicit
+
+    definitions: list[dict[str, Any]] = []
+    for tool_name in contracts.get("tools", []):
+        definition: dict[str, Any] = {"name": tool_name}
+        metadata = tool_metadata.get(tool_name)
+        if metadata:
+            definition["metadata"] = metadata
+        definitions.append(definition)
+    return definitions
+
+
+def _load_plugin_skill_definitions(plugin: DiscoveredPlugin) -> tuple[dict[str, Any], ...]:
+    if not plugin.skills or not plugin.manifest_path:
+        return ()
+
+    plugin_dir = Path(plugin.manifest_path).parent
+    definitions: list[dict[str, Any]] = []
+    for skill_name in plugin.skills:
+        skill_file = plugin_dir / skill_name / "SKILL.md"
+        if not skill_file.is_file():
+            continue
+        try:
+            content = skill_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        definitions.append(
+            {
+                "name": skill_name,
+                "path": str(skill_file),
+                "content": content,
+            }
+        )
+    return tuple(definitions)
 
 
 def _flatten_env_vars(value: dict[str, tuple[str, ...]] | None) -> list[str]:
@@ -579,6 +655,8 @@ def _extract_manifest_metadata(payload: dict[str, Any]) -> dict[str, Any]:
             "contracts",
             "activation",
             "command_aliases",
+            "skill_definitions",
+            "tool_definitions",
             "tool_metadata",
             "hook_metadata",
             "config_schema",

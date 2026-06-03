@@ -238,6 +238,8 @@ def test_list_plugins_includes_state_only_entries(
         "contracts": {},
         "activation": {},
         "command_aliases": [],
+        "skill_definitions": [],
+        "tool_definitions": [],
         "tool_metadata": {},
         "hook_metadata": {},
         "config_schema": {},
@@ -287,6 +289,10 @@ def test_list_plugins_includes_manifest_metadata(
     tmp_path,
 ) -> None:
     """list_plugins should expose manifest fields for discovered plugins."""
+    skill_dir = tmp_path / ".memstack" / "plugins" / "demo" / "demo-skill"
+    skill_dir.mkdir(parents=True)
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text("# Demo Skill\n\nUse the demo plugin skill.", encoding="utf-8")
     manager = PluginRuntimeManager(
         registry=AgentPluginRegistry(),
         state_store=PluginStateStore(base_path=tmp_path),
@@ -302,7 +308,7 @@ def test_list_plugins_includes_manifest_metadata(
                     version="0.2.0",
                     kind="channel",
                     manifest_id="demo-plugin",
-                    manifest_path="/tmp/.memstack/plugins/demo/memstack.plugin.json",
+                    manifest_path=str(skill_dir.parent / "memstack.plugin.json"),
                     channels=("feishu",),
                     providers=("demo-provider",),
                     skills=("demo-skill",),
@@ -337,6 +343,14 @@ def test_list_plugins_includes_manifest_metadata(
     assert plugins[0]["command_aliases"] == [
         {"name": "demo", "kind": "runtime-slash", "cliCommand": "demo"}
     ]
+    assert plugins[0]["skill_definitions"] == [
+        {
+            "name": "demo-skill",
+            "path": str(skill_file),
+            "content": "# Demo Skill\n\nUse the demo plugin skill.",
+        }
+    ]
+    assert plugins[0]["tool_definitions"] == [{"name": "demo_tool", "metadata": {"optional": True}}]
     assert plugins[0]["tool_metadata"] == {"demo_tool": {"optional": True}}
     assert plugins[0]["hook_metadata"] == {"before_tool_call": {"timeoutMs": 1000}}
     assert plugins[0]["config_schema"] == {"type": "object"}

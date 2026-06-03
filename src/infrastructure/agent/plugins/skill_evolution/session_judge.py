@@ -72,9 +72,7 @@ class SessionJudge:
                 )
                 count += 1
             except Exception:
-                logger.exception(
-                    "Failed to judge session %s", session.id
-                )
+                logger.exception("Failed to judge session %s", session.id)
         if count:
             logger.info("Judged %d skill evolution sessions", count)
         return count
@@ -108,7 +106,14 @@ class SessionJudge:
         )
 
         content = _extract_content(response)
-        parsed = json.loads(content)
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            logger.warning(
+                "Skill evolution judge received non-JSON response for session %s",
+                session.id,
+            )
+            return _fallback_scores(session, content)
 
         scores: dict[str, Any] = {
             "task_completion": float(parsed.get("task_completion", 0.5)),
@@ -118,11 +123,42 @@ class SessionJudge:
             "rationale": str(parsed.get("rationale", "")),
         }
 
-        overall = sum(
-            float(scores[dim]) * weight for dim, weight in _DIMENSION_WEIGHTS.items()
-        )
+        overall = sum(float(scores[dim]) * weight for dim, weight in _DIMENSION_WEIGHTS.items())
 
         return scores, overall
+
+
+def _fallback_scores(
+    session: SkillEvolutionSession,
+    content: str,
+) -> tuple[dict[str, Any], float]:
+    if session.success:
+        scores: dict[str, Any] = {
+            "task_completion": 0.65,
+            "response_quality": 0.55,
+            "efficiency": 0.50,
+            "tool_usage": 0.55 if session.tool_call_count > 0 else 0.40,
+            "rationale": (
+                "Automatic fallback score: judge model did not return valid JSON; "
+                "score derived conservatively from recorded success/tool metadata. "
+                f"Raw model response: {content[:300]}"
+            ),
+        }
+    else:
+        scores = {
+            "task_completion": 0.25,
+            "response_quality": 0.25,
+            "efficiency": 0.35,
+            "tool_usage": 0.35 if session.tool_call_count > 0 else 0.20,
+            "rationale": (
+                "Automatic fallback score: judge model did not return valid JSON and "
+                "the session was recorded as unsuccessful. "
+                f"Raw model response: {content[:300]}"
+            ),
+        }
+
+    overall = sum(float(scores[dim]) * weight for dim, weight in _DIMENSION_WEIGHTS.items())
+    return scores, overall
 
 
 def _extract_content(response: dict[str, Any]) -> str:

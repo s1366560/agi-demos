@@ -84,9 +84,7 @@ class SessionCollector:
         """
         skill_name = matched_skill_name or _NO_SKILL_KEY
 
-        trajectory = _build_trajectory(
-            conversation_context, user_message, final_content
-        )
+        trajectory = _build_trajectory(conversation_context, user_message, final_content)
 
         return SkillEvolutionSession(
             id=f"evs-{uuid.uuid4().hex[:16]}",
@@ -107,49 +105,60 @@ class SessionCollector:
         payload: Mapping[str, Any],
         *,
         session_factory: Any = None,  # noqa: ANN401
-    ) -> None:
+    ) -> list[SkillEvolutionSession]:
         """Extract skill session data from hook payload and persist.
 
         Called synchronously inside the hook handler; async DB write
         is spawned as a background task via ``session_factory``.
         """
         if not self._config.enabled:
-            return
+            return []
 
         matched_skill_name = payload.get("matched_skill_name")
         if isinstance(matched_skill_name, str):
             matched_skill_name = matched_skill_name.strip() or None
 
-        session = self.build_session(
-            tenant_id=str(payload.get("tenant_id", "")),
-            project_id=_str_or_none(payload.get("project_id")),
-            conversation_id=str(payload.get("conversation_id", "")),
-            user_message=str(payload.get("user_message", "")),
-            final_content=str(payload.get("final_content", "")),
-            matched_skill_name=matched_skill_name,
-            conversation_context=list(payload.get("conversation_context", [])),
-            success=bool(payload.get("success", False)),
-            execution_time_ms=int(payload.get("execution_time_ms", 0)),
-        )
+        loaded_skill_names = _loaded_skill_names(payload.get("loaded_skill_names"))
+        target_skill_names = [matched_skill_name] if matched_skill_name else loaded_skill_names
+        if not target_skill_names:
+            target_skill_names = [None]
 
-        if session is None:
-            return
+        sessions = [
+            self.build_session(
+                tenant_id=str(payload.get("tenant_id", "")),
+                project_id=_str_or_none(payload.get("project_id")),
+                conversation_id=str(payload.get("conversation_id", "")),
+                user_message=str(payload.get("user_message", "")),
+                final_content=str(payload.get("final_content", "")),
+                matched_skill_name=skill_name,
+                conversation_context=list(payload.get("conversation_context", [])),
+                success=bool(payload.get("success", False)),
+                execution_time_ms=int(payload.get("execution_time_ms", 0)),
+            )
+            for skill_name in target_skill_names
+        ]
+        sessions = [session for session in sessions if session is not None]
+
+        if not sessions:
+            return []
 
         if session_factory is not None:
             try:
                 async with session_factory() as db:
                     repo = _get_repo(db)
-                    await repo.save_session(session)
+                    for session in sessions:
+                        await repo.save_session(session)
                     await db.commit()
             except Exception:
-                logger.exception(
-                    "Failed to persist skill evolution session %s", session.id
-                )
+                logger.exception("Failed to persist skill evolution sessions")
+                return []
         else:
             logger.debug(
-                "Skill evolution session %s not persisted (no session_factory)",
-                session.id,
+                "Skill evolution sessions not persisted (no session_factory): %s",
+                [session.id for session in sessions],
             )
+
+        return sessions
 
 
 def _str_or_none(value: object) -> str | None:
@@ -157,6 +166,23 @@ def _str_or_none(value: object) -> str | None:
         return None
     s = str(value).strip()
     return s or None
+
+
+def _loaded_skill_names(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    names: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        name = item.strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    return names
 
 
 def _get_repo(db: Any) -> Any:  # noqa: ANN401

@@ -42,7 +42,11 @@ from src.infrastructure.adapters.secondary.persistence.plugin_config_repository 
 )
 from src.infrastructure.agent.plugins.control_plane import PluginControlPlaneService
 from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
-from src.infrastructure.agent.plugins.registry import get_plugin_registry
+from src.infrastructure.agent.plugins.registry import (
+    PluginSkillBuildContext,
+    PluginToolBuildContext,
+    get_plugin_registry,
+)
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.security.encryption_service import get_encryption_service
 
@@ -264,12 +268,15 @@ class RuntimePluginResponse(BaseModel):
     version: str | None = None
     kind: str | None = None
     manifest_id: str | None = None
+    manifest_path: str | None = None
     channels: list[str] = Field(default_factory=list)
     providers: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
     contracts: dict[str, list[str]] = Field(default_factory=dict)
     activation: dict[str, Any] = Field(default_factory=dict)
     command_aliases: list[dict[str, Any]] = Field(default_factory=list)
+    skill_definitions: list[dict[str, Any]] = Field(default_factory=list)
+    tool_definitions: list[dict[str, Any]] = Field(default_factory=list)
     tool_metadata: dict[str, dict[str, Any]] = Field(default_factory=dict)
     hook_metadata: dict[str, dict[str, Any]] = Field(default_factory=dict)
     config_schema: dict[str, Any] = Field(default_factory=dict)
@@ -843,6 +850,151 @@ def _build_plugin_control_plane() -> PluginControlPlaneService:
     )
 
 
+def _serialize_plugin_tool_definition(tool_name: str, tool_impl: Any) -> dict[str, Any]:
+    """Serialize a plugin tool implementation into a UI-safe definition."""
+    tags = getattr(tool_impl, "tags", None)
+    aliases = getattr(tool_impl, "aliases", None)
+    return {
+        "name": str(getattr(tool_impl, "name", tool_name)),
+        "description": str(getattr(tool_impl, "description", "")),
+        "parameters": getattr(tool_impl, "parameters", {}) or {},
+        "permission": getattr(tool_impl, "permission", None),
+        "category": str(getattr(tool_impl, "category", "general") or "general"),
+        "tags": sorted(str(tag) for tag in tags) if tags else [],
+        "aliases": [str(alias) for alias in aliases] if aliases else [],
+    }
+
+
+def _serialize_plugin_skill_definition(skill: dict[str, Any]) -> dict[str, Any]:
+    """Serialize a plugin skill definition into a UI-safe definition."""
+    payload: dict[str, Any] = {}
+    for key, value in skill.items():
+        if key.startswith("_"):
+            continue
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            payload[key] = value
+        elif isinstance(value, (list, tuple, set)):
+            payload[key] = list(value)
+        elif isinstance(value, dict):
+            payload[key] = value
+    return payload
+
+
+def _records_by_plugin_name(plugin_records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {str(record.get("name")): record for record in plugin_records if record.get("name")}
+
+
+async def _attach_plugin_tool_definitions(
+    *,
+    records_by_name: dict[str, dict[str, Any]],
+    tenant_id: str,
+) -> list[PluginDiagnosticResponse]:
+    registry = get_plugin_registry()
+    diagnostics: list[PluginDiagnosticResponse] = []
+    try:
+        plugin_tools, tool_diagnostics = await registry.build_tools(
+            PluginToolBuildContext(tenant_id=tenant_id, project_id="", base_tools={})
+        )
+    except Exception as exc:
+        logger.warning("Failed to build plugin tool definitions for UI: %s", exc)
+        return diagnostics
+
+    diagnostics.extend(_serialize_plugin_diagnostics(tool_diagnostics))
+    for tool_name, tool_impl in plugin_tools.items():
+        plugin_name = getattr(tool_impl, "_plugin_origin", None)
+        if not isinstance(plugin_name, str):
+            continue
+        record = records_by_name.get(plugin_name)
+        if record is not None:
+            record.setdefault("tool_definitions", []).append(
+                _serialize_plugin_tool_definition(str(tool_name), tool_impl)
+            )
+    return diagnostics
+
+
+def _resolve_skill_plugin_name(
+    *,
+    skill: dict[str, Any],
+    plugin_records: list[dict[str, Any]],
+    records_by_name: dict[str, dict[str, Any]],
+) -> str:
+    plugin_name = str(skill.get("plugin_name") or "")
+    if plugin_name:
+        return plugin_name
+
+    skill_id = str(skill.get("id") or "")
+    if skill_id.startswith("plugin-"):
+        for candidate_name in records_by_name:
+            if skill_id.startswith(f"plugin-{candidate_name}-"):
+                return candidate_name
+
+    skill_name = str(skill.get("name") or "")
+    matching_records = [
+        record
+        for record in plugin_records
+        if skill_name in _as_string_list(record.get("skills"))
+        or skill_name in _as_string_list((record.get("contracts") or {}).get("skills"))
+    ]
+    return str(matching_records[0].get("name")) if len(matching_records) == 1 else ""
+
+
+async def _attach_plugin_skill_definitions(
+    *,
+    plugin_records: list[dict[str, Any]],
+    records_by_name: dict[str, dict[str, Any]],
+    tenant_id: str,
+) -> list[PluginDiagnosticResponse]:
+    registry = get_plugin_registry()
+    diagnostics: list[PluginDiagnosticResponse] = []
+    try:
+        plugin_skills, skill_diagnostics = await registry.build_skills(
+            PluginSkillBuildContext(tenant_id=tenant_id, project_id="", agent_mode="chat")
+        )
+    except Exception as exc:
+        logger.warning("Failed to build plugin skill definitions for UI: %s", exc)
+        return diagnostics
+
+    diagnostics.extend(_serialize_plugin_diagnostics(skill_diagnostics))
+    for skill in plugin_skills:
+        plugin_name = _resolve_skill_plugin_name(
+            skill=skill,
+            plugin_records=plugin_records,
+            records_by_name=records_by_name,
+        )
+        record = records_by_name.get(plugin_name)
+        if record is not None:
+            record.setdefault("skill_definitions", []).append(
+                _serialize_plugin_skill_definition(skill)
+            )
+    return diagnostics
+
+
+async def _attach_plugin_runtime_definitions(
+    *,
+    plugin_records: list[dict[str, Any]],
+    tenant_id: str | None,
+) -> list[PluginDiagnosticResponse]:
+    """Attach concrete plugin tool and skill definitions to runtime records."""
+    records_by_name = _records_by_plugin_name(plugin_records)
+    context_tenant_id = tenant_id or ""
+
+    diagnostics = await _attach_plugin_tool_definitions(
+        records_by_name=records_by_name,
+        tenant_id=context_tenant_id,
+    )
+    diagnostics.extend(
+        await _attach_plugin_skill_definitions(
+            plugin_records=plugin_records,
+            records_by_name=records_by_name,
+            tenant_id=context_tenant_id,
+        )
+    )
+    for record in plugin_records:
+        record.setdefault("tool_definitions", [])
+        record.setdefault("skill_definitions", [])
+    return diagnostics
+
+
 async def _load_runtime_plugins(
     *,
     tenant_id: str | None = None,
@@ -862,7 +1014,15 @@ async def _load_runtime_plugins(
         record["schema_supported"] = (
             isinstance(plugin_name, str) and plugin_name in plugin_config_schemas
         )
-    return plugin_records, _serialize_plugin_diagnostics(diagnostics), channel_types_by_plugin
+    definition_diagnostics = await _attach_plugin_runtime_definitions(
+        plugin_records=plugin_records,
+        tenant_id=tenant_id,
+    )
+    return (
+        plugin_records,
+        [*_serialize_plugin_diagnostics(diagnostics), *definition_diagnostics],
+        channel_types_by_plugin,
+    )
 
 
 async def _ensure_channel_plugin_enabled_for_project(

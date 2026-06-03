@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -36,6 +37,17 @@ if TYPE_CHECKING:
     )
 
 logger = logging.getLogger(__name__)
+
+_CAPTURE_TRIGGER_DELAY_SECONDS = 5.0
+_STARTUP_TRIGGER_DELAY_SECONDS = 0.1
+_BACKLOG_CONTINUE_DELAY_SECONDS = 1.0
+
+
+@dataclass(frozen=True)
+class _EvolutionRunRequest:
+    tenant_id: str
+    project_id: str | None = None
+    skill_name: str | None = None
 
 
 class EvolutionScheduler:
@@ -66,6 +78,8 @@ class EvolutionScheduler:
         self._llm_provider_manager = llm_provider_manager
         self._session_factory = session_factory
         self._task: asyncio.Task[None] | None = None
+        self._run_lock = asyncio.Lock()
+        self._pending_tasks: dict[_EvolutionRunRequest, asyncio.Task[None]] = {}
         self._running = False
 
     @property
@@ -80,6 +94,7 @@ class EvolutionScheduler:
             return
         self._running = True
         self._task = asyncio.create_task(self._loop())
+        self.schedule_all(reason="startup", delay_seconds=_STARTUP_TRIGGER_DELAY_SECONDS)
         logger.info(
             "Skill evolution scheduler started (interval=%d min)",
             self._config.evolution_interval_minutes,
@@ -92,7 +107,70 @@ class EvolutionScheduler:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
+        for task in list(self._pending_tasks.values()):
+            task.cancel()
+        for task in list(self._pending_tasks.values()):
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        self._pending_tasks.clear()
         logger.info("Skill evolution scheduler stopped")
+
+    def schedule_all(self, *, reason: str, delay_seconds: float = 0.0) -> bool:
+        """Schedule a background sweep for all tenants with captured sessions."""
+        return self.schedule_run(
+            tenant_id="",
+            reason=reason,
+            delay_seconds=delay_seconds,
+        )
+
+    def schedule_run(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str | None = None,
+        skill_name: str | None = None,
+        reason: str = "capture",
+        delay_seconds: float = _CAPTURE_TRIGGER_DELAY_SECONDS,
+    ) -> bool:
+        """Schedule an autonomous evolution cycle without blocking the caller.
+
+        Requests are keyed by tenant/project/skill so bursty after-turn capture
+        coalesces into one background pipeline run.
+        """
+        if not self._config.enabled or not self._running:
+            return False
+
+        request = _EvolutionRunRequest(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            skill_name=skill_name,
+        )
+        existing = self._pending_tasks.get(request)
+        if existing is not None and not existing.done():
+            return False
+
+        task = asyncio.create_task(
+            self._delayed_execute_request(
+                request,
+                delay_seconds=max(0.0, delay_seconds),
+                reason=reason,
+            )
+        )
+        self._track_request(request, task)
+        return True
+
+    def _track_request(
+        self,
+        request: _EvolutionRunRequest,
+        task: asyncio.Task[None],
+    ) -> None:
+        self._pending_tasks[request] = task
+
+        def _discard_if_current(done_task: asyncio.Task[None]) -> None:
+            if self._pending_tasks.get(request) is done_task:
+                self._pending_tasks.pop(request, None)
+
+        task.add_done_callback(_discard_if_current)
 
     async def run_once(
         self,
@@ -105,7 +183,7 @@ class EvolutionScheduler:
 
         Returns a summary dict with counts for each stage.
         """
-        return await self._execute_cycle(
+        return await self._execute_serialized(
             tenant_id=tenant_id, project_id=project_id, skill_name=skill_name
         )
 
@@ -120,21 +198,112 @@ class EvolutionScheduler:
                 if not self._is_running():
                     break
                 logger.info("Evolution cycle triggered — discovering tenants")
-                tenant_ids = await self._discover_tenants()
-                for tid in tenant_ids:
-                    try:
-                        result = await self._execute_cycle(tenant_id=tid)
-                        logger.info(
-                            "Evolution cycle complete for tenant=%s: %s", tid, result
-                        )
-                    except Exception:
-                        logger.exception(
-                            "Evolution cycle failed for tenant=%s", tid
-                        )
+                await self._execute_all_tenants(reason="interval")
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.exception("Evolution scheduling error")
+
+    async def _delayed_execute_request(
+        self,
+        request: _EvolutionRunRequest,
+        *,
+        delay_seconds: float,
+        reason: str,
+    ) -> None:
+        try:
+            if delay_seconds > 0:
+                await asyncio.sleep(delay_seconds)
+            if not self._is_running():
+                return
+            if request.tenant_id:
+                result = await self._execute_serialized(
+                    tenant_id=request.tenant_id,
+                    project_id=request.project_id,
+                    skill_name=request.skill_name,
+                )
+                logger.info(
+                    "Evolution cycle complete for tenant=%s skill=%s reason=%s: %s",
+                    request.tenant_id,
+                    request.skill_name or "*",
+                    reason,
+                    result,
+                )
+                self._schedule_backlog_continuation(request, result)
+            else:
+                await self._execute_all_tenants(reason=reason)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "Autonomous evolution request failed tenant=%s skill=%s reason=%s",
+                request.tenant_id or "*",
+                request.skill_name or "*",
+                reason,
+            )
+
+    async def _execute_all_tenants(self, *, reason: str) -> None:
+        tenant_ids = await self._discover_tenants()
+        for tid in tenant_ids:
+            try:
+                result = await self._execute_serialized(tenant_id=tid)
+                logger.info(
+                    "Evolution cycle complete for tenant=%s reason=%s: %s",
+                    tid,
+                    reason,
+                    result,
+                )
+                self._schedule_backlog_continuation(
+                    _EvolutionRunRequest(tenant_id=tid),
+                    result,
+                )
+            except Exception:
+                logger.exception("Evolution cycle failed for tenant=%s", tid)
+
+    def _schedule_backlog_continuation(
+        self,
+        request: _EvolutionRunRequest,
+        result: dict[str, Any],
+    ) -> None:
+        if not self._is_running():
+            return
+        if not self._should_continue_backlog(result):
+            return
+
+        logger.info(
+            "Skill evolution backlog remains for tenant=%s skill=%s; scheduling continuation",
+            request.tenant_id,
+            request.skill_name or "*",
+        )
+        task = asyncio.create_task(
+            self._delayed_execute_request(
+                request,
+                delay_seconds=_BACKLOG_CONTINUE_DELAY_SECONDS,
+                reason="backlog",
+            )
+        )
+        self._track_request(request, task)
+
+    def _should_continue_backlog(self, result: dict[str, Any]) -> bool:
+        batch_limit = self._config.max_sessions_per_batch
+        return (
+            int(result.get("summarized") or 0) >= batch_limit
+            or int(result.get("judged") or 0) >= batch_limit
+        )
+
+    async def _execute_serialized(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str | None = None,
+        skill_name: str | None = None,
+    ) -> dict[str, Any]:
+        async with self._run_lock:
+            return await self._execute_cycle(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                skill_name=skill_name,
+            )
 
     async def _execute_cycle(
         self,
@@ -175,6 +344,12 @@ class EvolutionScheduler:
                 skill_name=skill_name,
                 limit=self._config.max_sessions_per_batch,
             )
+            logger.info(
+                "Skill evolution summarization stage tenant=%s skill=%s pending=%d",
+                tenant_id,
+                skill_name or "*",
+                len(unprocessed),
+            )
             if unprocessed:
                 result["summarized"] = await self._summarizer.summarize_batch(
                     unprocessed, llm_client, repo
@@ -187,18 +362,20 @@ class EvolutionScheduler:
                 skill_name=skill_name,
                 limit=self._config.max_sessions_per_batch,
             )
+            logger.info(
+                "Skill evolution judging stage tenant=%s skill=%s pending=%d",
+                tenant_id,
+                skill_name or "*",
+                len(unscored),
+            )
             if unscored:
-                result["judged"] = await self._judge.judge_batch(
-                    unscored, llm_client, repo
-                )
+                result["judged"] = await self._judge.judge_batch(unscored, llm_client, repo)
                 await db.commit()
 
             # Stage 3: Aggregate
             groups = await self._aggregator.aggregate(repo, tenant_id=tenant_id)
             if skill_name is not None:
-                groups = {
-                    name: group for name, group in groups.items() if name == skill_name
-                }
+                groups = {name: group for name, group in groups.items() if name == skill_name}
             result["groups"] = len(groups)
 
             # Stage 4: Evolve
@@ -238,9 +415,7 @@ class EvolutionScheduler:
         except TypeError:
             return await self._llm_provider_manager.get_llm_client()
         except RuntimeError:
-            logger.info(
-                "No registered LLM client for skill evolution; resolving tenant provider"
-            )
+            logger.info("No registered LLM client for skill evolution; resolving tenant provider")
 
         from src.application.services.llm_provider_manager import (
             OperationType as ManagerOperationType,
@@ -278,15 +453,26 @@ class EvolutionScheduler:
             return []
         try:
             async with self._session_factory() as db:
-                from sqlalchemy import select
+                from sqlalchemy import func, select
 
                 from src.infrastructure.agent.plugins.skill_evolution.models import (
                     SkillEvolutionSession,
                 )
 
-                stmt = select(SkillEvolutionSession.tenant_id).distinct().limit(50)
+                stmt = (
+                    select(SkillEvolutionSession.tenant_id)
+                    .where(SkillEvolutionSession.tenant_id != "")
+                    .group_by(SkillEvolutionSession.tenant_id)
+                    .order_by(func.count(SkillEvolutionSession.id).desc())
+                    .limit(100)
+                )
                 result = await db.execute(stmt)
                 tenant_ids = [row[0] for row in result.all() if row[0]]
+                logger.info(
+                    "Discovered %d tenants for skill evolution: %s",
+                    len(tenant_ids),
+                    tenant_ids[:10],
+                )
                 return tenant_ids if tenant_ids else [""]
         except Exception:
             logger.exception("Failed to discover tenants for evolution")

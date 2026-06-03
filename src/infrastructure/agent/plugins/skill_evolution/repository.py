@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.agent.plugins.skill_evolution.models import (
@@ -311,3 +311,157 @@ class SkillEvolutionRepository:
         )
         result = await self._session.execute(stmt)
         return int(result.scalar() or 0)
+
+    async def get_overview_stats(self, *, tenant_id: str) -> dict[str, object]:
+        """Return tenant-level capture and processing totals for the evolution UI."""
+        stmt = select(
+            func.count(SkillEvolutionSession.id).label("total_sessions"),
+            func.count()
+            .filter(SkillEvolutionSession.skill_name != "__no_skill__")
+            .label("skill_sessions"),
+            func.count()
+            .filter(SkillEvolutionSession.skill_name == "__no_skill__")
+            .label("no_skill_sessions"),
+            func.count()
+            .filter(SkillEvolutionSession.processed == False)  # noqa: E712
+            .label("unprocessed_sessions"),
+            func.count()
+            .filter(SkillEvolutionSession.processed == True)  # noqa: E712
+            .label("processed_sessions"),
+            func.count()
+            .filter(SkillEvolutionSession.overall_score.isnot(None))
+            .label("scored_sessions"),
+            func.count()
+            .filter(SkillEvolutionSession.success == True)  # noqa: E712
+            .label("successful_sessions"),
+            func.avg(SkillEvolutionSession.overall_score).label("avg_score"),
+        ).where(SkillEvolutionSession.tenant_id == tenant_id)
+        result = await self._session.execute(stmt)
+        row = result.mappings().one()
+
+        job_stmt = select(
+            func.count(SkillEvolutionJob.id).label("total_jobs"),
+            func.count()
+            .filter(SkillEvolutionJob.status == "pending_review")
+            .label("pending_jobs"),
+            func.count()
+            .filter(SkillEvolutionJob.status == "applied")
+            .label("applied_jobs"),
+            func.count()
+            .filter(SkillEvolutionJob.status == "skipped")
+            .label("skipped_jobs"),
+        ).where(SkillEvolutionJob.tenant_id == tenant_id)
+        job_result = await self._session.execute(job_stmt)
+        job_row = job_result.mappings().one()
+
+        return {
+            "total_sessions": int(row["total_sessions"] or 0),
+            "skill_sessions": int(row["skill_sessions"] or 0),
+            "no_skill_sessions": int(row["no_skill_sessions"] or 0),
+            "unprocessed_sessions": int(row["unprocessed_sessions"] or 0),
+            "processed_sessions": int(row["processed_sessions"] or 0),
+            "scored_sessions": int(row["scored_sessions"] or 0),
+            "successful_sessions": int(row["successful_sessions"] or 0),
+            "avg_score": float(row["avg_score"]) if row["avg_score"] is not None else None,
+            "total_jobs": int(job_row["total_jobs"] or 0),
+            "pending_jobs": int(job_row["pending_jobs"] or 0),
+            "applied_jobs": int(job_row["applied_jobs"] or 0),
+            "skipped_jobs": int(job_row["skipped_jobs"] or 0),
+        }
+
+    async def get_skill_session_summaries(
+        self,
+        *,
+        tenant_id: str,
+        limit: int = 50,
+    ) -> list[dict[str, object]]:
+        """Group captured sessions by skill name for the evolution overview."""
+        job_counts = (
+            select(
+                SkillEvolutionJob.skill_name.label("skill_name"),
+                func.count(SkillEvolutionJob.id).label("job_count"),
+                func.count()
+                .filter(SkillEvolutionJob.status == "pending_review")
+                .label("pending_job_count"),
+                func.max(SkillEvolutionJob.created_at).label("latest_job_at"),
+            )
+            .where(SkillEvolutionJob.tenant_id == tenant_id)
+            .group_by(SkillEvolutionJob.skill_name)
+            .subquery()
+        )
+        stmt = (
+            select(
+                SkillEvolutionSession.skill_name.label("skill_name"),
+                func.count(SkillEvolutionSession.id).label("session_count"),
+                func.count()
+                .filter(SkillEvolutionSession.success == True)  # noqa: E712
+                .label("success_count"),
+                func.count()
+                .filter(SkillEvolutionSession.processed == False)  # noqa: E712
+                .label("unprocessed_count"),
+                func.count()
+                .filter(SkillEvolutionSession.overall_score.isnot(None))
+                .label("scored_count"),
+                func.avg(SkillEvolutionSession.overall_score).label("avg_score"),
+                func.max(SkillEvolutionSession.created_at).label("latest_session_at"),
+                func.coalesce(job_counts.c.job_count, 0).label("job_count"),
+                func.coalesce(job_counts.c.pending_job_count, 0).label("pending_job_count"),
+                job_counts.c.latest_job_at.label("latest_job_at"),
+            )
+            .outerjoin(
+                job_counts,
+                job_counts.c.skill_name == SkillEvolutionSession.skill_name,
+            )
+            .where(SkillEvolutionSession.tenant_id == tenant_id)
+            .group_by(
+                SkillEvolutionSession.skill_name,
+                job_counts.c.job_count,
+                job_counts.c.pending_job_count,
+                job_counts.c.latest_job_at,
+            )
+            .order_by(
+                case((SkillEvolutionSession.skill_name == "__no_skill__", 1), else_=0),
+                func.count(SkillEvolutionSession.id).desc(),
+                SkillEvolutionSession.skill_name.asc(),
+            )
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        summaries: list[dict[str, object]] = []
+        for row in result.mappings().all():
+            summaries.append(
+                {
+                    "skill_name": row["skill_name"],
+                    "session_count": int(row["session_count"] or 0),
+                    "success_count": int(row["success_count"] or 0),
+                    "unprocessed_count": int(row["unprocessed_count"] or 0),
+                    "scored_count": int(row["scored_count"] or 0),
+                    "avg_score": (
+                        float(row["avg_score"]) if row["avg_score"] is not None else None
+                    ),
+                    "latest_session_at": row["latest_session_at"],
+                    "job_count": int(row["job_count"] or 0),
+                    "pending_job_count": int(row["pending_job_count"] or 0),
+                    "latest_job_at": row["latest_job_at"],
+                }
+            )
+        return summaries
+
+    async def list_recent_sessions(
+        self,
+        *,
+        tenant_id: str,
+        skill_name: str | None = None,
+        limit: int = 50,
+    ) -> list[SkillEvolutionSession]:
+        """Return the newest captured sessions for audit and UI inspection."""
+        stmt = (
+            select(SkillEvolutionSession)
+            .where(SkillEvolutionSession.tenant_id == tenant_id)
+            .order_by(SkillEvolutionSession.created_at.desc())
+            .limit(limit)
+        )
+        if skill_name is not None:
+            stmt = stmt.where(SkillEvolutionSession.skill_name == skill_name)
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())

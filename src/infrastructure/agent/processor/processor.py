@@ -541,9 +541,13 @@ class SessionProcessor:
         )
         tenant_id = langfuse_context.get("tenant_id") or runtime_context.get("tenant_id")
         project_id = langfuse_context.get("project_id") or runtime_context.get("project_id")
+        conversation_id = langfuse_context.get("conversation_id") or runtime_context.get(
+            "conversation_id"
+        )
         return {
             "tenant_id": tenant_id,
             "project_id": project_id,
+            "conversation_id": conversation_id,
             "runtime_context": runtime_context,
             "task_authority": runtime_context.get("task_authority"),
             "workspace_id": runtime_context.get("workspace_id"),
@@ -4232,6 +4236,11 @@ class SessionProcessor:
                         "call_id": call_id,
                         "session_id": session_id,
                         **self._runtime_hook_context_fields(),
+                        "result_metadata": (
+                            dict(self._last_sse_result)
+                            if isinstance(self._last_sse_result, dict)
+                            else None
+                        ),
                         "result": getattr(tool_part, "output", None),
                         "error": getattr(tool_part, "error", None),
                     },
@@ -4338,6 +4347,11 @@ class SessionProcessor:
                     "call_id": call_id,
                     "session_id": session_id,
                     **self._runtime_hook_context_fields(),
+                    "result_metadata": (
+                        dict(self._last_sse_result)
+                        if isinstance(self._last_sse_result, dict)
+                        else None
+                    ),
                     "result": getattr(tool_part, "output", None),
                     "error": getattr(tool_part, "error", None),
                 },

@@ -136,6 +136,56 @@ class SkillResponse(BaseModel):
     version_label: str | None = None
 
 
+class SkillEvolutionOverviewStatsResponse(BaseModel):
+    """Tenant-level skill evolution capture and job totals."""
+
+    total_sessions: int
+    skill_sessions: int
+    no_skill_sessions: int
+    unprocessed_sessions: int
+    processed_sessions: int
+    scored_sessions: int
+    successful_sessions: int
+    avg_score: float | None
+    total_jobs: int
+    pending_jobs: int
+    applied_jobs: int
+    skipped_jobs: int
+
+
+class SkillEvolutionSkillSummaryResponse(BaseModel):
+    """Aggregated evolution evidence for one skill name."""
+
+    skill_name: str
+    session_count: int
+    success_count: int
+    unprocessed_count: int
+    scored_count: int
+    avg_score: float | None
+    latest_session_at: str | None
+    job_count: int
+    pending_job_count: int
+    latest_job_at: str | None
+
+
+class SkillEvolutionSessionResponse(BaseModel):
+    """Captured skill evolution session for UI inspection."""
+
+    id: str
+    skill_name: str
+    conversation_id: str
+    project_id: str | None
+    user_query: str
+    summary: str | None
+    judge_scores: dict[str, Any] | None
+    overall_score: float | None
+    success: bool
+    execution_time_ms: int
+    tool_call_count: int
+    processed: bool
+    created_at: str
+
+
 class SkillListResponse(BaseModel):
     """Schema for skill list response."""
 
@@ -1341,6 +1391,16 @@ class SkillEvolutionTriggerResponse(BaseModel):
     enabled: bool
 
 
+class SkillEvolutionOverviewResponse(BaseModel):
+    """Global tenant overview for the skill evolution UI."""
+
+    stats: SkillEvolutionOverviewStatsResponse
+    skills: list[SkillEvolutionSkillSummaryResponse]
+    recent_sessions: list[SkillEvolutionSessionResponse]
+    recent_jobs: list[SkillEvolutionJobResponse]
+    trigger: SkillEvolutionTriggerResponse
+
+
 class SkillEvolutionDetailResponse(BaseModel):
     """Schema for skill evolution route and trigger details."""
 
@@ -1378,6 +1438,86 @@ def _evolution_job_to_response(job: Any) -> SkillEvolutionJobResponse:  # noqa: 
         skill_version_id=job.skill_version_id,
         created_at=job.created_at.isoformat(),
         applied_at=job.applied_at.isoformat() if job.applied_at else None,
+    )
+
+
+def _evolution_session_to_response(session: Any) -> SkillEvolutionSessionResponse:  # noqa: ANN401
+    return SkillEvolutionSessionResponse(
+        id=session.id,
+        skill_name=session.skill_name,
+        conversation_id=session.conversation_id,
+        project_id=session.project_id,
+        user_query=session.user_query,
+        summary=session.summary,
+        judge_scores=session.judge_scores,
+        overall_score=session.overall_score,
+        success=session.success,
+        execution_time_ms=session.execution_time_ms,
+        tool_call_count=session.tool_call_count,
+        processed=session.processed,
+        created_at=session.created_at.isoformat(),
+    )
+
+
+def _int_response_field(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float, str)):
+        return int(value)
+    return 0
+
+
+def _float_response_field(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float, str)):
+        return float(value)
+    return None
+
+
+def _overview_stats_to_response(
+    stats: Mapping[str, object],
+) -> SkillEvolutionOverviewStatsResponse:
+    return SkillEvolutionOverviewStatsResponse(
+        total_sessions=_int_response_field(stats.get("total_sessions")),
+        skill_sessions=_int_response_field(stats.get("skill_sessions")),
+        no_skill_sessions=_int_response_field(stats.get("no_skill_sessions")),
+        unprocessed_sessions=_int_response_field(stats.get("unprocessed_sessions")),
+        processed_sessions=_int_response_field(stats.get("processed_sessions")),
+        scored_sessions=_int_response_field(stats.get("scored_sessions")),
+        successful_sessions=_int_response_field(stats.get("successful_sessions")),
+        avg_score=_float_response_field(stats.get("avg_score")),
+        total_jobs=_int_response_field(stats.get("total_jobs")),
+        pending_jobs=_int_response_field(stats.get("pending_jobs")),
+        applied_jobs=_int_response_field(stats.get("applied_jobs")),
+        skipped_jobs=_int_response_field(stats.get("skipped_jobs")),
+    )
+
+
+def _skill_summary_to_response(
+    summary: Mapping[str, object],
+) -> SkillEvolutionSkillSummaryResponse:
+    latest_session_at = summary.get("latest_session_at")
+    latest_job_at = summary.get("latest_job_at")
+    return SkillEvolutionSkillSummaryResponse(
+        skill_name=str(summary.get("skill_name", "")),
+        session_count=_int_response_field(summary.get("session_count")),
+        success_count=_int_response_field(summary.get("success_count")),
+        unprocessed_count=_int_response_field(summary.get("unprocessed_count")),
+        scored_count=_int_response_field(summary.get("scored_count")),
+        avg_score=_float_response_field(summary.get("avg_score")),
+        latest_session_at=(
+            latest_session_at.isoformat()
+            if isinstance(latest_session_at, datetime)
+            else None
+        ),
+        job_count=_int_response_field(summary.get("job_count")),
+        pending_job_count=_int_response_field(summary.get("pending_job_count")),
+        latest_job_at=(
+            latest_job_at.isoformat()
+            if isinstance(latest_job_at, datetime)
+            else None
+        ),
     )
 
 
@@ -1426,20 +1566,69 @@ def _skill_evolution_trigger_response(skill_id: str) -> SkillEvolutionTriggerRes
     return SkillEvolutionTriggerResponse(
         capture_hook="after_turn_complete",
         capture_timing=(
-            "After every agent turn completes, the plugin records matched skill, "
-            "conversation trajectory, tool calls, success, and latency."
+            "After every agent turn completes, the plugin records matched skills, "
+            "dynamically loaded skill_loader usage, conversation trajectory, tool calls, "
+            "success, and latency."
         ),
         scheduled_timing=(
             f"Every {config.evolution_interval_minutes} minute(s), the scheduler "
             "summarizes, judges, aggregates, and evolves qualifying skill sessions."
         ),
-        manual_trigger=f"/api/v1/skills/{skill_id}/evolution/run",
+        manual_trigger=(
+            f"/api/v1/skills/{skill_id}/evolution/run"
+            if skill_id
+            else "/api/v1/skills/{skill_id}/evolution/run"
+        ),
         min_sessions_per_skill=config.min_sessions_per_skill,
         min_avg_score=config.min_avg_score,
         max_sessions_per_batch=config.max_sessions_per_batch,
         publish_mode=config.publish_mode,
         auto_apply=config.auto_apply,
         enabled=config.enabled,
+    )
+
+
+@router.get(
+    "/evolution/overview",
+    response_model=SkillEvolutionOverviewResponse,
+    summary="Get skill evolution overview",
+)
+async def get_skill_evolution_overview(
+    skill_limit: int = Query(50, ge=1, le=200),
+    session_limit: int = Query(50, ge=1, le=200),
+    job_limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+) -> SkillEvolutionOverviewResponse:
+    """Return tenant-wide evolution capture, scoring, and job state."""
+    from src.infrastructure.agent.plugins.skill_evolution.repository import (
+        SkillEvolutionRepository,
+    )
+
+    tenant_id = _normalize_tenant_id(tenant)
+    repo = SkillEvolutionRepository(db)
+    stats = await repo.get_overview_stats(tenant_id=tenant_id)
+    skill_summaries = await repo.get_skill_session_summaries(
+        tenant_id=tenant_id,
+        limit=skill_limit,
+    )
+    recent_sessions = await repo.list_recent_sessions(
+        tenant_id=tenant_id,
+        limit=session_limit,
+    )
+    recent_jobs = await repo.list_jobs(
+        tenant_id=tenant_id,
+        limit=job_limit,
+    )
+
+    return SkillEvolutionOverviewResponse(
+        stats=_overview_stats_to_response(stats),
+        skills=[_skill_summary_to_response(summary) for summary in skill_summaries],
+        recent_sessions=[
+            _evolution_session_to_response(session) for session in recent_sessions
+        ],
+        recent_jobs=[_evolution_job_to_response(job) for job in recent_jobs],
+        trigger=_skill_evolution_trigger_response(""),
     )
 
 
