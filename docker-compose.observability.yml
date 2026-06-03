@@ -172,6 +172,8 @@ services:
     container_name: memstack-langfuse-clickhouse
     restart: always
     user: "101:101"
+    cpus: 1.0
+    mem_limit: 2g
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: clickhouse
@@ -192,7 +194,7 @@ services:
       resources:
         limits:
           cpus: '1.0'
-          memory: 1G
+          memory: 2G
         reservations:
           cpus: '0.25'
           memory: 512M
