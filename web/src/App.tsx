@@ -156,6 +156,11 @@ const UnifiedRuntimes = lazy(() =>
 const AgentDefinitions = lazy(() =>
   import('./pages/tenant/AgentDefinitions').then((m) => ({ default: m.AgentDefinitions }))
 );
+const AgentDefinitionDetail = lazy(() =>
+  import('./pages/tenant/AgentDefinitionDetail').then((m) => ({
+    default: m.AgentDefinitionDetail,
+  }))
+);
 const AgentBindings = lazy(() =>
   import('./pages/tenant/AgentBindings').then((m) => ({ default: m.AgentBindings }))
 );
@@ -806,6 +811,14 @@ function App() {
                 }
               />
               <Route
+                path="agent-definitions/:definitionId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AgentDefinitionDetail />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="agent-bindings"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -1364,6 +1377,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <AgentDefinitions />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/agent-definitions/:definitionId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AgentDefinitionDetail />
                   </Suspense>
                 }
               />

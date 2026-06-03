@@ -1100,6 +1100,26 @@
       "refresh": "刷新智能体定义",
       "toggleAgent": "切换 {{name}}",
       "openActions": "打开 {{name}} 的操作菜单",
+      "detail": {
+        "viewDetails": "查看详情",
+        "backToList": "智能体定义",
+        "loadFailed": "无法加载智能体定义",
+        "notFound": "未找到智能体",
+        "sections": {
+          "identity": "身份",
+          "prompt": "系统提示词",
+          "trigger": "触发与路由",
+          "permissions": "权限与资源",
+          "workspace": "工作区",
+          "bindings": "绑定",
+          "raw": "原始定义",
+          "runtime": "运行时",
+          "spawn": "派生与 A2A",
+          "metrics": "指标",
+          "timestamps": "时间戳",
+          "metadata": "元数据"
+        }
+      },
       "stats": {
         "agents": "{{count}} 个智能体",
         "enabled": "{{count}} 个已启用"
@@ -1148,6 +1168,7 @@
         "systemPrompt": "系统提示词",
         "systemPromptRequired": "系统提示词不能为空",
         "systemPromptPlaceholder": "定义智能体的角色、能力和行为...",
+        "personaFiles": "人格文件",
         "model": "模型",
         "maxRetries": "最大重试次数",
         "triggerKeywords": "触发关键词",

@@ -1036,6 +1036,26 @@
       "refresh": "Refresh agent definitions",
       "toggleAgent": "Toggle {{name}}",
       "openActions": "Open actions for {{name}}",
+      "detail": {
+        "viewDetails": "View details",
+        "backToList": "Agent definitions",
+        "loadFailed": "Unable to load agent definition",
+        "notFound": "Agent not found",
+        "sections": {
+          "identity": "Identity",
+          "prompt": "System prompt",
+          "trigger": "Trigger and routing",
+          "permissions": "Permissions and resources",
+          "workspace": "Workspace",
+          "bindings": "Bindings",
+          "raw": "Raw definition",
+          "runtime": "Runtime",
+          "spawn": "Spawn and A2A",
+          "metrics": "Metrics",
+          "timestamps": "Timestamps",
+          "metadata": "Metadata"
+        }
+      },
       "stats": {
         "agents": "{{count}} agents",
         "enabled": "{{count}} enabled"
@@ -1084,6 +1104,7 @@
         "systemPrompt": "System Prompt",
         "systemPromptRequired": "System prompt is required",
         "systemPromptPlaceholder": "Define the agent's role, capabilities, and behavior...",
+        "personaFiles": "Persona files",
         "model": "Model",
         "maxRetries": "Max Retries",
         "triggerKeywords": "Trigger Keywords",

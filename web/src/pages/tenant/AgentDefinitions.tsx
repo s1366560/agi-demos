@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { Link, useLocation } from 'react-router-dom';
 
 import { Badge, Card, Dropdown, message, Spin, Switch, Tag, Tooltip } from 'antd';
-import { Bot, Edit2, MoreVertical, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { Bot, Edit2, Eye, MoreVertical, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 
 import { AgentDefinitionModal } from '../../components/agent/AgentDefinitionModal';
 import {
@@ -36,6 +37,7 @@ const SORT_FNS: Record<SortField, (a: AgentDefinition, b: AgentDefinition) => nu
 
 export const AgentDefinitions: React.FC = () => {
   const { t } = useTranslation();
+  const location = useLocation();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -54,6 +56,17 @@ export const AgentDefinitions: React.FC = () => {
   const toggleEnabled = useToggleDefinitionEnabled();
   const setFilters = useSetDefinitionFilters();
   const clearError = useClearDefinitionError();
+
+  const listPath = useMemo(() => {
+    const segments = location.pathname.split('/').filter(Boolean);
+    const definitionsIndex = segments.lastIndexOf('agent-definitions');
+
+    if (definitionsIndex === -1) {
+      return '/tenant/agent-definitions';
+    }
+
+    return `/${segments.slice(0, definitionsIndex + 1).join('/')}`;
+  }, [location.pathname]);
 
   const filteredDefinitions = useMemo(() => {
     const filtered = filterDefinitions(definitions, {
@@ -146,6 +159,15 @@ export const AgentDefinitions: React.FC = () => {
   const getCardMenuItems = useCallback(
     (def: AgentDefinition): MenuProps['items'] => [
       {
+        key: 'details',
+        label: (
+          <Link to={`${listPath}/${def.id}`}>
+            {t('tenant.agentDefinitions.detail.viewDetails', { defaultValue: 'View details' })}
+          </Link>
+        ),
+        icon: <Eye size={14} />,
+      },
+      {
         key: 'edit',
         label: t('common.edit', 'Edit'),
         icon: <Edit2 size={14} />,
@@ -164,7 +186,7 @@ export const AgentDefinitions: React.FC = () => {
         },
       },
     ],
-    [handleEdit, handleDelete, t]
+    [handleEdit, handleDelete, listPath, t]
   );
 
   return (
@@ -316,9 +338,12 @@ export const AgentDefinitions: React.FC = () => {
                 <div className="flex items-center gap-2 min-w-0">
                   <Badge status={def.enabled ? 'success' : 'default'} className="flex-shrink-0" />
                   <Tooltip title={def.display_name ?? def.name}>
-                    <span className="truncate font-medium text-sm">
+                    <Link
+                      to={`${listPath}/${def.id}`}
+                      className="truncate font-medium text-sm text-slate-900 transition-colors hover:text-primary dark:text-white"
+                    >
                       {def.display_name ?? def.name}
-                    </span>
+                    </Link>
                   </Tooltip>
                 </div>
               }
