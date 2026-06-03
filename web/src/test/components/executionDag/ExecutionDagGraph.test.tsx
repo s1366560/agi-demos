@@ -48,6 +48,7 @@ describe('ExecutionDagGraph', () => {
     render(<ExecutionDagGraph model={model} selectedNodeId="task-1" />);
 
     expect(screen.getByTestId('execution-dag-graph')).toBeInTheDocument();
+    expect(screen.getByTestId('execution-dag-svg')).toHaveClass('mx-auto');
     expect(screen.getByTestId('execution-dag-node-task-1')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Implement graph')).toBeInTheDocument();
     expect(screen.getByText('Worker A')).toBeInTheDocument();

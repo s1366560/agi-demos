@@ -557,7 +557,7 @@ export const ExecutionDagGraph = memo<ExecutionDagGraphProps>(
             height={layout.height}
             viewBox={`0 0 ${String(layout.width)} ${String(layout.height)}`}
             style={svgStyle}
-            className={viewMode === 'fit' ? 'h-auto w-full' : 'max-w-none'}
+            className={viewMode === 'fit' ? 'h-auto w-full' : 'mx-auto max-w-none'}
             role="img"
             aria-label={t('executionDag.ariaLabel', {
               defaultValue: 'Execution DAG',
