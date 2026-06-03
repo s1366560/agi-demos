@@ -102,6 +102,7 @@ from src.infrastructure.agent.workspace_plan.outbox_handlers import (
     WORKER_LAUNCH_EVENT,
     _apply_attempt_worktree_checkpoint,
     _commit_ref_token,
+    _ensure_leader_execution_team,
     _extract_task_evidence,
     _first_prefixed_ref,
     _integration_status_from_output,
@@ -8712,7 +8713,7 @@ async def test_supervisor_tick_handler_leader_builds_team_when_only_leader_is_bo
         (
             await db_session.execute(
                 select(AgentDefinitionModel).where(
-                    AgentDefinitionModel.name.like("workspace-workspace1-%")
+                    AgentDefinitionModel.name.like("workspace-plan-workerproject1-%")
                 )
             )
         )
@@ -8720,10 +8721,15 @@ async def test_supervisor_tick_handler_leader_builds_team_when_only_leader_is_bo
         .all()
     )
     assert {agent.name for agent in created_agents} == {
-        "workspace-workspace1-architect",
-        "workspace-workspace1-builder",
-        "workspace-workspace1-verifier",
+        "workspace-plan-workerproject1-architect",
+        "workspace-plan-workerproject1-builder",
+        "workspace-plan-workerproject1-verifier",
     }
+    assert all(agent.metadata_json.get("workspace_id") is None for agent in created_agents)
+    assert all(
+        agent.metadata_json.get("team_definition_scope") == "project"
+        for agent in created_agents
+    )
 
 
 @pytest.mark.asyncio
@@ -10063,6 +10069,234 @@ async def _seed_workspace_only(db_session: AsyncSession, *, include_worker: bool
         )
     db_session.add_all(rows)
     await db_session.flush()
+
+
+async def _seed_ready_plan(
+    db_session: AsyncSession,
+    *,
+    workspace_id: str,
+    plan_id: str,
+    root_task_id: str,
+) -> None:
+    plan = Plan(
+        id=plan_id,
+        workspace_id=workspace_id,
+        goal_id=PlanNodeId(f"{plan_id}-goal"),
+        status=PlanStatus.ACTIVE,
+    )
+    plan.add_node(
+        PlanNode(
+            id=f"{plan_id}-goal",
+            plan_id=plan.id,
+            parent_id=None,
+            kind=PlanNodeKind.GOAL,
+            title="Root goal",
+            intent=TaskIntent.IN_PROGRESS,
+            execution=TaskExecution.IDLE,
+            workspace_task_id=root_task_id,
+        )
+    )
+    plan.add_node(
+        PlanNode(
+            id=f"{plan_id}-task",
+            plan_id=plan.id,
+            parent_id=plan.goal_id,
+            kind=PlanNodeKind.TASK,
+            title="Implement root goal",
+            intent=TaskIntent.TODO,
+            execution=TaskExecution.IDLE,
+            workspace_task_id=f"{plan_id}-task-model",
+        )
+    )
+    await SqlPlanRepository(db_session).save(plan)
+
+
+@pytest.mark.unit
+async def test_leader_execution_team_reuses_project_scoped_agent_definitions(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session, include_worker=False)
+    await _seed_ready_plan(
+        db_session,
+        workspace_id="workspace-1",
+        plan_id="team-plan-1",
+        root_task_id="root-task-1",
+    )
+    db_session.add_all(
+        [
+            WorkspaceModel(
+                id="workspace-2",
+                tenant_id="worker-tenant-1",
+                project_id="worker-project-1",
+                name="Second Worker Workspace",
+                description="",
+                created_by="worker-user-1",
+                is_archived=False,
+                metadata_json={},
+            ),
+            WorkspaceMemberModel(
+                id="workspace-member-2",
+                workspace_id="workspace-2",
+                user_id="worker-user-1",
+                role="owner",
+                invited_by="worker-user-1",
+            ),
+            WorkspaceTaskModel(
+                id="root-task-2",
+                workspace_id="workspace-2",
+                title="Root goal",
+                description="Root goal for reused worker definitions",
+                created_by="worker-user-1",
+                status="todo",
+                priority=0,
+                metadata_json={
+                    AUTONOMY_SCHEMA_VERSION_KEY: 1,
+                    TASK_ROLE: "goal_root",
+                },
+            ),
+        ]
+    )
+    await db_session.flush()
+    await _seed_ready_plan(
+        db_session,
+        workspace_id="workspace-2",
+        plan_id="team-plan-2",
+        root_task_id="root-task-2",
+    )
+
+    await _ensure_leader_execution_team(
+        session=db_session,
+        workspace_id="workspace-1",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+    )
+    await _ensure_leader_execution_team(
+        session=db_session,
+        workspace_id="workspace-2",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+    )
+
+    created_agents = (
+        (
+            await db_session.execute(
+                select(AgentDefinitionModel).where(
+                    AgentDefinitionModel.metadata_json["created_by"].as_string()
+                    == "workspace_plan_team_setup"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert {agent.name for agent in created_agents} == {
+        "workspace-plan-workerproject1-architect",
+        "workspace-plan-workerproject1-builder",
+        "workspace-plan-workerproject1-verifier",
+    }
+    assert all(agent.metadata_json.get("workspace_id") is None for agent in created_agents)
+    assert all(
+        agent.metadata_json.get("team_definition_scope") == "project" for agent in created_agents
+    )
+
+    bindings = (
+        (
+            await db_session.execute(
+                select(WorkspaceAgentModel).where(WorkspaceAgentModel.is_active.is_(True))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(bindings) == 6
+    assert len({binding.agent_id for binding in bindings}) == 3
+
+
+@pytest.mark.unit
+async def test_leader_execution_team_supersedes_legacy_workspace_scoped_agent_definition(
+    db_session: AsyncSession,
+) -> None:
+    await _seed_workspace_only(db_session, include_worker=False)
+    await _seed_ready_plan(
+        db_session,
+        workspace_id="workspace-1",
+        plan_id="legacy-team-plan",
+        root_task_id="root-task-1",
+    )
+    db_session.add_all(
+        [
+            AgentDefinitionModel(
+                id="legacy-workspace-architect",
+                tenant_id="worker-tenant-1",
+                project_id="worker-project-1",
+                name="workspace-workspace1-architect",
+                display_name="Workspace Architect",
+                system_prompt="You are a legacy workspace-scoped worker.",
+                trigger_description="Legacy workspace worker",
+                allowed_tools=[],
+                allowed_skills=[],
+                allowed_mcp_servers=[],
+                source="database",
+                agent_to_agent_enabled=True,
+                agent_to_agent_allowlist=[BUILTIN_SISYPHUS_ID],
+                discoverable=True,
+                metadata_json={
+                    "created_by": "leader_team_setup",
+                    "workspace_id": "workspace-1",
+                    "workspace_role": "execution_worker",
+                    "max_iterations_explicit": False,
+                },
+            ),
+            WorkspaceAgentModel(
+                id="legacy-architect-binding",
+                workspace_id="workspace-1",
+                agent_id="legacy-workspace-architect",
+                display_name="Workspace Architect",
+                description=None,
+                config_json={
+                    "workspace_role": "execution_worker",
+                    "capabilities": ["architecture"],
+                },
+                is_active=True,
+                label="Architect",
+                status="idle",
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    await _ensure_leader_execution_team(
+        session=db_session,
+        workspace_id="workspace-1",
+        leader_agent_id=BUILTIN_SISYPHUS_ID,
+    )
+
+    legacy_agent = await db_session.get(AgentDefinitionModel, "legacy-workspace-architect")
+    assert legacy_agent is not None
+    assert legacy_agent.discoverable is False
+    assert legacy_agent.enabled is True
+    assert legacy_agent.metadata_json["superseded_by"] == "project_scoped_workspace_plan_team"
+
+    shared_agents = (
+        (
+            await db_session.execute(
+                select(AgentDefinitionModel).where(
+                    AgentDefinitionModel.metadata_json["team_definition_scope"].as_string()
+                    == "project"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert {agent.name for agent in shared_agents} == {
+        "workspace-plan-workerproject1-architect",
+        "workspace-plan-workerproject1-builder",
+        "workspace-plan-workerproject1-verifier",
+    }
+
+    legacy_binding = await db_session.get(WorkspaceAgentModel, "legacy-architect-binding")
+    assert legacy_binding is not None
+    assert legacy_binding.agent_id == "legacy-workspace-architect"
+    assert legacy_binding.is_active is True
 
 
 @pytest.mark.unit

@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +36,12 @@ from src.infrastructure.agent.sisyphus.builtin_agent import (
 )
 
 logger = logging.getLogger(__name__)
+_WORKSPACE_AUTO_TEAM_CREATOR_MARKERS = frozenset(
+    {
+        "workspace_plan_team_setup",
+        "leader_team_setup",
+    }
+)
 
 
 def _dedupe_agents_by_name_prefer_builtin(agents: list[Agent]) -> list[Agent]:
@@ -49,6 +55,24 @@ def _dedupe_agents_by_name_prefer_builtin(agents: list[Agent]) -> list[Agent]:
         seen.add(key)
         deduped.append(agent)
     return deduped
+
+
+def _exclude_legacy_workspace_scoped_auto_team(
+    query: Select[tuple[AgentDefinitionModel]],
+) -> Select[tuple[AgentDefinitionModel]]:
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        AgentDefinitionModel,
+    )
+
+    created_by = AgentDefinitionModel.metadata_json["created_by"].as_string()
+    workspace_id = AgentDefinitionModel.metadata_json["workspace_id"].as_string()
+    return query.where(
+        or_(
+            created_by.is_(None),
+            created_by.not_in(_WORKSPACE_AUTO_TEAM_CREATOR_MARKERS),
+            workspace_id.is_(None),
+        )
+    )
 
 
 class SqlAgentRegistryRepository(
@@ -257,6 +281,7 @@ class SqlAgentRegistryRepository(
         )
 
         query = select(AgentDefinitionModel).where(AgentDefinitionModel.tenant_id == tenant_id)
+        query = _exclude_legacy_workspace_scoped_auto_team(query)
 
         if enabled_only:
             query = query.where(AgentDefinitionModel.enabled.is_(True))
@@ -307,6 +332,7 @@ class SqlAgentRegistryRepository(
                     AgentDefinitionModel.project_id.is_(None),
                 )
             )
+        query = _exclude_legacy_workspace_scoped_auto_team(query)
 
         if enabled_only:
             query = query.where(AgentDefinitionModel.enabled.is_(True))

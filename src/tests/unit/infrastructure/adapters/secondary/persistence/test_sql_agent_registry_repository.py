@@ -173,3 +173,68 @@ class TestSqlAgentRegistryRepository:
         )
         assert refreshed is not None
         assert refreshed.max_iterations == 42
+
+    @pytest.mark.asyncio
+    async def test_list_excludes_legacy_workspace_scoped_auto_team_agents(
+        self,
+        db_session: AsyncSession,
+        test_tenant_db,
+        test_project_db,
+    ) -> None:
+        db_session.add_all(
+            [
+                AgentDefinitionModel(
+                    id="legacy-workspace-team-agent",
+                    tenant_id=test_tenant_db.id,
+                    project_id=test_project_db.id,
+                    name="workspace-abc123-architect",
+                    display_name="Workspace Architect",
+                    system_prompt="You are a legacy workspace-scoped worker.",
+                    trigger_description="Legacy workspace worker",
+                    allowed_tools=[],
+                    allowed_skills=[],
+                    allowed_mcp_servers=[],
+                    source="database",
+                    max_iterations=80,
+                    metadata_json={
+                        "created_by": "leader_team_setup",
+                        "workspace_id": "workspace-abc123",
+                        "workspace_role": "execution_worker",
+                    },
+                ),
+                AgentDefinitionModel(
+                    id="project-team-agent",
+                    tenant_id=test_tenant_db.id,
+                    project_id=test_project_db.id,
+                    name="workspace-plan-project123-architect",
+                    display_name="Workspace Architect",
+                    system_prompt="You are a project-scoped worker.",
+                    trigger_description="Project workspace worker",
+                    allowed_tools=[],
+                    allowed_skills=[],
+                    allowed_mcp_servers=[],
+                    source="database",
+                    max_iterations=80,
+                    metadata_json={
+                        "created_by": "workspace_plan_team_setup",
+                        "project_id": test_project_db.id,
+                        "workspace_role": "execution_worker",
+                        "team_definition_scope": "project",
+                    },
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        repo = SqlAgentRegistryRepository(db_session)
+
+        tenant_agents = await repo.list_by_tenant(test_tenant_db.id)
+        project_agents = await repo.list_by_project(
+            test_project_db.id,
+            tenant_id=test_tenant_db.id,
+        )
+
+        assert "workspace-abc123-architect" not in {agent.name for agent in tenant_agents}
+        assert "workspace-abc123-architect" not in {agent.name for agent in project_agents}
+        assert "workspace-plan-project123-architect" in {agent.name for agent in tenant_agents}
+        assert "workspace-plan-project123-architect" in {agent.name for agent in project_agents}

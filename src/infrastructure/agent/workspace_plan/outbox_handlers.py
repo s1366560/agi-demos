@@ -253,6 +253,12 @@ _AUTO_TEAM_TOOL_NAMES = [
     "workspace_report_complete",
 ]
 _AUTO_TEAM_MAX_ITERATIONS = 80
+_AUTO_TEAM_CREATOR_MARKERS = frozenset(
+    {
+        "workspace_plan_team_setup",
+        "leader_team_setup",
+    }
+)
 _AUTO_TEAM_ROLES = (
     {
         "key": "architect",
@@ -2702,6 +2708,7 @@ async def _ensure_leader_execution_team(
             session=session,
             workspace_id=workspace_id,
             workspace=workspace,
+            leader_agent_id=leader_agent_id,
         )
         return
 
@@ -2709,7 +2716,7 @@ async def _ensure_leader_execution_team(
     composition_id = f"workspace-plan-team:{workspace_id}:v2"
     ready_capabilities = _capabilities_for_ready_nodes(plan.ready_nodes())
     for role in _AUTO_TEAM_ROLES:
-        agent_name = _team_agent_name(workspace_id, str(role["key"]))
+        agent_name = _team_agent_name(workspace.project_id, str(role["key"]))
         agent = await registry.get_by_name(workspace.tenant_id, agent_name)
         if agent is None:
             agent = Agent.create(
@@ -2732,13 +2739,20 @@ async def _ensure_leader_execution_team(
                 discoverable=True,
                 metadata={
                     "created_by": "workspace_plan_team_setup",
-                    "workspace_id": workspace_id,
+                    "project_id": workspace.project_id,
                     "workspace_role": "execution_worker",
+                    "team_definition_scope": "project",
                     "team_composition_id": composition_id,
                     "max_iterations_explicit": False,
                 },
             )
             agent = await registry.create(agent)
+        elif _sync_auto_team_agent_definition(
+            agent,
+            leader_agent_id=leader_agent_id,
+            project_id=workspace.project_id,
+        ):
+            await registry.update(agent)
 
         existing_binding = await binding_repo.find_by_workspace_and_agent_id(
             workspace_id=workspace_id,
@@ -2772,15 +2786,11 @@ async def _ensure_leader_execution_team(
                 )
             )
         else:
-            if _should_upgrade_auto_team_agent(agent, workspace_id):
-                agent.max_iterations = max(agent.max_iterations, _AUTO_TEAM_MAX_ITERATIONS)
-                agent.metadata = {
-                    **dict(agent.metadata or {}),
-                    "created_by": "workspace_plan_team_setup",
-                    "workspace_id": workspace_id,
-                    "max_iterations_explicit": False,
-                }
-                agent.updated_at = datetime.now(UTC)
+            if _sync_auto_team_agent_definition(
+                agent,
+                leader_agent_id=leader_agent_id,
+                project_id=workspace.project_id,
+            ):
                 await registry.update(agent)
             existing_binding.is_active = True
             existing_binding.status = "idle"
@@ -2797,38 +2807,117 @@ async def _upgrade_existing_auto_team_agents(
     session: AsyncSession,
     workspace_id: str,
     workspace: object,
+    leader_agent_id: str,
 ) -> None:
     tenant_id = getattr(workspace, "tenant_id", None)
     if not isinstance(tenant_id, str) or not tenant_id:
+        return
+    project_id = getattr(workspace, "project_id", None)
+    if not isinstance(project_id, str) or not project_id:
         return
     registry = SqlAgentRegistryRepository(session)
     for role in _AUTO_TEAM_ROLES:
         agent = await registry.get_by_name(
             tenant_id,
-            _team_agent_name(workspace_id, str(role["key"])),
+            _team_agent_name(project_id, str(role["key"])),
         )
         if agent is None:
+            agent = Agent.create(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                name=_team_agent_name(project_id, str(role["key"])),
+                display_name=str(role["display_name"]),
+                system_prompt=_team_agent_prompt(
+                    str(role["display_name"]), str(role["description"])
+                ),
+                trigger_description=(
+                    "Execute tasks assigned by the durable workspace plan supervisor."
+                ),
+                allowed_tools=list(_AUTO_TEAM_AGENT_TOOLS),
+                allowed_skills=[],
+                allowed_mcp_servers=[],
+                max_iterations=_AUTO_TEAM_MAX_ITERATIONS,
+                agent_to_agent_enabled=True,
+                agent_to_agent_allowlist=[leader_agent_id],
+                discoverable=True,
+                metadata={
+                    "created_by": "workspace_plan_team_setup",
+                    "project_id": project_id,
+                    "workspace_role": "execution_worker",
+                    "team_definition_scope": "project",
+                    "team_composition_id": f"workspace-plan-team:{workspace_id}:v2",
+                    "max_iterations_explicit": False,
+                },
+            )
+            await registry.create(agent)
+            legacy_agent = await registry.get_by_name(
+                tenant_id,
+                _legacy_team_agent_name(workspace_id, str(role["key"])),
+            )
+            if legacy_agent is not None and _is_legacy_workspace_scoped_auto_team_agent(
+                legacy_agent, workspace_id
+            ):
+                legacy_agent.discoverable = False
+                legacy_agent.metadata = {
+                    **dict(legacy_agent.metadata or {}),
+                    "superseded_by": "project_scoped_workspace_plan_team",
+                    "superseded_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                }
+                legacy_agent.updated_at = datetime.now(UTC)
+                await registry.update(legacy_agent)
             continue
-        if not _should_upgrade_auto_team_agent(agent, workspace_id):
-            continue
-        agent.max_iterations = max(agent.max_iterations, _AUTO_TEAM_MAX_ITERATIONS)
-        agent.metadata = {
-            **dict(agent.metadata or {}),
-            "created_by": "workspace_plan_team_setup",
-            "workspace_id": workspace_id,
-            "max_iterations_explicit": False,
-        }
-        agent.updated_at = datetime.now(UTC)
-        await registry.update(agent)
+        if _sync_auto_team_agent_definition(agent, leader_agent_id=None, project_id=project_id):
+            await registry.update(agent)
 
 
-def _should_upgrade_auto_team_agent(agent: Agent, workspace_id: str) -> bool:
+def _sync_auto_team_agent_definition(
+    agent: Agent,
+    *,
+    leader_agent_id: str | None,
+    project_id: str,
+) -> bool:
+    if not _is_auto_team_agent(agent):
+        return False
+
+    changed = False
+    if int(agent.max_iterations or 0) < _AUTO_TEAM_MAX_ITERATIONS:
+        agent.max_iterations = _AUTO_TEAM_MAX_ITERATIONS
+        changed = True
+
     metadata = dict(agent.metadata or {})
-    if metadata.get("created_by") != "workspace_plan_team_setup":
-        return False
-    if metadata.get("workspace_id") != workspace_id:
-        return False
-    return int(agent.max_iterations or 0) < _AUTO_TEAM_MAX_ITERATIONS
+    desired_metadata = {
+        **metadata,
+        "created_by": "workspace_plan_team_setup",
+        "project_id": project_id,
+        "workspace_role": "execution_worker",
+        "team_definition_scope": "project",
+        "max_iterations_explicit": False,
+    }
+    desired_metadata.pop("workspace_id", None)
+    if desired_metadata != metadata:
+        agent.metadata = desired_metadata
+        changed = True
+
+    if leader_agent_id:
+        allowlist = Agent.normalize_agent_to_agent_allowlist(
+            [*(agent.agent_to_agent_allowlist or []), leader_agent_id]
+        )
+        if allowlist != agent.agent_to_agent_allowlist:
+            agent.agent_to_agent_allowlist = allowlist
+            changed = True
+
+    if changed:
+        agent.updated_at = datetime.now(UTC)
+    return changed
+
+
+def _is_auto_team_agent(agent: Agent) -> bool:
+    return dict(agent.metadata or {}).get("created_by") in _AUTO_TEAM_CREATOR_MARKERS
+
+
+def _is_legacy_workspace_scoped_auto_team_agent(agent: Agent, workspace_id: str) -> bool:
+    metadata = dict(agent.metadata or {})
+    return _is_auto_team_agent(agent) and metadata.get("workspace_id") == workspace_id
 
 
 def _is_execution_worker_binding(binding: WorkspaceAgent, leader_agent_id: str) -> bool:
@@ -2846,7 +2935,12 @@ def _capabilities_for_ready_nodes(nodes: Iterable[PlanNode]) -> set[str]:
     return {cap for cap in capabilities if cap}
 
 
-def _team_agent_name(workspace_id: str, role_key: str) -> str:
+def _team_agent_name(project_id: str, role_key: str) -> str:
+    compact_project_id = "".join(ch for ch in project_id.lower() if ch.isalnum())[:16]
+    return f"workspace-plan-{compact_project_id}-{role_key}"
+
+
+def _legacy_team_agent_name(workspace_id: str, role_key: str) -> str:
     compact_workspace_id = "".join(ch for ch in workspace_id.lower() if ch.isalnum())[:12]
     return f"workspace-{compact_workspace_id}-{role_key}"
 
