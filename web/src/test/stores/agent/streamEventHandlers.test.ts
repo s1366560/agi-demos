@@ -605,6 +605,73 @@ describe('streamEventHandlers', () => {
     expect(calls.get('search').result).toBe('Found results');
   });
 
+  it('should stop streaming after a successful terminal workspace contract observe', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+
+    const activeCalls = new Map();
+    activeCalls.set('workspace_submit_supervisor_decision', {
+      name: 'workspace_submit_supervisor_decision',
+      status: 'running',
+    });
+    mockState.isStreaming = true;
+    mockState.streamStatus = 'streaming';
+    mockState.agentState = 'observing';
+    mockState.isThinkingStreaming = true;
+    mockState.streamingThought = 'still thinking';
+    mockState.pendingToolsStack = ['workspace_submit_supervisor_decision'];
+    mockState.activeToolCalls = activeCalls;
+
+    handlers.onObserve!({
+      type: 'observe',
+      data: {
+        tool_name: 'workspace_submit_supervisor_decision',
+        observation: JSON.stringify({
+          ok: true,
+          supervisor_decision: { action: 'accept_node' },
+        }),
+      },
+    });
+
+    expect(mockUpdateConversationState).toHaveBeenLastCalledWith(
+      conversationId,
+      expect.objectContaining({
+        isStreaming: false,
+        streamStatus: 'idle',
+        agentState: 'idle',
+        isThinkingStreaming: false,
+        streamingThought: '',
+        pendingToolsStack: [],
+      })
+    );
+  });
+
+  it('should keep streaming when a terminal workspace contract observe reports an error', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+
+    mockState.isStreaming = true;
+    mockState.streamStatus = 'streaming';
+    mockState.agentState = 'observing';
+    mockState.pendingToolsStack = ['workspace_submit_supervisor_decision'];
+
+    handlers.onObserve!({
+      type: 'observe',
+      data: {
+        tool_name: 'workspace_submit_supervisor_decision',
+        error: 'failed to persist decision',
+        observation: JSON.stringify({ ok: false, error: 'failed to persist decision' }),
+      },
+    });
+
+    expect(mockUpdateConversationState).not.toHaveBeenLastCalledWith(
+      conversationId,
+      expect.objectContaining({
+        isStreaming: false,
+        streamStatus: 'idle',
+        agentState: 'idle',
+      })
+    );
+  });
+
   it('should derive A2UI surface id from payload content when metadata is missing', () => {
     const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
     const content = [

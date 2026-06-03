@@ -45,6 +45,7 @@ import type {
   ModelSwitchRequestedEventData,
   ModelOverrideRejectedEventData,
   MessageEventData,
+  ObserveEventData,
   PermissionAskedEventData,
   ThoughtEventData,
   TimelineEvent,
@@ -180,6 +181,56 @@ function findCurrentTurnStartIndex(timeline: TimelineEvent[]): number {
   }
 
   return -1;
+}
+
+const TERMINAL_WORKSPACE_CONTRACT_TOOLS = new Set([
+  'workspace_submit_planning_contract',
+  'workspace_submit_verification_judgment',
+  'workspace_submit_iteration_review',
+  'workspace_submit_supervisor_decision',
+  'workspace_submit_worktree_preparation',
+]);
+
+function parseObjectPayload(value: unknown): Record<string, unknown> | null {
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function isTerminalWorkspaceContractObserve(event: AgentEvent<ObserveEventData>): boolean {
+  const { tool_name: toolName, error, result, observation } = event.data;
+  if (!toolName || !TERMINAL_WORKSPACE_CONTRACT_TOOLS.has(toolName) || error) {
+    return false;
+  }
+
+  const payload = parseObjectPayload(result) ?? parseObjectPayload(observation);
+  if (!payload) {
+    return false;
+  }
+
+  if (payload.ok === false || typeof payload.error === 'string') {
+    return false;
+  }
+
+  return (
+    payload.ok === true ||
+    typeof payload.supervisor_decision === 'object' ||
+    typeof payload.contract === 'object' ||
+    typeof payload.judgment === 'object' ||
+    typeof payload.review === 'object' ||
+    typeof payload.preparation === 'object'
+  );
 }
 
 /**
@@ -785,6 +836,26 @@ export function createStreamEventHandlers(
 
       // Timeline append is batched
       queueTimelineEvent(event);
+
+      if (isTerminalWorkspaceContractObserve(event)) {
+        clearThoughtIdleResetTimer();
+        clearDeltaBuffers(handlerConversationId);
+        clearPendingA2UIRequestIds(handlerConversationId);
+
+        updateConversationState(handlerConversationId, {
+          streamingAssistantContent: '',
+          streamingThought: '',
+          isThinkingStreaming: false,
+          isStreaming: false,
+          streamStatus: 'idle',
+          agentState: 'idle',
+          activeToolCalls: newMap,
+          pendingToolsStack: [],
+        });
+
+        tabSync.broadcastConversationCompleted(handlerConversationId);
+        tabSync.broadcastStreamingStateChanged(handlerConversationId, false, 'idle');
+      }
 
       additionalHandlers?.onObserve?.(event);
     },
