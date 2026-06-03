@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import {
   Badge,
@@ -20,7 +20,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { Package, Trash2, Pencil, Plus, RefreshCw, Settings } from 'lucide-react';
+import { Eye, Package, Trash2, Pencil, Plus, RefreshCw, Settings } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useProjectStore } from '@/stores/project';
@@ -146,6 +146,7 @@ export const PluginHub: React.FC = () => {
   const { tenantId: urlTenantId } = useParams<{ tenantId?: string | undefined }>();
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const projectIdFromQuery = searchParams.get('projectId');
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const tenantId = urlTenantId || currentTenant?.id || null;
@@ -467,6 +468,16 @@ export const PluginHub: React.FC = () => {
       setPluginActionKey(null);
     }
   }, [loadChannelConfigs, loadPluginRuntime, recordPluginAction, tenantId, t]);
+
+  const openPluginDetail = useCallback(
+    (pluginName: string) => {
+      if (!tenantId) return;
+      const projectId = selectedProjectId || projectIdFromQuery;
+      const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+      void navigate(`/tenant/${tenantId}/plugins/${encodeURIComponent(pluginName)}${query}`);
+    },
+    [navigate, projectIdFromQuery, selectedProjectId, tenantId]
+  );
 
   const handleUninstallPlugin = useCallback(
     async (plugin: RuntimePlugin) => {
@@ -955,7 +966,15 @@ export const PluginHub: React.FC = () => {
       key: 'name',
       render: (name: string, record: RuntimePlugin) => (
         <Space orientation="vertical" size={0}>
-          <Text strong>{name}</Text>
+          <Button
+            type="link"
+            className="h-auto p-0 text-left font-medium"
+            onClick={() => {
+              openPluginDetail(record.name);
+            }}
+          >
+            {name}
+          </Button>
           <Text type="secondary" style={{ fontSize: 12 }}>
             {record.package || t('tenant.pluginHub.pluginsList.local')}
             {record.version ? `@${record.version}` : ''}
@@ -1043,6 +1062,15 @@ export const PluginHub: React.FC = () => {
       key: 'actions',
       render: (_: unknown, record: RuntimePlugin) => (
         <Space>
+          <Button
+            size="small"
+            icon={<Eye size={16} />}
+            aria-label={t('tenant.pluginHub.pluginsList.viewPlugin', { name: record.name })}
+            title={t('tenant.pluginHub.pluginsList.viewPlugin', { name: record.name })}
+            onClick={() => {
+              openPluginDetail(record.name);
+            }}
+          />
           <Button
             size="small"
             icon={<Settings size={16} />}

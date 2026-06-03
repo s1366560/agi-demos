@@ -124,6 +124,9 @@ const SubAgentList = lazy(() =>
 const SkillList = lazy(() =>
   import('./pages/tenant/SkillList').then((m) => ({ default: m.SkillList }))
 );
+const SkillEvolution = lazy(() =>
+  import('./pages/tenant/SkillEvolution').then((m) => ({ default: m.SkillEvolution }))
+);
 const SkillDetail = lazy(() =>
   import('./pages/tenant/SkillDetail').then((m) => ({ default: m.SkillDetail }))
 );
@@ -135,6 +138,11 @@ const TemplateMarketplace = lazy(() =>
 const PluginHub = lazy(() =>
   import('./pages/tenant/PluginHub').then((m) => ({
     default: m.PluginHub,
+  }))
+);
+const PluginDetail = lazy(() =>
+  import('./pages/tenant/PluginDetail').then((m) => ({
+    default: m.PluginDetail,
   }))
 );
 const McpServerList = lazy(() =>
@@ -321,6 +329,16 @@ const ProjectChannelsRedirect: React.FC = () => {
   const projectQuery = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
 
   return <Navigate to={`${basePath}${projectQuery}`} replace />;
+};
+
+export const LegacyTenantAuditLogsRedirect: React.FC = () => {
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const user = useAuthStore((state) => state.user);
+  const tenantId = currentTenant?.id || user?.tenant_id;
+
+  return (
+    <Navigate to={tenantId ? `/tenant/${tenantId}/audit-logs` : '/tenant/audit-logs'} replace />
+  );
 };
 
 function buildCanonicalProjectRedirectPath({
@@ -589,6 +607,19 @@ function App() {
               }
             />
 
+            <Route
+              path="/audit-logs"
+              element={
+                mustChangePassword ? (
+                  <Navigate to="/force-change-password" replace />
+                ) : isAuthenticated ? (
+                  <LegacyTenantAuditLogsRedirect />
+                ) : (
+                  <RedirectToLogin />
+                )
+              }
+            />
+
             {/* Tenant Console */}
             <Route
               path="/tenant"
@@ -787,6 +818,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <SkillList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="evolution"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <SkillEvolution />
                   </Suspense>
                 }
               />
@@ -1345,6 +1384,14 @@ function App() {
                 }
               />
               <Route
+                path=":tenantId/evolution"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <SkillEvolution />
+                  </Suspense>
+                }
+              />
+              <Route
                 path=":tenantId/skills/:skillId"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -1365,6 +1412,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <PluginHub />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/plugins/:pluginName"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <PluginDetail />
                   </Suspense>
                 }
               />

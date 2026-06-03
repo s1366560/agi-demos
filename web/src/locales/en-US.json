@@ -294,6 +294,7 @@
     "agentConfiguration": "Agent Configuration",
     "subagents": "Agents",
     "skills": "Skills",
+    "evolution": "Evolution",
     "plugins": "Plugins",
     "templates": "Templates",
     "providers": "Model Services",
@@ -1377,6 +1378,85 @@
         "toolsHint": "Specify the list of tools this skill can use. These tools will be available during skill execution."
       },
       "statusUpdateSuccess": "Skill status updated"
+    },
+    "skillEvolution": {
+      "eyebrow": "Skill evolution",
+      "title": "Evolution Observatory",
+      "subtitle": "Inspect captured skill sessions, scoring coverage, evolution jobs, and scheduler policy across the tenant.",
+      "loadFailed": "Failed to load skill evolution data",
+      "empty": "No skill evolution data available",
+      "stats": {
+        "captured": "Captured sessions",
+        "skillCaptured": "{{count}} attributed to skills",
+        "processing": "Processed",
+        "queued": "{{count}} waiting for summarization or judging",
+        "score": "Average score",
+        "scored": "{{count}} scored sessions",
+        "jobs": "Evolution jobs",
+        "pending": "{{count}} pending review"
+      },
+      "trigger": {
+        "capture": "Capture",
+        "schedule": "Schedule",
+        "policy": "Policy"
+      },
+      "status": {
+        "success": "Success",
+        "failed": "Failed",
+        "processed": "Processed",
+        "queued": "Queued",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "autoApply": "Auto apply",
+        "review": "Review"
+      },
+      "units": {
+        "sessions": "{{count}} sessions",
+        "tools": "{{count}} tools",
+        "ms": "{{count}} ms"
+      },
+      "jobActions": {
+        "improve_skill": "Improve skill",
+        "create_skill": "Create skill",
+        "optimize_description": "Optimize description",
+        "skip": "Skip"
+      },
+      "jobStatuses": {
+        "pending_review": "Pending review",
+        "applied": "Applied",
+        "skipped": "Skipped"
+      },
+      "publishModes": {
+        "review": "Review",
+        "auto_apply": "Auto apply"
+      },
+      "tabs": {
+        "ariaLabel": "Skill evolution panels",
+        "skills": "Skill evidence",
+        "sessions": "Tasks",
+        "jobs": "Recent jobs"
+      },
+      "skills": {
+        "title": "Skill evidence",
+        "subtitle": "{{count}} skills with captured sessions"
+      },
+      "table": {
+        "skill": "Skill",
+        "sessions": "Sessions",
+        "success": "Success",
+        "score": "Score",
+        "queued": "Queued",
+        "jobs": "Jobs"
+      },
+      "sessions": {
+        "title": "Recent sessions",
+        "empty": "No captured sessions"
+      },
+      "jobs": {
+        "title": "Recent jobs",
+        "openSkills": "Open skills",
+        "empty": "No evolution jobs yet"
+      }
     },
     "mcpServers": {
       "title": "MCP Servers",
@@ -2537,10 +2617,12 @@
         "allEvents": "All Events",
         "runtimeHooks": "Runtime Hooks"
       },
+      "filterActorPlaceholder": "Filter by actor...",
       "filterActionPlaceholder": "Filter by action...",
       "filterResourceType": "Resource Type",
       "filterFromDate": "From date",
       "filterToDate": "To date",
+      "clearFilters": "Clear filters",
       "exportCsv": "Export CSV",
       "exportJson": "Export JSON",
       "exportSuccess": "Export started",
@@ -2558,6 +2640,8 @@
       "viewDetails": "Details",
       "detailTitle": "Audit Log Detail",
       "details": "Details",
+      "ipAddress": "IP",
+      "userAgent": "User Agent",
       "showing": "Showing {{from}}-{{to}} of {{total}}",
       "runtimeHookSummary": {
         "title": "Runtime Hook Summary",
@@ -3094,10 +3178,48 @@
         "capabilityCommands": "Commands",
         "capabilityHooks": "Hooks",
         "noCapabilities": "No declared capabilities",
+        "viewPlugin": "View {{name}}",
         "configurePlugin": "Configure {{name}}",
         "local": "local",
         "toolOnly": "Tool-only plugin",
         "noPluginsInstalled": "No plugins installed yet"
+      },
+      "pluginDetail": {
+        "back": "Plugins",
+        "subtitle": "Runtime manifest, capabilities, configuration schema, and raw plugin metadata",
+        "notFound": "Plugin not found",
+        "overview": "Overview",
+        "declaredCapabilities": "Declared Capabilities",
+        "contracts": "Contracts",
+        "builtinSkills": "Built-in Skills",
+        "toolDefinitions": "Tool Definitions",
+        "commandsAndHooks": "Commands and Hooks",
+        "configuration": "Configuration",
+        "metadata": "Metadata",
+        "diagnostics": "Diagnostics",
+        "rawRuntimeRecord": "Raw Runtime Record",
+        "package": "Package",
+        "version": "Version",
+        "kind": "Kind",
+        "manifestId": "Manifest ID",
+        "manifestPath": "Manifest Path",
+        "providers": "Providers",
+        "manifestChannels": "Manifest Channels",
+        "commandAliases": "Command Aliases",
+        "hookMetadata": "Hook Metadata",
+        "toolMetadata": "Tool Metadata",
+        "activation": "Activation",
+        "envVars": "Environment Variables",
+        "secretPaths": "Secret Paths",
+        "defaults": "Defaults",
+        "configSchema": "Config Schema",
+        "configUiHints": "Config UI Hints",
+        "discovered": "Discovered",
+        "notDiscovered": "Not discovered",
+        "notDeclared": "Not declared",
+        "notSupported": "Not supported",
+        "none": "None",
+        "schemaLoadFailed": "Failed to load plugin configuration schema"
       },
       "channelsList": {
         "configuredChannels": "Configured Channels",

@@ -294,6 +294,7 @@
     "agentConfiguration": "智能体配置",
     "subagents": "Agents",
     "skills": "技能",
+    "evolution": "进化",
     "plugins": "插件",
     "templates": "模板市场",
     "providers": "模型服务",
@@ -2089,6 +2090,85 @@
       },
       "statusUpdateSuccess": "技能状态已更新"
     },
+    "skillEvolution": {
+      "eyebrow": "技能进化",
+      "title": "进化观测台",
+      "subtitle": "查看租户范围内的技能采集会话、评分覆盖、进化任务和调度策略。",
+      "loadFailed": "加载技能进化数据失败",
+      "empty": "暂无技能进化数据",
+      "stats": {
+        "captured": "已采集会话",
+        "skillCaptured": "{{count}} 条已归因到技能",
+        "processing": "已处理",
+        "queued": "{{count}} 条等待摘要或评分",
+        "score": "平均评分",
+        "scored": "{{count}} 条已评分会话",
+        "jobs": "进化任务",
+        "pending": "{{count}} 条待审核"
+      },
+      "trigger": {
+        "capture": "采集",
+        "schedule": "调度",
+        "policy": "策略"
+      },
+      "status": {
+        "success": "成功",
+        "failed": "失败",
+        "processed": "已处理",
+        "queued": "排队中",
+        "enabled": "已启用",
+        "disabled": "已禁用",
+        "autoApply": "自动应用",
+        "review": "人工审核"
+      },
+      "units": {
+        "sessions": "{{count}} 条会话",
+        "tools": "{{count}} 次工具调用",
+        "ms": "{{count}} ms"
+      },
+      "jobActions": {
+        "improve_skill": "改进技能",
+        "create_skill": "创建技能",
+        "optimize_description": "优化描述",
+        "skip": "跳过"
+      },
+      "jobStatuses": {
+        "pending_review": "待审核",
+        "applied": "已应用",
+        "skipped": "已跳过"
+      },
+      "publishModes": {
+        "review": "人工审核",
+        "auto_apply": "自动应用"
+      },
+      "tabs": {
+        "ariaLabel": "技能进化面板",
+        "skills": "技能证据",
+        "sessions": "任务",
+        "jobs": "最新任务"
+      },
+      "skills": {
+        "title": "技能证据",
+        "subtitle": "{{count}} 个技能已有采集样本"
+      },
+      "table": {
+        "skill": "技能",
+        "sessions": "会话",
+        "success": "成功率",
+        "score": "评分",
+        "queued": "排队",
+        "jobs": "任务"
+      },
+      "sessions": {
+        "title": "最新会话",
+        "empty": "暂无采集会话"
+      },
+      "jobs": {
+        "title": "最新任务",
+        "openSkills": "打开技能",
+        "empty": "暂无进化任务"
+      }
+    },
     "mcpServers": {
       "title": "MCP 服务器",
       "subtitle": "管理 Model Context Protocol 服务器集成",
@@ -2695,10 +2775,12 @@
         "allEvents": "全部事件",
         "runtimeHooks": "运行时 Hook"
       },
+      "filterActorPlaceholder": "按操作者筛选...",
       "filterActionPlaceholder": "按操作筛选...",
       "filterResourceType": "资源类型",
       "filterFromDate": "起始日期",
       "filterToDate": "截止日期",
+      "clearFilters": "清除筛选",
       "exportCsv": "导出 CSV",
       "exportJson": "导出 JSON",
       "exportSuccess": "导出已开始",
@@ -2716,6 +2798,8 @@
       "viewDetails": "详情",
       "detailTitle": "审计日志详情",
       "details": "详细信息",
+      "ipAddress": "IP",
+      "userAgent": "用户代理",
       "showing": "显示第 {{from}}-{{to}} 条，共 {{total}} 条",
       "runtimeHookSummary": {
         "title": "运行时 Hook 概览",
@@ -3252,10 +3336,48 @@
         "capabilityCommands": "命令",
         "capabilityHooks": "Hook",
         "noCapabilities": "未声明能力",
+        "viewPlugin": "查看 {{name}}",
         "configurePlugin": "配置 {{name}}",
         "local": "本地",
         "toolOnly": "仅工具插件",
         "noPluginsInstalled": "还未安装任何插件"
+      },
+      "pluginDetail": {
+        "back": "插件",
+        "subtitle": "运行时 manifest、能力、配置 schema 与原始插件元数据",
+        "notFound": "未找到插件",
+        "overview": "概览",
+        "declaredCapabilities": "声明的能力",
+        "contracts": "Contracts",
+        "builtinSkills": "内置技能",
+        "toolDefinitions": "工具定义",
+        "commandsAndHooks": "命令与 Hook",
+        "configuration": "配置",
+        "metadata": "元数据",
+        "diagnostics": "诊断",
+        "rawRuntimeRecord": "原始运行时记录",
+        "package": "包",
+        "version": "版本",
+        "kind": "类型",
+        "manifestId": "Manifest ID",
+        "manifestPath": "Manifest 路径",
+        "providers": "Providers",
+        "manifestChannels": "Manifest 频道",
+        "commandAliases": "命令别名",
+        "hookMetadata": "Hook 元数据",
+        "toolMetadata": "工具元数据",
+        "activation": "激活",
+        "envVars": "环境变量",
+        "secretPaths": "Secret 路径",
+        "defaults": "默认值",
+        "configSchema": "配置 Schema",
+        "configUiHints": "配置 UI 提示",
+        "discovered": "已发现",
+        "notDiscovered": "未发现",
+        "notDeclared": "未声明",
+        "notSupported": "不支持",
+        "none": "无",
+        "schemaLoadFailed": "加载插件配置 schema 失败"
       },
       "channelsList": {
         "configuredChannels": "已配置的渠道",

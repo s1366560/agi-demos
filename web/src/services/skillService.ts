@@ -18,6 +18,7 @@ import type {
   SkillLifecycleResponse,
   SkillPackageResponse,
   SkillEvolutionDetailResponse,
+  SkillEvolutionOverviewResponse,
   SkillEvolutionRunResponse,
   SkillVersionDetailResponse,
   SkillVersionListResponse,
@@ -183,6 +184,21 @@ export const skillAPI = {
    */
   getEvolution: async (skillId: string): Promise<SkillEvolutionDetailResponse> => {
     return await api.get<SkillEvolutionDetailResponse>(`/skills/${skillId}/evolution`);
+  },
+
+  /**
+   * Get tenant-wide skill evolution capture, scoring, and job state.
+   */
+  getEvolutionOverview: async (
+    params: {
+      skill_limit?: number | undefined;
+      session_limit?: number | undefined;
+      job_limit?: number | undefined;
+    } = {}
+  ): Promise<SkillEvolutionOverviewResponse> => {
+    return await api.get<SkillEvolutionOverviewResponse>('/skills/evolution/overview', {
+      params,
+    });
   },
 
   /**

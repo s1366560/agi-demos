@@ -3,7 +3,11 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GenericTenantProjectRedirect, LegacyProjectRedirect } from '@/App';
+import {
+  GenericTenantProjectRedirect,
+  LegacyProjectRedirect,
+  LegacyTenantAuditLogsRedirect,
+} from '@/App';
 
 const tenantState = {
   currentTenant: { id: 'tenant-1', name: 'Tenant One' },
@@ -78,6 +82,21 @@ describe('App route redirects', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('location')).toHaveTextContent('/tenant/projects?source=legacy');
+    });
+  });
+
+  it('redirects legacy /audit-logs to the canonical tenant audit log route', async () => {
+    render(
+      <MemoryRouter initialEntries={['/audit-logs']}>
+        <Routes>
+          <Route path="/audit-logs" element={<LegacyTenantAuditLogsRedirect />} />
+          <Route path="*" element={<LocationDisplay />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/tenant/tenant-1/audit-logs');
     });
   });
 });

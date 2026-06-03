@@ -94,6 +94,8 @@ export interface RuntimePlugin {
   contracts?: Record<string, string[]> | undefined;
   activation?: Record<string, unknown> | undefined;
   command_aliases?: Array<Record<string, unknown>> | undefined;
+  skill_definitions?: Array<Record<string, unknown>> | undefined;
+  tool_definitions?: Array<Record<string, unknown>> | undefined;
   tool_metadata?: Record<string, Record<string, unknown>> | undefined;
   hook_metadata?: Record<string, Record<string, unknown>> | undefined;
   config_schema?: Record<string, unknown> | undefined;

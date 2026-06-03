@@ -332,6 +332,58 @@ export interface SkillEvolutionTriggerResponse {
   enabled: boolean;
 }
 
+export interface SkillEvolutionOverviewStatsResponse {
+  total_sessions: number;
+  skill_sessions: number;
+  no_skill_sessions: number;
+  unprocessed_sessions: number;
+  processed_sessions: number;
+  scored_sessions: number;
+  successful_sessions: number;
+  avg_score: number | null;
+  total_jobs: number;
+  pending_jobs: number;
+  applied_jobs: number;
+  skipped_jobs: number;
+}
+
+export interface SkillEvolutionSkillSummaryResponse {
+  skill_name: string;
+  session_count: number;
+  success_count: number;
+  unprocessed_count: number;
+  scored_count: number;
+  avg_score: number | null;
+  latest_session_at: string | null;
+  job_count: number;
+  pending_job_count: number;
+  latest_job_at: string | null;
+}
+
+export interface SkillEvolutionSessionResponse {
+  id: string;
+  skill_name: string;
+  conversation_id: string;
+  project_id: string | null;
+  user_query: string;
+  summary: string | null;
+  judge_scores: Record<string, unknown> | null;
+  overall_score: number | null;
+  success: boolean;
+  execution_time_ms: number;
+  tool_call_count: number;
+  processed: boolean;
+  created_at: string;
+}
+
+export interface SkillEvolutionOverviewResponse {
+  stats: SkillEvolutionOverviewStatsResponse;
+  skills: SkillEvolutionSkillSummaryResponse[];
+  recent_sessions: SkillEvolutionSessionResponse[];
+  recent_jobs: SkillEvolutionJobResponse[];
+  trigger: SkillEvolutionTriggerResponse;
+}
+
 export interface SkillEvolutionDetailResponse {
   skill_id: string;
   skill_name: string;

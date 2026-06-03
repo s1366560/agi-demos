@@ -274,6 +274,7 @@ export const TenantLayout: React.FC = memo(() => {
     'patterns',
     'subagents',
     'skills',
+    'evolution',
     'profile',
     'mcp-servers',
     'agent-definitions',

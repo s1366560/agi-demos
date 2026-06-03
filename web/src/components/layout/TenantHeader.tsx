@@ -64,12 +64,13 @@ interface NavItem {
   exact?: boolean | undefined;
 }
 
-const MAX_VISIBLE_NAV_ITEMS = 7;
+const MAX_VISIBLE_NAV_ITEMS = 8;
 
 const TENANT_NAV_FALLBACK_LABELS: Record<string, string> = {
   'agent-workspace': 'Agent Workspace',
   'agent-configuration': 'Agent Configuration',
   'audit-logs': 'Audit Logs',
+  evolution: 'Evolution',
   overview: 'Overview',
   plugins: 'Plugins',
   projects: 'Projects',
