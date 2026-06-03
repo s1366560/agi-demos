@@ -1,0 +1,33 @@
+id: docs-backed-multiply
+category: docs_backed_change
+prompt: |
+  Read README.md and update math_ops.py so multiply follows the documented behavior.
+verification_command: |
+  python3 - <<'PY'
+  import importlib.util
+  from pathlib import Path
+
+  assert "mathematical product" in Path("README.md").read_text(encoding="utf-8")
+  spec = importlib.util.spec_from_file_location("math_ops", Path("math_ops.py"))
+  module = importlib.util.module_from_spec(spec)
+  assert spec.loader is not None
+  spec.loader.exec_module(module)
+  assert module.multiply(4, 5) == 20
+  PY
+target_repo: ../fixtures/docs_project
+expected_files:
+  - math_ops.py
+deterministic_commands:
+  - |
+    python3 - <<'PY'
+    from pathlib import Path
+
+    path = Path("math_ops.py")
+    path.write_text(
+        "def multiply(a: int, b: int) -> int:\n"
+        "    return a * b\n",
+        encoding="utf-8",
+    )
+    PY
+metadata:
+  purpose: docs-backed implementation capability case

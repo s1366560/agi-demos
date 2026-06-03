@@ -1,0 +1,34 @@
+id: palindrome-bug-fix
+category: bug_fix
+prompt: |
+  Fix text_utils.py so is_palindrome ignores case and spaces.
+verification_command: |
+  python3 - <<'PY'
+  import importlib.util
+  from pathlib import Path
+
+  spec = importlib.util.spec_from_file_location("text_utils", Path("text_utils.py"))
+  module = importlib.util.module_from_spec(spec)
+  assert spec.loader is not None
+  spec.loader.exec_module(module)
+  assert module.is_palindrome("Never Odd Or Even")
+  assert not module.is_palindrome("hello")
+  PY
+target_repo: ../fixtures/palindrome_project
+expected_files:
+  - text_utils.py
+deterministic_commands:
+  - |
+    python3 - <<'PY'
+    from pathlib import Path
+
+    path = Path("text_utils.py")
+    path.write_text(
+        "def is_palindrome(value: str) -> bool:\n"
+        "    normalized = ''.join(value.lower().split())\n"
+        "    return normalized == normalized[::-1]\n",
+        encoding="utf-8",
+    )
+    PY
+metadata:
+  purpose: bug fix capability case

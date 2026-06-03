@@ -1,0 +1,9 @@
+id: smoke-toy-repo
+category: failing_test_repair
+prompt: |
+  Fix the failing test in this toy repository. Run the verification command before finishing.
+verification_command: bash -lc 'test -f pyproject.toml || true'
+target_repo: ..
+expected_files: []
+metadata:
+  purpose: dry-run smoke case for harness wiring

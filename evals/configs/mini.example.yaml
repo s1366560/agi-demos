@@ -1,0 +1,5 @@
+# Example mini-swe-agent config placeholder.
+# Pass this through the CLI with:
+#   uv run memstack-agent-evals run cases/smoke_toy_repo.yaml --runner mini --config configs/mini.example.yaml
+#
+# Keep real provider credentials in environment variables, not in this file.

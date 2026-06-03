@@ -1,0 +1,39 @@
+id: greeting-refactor
+category: small_refactor
+prompt: |
+  Refactor greeting.py to remove duplicate greeting construction while preserving behavior.
+verification_command: |
+  python3 - <<'PY'
+  import importlib.util
+  from pathlib import Path
+
+  source = Path("greeting.py").read_text(encoding="utf-8")
+  assert "def _format_greeting" in source
+  assert source.count('"Hello, " + name + "!"') == 1
+  spec = importlib.util.spec_from_file_location("greeting", Path("greeting.py"))
+  module = importlib.util.module_from_spec(spec)
+  assert spec.loader is not None
+  spec.loader.exec_module(module)
+  assert module.morning("Ada") == "Hello, Ada!"
+  assert module.evening("Grace") == "Hello, Grace!"
+  PY
+target_repo: ../fixtures/greeting_project
+expected_files:
+  - greeting.py
+deterministic_commands:
+  - |
+    python3 - <<'PY'
+    from pathlib import Path
+
+    Path("greeting.py").write_text(
+        "def _format_greeting(name: str) -> str:\n"
+        "    return \"Hello, \" + name + \"!\"\n\n\n"
+        "def morning(name: str) -> str:\n"
+        "    return _format_greeting(name)\n\n\n"
+        "def evening(name: str) -> str:\n"
+        "    return _format_greeting(name)\n",
+        encoding="utf-8",
+    )
+    PY
+metadata:
+  purpose: small refactor capability case

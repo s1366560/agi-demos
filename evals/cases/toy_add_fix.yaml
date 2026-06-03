@@ -1,0 +1,30 @@
+id: toy-add-fix
+category: failing_test_repair
+prompt: |
+  Fix calculator.py so add(2, 3) returns 5.
+verification_command: |
+  python3 - <<'PY'
+  import importlib.util
+  from pathlib import Path
+
+  module_path = Path("calculator.py")
+  spec = importlib.util.spec_from_file_location("calculator", module_path)
+  module = importlib.util.module_from_spec(spec)
+  assert spec.loader is not None
+  spec.loader.exec_module(module)
+  assert module.add(2, 3) == 5
+  PY
+target_repo: ../fixtures/toy_project
+expected_files:
+  - calculator.py
+deterministic_commands:
+  - |
+    python3 - <<'PY'
+    from pathlib import Path
+
+    path = Path("calculator.py")
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("return a - b", "return a + b"), encoding="utf-8")
+    PY
+metadata:
+  purpose: complete one deterministic mini-swe-agent eval round

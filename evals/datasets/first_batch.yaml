@@ -1,0 +1,7 @@
+name: first-batch-software-engineering
+cases:
+  - ../cases/toy_add_fix.yaml
+  - ../cases/palindrome_bug_fix.yaml
+  - ../cases/greeting_refactor.yaml
+  - ../cases/config_timeout_fix.yaml
+  - ../cases/docs_backed_multiply.yaml
