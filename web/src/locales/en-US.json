@@ -1408,18 +1408,85 @@
       "empty": "No skill evolution data available",
       "stats": {
         "captured": "Captured sessions",
-        "skillCaptured": "{{count}} attributed to skills",
+        "skillCaptured": "{{count}} attributed to skills · {{rate}}% attribution",
         "processing": "Processed",
         "queued": "{{count}} waiting for summarization or judging",
         "score": "Average score",
         "scored": "{{count}} scored sessions",
         "jobs": "Evolution jobs",
-        "pending": "{{count}} pending review"
+        "pending": "{{count}} pending · {{applied}} applied · {{rejected}} rejected"
+      },
+      "monitor": {
+        "attention": "Evolution needs attention",
+        "healthy": "Evolution loop is clear",
+        "summary": "{{backlog}} queued, {{unscored}} unscored, {{blocked}} blocked by review, {{eligible}} eligible skill groups",
+        "lastUpdated": "Last refresh: {{time}}",
+        "latestSession": "Latest session: {{time}}",
+        "latestJob": "Latest job: {{time}}",
+        "pause": "Pause live tracking",
+        "resume": "Resume live tracking",
+        "stageCounts": "{{count}} done · {{backlog}} waiting"
+      },
+      "stageCountDetails": {
+        "capture": "{{count}} captured · {{backlog}} waiting for capture",
+        "summarize": "{{count}} summarized · {{backlog}} waiting for summarization",
+        "judge": "{{count}} scored · {{backlog}} waiting for scheduler scoring",
+        "review": "{{count}} pending review · {{backlog}} blocking duplicate batches",
+        "apply": "{{count}} applied · {{backlog}} waiting for apply"
+      },
+      "stageDetails": {
+        "capture": "After each agent turn, the plugin records skills, tool calls, results, and final responses.",
+        "summarize": "The scheduler turns captured sessions into comparable trajectory summaries.",
+        "judge": "Waiting for the next scheduler run to call the judge model and produce scores plus improvement signals.",
+        "review": "In manual review mode, pending jobs must be applied or rejected before the same batch advances.",
+        "apply": "Approved jobs create new skill versions attributed to evolution."
+      },
+      "stages": {
+        "capture": "Capture",
+        "summarize": "Summarize",
+        "judge": "Judge",
+        "review": "Review",
+        "apply": "Apply"
+      },
+      "stageWaitingStatuses": {
+        "capture": "Pending capture",
+        "summarize": "Pending summary",
+        "judge": "Pending scoring",
+        "review": "Pending review",
+        "apply": "Pending apply"
+      },
+      "stageStatuses": {
+        "active": "Active",
+        "waiting": "Waiting",
+        "complete": "Clear",
+        "blocked": "Blocked"
+      },
+      "manualRun": {
+        "action": "Run now",
+        "running": "Running",
+        "success": "Skill evolution run started",
+        "failed": "Failed to run skill evolution"
       },
       "trigger": {
         "capture": "Capture",
         "schedule": "Schedule",
         "policy": "Policy"
+      },
+      "policy": {
+        "enabled": "Scheduler enabled",
+        "autoApply": "Auto apply",
+        "publishMode": "Publish mode",
+        "reviewMode": "Manual review",
+        "directMode": "Direct publish",
+        "scoringMinSessions": "Score only skills with at least",
+        "evolutionMinSessions": "Evolve only skills with at least",
+        "minScore": "Evolution score threshold",
+        "batchSize": "Batch session limit",
+        "interval": "Scheduler interval minutes",
+        "save": "Save policy",
+        "saving": "Saving",
+        "saveSuccess": "Skill evolution policy saved",
+        "saveFailed": "Failed to save skill evolution policy"
       },
       "status": {
         "success": "Success",
@@ -1433,6 +1500,8 @@
       },
       "units": {
         "sessions": "{{count}} sessions",
+        "scoringSessions": "Score ≥ {{count}} sessions",
+        "minScore": "Score ≥ {{score}}",
         "tools": "{{count}} tools",
         "ms": "{{count}} ms"
       },
@@ -1445,10 +1514,12 @@
       "jobStatuses": {
         "pending_review": "Pending review",
         "applied": "Applied",
-        "skipped": "Skipped"
+        "skipped": "Skipped",
+        "rejected": "Rejected"
       },
       "publishModes": {
         "review": "Review",
+        "direct": "Direct",
         "auto_apply": "Auto apply"
       },
       "tabs": {
@@ -1467,7 +1538,16 @@
         "success": "Success",
         "score": "Score",
         "queued": "Queued",
-        "jobs": "Jobs"
+        "jobs": "Jobs",
+        "eligibility": "Evolution status"
+      },
+      "eligibility": {
+        "eligible": "Meets threshold",
+        "hasJob": "Scheduled",
+        "pendingReview": "Pending review",
+        "notEnoughSessions": "Below {{count}} sessions",
+        "notScored": "Not scored",
+        "lowScore": "{{score}} < {{threshold}}"
       },
       "sessions": {
         "title": "Recent sessions",
@@ -1476,7 +1556,13 @@
       "jobs": {
         "title": "Recent jobs",
         "openSkills": "Open skills",
-        "empty": "No evolution jobs yet"
+        "empty": "No evolution jobs yet",
+        "apply": "Apply",
+        "reject": "Reject",
+        "applySuccess": "Evolution job applied",
+        "applyFailed": "Failed to apply evolution job",
+        "rejectSuccess": "Evolution job rejected",
+        "rejectFailed": "Failed to reject evolution job"
       }
     },
     "mcpServers": {

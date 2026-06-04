@@ -14,6 +14,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Alert, Tag } from 'antd';
 import {
   ArrowLeft,
+  CheckCircle2,
   Code2,
   Download,
   Eye,
@@ -26,6 +27,7 @@ import {
   RefreshCw,
   RotateCcw,
   Wrench,
+  XCircle,
 } from 'lucide-react';
 
 import { skillAPI } from '@/services/skillService';
@@ -133,38 +135,83 @@ function SkillContentViewer({ content, mode }: { content: string; mode: SkillCon
   );
 }
 
-function EvolutionRouteRow({ entry }: { entry: SkillEvolutionRouteEntry }) {
+function EvolutionRouteRow({
+  entry,
+  isProcessing,
+  onApply,
+  onReject,
+}: {
+  entry: SkillEvolutionRouteEntry;
+  isProcessing: boolean;
+  onApply: (jobId: string) => void;
+  onReject: (jobId: string) => void;
+}) {
   const isVersion = entry.kind === 'version';
+  const { t } = useTranslation();
+  const actionable = entry.kind === 'evolution_job' && entry.status === 'pending_review';
   return (
     <div className="py-3">
-      <div className="flex items-start gap-3">
-        <div
-          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] ${
-            isVersion
-              ? 'bg-[oklch(0.9_0.08_145)] text-[oklch(0.35_0.1_145)] dark:bg-[oklch(0.24_0.05_145)] dark:text-[oklch(0.78_0.09_145)]'
-              : 'bg-[oklch(0.91_0.05_255)] text-[oklch(0.38_0.1_255)] dark:bg-[oklch(0.24_0.04_255)] dark:text-[oklch(0.76_0.08_255)]'
-          }`}
-        >
-          {isVersion ? <History size={15} /> : <GitBranch size={15} />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`text-sm font-semibold ${pageText}`}>{entry.label}</span>
-            <Tag>{isVersion ? 'version' : entry.action}</Tag>
-            {entry.status ? (
-              <Tag color={entry.status === 'applied' ? 'success' : 'default'}>{entry.status}</Tag>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <div
+            className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] ${
+              isVersion
+                ? 'bg-[oklch(0.9_0.08_145)] text-[oklch(0.35_0.1_145)] dark:bg-[oklch(0.24_0.05_145)] dark:text-[oklch(0.78_0.09_145)]'
+                : 'bg-[oklch(0.91_0.05_255)] text-[oklch(0.38_0.1_255)] dark:bg-[oklch(0.24_0.04_255)] dark:text-[oklch(0.76_0.08_255)]'
+            }`}
+          >
+            {isVersion ? <History size={15} /> : <GitBranch size={15} />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`text-sm font-semibold ${pageText}`}>{entry.label}</span>
+              <Tag>{isVersion ? 'version' : entry.action}</Tag>
+              {entry.status ? (
+                <Tag color={entry.status === 'applied' ? 'success' : 'default'}>{entry.status}</Tag>
+              ) : null}
+            </div>
+            {entry.change_summary || entry.rationale ? (
+              <div className={`mt-1 text-sm ${mutedText}`}>
+                {entry.change_summary ?? entry.rationale}
+              </div>
+            ) : null}
+            <div className={`mt-1 text-xs ${mutedText}`}>
+              {entry.created_by ? `${entry.created_by} · ` : ''}
+              {formatDate(entry.created_at)}
+            </div>
+            {entry.candidate_preview ? (
+              <pre className="mt-2 max-h-36 overflow-auto rounded-[4px] border border-[oklch(0.88_0.006_255)] bg-[oklch(0.96_0.004_255)] p-3 text-xs leading-5 text-[oklch(0.28_0.01_255)] dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)] dark:text-[oklch(0.84_0.006_255)]">
+                {entry.candidate_preview}
+              </pre>
             ) : null}
           </div>
-          {entry.change_summary || entry.rationale ? (
-            <div className={`mt-1 text-sm ${mutedText}`}>
-              {entry.change_summary ?? entry.rationale}
-            </div>
-          ) : null}
-          <div className={`mt-1 text-xs ${mutedText}`}>
-            {entry.created_by ? `${entry.created_by} · ` : ''}
-            {formatDate(entry.created_at)}
-          </div>
         </div>
+        {actionable ? (
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                onApply(entry.id);
+              }}
+              disabled={isProcessing}
+              className={actionButton}
+            >
+              <CheckCircle2 size={14} />
+              {t('tenant.skillEvolution.jobs.apply')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onReject(entry.id);
+              }}
+              disabled={isProcessing}
+              className={actionButton}
+            >
+              <XCircle size={14} />
+              {t('tenant.skillEvolution.jobs.reject')}
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -183,6 +230,7 @@ export const SkillDetail: FC = () => {
   const [evolution, setEvolution] = useState<SkillEvolutionDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEvolutionRunning, setIsEvolutionRunning] = useState(false);
+  const [processingEvolutionJobId, setProcessingEvolutionJobId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rollbackVersion, setRollbackVersion] = useState<number | null>(null);
   const [contentMode, setContentMode] = useState<SkillContentMode>('preview');
@@ -293,6 +341,38 @@ export const SkillDetail: FC = () => {
       setIsEvolutionRunning(false);
     }
   }, [loadSkill, managed, message, skill, t]);
+
+  const handleApplyEvolutionJob = useCallback(
+    async (jobId: string) => {
+      setProcessingEvolutionJobId(jobId);
+      try {
+        await skillAPI.applyEvolutionJob(jobId);
+        message?.success(t('tenant.skillEvolution.jobs.applySuccess'));
+        await loadSkill();
+      } catch {
+        message?.error(t('tenant.skillEvolution.jobs.applyFailed'));
+      } finally {
+        setProcessingEvolutionJobId(null);
+      }
+    },
+    [loadSkill, message, t]
+  );
+
+  const handleRejectEvolutionJob = useCallback(
+    async (jobId: string) => {
+      setProcessingEvolutionJobId(jobId);
+      try {
+        await skillAPI.rejectEvolutionJob(jobId);
+        message?.success(t('tenant.skillEvolution.jobs.rejectSuccess'));
+        await loadSkill();
+      } catch {
+        message?.error(t('tenant.skillEvolution.jobs.rejectFailed'));
+      } finally {
+        setProcessingEvolutionJobId(null);
+      }
+    },
+    [loadSkill, message, t]
+  );
 
   const handleModalSuccess = useCallback(() => {
     setIsModalOpen(false);
@@ -520,7 +600,9 @@ export const SkillDetail: FC = () => {
                   />
                   <InfoRow
                     label={t('tenant.skills.detail.evolutionThreshold')}
-                    value={`${evolution.trigger.min_sessions_per_skill} / ${evolution.trigger.min_avg_score}`}
+                    value={`${String(evolution.trigger.min_sessions_per_skill)} / ${String(
+                      evolution.trigger.min_avg_score
+                    )}`}
                   />
                 </div>
                 <div className={`text-sm ${mutedText}`}>
@@ -533,7 +615,17 @@ export const SkillDetail: FC = () => {
                 ) : (
                   <div className="divide-y divide-[oklch(0.9_0.006_255)] dark:divide-[oklch(0.28_0.006_255)]">
                     {evolution.route.map((entry) => (
-                      <EvolutionRouteRow key={`${entry.kind}-${entry.id}`} entry={entry} />
+                      <EvolutionRouteRow
+                        key={`${entry.kind}-${entry.id}`}
+                        entry={entry}
+                        isProcessing={processingEvolutionJobId === entry.id}
+                        onApply={(jobId) => {
+                          void handleApplyEvolutionJob(jobId);
+                        }}
+                        onReject={(jobId) => {
+                          void handleRejectEvolutionJob(jobId);
+                        }}
+                      />
                     ))}
                   </div>
                 )}

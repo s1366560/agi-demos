@@ -2119,18 +2119,85 @@
       "empty": "暂无技能进化数据",
       "stats": {
         "captured": "已采集会话",
-        "skillCaptured": "{{count}} 条已归因到技能",
+        "skillCaptured": "{{count}} 条已归因到技能 · 归因率 {{rate}}%",
         "processing": "已处理",
         "queued": "{{count}} 条等待摘要或评分",
         "score": "平均评分",
         "scored": "{{count}} 条已评分会话",
         "jobs": "进化任务",
-        "pending": "{{count}} 条待审核"
+        "pending": "{{count}} 条待审核 · {{applied}} 条已应用 · {{rejected}} 条已拒绝"
+      },
+      "monitor": {
+        "attention": "进化流程需要处理",
+        "healthy": "进化流程暂无阻塞",
+        "summary": "{{backlog}} 条排队、{{unscored}} 条未评分、{{blocked}} 条被审核阻塞、{{eligible}} 个技能组达标",
+        "lastUpdated": "上次刷新：{{time}}",
+        "latestSession": "最新会话：{{time}}",
+        "latestJob": "最新任务：{{time}}",
+        "pause": "暂停实时跟踪",
+        "resume": "恢复实时跟踪",
+        "stageCounts": "{{count}} 已完成 · {{backlog}} 等待中"
+      },
+      "stageCountDetails": {
+        "capture": "{{count}} 已采集 · {{backlog}} 等待采集",
+        "summarize": "{{count}} 已摘要 · {{backlog}} 待摘要",
+        "judge": "{{count}} 已评分 · {{backlog}} 待调度器评分",
+        "review": "{{count}} 待审核 · {{backlog}} 阻塞后续进化",
+        "apply": "{{count}} 已应用 · {{backlog}} 待应用"
+      },
+      "stageDetails": {
+        "capture": "每轮智能体对话结束后记录技能、工具调用、结果和最终回复。",
+        "summarize": "调度器把采集到的会话整理成可比较的轨迹摘要。",
+        "judge": "等待下一轮调度器调用 judge 模型，为这些会话产出评分和改进信号。",
+        "review": "人工审核模式下，待审核任务需要应用或拒绝后才会继续处理同一批次。",
+        "apply": "已通过审核的任务会写入新的技能版本，并归因到 evolution。"
+      },
+      "stages": {
+        "capture": "采集",
+        "summarize": "摘要",
+        "judge": "评分",
+        "review": "审核",
+        "apply": "应用"
+      },
+      "stageWaitingStatuses": {
+        "capture": "待采集",
+        "summarize": "待摘要",
+        "judge": "待评分",
+        "review": "待审核",
+        "apply": "待应用"
+      },
+      "stageStatuses": {
+        "active": "运行中",
+        "waiting": "等待中",
+        "complete": "畅通",
+        "blocked": "阻塞"
+      },
+      "manualRun": {
+        "action": "立即调度",
+        "running": "调度中",
+        "success": "已触发技能进化调度",
+        "failed": "技能进化调度触发失败"
       },
       "trigger": {
         "capture": "采集",
         "schedule": "调度",
         "policy": "策略"
+      },
+      "policy": {
+        "enabled": "启用调度",
+        "autoApply": "自动应用",
+        "publishMode": "发布模式",
+        "reviewMode": "人工审核",
+        "directMode": "直接发布",
+        "scoringMinSessions": "仅评分至少多少条样本的技能",
+        "evolutionMinSessions": "仅进化至少多少条样本的技能",
+        "minScore": "进化评分阈值",
+        "batchSize": "单批会话上限",
+        "interval": "调度间隔分钟",
+        "save": "保存策略",
+        "saving": "保存中",
+        "saveSuccess": "技能进化策略已保存",
+        "saveFailed": "技能进化策略保存失败"
       },
       "status": {
         "success": "成功",
@@ -2144,6 +2211,8 @@
       },
       "units": {
         "sessions": "{{count}} 条会话",
+        "scoringSessions": "评分样本 ≥ {{count}} 条",
+        "minScore": "评分 ≥ {{score}}",
         "tools": "{{count}} 次工具调用",
         "ms": "{{count}} ms"
       },
@@ -2156,10 +2225,12 @@
       "jobStatuses": {
         "pending_review": "待审核",
         "applied": "已应用",
-        "skipped": "已跳过"
+        "skipped": "已跳过",
+        "rejected": "已拒绝"
       },
       "publishModes": {
         "review": "人工审核",
+        "direct": "直接发布",
         "auto_apply": "自动应用"
       },
       "tabs": {
@@ -2178,7 +2249,16 @@
         "success": "成功率",
         "score": "评分",
         "queued": "排队",
-        "jobs": "任务"
+        "jobs": "任务",
+        "eligibility": "进化状态"
+      },
+      "eligibility": {
+        "eligible": "达到阈值",
+        "hasJob": "已调度",
+        "pendingReview": "待审核",
+        "notEnoughSessions": "少于 {{count}} 条",
+        "notScored": "未评分",
+        "lowScore": "{{score}} < {{threshold}}"
       },
       "sessions": {
         "title": "最新会话",
@@ -2187,7 +2267,13 @@
       "jobs": {
         "title": "最新任务",
         "openSkills": "打开技能",
-        "empty": "暂无进化任务"
+        "empty": "暂无进化任务",
+        "apply": "应用",
+        "reject": "拒绝",
+        "applySuccess": "进化任务已应用",
+        "applyFailed": "进化任务应用失败",
+        "rejectSuccess": "进化任务已拒绝",
+        "rejectFailed": "进化任务拒绝失败"
       }
     },
     "mcpServers": {

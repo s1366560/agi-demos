@@ -18,8 +18,12 @@ import type {
   SkillLifecycleResponse,
   SkillPackageResponse,
   SkillEvolutionDetailResponse,
+  SkillEvolutionConfigResponse,
+  SkillEvolutionConfigUpdateRequest,
+  SkillEvolutionJobResponse,
   SkillEvolutionOverviewResponse,
   SkillEvolutionRunResponse,
+  SkillEvolutionTenantRunResponse,
   SkillVersionDetailResponse,
   SkillVersionListResponse,
   TenantSkillConfigResponse,
@@ -201,11 +205,42 @@ export const skillAPI = {
     });
   },
 
+  getEvolutionConfig: async (): Promise<SkillEvolutionConfigResponse> => {
+    return await api.get<SkillEvolutionConfigResponse>('/skills/evolution/config');
+  },
+
+  updateEvolutionConfig: async (
+    data: SkillEvolutionConfigUpdateRequest
+  ): Promise<SkillEvolutionConfigResponse> => {
+    return await api.put<SkillEvolutionConfigResponse>('/skills/evolution/config', data);
+  },
+
   /**
    * Run one evolution cycle for a Skill.
    */
   runEvolution: async (skillId: string): Promise<SkillEvolutionRunResponse> => {
     return await api.post<SkillEvolutionRunResponse>(`/skills/${skillId}/evolution/run`);
+  },
+
+  /**
+   * Run one tenant-wide skill evolution cycle.
+   */
+  runEvolutionOverview: async (): Promise<SkillEvolutionTenantRunResponse> => {
+    return await api.post<SkillEvolutionTenantRunResponse>('/skills/evolution/run');
+  },
+
+  /**
+   * Apply a pending skill evolution job.
+   */
+  applyEvolutionJob: async (jobId: string): Promise<SkillEvolutionJobResponse> => {
+    return await api.post<SkillEvolutionJobResponse>(`/skills/evolution/jobs/${jobId}/apply`);
+  },
+
+  /**
+   * Reject a pending skill evolution job.
+   */
+  rejectEvolutionJob: async (jobId: string): Promise<SkillEvolutionJobResponse> => {
+    return await api.post<SkillEvolutionJobResponse>(`/skills/evolution/jobs/${jobId}/reject`);
   },
 };
 
