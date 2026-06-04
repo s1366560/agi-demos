@@ -8,6 +8,7 @@ from src.infrastructure.adapters.primary.web.routers.agent.messages import (
     _DISPLAYABLE_EVENTS,
     _build_completion_map,
     _build_timeline,
+    _build_tool_exec_map,
 )
 
 
@@ -21,6 +22,17 @@ class _StubEvent:
     message_id: str = "msg-1"
 
 
+@dataclass
+class _StubToolExecution:
+    id: str
+    message_id: str
+    call_id: str
+    tool_name: str
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    duration_ms: int | None = None
+
+
 def test_displayable_events_include_a2ui_action_asked() -> None:
     assert "a2ui_action_asked" in _DISPLAYABLE_EVENTS
 
@@ -30,6 +42,440 @@ def test_displayable_events_include_legacy_subagent_timeline_events() -> None:
     assert "subagent_run_completed" in _DISPLAYABLE_EVENTS
     assert "subagent_announce_giveup" in _DISPLAYABLE_EVENTS
     assert "chain_started" in _DISPLAYABLE_EVENTS
+
+
+def test_displayable_events_include_persisted_act_delta() -> None:
+    assert "act_delta" in _DISPLAYABLE_EVENTS
+
+
+def test_build_timeline_replays_latest_act_delta_as_act() -> None:
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="act_delta",
+                event_data={
+                    "tool_name": "workspace_submit_supervisor_decision",
+                    "call_id": "call-1",
+                    "arguments_fragment": '{"action":',
+                    "accumulated_arguments": '{"action":',
+                    "status": "preparing",
+                },
+                event_time_us=1_000,
+            ),
+            _StubEvent(
+                event_type="act_delta",
+                event_data={
+                    "tool_name": "workspace_submit_supervisor_decision",
+                    "call_id": "call-1",
+                    "arguments_fragment": ' "accept_node"}',
+                    "accumulated_arguments": '{"action": "accept_node"}',
+                    "status": "preparing",
+                },
+                event_time_us=2_000,
+            ),
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert timeline == [
+        {
+            "id": "act_delta-2000-0",
+            "type": "act",
+            "eventTimeUs": 2_000,
+            "eventCounter": 0,
+            "timestamp": 2,
+            "toolName": "workspace_submit_supervisor_decision",
+            "toolInput": {"action": "accept_node"},
+            "execution_id": "call-1",
+            "metadata": {
+                "sourceEventType": "act_delta",
+                "status": "preparing",
+                "synthesizeObserve": True,
+            },
+        },
+        {
+            "id": "observe-act_delta-2000-0",
+            "type": "observe",
+            "eventTimeUs": 2_000,
+            "eventCounter": 0,
+            "timestamp": 2,
+            "toolName": "workspace_submit_supervisor_decision",
+            "toolOutput": '{"action": "accept_node"}',
+            "isError": False,
+            "execution_id": "call-1",
+            "metadata": {
+                "sourceEventType": "synthetic_observe",
+                "status": "preparing",
+                "synthesizeObserve": True,
+            },
+        },
+    ]
+
+
+def test_build_timeline_repairs_truncated_act_delta_json_prefix() -> None:
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="act_delta",
+                event_data={
+                    "tool_name": "workspace_submit_supervisor_decision",
+                    "call_id": "call-1",
+                    "arguments_fragment": '"feedback_items": []',
+                    "accumulated_arguments": (
+                        '{"action": "accept_node", "feedback_items": [], '
+                        '"retry_not_before_seconds": null'
+                    ),
+                    "status": "preparing",
+                },
+                event_time_us=1_000,
+            ),
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert timeline[0]["toolInput"] == {
+        "action": "accept_node",
+        "feedback_items": [],
+        "retry_not_before_seconds": None,
+    }
+    assert timeline[1]["type"] == "observe"
+    assert timeline[1]["isError"] is False
+
+
+def test_build_timeline_trims_dangling_top_level_act_delta_field() -> None:
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="act_delta",
+                event_data={
+                    "tool_name": "workspace_submit_verification_judgment",
+                    "call_id": "call-1",
+                    "arguments_fragment": '"satisfied_guard_failures": ',
+                    "accumulated_arguments": (
+                        '{"verdict": "accepted", "failed_criteria": [], '
+                        '"satisfied_guard_failures": '
+                    ),
+                    "status": "preparing",
+                },
+                event_time_us=1_000,
+            ),
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert timeline[0]["toolInput"] == {
+        "verdict": "accepted",
+        "failed_criteria": [],
+    }
+    assert timeline[1]["type"] == "observe"
+    assert timeline[1]["execution_id"] == "call-1"
+
+
+def test_build_timeline_skips_act_delta_when_full_act_exists_for_same_call() -> None:
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="act_delta",
+                event_data={
+                    "tool_name": "bash",
+                    "call_id": "call-1",
+                    "accumulated_arguments": '{"command": "echo hi"}',
+                    "status": "preparing",
+                },
+                event_time_us=1_000,
+            ),
+            _StubEvent(
+                event_type="act",
+                event_data={
+                    "tool_name": "bash",
+                    "tool_input": {"command": "echo hi"},
+                    "call_id": "call-1",
+                },
+                event_time_us=2_000,
+            ),
+            _StubEvent(
+                event_type="observe",
+                event_data={
+                    "tool_name": "bash",
+                    "observation": "hi",
+                    "call_id": "call-1",
+                    "is_error": False,
+                },
+                event_time_us=3_000,
+            ),
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [(item["type"], item.get("execution_id")) for item in timeline] == [
+        ("act", "call-1"),
+        ("observe", "call-1"),
+    ]
+
+
+def test_build_timeline_keeps_same_tool_calls_separate_by_execution_id() -> None:
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="act",
+                event_data={
+                    "tool_name": "bash",
+                    "tool_input": {"command": "echo first"},
+                    "call_id": "call-1",
+                },
+                event_time_us=1_000,
+            ),
+            _StubEvent(
+                event_type="observe",
+                event_data={
+                    "tool_name": "bash",
+                    "observation": "first",
+                    "call_id": "call-1",
+                    "is_error": False,
+                },
+                event_time_us=2_000,
+            ),
+            _StubEvent(
+                event_type="act",
+                event_data={
+                    "tool_name": "bash",
+                    "tool_input": {"command": "echo second"},
+                    "tool_execution_id": "exec-2",
+                    "call_id": "call-2",
+                },
+                event_time_us=3_000,
+            ),
+            _StubEvent(
+                event_type="observe",
+                event_data={
+                    "tool_name": "bash",
+                    "observation": "second",
+                    "tool_execution_id": "exec-2",
+                    "call_id": "call-2",
+                    "is_error": False,
+                },
+                event_time_us=4_000,
+            ),
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [(item["type"], item.get("execution_id")) for item in timeline] == [
+        ("act", "call-1"),
+        ("observe", "call-1"),
+        ("act", "exec-2"),
+        ("observe", "exec-2"),
+    ]
+    assert timeline[0]["toolInput"] == {"command": "echo first"}
+    assert timeline[2]["toolInput"] == {"command": "echo second"}
+
+
+def test_build_timeline_uses_tool_execution_record_id_for_act_matching() -> None:
+    now = datetime(2026, 6, 3, tzinfo=UTC)
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="act",
+                event_data={
+                    "tool_name": "bash",
+                    "tool_input": {"command": "echo hi"},
+                    "call_id": "call-1",
+                },
+                event_time_us=1_000,
+            ),
+            _StubEvent(
+                event_type="observe",
+                event_data={
+                    "tool_name": "bash",
+                    "observation": "hi",
+                    "tool_execution_id": "exec-1",
+                    "call_id": "call-1",
+                    "is_error": False,
+                },
+                event_time_us=2_000,
+            ),
+        ],
+        tool_exec_map=_build_tool_exec_map(
+            [
+                _StubToolExecution(
+                    id="exec-1",
+                    message_id="msg-1",
+                    call_id="call-1",
+                    tool_name="bash",
+                    started_at=now,
+                    completed_at=now,
+                    duration_ms=7,
+                )
+            ]
+        ),
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert timeline[0]["execution_id"] == "exec-1"
+    assert timeline[0]["execution"] == {
+        "startTime": now.timestamp() * 1000,
+        "endTime": now.timestamp() * 1000,
+        "duration": 7,
+    }
+    assert timeline[1]["execution_id"] == "exec-1"
+
+
+def test_build_timeline_replays_terminal_act_delta_after_prior_same_tool_act() -> None:
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="act",
+                event_data={
+                    "tool_name": "workspace_submit_verification_judgment",
+                    "tool_input": {"verdict": "rejected"},
+                    "call_id": "call-prior",
+                },
+                event_time_us=1_000,
+            ),
+            _StubEvent(
+                event_type="observe",
+                event_data={
+                    "tool_name": "workspace_submit_verification_judgment",
+                    "observation": "prior complete",
+                    "call_id": "call-prior",
+                    "is_error": False,
+                },
+                event_time_us=2_000,
+            ),
+            _StubEvent(
+                event_type="act_delta",
+                event_data={
+                    "tool_name": "workspace_submit_verification_judgment",
+                    "call_id": "call-final",
+                    "arguments_fragment": '{"verdict": "accepted"}',
+                    "accumulated_arguments": '{"verdict": "accepted"}',
+                    "status": "preparing",
+                },
+                event_time_us=3_000,
+            ),
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert [(item["type"], item.get("execution_id")) for item in timeline] == [
+        ("act", "call-prior"),
+        ("observe", "call-prior"),
+        ("act", "call-final"),
+        ("observe", "call-final"),
+    ]
+    assert timeline[2]["toolInput"] == {"verdict": "accepted"}
+
+
+def test_build_timeline_extracts_execution_id_by_precedence() -> None:
+    timeline = _build_timeline(
+        events=[
+            _StubEvent(
+                event_type="act",
+                event_data={
+                    "tool_name": "bash",
+                    "tool_input": {"command": "echo hi"},
+                    "tool_execution_id": "exec-1",
+                    "execution_id": "legacy-exec",
+                    "call_id": "call-1",
+                },
+                event_time_us=1_000,
+            ),
+            _StubEvent(
+                event_type="observe",
+                event_data={
+                    "tool_name": "bash",
+                    "observation": "hi",
+                    "execution_id": "legacy-exec",
+                    "call_id": "call-1",
+                    "is_error": False,
+                },
+                event_time_us=2_000,
+            ),
+            _StubEvent(
+                event_type="act_delta",
+                event_data={
+                    "tool_name": "workspace_submit_supervisor_decision",
+                    "call_id": "call-final",
+                    "accumulated_arguments": '{"action": "accept_node"}',
+                },
+                event_time_us=3_000,
+            ),
+        ],
+        tool_exec_map={},
+        hitl_answered_map={},
+        hitl_status_map={},
+        artifact_ready_map={},
+        artifact_error_map={},
+        completion_map={},
+    )
+
+    assert timeline[0]["execution_id"] == "exec-1"
+    assert timeline[1]["execution_id"] == "legacy-exec"
+    assert timeline[2]["execution_id"] == "call-final"
+
+
+def test_build_tool_exec_map_prefers_per_call_identity_over_tool_name() -> None:
+    now = datetime(2026, 6, 3, tzinfo=UTC)
+    tool_exec_map = _build_tool_exec_map(
+        [
+            _StubToolExecution(
+                id="exec-1",
+                message_id="msg-1",
+                call_id="call-1",
+                tool_name="bash",
+                started_at=now,
+                completed_at=now,
+                duration_ms=10,
+            ),
+            _StubToolExecution(
+                id="exec-2",
+                message_id="msg-1",
+                call_id="call-2",
+                tool_name="bash",
+                started_at=now,
+                completed_at=now,
+                duration_ms=20,
+            ),
+        ]
+    )
+
+    assert tool_exec_map["msg-1:call-1"]["duration"] == 10
+    assert tool_exec_map["msg-1:exec-2"]["duration"] == 20
+    assert tool_exec_map["msg-1:bash"]["duration"] == 10
 
 
 def test_build_timeline_includes_a2ui_action_asked() -> None:

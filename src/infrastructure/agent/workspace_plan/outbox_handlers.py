@@ -3888,6 +3888,18 @@ def _repair_brief_from_node(node: PlanNode, *, previous_attempt_id: str) -> dict
     }
     if isinstance(provided, Mapping):
         base.update(dict(provided))
+    if metadata.get("terminal_attempt_retry_reason") == "worktree_integration_failed":
+        base["worktree_integration_failure"] = {
+            "previous_attempt_id": metadata.get("worktree_integration_failed_previous_attempt_id"),
+            "previous_commit_ref": metadata.get("worktree_integration_failed_previous_commit_ref"),
+            "summary": metadata.get("worktree_integration_failed_previous_summary"),
+            "required_action": (
+                "Inspect the current main checkout and the previous accepted worktree output. "
+                "If main already contains an equivalent or newer solution, do not reapply stale "
+                "conflicting content; produce a fresh commit from the current base only when the "
+                "task's required artifact or behavior is still missing."
+            ),
+        }
     worker_feedback = _worker_feedback_items(metadata, base.get("feedback_items"))
     if worker_feedback:
         base["feedback_items"] = worker_feedback
@@ -3969,6 +3981,10 @@ def _repair_turn_prompt(context: Mapping[str, Any] | None) -> str | None:
         "- Treat this as a new attempt with fresh evidence boundaries even though "
         "the conversation is reused.\n"
         "- Address only the failures in repair_brief.failed_items and required_next_action.\n"
+        "- If repair_brief.worktree_integration_failure is present, first inspect the current "
+        "main checkout and prior accepted commit/worktree evidence. Resolve the task from the "
+        "current base: keep equivalent existing mainline work, avoid reintroducing stale "
+        "conflicting content, and create a fresh commit_ref only for missing task-scoped changes.\n"
         "- Re-run the minimum_verifications listed in the brief.\n"
         "- When complete, report using the current_attempt_id only; include fresh commit_ref, "
         "git_diff_summary, changed files, test_run evidence, and git status --short."

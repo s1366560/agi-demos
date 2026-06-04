@@ -298,6 +298,9 @@ export interface SkillEvolutionJobResponse {
   action: string;
   status: string;
   rationale: string | null;
+  candidate_preview: string | null;
+  candidate_content: string | null;
+  blocked_by_review: boolean;
   session_ids: string[];
   skill_version_id: string | null;
   created_at: string;
@@ -315,6 +318,7 @@ export interface SkillEvolutionRouteEntry {
   skill_version_id: string | null;
   change_summary: string | null;
   rationale: string | null;
+  candidate_preview: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -325,12 +329,26 @@ export interface SkillEvolutionTriggerResponse {
   scheduled_timing: string;
   manual_trigger: string;
   min_sessions_per_skill: number;
+  scoring_min_sessions_per_skill: number;
   min_avg_score: number;
   max_sessions_per_batch: number;
   publish_mode: string;
   auto_apply: boolean;
   enabled: boolean;
 }
+
+export interface SkillEvolutionConfigResponse {
+  enabled: boolean;
+  min_sessions_per_skill: number;
+  scoring_min_sessions_per_skill: number;
+  min_avg_score: number;
+  max_sessions_per_batch: number;
+  evolution_interval_minutes: number;
+  publish_mode: string;
+  auto_apply: boolean;
+}
+
+export type SkillEvolutionConfigUpdateRequest = Partial<SkillEvolutionConfigResponse>;
 
 export interface SkillEvolutionOverviewStatsResponse {
   total_sessions: number;
@@ -345,9 +363,31 @@ export interface SkillEvolutionOverviewStatsResponse {
   pending_jobs: number;
   applied_jobs: number;
   skipped_jobs: number;
+  rejected_jobs?: number;
+}
+
+export interface SkillEvolutionMonitorResponse {
+  refresh_interval_seconds: number;
+  latest_session_at: string | null;
+  latest_job_at: string | null;
+  backlog_count: number;
+  unscored_count: number;
+  blocked_by_review_count: number;
+  eligible_skill_count: number;
+  needs_attention: boolean;
+}
+
+export interface SkillEvolutionStageResponse {
+  id: string;
+  label: string;
+  status: string;
+  count: number;
+  backlog_count: number;
+  detail: string;
 }
 
 export interface SkillEvolutionSkillSummaryResponse {
+  skill_id: string | null;
   skill_name: string;
   session_count: number;
   success_count: number;
@@ -378,6 +418,8 @@ export interface SkillEvolutionSessionResponse {
 
 export interface SkillEvolutionOverviewResponse {
   stats: SkillEvolutionOverviewStatsResponse;
+  monitor?: SkillEvolutionMonitorResponse;
+  stages?: SkillEvolutionStageResponse[];
   skills: SkillEvolutionSkillSummaryResponse[];
   recent_sessions: SkillEvolutionSessionResponse[];
   recent_jobs: SkillEvolutionJobResponse[];
@@ -396,6 +438,11 @@ export interface SkillEvolutionDetailResponse {
 export interface SkillEvolutionRunResponse {
   skill_id: string;
   skill_name: string;
+  result: Record<string, unknown>;
+}
+
+export interface SkillEvolutionTenantRunResponse {
+  tenant_id: string;
   result: Record<string, unknown>;
 }
 

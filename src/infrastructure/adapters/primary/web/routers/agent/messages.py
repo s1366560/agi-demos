@@ -3,6 +3,7 @@
 Endpoints for conversation messages, execution history, and status.
 """
 
+import json
 import logging
 from collections import defaultdict
 from datetime import datetime
@@ -102,6 +103,9 @@ async def _verify_conversation_access(
 # are not first-class members of ``AgentEventType``.  Preserve replay parity.
 _DISPLAYABLE_EVENTS.update(
     {
+        # Contract-agent tool calls can persist only streaming act_delta rows
+        # when the final tool call terminates the session before a full act row.
+        "act_delta",
         "permission_requested",  # legacy alias for permission_asked
         "permission_granted",  # legacy alias for permission_replied
         # Sessionized / chained SubAgent events predate AgentEventType but the
@@ -120,6 +124,10 @@ _DISPLAYABLE_EVENTS.update(
 )
 
 _SKIP_EVENT_SENTINEL = object()
+_TERMINAL_WORKSPACE_CONTRACT_TOOLS = {
+    "workspace_submit_verification_judgment",
+    "workspace_submit_supervisor_decision",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -127,16 +135,35 @@ _SKIP_EVENT_SENTINEL = object()
 # ---------------------------------------------------------------------------
 
 
+def _extract_tool_execution_id(data: dict[str, Any]) -> str | None:
+    """Return the stable per-call execution identity from an event payload."""
+    for key in ("tool_execution_id", "execution_id", "call_id"):
+        value = data.get(key)
+        if value:
+            return str(value)
+    return None
+
+
 def _build_tool_exec_map(tool_executions: list[Any]) -> dict[str, Any]:
-    """Build a lookup map from tool executions keyed by message_id:tool_name."""
+    """Build a lookup map from tool executions keyed by call id, with tool-name fallback."""
     tool_exec_map: dict[str, dict[str, Any]] = {}
     for te in tool_executions:
-        key = f"{te.message_id}:{te.tool_name}"
-        tool_exec_map[key] = {
+        message_id = getattr(te, "message_id", None)
+        call_id = getattr(te, "call_id", None)
+        record_id = getattr(te, "id", None)
+        tool_name = getattr(te, "tool_name", None)
+        execution = {
+            "_execution_id": str(record_id) if record_id else None,
             "startTime": te.started_at.timestamp() * 1000 if te.started_at else None,
             "endTime": te.completed_at.timestamp() * 1000 if te.completed_at else None,
             "duration": te.duration_ms,
         }
+
+        for execution_id in (call_id, record_id):
+            if execution_id:
+                tool_exec_map[f"{message_id}:{execution_id}"] = execution
+        if tool_name:
+            tool_exec_map.setdefault(f"{message_id}:{tool_name}", execution)
     return tool_exec_map
 
 
@@ -314,14 +341,143 @@ def _build_thought(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any] | obj
 def _build_act(
     data: dict[str, Any], event: Any, tool_exec_map: dict[str, Any], **_kwargs: Any
 ) -> dict[str, Any]:
+    execution_id = _extract_tool_execution_id(data)
     item: dict[str, Any] = {
         "toolName": data.get("tool_name", ""),
         "toolInput": data.get("tool_input", {}),
     }
-    key = f"{event.message_id}:{data.get('tool_name', '')}"
-    if key in tool_exec_map:
-        item["execution"] = tool_exec_map[key]
+    execution_keys = []
+    if execution_id:
+        execution_keys.append(f"{event.message_id}:{execution_id}")
+    execution_keys.append(f"{event.message_id}:{data.get('tool_name', '')}")
+    for key in execution_keys:
+        if key in tool_exec_map:
+            execution = dict(tool_exec_map[key])
+            execution_id = execution.pop("_execution_id", None) or execution_id
+            item["execution"] = execution
+            break
+    if execution_id:
+        item["execution_id"] = execution_id
     return item
+
+
+def _parse_accumulated_tool_arguments(raw_arguments: Any) -> dict[str, Any]:
+    if isinstance(raw_arguments, dict):
+        return raw_arguments
+    if not isinstance(raw_arguments, str) or not raw_arguments.strip():
+        return {}
+    parsed = _load_json_object_prefix(raw_arguments)
+    if parsed is _SKIP_EVENT_SENTINEL:
+        return {"partial_arguments": raw_arguments}
+    return parsed if isinstance(parsed, dict) else {"arguments": parsed}
+
+
+def _load_json_object_prefix(raw_arguments: str) -> Any:
+    try:
+        return json.loads(raw_arguments)
+    except json.JSONDecodeError:
+        pass
+
+    repaired = _close_json_prefix(raw_arguments)
+    if repaired == raw_arguments:
+        repaired = _trim_to_complete_json_object_prefix(raw_arguments)
+    try:
+        return json.loads(repaired)
+    except json.JSONDecodeError:
+        trimmed = _trim_to_complete_json_object_prefix(raw_arguments)
+        if trimmed != raw_arguments and trimmed != repaired:
+            try:
+                return json.loads(trimmed)
+            except json.JSONDecodeError:
+                pass
+        return _SKIP_EVENT_SENTINEL
+
+
+def _close_json_prefix(raw_arguments: str) -> str:
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+
+    for char in raw_arguments:
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\" and in_string:
+            escaped = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == "{":
+            stack.append("}")
+        elif char == "[":
+            stack.append("]")
+        elif char in ("}", "]"):
+            if not stack or stack[-1] != char:
+                return raw_arguments
+            stack.pop()
+
+    if in_string or not stack:
+        return raw_arguments
+    return f"{raw_arguments}{''.join(reversed(stack))}"
+
+
+def _trim_to_complete_json_object_prefix(raw_arguments: str) -> str:
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    last_top_level_comma_index: int | None = None
+
+    for index, char in enumerate(raw_arguments):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\" and in_string:
+            escaped = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == "{":
+            stack.append("}")
+        elif char == "[":
+            stack.append("]")
+        elif char in ("}", "]"):
+            if not stack or stack[-1] != char:
+                return raw_arguments
+            stack.pop()
+        elif char == "," and stack == ["}"]:
+            last_top_level_comma_index = index
+
+    if last_top_level_comma_index is None:
+        return raw_arguments
+    return _close_json_prefix(raw_arguments[:last_top_level_comma_index])
+
+
+def _build_act_delta(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
+    tool_name = data.get("tool_name", "")
+    tool_input = _parse_accumulated_tool_arguments(data.get("accumulated_arguments"))
+    return {
+        "__timeline_type": "act",
+        "toolName": tool_name,
+        "toolInput": tool_input,
+        "execution_id": _extract_tool_execution_id(data),
+        "metadata": {
+            "sourceEventType": "act_delta",
+            "status": data.get("status", "preparing"),
+            "synthesizeObserve": _should_synthesize_terminal_observe(tool_name, tool_input),
+        },
+    }
+
+
+def _should_synthesize_terminal_observe(tool_name: Any, tool_input: dict[str, Any]) -> bool:
+    if tool_name not in _TERMINAL_WORKSPACE_CONTRACT_TOOLS:
+        return False
+    return bool(tool_input.get("verdict") or tool_input.get("action"))
 
 
 def _build_observe(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
@@ -330,6 +486,9 @@ def _build_observe(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
         "toolOutput": data.get("observation", ""),
         "isError": data.get("is_error", False),
     }
+    execution_id = _extract_tool_execution_id(data)
+    if execution_id:
+        item["execution_id"] = execution_id
     raw_ui_meta = data.get("ui_metadata")
     if raw_ui_meta and isinstance(raw_ui_meta, dict):
         item["mcpUiMetadata"] = {
@@ -790,6 +949,7 @@ _EVENT_BUILDERS: dict[str, Any] = {
     "assistant_message": _build_assistant_message,
     "thought": _build_thought,
     "act": _build_act,
+    "act_delta": _build_act_delta,
     "observe": _build_observe,
     "work_plan": _build_work_plan,
     "task_start": _build_task_start,
@@ -851,8 +1011,11 @@ def _build_timeline(
 ) -> list[dict[str, Any]]:
     """Build the timeline list from raw events using the dispatch dict."""
     timeline: list[dict[str, Any]] = []
+    replayable_act_delta_ids = _find_replayable_act_delta_ids(events)
     for event in events:
         event_type = event.event_type
+        if event_type == "act_delta" and _event_identity(event) not in replayable_act_delta_ids:
+            continue
         data = event.event_data or {}
         builder = _EVENT_BUILDERS.get(event_type)
         if builder is None:
@@ -870,10 +1033,11 @@ def _build_timeline(
         )
         if fields is _SKIP_EVENT_SENTINEL:
             continue
+        timeline_type = fields.pop("__timeline_type", event_type)
 
         item = {
             "id": _timeline_event_id(event),
-            "type": event_type,
+            "type": timeline_type,
             "eventTimeUs": event.event_time_us,
             "eventCounter": event.event_counter,
             "timestamp": event.event_time_us // 1000
@@ -882,7 +1046,64 @@ def _build_timeline(
         }
         item.update(fields)
         timeline.append(item)
+        if event_type == "act_delta" and _should_append_synthetic_observe(item):
+            timeline.append(_build_synthetic_observe_item(item))
     return timeline
+
+
+def _should_append_synthetic_observe(item: dict[str, Any]) -> bool:
+    metadata = item.get("metadata")
+    return isinstance(metadata, dict) and metadata.get("synthesizeObserve") is True
+
+
+def _build_synthetic_observe_item(act_item: dict[str, Any]) -> dict[str, Any]:
+    tool_input = act_item.get("toolInput")
+    result = tool_input if isinstance(tool_input, dict) else {}
+    metadata = dict(act_item.get("metadata") or {})
+    metadata["sourceEventType"] = "synthetic_observe"
+    return {
+        "id": f"observe-{act_item['id']}",
+        "type": "observe",
+        "eventTimeUs": act_item["eventTimeUs"],
+        "eventCounter": act_item["eventCounter"],
+        "timestamp": act_item["timestamp"],
+        "toolName": act_item.get("toolName", ""),
+        "toolOutput": json.dumps(result, ensure_ascii=False),
+        "isError": False,
+        "execution_id": act_item.get("execution_id"),
+        "metadata": metadata,
+    }
+
+
+def _event_identity(event: Any) -> tuple[int, int, str]:
+    return (event.event_time_us, event.event_counter, event.event_type)
+
+
+def _act_delta_replay_key(event: Any) -> tuple[str, str]:
+    data = event.event_data or {}
+    message_id = event.message_id or ""
+    tool_name = data.get("tool_name", "")
+    execution_id = _extract_tool_execution_id(data)
+    return (message_id, str(execution_id or tool_name))
+
+
+def _find_replayable_act_delta_ids(events: list[Any]) -> set[tuple[int, int, str]]:
+    """Return the last act_delta per tool call, unless a full act already exists."""
+    latest_delta_by_key: dict[tuple[str, str], Any] = {}
+    full_act_keys: set[tuple[str, str]] = set()
+
+    for event in events:
+        if event.event_type == "act_delta":
+            latest_delta_by_key[_act_delta_replay_key(event)] = event
+            continue
+        if event.event_type == "act":
+            full_act_keys.add(_act_delta_replay_key(event))
+
+    return {
+        _event_identity(event)
+        for event in latest_delta_by_key.values()
+        if _act_delta_replay_key(event) not in full_act_keys
+    }
 
 
 async def _resolve_pagination_cursors(

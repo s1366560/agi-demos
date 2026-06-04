@@ -9273,6 +9273,13 @@ async def test_retry_same_node_dispatches_same_conversation_repair_turn(
                 "last_verification_judge_next_action_kind": "retry_same_node",
                 "last_verification_judge_required_next_action": "report fresh commit_ref",
                 "last_verification_judge_failed_criteria": ["missing_commit_ref"],
+                "terminal_attempt_retry_reason": "worktree_integration_failed",
+                "worktree_integration_failed_previous_attempt_id": "attempt-old",
+                "worktree_integration_failed_previous_commit_ref": "abc1234",
+                "worktree_integration_failed_previous_summary": (
+                    "status=failed\nreason=merge_failed_aborted\n"
+                    "CONFLICT (add/add): Merge conflict in src/example.ts"
+                ),
                 "last_verification_judge_repair_brief": {
                     "failed_items": ["missing commit_ref"],
                     "minimum_verifications": ["npm test"],
@@ -9405,6 +9412,11 @@ async def test_retry_same_node_dispatches_same_conversation_repair_turn(
     assert "[repair-turn]" in str(launched[0]["repair_brief_prompt"])
     assert "missing commit_ref" in str(launched[0]["repair_brief_prompt"])
     assert "worker should report a fresh commit_ref" in str(launched[0]["repair_brief_prompt"])
+    assert "worktree_integration_failure" in str(launched[0]["repair_brief_prompt"])
+    assert "inspect the current main checkout" in str(launched[0]["repair_brief_prompt"])
+    assert "avoid reintroducing stale conflicting content" in str(
+        launched[0]["repair_brief_prompt"]
+    )
     assert "planner-only feedback" not in str(launched[0]["repair_brief_prompt"])
 
     db_session.expire_all()
