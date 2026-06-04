@@ -4,7 +4,7 @@ import io
 import zipfile
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException, status
@@ -28,6 +28,22 @@ metadata:
 Use when managing Agent Skills packages.
 """
 
+SAMPLE_SKILL_MD_WITH_SPEC = """---
+name: alpha-skill
+description: Searches, installs, and exports agent skills.
+allowed-tools: Bash(git:*) Read
+license: MIT
+compatibility: Requires git and internet access
+metadata:
+  version: "1.2.3"
+  author: test-suite
+---
+
+# Alpha Skill
+
+Use when managing Agent Skills packages.
+"""
+
 
 def _make_zip(files: dict[str, bytes | str]) -> bytes:
     buffer = io.BytesIO()
@@ -39,6 +55,15 @@ def _make_zip(files: dict[str, bytes | str]) -> bytes:
 
 
 class _SkillRepository:
+    async def get_by_name(
+        self,
+        tenant_id: str,
+        name: str,
+        scope: SkillScope | None = None,
+    ) -> Skill | None:
+        _ = (tenant_id, name, scope)
+        return None
+
     async def create(self, _skill: object) -> object:
         raise ValueError("Skill name 'Bad Name' must be lowercase with hyphens only")
 
@@ -86,7 +111,9 @@ class _MemorySkillRepository:
     async def list_by_tenant(self, *_args: object, **_kwargs: object) -> list[Skill]:
         return list(self.skills_by_id.values())
 
-    async def list_by_project(self, project_id: str, *_args: object, **_kwargs: object) -> list[Skill]:
+    async def list_by_project(
+        self, project_id: str, *_args: object, **_kwargs: object
+    ) -> list[Skill]:
         return [skill for skill in self.skills_by_id.values() if skill.project_id == project_id]
 
     async def count_by_tenant(self, *_args: object, **_kwargs: object) -> int:
@@ -130,7 +157,9 @@ class _MemoryVersionRepository:
         return max(versions, key=lambda version: version.version_number, default=None)
 
     async def get_max_version_number(self, skill_id: str) -> int:
-        versions = [version.version_number for version in self._db.versions if version.skill_id == skill_id]
+        versions = [
+            version.version_number for version in self._db.versions if version.skill_id == skill_id
+        ]
         return max(versions, default=0)
 
     async def count_by_skill(self, skill_id: str) -> int:
@@ -143,6 +172,17 @@ class _MemorySqlSkillRepository:
 
     async def get_by_id(self, skill_id: str) -> Skill | None:
         return await self._repo.get_by_id(skill_id)
+
+    async def get_by_name(
+        self,
+        tenant_id: str,
+        name: str,
+        scope: SkillScope | None = None,
+    ) -> Skill | None:
+        return await self._repo.get_by_name(tenant_id, name, scope)
+
+    async def update(self, skill: Skill) -> Skill:
+        return await self._repo.update(skill)
 
 
 class _MemoryEvolutionRepository:
@@ -166,6 +206,25 @@ class _MemoryEvolutionRepository:
         ]
         return jobs[:limit]
 
+    async def get_job(self, job_id: str) -> SimpleNamespace | None:
+        return next((job for job in self._db.evolution_jobs if job.id == job_id), None)
+
+    async def update_job_status(
+        self,
+        job_id: str,
+        *,
+        status: str,
+        skill_version_id: str | None = None,
+    ) -> None:
+        job = await self.get_job(job_id)
+        if job is None:
+            return
+        job.status = status
+        if skill_version_id is not None:
+            job.skill_version_id = skill_version_id
+        if status == "applied":
+            job.applied_at = datetime.now(UTC)
+
     async def count_sessions_by_skill(self, *, tenant_id: str, skill_name: str) -> int:
         return sum(
             1
@@ -175,24 +234,22 @@ class _MemoryEvolutionRepository:
 
     async def get_overview_stats(self, *, tenant_id: str) -> dict[str, object]:
         sessions = [
-            session
-            for session in self._db.evolution_sessions
-            if session.tenant_id == tenant_id
+            session for session in self._db.evolution_sessions if session.tenant_id == tenant_id
         ]
-        jobs = [
-            job for job in self._db.evolution_jobs if job.tenant_id == tenant_id
-        ]
+        jobs = [job for job in self._db.evolution_jobs if job.tenant_id == tenant_id]
         scores = [
             session.overall_score
             for session in sessions
-            if getattr(session, "overall_score", None) is not None
+            if session.skill_name != "__no_skill__"
+            and getattr(session, "overall_score", None) is not None
         ]
+        skill_sessions = [session for session in sessions if session.skill_name != "__no_skill__"]
         return {
             "total_sessions": len(sessions),
-            "skill_sessions": sum(1 for s in sessions if s.skill_name != "__no_skill__"),
+            "skill_sessions": len(skill_sessions),
             "no_skill_sessions": sum(1 for s in sessions if s.skill_name == "__no_skill__"),
-            "unprocessed_sessions": sum(1 for s in sessions if not s.processed),
-            "processed_sessions": sum(1 for s in sessions if s.processed),
+            "unprocessed_sessions": sum(1 for s in skill_sessions if not s.processed),
+            "processed_sessions": sum(1 for s in skill_sessions if s.processed),
             "scored_sessions": len(scores),
             "successful_sessions": sum(1 for s in sessions if s.success),
             "avg_score": sum(scores) / len(scores) if scores else None,
@@ -200,6 +257,7 @@ class _MemoryEvolutionRepository:
             "pending_jobs": sum(1 for j in jobs if j.status == "pending_review"),
             "applied_jobs": sum(1 for j in jobs if j.status == "applied"),
             "skipped_jobs": sum(1 for j in jobs if j.status == "skipped"),
+            "rejected_jobs": sum(1 for j in jobs if j.status == "rejected"),
         }
 
     async def get_skill_session_summaries(
@@ -209,15 +267,14 @@ class _MemoryEvolutionRepository:
         limit: int = 50,
     ) -> list[dict[str, object]]:
         sessions = [
-            session
-            for session in self._db.evolution_sessions
-            if session.tenant_id == tenant_id
+            session for session in self._db.evolution_sessions if session.tenant_id == tenant_id
         ]
-        jobs = [
-            job for job in self._db.evolution_jobs if job.tenant_id == tenant_id
-        ]
+        jobs = [job for job in self._db.evolution_jobs if job.tenant_id == tenant_id]
         summaries: list[dict[str, object]] = []
-        for skill_name in sorted({session.skill_name for session in sessions}):
+        skill_names = {
+            session.skill_name for session in sessions if session.skill_name != "__no_skill__"
+        }
+        for skill_name in sorted(skill_names):
             skill_sessions = [session for session in sessions if session.skill_name == skill_name]
             skill_jobs = [job for job in jobs if job.skill_name == skill_name]
             scores = [
@@ -235,9 +292,7 @@ class _MemoryEvolutionRepository:
                     ),
                     "scored_count": len(scores),
                     "avg_score": sum(scores) / len(scores) if scores else None,
-                    "latest_session_at": max(
-                        session.created_at for session in skill_sessions
-                    ),
+                    "latest_session_at": max(session.created_at for session in skill_sessions),
                     "job_count": len(skill_jobs),
                     "pending_job_count": sum(
                         1 for job in skill_jobs if job.status == "pending_review"
@@ -250,7 +305,6 @@ class _MemoryEvolutionRepository:
         return sorted(
             summaries,
             key=lambda summary: (
-                summary["skill_name"] == "__no_skill__",
                 -int(summary["session_count"]),
                 str(summary["skill_name"]),
             ),
@@ -349,6 +403,60 @@ async def test_create_skill_preserves_agentskills_spec_fields(
             "spec_version": "1.0",
         },
     }
+
+
+@pytest.mark.unit
+async def test_create_skill_rejects_mismatched_skill_md_frontmatter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    db = SimpleNamespace(commit=AsyncMock())
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.create_skill(
+            request=SimpleNamespace(),
+            data=router.SkillCreate(
+                name="wrong-name",
+                description="Searches, installs, and exports agent skills.",
+                tools=["Bash", "Read"],
+                full_content=SAMPLE_SKILL_MD_WITH_SPEC,
+            ),
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+    assert exc_info.value.detail == "Skill name must match SKILL.md frontmatter"
+
+
+@pytest.mark.unit
+async def test_create_skill_from_skill_md_uses_frontmatter_as_canonical_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    db = SimpleNamespace(commit=AsyncMock())
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+
+    response = await router.create_skill(
+        request=SimpleNamespace(),
+        data=router.SkillCreate(
+            name="alpha-skill",
+            description="Searches, installs, and exports agent skills.",
+            tools=["Bash", "Read"],
+            full_content=SAMPLE_SKILL_MD_WITH_SPEC,
+        ),
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    stored = await repo.get_by_id(response.id)
+    assert stored is not None
+    assert stored.full_content == SAMPLE_SKILL_MD_WITH_SPEC
+    assert stored.license == "MIT"
+    assert stored.compatibility == "Requires git and internet access"
+    assert stored.allowed_tools_raw == "Bash(git:*) Read"
+    assert response.version_label == "1.2.3"
     db.commit.assert_awaited_once()
 
 
@@ -468,6 +576,47 @@ async def test_import_skill_package_creates_skill_and_version(
     assert response.skill.current_version == 1
     assert response.version_label == "1.2.3"
     assert db.versions[0].resource_files == {"references/README.md": "details"}
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_update_skill_content_validates_and_creates_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        name="alpha-skill",
+        description="Old description",
+        tools=["Read"],
+        full_content=None,
+    )
+    await repo.create(skill)
+    db = SimpleNamespace(commit=AsyncMock(), versions=[])
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
+        "SqlSkillVersionRepository",
+        _MemoryVersionRepository,
+    )
+
+    response = await router.update_skill_content(
+        request=SimpleNamespace(),
+        skill_id=skill.id,
+        data=router.SkillContentUpdate(full_content=SAMPLE_SKILL_MD_WITH_SPEC),
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    updated = await repo.get_by_id(skill.id)
+    assert updated is not None
+    assert response.description == "Searches, installs, and exports agent skills."
+    assert updated.tools == ["Bash", "Read"]
+    assert updated.full_content == SAMPLE_SKILL_MD_WITH_SPEC
+    assert updated.license == "MIT"
+    assert updated.allowed_tools_raw == "Bash(git:*) Read"
+    assert updated.current_version == 1
+    assert db.versions[0].skill_md_content == SAMPLE_SKILL_MD_WITH_SPEC
     db.commit.assert_awaited_once()
 
 
@@ -664,6 +813,7 @@ async def test_get_skill_evolution_returns_route_and_trigger_metadata(
                 action="improve_skill",
                 status="pending_review",
                 rationale="Observed repeated missing setup step",
+                candidate_content="# Improved alpha",
                 session_ids=["s1", "s2"],
                 skill_version_id=None,
                 created_at=created_at,
@@ -676,8 +826,7 @@ async def test_get_skill_evolution_returns_route_and_trigger_metadata(
         ],
     )
     monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository."
-        "SqlSkillRepository",
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
         _MemorySqlSkillRepository,
     )
     monkeypatch.setattr(
@@ -686,8 +835,7 @@ async def test_get_skill_evolution_returns_route_and_trigger_metadata(
         _MemoryVersionRepository,
     )
     monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository."
-        "SkillEvolutionRepository",
+        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
         _MemoryEvolutionRepository,
     )
 
@@ -704,6 +852,8 @@ async def test_get_skill_evolution_returns_route_and_trigger_metadata(
     assert response.trigger.manual_trigger.endswith(f"/skills/{skill.id}/evolution/run")
     assert [entry.kind for entry in response.route] == ["version", "evolution_job"]
     assert response.jobs[0].rationale == "Observed repeated missing setup step"
+    assert response.jobs[0].candidate_preview == "# Improved alpha"
+    assert response.jobs[0].blocked_by_review is True
 
 
 @pytest.mark.unit
@@ -720,6 +870,7 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
                 action="improve_skill",
                 status="pending_review",
                 rationale="Missing setup step",
+                candidate_content="# Improved alpha",
                 session_ids=["s1"],
                 skill_version_id=None,
                 created_at=created_at,
@@ -762,8 +913,7 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
         ],
     )
     monkeypatch.setattr(
-        "src.infrastructure.agent.plugins.skill_evolution.repository."
-        "SkillEvolutionRepository",
+        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
         _MemoryEvolutionRepository,
     )
 
@@ -779,15 +929,171 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
     assert response.stats.skill_sessions == 1
     assert response.stats.no_skill_sessions == 1
     assert response.stats.pending_jobs == 1
+    assert response.stats.rejected_jobs == 0
+    assert response.monitor.blocked_by_review_count == 1
+    assert response.monitor.backlog_count == 0
+    assert response.monitor.unscored_count == 0
+    assert response.monitor.needs_attention is True
+    assert [stage.id for stage in response.stages] == [
+        "capture",
+        "summarize",
+        "judge",
+        "review",
+        "apply",
+    ]
+    assert response.stages[3].status == "blocked"
+    assert [skill.skill_name for skill in response.skills] == ["alpha-skill"]
     assert response.skills[0].skill_name == "alpha-skill"
     assert response.skills[0].session_count == 1
     assert response.recent_sessions[0].id in {"s1", "s2"}
     assert response.recent_jobs[0].id == "job-1"
+    assert response.recent_jobs[0].candidate_preview == "# Improved alpha"
     assert response.trigger.manual_trigger == "/api/v1/skills/{skill_id}/evolution/run"
 
 
 @pytest.mark.unit
-async def test_run_skill_evolution_triggers_single_skill_cycle(
+async def test_apply_skill_evolution_job_creates_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        name="alpha-skill",
+        description="Manages Agent Skills packages",
+        tools=["Read"],
+        full_content=SAMPLE_SKILL_MD,
+    )
+    await repo.create(skill)
+    created_at = datetime.now(UTC)
+    db = SimpleNamespace(
+        skill_repo=repo,
+        versions=[],
+        evolution_jobs=[
+            SimpleNamespace(
+                id="job-apply",
+                tenant_id="tenant-1",
+                skill_name="alpha-skill",
+                action="improve_skill",
+                status="pending_review",
+                rationale="Add verification guidance",
+                candidate_content="# Improved Alpha Skill",
+                session_ids=["s1", "s2"],
+                skill_version_id=None,
+                created_at=created_at,
+                applied_at=None,
+            )
+        ],
+        commit=AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
+        _MemorySqlSkillRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
+        "SqlSkillVersionRepository",
+        _MemoryVersionRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
+        _MemoryEvolutionRepository,
+    )
+
+    response = await router.apply_skill_evolution_job(
+        job_id="job-apply",
+        db=db,
+        tenant={"id": "tenant-1"},
+    )
+
+    assert response.status == "applied"
+    assert response.skill_version_id == db.versions[0].id
+    assert db.versions[0].created_by == "evolution"
+    assert skill.full_content == "# Improved Alpha Skill"
+    assert skill.current_version == 1
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_reject_skill_evolution_job_does_not_create_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created_at = datetime.now(UTC)
+    db = SimpleNamespace(
+        evolution_jobs=[
+            SimpleNamespace(
+                id="job-reject",
+                tenant_id="tenant-1",
+                skill_name="alpha-skill",
+                action="improve_skill",
+                status="pending_review",
+                rationale="Rejected candidate",
+                candidate_content="# Rejected",
+                session_ids=["s1"],
+                skill_version_id=None,
+                created_at=created_at,
+                applied_at=None,
+            )
+        ],
+        versions=[],
+        commit=AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
+        _MemoryEvolutionRepository,
+    )
+
+    response = await router.reject_skill_evolution_job(
+        job_id="job-reject",
+        db=db,
+        tenant={"id": "tenant-1"},
+    )
+
+    assert response.status == "rejected"
+    assert response.skill_version_id is None
+    assert db.versions == []
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_apply_skill_evolution_job_rejects_cross_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = SimpleNamespace(
+        evolution_jobs=[
+            SimpleNamespace(
+                id="job-other",
+                tenant_id="tenant-other",
+                skill_name="alpha-skill",
+                action="improve_skill",
+                status="pending_review",
+                rationale=None,
+                candidate_content="# Other",
+                session_ids=[],
+                skill_version_id=None,
+                created_at=datetime.now(UTC),
+                applied_at=None,
+            )
+        ],
+        commit=AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
+        _MemoryEvolutionRepository,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.apply_skill_evolution_job(
+            job_id="job-other",
+            db=db,
+            tenant={"id": "tenant-1"},
+        )
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_run_skill_evolution_queues_single_skill_cycle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repo = _MemorySkillRepository()
@@ -799,18 +1105,17 @@ async def test_run_skill_evolution_triggers_single_skill_cycle(
     )
     await repo.create(skill)
     db = SimpleNamespace(skill_repo=repo)
-    plugin = SimpleNamespace(trigger_evolution=AsyncMock(return_value={"jobs": 1}))
+    plugin = SimpleNamespace(
+        schedule_evolution=MagicMock(return_value={"scheduled": True, "status": "queued"})
+    )
     container = SimpleNamespace(skill_evolution_plugin=lambda: plugin)
     request = SimpleNamespace(
         app=SimpleNamespace(
-            state=SimpleNamespace(
-                container=SimpleNamespace(with_db=lambda _db: container)
-            )
+            state=SimpleNamespace(container=SimpleNamespace(with_db=lambda _db: container))
         )
     )
     monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository."
-        "SqlSkillRepository",
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
         _MemorySqlSkillRepository,
     )
 
@@ -821,9 +1126,55 @@ async def test_run_skill_evolution_triggers_single_skill_cycle(
         tenant={"id": "tenant-1"},
     )
 
-    assert response.result == {"jobs": 1}
-    plugin.trigger_evolution.assert_awaited_once_with(
+    assert response.result == {"scheduled": True, "status": "queued"}
+    plugin.schedule_evolution.assert_called_once_with(
         tenant_id="tenant-1",
         project_id=None,
         skill_name="alpha-skill",
     )
+
+
+@pytest.mark.unit
+async def test_run_tenant_skill_evolution_queues_tenant_cycle() -> None:
+    plugin = SimpleNamespace(
+        schedule_evolution=MagicMock(return_value={"scheduled": True, "status": "queued"})
+    )
+    container = SimpleNamespace(skill_evolution_plugin=lambda: plugin)
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(container=SimpleNamespace(with_db=lambda _db: container))
+        )
+    )
+
+    response = await router.run_tenant_skill_evolution(
+        request=request,
+        db=SimpleNamespace(),
+        tenant={"id": "tenant-1"},
+    )
+
+    assert response.tenant_id == "tenant-1"
+    assert response.result == {"scheduled": True, "status": "queued"}
+    plugin.schedule_evolution.assert_called_once_with(
+        tenant_id="tenant-1",
+        project_id=None,
+        skill_name=None,
+    )
+
+
+@pytest.mark.unit
+async def test_run_tenant_skill_evolution_rejects_missing_plugin() -> None:
+    container = SimpleNamespace(skill_evolution_plugin=lambda: None)
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(container=SimpleNamespace(with_db=lambda _db: container))
+        )
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.run_tenant_skill_evolution(
+            request=request,
+            db=SimpleNamespace(),
+            tenant={"id": "tenant-1"},
+        )
+
+    assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE

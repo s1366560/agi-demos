@@ -131,13 +131,16 @@ class EvolutionScheduler:
         skill_name: str | None = None,
         reason: str = "capture",
         delay_seconds: float = _CAPTURE_TRIGGER_DELAY_SECONDS,
+        allow_when_stopped: bool = False,
     ) -> bool:
         """Schedule an autonomous evolution cycle without blocking the caller.
 
         Requests are keyed by tenant/project/skill so bursty after-turn capture
         coalesces into one background pipeline run.
         """
-        if not self._config.enabled or not self._running:
+        if not self._config.enabled:
+            return False
+        if not allow_when_stopped and not self._running:
             return False
 
         request = _EvolutionRunRequest(
@@ -154,6 +157,7 @@ class EvolutionScheduler:
                 request,
                 delay_seconds=max(0.0, delay_seconds),
                 reason=reason,
+                require_running=not allow_when_stopped,
             )
         )
         self._track_request(request, task)
@@ -210,11 +214,12 @@ class EvolutionScheduler:
         *,
         delay_seconds: float,
         reason: str,
+        require_running: bool = True,
     ) -> None:
         try:
             if delay_seconds > 0:
                 await asyncio.sleep(delay_seconds)
-            if not self._is_running():
+            if require_running and not self._is_running():
                 return
             if request.tenant_id:
                 result = await self._execute_serialized(
@@ -320,6 +325,7 @@ class EvolutionScheduler:
             "judged": 0,
             "groups": 0,
             "jobs": 0,
+            "blocked_by_review": 0,
         }
 
         async with self._session_factory() as db:
@@ -334,6 +340,11 @@ class EvolutionScheduler:
             )
 
             repo = SkillEvolutionRepository(db)
+            run_config = await _load_tenant_config(db, tenant_id=tenant_id, default_config=self._config)
+            self._summarizer._config = run_config
+            self._judge._config = run_config
+            self._aggregator._config = run_config
+            self._engine._config = run_config
             skill_repo = SqlSkillRepository(db)
             skill_version_repo = SqlSkillVersionRepository(db)
             llm_client = await self._get_llm_client(db=db, tenant_id=tenant_id)
@@ -342,7 +353,8 @@ class EvolutionScheduler:
             unprocessed = await repo.get_unprocessed_sessions(
                 tenant_id=tenant_id,
                 skill_name=skill_name,
-                limit=self._config.max_sessions_per_batch,
+                min_skill_sessions=run_config.scoring_min_sessions_per_skill,
+                limit=run_config.max_sessions_per_batch,
             )
             logger.info(
                 "Skill evolution summarization stage tenant=%s skill=%s pending=%d",
@@ -360,7 +372,8 @@ class EvolutionScheduler:
             unscored = await repo.get_unscored_sessions(
                 tenant_id=tenant_id,
                 skill_name=skill_name,
-                limit=self._config.max_sessions_per_batch,
+                min_skill_sessions=run_config.scoring_min_sessions_per_skill,
+                limit=run_config.max_sessions_per_batch,
             )
             logger.info(
                 "Skill evolution judging stage tenant=%s skill=%s pending=%d",
@@ -390,11 +403,12 @@ class EvolutionScheduler:
                     skill_version_repository=skill_version_repo,
                 )
                 result["jobs"] = len(jobs)
+                result["blocked_by_review"] = self._engine.last_blocked_by_review_count
                 await db.commit()
 
             # Cleanup old sessions
             cleaned = await repo.cleanup_old_sessions(
-                retention_days=self._config.session_retention_days
+                retention_days=run_config.session_retention_days
             )
             if cleaned > 0:
                 await db.commit()
@@ -477,3 +491,26 @@ class EvolutionScheduler:
         except Exception:
             logger.exception("Failed to discover tenants for evolution")
             return [""]
+
+
+async def _load_tenant_config(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    default_config: SkillEvolutionConfig,
+) -> SkillEvolutionConfig:
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from src.infrastructure.adapters.secondary.persistence.plugin_config_repository import (
+        PluginConfigRepository,
+    )
+
+    try:
+        row = await PluginConfigRepository(db).get_by_tenant_and_plugin(
+            tenant_id=tenant_id,
+            plugin_name="skill_evolution",
+        )
+    except (AttributeError, SQLAlchemyError):
+        return default_config
+    config = row.config if row is not None and isinstance(row.config, dict) else {}
+    return default_config.with_overrides(config)

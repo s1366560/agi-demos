@@ -22,6 +22,7 @@ class TestSkillEvolutionConfig:
         config = SkillEvolutionConfig()
         assert config.enabled is True
         assert config.min_sessions_per_skill == 5
+        assert config.scoring_min_sessions_per_skill == 5
         assert config.min_avg_score == 0.6
         assert config.evolution_interval_minutes == 60
 
@@ -34,6 +35,7 @@ class TestSkillEvolutionConfig:
         {
             "SKILL_EVOLUTION_ENABLED": "false",
             "SKILL_EVOLUTION_MIN_SESSIONS": "10",
+            "SKILL_EVOLUTION_SCORING_MIN_SESSIONS": "7",
             "SKILL_EVOLUTION_MIN_AVG_SCORE": "0.8",
             "SKILL_EVOLUTION_INTERVAL_MINUTES": "120",
             "SKILL_EVOLUTION_PUBLISH_MODE": "direct",
@@ -44,8 +46,30 @@ class TestSkillEvolutionConfig:
         config = SkillEvolutionConfig.from_env()
         assert config.enabled is False
         assert config.min_sessions_per_skill == 10
+        assert config.scoring_min_sessions_per_skill == 7
         assert config.min_avg_score == 0.8
         assert config.evolution_interval_minutes == 120
+        assert config.publish_mode == "direct"
+        assert config.auto_apply is True
+
+    def test_with_overrides_clamps_persisted_strategy(self) -> None:
+        config = SkillEvolutionConfig().with_overrides(
+            {
+                "enabled": False,
+                "min_sessions_per_skill": 0,
+                "scoring_min_sessions_per_skill": 4,
+                "min_avg_score": 2,
+                "max_sessions_per_batch": 0,
+                "publish_mode": "direct",
+                "auto_apply": True,
+            }
+        )
+
+        assert config.enabled is False
+        assert config.min_sessions_per_skill == 1
+        assert config.scoring_min_sessions_per_skill == 4
+        assert config.min_avg_score == 1.0
+        assert config.max_sessions_per_batch == 1
         assert config.publish_mode == "direct"
         assert config.auto_apply is True
 
@@ -163,9 +187,19 @@ class TestSessionCollector:
             ],
             user_message="read the file",
             final_content="The file says hello world",
+            tool_events=[
+                {
+                    "tool_name": "write_file",
+                    "success": True,
+                    "result": "wrote file",
+                    "metadata": {"path": "demo.txt"},
+                }
+            ],
         )
-        assert len(trajectory["steps"]) == 3
-        assert trajectory["tool_call_count"] == 1
+        assert len(trajectory["steps"]) == 4
+        assert trajectory["steps"][-1]["type"] == "tool_execution"
+        assert trajectory["steps"][-1]["name"] == "write_file"
+        assert trajectory["tool_call_count"] == 2
         assert trajectory["user_query"] == "read the file"
 
     @pytest.mark.asyncio
@@ -199,6 +233,13 @@ class TestSessionCollector:
                 "user_message": "use loaded skills",
                 "final_content": "done",
                 "loaded_skill_names": ["dynamic-a", "dynamic-b", "dynamic-a"],
+                "tool_events": [
+                    {
+                        "tool_name": "skill_loader",
+                        "success": True,
+                        "result": "loaded dynamic-a",
+                    }
+                ],
                 "conversation_context": [{"role": "assistant", "content": "done"}],
                 "success": True,
             },
@@ -210,6 +251,7 @@ class TestSessionCollector:
             "dynamic-a",
             "dynamic-b",
         ]
+        assert saved_sessions[0].trajectory["tool_call_count"] == 1
 
     @pytest.mark.asyncio
     async def test_matched_skill_takes_precedence_over_loaded_skill_names(
@@ -343,6 +385,255 @@ class TestSessionSummarizer:
         assert "Automatic fallback summary" in summary
         assert "not json" in summary
 
+    @pytest.mark.asyncio
+    async def test_summarize_parses_fenced_json(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.summarizer import (
+            SessionSummarizer,
+        )
+
+        llm_client = MagicMock()
+        llm_client.generate = AsyncMock(
+            return_value={
+                "content": (
+                    "```json\n"
+                    '{"trajectory":[{"step":1,"action":"Loaded skill","tool":"skill_loader",'
+                    '"outcome":"success"}],"summary":"The run completed."}\n'
+                    "```"
+                )
+            }
+        )
+        session = SkillEvolutionSession(
+            id="s-fenced",
+            skill_name="test-skill",
+            tenant_id="t1",
+            conversation_id="c1",
+            user_query="query",
+            trajectory={"steps": []},
+            success=True,
+        )
+
+        trajectory, summary = await SessionSummarizer(SkillEvolutionConfig())._summarize_one(
+            session, llm_client
+        )
+
+        assert trajectory["steps"][0]["tool"] == "skill_loader"
+        assert summary == "The run completed."
+
+    @pytest.mark.asyncio
+    async def test_summarize_preserves_final_response_from_raw_trajectory(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.summarizer import (
+            SessionSummarizer,
+        )
+
+        llm_client = MagicMock()
+        llm_client.generate = AsyncMock(
+            return_value={
+                "content": json.dumps(
+                    {
+                        "trajectory": [
+                            {
+                                "step": 1,
+                                "action": "Completed the requested work",
+                                "tool": None,
+                                "outcome": "success",
+                            }
+                        ],
+                        "summary": "The run completed.",
+                    }
+                )
+            }
+        )
+        session = SkillEvolutionSession(
+            id="s-final",
+            skill_name="test-skill",
+            tenant_id="t1",
+            conversation_id="c1",
+            user_query="query",
+            trajectory={"steps": [], "final_response": "This is the final answer."},
+            success=True,
+        )
+
+        trajectory, summary = await SessionSummarizer(SkillEvolutionConfig())._summarize_one(
+            session, llm_client
+        )
+
+        assert trajectory["final_response"] == "This is the final answer."
+        assert summary == "The run completed."
+
+    @pytest.mark.asyncio
+    async def test_summarize_enriches_sparse_trajectory_from_execution_events(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.summarizer import (
+            SessionSummarizer,
+        )
+
+        llm_client = MagicMock()
+        llm_client.generate = AsyncMock(
+            return_value={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "trajectory": [
+                                        {
+                                            "step": 1,
+                                            "action": "Used todowrite after loading the skill",
+                                            "tool": "todowrite",
+                                            "outcome": "success",
+                                        }
+                                    ],
+                                    "summary": "The event stream showed real tool usage.",
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+        )
+        repo = MagicMock()
+        repo.get_conversation_trace_events = AsyncMock(
+            return_value=[
+                {
+                    "event_type": "assistant_message",
+                    "event_data": {"content": "I will create tasks."},
+                },
+                {
+                    "event_type": "act",
+                    "event_data": {
+                        "tool_name": "todowrite",
+                        "tool_input": {"action": "replace"},
+                        "status": "running",
+                    },
+                },
+                {
+                    "event_type": "observe",
+                    "event_data": {
+                        "tool_name": "todowrite",
+                        "result": '{"success": true}',
+                        "status": "completed",
+                    },
+                },
+                {
+                    "event_type": "complete",
+                    "event_data": {"content": "Tasks were created."},
+                },
+            ]
+        )
+        repo.update_summary = AsyncMock()
+        session = SkillEvolutionSession(
+            id="s-sparse",
+            skill_name="research",
+            tenant_id="t1",
+            conversation_id="c1",
+            user_query="decompose and execute",
+            trajectory={
+                "steps": [
+                    {
+                        "step": 1,
+                        "tool": "skill_loader",
+                        "action": "Loaded research",
+                        "outcome": "success",
+                    }
+                ]
+            },
+            success=True,
+            tool_call_count=1,
+        )
+
+        count = await SessionSummarizer(SkillEvolutionConfig()).summarize_batch(
+            [session], llm_client, repo
+        )
+
+        assert count == 1
+        prompt = llm_client.generate.await_args.kwargs["messages"][1].content
+        assert "todowrite" in prompt
+        assert "Tasks were created." in prompt
+        persisted_trajectory = repo.update_summary.await_args.kwargs["trajectory"]
+        assert persisted_trajectory["final_response"] == "Tasks were created."
+        assert session.trajectory["trajectory_source"] == "agent_execution_events"
+
+    @pytest.mark.asyncio
+    async def test_summarize_enriches_missing_final_response_from_execution_events(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.summarizer import (
+            SessionSummarizer,
+        )
+
+        llm_client = MagicMock()
+        llm_client.generate = AsyncMock(
+            return_value={
+                "content": json.dumps(
+                    {
+                        "trajectory": [
+                            {
+                                "step": 1,
+                                "action": "Summarized existing non-sparse steps",
+                                "tool": "read_file",
+                                "outcome": "success",
+                            }
+                        ],
+                        "summary": "The event stream supplied the missing final answer.",
+                    }
+                )
+            }
+        )
+        repo = MagicMock()
+        repo.get_conversation_trace_events = AsyncMock(
+            return_value=[
+                {
+                    "event_type": "complete",
+                    "event_data": {"content": "A complete answer was delivered."},
+                },
+            ]
+        )
+        repo.update_summary = AsyncMock()
+        session = SkillEvolutionSession(
+            id="s-missing-final",
+            skill_name="research",
+            tenant_id="t1",
+            conversation_id="c1",
+            user_query="research this",
+            trajectory={
+                "steps": [
+                    {
+                        "step": 1,
+                        "tool": "read_file",
+                        "action": "Read context",
+                        "outcome": "success",
+                    },
+                    {
+                        "step": 2,
+                        "tool": "web_search",
+                        "action": "Searched references",
+                        "outcome": "success",
+                    },
+                ]
+            },
+            success=True,
+            tool_call_count=2,
+        )
+
+        count = await SessionSummarizer(SkillEvolutionConfig()).summarize_batch(
+            [session], llm_client, repo
+        )
+
+        assert count == 1
+        prompt = llm_client.generate.await_args.kwargs["messages"][1].content
+        assert "A complete answer was delivered." in prompt
+        persisted_trajectory = repo.update_summary.await_args.kwargs["trajectory"]
+        assert persisted_trajectory["final_response"] == "A complete answer was delivered."
+
 
 class TestSessionJudge:
     @pytest.mark.asyncio
@@ -374,6 +665,87 @@ class TestSessionJudge:
         assert scores["tool_usage"] == 0.55
         assert "Automatic fallback score" in str(scores["rationale"])
         assert 0.0 < overall < 1.0
+
+    @pytest.mark.asyncio
+    async def test_judge_parses_fenced_json(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.session_judge import (
+            SessionJudge,
+        )
+
+        llm_client = MagicMock()
+        llm_client.generate = AsyncMock(
+            return_value={
+                "content": (
+                    "```json\n"
+                    '{"task_completion":0.9,"response_quality":0.8,"efficiency":0.7,'
+                    '"tool_usage":0.6,"rationale":"Good run"}\n'
+                    "```"
+                )
+            }
+        )
+        session = SkillEvolutionSession(
+            id="j-fenced",
+            skill_name="test-skill",
+            tenant_id="t1",
+            conversation_id="c1",
+            user_query="query",
+            summary="summary",
+            trajectory={"steps": []},
+            success=True,
+        )
+
+        scores, overall = await SessionJudge(SkillEvolutionConfig())._judge_one(
+            session,
+            llm_client,
+        )
+
+        assert scores["task_completion"] == 0.9
+        assert scores["rationale"] == "Good run"
+        assert overall == pytest.approx(0.83)
+
+    @pytest.mark.asyncio
+    async def test_judge_prompt_includes_final_response(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.session_judge import (
+            SessionJudge,
+        )
+
+        llm_client = MagicMock()
+        llm_client.generate = AsyncMock(
+            return_value={
+                "content": json.dumps(
+                    {
+                        "task_completion": 0.8,
+                        "response_quality": 0.7,
+                        "efficiency": 0.9,
+                        "tool_usage": 0.6,
+                        "rationale": "final response was useful",
+                    }
+                )
+            }
+        )
+        session = SkillEvolutionSession(
+            id="j-final",
+            skill_name="test-skill",
+            tenant_id="t1",
+            conversation_id="c1",
+            user_query="query",
+            summary="summary",
+            trajectory={"steps": [], "final_response": "This is the actual answer."},
+            success=True,
+            tool_call_count=1,
+        )
+
+        await SessionJudge(SkillEvolutionConfig())._judge_one(session, llm_client)
+
+        prompt = llm_client.generate.await_args.kwargs["messages"][1].content
+        assert "Final response:" in prompt
+        assert "This is the actual answer." in prompt
 
 
 class TestSkillMerger:
@@ -505,6 +877,70 @@ class TestSkillMerger:
         skill_repository.update.assert_awaited_once_with(skill)
 
     @pytest.mark.asyncio
+    async def test_apply_filesystem_skill_imports_database_copy_before_version(self) -> None:
+        from src.domain.model.agent.skill import Skill, SkillScope
+        from src.domain.model.agent.skill_source import SkillSource
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionJob,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.skill_merger import (
+            SkillMerger,
+        )
+
+        filesystem_skill = Skill(
+            id="fs-skill-1",
+            tenant_id="t1",
+            name="research",
+            description="Research with structured reports.",
+            tools=["web_search"],
+            source=SkillSource.FILESYSTEM,
+            file_path="/repo/.memstack/skills/research/SKILL.md",
+            full_content="# Current filesystem skill",
+            scope=SkillScope.TENANT,
+        )
+        skill_service = MagicMock()
+        skill_service.get_skill_by_name = AsyncMock(return_value=filesystem_skill)
+        skill_repository = MagicMock()
+        skill_repository.get_by_name = AsyncMock(return_value=None)
+        skill_repository.create = AsyncMock()
+        skill_repository.update = AsyncMock()
+        version_repository = MagicMock()
+        version_repository.get_max_version_number = AsyncMock(return_value=0)
+        version_repository.create = AsyncMock()
+        merger = SkillMerger(skill_service)
+
+        job = SkillEvolutionJob(
+            id="j-fs",
+            skill_name="research",
+            tenant_id="t1",
+            action="improve_skill",
+            candidate_content="# Improved DB skill",
+            rationale="Persist filesystem evolution to DB.",
+        )
+
+        version_id = await merger.apply_evolution(
+            job,
+            tenant_id="t1",
+            skill_repository=skill_repository,
+            skill_version_repository=version_repository,
+        )
+
+        assert version_id is not None
+        skill_repository.create.assert_awaited_once()
+        imported_skill = skill_repository.create.await_args.args[0]
+        assert imported_skill.name == "research"
+        assert imported_skill.scope == SkillScope.TENANT
+        assert imported_skill.is_system_skill is False
+        assert imported_skill.metadata["evolution_imported_from"] == "filesystem"
+        assert imported_skill.metadata["source_file_path"].endswith("research/SKILL.md")
+        version_repository.create.assert_awaited_once()
+        created_version = version_repository.create.await_args.args[0]
+        assert created_version.skill_id == imported_skill.id
+        assert created_version.skill_md_content == "# Improved DB skill"
+        assert imported_skill.full_content == "# Improved DB skill"
+        skill_repository.update.assert_awaited_once_with(imported_skill)
+
+    @pytest.mark.asyncio
     async def test_optimize_description_keeps_skill_body(self) -> None:
         from src.infrastructure.agent.plugins.skill_evolution.models import (
             SkillEvolutionJob,
@@ -604,6 +1040,7 @@ class TestHookRegistration:
         plugin_module._collector = collector
         plugin_module._session_factory = object()
         plugin_module._loaded_skill_names_by_turn.clear()
+        plugin_module._tool_events_by_turn.clear()
 
         registry = AgentPluginRegistry()
         api = PluginRuntimeApi("skill-evolution", registry=registry)
@@ -617,6 +1054,7 @@ class TestHookRegistration:
                     "tool_name": "skill_loader",
                     "conversation_id": "conv-1",
                     "result_metadata": {"name": "dynamic-skill"},
+                    "result": "Loaded skill: dynamic-skill",
                 },
             )
             await registry.apply_hook(
@@ -634,9 +1072,11 @@ class TestHookRegistration:
             plugin_module._collector = previous_collector
             plugin_module._session_factory = previous_session_factory
             plugin_module._loaded_skill_names_by_turn.clear()
+            plugin_module._tool_events_by_turn.clear()
 
         captured_payload = collector.capture_from_hook.await_args.args[0]
         assert captured_payload["loaded_skill_names"] == ["dynamic-skill"]
+        assert captured_payload["tool_events"][0]["tool_name"] == "skill_loader"
 
     @pytest.mark.asyncio
     async def test_after_turn_capture_schedules_autonomous_evolution(self) -> None:
@@ -743,6 +1183,24 @@ class TestEvolutionScheduler:
             project_id="project-1",
             skill_name="skill-a",
         )
+
+    @pytest.mark.asyncio
+    async def test_manual_run_can_queue_when_scheduler_not_running(self) -> None:
+        scheduler = self._make_scheduler()
+        scheduler._running = False
+        scheduler._delayed_execute_request = AsyncMock()
+
+        scheduled = scheduler.schedule_run(
+            tenant_id="tenant-1",
+            reason="manual",
+            delay_seconds=0,
+            allow_when_stopped=True,
+        )
+
+        assert scheduled is True
+        await asyncio.gather(*list(scheduler._pending_tasks.values()))
+        scheduler._delayed_execute_request.assert_awaited_once()
+        assert scheduler._delayed_execute_request.await_args.kwargs["require_running"] is False
 
     @pytest.mark.asyncio
     async def test_start_schedules_startup_sweep_without_waiting_for_interval(self) -> None:
@@ -958,6 +1416,7 @@ class TestSkillEvolutionEndToEnd:
             config = SkillEvolutionConfig(
                 enabled=True,
                 min_sessions_per_skill=1,
+                scoring_min_sessions_per_skill=1,
                 min_avg_score=0.5,
                 max_sessions_per_batch=5,
                 publish_mode="direct",
@@ -1027,7 +1486,13 @@ class TestSkillEvolutionEndToEnd:
 
         assert "after_turn_complete" in registry.list_hooks()
         assert hook_result.diagnostics == []
-        assert result == {"summarized": 1, "judged": 1, "groups": 1, "jobs": 1}
+        assert result == {
+            "summarized": 1,
+            "judged": 1,
+            "groups": 1,
+            "jobs": 1,
+            "blocked_by_review": 0,
+        }
         assert len(client.calls) == 3
         assert session.processed is True
         assert isinstance(session.trajectory, dict)
@@ -1128,7 +1593,7 @@ class TestAggregator:
 
 class TestEvolutionEngine:
     @pytest.mark.asyncio
-    async def test_missing_managed_skill_creates_review_job(self) -> None:
+    async def test_filesystem_skill_fallback_can_be_evolved(self) -> None:
         from src.infrastructure.agent.plugins.skill_evolution.evolution_engine import (
             EvolutionEngine,
         )
@@ -1148,7 +1613,7 @@ class TestEvolutionEngine:
                             "message": {
                                 "content": json.dumps(
                                     {
-                                        "action": "create_skill",
+                                        "action": "improve_skill",
                                         "rationale": "Repeated sessions show a reusable workflow.",
                                         "skill_content": (
                                             "---\nname: deep-research\n"
@@ -1178,9 +1643,9 @@ class TestEvolutionEngine:
             )
 
         skill_service = MagicMock()
-        skill_service.get_skill_by_name = AsyncMock(
-            side_effect=AssertionError("repository-backed lookup should be used")
-        )
+        filesystem_skill = MagicMock()
+        filesystem_skill.full_content = "---\nname: deep-research\n---\n# Deep Research\n"
+        skill_service.get_skill_by_name = AsyncMock(return_value=filesystem_skill)
         skill_repo = MagicMock()
         skill_repo.get_by_name = AsyncMock(return_value=None)
         skill_repo.list_by_tenant = AsyncMock(return_value=[])
@@ -1202,9 +1667,10 @@ class TestEvolutionEngine:
         )
 
         assert len(jobs) == 1
-        assert jobs[0].action == "create_skill"
+        assert jobs[0].action == "improve_skill"
         assert jobs[0].status == "pending_review"
-        assert "No managed SKILL.md exists" in client.prompt
+        assert "Current SKILL.md for 'deep-research'" in client.prompt
+        assert "No managed or file-system SKILL.md exists" not in client.prompt
         repo.save_job.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -1315,5 +1781,73 @@ class TestEvolutionEngine:
         )
 
         assert jobs == []
+        assert engine.last_blocked_by_review_count == 1
         llm_client.generate.assert_not_awaited()
         repo.save_job.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_rejected_session_batch_can_be_evolved_again(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.evolution_engine import (
+            EvolutionEngine,
+        )
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+
+        class FakeLLMClient:
+            async def generate(self, messages, max_tokens: int):
+                return {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json.dumps(
+                                    {
+                                        "action": "improve_skill",
+                                        "rationale": "Rejected prior candidate; try again.",
+                                        "skill_content": "# Improved again",
+                                    }
+                                )
+                            }
+                        }
+                    ]
+                }
+
+        skill = MagicMock()
+        skill.full_content = "# Current"
+        group = SkillSessionGroup(skill_name="retry-skill")
+        for i in range(5):
+            group.add(
+                SkillEvolutionSession(
+                    id=f"s{i}",
+                    skill_name="retry-skill",
+                    tenant_id="t1",
+                    conversation_id=f"c{i}",
+                    user_query="retry evolution",
+                    success=True,
+                    overall_score=0.9,
+                )
+            )
+
+        skill_repo = MagicMock()
+        skill_repo.get_by_name = AsyncMock(return_value=skill)
+        skill_repo.list_by_tenant = AsyncMock(return_value=[skill])
+        repo = MagicMock()
+        repo.get_job_for_sessions = AsyncMock(return_value=None)
+        repo.save_job = AsyncMock()
+
+        engine = EvolutionEngine(
+            SkillEvolutionConfig(), skill_service=MagicMock(), merger=MagicMock()
+        )
+
+        jobs = await engine.evolve_all(
+            {"retry-skill": group},
+            FakeLLMClient(),
+            repo,
+            tenant_id="t1",
+            skill_repository=skill_repo,
+        )
+
+        assert len(jobs) == 1
+        assert jobs[0].candidate_content == "# Improved again"
+        assert engine.last_blocked_by_review_count == 0
+        repo.save_job.assert_awaited_once()

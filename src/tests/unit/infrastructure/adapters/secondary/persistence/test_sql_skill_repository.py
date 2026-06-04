@@ -37,7 +37,7 @@ def create_test_skill(
     skill_id: str,
     tenant_id: str = "tenant-1",
     project_id: str | None = None,
-    name: str = "test-skill",
+    name: str | None = None,
     status: SkillStatus = SkillStatus.ACTIVE,
     scope: SkillScope = SkillScope.TENANT,
 ) -> Skill:
@@ -46,7 +46,7 @@ def create_test_skill(
         id=skill_id,
         tenant_id=tenant_id,
         project_id=project_id,
-        name=name,
+        name=name or f"test-skill-{skill_id.lower()}",
         description="Test description",
         tools=["search", "analyze"],
         status=status,
@@ -75,7 +75,41 @@ class TestSqlSkillRepositoryCreate:
         # Verify was saved
         retrieved = await v2_skill_repo.get_by_id("skill-test-1")
         assert retrieved is not None
-        assert retrieved.name == "test-skill"
+        assert retrieved.name == "test-skill-skill-test-1"
+
+    @pytest.mark.asyncio
+    async def test_create_preserves_agentskills_package_fields(
+        self,
+        v2_skill_repo: SqlSkillRepository,
+    ):
+        """AgentSkills.io DB fields should survive SQL persistence round-trip."""
+        skill = create_test_skill("skill-spec-fields", name="spec-fields")
+        skill.full_content = (
+            "---\n"
+            "name: spec-fields\n"
+            "description: Test description\n"
+            "allowed-tools: Bash(git:*) Read\n"
+            "license: MIT\n"
+            "compatibility: Requires git\n"
+            "---\n\n"
+            "# Spec fields\n"
+        )
+        skill.resource_files = {"references/README.md": "details"}
+        skill.license = "MIT"
+        skill.compatibility = "Requires git"
+        skill.allowed_tools_raw = "Bash(git:*) Read"
+        skill.spec_version = "1.0"
+
+        await v2_skill_repo.create(skill)
+
+        retrieved = await v2_skill_repo.get_by_id("skill-spec-fields")
+        assert retrieved is not None
+        assert retrieved.full_content == skill.full_content
+        assert retrieved.resource_files == {"references/README.md": "details"}
+        assert retrieved.license == "MIT"
+        assert retrieved.compatibility == "Requires git"
+        assert retrieved.allowed_tools_raw == "Bash(git:*) Read"
+        assert retrieved.spec_version == "1.0"
 
 
 class TestSqlSkillRepositoryFind:
@@ -90,7 +124,7 @@ class TestSqlSkillRepositoryFind:
         retrieved = await v2_skill_repo.get_by_id("skill-find-1")
         assert retrieved is not None
         assert retrieved.id == "skill-find-1"
-        assert retrieved.name == "test-skill"
+        assert retrieved.name == "test-skill-skill-find-1"
 
     @pytest.mark.asyncio
     async def test_get_by_id_not_found(self, v2_skill_repo: SqlSkillRepository):
@@ -407,7 +441,7 @@ class TestSqlSkillRepositoryToDomain:
         retrieved = await v2_skill_repo.get_by_id("skill-domain-1")
         assert retrieved.id == "skill-domain-1"
         assert retrieved.tenant_id == "tenant-1"
-        assert retrieved.name == "test-skill"
+        assert retrieved.name == "test-skill-skill-domain-1"
         assert retrieved.description == "Test description"
         assert retrieved.status == SkillStatus.ACTIVE
         assert retrieved.scope == SkillScope.TENANT

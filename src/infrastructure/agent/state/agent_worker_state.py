@@ -3291,6 +3291,13 @@ async def get_or_create_skills(
                         cwd_count,
                     )
 
+            await _merge_database_skills_for_worker(
+                loaded_by_name,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                cache_key=cache_key,
+            )
+
             skills = list(loaded_by_name.values())
 
             # Merge plugin-provided skills
@@ -3310,6 +3317,50 @@ async def get_or_create_skills(
                     logger.warning("Agent Worker: Skill loading error: %s", error)
 
         return _skills_cache[cache_key]
+
+
+async def _merge_database_skills_for_worker(
+    loaded_by_name: dict[str, Any],
+    *,
+    tenant_id: str,
+    project_id: str | None,
+    cache_key: str,
+) -> None:
+    try:
+        from src.domain.model.agent.skill import SkillScope, SkillStatus
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
+            SqlSkillRepository,
+        )
+
+        async with async_session_factory() as session:
+            skill_repo = SqlSkillRepository(session)
+            db_skills = await skill_repo.list_by_tenant(
+                tenant_id=tenant_id,
+                status=SkillStatus.ACTIVE,
+                scope=SkillScope.TENANT,
+                limit=1000,
+            )
+            if project_id:
+                db_skills.extend(
+                    await skill_repo.list_by_project(
+                        project_id=project_id,
+                        status=SkillStatus.ACTIVE,
+                        scope=SkillScope.PROJECT,
+                    )
+                )
+        for skill in db_skills:
+            loaded_by_name[skill.name] = skill
+        if db_skills:
+            logger.info(
+                "Agent Worker: DB skill merge added/overrode %d skills for %s",
+                len(db_skills),
+                cache_key,
+            )
+    except Exception as e:
+        logger.warning("Agent Worker: DB skill merge failed: %s", e)
 
 
 async def get_or_create_provider_config(
@@ -3422,8 +3473,12 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
 
     from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
     from src.application.services.skill_service import SkillService
-    from src.domain.model.agent.skill import Skill, SkillStatus
+    from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
     from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
+        SqlSkillRepository,
+    )
     from src.infrastructure.agent.tools.define import get_registered_tools
     from src.infrastructure.agent.tools.skill_loader import (
         configure_skill_loader_tool,
@@ -3432,42 +3487,64 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
     )
     from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
-    # NOTE: NullSkillRepository is intentionally used here instead of SqlSkillRepository.
-    # The agent worker context has no per-request DB session available (skip_database=True).
-    # All skills are loaded from the filesystem via FileSystemSkillLoader/FileSystemSkillScanner,
-    # so database operations are never invoked. This null implementation satisfies the
-    # SkillRepositoryPort interface required by SkillService without requiring a DB connection.
-    class NullSkillRepository(SkillRepositoryPort):
-        """Null implementation - all methods return empty/None."""
+    class SessionSkillRepository(SkillRepositoryPort):
+        """Read DB skills through short-lived sessions for worker skill loading."""
 
         @override
         async def create(self, skill: Skill) -> Skill:
-            return skill
+            raise NotImplementedError("worker skill loader is read-only")
 
         @override
         async def get_by_id(self, skill_id: str) -> Skill | None:
-            return None
+            async with async_session_factory() as session:
+                return await SqlSkillRepository(session).get_by_id(skill_id)
 
-        async def get_by_name(self, tenant_id: str, name: str) -> Skill | None:  # type: ignore[override]
-            return None
+        async def get_by_name(
+            self,
+            tenant_id: str,
+            name: str,
+            scope: SkillScope | None = None,
+        ) -> Skill | None:
+            async with async_session_factory() as session:
+                return await SqlSkillRepository(session).get_by_name(tenant_id, name, scope)
 
-        async def list_by_tenant(  # type: ignore[override]
-            self, tenant_id: str, status: SkillStatus | None = None
+        async def list_by_tenant(
+            self,
+            tenant_id: str,
+            status: SkillStatus | None = None,
+            scope: SkillScope | None = None,
+            limit: int = 100,
+            offset: int = 0,
         ) -> list[Skill]:
-            return []
+            async with async_session_factory() as session:
+                return await SqlSkillRepository(session).list_by_tenant(
+                    tenant_id=tenant_id,
+                    status=status,
+                    scope=scope,
+                    limit=limit,
+                    offset=offset,
+                )
 
-        async def list_by_project(  # type: ignore[override]
-            self, project_id: str, status: SkillStatus | None = None
+        async def list_by_project(
+            self,
+            project_id: str,
+            status: SkillStatus | None = None,
+            scope: SkillScope | None = None,
         ) -> list[Skill]:
-            return []
+            async with async_session_factory() as session:
+                return await SqlSkillRepository(session).list_by_project(
+                    project_id=project_id,
+                    status=status,
+                    scope=scope,
+                )
 
         @override
         async def update(self, skill: Skill) -> Skill:
-            return skill
+            raise NotImplementedError("worker skill loader is read-only")
 
         @override
         async def delete(self, skill_id: str) -> bool:
-            return False
+            raise NotImplementedError("worker skill loader is read-only")
 
         async def find_matching_skills(
             self,
@@ -3481,8 +3558,18 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
         async def increment_usage(self, skill_id: str, success: bool = True) -> None:
             pass
 
-        async def count_by_tenant(self, tenant_id: str, status: SkillStatus | None = None) -> int:  # type: ignore[override]
-            return 0
+        async def count_by_tenant(
+            self,
+            tenant_id: str,
+            status: SkillStatus | None = None,
+            scope: SkillScope | None = None,
+        ) -> int:
+            async with async_session_factory() as session:
+                return await SqlSkillRepository(session).count_by_tenant(
+                    tenant_id=tenant_id,
+                    status=status,
+                    scope=scope,
+                )
 
     cache_key = f"{tenant_id}:{project_id or 'global'}:{agent_mode}"
 
@@ -3504,9 +3591,10 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                 scanner=scanner,
             )
 
-            # Create SkillService with NullSkillRepository (we only use filesystem skills)
+            # Create SkillService with short-lived DB sessions so DB-persisted evolved
+            # skills can override same-name filesystem skills at runtime.
             skill_service = SkillService(
-                skill_repository=NullSkillRepository(),
+                skill_repository=SessionSkillRepository(),
                 filesystem_loader=fs_loader,
             )
 
@@ -3516,6 +3604,7 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
                 tenant_id=tenant_id,
                 project_id=project_id or "",
                 agent_mode=agent_mode,
+                skip_database=False,
             )
 
             # Initialize from cached skills to avoid double filesystem scan

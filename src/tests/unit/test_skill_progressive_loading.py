@@ -652,9 +652,16 @@ class TestSkillLoaderTool:
     async def test_execute_loads_skill_content(self, mock_skill_service):
         """Test skill_loader_tool returns ToolResult with content."""
         from src.infrastructure.agent.tools.skill_loader import (
+            configure_skill_loader_tool,
             skill_loader_tool,
         )
 
+        configure_skill_loader_tool(
+            skill_service=mock_skill_service,
+            tenant_id="test-tenant",
+            project_id="test-project",
+            skip_database=False,
+        )
         mock_skill_service.load_skill_content = AsyncMock(
             return_value="# Skill Instructions\n\nDo the thing.",
         )
@@ -671,6 +678,8 @@ class TestSkillLoaderTool:
             tenant_id="test-tenant",
             skill_name="my-skill",
         )
+        mock_skill_service.list_available_skills.assert_awaited_once()
+        assert mock_skill_service.list_available_skills.await_args.kwargs["skip_database"] is False
 
     async def test_execute_handles_not_found(self, mock_skill_service):
         """Test error ToolResult for non-existent skill."""

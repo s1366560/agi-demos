@@ -65,6 +65,14 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/skills", tags=["Skills"])
+ParsedSkillPayload = tuple[
+    str | None,
+    str | None,
+    str | None,
+    list[str] | None,
+    dict[str, Any] | None,
+    str | None,
+]
 
 
 # === Pydantic Models ===
@@ -127,6 +135,7 @@ class SkillResponse(BaseModel):
     created_at: str
     updated_at: str
     metadata: dict[str, Any] | None
+    resource_files: dict[str, str] = Field(default_factory=dict)
     agent_modes: list[str] = Field(default_factory=lambda: ["*"])
     license: str | None = None
     compatibility: str | None = None
@@ -151,11 +160,13 @@ class SkillEvolutionOverviewStatsResponse(BaseModel):
     pending_jobs: int
     applied_jobs: int
     skipped_jobs: int
+    rejected_jobs: int
 
 
 class SkillEvolutionSkillSummaryResponse(BaseModel):
     """Aggregated evolution evidence for one skill name."""
 
+    skill_id: str | None = None
     skill_name: str
     session_count: int
     success_count: int
@@ -252,6 +263,7 @@ def skill_to_response(skill: Skill) -> SkillResponse:
         created_at=skill.created_at.isoformat(),
         updated_at=skill.updated_at.isoformat(),
         metadata=skill.metadata,
+        resource_files=dict(getattr(skill, "resource_files", {}) or {}),
         agent_modes=list(getattr(skill, "agent_modes", ["*"]) or ["*"]),
         license=getattr(skill, "license", None) or agentskills.get("license"),
         compatibility=getattr(skill, "compatibility", None) or agentskills.get("compatibility"),
@@ -400,12 +412,11 @@ def _parse_skill_zip_package(content: bytes) -> tuple[str, dict[str, str]]:
         file_infos = [
             info
             for info in archive.infolist()
-            if not info.is_dir() and not _is_ignored_zip_member(_safe_zip_member_path(info.filename))
+            if not info.is_dir()
+            and not _is_ignored_zip_member(_safe_zip_member_path(info.filename))
         ]
         skill_md_infos = [
-            info
-            for info in file_infos
-            if _safe_zip_member_path(info.filename).name == "SKILL.md"
+            info for info in file_infos if _safe_zip_member_path(info.filename).name == "SKILL.md"
         ]
         if not skill_md_infos:
             raise HTTPException(
@@ -519,7 +530,11 @@ async def _find_existing_skill(
     if scope == SkillScope.PROJECT and project_id:
         project_skills = await repo.list_by_project(project_id=project_id, scope=SkillScope.PROJECT)
         return next(
-            (skill for skill in project_skills if skill.tenant_id == tenant_id and skill.name == name),
+            (
+                skill
+                for skill in project_skills
+                if skill.tenant_id == tenant_id and skill.name == name
+            ),
             None,
         )
     return await repo.get_by_name(tenant_id=tenant_id, name=name, scope=scope)
@@ -554,9 +569,44 @@ def _parse_skill_package(skill_md_content: str) -> tuple[SkillMarkdown, dict[str
     return parsed, metadata, tools
 
 
-def _build_skill_md_from_payload(
-    payload: dict[str, Any], version_label: str | None = None
-) -> str:
+def _parsed_skill_payload(
+    *,
+    skill_md_content: str | None,
+    name: str | None,
+    description: str | None,
+    tools: list[str] | None,
+) -> ParsedSkillPayload:
+    if not skill_md_content:
+        return None, name, description, tools, None, None
+
+    parsed, metadata, parsed_tools = _parse_skill_package(skill_md_content)
+    if name is not None and name != parsed.name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Skill name must match SKILL.md frontmatter"),
+        )
+    if description is not None and description != parsed.description:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Skill description must match SKILL.md frontmatter"),
+        )
+    if tools is not None and tools != parsed_tools:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Skill tools must match SKILL.md allowed-tools"),
+        )
+
+    return (
+        skill_md_content,
+        parsed.name,
+        parsed.description,
+        parsed_tools,
+        metadata,
+        _extract_version_label_from_parsed(parsed),
+    )
+
+
+def _build_skill_md_from_payload(payload: dict[str, Any], version_label: str | None = None) -> str:
     name = str(payload.get("name") or "skill")
     description = str(payload.get("description") or "")
     tools = payload.get("tools") if isinstance(payload.get("tools"), list) else []
@@ -617,6 +667,7 @@ async def _create_skill_version_snapshot(
     max_version = await version_repo.get_max_version_number(skill.id)
     next_version = max_version + 1
     version_label = _version_label_from_content(skill_md_content, str(next_version))
+    skill.resource_files = dict(resource_files)
     version = SkillVersion(
         id=str(uuid.uuid4()),
         skill_id=skill.id,
@@ -675,22 +726,40 @@ async def create_skill(
             )
 
         container = get_container_with_db(request, db)
+        repo = container.skill_repository()
 
-        # Create skill
+        full_content, name, description, tools, package_metadata, version_label = _parsed_skill_payload(
+            skill_md_content=data.full_content,
+            name=data.name,
+            description=data.description,
+            tools=data.tools,
+        )
         metadata = _merge_agentskills_metadata(
-            data.metadata,
+            package_metadata if package_metadata is not None else data.metadata,
             license_value=data.license,
             compatibility=data.compatibility,
             allowed_tools_raw=data.allowed_tools_raw,
             spec_version=data.spec_version,
         )
+        existing = await _find_existing_skill(
+            repo,
+            tenant_id=tenant_id,
+            name=name or data.name,
+            scope=scope,
+            project_id=data.project_id,
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_("Skill already exists"),
+            )
         skill = Skill.create(
             tenant_id=tenant_id,
-            name=data.name,
-            description=data.description,
-            tools=data.tools,
+            name=name or data.name,
+            description=description or data.description,
+            tools=tools or data.tools,
             project_id=data.project_id,
-            full_content=data.full_content,
+            full_content=full_content,
             metadata=metadata,
             scope=scope,
             is_system_skill=False,
@@ -698,10 +767,16 @@ async def create_skill(
             compatibility=data.compatibility,
             allowed_tools_raw=data.allowed_tools_raw,
         )
+        if package_metadata is not None:
+            agentskills = metadata.get("agentskills", {}) if isinstance(metadata, dict) else {}
+            skill.license = data.license or agentskills.get("license")
+            skill.compatibility = data.compatibility or agentskills.get("compatibility")
+            skill.allowed_tools_raw = data.allowed_tools_raw or agentskills.get("allowed_tools")
+        if version_label:
+            skill.version_label = version_label
         if data.spec_version:
             skill.spec_version = data.spec_version
 
-        repo = container.skill_repository()
         created_skill = await repo.create(skill)
         await db.commit()
 
@@ -717,7 +792,9 @@ async def create_skill(
 @router.get("/", response_model=SkillListResponse)
 async def list_skills(
     request: Request,
-    search_query: str | None = Query(None, alias="search", description="Search by name/description"),
+    search_query: str | None = Query(
+        None, alias="search", description="Search by name/description"
+    ),
     q: str | None = Query(None, description="Alias for search"),
     status_filter: str | None = Query(None, alias="status", description="Filter by status"),
     scope_filter: str | None = Query(
@@ -829,40 +906,80 @@ async def update_skill(
     # Update fields
     from datetime import datetime
 
+    full_content, name, description, tools, package_metadata, version_label = _parsed_skill_payload(
+        skill_md_content=data.full_content,
+        name=data.name,
+        description=data.description,
+        tools=data.tools,
+    )
     metadata = _merge_agentskills_metadata(
-        data.metadata if data.metadata is not None else skill.metadata,
+        package_metadata
+        if package_metadata is not None
+        else data.metadata
+        if data.metadata is not None
+        else skill.metadata,
         license_value=data.license,
         compatibility=data.compatibility,
         allowed_tools_raw=data.allowed_tools_raw,
         spec_version=data.spec_version,
     )
+    next_name = name or data.name or skill.name
+    agentskills = metadata.get("agentskills", {}) if isinstance(metadata, dict) else {}
+    next_license = data.license if data.license is not None else agentskills.get("license")
+    if next_license is None:
+        next_license = skill.license
+    next_compatibility = (
+        data.compatibility if data.compatibility is not None else agentskills.get("compatibility")
+    )
+    if next_compatibility is None:
+        next_compatibility = skill.compatibility
+    next_allowed_tools_raw = (
+        data.allowed_tools_raw
+        if data.allowed_tools_raw is not None
+        else agentskills.get("allowed_tools")
+    )
+    if next_allowed_tools_raw is None:
+        next_allowed_tools_raw = skill.allowed_tools_raw
+    next_spec_version = data.spec_version or agentskills.get("spec_version") or skill.spec_version
+    if next_name != skill.name:
+        existing = await _find_existing_skill(
+            repo,
+            tenant_id=tenant_id,
+            name=next_name,
+            scope=skill.scope,
+            project_id=skill.project_id,
+        )
+        if existing and existing.id != skill.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_("Skill already exists"),
+            )
 
     updated_skill = Skill(
         id=skill.id,
         tenant_id=skill.tenant_id,
         project_id=skill.project_id,  # project_id cannot be changed
-        name=data.name if data.name else skill.name,
-        description=data.description if data.description else skill.description,
-        tools=data.tools if data.tools else skill.tools,
+        name=next_name,
+        description=description or data.description or skill.description,
+        tools=tools or data.tools or skill.tools,
         status=SkillStatus(data.status) if data.status else skill.status,
         created_at=skill.created_at,
         updated_at=datetime.now(UTC),
         metadata=metadata,
         source=skill.source,
         file_path=skill.file_path,
-        full_content=data.full_content if data.full_content is not None else skill.full_content,
+        full_content=full_content if full_content is not None else skill.full_content,
+        resource_files=skill.resource_files,
         agent_modes=skill.agent_modes,
         scope=skill.scope,
         is_system_skill=skill.is_system_skill,
-        license=data.license if data.license is not None else skill.license,
-        compatibility=data.compatibility if data.compatibility is not None else skill.compatibility,
-        allowed_tools_raw=data.allowed_tools_raw
-        if data.allowed_tools_raw is not None
-        else skill.allowed_tools_raw,
+        license=next_license,
+        compatibility=next_compatibility,
+        allowed_tools_raw=next_allowed_tools_raw,
         allowed_tools_parsed=skill.allowed_tools_parsed,
-        spec_version=data.spec_version if data.spec_version is not None else skill.spec_version,
+        spec_version=next_spec_version,
         current_version=skill.current_version,
-        version_label=skill.version_label,
+        version_label=version_label or skill.version_label,
     )
 
     result = await repo.update(updated_skill)
@@ -1117,38 +1234,73 @@ async def update_skill_content(
 
     from datetime import datetime
 
+    full_content, name, description, tools, package_metadata, version_label = _parsed_skill_payload(
+        skill_md_content=data.full_content,
+        name=None,
+        description=None,
+        tools=None,
+    )
+    assert full_content is not None
+    metadata = _merge_agentskills_metadata(package_metadata)
+    agentskills = metadata.get("agentskills", {}) if isinstance(metadata, dict) else {}
+    if name != skill.name:
+        existing = await _find_existing_skill(
+            repo,
+            tenant_id=tenant_id,
+            name=name or skill.name,
+            scope=skill.scope,
+            project_id=skill.project_id,
+        )
+        if existing and existing.id != skill.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_("Skill already exists"),
+            )
+
     # Update skill content
     updated_skill = Skill(
         id=skill.id,
         tenant_id=skill.tenant_id,
         project_id=skill.project_id,
-        name=skill.name,
-        description=skill.description,
-        tools=skill.tools,
-        full_content=data.full_content,
+        name=name or skill.name,
+        description=description or skill.description,
+        tools=tools or skill.tools,
+        full_content=full_content,
+        resource_files=skill.resource_files,
         status=skill.status,
         created_at=skill.created_at,
         updated_at=datetime.now(UTC),
-        metadata=skill.metadata,
+        metadata=metadata or skill.metadata,
         source=skill.source,
         file_path=skill.file_path,
         agent_modes=skill.agent_modes,
         scope=skill.scope,
         is_system_skill=skill.is_system_skill,
-        license=skill.license,
-        compatibility=skill.compatibility,
-        allowed_tools_raw=skill.allowed_tools_raw,
+        license=agentskills.get("license") or skill.license,
+        compatibility=agentskills.get("compatibility") or skill.compatibility,
+        allowed_tools_raw=agentskills.get("allowed_tools") or skill.allowed_tools_raw,
         allowed_tools_parsed=skill.allowed_tools_parsed,
-        spec_version=skill.spec_version,
+        spec_version=agentskills.get("spec_version") or skill.spec_version,
         current_version=skill.current_version,
-        version_label=skill.version_label,
+        version_label=version_label or skill.version_label,
     )
 
     result = await repo.update(updated_skill)
+    result = await repo.get_by_id(result.id) or result
+    await _create_skill_version_snapshot(
+        db,
+        repo,
+        result,
+        skill_md_content=full_content,
+        resource_files=result.resource_files,
+        change_summary="Manual content update",
+        created_by="agent",
+    )
     await db.commit()
 
     logger.info(f"Skill content updated: {skill_id}")
-    return skill_to_response(result)
+    updated_result = await repo.get_by_id(skill_id)
+    return skill_to_response(updated_result or result)
 
 
 # === Import / Export / Install / Upgrade Endpoints ===
@@ -1190,7 +1342,11 @@ async def import_skill_package(
         existing.description = parsed.description
         existing.tools = tools
         existing.full_content = data.skill_md_content
+        existing.resource_files = dict(data.resource_files)
         existing.metadata = metadata
+        existing.license = parsed.license
+        existing.compatibility = parsed.compatibility
+        existing.allowed_tools_raw = parsed.allowed_tools_raw
         existing.updated_at = datetime.now(UTC)
         existing.version_label = version_label
         skill = await repo.update(existing)
@@ -1203,6 +1359,7 @@ async def import_skill_package(
             tools=tools,
             project_id=data.project_id,
             full_content=data.skill_md_content,
+            resource_files=data.resource_files,
             metadata=metadata,
             scope=scope,
             is_system_skill=False,
@@ -1303,9 +1460,14 @@ async def export_skill_package(
     skill_md_content = (
         version.skill_md_content
         if version is not None
-        else skill.full_content or _build_skill_md_from_payload(skill.to_dict(), skill.version_label)
+        else skill.full_content
+        or _build_skill_md_from_payload(skill.to_dict(), skill.version_label)
     )
-    resource_files = version.resource_files if version is not None else {}
+    resource_files = (
+        version.resource_files
+        if version is not None
+        else dict(getattr(skill, "resource_files", {}) or {})
+    )
 
     return SkillPackageResponse(
         skill=skill_to_response(skill),
@@ -1353,6 +1515,9 @@ class SkillEvolutionJobResponse(BaseModel):
     action: str
     status: str
     rationale: str | None
+    candidate_preview: str | None = None
+    candidate_content: str | None = None
+    blocked_by_review: bool = False
     session_ids: list[str]
     skill_version_id: str | None
     created_at: str
@@ -1372,6 +1537,7 @@ class SkillEvolutionRouteEntry(BaseModel):
     skill_version_id: str | None = None
     change_summary: str | None = None
     rationale: str | None = None
+    candidate_preview: str | None = None
     created_by: str | None = None
     created_at: str
 
@@ -1384,6 +1550,7 @@ class SkillEvolutionTriggerResponse(BaseModel):
     scheduled_timing: str
     manual_trigger: str
     min_sessions_per_skill: int
+    scoring_min_sessions_per_skill: int
     min_avg_score: float
     max_sessions_per_batch: int
     publish_mode: str
@@ -1391,10 +1558,62 @@ class SkillEvolutionTriggerResponse(BaseModel):
     enabled: bool
 
 
+class SkillEvolutionConfigResponse(BaseModel):
+    """Tenant skill evolution strategy config."""
+
+    enabled: bool
+    min_sessions_per_skill: int
+    scoring_min_sessions_per_skill: int
+    min_avg_score: float
+    max_sessions_per_batch: int
+    evolution_interval_minutes: int
+    publish_mode: str
+    auto_apply: bool
+
+
+class SkillEvolutionConfigUpdateRequest(BaseModel):
+    """Request schema for updating tenant skill evolution strategy config."""
+
+    enabled: bool | None = None
+    min_sessions_per_skill: int | None = Field(default=None, ge=1, le=100)
+    scoring_min_sessions_per_skill: int | None = Field(default=None, ge=1, le=100)
+    min_avg_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    max_sessions_per_batch: int | None = Field(default=None, ge=1, le=100)
+    evolution_interval_minutes: int | None = Field(default=None, ge=1, le=10080)
+    publish_mode: str | None = None
+    auto_apply: bool | None = None
+
+
+class SkillEvolutionMonitorResponse(BaseModel):
+    """Operational status for the tenant-wide skill evolution loop."""
+
+    refresh_interval_seconds: int
+    latest_session_at: str | None
+    latest_job_at: str | None
+    backlog_count: int
+    unscored_count: int
+    blocked_by_review_count: int
+    eligible_skill_count: int
+    needs_attention: bool
+
+
+class SkillEvolutionStageResponse(BaseModel):
+    """One visible stage in the skill evolution pipeline."""
+
+    id: str
+    label: str
+    status: str
+    count: int
+    backlog_count: int = 0
+    detail: str
+
+
 class SkillEvolutionOverviewResponse(BaseModel):
     """Global tenant overview for the skill evolution UI."""
 
     stats: SkillEvolutionOverviewStatsResponse
+    monitor: SkillEvolutionMonitorResponse
+    stages: list[SkillEvolutionStageResponse]
     skills: list[SkillEvolutionSkillSummaryResponse]
     recent_sessions: list[SkillEvolutionSessionResponse]
     recent_jobs: list[SkillEvolutionJobResponse]
@@ -1420,6 +1639,13 @@ class SkillEvolutionRunResponse(BaseModel):
     result: dict[str, Any]
 
 
+class SkillEvolutionTenantRunResponse(BaseModel):
+    """Schema for a tenant-wide manual evolution run result."""
+
+    tenant_id: str
+    result: dict[str, Any]
+
+
 class SkillRollbackRequest(BaseModel):
     """Schema for skill rollback request."""
 
@@ -1428,12 +1654,19 @@ class SkillRollbackRequest(BaseModel):
 
 def _evolution_job_to_response(job: Any) -> SkillEvolutionJobResponse:  # noqa: ANN401
     session_ids = job.session_ids if isinstance(job.session_ids, list) else []
+    candidate_content = getattr(job, "candidate_content", None)
+    candidate_text = candidate_content if isinstance(candidate_content, str) else None
     return SkillEvolutionJobResponse(
         id=job.id,
         skill_name=job.skill_name,
         action=job.action,
         status=job.status,
         rationale=job.rationale,
+        candidate_preview=(
+            candidate_text[:500] if candidate_text is not None and candidate_text else None
+        ),
+        candidate_content=candidate_text,
+        blocked_by_review=job.status == "pending_review",
         session_ids=[str(value) for value in session_ids],
         skill_version_id=job.skill_version_id,
         created_at=job.created_at.isoformat(),
@@ -1491,6 +1724,7 @@ def _overview_stats_to_response(
         pending_jobs=_int_response_field(stats.get("pending_jobs")),
         applied_jobs=_int_response_field(stats.get("applied_jobs")),
         skipped_jobs=_int_response_field(stats.get("skipped_jobs")),
+        rejected_jobs=_int_response_field(stats.get("rejected_jobs")),
     )
 
 
@@ -1500,6 +1734,7 @@ def _skill_summary_to_response(
     latest_session_at = summary.get("latest_session_at")
     latest_job_at = summary.get("latest_job_at")
     return SkillEvolutionSkillSummaryResponse(
+        skill_id=str(summary["skill_id"]) if summary.get("skill_id") else None,
         skill_name=str(summary.get("skill_name", "")),
         session_count=_int_response_field(summary.get("session_count")),
         success_count=_int_response_field(summary.get("success_count")),
@@ -1507,17 +1742,11 @@ def _skill_summary_to_response(
         scored_count=_int_response_field(summary.get("scored_count")),
         avg_score=_float_response_field(summary.get("avg_score")),
         latest_session_at=(
-            latest_session_at.isoformat()
-            if isinstance(latest_session_at, datetime)
-            else None
+            latest_session_at.isoformat() if isinstance(latest_session_at, datetime) else None
         ),
         job_count=_int_response_field(summary.get("job_count")),
         pending_job_count=_int_response_field(summary.get("pending_job_count")),
-        latest_job_at=(
-            latest_job_at.isoformat()
-            if isinstance(latest_job_at, datetime)
-            else None
-        ),
+        latest_job_at=(latest_job_at.isoformat() if isinstance(latest_job_at, datetime) else None),
     )
 
 
@@ -1550,6 +1779,11 @@ def _build_evolution_route(
                 action=job.action,
                 skill_version_id=job.skill_version_id,
                 rationale=job.rationale,
+                candidate_preview=(
+                    job.candidate_content[:500]
+                    if isinstance(job.candidate_content, str) and job.candidate_content
+                    else None
+                ),
                 created_by="skill-evolution",
                 created_at=job.created_at.isoformat(),
             )
@@ -1557,12 +1791,28 @@ def _build_evolution_route(
     return sorted(entries, key=lambda entry: entry.created_at, reverse=True)
 
 
-def _skill_evolution_trigger_response(skill_id: str) -> SkillEvolutionTriggerResponse:
+def _skill_evolution_config_response(config: Any) -> SkillEvolutionConfigResponse:  # noqa: ANN401
+    return SkillEvolutionConfigResponse(
+        enabled=config.enabled,
+        min_sessions_per_skill=config.min_sessions_per_skill,
+        scoring_min_sessions_per_skill=config.scoring_min_sessions_per_skill,
+        min_avg_score=config.min_avg_score,
+        max_sessions_per_batch=config.max_sessions_per_batch,
+        evolution_interval_minutes=config.evolution_interval_minutes,
+        publish_mode=config.publish_mode,
+        auto_apply=config.auto_apply,
+    )
+
+
+def _skill_evolution_trigger_response(
+    skill_id: str,
+    config: Any | None = None,  # noqa: ANN401
+) -> SkillEvolutionTriggerResponse:
     from src.infrastructure.agent.plugins.skill_evolution.config import (
         SkillEvolutionConfig,
     )
 
-    config = SkillEvolutionConfig.from_env()
+    config = config or SkillEvolutionConfig.from_env()
     return SkillEvolutionTriggerResponse(
         capture_hook="after_turn_complete",
         capture_timing=(
@@ -1580,12 +1830,175 @@ def _skill_evolution_trigger_response(skill_id: str) -> SkillEvolutionTriggerRes
             else "/api/v1/skills/{skill_id}/evolution/run"
         ),
         min_sessions_per_skill=config.min_sessions_per_skill,
+        scoring_min_sessions_per_skill=config.scoring_min_sessions_per_skill,
         min_avg_score=config.min_avg_score,
         max_sessions_per_batch=config.max_sessions_per_batch,
         publish_mode=config.publish_mode,
         auto_apply=config.auto_apply,
         enabled=config.enabled,
     )
+
+
+async def _load_skill_evolution_config(db: AsyncSession, tenant_id: str) -> Any:  # noqa: ANN401
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from src.infrastructure.adapters.secondary.persistence.plugin_config_repository import (
+        PluginConfigRepository,
+    )
+    from src.infrastructure.agent.plugins.skill_evolution.config import (
+        SkillEvolutionConfig,
+    )
+
+    base_config = SkillEvolutionConfig.from_env()
+    try:
+        row = await PluginConfigRepository(db).get_by_tenant_and_plugin(
+            tenant_id=tenant_id,
+            plugin_name="skill_evolution",
+        )
+    except (AttributeError, SQLAlchemyError):
+        return base_config
+    overrides = row.config if row is not None and isinstance(row.config, dict) else {}
+    return base_config.with_overrides(overrides)
+
+
+def _skill_evolution_config_payload(config: SkillEvolutionConfigUpdateRequest) -> dict[str, object]:
+    payload = config.model_dump(exclude_unset=True)
+    publish_mode = payload.get("publish_mode")
+    if publish_mode is not None and publish_mode not in {"review", "direct"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Invalid skill evolution publish mode"),
+        )
+    return payload
+
+
+def _skill_evolution_monitor_response(
+    *,
+    stats: SkillEvolutionOverviewStatsResponse,
+    skill_summaries: list[SkillEvolutionSkillSummaryResponse],
+    recent_sessions: list[Any],
+    recent_jobs: list[Any],
+    trigger: SkillEvolutionTriggerResponse,
+) -> SkillEvolutionMonitorResponse:
+    latest_session_at = recent_sessions[0].created_at.isoformat() if recent_sessions else None
+    latest_job_at = recent_jobs[0].created_at.isoformat() if recent_jobs else None
+    scorable_backlog_count = sum(
+        summary.unprocessed_count
+        for summary in skill_summaries
+        if summary.skill_name != "__no_skill__"
+        and summary.session_count >= trigger.scoring_min_sessions_per_skill
+    )
+    unscored_count = max(stats.processed_sessions - stats.scored_sessions, 0)
+    eligible_skill_count = sum(
+        1
+        for summary in skill_summaries
+        if summary.skill_name != "__no_skill__"
+        and summary.session_count >= trigger.min_sessions_per_skill
+        and summary.avg_score is not None
+        and summary.avg_score >= trigger.min_avg_score
+    )
+    blocked_by_review_count = stats.pending_jobs
+    return SkillEvolutionMonitorResponse(
+        refresh_interval_seconds=15,
+        latest_session_at=latest_session_at,
+        latest_job_at=latest_job_at,
+        backlog_count=scorable_backlog_count,
+        unscored_count=unscored_count,
+        blocked_by_review_count=blocked_by_review_count,
+        eligible_skill_count=eligible_skill_count,
+        needs_attention=scorable_backlog_count > 0
+        or unscored_count > 0
+        or blocked_by_review_count > 0,
+    )
+
+
+def _skill_evolution_stage_responses(
+    *,
+    stats: SkillEvolutionOverviewStatsResponse,
+    monitor: SkillEvolutionMonitorResponse,
+) -> list[SkillEvolutionStageResponse]:
+    return [
+        SkillEvolutionStageResponse(
+            id="capture",
+            label="capture",
+            status="active" if stats.total_sessions else "waiting",
+            count=stats.total_sessions,
+            detail="Captured agent turns available for evolution.",
+        ),
+        SkillEvolutionStageResponse(
+            id="summarize",
+            label="summarize",
+            status="waiting" if monitor.backlog_count else "complete",
+            count=stats.processed_sessions,
+            backlog_count=monitor.backlog_count,
+            detail="Captured turns are summarized into comparable trajectories.",
+        ),
+        SkillEvolutionStageResponse(
+            id="judge",
+            label="judge",
+            status="waiting" if monitor.unscored_count else "complete",
+            count=stats.scored_sessions,
+            backlog_count=monitor.unscored_count,
+            detail="Summaries are judged and scored for evolution readiness.",
+        ),
+        SkillEvolutionStageResponse(
+            id="review",
+            label="review",
+            status="blocked" if stats.pending_jobs else "complete",
+            count=stats.pending_jobs,
+            backlog_count=stats.pending_jobs,
+            detail="Pending jobs require apply or reject before duplicate batches advance.",
+        ),
+        SkillEvolutionStageResponse(
+            id="apply",
+            label="apply",
+            status="active" if stats.applied_jobs else "waiting",
+            count=stats.applied_jobs,
+            detail="Applied jobs create skill versions attributed to evolution.",
+        ),
+    ]
+
+
+@router.get(
+    "/evolution/config",
+    response_model=SkillEvolutionConfigResponse,
+    summary="Get skill evolution strategy config",
+)
+async def get_skill_evolution_config(
+    db: AsyncSession = Depends(get_db),
+    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+) -> SkillEvolutionConfigResponse:
+    """Return tenant skill evolution strategy config."""
+    tenant_id = _normalize_tenant_id(tenant)
+    config = await _load_skill_evolution_config(db, tenant_id)
+    return _skill_evolution_config_response(config)
+
+
+@router.put(
+    "/evolution/config",
+    response_model=SkillEvolutionConfigResponse,
+    summary="Update skill evolution strategy config",
+)
+async def update_skill_evolution_config(
+    payload: SkillEvolutionConfigUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+) -> SkillEvolutionConfigResponse:
+    """Persist tenant skill evolution strategy config."""
+    from src.infrastructure.adapters.secondary.persistence.plugin_config_repository import (
+        PluginConfigRepository,
+    )
+
+    tenant_id = _normalize_tenant_id(tenant)
+    current = await _load_skill_evolution_config(db, tenant_id)
+    next_config = current.with_overrides(_skill_evolution_config_payload(payload))
+    await PluginConfigRepository(db).upsert(
+        tenant_id=tenant_id,
+        plugin_name="skill_evolution",
+        config=_skill_evolution_config_response(next_config).model_dump(),
+    )
+    await db.commit()
+    return _skill_evolution_config_response(next_config)
 
 
 @router.get(
@@ -1607,6 +2020,7 @@ async def get_skill_evolution_overview(
 
     tenant_id = _normalize_tenant_id(tenant)
     repo = SkillEvolutionRepository(db)
+    config = await _load_skill_evolution_config(db, tenant_id)
     stats = await repo.get_overview_stats(tenant_id=tenant_id)
     skill_summaries = await repo.get_skill_session_summaries(
         tenant_id=tenant_id,
@@ -1621,14 +2035,158 @@ async def get_skill_evolution_overview(
         limit=job_limit,
     )
 
+    stats_response = _overview_stats_to_response(stats)
+    skill_responses = [_skill_summary_to_response(summary) for summary in skill_summaries]
+    trigger_response = _skill_evolution_trigger_response("", config=config)
+    monitor_response = _skill_evolution_monitor_response(
+        stats=stats_response,
+        skill_summaries=skill_responses,
+        recent_sessions=recent_sessions,
+        recent_jobs=recent_jobs,
+        trigger=trigger_response,
+    )
+
     return SkillEvolutionOverviewResponse(
-        stats=_overview_stats_to_response(stats),
-        skills=[_skill_summary_to_response(summary) for summary in skill_summaries],
-        recent_sessions=[
-            _evolution_session_to_response(session) for session in recent_sessions
-        ],
+        stats=stats_response,
+        monitor=monitor_response,
+        stages=_skill_evolution_stage_responses(stats=stats_response, monitor=monitor_response),
+        skills=skill_responses,
+        recent_sessions=[_evolution_session_to_response(session) for session in recent_sessions],
         recent_jobs=[_evolution_job_to_response(job) for job in recent_jobs],
-        trigger=_skill_evolution_trigger_response(""),
+        trigger=trigger_response,
+    )
+
+
+@router.post(
+    "/evolution/jobs/{job_id}/apply",
+    response_model=SkillEvolutionJobResponse,
+    summary="Apply a pending skill evolution job",
+)
+async def apply_skill_evolution_job(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+) -> SkillEvolutionJobResponse:
+    """Apply a pending evolution job and create a new SkillVersion."""
+    from pathlib import Path
+
+    from src.application.services.skill_service import SkillService
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
+        SqlSkillRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
+        SqlSkillVersionRepository,
+    )
+    from src.infrastructure.agent.plugins.skill_evolution.repository import (
+        SkillEvolutionRepository,
+    )
+    from src.infrastructure.agent.plugins.skill_evolution.skill_merger import (
+        SkillMerger,
+    )
+
+    tenant_id = _normalize_tenant_id(tenant)
+    evolution_repo = SkillEvolutionRepository(db)
+    job = await evolution_repo.get_job(job_id)
+    _validate_pending_evolution_job(job, tenant_id=tenant_id)
+    assert job is not None
+
+    skill_repo = SqlSkillRepository(db)
+    skill_version_repo = SqlSkillVersionRepository(db)
+    skill_service = SkillService.create(
+        skill_repository=skill_repo,
+        base_path=Path.cwd(),
+        tenant_id=tenant_id,
+        include_system=True,
+    )
+    version_id = await SkillMerger(skill_service=skill_service).apply_evolution(
+        job,
+        tenant_id=tenant_id,
+        skill_repository=skill_repo,
+        skill_version_repository=skill_version_repo,
+    )
+    if version_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Skill evolution job cannot be applied"),
+        )
+
+    await evolution_repo.update_job_status(
+        job.id,
+        status="applied",
+        skill_version_id=version_id,
+    )
+    await db.commit()
+    refreshed = await evolution_repo.get_job(job.id)
+    return _evolution_job_to_response(refreshed or job)
+
+
+@router.post(
+    "/evolution/jobs/{job_id}/reject",
+    response_model=SkillEvolutionJobResponse,
+    summary="Reject a pending skill evolution job",
+)
+async def reject_skill_evolution_job(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+) -> SkillEvolutionJobResponse:
+    """Reject a pending evolution job without changing the target skill."""
+    from src.infrastructure.agent.plugins.skill_evolution.repository import (
+        SkillEvolutionRepository,
+    )
+
+    tenant_id = _normalize_tenant_id(tenant)
+    evolution_repo = SkillEvolutionRepository(db)
+    job = await evolution_repo.get_job(job_id)
+    _validate_pending_evolution_job(job, tenant_id=tenant_id)
+
+    await evolution_repo.update_job_status(job.id, status="rejected")
+    await db.commit()
+    refreshed = await evolution_repo.get_job(job.id)
+    return _evolution_job_to_response(refreshed or job)
+
+
+def _validate_pending_evolution_job(job: Any, *, tenant_id: str) -> None:  # noqa: ANN401
+    if job is None or job.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Skill evolution job not found"),
+        )
+    if job.status != "pending_review":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Skill evolution job is not pending review"),
+        )
+
+
+@router.post(
+    "/evolution/run",
+    response_model=SkillEvolutionTenantRunResponse,
+    summary="Run tenant skill evolution now",
+)
+async def run_tenant_skill_evolution(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+) -> SkillEvolutionTenantRunResponse:
+    """Manually trigger one evolution cycle for the current tenant."""
+    tenant_id = _normalize_tenant_id(tenant)
+    container = get_container_with_db(request, db)
+    plugin = container.skill_evolution_plugin()
+    if plugin is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_("Skill evolution plugin is not available"),
+        )
+
+    result = plugin.schedule_evolution(
+        tenant_id=tenant_id,
+        project_id=None,
+        skill_name=None,
+    )
+    return SkillEvolutionTenantRunResponse(
+        tenant_id=tenant_id,
+        result=result,
     )
 
 
@@ -1655,6 +2213,7 @@ async def get_skill_evolution(
     )
 
     tenant_id = _normalize_tenant_id(tenant)
+    config = await _load_skill_evolution_config(db, tenant_id)
     skill_repo = SqlSkillRepository(db)
     skill = await _get_tenant_skill_or_404(skill_repo, skill_id, tenant_id)
 
@@ -1678,7 +2237,7 @@ async def get_skill_evolution(
         captured_session_count=captured_session_count,
         jobs=[_evolution_job_to_response(job) for job in jobs],
         route=_build_evolution_route(versions=versions, jobs=jobs),
-        trigger=_skill_evolution_trigger_response(skill_id),
+        trigger=_skill_evolution_trigger_response(skill_id, config=config),
     )
 
 
@@ -1715,7 +2274,7 @@ async def run_skill_evolution(
             detail=_("Skill evolution plugin is not available"),
         )
 
-    result = await plugin.trigger_evolution(
+    result = plugin.schedule_evolution(
         tenant_id=tenant_id,
         project_id=skill.project_id,
         skill_name=skill.name,

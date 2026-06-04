@@ -78,6 +78,7 @@ class Skill:
     source: SkillSource = SkillSource.DATABASE
     file_path: str | None = None
     full_content: str | None = None
+    resource_files: dict[str, str] = field(default_factory=dict)
     # Agent mode support — specify which agent modes can use this skill.
     # ["*"] means all modes, ["default", "plan"] means only those modes.
     agent_modes: list[str] = field(default_factory=lambda: ["*"])
@@ -168,6 +169,8 @@ class Skill:
             "metadata": self.metadata,
             "source": self.source.value if self.source else None,
             "file_path": self.file_path,
+            "full_content": self.full_content,
+            "resource_files": dict(self.resource_files),
             "agent_modes": list(self.agent_modes),
             "scope": self.scope.value,
             "is_system_skill": self.is_system_skill,
@@ -199,6 +202,10 @@ class Skill:
             if "updated_at" in data
             else datetime.now(UTC),
             metadata=data.get("metadata"),
+            source=SkillSource(data.get("source", SkillSource.DATABASE.value)),
+            file_path=data.get("file_path"),
+            full_content=data.get("full_content"),
+            resource_files=dict(data.get("resource_files") or {}),
             agent_modes=data.get("agent_modes", ["*"]),
             scope=SkillScope(data.get("scope", "tenant")),
             is_system_skill=data.get("is_system_skill", False),
@@ -224,6 +231,7 @@ class Skill:
         scope: SkillScope = SkillScope.TENANT,
         is_system_skill: bool = False,
         full_content: str | None = None,
+        resource_files: dict[str, str] | None = None,
         license: str | None = None,
         compatibility: str | None = None,
         allowed_tools_raw: str | None = None,
@@ -242,6 +250,7 @@ class Skill:
             scope=scope,
             is_system_skill=is_system_skill,
             full_content=full_content,
+            resource_files=resource_files or {},
             license=license,
             compatibility=compatibility,
             allowed_tools_raw=allowed_tools_raw,

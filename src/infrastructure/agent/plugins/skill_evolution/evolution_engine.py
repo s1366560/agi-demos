@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any, cast
 
 from src.domain.llm_providers.llm_types import LLMClient, Message
 from src.infrastructure.agent.plugins.skill_evolution.models import SkillEvolutionJob
@@ -87,6 +88,7 @@ class EvolutionEngine:
         self._config = config
         self._skill_service = skill_service
         self._merger = merger
+        self.last_blocked_by_review_count = 0
 
     async def evolve_all(
         self,
@@ -104,6 +106,7 @@ class EvolutionEngine:
         Returns the list of created evolution jobs.
         """
         jobs: list[SkillEvolutionJob] = []
+        self.last_blocked_by_review_count = 0
         existing_names = await self._existing_skill_names(
             tenant_id=tenant_id,
             skill_repository=skill_repository,
@@ -113,15 +116,20 @@ class EvolutionEngine:
         for group in groups.values():
             try:
                 session_ids = [s.id for s in group.sessions]
-                if await repo.has_job_for_sessions(
+                existing_job = await _get_existing_job_for_sessions(
+                    repo,
                     tenant_id=tenant_id,
                     skill_name=group.skill_name,
                     session_ids=session_ids,
-                ):
+                )
+                if existing_job is not None:
+                    if existing_job.status == "pending_review":
+                        self.last_blocked_by_review_count += 1
                     logger.info(
-                        "Skipping duplicate evolution job for '%s' (%d sessions)",
+                        "Skipping duplicate evolution job for '%s' (%d sessions, status=%s)",
                         group.skill_name,
                         len(session_ids),
+                        existing_job.status,
                     )
                     continue
 
@@ -146,9 +154,7 @@ class EvolutionEngine:
                             skill_version_repository=skill_version_repository,
                         )
             except Exception:
-                logger.exception(
-                    "Evolution failed for skill '%s'", group.skill_name
-                )
+                logger.exception("Evolution failed for skill '%s'", group.skill_name)
 
         if jobs:
             logger.info("Created %d evolution jobs", len(jobs))
@@ -170,7 +176,7 @@ class EvolutionEngine:
             skill.full_content
             if skill is not None
             else (
-                "No managed SKILL.md exists for this skill name yet. "
+                "No managed or file-system SKILL.md exists for this skill name yet. "
                 "Use action=create_skill only if the evidence supports a reusable workflow."
             )
         )
@@ -199,15 +205,12 @@ class EvolutionEngine:
         )
 
         content = _extract_content(response)
-        parsed = json.loads(content)
+        parsed = json.loads(_strip_json_payload(content))
 
         action = parsed.get("action", "skip")
         rationale = parsed.get("rationale", "")
         candidate_content = parsed.get("skill_content")
         description = parsed.get("description")
-
-        if skill is None and action in {"improve_skill", "optimize_description"}:
-            action = "create_skill" if candidate_content else "skip"
 
         if action == "optimize_description" and description:
             candidate_content = description
@@ -252,9 +255,7 @@ class EvolutionEngine:
                 skill_repository=skill_repository,
                 skill_version_repository=skill_version_repository,
             )
-            await repo.update_job_status(
-                job.id, status="applied", skill_version_id=version_id
-            )
+            await repo.update_job_status(job.id, status="applied", skill_version_id=version_id)
         except Exception:
             logger.exception("Failed to apply evolution job %s", job.id)
             await repo.update_job_status(job.id, status="pending_review")
@@ -267,7 +268,9 @@ class EvolutionEngine:
         skill_repository: SkillRepositoryPort | None = None,
     ) -> Any:  # noqa: ANN401
         if skill_repository is not None:
-            return await skill_repository.get_by_name(tenant_id, skill_name)
+            skill = await skill_repository.get_by_name(tenant_id, skill_name)
+            if skill is not None:
+                return skill
         return await self._skill_service.get_skill_by_name(
             tenant_id=tenant_id, skill_name=skill_name
         )
@@ -307,3 +310,59 @@ def _extract_content(response: dict[str, Any]) -> str:
         msg = choices[0].get("message", {})
         return str(msg.get("content", ""))
     return str(response.get("content", ""))
+
+
+def _strip_json_payload(content: str) -> str:
+    text = content.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return text[start : end + 1]
+    return text
+
+
+async def _get_existing_job_for_sessions(
+    repo: SkillEvolutionRepository,
+    *,
+    tenant_id: str,
+    skill_name: str,
+    session_ids: list[str],
+) -> SkillEvolutionJob | None:
+    method = getattr(repo, "get_job_for_sessions", None)
+    if callable(method):
+        typed_method = cast(
+            Callable[..., Awaitable[SkillEvolutionJob | None]],
+            method,
+        )
+        try:
+            return await typed_method(
+                tenant_id=tenant_id,
+                skill_name=skill_name,
+                session_ids=session_ids,
+                excluded_statuses={"rejected"},
+            )
+        except TypeError:
+            pass
+
+    if await repo.has_job_for_sessions(
+        tenant_id=tenant_id,
+        skill_name=skill_name,
+        session_ids=session_ids,
+    ):
+        return SkillEvolutionJob(
+            id="existing",
+            skill_name=skill_name,
+            tenant_id=tenant_id,
+            action="unknown",
+            status="pending_review",
+            session_ids=session_ids,
+        )
+    return None

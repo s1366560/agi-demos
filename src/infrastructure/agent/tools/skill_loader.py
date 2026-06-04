@@ -56,6 +56,7 @@ class _SkillLoaderDeps:
     session_id: str = ""
     skill_sync_service: Any = None
     sandbox_id: str = ""
+    skip_database: bool = True
 
 _skill_loader_deps: _SkillLoaderDeps | None = None
 
@@ -101,6 +102,7 @@ def set_sandbox_id(sandbox_id: str) -> None:
         session_id=_skill_loader_deps.session_id,
         skill_sync_service=_skill_loader_deps.skill_sync_service,
         sandbox_id=sandbox_id,
+        skip_database=_skill_loader_deps.skip_database,
     )
 
 def configure_skill_loader_tool(
@@ -112,6 +114,7 @@ def configure_skill_loader_tool(
     session_id: str = "",
     skill_sync_service: Any = None,
     sandbox_id: str = "",
+    skip_database: bool = True,
 ) -> None:
     """Configure dependencies for the skill_loader tool.
 
@@ -127,6 +130,7 @@ def configure_skill_loader_tool(
         session_id=session_id,
         skill_sync_service=skill_sync_service,
         sandbox_id=sandbox_id,
+        skip_database=skip_database,
     )
 
 
@@ -144,7 +148,7 @@ async def _load_available_skills(
         project_id=deps.project_id,
         tier=1,
         agent_mode=deps.agent_mode,
-        skip_database=True,
+        skip_database=deps.skip_database,
     )
     return cast(list[Skill], skills)
 

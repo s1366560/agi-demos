@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from src.domain.model.agent.skill import Skill
+from src.domain.model.agent.skill import Skill, SkillScope
 from src.domain.model.agent.skill.skill_version import SkillVersion
 
 if TYPE_CHECKING:
@@ -52,12 +52,11 @@ class SkillMerger:
             return None
 
         try:
-            if skill_repository is not None:
-                skill = await skill_repository.get_by_name(tenant_id, job.skill_name)
-            else:
-                skill = await self._skill_service.get_skill_by_name(
-                    tenant_id=tenant_id, skill_name=job.skill_name
-                )
+            skill = await self._load_skill_for_apply(
+                job.skill_name,
+                tenant_id=tenant_id,
+                skill_repository=skill_repository,
+            )
         except Exception:
             logger.exception("Failed to load skill '%s' for evolution", job.skill_name)
             return None
@@ -78,6 +77,8 @@ class SkillMerger:
                 skill,
                 updated_content=updated_content,
                 job=job,
+                tenant_id=tenant_id,
+                project_id=project_id,
                 skill_repository=skill_repository,
                 skill_version_repository=skill_version_repository,
             )
@@ -95,6 +96,8 @@ class SkillMerger:
                 skill,
                 updated_content=job.candidate_content,
                 job=job,
+                tenant_id=tenant_id,
+                project_id=project_id,
                 skill_repository=skill_repository,
                 skill_version_repository=skill_version_repository,
             )
@@ -114,12 +117,30 @@ class SkillMerger:
 
         return None
 
+    async def _load_skill_for_apply(
+        self,
+        skill_name: str,
+        *,
+        tenant_id: str,
+        skill_repository: SkillRepositoryPort | None,
+    ) -> Skill | None:
+        if skill_repository is not None:
+            skill = await skill_repository.get_by_name(tenant_id, skill_name)
+            if skill is not None:
+                return skill
+        return await self._skill_service.get_skill_by_name(
+            tenant_id=tenant_id,
+            skill_name=skill_name,
+        )
+
     async def _persist_skill_update(
         self,
         skill: Skill,
         *,
         updated_content: str,
         job: SkillEvolutionJob,
+        tenant_id: str,
+        project_id: str | None,
         skill_repository: SkillRepositoryPort | None,
         skill_version_repository: SkillVersionRepositoryPort | None,
     ) -> str | None:
@@ -129,6 +150,14 @@ class SkillMerger:
                 full_content=updated_content,
             )
             return None
+
+        skill = await self._ensure_database_skill(
+            skill,
+            updated_content=updated_content,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            skill_repository=skill_repository,
+        )
 
         max_version = await skill_version_repository.get_max_version_number(skill.id)
         next_version = max_version + 1
@@ -151,6 +180,53 @@ class SkillMerger:
         skill.updated_at = datetime.now(UTC)
         await skill_repository.update(skill)
         return version.id
+
+    async def _ensure_database_skill(
+        self,
+        skill: Skill,
+        *,
+        updated_content: str,
+        tenant_id: str,
+        project_id: str | None,
+        skill_repository: SkillRepositoryPort,
+    ) -> Skill:
+        existing = await skill_repository.get_by_name(tenant_id, skill.name)
+        if existing is not None:
+            return existing
+
+        scope = SkillScope.PROJECT if project_id else SkillScope.TENANT
+        metadata = {
+            **(skill.metadata or {}),
+            "evolution_imported_from": "filesystem",
+            "source_skill_id": skill.id,
+            "source_file_path": skill.file_path,
+            "source_scope": skill.scope.value,
+            "source_is_system_skill": skill.is_system_skill,
+        }
+        imported = Skill(
+            id=str(uuid.uuid4()),
+            tenant_id=tenant_id,
+            project_id=project_id,
+            name=skill.name,
+            description=skill.description,
+            tools=list(skill.tools),
+            status=skill.status,
+            metadata=metadata,
+            source=skill.source,
+            file_path=skill.file_path,
+            full_content=skill.full_content or updated_content,
+            agent_modes=list(skill.agent_modes),
+            scope=scope,
+            is_system_skill=False,
+            license=skill.license,
+            compatibility=skill.compatibility,
+            allowed_tools_raw=skill.allowed_tools_raw,
+            allowed_tools_parsed=list(skill.allowed_tools_parsed),
+            spec_version=skill.spec_version,
+            current_version=0,
+        )
+        await skill_repository.create(imported)
+        return imported
 
 
 def _replace_frontmatter_description(content: str, description: str) -> str:

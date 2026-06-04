@@ -1228,7 +1228,7 @@ class WorkflowPattern(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     pattern_signature: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     steps_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
     # Legacy field for backward compatibility
@@ -1356,6 +1356,12 @@ class Skill(Base):
     # True if this is a database copy of a system skill (for usage tracking)
     full_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Full SKILL.md content for Web UI editing
+    resource_files: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Current package resource files keyed by relative path
+    license: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    compatibility: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    allowed_tools_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
+    spec_version: Mapped[str] = mapped_column(String(32), default="1.0", nullable=False)
     # Version tracking
     current_version: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False, server_default="0"
@@ -1369,7 +1375,27 @@ class Skill(Base):
     )
 
     # Indexes for efficient queries
-    __table_args__ = (Index("ix_skills_tenant_scope", "tenant_id", "scope"),)
+    __table_args__ = (
+        Index("ix_skills_tenant_scope", "tenant_id", "scope"),
+        Index(
+            "uq_skills_tenant_scope_name",
+            "tenant_id",
+            "scope",
+            "name",
+            unique=True,
+            postgresql_where=text("project_id IS NULL"),
+            sqlite_where=text("project_id IS NULL"),
+        ),
+        Index(
+            "uq_skills_tenant_project_name",
+            "tenant_id",
+            "project_id",
+            "name",
+            unique=True,
+            postgresql_where=text("project_id IS NOT NULL"),
+            sqlite_where=text("project_id IS NOT NULL"),
+        ),
+    )
 
 
 class TenantSkillConfig(Base):

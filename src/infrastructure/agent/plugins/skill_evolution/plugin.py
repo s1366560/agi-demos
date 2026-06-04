@@ -37,8 +37,11 @@ async def _after_turn_complete(payload: Mapping[str, Any]) -> dict[str, Any]:
     result_payload = dict(payload)
     key = _turn_key(payload)
     loaded_skill_names = _loaded_skill_names_by_turn.pop(key, []) if key else []
+    tool_events = _tool_events_by_turn.pop(key, []) if key else []
     if loaded_skill_names and not result_payload.get("loaded_skill_names"):
         result_payload["loaded_skill_names"] = loaded_skill_names
+    if tool_events and not result_payload.get("tool_events"):
+        result_payload["tool_events"] = tool_events
 
     collector = _get_collector()
     if collector is None:
@@ -61,6 +64,7 @@ _config: Any = None
 _session_factory: Any = None
 _scheduler: Any = None
 _loaded_skill_names_by_turn: dict[str, list[str]] = {}
+_tool_events_by_turn: dict[str, list[dict[str, Any]]] = {}
 
 
 def _get_collector() -> Any:  # noqa: ANN401
@@ -88,6 +92,12 @@ def _turn_key(payload: Mapping[str, Any]) -> str | None:
 async def _after_tool_execution(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Hook handler: remember successful skill_loader calls for turn attribution."""
     result_payload = dict(payload)
+    key = _turn_key(payload)
+    if key is not None:
+        tool_events = _tool_events_by_turn.setdefault(key, [])
+        if len(tool_events) < 40:
+            tool_events.append(_tool_event_summary(payload))
+
     if payload.get("tool_name") != "skill_loader" or payload.get("error"):
         return result_payload
 
@@ -99,7 +109,6 @@ async def _after_tool_execution(payload: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(skill_name, str) or not skill_name.strip():
         return result_payload
 
-    key = _turn_key(payload)
     if key is None:
         return result_payload
 
@@ -109,6 +118,19 @@ async def _after_tool_execution(payload: Mapping[str, Any]) -> dict[str, Any]:
         loaded.append(normalized)
     result_payload["loaded_skill_names"] = list(loaded)
     return result_payload
+
+
+def _tool_event_summary(payload: Mapping[str, Any]) -> dict[str, Any]:
+    raw_result = payload.get("result")
+    metadata = payload.get("result_metadata")
+    return {
+        "tool_name": str(payload.get("tool_name", "")),
+        "call_id": str(payload.get("call_id", "")),
+        "success": not bool(payload.get("error")),
+        "error": str(payload.get("error", ""))[:500] if payload.get("error") else None,
+        "result": str(raw_result)[:1200] if raw_result is not None else "",
+        "metadata": dict(metadata) if isinstance(metadata, Mapping) else {},
+    }
 
 
 def _schedule_captured_sessions(sessions: object) -> None:
@@ -260,6 +282,29 @@ class SkillEvolutionPlugin:
         return await self._scheduler_instance.run_once(
             tenant_id=tenant_id, project_id=project_id, skill_name=skill_name
         )
+
+    def schedule_evolution(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str | None = None,
+        skill_name: str | None = None,
+        reason: str = "manual",
+    ) -> dict[str, Any]:
+        """Queue an evolution cycle without blocking the caller."""
+        scheduled = self._scheduler_instance.schedule_run(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            skill_name=skill_name,
+            reason=reason,
+            delay_seconds=0,
+            allow_when_stopped=True,
+        )
+        return {
+            "scheduled": scheduled,
+            "reason": reason,
+            "status": "queued" if scheduled else "already_scheduled_or_not_running",
+        }
 
 
 def configure_skill_evolution_capture(

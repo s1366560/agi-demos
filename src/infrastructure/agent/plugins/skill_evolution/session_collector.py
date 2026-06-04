@@ -21,6 +21,7 @@ def _build_trajectory(
     conversation_context: list[dict[str, str]],
     user_message: str,
     final_content: str,
+    tool_events: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Extract a lightweight tool-call trajectory from the conversation context.
 
@@ -44,6 +45,22 @@ def _build_trajectory(
                 }
             )
             tool_call_count += 1
+
+    for event in tool_events or []:
+        tool_name = str(event.get("tool_name", ""))
+        steps.append(
+            {
+                "type": "tool_execution",
+                "name": tool_name,
+                "success": bool(event.get("success", False)),
+                "error": event.get("error"),
+                "content": str(event.get("result", ""))[:2000],
+                "metadata": event.get("metadata")
+                if isinstance(event.get("metadata"), dict)
+                else {},
+            }
+        )
+        tool_call_count += 1
 
     return {
         "user_query": user_message[:2000],
@@ -75,6 +92,7 @@ class SessionCollector:
         matched_skill_name: str | None,
         conversation_context: list[dict[str, str]],
         success: bool,
+        tool_events: list[dict[str, Any]] | None = None,
         execution_time_ms: int = 0,
     ) -> SkillEvolutionSession | None:
         """Build a session entity from hook payload data.
@@ -84,7 +102,12 @@ class SessionCollector:
         """
         skill_name = matched_skill_name or _NO_SKILL_KEY
 
-        trajectory = _build_trajectory(conversation_context, user_message, final_content)
+        trajectory = _build_trajectory(
+            conversation_context,
+            user_message,
+            final_content,
+            tool_events=tool_events,
+        )
 
         return SkillEvolutionSession(
             id=f"evs-{uuid.uuid4().hex[:16]}",
@@ -132,6 +155,7 @@ class SessionCollector:
                 final_content=str(payload.get("final_content", "")),
                 matched_skill_name=skill_name,
                 conversation_context=list(payload.get("conversation_context", [])),
+                tool_events=_tool_events(payload.get("tool_events")),
                 success=bool(payload.get("success", False)),
                 execution_time_ms=int(payload.get("execution_time_ms", 0)),
             )
@@ -183,6 +207,16 @@ def _loaded_skill_names(value: object) -> list[str]:
         seen.add(name)
         names.append(name)
     return names
+
+
+def _tool_events(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    events: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, dict):
+            events.append(item)
+    return events
 
 
 def _get_repo(db: Any) -> Any:  # noqa: ANN401

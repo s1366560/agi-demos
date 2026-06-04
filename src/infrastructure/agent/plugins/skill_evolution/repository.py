@@ -5,9 +5,14 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import case, delete, func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
+from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentExecutionEvent,
+    Skill,
+)
 from src.infrastructure.agent.plugins.skill_evolution.models import (
     SkillEvolutionJob,
     SkillEvolutionSession,
@@ -33,11 +38,37 @@ class SkillEvolutionRepository:
         await self._session.flush()
         return session
 
+    async def get_conversation_trace_events(
+        self,
+        *,
+        conversation_id: str,
+        limit: int = 120,
+    ) -> list[dict[str, object]]:
+        """Return persisted execution events usable for trajectory reconstruction."""
+        stmt = (
+            select(AgentExecutionEvent.event_type, AgentExecutionEvent.event_data)
+            .where(
+                AgentExecutionEvent.conversation_id == conversation_id,
+                AgentExecutionEvent.event_type.in_(
+                    ["assistant_message", "act", "observe", "complete", "error"]
+                ),
+            )
+            .order_by(AgentExecutionEvent.event_time_us.asc(), AgentExecutionEvent.event_counter.asc())
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        events: list[dict[str, object]] = []
+        for row in result.all():
+            event_data = row.event_data if isinstance(row.event_data, dict) else {}
+            events.append({"event_type": row.event_type, "event_data": event_data})
+        return events
+
     async def get_unprocessed_sessions(
         self,
         *,
         tenant_id: str,
         skill_name: str | None = None,
+        min_skill_sessions: int = 1,
         limit: int = 50,
     ) -> list[SkillEvolutionSession]:
         stmt = (
@@ -51,6 +82,13 @@ class SkillEvolutionRepository:
         )
         if skill_name is not None:
             stmt = stmt.where(SkillEvolutionSession.skill_name == skill_name)
+        else:
+            stmt = stmt.where(SkillEvolutionSession.skill_name != "__no_skill__")
+        stmt = self._filter_by_min_skill_sessions(
+            stmt,
+            tenant_id=tenant_id,
+            min_skill_sessions=min_skill_sessions,
+        )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
@@ -59,6 +97,7 @@ class SkillEvolutionRepository:
         *,
         tenant_id: str,
         skill_name: str | None = None,
+        min_skill_sessions: int = 1,
         limit: int = 50,
     ) -> list[SkillEvolutionSession]:
         stmt = (
@@ -73,8 +112,38 @@ class SkillEvolutionRepository:
         )
         if skill_name is not None:
             stmt = stmt.where(SkillEvolutionSession.skill_name == skill_name)
+        else:
+            stmt = stmt.where(SkillEvolutionSession.skill_name != "__no_skill__")
+        stmt = self._filter_by_min_skill_sessions(
+            stmt,
+            tenant_id=tenant_id,
+            min_skill_sessions=min_skill_sessions,
+        )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    def _filter_by_min_skill_sessions(
+        self,
+        stmt: Select[tuple[SkillEvolutionSession]],
+        *,
+        tenant_id: str,
+        min_skill_sessions: int,
+    ) -> Select[tuple[SkillEvolutionSession]]:
+        if min_skill_sessions <= 1:
+            return stmt
+        eligible_skill_names = (
+            select(SkillEvolutionSession.skill_name)
+            .where(
+                SkillEvolutionSession.tenant_id == tenant_id,
+                SkillEvolutionSession.skill_name != "__no_skill__",
+            )
+            .group_by(SkillEvolutionSession.skill_name)
+            .having(func.count(SkillEvolutionSession.id) >= min_skill_sessions)
+            .subquery()
+        )
+        return stmt.where(
+            SkillEvolutionSession.skill_name.in_(select(eligible_skill_names.c.skill_name))
+        )
 
     async def mark_processed(self, session_ids: list[str]) -> None:
         stmt = (
@@ -195,15 +264,16 @@ class SkillEvolutionRepository:
         return [
             {"skill_name": row.skill_name, "session_count": row.session_count}
             for row in result.all()
-            if row.skill_name not in existing_skill_names
-            and row.skill_name != "__no_skill__"
+            if row.skill_name not in existing_skill_names and row.skill_name != "__no_skill__"
         ]
 
     async def cleanup_old_sessions(self, *, retention_days: int = 30) -> int:
         cutoff = datetime.now(UTC) - timedelta(days=retention_days)
-        stmt = delete(SkillEvolutionSession).where(
-            SkillEvolutionSession.created_at < cutoff
-        ).execution_options(synchronize_session=False)
+        stmt = (
+            delete(SkillEvolutionSession)
+            .where(SkillEvolutionSession.created_at < cutoff)
+            .execution_options(synchronize_session=False)
+        )
         result = await self._session.execute(stmt)
         await self._session.flush()
         return int(getattr(result, "rowcount", 0) or 0)
@@ -223,19 +293,39 @@ class SkillEvolutionRepository:
         session_ids: list[str],
     ) -> bool:
         """Return true when this exact session batch already produced a job."""
+        job = await self.get_job_for_sessions(
+            tenant_id=tenant_id,
+            skill_name=skill_name,
+            session_ids=session_ids,
+            excluded_statuses={"rejected"},
+        )
+        return job is not None
+
+    async def get_job_for_sessions(
+        self,
+        *,
+        tenant_id: str,
+        skill_name: str,
+        session_ids: list[str],
+        excluded_statuses: set[str] | None = None,
+    ) -> SkillEvolutionJob | None:
+        """Return the existing job for an exact session batch, if any."""
         if not session_ids:
-            return False
+            return None
 
         expected = set(session_ids)
+        excluded = excluded_statuses or set()
         stmt = select(SkillEvolutionJob).where(
             SkillEvolutionJob.tenant_id == tenant_id,
             SkillEvolutionJob.skill_name == skill_name,
         )
         result = await self._session.execute(stmt)
         for job in result.scalars().all():
+            if job.status in excluded:
+                continue
             if set(job.session_ids or []) == expected:
-                return True
-        return False
+                return job
+        return None
 
     async def get_pending_jobs(
         self, *, tenant_id: str, skill_name: str | None = None
@@ -270,11 +360,7 @@ class SkillEvolutionRepository:
             values["applied_at"] = datetime.now(UTC)
         if skill_version_id is not None:
             values["skill_version_id"] = skill_version_id
-        stmt = (
-            update(SkillEvolutionJob)
-            .where(SkillEvolutionJob.id == job_id)
-            .values(**values)
-        )
+        stmt = update(SkillEvolutionJob).where(SkillEvolutionJob.id == job_id).values(**values)
         await self._session.execute(stmt)
         await self._session.flush()
 
@@ -323,33 +409,39 @@ class SkillEvolutionRepository:
             .filter(SkillEvolutionSession.skill_name == "__no_skill__")
             .label("no_skill_sessions"),
             func.count()
-            .filter(SkillEvolutionSession.processed == False)  # noqa: E712
+            .filter(
+                SkillEvolutionSession.skill_name != "__no_skill__",
+                SkillEvolutionSession.processed == False,  # noqa: E712
+            )
             .label("unprocessed_sessions"),
             func.count()
-            .filter(SkillEvolutionSession.processed == True)  # noqa: E712
+            .filter(
+                SkillEvolutionSession.skill_name != "__no_skill__",
+                SkillEvolutionSession.processed == True,  # noqa: E712
+            )
             .label("processed_sessions"),
             func.count()
-            .filter(SkillEvolutionSession.overall_score.isnot(None))
+            .filter(
+                SkillEvolutionSession.skill_name != "__no_skill__",
+                SkillEvolutionSession.overall_score.isnot(None),
+            )
             .label("scored_sessions"),
             func.count()
             .filter(SkillEvolutionSession.success == True)  # noqa: E712
             .label("successful_sessions"),
-            func.avg(SkillEvolutionSession.overall_score).label("avg_score"),
+            func.avg(SkillEvolutionSession.overall_score)
+            .filter(SkillEvolutionSession.skill_name != "__no_skill__")
+            .label("avg_score"),
         ).where(SkillEvolutionSession.tenant_id == tenant_id)
         result = await self._session.execute(stmt)
         row = result.mappings().one()
 
         job_stmt = select(
             func.count(SkillEvolutionJob.id).label("total_jobs"),
-            func.count()
-            .filter(SkillEvolutionJob.status == "pending_review")
-            .label("pending_jobs"),
-            func.count()
-            .filter(SkillEvolutionJob.status == "applied")
-            .label("applied_jobs"),
-            func.count()
-            .filter(SkillEvolutionJob.status == "skipped")
-            .label("skipped_jobs"),
+            func.count().filter(SkillEvolutionJob.status == "pending_review").label("pending_jobs"),
+            func.count().filter(SkillEvolutionJob.status == "applied").label("applied_jobs"),
+            func.count().filter(SkillEvolutionJob.status == "skipped").label("skipped_jobs"),
+            func.count().filter(SkillEvolutionJob.status == "rejected").label("rejected_jobs"),
         ).where(SkillEvolutionJob.tenant_id == tenant_id)
         job_result = await self._session.execute(job_stmt)
         job_row = job_result.mappings().one()
@@ -367,6 +459,7 @@ class SkillEvolutionRepository:
             "pending_jobs": int(job_row["pending_jobs"] or 0),
             "applied_jobs": int(job_row["applied_jobs"] or 0),
             "skipped_jobs": int(job_row["skipped_jobs"] or 0),
+            "rejected_jobs": int(job_row["rejected_jobs"] or 0),
         }
 
     async def get_skill_session_summaries(
@@ -391,6 +484,7 @@ class SkillEvolutionRepository:
         )
         stmt = (
             select(
+                func.min(Skill.id).label("skill_id"),
                 SkillEvolutionSession.skill_name.label("skill_name"),
                 func.count(SkillEvolutionSession.id).label("session_count"),
                 func.count()
@@ -412,7 +506,15 @@ class SkillEvolutionRepository:
                 job_counts,
                 job_counts.c.skill_name == SkillEvolutionSession.skill_name,
             )
-            .where(SkillEvolutionSession.tenant_id == tenant_id)
+            .outerjoin(
+                Skill,
+                (Skill.tenant_id == tenant_id)
+                & (Skill.name == SkillEvolutionSession.skill_name),
+            )
+            .where(
+                SkillEvolutionSession.tenant_id == tenant_id,
+                SkillEvolutionSession.skill_name != "__no_skill__",
+            )
             .group_by(
                 SkillEvolutionSession.skill_name,
                 job_counts.c.job_count,
@@ -420,7 +522,6 @@ class SkillEvolutionRepository:
                 job_counts.c.latest_job_at,
             )
             .order_by(
-                case((SkillEvolutionSession.skill_name == "__no_skill__", 1), else_=0),
                 func.count(SkillEvolutionSession.id).desc(),
                 SkillEvolutionSession.skill_name.asc(),
             )
@@ -431,6 +532,7 @@ class SkillEvolutionRepository:
         for row in result.mappings().all():
             summaries.append(
                 {
+                    "skill_id": row["skill_id"],
                     "skill_name": row["skill_name"],
                     "session_count": int(row["session_count"] or 0),
                     "success_count": int(row["success_count"] or 0),

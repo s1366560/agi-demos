@@ -404,6 +404,7 @@ class SkillService:
             source=skill.source,
             file_path=skill.file_path if tier >= 2 else None,
             full_content=None if tier < 3 else skill.full_content,
+            resource_files=skill.resource_files if tier >= 3 else {},
             agent_modes=skill.agent_modes,
             scope=skill.scope,
             is_system_skill=skill.is_system_skill,

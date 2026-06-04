@@ -6,6 +6,7 @@ a weighted overall quality score used for filtering before evolution.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -61,18 +62,34 @@ class SessionJudge:
 
         Returns the number of sessions successfully scored.
         """
-        count = 0
-        for session in sessions:
+        async def judge_one(session: SkillEvolutionSession) -> tuple[str, dict[str, Any], float] | None:
             try:
                 scores, overall = await self._judge_one(session, llm_client)
+                return session.id, scores, overall
+            except Exception:
+                logger.exception("Failed to judge session %s", session.id)
+                return None
+
+        results = await _run_with_concurrency(
+            [judge_one(session) for session in sessions],
+            limit=self._config.llm_concurrency,
+            timeout_seconds=self._config.llm_timeout_seconds,
+        )
+
+        count = 0
+        for result in results:
+            if result is None:
+                continue
+            session_id, scores, overall = result
+            try:
                 await repo.update_scores(
-                    session.id,
+                    session_id,
                     judge_scores=scores,
                     overall_score=overall,
                 )
                 count += 1
             except Exception:
-                logger.exception("Failed to judge session %s", session.id)
+                logger.exception("Failed to persist score for session %s", session_id)
         if count:
             logger.info("Judged %d skill evolution sessions", count)
         return count
@@ -84,6 +101,7 @@ class SessionJudge:
     ) -> tuple[dict[str, Any], float]:
         summary_text = session.summary or ""
         trajectory = session.trajectory or {}
+        final_response = str(trajectory.get("final_response", "")).strip()
 
         user_prompt = (
             f"Skill: {session.skill_name}\n"
@@ -92,6 +110,7 @@ class SessionJudge:
             f"Tool calls: {session.tool_call_count}\n"
             f"Execution time: {session.execution_time_ms}ms\n\n"
             f"Summary: {summary_text}\n\n"
+            f"Final response:\n{final_response[:2000]}\n\n"
             f"Trajectory: {json.dumps(trajectory.get('steps', []), ensure_ascii=False)}"
         )
 
@@ -107,7 +126,7 @@ class SessionJudge:
 
         content = _extract_content(response)
         try:
-            parsed = json.loads(content)
+            parsed = json.loads(_strip_json_payload(content))
         except json.JSONDecodeError:
             logger.warning(
                 "Skill evolution judge received non-JSON response for session %s",
@@ -167,3 +186,39 @@ def _extract_content(response: dict[str, Any]) -> str:
         msg = choices[0].get("message", {})
         return str(msg.get("content", ""))
     return str(response.get("content", ""))
+
+
+def _strip_json_payload(content: str) -> str:
+    text = content.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return text[start : end + 1]
+    return text
+
+
+async def _run_with_concurrency(
+    coros: list[Any],
+    *,
+    limit: int,
+    timeout_seconds: int,
+) -> list[Any]:
+    semaphore = asyncio.Semaphore(max(1, limit))
+
+    async def run_one(coro: Any) -> Any:  # noqa: ANN401
+        async with semaphore:
+            try:
+                return await asyncio.wait_for(coro, timeout=max(1, timeout_seconds))
+            except TimeoutError:
+                logger.warning("Skill evolution judging timed out")
+                return None
+
+    return await asyncio.gather(*(run_one(coro) for coro in coros))

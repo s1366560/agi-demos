@@ -78,6 +78,11 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             scope=skill.scope.value,
             is_system_skill=skill.is_system_skill,
             full_content=skill.full_content,
+            resource_files=dict(skill.resource_files),
+            license=skill.license,
+            compatibility=skill.compatibility,
+            allowed_tools_raw=skill.allowed_tools_raw,
+            spec_version=skill.spec_version,
             current_version=skill.current_version,
             version_label=skill.version_label,
         )
@@ -143,6 +148,11 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         db_skill.scope = skill.scope.value
         db_skill.is_system_skill = skill.is_system_skill
         db_skill.full_content = skill.full_content
+        db_skill.resource_files = dict(skill.resource_files)
+        db_skill.license = skill.license
+        db_skill.compatibility = skill.compatibility
+        db_skill.allowed_tools_raw = skill.allowed_tools_raw
+        db_skill.spec_version = skill.spec_version
         db_skill.current_version = skill.current_version
         db_skill.version_label = skill.version_label
 
@@ -249,6 +259,9 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         full_content = None
         if hasattr(db_skill, "full_content"):
             full_content = db_skill.full_content
+        resource_files = {}
+        if hasattr(db_skill, "resource_files") and db_skill.resource_files:
+            resource_files = dict(db_skill.resource_files)
 
         # Handle version fields (may not exist in old records)
         current_version = 0
@@ -274,6 +287,11 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             scope=scope,
             is_system_skill=is_system_skill,
             full_content=full_content,
+            resource_files=resource_files,
+            license=getattr(db_skill, "license", None),
+            compatibility=getattr(db_skill, "compatibility", None),
+            allowed_tools_raw=getattr(db_skill, "allowed_tools_raw", None),
+            spec_version=getattr(db_skill, "spec_version", None) or "1.0",
             current_version=current_version,
             version_label=version_label,
         )
@@ -294,6 +312,11 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
             scope=domain_entity.scope.value,
             is_system_skill=domain_entity.is_system_skill,
             full_content=domain_entity.full_content,
+            resource_files=dict(domain_entity.resource_files),
+            license=domain_entity.license,
+            compatibility=domain_entity.compatibility,
+            allowed_tools_raw=domain_entity.allowed_tools_raw,
+            spec_version=domain_entity.spec_version,
             current_version=domain_entity.current_version,
             version_label=domain_entity.version_label,
         )
