@@ -14,11 +14,16 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Alert, Tag } from 'antd';
 import {
   ArrowLeft,
+  ChevronRight,
   CheckCircle2,
+  ClipboardList,
   Code2,
+  Copy,
   Download,
   Eye,
   FileText,
+  Folder,
+  FolderOpen,
   GitBranch,
   History,
   KeyRound,
@@ -26,6 +31,7 @@ import {
   Play,
   RefreshCw,
   RotateCcw,
+  ShieldCheck,
   Wrench,
   XCircle,
 } from 'lucide-react';
@@ -50,6 +56,52 @@ import type {
 
 type SkillSource = NonNullable<SkillResponse['source']>;
 type SkillContentMode = 'preview' | 'raw';
+type SkillDetailMode = 'preview' | 'manage' | 'report';
+type SkillPreviewFileKind = 'markdown' | 'text';
+type SkillAssessmentGroup = 'p0' | 'p1' | 'p2';
+type SkillAssessmentStatus = 'pass' | 'warn';
+
+interface SkillPreviewFile {
+  path: string;
+  content: string;
+  kind: SkillPreviewFileKind;
+}
+
+interface SkillPreviewTreeFile {
+  type: 'file';
+  file: SkillPreviewFile;
+}
+
+interface SkillPreviewTreeDirectory {
+  type: 'directory';
+  path: string;
+  name: string;
+  children: SkillPreviewTreeNode[];
+}
+
+type SkillPreviewTreeNode = SkillPreviewTreeDirectory | SkillPreviewTreeFile;
+
+interface SkillAssessmentItem {
+  id: string;
+  group: SkillAssessmentGroup;
+  status: SkillAssessmentStatus;
+  title: string;
+  description: string;
+}
+
+interface SkillAssessmentGroupSummary {
+  group: SkillAssessmentGroup;
+  passed: number;
+  total: number;
+}
+
+interface SkillAssessmentReport {
+  status: 'safe' | 'attention';
+  generatedAt: string;
+  items: SkillAssessmentItem[];
+  groups: SkillAssessmentGroupSummary[];
+  text: string;
+}
 
 const pageText = 'text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.94_0.006_255)]';
 const mutedText = 'text-[oklch(0.48_0.01_255)] dark:text-[oklch(0.68_0.008_255)]';
@@ -64,6 +116,247 @@ function formatDate(value: string | null | undefined): string {
 
 function jsonBlock(value: Record<string, unknown> | undefined): string {
   return JSON.stringify(value ?? {}, null, 2);
+}
+
+function stringifyResourceFile(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  return JSON.stringify(value, null, 2);
+}
+
+function getPreviewFileKind(path: string): SkillPreviewFileKind {
+  return path.toLowerCase().endsWith('.md') || path.toLowerCase().endsWith('.mdx')
+    ? 'markdown'
+    : 'text';
+}
+
+function sortPreviewTreeNodes(nodes: SkillPreviewTreeNode[]): SkillPreviewTreeNode[] {
+  return [...nodes].sort((left, right) => {
+    if (left.type !== right.type) {
+      return left.type === 'directory' ? -1 : 1;
+    }
+
+    const leftName = left.type === 'directory' ? left.name : left.file.path;
+    const rightName = right.type === 'directory' ? right.name : right.file.path;
+    return leftName.localeCompare(rightName);
+  });
+}
+
+function buildPreviewFileTree(files: SkillPreviewFile[]): SkillPreviewTreeNode[] {
+  const roots: SkillPreviewTreeNode[] = [];
+  const directories = new Map<string, SkillPreviewTreeDirectory>();
+
+  const getDirectory = (
+    directoryPath: string,
+    name: string,
+    siblings: SkillPreviewTreeNode[]
+  ): SkillPreviewTreeDirectory => {
+    const existing = directories.get(directoryPath);
+    if (existing) {
+      return existing;
+    }
+
+    const directory: SkillPreviewTreeDirectory = {
+      type: 'directory',
+      path: directoryPath,
+      name,
+      children: [],
+    };
+    directories.set(directoryPath, directory);
+    siblings.push(directory);
+    return directory;
+  };
+
+  files.forEach((file) => {
+    const parts = file.path.split('/').filter(Boolean);
+    let siblings = roots;
+    let currentPath = '';
+
+    parts.slice(0, -1).forEach((part) => {
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+      siblings = getDirectory(currentPath, part, siblings).children;
+    });
+
+    siblings.push({ type: 'file', file });
+  });
+
+  const sortRecursively = (nodes: SkillPreviewTreeNode[]): SkillPreviewTreeNode[] =>
+    sortPreviewTreeNodes(nodes).map((node) =>
+      node.type === 'directory' ? { ...node, children: sortRecursively(node.children) } : node
+    );
+
+  return sortRecursively(roots);
+}
+
+function getPreviewDirectoryPaths(nodes: SkillPreviewTreeNode[]): string[] {
+  return nodes.flatMap((node) => {
+    if (node.type === 'file') {
+      return [];
+    }
+
+    return [node.path, ...getPreviewDirectoryPaths(node.children)];
+  });
+}
+
+function getAssessmentItemClasses(status: SkillAssessmentStatus): string {
+  return status === 'pass'
+    ? 'border-[oklch(0.82_0.06_145)] bg-[oklch(0.97_0.018_145)] text-[oklch(0.34_0.11_145)] dark:border-[oklch(0.36_0.06_145)] dark:bg-[oklch(0.19_0.035_145)] dark:text-[oklch(0.78_0.09_145)]'
+    : 'border-[oklch(0.84_0.08_75)] bg-[oklch(0.98_0.022_75)] text-[oklch(0.45_0.1_75)] dark:border-[oklch(0.38_0.07_75)] dark:bg-[oklch(0.21_0.035_75)] dark:text-[oklch(0.82_0.1_75)]';
+}
+
+function buildAssessmentReport({
+  skill,
+  previewFiles,
+  versions,
+  t,
+}: {
+  skill: SkillResponse;
+  previewFiles: SkillPreviewFile[];
+  versions: SkillVersionResponse[];
+  t: (key: string, options?: Record<string, unknown>) => string;
+}): SkillAssessmentReport {
+  const skillContent = previewFiles.map((file) => file.content).join('\n');
+  const possibleSecretPattern =
+    /(api[_-]?key|access[_-]?token|secret|password)\s*[:=]\s*["']?[A-Za-z0-9_\-.]{16,}/i;
+  const hasPossibleSecret = possibleSecretPattern.test(skillContent);
+  const hasHiddenCharacters = /[\u200B-\u200D\uFEFF]/.test(skillContent);
+  const hasAllowedTools = skill.tools.length > 0;
+  const hasBundledFiles = previewFiles.length > 1;
+  const hasVersionSnapshot = versions.length > 0 || skill.current_version > 0;
+  const hasMetadata = Boolean(skill.metadata && Object.keys(skill.metadata).length > 0);
+  const hasLicense = Boolean(skill.license);
+  const hasCompatibility = Boolean(skill.compatibility);
+
+  const items: SkillAssessmentItem[] = [
+    {
+      id: 'secrets',
+      group: 'p0',
+      status: hasPossibleSecret ? 'warn' : 'pass',
+      title: t('tenant.skills.detail.assessment.items.secrets.title'),
+      description: t(
+        hasPossibleSecret
+          ? 'tenant.skills.detail.assessment.items.secrets.warn'
+          : 'tenant.skills.detail.assessment.items.secrets.pass'
+      ),
+    },
+    {
+      id: 'hiddenCharacters',
+      group: 'p0',
+      status: hasHiddenCharacters ? 'warn' : 'pass',
+      title: t('tenant.skills.detail.assessment.items.hiddenCharacters.title'),
+      description: t(
+        hasHiddenCharacters
+          ? 'tenant.skills.detail.assessment.items.hiddenCharacters.warn'
+          : 'tenant.skills.detail.assessment.items.hiddenCharacters.pass'
+      ),
+    },
+    {
+      id: 'allowedTools',
+      group: 'p1',
+      status: hasAllowedTools ? 'pass' : 'warn',
+      title: t('tenant.skills.detail.assessment.items.allowedTools.title'),
+      description: t(
+        hasAllowedTools
+          ? 'tenant.skills.detail.assessment.items.allowedTools.pass'
+          : 'tenant.skills.detail.assessment.items.allowedTools.warn'
+      ),
+    },
+    {
+      id: 'packageFiles',
+      group: 'p1',
+      status: previewFiles.length > 0 ? 'pass' : 'warn',
+      title: t('tenant.skills.detail.assessment.items.packageFiles.title'),
+      description: t('tenant.skills.detail.assessment.items.packageFiles.pass', {
+        count: previewFiles.length,
+      }),
+    },
+    {
+      id: 'metadata',
+      group: 'p1',
+      status: hasMetadata ? 'pass' : 'warn',
+      title: t('tenant.skills.detail.assessment.items.metadata.title'),
+      description: t(
+        hasMetadata
+          ? 'tenant.skills.detail.assessment.items.metadata.pass'
+          : 'tenant.skills.detail.assessment.items.metadata.warn'
+      ),
+    },
+    {
+      id: 'versioning',
+      group: 'p2',
+      status: hasVersionSnapshot ? 'pass' : 'warn',
+      title: t('tenant.skills.detail.assessment.items.versioning.title'),
+      description: t(
+        hasVersionSnapshot
+          ? 'tenant.skills.detail.assessment.items.versioning.pass'
+          : 'tenant.skills.detail.assessment.items.versioning.warn'
+      ),
+    },
+    {
+      id: 'documentation',
+      group: 'p2',
+      status: hasBundledFiles ? 'pass' : 'warn',
+      title: t('tenant.skills.detail.assessment.items.documentation.title'),
+      description: t(
+        hasBundledFiles
+          ? 'tenant.skills.detail.assessment.items.documentation.pass'
+          : 'tenant.skills.detail.assessment.items.documentation.warn'
+      ),
+    },
+    {
+      id: 'licenseCompatibility',
+      group: 'p2',
+      status: hasLicense && hasCompatibility ? 'pass' : 'warn',
+      title: t('tenant.skills.detail.assessment.items.licenseCompatibility.title'),
+      description: t(
+        hasLicense && hasCompatibility
+          ? 'tenant.skills.detail.assessment.items.licenseCompatibility.pass'
+          : 'tenant.skills.detail.assessment.items.licenseCompatibility.warn'
+      ),
+    },
+  ];
+
+  const groups = (['p0', 'p1', 'p2'] as const).map((group) => {
+    const groupItems = items.filter((item) => item.group === group);
+    return {
+      group,
+      passed: groupItems.filter((item) => item.status === 'pass').length,
+      total: groupItems.length,
+    };
+  });
+  const status = items.some((item) => item.status === 'warn') ? 'attention' : 'safe';
+  const generatedAt = formatDate(skill.updated_at);
+  const text = [
+    t('tenant.skills.detail.assessment.reportTitle'),
+    `${t('tenant.skills.detail.assessment.reportSkill')}: ${skill.name}`,
+    `${t('tenant.skills.detail.assessment.reportGeneratedAt')}: ${generatedAt}`,
+    `${t('tenant.skills.detail.assessment.reportStatus')}: ${t(
+      `tenant.skills.detail.assessment.status.${status}`
+    )}`,
+    '',
+    ...groups.map(
+      (group) =>
+        `${t(`tenant.skills.detail.assessment.groups.${group.group}`)}: ${String(
+          group.passed
+        )}/${String(group.total)}`
+    ),
+    '',
+    ...items.map(
+      (item) =>
+        `[${t(`tenant.skills.detail.assessment.itemStatus.${item.status}`)}] ${item.title}: ${
+          item.description
+        }`
+    ),
+  ].join('\n');
+
+  return {
+    status,
+    generatedAt,
+    items,
+    groups,
+    text,
+  };
 }
 
 function InfoRow({
@@ -109,12 +402,26 @@ function getSkillListPath(pathname: string): string {
   return `/${segments.slice(0, skillsIndex + 1).join('/')}`;
 }
 
-function SkillContentViewer({ content, mode }: { content: string; mode: SkillContentMode }) {
+function SkillContentViewer({
+  content,
+  mode,
+  flush = false,
+}: {
+  content: string;
+  mode: SkillContentMode;
+  flush?: boolean;
+}) {
   const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
 
   if (mode === 'raw') {
     return (
-      <pre className="mt-4 max-h-[520px] overflow-auto rounded-[4px] border border-[oklch(0.88_0.006_255)] bg-[oklch(0.96_0.004_255)] p-4 text-xs leading-5 text-[oklch(0.24_0.01_255)] dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)] dark:text-[oklch(0.88_0.006_255)]">
+      <pre
+        className={
+          flush
+            ? 'min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-8 font-mono text-sm leading-7 text-[oklch(0.22_0.01_255)] dark:text-[oklch(0.9_0.006_255)]'
+            : 'mt-4 max-h-[520px] overflow-auto rounded-[4px] border border-[oklch(0.88_0.006_255)] bg-[oklch(0.96_0.004_255)] p-4 text-xs leading-5 text-[oklch(0.24_0.01_255)] dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)] dark:text-[oklch(0.88_0.006_255)]'
+        }
+      >
         {content}
       </pre>
     );
@@ -122,7 +429,11 @@ function SkillContentViewer({ content, mode }: { content: string; mode: SkillCon
 
   return (
     <div
-      className={`mt-4 max-h-[520px] overflow-auto rounded-[4px] border border-[oklch(0.88_0.006_255)] bg-white p-4 text-sm text-[oklch(0.24_0.01_255)] dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)] dark:text-[oklch(0.88_0.006_255)] ${MARKDOWN_PROSE_CLASSES}`}
+      className={`${
+        flush
+          ? 'min-h-0 flex-1 overflow-auto bg-white p-8 text-[15px] leading-7 dark:bg-[oklch(0.14_0.006_255)]'
+          : 'mt-4 max-h-[520px] overflow-auto rounded-[4px] border border-[oklch(0.88_0.006_255)] bg-white p-4 text-sm dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)]'
+      } text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.88_0.006_255)] ${MARKDOWN_PROSE_CLASSES}`}
     >
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
@@ -132,6 +443,90 @@ function SkillContentViewer({ content, mode }: { content: string; mode: SkillCon
         {content}
       </ReactMarkdown>
     </div>
+  );
+}
+
+function SkillPreviewTreeItem({
+  node,
+  depth,
+  expandedFolders,
+  selectedFilePath,
+  onToggleFolder,
+  onSelectFile,
+}: {
+  node: SkillPreviewTreeNode;
+  depth: number;
+  expandedFolders: Set<string>;
+  selectedFilePath: string;
+  onToggleFolder: (path: string) => void;
+  onSelectFile: (path: string) => void;
+}) {
+  const indent = depth * 14;
+
+  if (node.type === 'directory') {
+    const expanded = expandedFolders.has(node.path);
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={() => {
+            onToggleFolder(node.path);
+          }}
+          className={`flex h-8 w-full min-w-0 items-center gap-1.5 rounded-[4px] py-1.5 pr-2 text-left text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] ${mutedText} hover:bg-white/70 hover:text-[oklch(0.24_0.01_255)] dark:hover:bg-[oklch(0.22_0.006_255)] dark:hover:text-[oklch(0.94_0.006_255)]`}
+          style={{ paddingLeft: indent + 6 }}
+          aria-expanded={expanded}
+        >
+          <ChevronRight
+            size={13}
+            className={`shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}
+          />
+          {expanded ? (
+            <FolderOpen size={14} className="shrink-0" />
+          ) : (
+            <Folder size={14} className="shrink-0" />
+          )}
+          <span className="min-w-0 truncate" title={node.path}>
+            {node.name}
+          </span>
+        </button>
+        {expanded ? (
+          <div>
+            {node.children.map((child) => (
+              <SkillPreviewTreeItem
+                key={child.type === 'directory' ? child.path : child.file.path}
+                node={child}
+                depth={depth + 1}
+                expandedFolders={expandedFolders}
+                selectedFilePath={selectedFilePath}
+                onToggleFolder={onToggleFolder}
+                onSelectFile={onSelectFile}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  const active = selectedFilePath === node.file.path;
+  const fileName = node.file.path.split('/').pop() ?? node.file.path;
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        onSelectFile(node.file.path);
+      }}
+      className={`flex h-8 w-full min-w-0 items-center gap-2 rounded-[4px] py-1.5 pr-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] ${
+        active
+          ? 'bg-white text-[oklch(0.24_0.01_255)] shadow-sm dark:bg-[oklch(0.24_0.006_255)] dark:text-[oklch(0.94_0.006_255)]'
+          : 'text-[oklch(0.48_0.01_255)] hover:bg-white/70 hover:text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.68_0.008_255)] dark:hover:bg-[oklch(0.22_0.006_255)] dark:hover:text-[oklch(0.94_0.006_255)]'
+      }`}
+      style={{ paddingLeft: indent + 25 }}
+      title={node.file.path}
+    >
+      <FileText size={14} className="shrink-0" />
+      <span className="min-w-0 truncate">{fileName}</span>
+    </button>
   );
 }
 
@@ -224,6 +619,12 @@ export const SkillDetail: FC = () => {
   const params = useParams<{ skillId: string }>();
   const message = useLazyMessage();
   const skillId = params.skillId;
+  const translate = useCallback(
+    (key: string, options?: Record<string, unknown>) => {
+      return options ? t(key, options) : t(key);
+    },
+    [t]
+  );
 
   const [skill, setSkill] = useState<SkillResponse | null>(null);
   const [versions, setVersions] = useState<SkillVersionResponse[]>([]);
@@ -234,6 +635,12 @@ export const SkillDetail: FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rollbackVersion, setRollbackVersion] = useState<number | null>(null);
   const [contentMode, setContentMode] = useState<SkillContentMode>('preview');
+  const [detailMode, setDetailMode] = useState<SkillDetailMode>('preview');
+  const [resourceFiles, setResourceFiles] = useState<Record<string, string>>({});
+  const [packageSkillContent, setPackageSkillContent] = useState('');
+  const [selectedFilePath, setSelectedFilePath] = useState('SKILL.md');
+  const [expandedPreviewFolders, setExpandedPreviewFolders] = useState<Set<string>>(new Set());
+  const [isLoadingPackageFiles, setIsLoadingPackageFiles] = useState(false);
 
   const metadataText = useMemo(() => jsonBlock(skill?.metadata), [skill?.metadata]);
   const allowedToolsRaw = skill?.allowed_tools_raw ?? skill?.tools.join(' ') ?? '';
@@ -241,6 +648,38 @@ export const SkillDetail: FC = () => {
   const skillSource = skill ? getSkillSource(skill) : 'database';
   const managed = skill ? isManagedSkill(skill) : false;
   const skillListPath = useMemo(() => getSkillListPath(location.pathname), [location.pathname]);
+  const previewFiles = useMemo<SkillPreviewFile[]>(() => {
+    const skillContent = packageSkillContent || skill?.full_content || '';
+    return [
+      {
+        path: 'SKILL.md',
+        content: skillContent,
+        kind: 'markdown',
+      },
+      ...Object.entries(resourceFiles)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([path, content]) => ({
+          path,
+          content,
+          kind: getPreviewFileKind(path),
+        })),
+    ];
+  }, [packageSkillContent, resourceFiles, skill?.full_content]);
+  const selectedPreviewFile = useMemo(() => {
+    return previewFiles.find((file) => file.path === selectedFilePath) ?? previewFiles[0];
+  }, [previewFiles, selectedFilePath]);
+  const previewFileTree = useMemo(() => buildPreviewFileTree(previewFiles), [previewFiles]);
+  const assessmentReport = useMemo(() => {
+    if (!skill) {
+      return null;
+    }
+    return buildAssessmentReport({
+      skill,
+      previewFiles,
+      versions,
+      t: translate,
+    });
+  }, [previewFiles, skill, translate, versions]);
 
   const loadSkill = useCallback(async () => {
     if (!skillId) {
@@ -249,9 +688,32 @@ export const SkillDetail: FC = () => {
     }
 
     setIsLoading(true);
+    setIsLoadingPackageFiles(true);
     try {
       const nextSkill = await skillAPI.get(skillId);
       setSkill(nextSkill);
+      setPackageSkillContent(nextSkill.full_content ?? '');
+      setResourceFiles({});
+      setSelectedFilePath('SKILL.md');
+
+      try {
+        const exportId = getSkillSource(nextSkill) === 'filesystem' ? nextSkill.name : nextSkill.id;
+        const exported = await skillAPI.exportPackage(exportId);
+        setPackageSkillContent(exported.skill_md_content);
+        setResourceFiles(
+          Object.fromEntries(
+            Object.entries(exported.resource_files ?? {}).map(([path, value]) => [
+              path,
+              stringifyResourceFile(value),
+            ])
+          )
+        );
+      } catch {
+        setResourceFiles({});
+      } finally {
+        setIsLoadingPackageFiles(false);
+      }
+
       if (!isManagedSkill(nextSkill)) {
         setVersions([]);
         setEvolution(null);
@@ -271,15 +733,34 @@ export const SkillDetail: FC = () => {
       }
     } catch {
       setSkill(null);
+      setPackageSkillContent('');
+      setResourceFiles({});
       message?.error(t('tenant.skills.detail.loadFailed'));
     } finally {
       setIsLoading(false);
+      setIsLoadingPackageFiles(false);
     }
   }, [message, skillId, t]);
 
   useEffect(() => {
     void loadSkill();
   }, [loadSkill]);
+
+  useEffect(() => {
+    setExpandedPreviewFolders(new Set(getPreviewDirectoryPaths(previewFileTree)));
+  }, [previewFileTree]);
+
+  const handleTogglePreviewFolder = useCallback((path: string) => {
+    setExpandedPreviewFolders((current) => {
+      const next = new Set(current);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
 
   const handleExport = useCallback(async () => {
     if (!skill) {
@@ -302,6 +783,18 @@ export const SkillDetail: FC = () => {
       message?.error(t('tenant.skills.detail.exportFailed'));
     }
   }, [message, skill, t]);
+
+  const handleCopyAssessmentReport = useCallback(async () => {
+    if (!assessmentReport) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(assessmentReport.text);
+      message?.success(t('tenant.skills.detail.assessment.copySuccess'));
+    } catch {
+      message?.error(t('tenant.skills.detail.assessment.copyFailed'));
+    }
+  }, [assessmentReport, message, t]);
 
   const handleRollback = useCallback(
     async (versionNumber: number) => {
@@ -469,179 +962,399 @@ export const SkillDetail: FC = () => {
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="flex min-w-0 flex-col gap-5">
-          <section className={`rounded-[6px] p-5 ${surface}`}>
-            <div className="flex items-center gap-2">
-              <Wrench size={17} className={mutedText} />
-              <h2 className={`text-sm font-semibold ${pageText}`}>
-                {t('tenant.skills.detail.package')}
-              </h2>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {skill.tools.map((tool) => (
-                <Tag key={tool}>{tool}</Tag>
-              ))}
-            </div>
-            <div className="mt-4">
-              <InfoRow
-                label={t('tenant.skills.detail.allowedToolsRaw')}
-                value={allowedToolsRaw || t('tenant.skills.detail.notSet')}
-              />
-              <InfoRow
-                label={t('tenant.skills.detail.license')}
-                value={skill.license || t('tenant.skills.detail.notSet')}
-              />
-              <InfoRow
-                label={t('tenant.skills.detail.compatibility')}
-                value={skill.compatibility || t('tenant.skills.detail.notSet')}
-              />
-              <InfoRow label={t('tenant.skills.detail.specVersion')} value={skill.spec_version} />
-            </div>
-          </section>
-
-          <section className={`rounded-[6px] p-5 ${surface}`}>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2">
-                <FileText size={17} className={mutedText} />
-                <h2 className={`text-sm font-semibold ${pageText}`}>
-                  {t('tenant.skills.detail.fullContent')}
-                </h2>
-              </div>
-              {skill.full_content ? (
-                <div
-                  className="inline-flex w-fit rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-[oklch(0.97_0.004_255)] p-0.5 dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.2_0.006_255)]"
-                  role="group"
-                  aria-label={t('tenant.skills.detail.contentMode')}
-                >
-                  {(
-                    [
-                      { key: 'preview' as const, icon: Eye },
-                      { key: 'raw' as const, icon: Code2 },
-                    ] satisfies Array<{ key: SkillContentMode; icon: typeof Eye }>
-                  ).map(({ key, icon: Icon }) => {
-                    const active = contentMode === key;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => {
-                          setContentMode(key);
-                        }}
-                        className={`inline-flex h-8 items-center gap-1.5 rounded-[3px] px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] ${
-                          active
-                            ? 'bg-white text-[oklch(0.24_0.01_255)] shadow-sm dark:bg-[oklch(0.28_0.006_255)] dark:text-[oklch(0.94_0.006_255)]'
-                            : 'text-[oklch(0.48_0.01_255)] hover:text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.68_0.008_255)] dark:hover:text-[oklch(0.94_0.006_255)]'
-                        }`}
-                        aria-pressed={active}
-                      >
-                        <Icon size={14} />
-                        {t(`tenant.skills.detail.contentModes.${key}`)}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-            {skill.full_content ? (
-              <SkillContentViewer content={skill.full_content} mode={contentMode} />
-            ) : (
-              <div className="mt-4 py-8">
-                <LazyEmpty description={t('tenant.skills.detail.emptyContent')} />
-              </div>
-            )}
-          </section>
-
-          <section className={`rounded-[6px] p-5 ${surface}`}>
-            <div className="flex items-center gap-2">
-              <KeyRound size={17} className={mutedText} />
-              <h2 className={`text-sm font-semibold ${pageText}`}>
-                {t('tenant.skills.detail.metadata')}
-              </h2>
-            </div>
-            <pre className="mt-4 max-h-[360px] overflow-auto rounded-[4px] border border-[oklch(0.88_0.006_255)] bg-[oklch(0.96_0.004_255)] p-4 text-xs leading-5 text-[oklch(0.24_0.01_255)] dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)] dark:text-[oklch(0.88_0.006_255)]">
-              {metadataText}
-            </pre>
-          </section>
-
-          <section className={`rounded-[6px] p-5 ${surface}`}>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex items-center gap-2">
-                <GitBranch size={17} className={mutedText} />
-                <h2 className={`text-sm font-semibold ${pageText}`}>
-                  {t('tenant.skills.detail.evolutionRoute')}
-                </h2>
-              </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          className="inline-flex w-fit rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-[oklch(0.97_0.004_255)] p-0.5 dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.2_0.006_255)]"
+          role="group"
+          aria-label={t('tenant.skills.detail.viewMode')}
+        >
+          {(
+            [
+              { key: 'preview' as const, icon: Eye },
+              { key: 'manage' as const, icon: Wrench },
+              { key: 'report' as const, icon: ClipboardList },
+            ] satisfies Array<{ key: SkillDetailMode; icon: typeof Eye }>
+          ).map(({ key, icon: Icon }) => {
+            const active = detailMode === key;
+            return (
               <button
+                key={key}
                 type="button"
                 onClick={() => {
-                  void handleRunEvolution();
+                  setDetailMode(key);
                 }}
-                className={actionButton}
-                disabled={!managed || isEvolutionRunning}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-[3px] px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] ${
+                  active
+                    ? 'bg-white text-[oklch(0.24_0.01_255)] shadow-sm dark:bg-[oklch(0.28_0.006_255)] dark:text-[oklch(0.94_0.006_255)]'
+                    : 'text-[oklch(0.48_0.01_255)] hover:text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.68_0.008_255)] dark:hover:text-[oklch(0.94_0.006_255)]'
+                }`}
+                aria-pressed={active}
               >
-                <Play size={16} />
-                {isEvolutionRunning
-                  ? t('tenant.skills.detail.evolutionRunning')
-                  : t('tenant.skills.detail.runEvolution')}
+                <Icon size={14} />
+                {t(`tenant.skills.detail.viewModes.${key}`)}
               </button>
-            </div>
-            {evolution ? (
-              <div className="mt-4 grid gap-4">
-                <div className="grid gap-3 sm:grid-cols-3">
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="flex min-w-0 flex-col gap-5">
+          {detailMode === 'preview' ? (
+            <>
+              <section className={`rounded-[6px] p-5 ${surface}`}>
+                <div className="flex items-center gap-2">
+                  <Wrench size={17} className={mutedText} />
+                  <h2 className={`text-sm font-semibold ${pageText}`}>
+                    {t('tenant.skills.detail.package')}
+                  </h2>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {skill.tools.map((tool) => (
+                    <Tag key={tool}>{tool}</Tag>
+                  ))}
+                </div>
+                <div className="mt-4">
                   <InfoRow
-                    label={t('tenant.skills.detail.capturedSessions')}
-                    value={evolution.captured_session_count}
+                    label={t('tenant.skills.detail.allowedToolsRaw')}
+                    value={allowedToolsRaw || t('tenant.skills.detail.notSet')}
                   />
                   <InfoRow
-                    label={t('tenant.skills.detail.triggerHook')}
-                    value={evolution.trigger.capture_hook}
-                    mono
+                    label={t('tenant.skills.detail.license')}
+                    value={skill.license || t('tenant.skills.detail.notSet')}
                   />
                   <InfoRow
-                    label={t('tenant.skills.detail.evolutionThreshold')}
-                    value={`${String(evolution.trigger.min_sessions_per_skill)} / ${String(
-                      evolution.trigger.min_avg_score
-                    )}`}
+                    label={t('tenant.skills.detail.compatibility')}
+                    value={skill.compatibility || t('tenant.skills.detail.notSet')}
+                  />
+                  <InfoRow
+                    label={t('tenant.skills.detail.specVersion')}
+                    value={skill.spec_version}
                   />
                 </div>
-                <div className={`text-sm ${mutedText}`}>
-                  {evolution.trigger.capture_timing}
-                  <br />
-                  {evolution.trigger.scheduled_timing}
+              </section>
+
+              <section className={`overflow-hidden rounded-[8px] p-0 ${surface}`}>
+                <div className="flex min-h-12 items-center justify-between gap-3 border-b border-[oklch(0.9_0.006_255)] bg-[oklch(0.985_0.003_255)] px-5 dark:border-[oklch(0.28_0.006_255)] dark:bg-[oklch(0.17_0.006_255)]">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex shrink-0 items-center gap-2">
+                      <FileText size={17} className={mutedText} />
+                      <h2 className={`text-sm font-semibold ${pageText}`}>
+                        {t('tenant.skills.detail.files')}
+                      </h2>
+                    </div>
+                    <span className="h-4 w-px shrink-0 bg-[oklch(0.86_0.006_255)] dark:bg-[oklch(0.32_0.006_255)]" />
+                    <div className={`min-w-0 truncate text-sm font-medium ${pageText}`}>
+                      {skill.name}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {selectedPreviewFile?.kind === 'markdown' ? (
+                      <div
+                        className="inline-flex w-fit rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-[oklch(0.97_0.004_255)] p-0.5 dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.2_0.006_255)]"
+                        role="group"
+                        aria-label={t('tenant.skills.detail.contentMode')}
+                      >
+                        {(
+                          [
+                            { key: 'preview' as const, icon: Eye },
+                            { key: 'raw' as const, icon: Code2 },
+                          ] satisfies Array<{ key: SkillContentMode; icon: typeof Eye }>
+                        ).map(({ key, icon: Icon }) => {
+                          const active = contentMode === key;
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => {
+                                setContentMode(key);
+                              }}
+                              className={`inline-flex h-8 items-center gap-1.5 rounded-[3px] px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] ${
+                                active
+                                  ? 'bg-white text-[oklch(0.24_0.01_255)] shadow-sm dark:bg-[oklch(0.28_0.006_255)] dark:text-[oklch(0.94_0.006_255)]'
+                                  : 'text-[oklch(0.48_0.01_255)] hover:text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.68_0.008_255)] dark:hover:text-[oklch(0.94_0.006_255)]'
+                              }`}
+                              aria-pressed={active}
+                            >
+                              <Icon size={14} />
+                              {t(`tenant.skills.detail.contentModes.${key}`)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void handleExport();
+                      }}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-[4px] text-[oklch(0.52_0.012_255)] transition-colors hover:bg-[oklch(0.93_0.005_255)] hover:text-[oklch(0.24_0.01_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:text-[oklch(0.7_0.008_255)] dark:hover:bg-[oklch(0.24_0.006_255)] dark:hover:text-[oklch(0.94_0.006_255)]"
+                      aria-label={t('tenant.skills.detail.export')}
+                      title={t('tenant.skills.detail.export')}
+                    >
+                      <Download size={17} />
+                    </button>
+                  </div>
                 </div>
-                {evolution.route.length === 0 ? (
-                  <LazyEmpty description={t('tenant.skills.detail.emptyEvolutionRoute')} />
-                ) : (
-                  <div className="divide-y divide-[oklch(0.9_0.006_255)] dark:divide-[oklch(0.28_0.006_255)]">
-                    {evolution.route.map((entry) => (
-                      <EvolutionRouteRow
-                        key={`${entry.kind}-${entry.id}`}
-                        entry={entry}
-                        isProcessing={processingEvolutionJobId === entry.id}
-                        onApply={(jobId) => {
-                          void handleApplyEvolutionJob(jobId);
-                        }}
-                        onReject={(jobId) => {
-                          void handleRejectEvolutionJob(jobId);
-                        }}
+                {isLoadingPackageFiles ? (
+                  <div className="mt-4 flex justify-center py-10">
+                    <LazySpin />
+                  </div>
+                ) : selectedPreviewFile ? (
+                  <div className="grid h-[760px] items-stretch lg:grid-cols-[310px_minmax(0,1fr)]">
+                    <div className="flex min-h-0 flex-col border-r border-[oklch(0.9_0.006_255)] bg-white p-4 dark:border-[oklch(0.28_0.006_255)] dark:bg-[oklch(0.14_0.006_255)]">
+                      <div className={`px-1 pb-3 text-xs font-medium ${mutedText}`}>
+                        {t('tenant.skills.detail.packageFiles', {
+                          count: previewFiles.length,
+                        })}
+                      </div>
+                      <div className="min-h-0 flex-1 space-y-1 overflow-auto pr-1">
+                        {previewFileTree.map((node) => (
+                          <SkillPreviewTreeItem
+                            key={node.type === 'directory' ? node.path : node.file.path}
+                            node={node}
+                            depth={0}
+                            expandedFolders={expandedPreviewFolders}
+                            selectedFilePath={selectedPreviewFile.path}
+                            onToggleFolder={handleTogglePreviewFolder}
+                            onSelectFile={setSelectedFilePath}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex min-h-0 min-w-0 flex-col bg-white dark:bg-[oklch(0.14_0.006_255)]">
+                      <div className="flex min-h-11 items-center justify-between gap-3 border-b border-[oklch(0.9_0.006_255)] px-6 dark:border-[oklch(0.28_0.006_255)]">
+                        <div
+                          className={`min-w-0 truncate font-mono text-xs font-semibold ${pageText}`}
+                          title={selectedPreviewFile.path}
+                        >
+                          {selectedPreviewFile.path}
+                        </div>
+                        <span className={`shrink-0 text-xs ${mutedText}`}>
+                          {selectedPreviewFile.kind === 'markdown'
+                            ? t('tenant.skills.detail.fileKinds.markdown')
+                            : t('tenant.skills.detail.fileKinds.text')}
+                        </span>
+                      </div>
+                      <SkillContentViewer
+                        content={selectedPreviewFile.content}
+                        mode={selectedPreviewFile.kind === 'markdown' ? contentMode : 'raw'}
+                        flush
                       />
-                    ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 py-8">
+                    <LazyEmpty description={t('tenant.skills.detail.emptyContent')} />
                   </div>
                 )}
-              </div>
-            ) : (
-              <div className="mt-4 py-8">
-                <LazyEmpty
-                  description={
-                    managed
-                      ? t('tenant.skills.detail.emptyEvolutionRoute')
-                      : t('tenant.skills.detail.notVersioned')
-                  }
-                />
-              </div>
-            )}
-          </section>
+              </section>
+            </>
+          ) : detailMode === 'manage' ? (
+            <>
+              <section className={`rounded-[6px] p-5 ${surface}`}>
+                <div className="flex items-center gap-2">
+                  <KeyRound size={17} className={mutedText} />
+                  <h2 className={`text-sm font-semibold ${pageText}`}>
+                    {t('tenant.skills.detail.metadata')}
+                  </h2>
+                </div>
+                <pre className="mt-4 max-h-[360px] overflow-auto rounded-[4px] border border-[oklch(0.88_0.006_255)] bg-[oklch(0.96_0.004_255)] p-4 text-xs leading-5 text-[oklch(0.24_0.01_255)] dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)] dark:text-[oklch(0.88_0.006_255)]">
+                  {metadataText}
+                </pre>
+              </section>
+
+              <section className={`rounded-[6px] p-5 ${surface}`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <GitBranch size={17} className={mutedText} />
+                    <h2 className={`text-sm font-semibold ${pageText}`}>
+                      {t('tenant.skills.detail.evolutionRoute')}
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleRunEvolution();
+                    }}
+                    className={actionButton}
+                    disabled={!managed || isEvolutionRunning}
+                  >
+                    <Play size={16} />
+                    {isEvolutionRunning
+                      ? t('tenant.skills.detail.evolutionRunning')
+                      : t('tenant.skills.detail.runEvolution')}
+                  </button>
+                </div>
+                {evolution ? (
+                  <div className="mt-4 grid gap-4">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <InfoRow
+                        label={t('tenant.skills.detail.capturedSessions')}
+                        value={evolution.captured_session_count}
+                      />
+                      <InfoRow
+                        label={t('tenant.skills.detail.triggerHook')}
+                        value={evolution.trigger.capture_hook}
+                        mono
+                      />
+                      <InfoRow
+                        label={t('tenant.skills.detail.evolutionThreshold')}
+                        value={`${String(evolution.trigger.min_sessions_per_skill)} / ${String(
+                          evolution.trigger.min_avg_score
+                        )}`}
+                      />
+                    </div>
+                    <div className={`text-sm ${mutedText}`}>
+                      {evolution.trigger.capture_timing}
+                      <br />
+                      {evolution.trigger.scheduled_timing}
+                    </div>
+                    {evolution.route.length === 0 ? (
+                      <LazyEmpty description={t('tenant.skills.detail.emptyEvolutionRoute')} />
+                    ) : (
+                      <div className="divide-y divide-[oklch(0.9_0.006_255)] dark:divide-[oklch(0.28_0.006_255)]">
+                        {evolution.route.map((entry) => (
+                          <EvolutionRouteRow
+                            key={`${entry.kind}-${entry.id}`}
+                            entry={entry}
+                            isProcessing={processingEvolutionJobId === entry.id}
+                            onApply={(jobId) => {
+                              void handleApplyEvolutionJob(jobId);
+                            }}
+                            onReject={(jobId) => {
+                              void handleRejectEvolutionJob(jobId);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-4 py-8">
+                    <LazyEmpty
+                      description={
+                        managed
+                          ? t('tenant.skills.detail.emptyEvolutionRoute')
+                          : t('tenant.skills.detail.notVersioned')
+                      }
+                    />
+                  </div>
+                )}
+              </section>
+            </>
+          ) : assessmentReport ? (
+            <>
+              <section className={`rounded-[6px] p-5 ${surface}`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[6px] border ${getAssessmentItemClasses(
+                        assessmentReport.status === 'safe' ? 'pass' : 'warn'
+                      )}`}
+                    >
+                      <ShieldCheck size={18} />
+                    </div>
+                    <div>
+                      <h2 className={`text-sm font-semibold ${pageText}`}>
+                        {t('tenant.skills.detail.assessment.title')}
+                      </h2>
+                      <p className={`mt-1 max-w-2xl text-sm leading-6 ${mutedText}`}>
+                        {t('tenant.skills.detail.assessment.description')}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleCopyAssessmentReport();
+                    }}
+                    className={actionButton}
+                  >
+                    <Copy size={16} />
+                    {t('tenant.skills.detail.assessment.copy')}
+                  </button>
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  {assessmentReport.groups.map((group) => (
+                    <div
+                      key={group.group}
+                      className="rounded-[6px] border border-[oklch(0.88_0.006_255)] bg-white p-4 dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)]"
+                    >
+                      <div className={`text-xs font-medium uppercase tracking-normal ${mutedText}`}>
+                        {t(`tenant.skills.detail.assessment.groups.${group.group}`)}
+                      </div>
+                      <div className={`mt-2 text-2xl font-semibold ${pageText}`}>
+                        {group.passed}/{group.total}
+                      </div>
+                      <div className={`mt-1 text-xs ${mutedText}`}>
+                        {t('tenant.skills.detail.assessment.groupPassed')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 rounded-[6px] border border-[oklch(0.88_0.006_255)] bg-[oklch(0.97_0.004_255)] p-4 dark:border-[oklch(0.3_0.006_255)] dark:bg-[oklch(0.14_0.006_255)]">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Tag color={assessmentReport.status === 'safe' ? 'success' : 'warning'}>
+                      {t(`tenant.skills.detail.assessment.status.${assessmentReport.status}`)}
+                    </Tag>
+                    <span className={`text-xs ${mutedText}`}>
+                      {t('tenant.skills.detail.assessment.generatedAt', {
+                        date: assessmentReport.generatedAt,
+                      })}
+                    </span>
+                  </div>
+                  <p className={`mt-3 text-sm leading-6 ${mutedText}`}>
+                    {t('tenant.skills.detail.assessment.staticNotice')}
+                  </p>
+                </div>
+              </section>
+
+              <section className={`rounded-[6px] p-5 ${surface}`}>
+                <div className="flex items-center gap-2">
+                  <ClipboardList size={17} className={mutedText} />
+                  <h2 className={`text-sm font-semibold ${pageText}`}>
+                    {t('tenant.skills.detail.assessment.details')}
+                  </h2>
+                </div>
+                <div className="mt-4 divide-y divide-[oklch(0.9_0.006_255)] dark:divide-[oklch(0.28_0.006_255)]">
+                  {assessmentReport.items.map((item) => (
+                    <div key={item.id} className="py-4">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] border ${getAssessmentItemClasses(
+                            item.status
+                          )}`}
+                        >
+                          {item.status === 'pass' ? (
+                            <CheckCircle2 size={15} />
+                          ) : (
+                            <XCircle size={15} />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-sm font-semibold ${pageText}`}>
+                              {item.title}
+                            </span>
+                            <Tag>{t(`tenant.skills.detail.assessment.groups.${item.group}`)}</Tag>
+                            <Tag color={item.status === 'pass' ? 'success' : 'warning'}>
+                              {t(`tenant.skills.detail.assessment.itemStatus.${item.status}`)}
+                            </Tag>
+                          </div>
+                          <p className={`mt-1 text-sm leading-6 ${mutedText}`}>
+                            {item.description}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </>
+          ) : null}
         </div>
 
         <aside className="flex min-w-0 flex-col gap-5">

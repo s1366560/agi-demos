@@ -1228,7 +1228,8 @@
       "title": "Skill Management",
       "subtitle": "Configure and manage agent skill library",
       "registry": "Skill Registry",
-      "createNew": "Create Skill",
+      "createWithChat": "Create in chat",
+      "createWithChatPrompt": "Help me create a new skill. Ask for the goal, trigger scenarios, allowed tools, inputs and outputs, and bundled files before generating a spec-compliant skill package.",
       "searchPlaceholder": "Search skills...",
       "statusFilterLabel": "Filter skills by status",
       "statusSelectAria": "Set status for {{name}}",
@@ -1238,8 +1239,13 @@
       "deprecatedOnly": "Deprecated Only",
       "tools": "Tools",
       "empty": "No skills yet",
-      "createFirst": "Create your first skill",
       "noResults": "No matching skills found",
+      "libraryViewLabel": "Skill library view",
+      "libraryViews": {
+        "all": "All skills",
+        "managed": "Managed",
+        "readonly": "Read-only"
+      },
       "stats": {
         "total": "Total Skills",
         "active": "Active",
@@ -1263,16 +1269,18 @@
         "versions": "Versions",
         "versionsAria": "Manage skill versions",
         "delete": "Delete",
-        "deleteAria": "Delete skill"
+        "deleteAria": "Delete skill",
+        "more": "More actions",
+        "viewShort": "Preview"
       },
       "card": {
-        "tools": "Tools"
+        "tools": "Tools",
+        "version": "v{{version}}"
       },
       "deleteConfirm": "Are you sure you want to delete this skill?",
       "deleteSuccess": "Skill deleted successfully",
       "enableSuccess": "Skill enabled",
       "disableSuccess": "Skill disabled",
-      "createSuccess": "Skill created successfully",
       "updateSuccess": "Skill updated successfully",
       "import": {
         "button": "Import",
@@ -1331,10 +1339,91 @@
         "specVersion": "Spec",
         "allowedToolsRaw": "Allowed tools",
         "fullContent": "SKILL.md",
+        "files": "File preview",
+        "packageFiles": "{{count}} files",
+        "fileKinds": {
+          "markdown": "Markdown",
+          "text": "Text"
+        },
         "contentMode": "SKILL.md display mode",
         "contentModes": {
           "preview": "Preview",
           "raw": "Source"
+        },
+        "viewMode": "Skill detail view",
+        "viewModes": {
+          "preview": "Preview",
+          "manage": "Manage",
+          "report": "Assessment"
+        },
+        "assessment": {
+          "title": "Assessment report",
+          "description": "Summarizes package structure, permissions, metadata, and version state so reviewers can spot missing launch notes or loose configuration.",
+          "copy": "Copy report",
+          "copySuccess": "Assessment report copied",
+          "copyFailed": "Failed to copy assessment report",
+          "details": "Assessment details",
+          "groupPassed": "Passed checks",
+          "generatedAt": "Generated from the {{date}} skill snapshot",
+          "staticNotice": "This report is a local static check. It does not run an external sandbox security scan or live quality evaluation.",
+          "reportTitle": "Skill assessment report",
+          "reportSkill": "Skill",
+          "reportGeneratedAt": "Generated at",
+          "reportStatus": "Status",
+          "status": {
+            "safe": "No high-risk findings",
+            "attention": "Needs attention"
+          },
+          "itemStatus": {
+            "pass": "Pass",
+            "warn": "Review"
+          },
+          "groups": {
+            "p0": "P0 required",
+            "p1": "P1 important",
+            "p2": "P2 recommended"
+          },
+          "items": {
+            "secrets": {
+              "title": "Hardcoded credentials",
+              "pass": "No obvious key, token, or password literals were found in the skill files.",
+              "warn": "Possible key, token, or password literals were detected. Remove them before release."
+            },
+            "hiddenCharacters": {
+              "title": "Hidden characters",
+              "pass": "No zero-width characters or BOM markers were found.",
+              "warn": "Hidden characters were detected. Check for invisible instructions or formatting issues."
+            },
+            "allowedTools": {
+              "title": "Tool permissions",
+              "pass": "The skill declares available tools, so the permission boundary is reviewable.",
+              "warn": "The skill does not declare tool permissions. Add allowed-tools or confirm runtime policy."
+            },
+            "packageFiles": {
+              "title": "Package integrity",
+              "pass": "{{count}} skill package files are available for preview."
+            },
+            "metadata": {
+              "title": "Metadata",
+              "pass": "The skill includes structured metadata.",
+              "warn": "The skill has no metadata, leaving less context for search, categorization, or governance."
+            },
+            "versioning": {
+              "title": "Version history",
+              "pass": "The skill has a current version or saved version snapshots.",
+              "warn": "No rollback-friendly version snapshot was found."
+            },
+            "documentation": {
+              "title": "Supplementary docs",
+              "pass": "The package includes files beyond SKILL.md.",
+              "warn": "The package only includes SKILL.md. Complex skills should add examples or schemas."
+            },
+            "licenseCompatibility": {
+              "title": "License and compatibility",
+              "pass": "License and compatibility notes are filled in.",
+              "warn": "License or compatibility notes are incomplete. Add runtime constraints where relevant."
+            }
+          }
         },
         "emptyContent": "No SKILL.md content saved",
         "emptyVersions": "No version snapshots yet",
@@ -1360,18 +1449,22 @@
         "notSet": "Not set"
       },
       "modal": {
-        "createTitle": "Create New Skill",
         "editTitle": "Edit Skill",
+        "specPanelTitle": "AgentSkills.io package",
+        "specPanelDescription": "Define the required frontmatter, write the Markdown instructions, and review the generated SKILL.md before saving.",
         "basicInfo": "Basic Information",
         "tools": "Tools Configuration",
         "package": "Package",
         "metadata": "Metadata",
+        "frontmatter": "Frontmatter",
         "name": "Skill Name",
         "nameRequired": "Please enter skill name",
         "namePattern": "Use lowercase letters, numbers, and single hyphens only",
+        "nameMax": "Skill name must be 64 characters or fewer",
         "namePlaceholder": "e.g., data-analysis-skill",
         "description": "Description",
         "descriptionRequired": "Please enter skill description",
+        "descriptionMax": "Description must be 1024 characters or fewer",
         "descriptionPlaceholder": "Describe what this skill does...",
         "scope": "Scope",
         "scopeRequired": "Please select a scope",
@@ -1381,8 +1474,15 @@
         "projectIdRequired": "Project ID is required for project scope",
         "projectIdPlaceholder": "Project UUID",
         "allowedTools": "Allowed Tools",
-        "allowedToolsRaw": "Raw allowed-tools",
+        "allowedToolsRaw": "allowed-tools",
         "allowedToolsRawPlaceholder": "Bash(git:*) Bash(jq:*) Read",
+        "body": "Markdown instructions",
+        "bodyPlaceholder": "Write the instructions agents should follow when this skill activates...",
+        "advanced": "Optional frontmatter",
+        "advancedHint": "License, compatibility, spec version, and metadata.",
+        "preview": "Generated package",
+        "previewEmpty": "Enter a name and description to preview SKILL.md.",
+        "previewInvalid": "Fix invalid metadata to preview SKILL.md.",
         "fullContent": "SKILL.md content",
         "fullContentPlaceholder": "Paste or edit the complete SKILL.md content...",
         "fullContentHint": "If omitted, the backend can generate a minimal SKILL.md from the fields above.",
@@ -1392,11 +1492,12 @@
         "license": "License",
         "licensePlaceholder": "Apache-2.0",
         "compatibility": "Compatibility",
+        "compatibilityMax": "Compatibility must be 500 characters or fewer",
         "compatibilityPlaceholder": "Required product, system packages, network access, or runtime notes",
         "requireTools": "At least one tool is required",
         "addTool": "Enter tool name...",
         "noTools": "No tools yet, please add at least one",
-        "toolsHint": "Specify the list of tools this skill can use. These tools will be available during skill execution."
+        "toolsHint": "Optional. Leave blank to omit allowed-tools from frontmatter; the runtime stores this as unrestricted internally."
       },
       "statusUpdateSuccess": "Skill status updated"
     },

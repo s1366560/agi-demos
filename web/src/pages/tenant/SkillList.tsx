@@ -8,23 +8,23 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Input, Modal, Switch } from 'antd';
 import {
-  Copy,
   Download,
   Eye,
   FileText,
   History,
+  MessageSquare,
   Pencil,
-  Plus,
   RefreshCw,
   RotateCcw,
   Search as SearchIcon,
   Trash2,
   Upload,
   UploadCloud,
+  Wrench,
 } from 'lucide-react';
 
 import {
@@ -52,6 +52,7 @@ const { TextArea } = Input;
 
 type SkillStatus = 'active' | 'disabled' | 'deprecated';
 type SkillSource = NonNullable<SkillResponse['source']>;
+type SkillLibraryView = 'all' | 'managed' | 'readonly';
 
 const pageText = 'text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.94_0.006_255)]';
 const mutedText = 'text-[oklch(0.48_0.01_255)] dark:text-[oklch(0.68_0.008_255)]';
@@ -59,6 +60,10 @@ const surface =
   'border border-[oklch(0.9_0.006_255)] bg-[oklch(0.99_0.004_255)] dark:border-[oklch(0.28_0.006_255)] dark:bg-[oklch(0.18_0.006_255)]';
 const iconButton =
   'inline-flex h-8 w-8 items-center justify-center rounded-[4px] text-[oklch(0.48_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] hover:text-[oklch(0.26_0.012_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:text-[oklch(0.7_0.008_255)] dark:hover:bg-[oklch(0.24_0.006_255)] dark:hover:text-[oklch(0.94_0.006_255)]';
+const primaryButton =
+  'inline-flex h-9 items-center justify-center gap-2 rounded-[4px] bg-[oklch(0.24_0.01_255)] px-4 text-sm font-medium text-[oklch(0.98_0.004_255)] transition-colors hover:bg-[oklch(0.31_0.012_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:bg-[oklch(0.9_0.006_255)] dark:text-[oklch(0.17_0.006_255)] dark:hover:bg-[oklch(0.98_0.004_255)]';
+const secondaryButton =
+  'inline-flex h-9 items-center justify-center gap-2 rounded-[4px] border border-[oklch(0.86_0.006_255)] px-3 text-sm font-medium text-[oklch(0.34_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:border-[oklch(0.34_0.006_255)] dark:text-[oklch(0.82_0.006_255)] dark:hover:bg-[oklch(0.24_0.006_255)]';
 
 function StatusBadge({ status, label }: { status: SkillStatus; label: string }) {
   const config: Record<SkillStatus, { shell: string; dot: string }> = {
@@ -110,6 +115,17 @@ function isManagedSkill(skill: SkillResponse): boolean {
   return !skill.is_system_skill && (source === 'database' || source === 'hybrid');
 }
 
+function getAgentWorkspacePath(pathname: string): string {
+  const segments = pathname.split('/').filter(Boolean);
+  const skillsIndex = segments.lastIndexOf('skills');
+
+  if (skillsIndex === -1) {
+    return '/tenant/agent-workspace';
+  }
+
+  return `/${segments.slice(0, skillsIndex).concat('agent-workspace').join('/')}`;
+}
+
 function SourceBadge({ source, label }: { source: SkillSource; label: string }) {
   const dot =
     source === 'database'
@@ -131,9 +147,11 @@ function SourceBadge({ source, label }: { source: SkillSource; label: string }) 
 export const SkillList: FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const message = useLazyMessage();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | SkillStatus>('all');
+  const [libraryView, setLibraryView] = useState<SkillLibraryView>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importContent, setImportContent] = useState('');
@@ -184,12 +202,22 @@ export const SkillList: FC = () => {
         return false;
       }
 
+      if (libraryView === 'managed' && !isManagedSkill(skill)) {
+        return false;
+      }
+
+      if (libraryView === 'readonly' && isManagedSkill(skill)) {
+        return false;
+      }
+
       return true;
     });
-  }, [skills, search, statusFilter]);
+  }, [libraryView, skills, search, statusFilter]);
 
   const visibleCount = filteredSkills.length;
-  const { listSkills, deleteSkill, updateSkillStatus, clearError } = useSkillStore();
+  const managedCount = useMemo(() => skills.filter(isManagedSkill).length, [skills]);
+  const readonlyCount = total - managedCount;
+  const { listSkills, deleteSkill, clearError } = useSkillStore();
 
   // Load data on mount
   useEffect(() => {
@@ -212,9 +240,12 @@ export const SkillList: FC = () => {
 
   // Handlers
   const handleCreate = useCallback(() => {
-    setEditingSkill(null);
-    setIsModalOpen(true);
-  }, []);
+    void navigate(getAgentWorkspacePath(location.pathname), {
+      state: {
+        suggestedPrompt: t('tenant.skills.createWithChatPrompt'),
+      },
+    });
+  }, [location.pathname, navigate, t]);
 
   const handleImport = useCallback(async () => {
     if (!importFile && !importContent.trim()) {
@@ -257,18 +288,6 @@ export const SkillList: FC = () => {
       void navigate(encodeURIComponent(routeId));
     },
     [navigate]
-  );
-
-  const handleStatusChange = useCallback(
-    async (id: string, status: SkillStatus) => {
-      try {
-        await updateSkillStatus(id, status);
-        message?.success(t('tenant.skills.statusUpdateSuccess'));
-      } catch {
-        // Error handled by store
-      }
-    },
-    [updateSkillStatus, message, t]
   );
 
   const handleDelete = useCallback(
@@ -355,27 +374,6 @@ export const SkillList: FC = () => {
     [listSkills, loadVersions, message, search, t, versionSkill]
   );
 
-  const handleDuplicate = useCallback(
-    async (skill: SkillResponse) => {
-      const { createSkill } = useSkillStore.getState();
-      try {
-        // Build a SkillCreate payload from the source skill. We deliberately
-        // ignore status so the copy starts fresh.
-        await createSkill({
-          name: `${skill.name}-copy`,
-          description: skill.description,
-          tools: skill.tools,
-          ...(skill.full_content ? { full_content: skill.full_content } : {}),
-          metadata: { ...skill.metadata, duplicated_from: skill.id },
-        });
-        message?.success(t('common.success'));
-      } catch {
-        // Error handled by store
-      }
-    },
-    [message, t]
-  );
-
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
     setEditingSkill(null);
@@ -393,48 +391,78 @@ export const SkillList: FC = () => {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className={`text-xs font-medium uppercase tracking-normal ${mutedText}`}>
-            {t('tenant.skills.registry')}
+      <div className={`rounded-[8px] p-5 ${surface}`}>
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className={`text-xs font-medium uppercase tracking-normal ${mutedText}`}>
+              {t('tenant.skills.registry')}
+            </div>
+            <h1 className={`mt-2 text-2xl font-semibold leading-8 tracking-normal ${pageText}`}>
+              {t('tenant.skills.title')}
+            </h1>
+            <p className={`mt-1 max-w-2xl text-sm ${mutedText}`}>{t('tenant.skills.subtitle')}</p>
           </div>
-          <h1 className={`mt-2 text-2xl font-semibold leading-8 tracking-normal ${pageText}`}>
-            {t('tenant.skills.title')}
-          </h1>
-          <p className={`mt-1 max-w-2xl text-sm ${mutedText}`}>{t('tenant.skills.subtitle')}</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={handleCreate} className={primaryButton}>
+              <MessageSquare size={16} />
+              {t('tenant.skills.createWithChat')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsImportOpen(true);
+              }}
+              className={secondaryButton}
+            >
+              <Upload size={16} />
+              {t('tenant.skills.import.button')}
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleCreate}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-[4px] bg-[oklch(0.24_0.01_255)] px-4 text-sm font-medium text-[oklch(0.98_0.004_255)] transition-colors hover:bg-[oklch(0.31_0.012_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:bg-[oklch(0.9_0.006_255)] dark:text-[oklch(0.17_0.006_255)] dark:hover:bg-[oklch(0.98_0.004_255)]"
-          >
-            <Plus size={16} />
-            {t('tenant.skills.createNew')}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsImportOpen(true);
-            }}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-[4px] border border-[oklch(0.86_0.006_255)] px-4 text-sm font-medium text-[oklch(0.34_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:border-[oklch(0.34_0.006_255)] dark:text-[oklch(0.82_0.006_255)] dark:hover:bg-[oklch(0.24_0.006_255)]"
-          >
-            <Upload size={16} />
-            {t('tenant.skills.import.button')}
-          </button>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <SummaryStat label={t('tenant.skills.stats.total')} value={total} />
+          <SummaryStat label={t('tenant.skills.stats.active')} value={activeCount} />
+          <SummaryStat label={t('tenant.skills.stats.visible')} value={visibleCount} />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <SummaryStat label={t('tenant.skills.stats.total')} value={total} />
-        <SummaryStat label={t('tenant.skills.stats.active')} value={activeCount} />
-        <SummaryStat label={t('tenant.skills.stats.visible')} value={visibleCount} />
-      </div>
-
-      <div className={`rounded-[6px] p-3 ${surface}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div
+          className="inline-flex w-fit rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-[oklch(0.97_0.004_255)] p-0.5 dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.2_0.006_255)]"
+          role="group"
+          aria-label={t('tenant.skills.libraryViewLabel')}
+        >
+          {(
+            [
+              { key: 'all' as const, count: total },
+              { key: 'managed' as const, count: managedCount },
+              { key: 'readonly' as const, count: readonlyCount },
+            ] satisfies Array<{ key: SkillLibraryView; count: number }>
+          ).map(({ key, count }) => {
+            const active = libraryView === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setLibraryView(key);
+                }}
+                className={`inline-flex h-8 items-center gap-2 rounded-[3px] px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] ${
+                  active
+                    ? 'bg-white text-[oklch(0.24_0.01_255)] shadow-sm dark:bg-[oklch(0.28_0.006_255)] dark:text-[oklch(0.94_0.006_255)]'
+                    : 'text-[oklch(0.48_0.01_255)] hover:text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.68_0.008_255)] dark:hover:text-[oklch(0.94_0.006_255)]'
+                }`}
+                aria-pressed={active}
+              >
+                {t(`tenant.skills.libraryViews.${key}`)}
+                <span className="text-[11px] opacity-70">{count}</span>
+              </button>
+            );
+          })}
+        </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <SearchIcon size={16} className={mutedText} />
+          <div className="min-w-0 md:w-[360px]">
             <Search
               aria-label={t('tenant.skills.searchPlaceholder')}
               placeholder={t('tenant.skills.searchPlaceholder')}
@@ -467,11 +495,7 @@ export const SkillList: FC = () => {
               { label: t('common.status.deprecated'), value: 'deprecated' },
             ]}
           />
-          <button
-            type="button"
-            onClick={handleRefresh}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-[4px] border border-[oklch(0.86_0.006_255)] px-3 text-sm font-medium text-[oklch(0.34_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:border-[oklch(0.34_0.006_255)] dark:text-[oklch(0.82_0.006_255)] dark:hover:bg-[oklch(0.24_0.006_255)]"
-          >
+          <button type="button" onClick={handleRefresh} className={secondaryButton}>
             <RefreshCw size={16} />
             <span>{t('common.refresh')}</span>
           </button>
@@ -487,94 +511,76 @@ export const SkillList: FC = () => {
           <LazyEmpty description={t('tenant.skills.empty')} />
         </div>
       ) : (
-        <div className={`overflow-hidden rounded-[6px] ${surface}`}>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {filteredSkills.length === 0 ? (
+            <div className={`rounded-[6px] py-12 md:col-span-2 xl:col-span-3 ${surface}`}>
+              <LazyEmpty description={t('tenant.skills.noResults')} />
+            </div>
+          ) : null}
           {filteredSkills.map((skill) => {
             const source = getSkillSource(skill);
             const managed = isManagedSkill(skill);
             return (
-              <div
+              <article
                 key={skill.id}
-                className="grid gap-4 border-b border-[oklch(0.9_0.006_255)] px-4 py-4 last:border-b-0 hover:bg-[oklch(0.97_0.004_255)] dark:border-[oklch(0.28_0.006_255)] dark:hover:bg-[oklch(0.21_0.006_255)] lg:grid-cols-[minmax(0,1fr)_140px_340px] lg:items-center"
+                className={`grid h-[196px] grid-rows-[56px_84px_56px] overflow-hidden rounded-[8px] transition-colors hover:bg-[oklch(0.97_0.004_255)] dark:hover:bg-[oklch(0.21_0.006_255)] ${surface}`}
               >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-h-14 items-center justify-between gap-3 border-b border-[oklch(0.9_0.006_255)] px-4 dark:border-[oklch(0.28_0.006_255)]">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-white text-[oklch(0.42_0.14_255)] dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.2_0.006_255)] dark:text-[oklch(0.74_0.12_255)]">
+                      <Wrench size={15} />
+                    </span>
                     <button
                       type="button"
                       onClick={() => {
                         handleView(skill);
                       }}
-                      className={`truncate text-left text-sm font-semibold hover:underline ${pageText}`}
+                      className={`min-w-0 truncate text-left text-sm font-semibold hover:underline ${pageText}`}
                     >
                       {skill.name}
                     </button>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
                     <StatusBadge status={skill.status} label={t(`common.status.${skill.status}`)} />
                     <SourceBadge source={source} label={t(`tenant.skills.source.${source}`)} />
+                  </div>
+                </div>
+
+                <div className="overflow-hidden px-4 py-3">
+                  <p className={`max-h-[40px] overflow-hidden text-sm leading-5 ${mutedText}`}>
+                    {skill.description}
+                  </p>
+                </div>
+
+                <div className="flex min-h-0 items-center justify-between gap-3 border-t border-[oklch(0.9_0.006_255)] px-4 py-2.5 dark:border-[oklch(0.28_0.006_255)]">
+                  <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+                    <span
+                      className={`inline-flex h-6 items-center gap-1 whitespace-nowrap text-xs ${mutedText}`}
+                    >
+                      <FileText size={14} />
+                      {t('tenant.skills.card.tools')}: {skill.tools.length}
+                    </span>
                     {skill.version_label || skill.current_version > 0 ? (
                       <span
-                        className={`inline-flex h-6 items-center rounded-full border border-[oklch(0.86_0.006_255)] px-2 text-[11px] font-medium ${mutedText}`}
+                        className={`inline-flex h-6 shrink-0 items-center rounded-full border border-[oklch(0.86_0.006_255)] px-2 text-[11px] font-medium ${mutedText}`}
                       >
-                        {skill.version_label ?? `#${String(skill.current_version)}`}
+                        {t('tenant.skills.card.version', {
+                          version: skill.version_label ?? String(skill.current_version),
+                        })}
                       </span>
                     ) : null}
                   </div>
-                  <p className={`mt-2 line-clamp-2 text-sm ${mutedText}`}>{skill.description}</p>
-                </div>
-
-                <div className={`flex items-center gap-2 text-xs ${mutedText}`}>
-                  <FileText size={14} />
-                  <span>
-                    {t('tenant.skills.tools')}: {skill.tools.length}
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between lg:justify-end">
-                  <LazySelect
-                    aria-label={t('tenant.skills.statusSelectAria', { name: skill.name })}
-                    value={skill.status}
-                    onChange={(status: SkillStatus) => handleStatusChange(skill.id, status)}
-                    className="w-full sm:w-36"
-                    size="small"
-                    disabled={!managed}
-                    options={[
-                      { label: t('common.status.active'), value: 'active' },
-                      { label: t('common.status.disabled'), value: 'disabled' },
-                      { label: t('common.status.deprecated'), value: 'deprecated' },
-                    ]}
-                  />
-                  <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+                  <div className="flex shrink-0 items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => {
                         handleView(skill);
                       }}
                       className={iconButton}
-                      title={t('tenant.skills.actions.view')}
-                      aria-label={t('tenant.skills.actions.viewAria')}
+                      title={t('tenant.skills.actions.viewShort')}
+                      aria-label={t('tenant.skills.actions.viewShort')}
                     >
-                      <Eye size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleEdit(skill);
-                      }}
-                      className={iconButton}
-                      title={t('tenant.skills.actions.edit')}
-                      aria-label={t('tenant.skills.actions.editAria')}
-                      disabled={!managed}
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void handleDuplicate(skill);
-                      }}
-                      className={iconButton}
-                      title={t('tenant.skills.actions.duplicate')}
-                      aria-label={t('tenant.skills.actions.duplicateAria')}
-                    >
-                      <Copy size={16} />
+                      <Eye size={14} />
                     </button>
                     <button
                       type="button"
@@ -587,55 +593,65 @@ export const SkillList: FC = () => {
                     >
                       <Download size={16} />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleOpenVersions(skill);
-                      }}
-                      className={iconButton}
-                      title={t('tenant.skills.actions.versions')}
-                      aria-label={t('tenant.skills.actions.versionsAria')}
-                      disabled={!managed}
-                    >
-                      <History size={16} />
-                    </button>
-                    <LazyPopconfirm
-                      title={t('tenant.skills.deleteConfirm')}
-                      onConfirm={() => {
-                        if (managed) {
-                          void handleDelete(skill.id);
-                        }
-                      }}
-                      okText={t('common.confirm')}
-                      cancelText={t('common.cancel')}
-                      disabled={!managed}
-                    >
-                      <button
-                        type="button"
-                        className={`${iconButton} hover:text-[oklch(0.55_0.18_25)]`}
-                        title={t('tenant.skills.actions.delete')}
-                        aria-label={t('tenant.skills.actions.deleteAria')}
-                        disabled={!managed}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </LazyPopconfirm>
+                    {managed ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleEdit(skill);
+                          }}
+                          className={iconButton}
+                          title={t('tenant.skills.actions.edit')}
+                          aria-label={t('tenant.skills.actions.editAria')}
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleOpenVersions(skill);
+                          }}
+                          className={iconButton}
+                          title={t('tenant.skills.actions.versions')}
+                          aria-label={t('tenant.skills.actions.versionsAria')}
+                        >
+                          <History size={16} />
+                        </button>
+                        <LazyPopconfirm
+                          title={t('tenant.skills.deleteConfirm')}
+                          onConfirm={() => {
+                            void handleDelete(skill.id);
+                          }}
+                          okText={t('common.confirm')}
+                          cancelText={t('common.cancel')}
+                        >
+                          <button
+                            type="button"
+                            className={`${iconButton} hover:text-[oklch(0.55_0.18_25)]`}
+                            title={t('tenant.skills.actions.delete')}
+                            aria-label={t('tenant.skills.actions.deleteAria')}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </LazyPopconfirm>
+                      </>
+                    ) : null}
                   </div>
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>
       )}
 
-      {isModalOpen && (
+      {isModalOpen && editingSkill ? (
         <SkillModal
           isOpen={isModalOpen}
           skill={editingSkill}
           onClose={handleModalClose}
           onSuccess={handleModalSuccess}
         />
-      )}
+      ) : null}
       <Modal
         title={t('tenant.skills.import.title')}
         open={isImportOpen}

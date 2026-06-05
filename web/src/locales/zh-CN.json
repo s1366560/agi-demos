@@ -1939,7 +1939,8 @@
       "title": "技能管理",
       "subtitle": "配置和管理智能体技能库",
       "registry": "技能注册表",
-      "createNew": "创建技能",
+      "createWithChat": "对话创建",
+      "createWithChatPrompt": "帮我创建一个新的技能。请先询问技能目标、触发场景、允许工具、输入输出和交付文件，然后生成符合规范的技能包。",
       "searchPlaceholder": "搜索技能...",
       "statusFilterLabel": "按状态筛选技能",
       "statusSelectAria": "设置 {{name}} 的状态",
@@ -1949,8 +1950,13 @@
       "deprecatedOnly": "仅已废弃",
       "tools": "工具",
       "empty": "暂无技能",
-      "createFirst": "创建您的第一个技能",
       "noResults": "未找到匹配的技能",
+      "libraryViewLabel": "技能库视图",
+      "libraryViews": {
+        "all": "全部技能",
+        "managed": "我管理的",
+        "readonly": "只读来源"
+      },
       "stats": {
         "total": "总技能数",
         "active": "活跃",
@@ -1974,16 +1980,18 @@
         "versions": "版本",
         "versionsAria": "管理技能版本",
         "delete": "删除",
-        "deleteAria": "删除技能"
+        "deleteAria": "删除技能",
+        "more": "更多操作",
+        "viewShort": "预览"
       },
       "card": {
-        "tools": "工具"
+        "tools": "工具",
+        "version": "v{{version}}"
       },
       "deleteConfirm": "确定要删除这个技能吗？",
       "deleteSuccess": "技能删除成功",
       "enableSuccess": "技能已启用",
       "disableSuccess": "技能已禁用",
-      "createSuccess": "技能创建成功",
       "updateSuccess": "技能更新成功",
       "import": {
         "button": "导入",
@@ -2042,10 +2050,91 @@
         "specVersion": "规范",
         "allowedToolsRaw": "允许工具",
         "fullContent": "SKILL.md",
+        "files": "文件预览",
+        "packageFiles": "{{count}} 个文件",
+        "fileKinds": {
+          "markdown": "Markdown",
+          "text": "文本"
+        },
         "contentMode": "SKILL.md 显示模式",
         "contentModes": {
           "preview": "预览",
           "raw": "原文"
+        },
+        "viewMode": "技能详情视图",
+        "viewModes": {
+          "preview": "预览",
+          "manage": "管理",
+          "report": "评测报告"
+        },
+        "assessment": {
+          "title": "评测报告",
+          "description": "汇总技能包结构、权限、元数据和版本状态，帮助判断上线前是否需要补充说明或收紧配置。",
+          "copy": "复制报告",
+          "copySuccess": "评测报告已复制",
+          "copyFailed": "复制评测报告失败",
+          "details": "评测详情",
+          "groupPassed": "通过项",
+          "generatedAt": "基于 {{date}} 的技能快照生成",
+          "staticNotice": "此报告为本地静态检查结果，未运行外部沙箱安全扫描或真实质量评测。",
+          "reportTitle": "技能评测报告",
+          "reportSkill": "技能",
+          "reportGeneratedAt": "生成时间",
+          "reportStatus": "状态",
+          "status": {
+            "safe": "未发现高风险项",
+            "attention": "需要关注"
+          },
+          "itemStatus": {
+            "pass": "通过",
+            "warn": "关注"
+          },
+          "groups": {
+            "p0": "P0 必须项",
+            "p1": "P1 重点项",
+            "p2": "P2 建议项"
+          },
+          "items": {
+            "secrets": {
+              "title": "硬编码凭证",
+              "pass": "未在技能文件中发现明显的密钥、令牌或密码字面量。",
+              "warn": "检测到疑似密钥、令牌或密码字面量，请在发布前移除。"
+            },
+            "hiddenCharacters": {
+              "title": "隐藏字符",
+              "pass": "未发现零宽字符或 BOM 等隐藏字符。",
+              "warn": "检测到隐藏字符，请检查是否存在不可见指令或格式问题。"
+            },
+            "allowedTools": {
+              "title": "工具权限",
+              "pass": "技能声明了可用工具，权限边界可被审阅。",
+              "warn": "技能没有声明工具权限，建议补充 allowed-tools 或确认运行时策略。"
+            },
+            "packageFiles": {
+              "title": "文件包完整性",
+              "pass": "当前可预览 {{count}} 个技能包文件。"
+            },
+            "metadata": {
+              "title": "元数据",
+              "pass": "技能包含结构化元数据。",
+              "warn": "技能未提供元数据，后续检索、分类或治理信息较少。"
+            },
+            "versioning": {
+              "title": "版本记录",
+              "pass": "技能存在当前版本或版本快照。",
+              "warn": "未发现可回溯的版本快照。"
+            },
+            "documentation": {
+              "title": "补充文档",
+              "pass": "技能包包含 SKILL.md 之外的补充文件。",
+              "warn": "技能包仅包含 SKILL.md，复杂技能建议补充示例或 schema。"
+            },
+            "licenseCompatibility": {
+              "title": "许可证与兼容性",
+              "pass": "许可证和兼容性说明已填写。",
+              "warn": "许可证或兼容性说明不完整，建议补充运行约束。"
+            }
+          }
         },
         "emptyContent": "未保存 SKILL.md 内容",
         "emptyVersions": "暂无版本快照",
@@ -2071,18 +2160,22 @@
         "notSet": "未设置"
       },
       "modal": {
-        "createTitle": "创建新技能",
         "editTitle": "编辑技能",
+        "specPanelTitle": "AgentSkills.io 技能包",
+        "specPanelDescription": "定义必填 frontmatter，编写 Markdown 指令，并在保存前检查生成的 SKILL.md。",
         "basicInfo": "基本信息",
         "tools": "工具配置",
         "package": "技能包",
         "metadata": "元数据",
+        "frontmatter": "Frontmatter",
         "name": "技能名称",
         "nameRequired": "请输入技能名称",
         "namePattern": "仅可使用小写字母、数字和单个连字符",
+        "nameMax": "技能名称最多 64 个字符",
         "namePlaceholder": "例如：data-analysis-skill",
         "description": "描述",
         "descriptionRequired": "请输入技能描述",
+        "descriptionMax": "描述最多 1024 个字符",
         "descriptionPlaceholder": "描述此技能的功能和用途...",
         "scope": "范围",
         "scopeRequired": "请选择范围",
@@ -2092,8 +2185,15 @@
         "projectIdRequired": "项目范围必须填写项目 ID",
         "projectIdPlaceholder": "项目 UUID",
         "allowedTools": "允许的工具",
-        "allowedToolsRaw": "原始 allowed-tools",
+        "allowedToolsRaw": "allowed-tools",
         "allowedToolsRawPlaceholder": "Bash(git:*) Bash(jq:*) Read",
+        "body": "Markdown 指令",
+        "bodyPlaceholder": "编写此技能激活后智能体应遵循的指令...",
+        "advanced": "可选 frontmatter",
+        "advancedHint": "许可证、兼容性、规范版本和元数据。",
+        "preview": "生成的技能包",
+        "previewEmpty": "填写名称和描述后预览 SKILL.md。",
+        "previewInvalid": "修复无效元数据后预览 SKILL.md。",
         "fullContent": "SKILL.md 内容",
         "fullContentPlaceholder": "粘贴或编辑完整 SKILL.md 内容...",
         "fullContentHint": "如不填写，后端可根据上方字段生成最小 SKILL.md。",
@@ -2103,11 +2203,12 @@
         "license": "许可证",
         "licensePlaceholder": "Apache-2.0",
         "compatibility": "兼容性",
+        "compatibilityMax": "兼容性最多 500 个字符",
         "compatibilityPlaceholder": "所需产品、系统包、网络访问或运行环境说明",
         "requireTools": "至少需要一个工具",
         "addTool": "输入工具名称...",
         "noTools": "暂无工具，请添加至少一个",
-        "toolsHint": "指定此技能可以使用的工具列表。这些工具将在技能执行时可用。"
+        "toolsHint": "可选。留空时不会在 frontmatter 中写入 allowed-tools；运行时内部按不限制工具保存。"
       },
       "statusUpdateSuccess": "技能状态已更新"
     },
