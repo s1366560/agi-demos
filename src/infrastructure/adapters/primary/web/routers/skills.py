@@ -18,7 +18,7 @@ from base64 import b64encode
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from io import BytesIO
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -389,10 +389,35 @@ def _safe_zip_member_path(name: str) -> PurePosixPath:
 
 
 def _resource_text_from_zip(content: bytes) -> str:
+    return _resource_text_from_bytes(content)
+
+
+def _resource_text_from_bytes(content: bytes) -> str:
     try:
         return content.decode("utf-8")
     except UnicodeDecodeError:
         return "base64:" + b64encode(content).decode("ascii")
+
+
+def _filesystem_skill_resource_files(skill: Skill) -> dict[str, str]:
+    file_path = getattr(skill, "file_path", None)
+    if not file_path:
+        return dict(getattr(skill, "resource_files", {}) or {})
+
+    skill_md_path = Path(file_path)
+    skill_dir = skill_md_path.parent
+    if not skill_dir.exists() or not skill_dir.is_dir():
+        return dict(getattr(skill, "resource_files", {}) or {})
+
+    resource_files: dict[str, str] = {}
+    for path in sorted(skill_dir.rglob("*")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        relative_path = path.relative_to(skill_dir)
+        if relative_path == Path("SKILL.md"):
+            continue
+        resource_files[relative_path.as_posix()] = _resource_text_from_bytes(path.read_bytes())
+    return resource_files
 
 
 def _is_ignored_zip_member(path: PurePosixPath) -> bool:
@@ -728,11 +753,13 @@ async def create_skill(
         container = get_container_with_db(request, db)
         repo = container.skill_repository()
 
-        full_content, name, description, tools, package_metadata, version_label = _parsed_skill_payload(
-            skill_md_content=data.full_content,
-            name=data.name,
-            description=data.description,
-            tools=data.tools,
+        full_content, name, description, tools, package_metadata, version_label = (
+            _parsed_skill_payload(
+                skill_md_content=data.full_content,
+                name=data.name,
+                description=data.description,
+                tools=data.tools,
+            )
         )
         metadata = _merge_agentskills_metadata(
             package_metadata if package_metadata is not None else data.metadata,
@@ -1464,9 +1491,7 @@ async def export_skill_package(
         or _build_skill_md_from_payload(skill.to_dict(), skill.version_label)
     )
     resource_files = (
-        version.resource_files
-        if version is not None
-        else dict(getattr(skill, "resource_files", {}) or {})
+        version.resource_files if version is not None else _filesystem_skill_resource_files(skill)
     )
 
     return SkillPackageResponse(

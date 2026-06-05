@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import zipfile
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -744,6 +745,54 @@ async def test_export_skill_package_uses_latest_version(
     assert response.version_number == 1
     assert response.resource_files == {"assets/template.txt": "template"}
     assert response.skill_md_content == SAMPLE_SKILL_MD
+
+
+@pytest.mark.unit
+async def test_export_filesystem_skill_includes_directory_resource_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo = _MemorySkillRepository()
+    skill_dir = tmp_path / "filesystem-skill"
+    skill_dir.mkdir()
+    skill_md_path = skill_dir / "SKILL.md"
+    skill_md_path.write_text(SAMPLE_SKILL_MD, encoding="utf-8")
+    (skill_dir / "env.sh").write_text("export SKILL_ENV=1\n", encoding="utf-8")
+    references_dir = skill_dir / "references"
+    references_dir.mkdir()
+    (references_dir / "README.md").write_text("details", encoding="utf-8")
+    (skill_dir / "asset.bin").write_bytes(b"\xff\x00")
+
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        name="filesystem-skill",
+        description="Loaded from SKILL.md",
+        tools=["Read"],
+        full_content=SAMPLE_SKILL_MD,
+    )
+    skill.source = SkillSource.FILESYSTEM
+    skill.file_path = str(skill_md_path)
+    await repo.create(skill)
+    db = SimpleNamespace(versions=[])
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
+        "SqlSkillVersionRepository",
+        _MemoryVersionRepository,
+    )
+
+    response = await router.export_skill_package(
+        request=SimpleNamespace(),
+        skill_id=skill.id,
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    assert response.skill_md_content == SAMPLE_SKILL_MD
+    assert response.resource_files["env.sh"] == "export SKILL_ENV=1\n"
+    assert response.resource_files["references/README.md"] == "details"
+    assert response.resource_files["asset.bin"].startswith("base64:")
+    assert "SKILL.md" not in response.resource_files
 
 
 @pytest.mark.unit
