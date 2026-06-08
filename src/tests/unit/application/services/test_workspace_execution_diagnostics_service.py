@@ -315,6 +315,19 @@ def _plan_with_current_task(task_id: str) -> Plan:
     return plan
 
 
+def _completed_plan_with_current_task(task_id: str) -> Plan:
+    plan = _plan_with_current_task(task_id)
+    return Plan(
+        id=plan.id,
+        workspace_id=plan.workspace_id,
+        goal_id=plan.goal_id,
+        status=PlanStatus.COMPLETED,
+        nodes=plan.nodes,
+        created_at=plan.created_at,
+        updated_at=plan.updated_at,
+    )
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_get_diagnostics_collects_structural_execution_signals() -> None:
@@ -419,6 +432,49 @@ async def test_get_diagnostics_collects_structural_execution_signals() -> None:
         },
     ]
     assert diagnostics.recent_tool_failures[0]["id"] == "tool-failed"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_completed_plan_counts_only_plan_tasks_and_achieved_root_as_done() -> None:
+    root_task = _task(
+        "root-task",
+        "Root goal",
+        WorkspaceTaskStatus.IN_PROGRESS,
+        metadata={
+            "task_role": "goal_root",
+            "goal_health": "achieved",
+            "remediation_status": "ready_for_completion",
+        },
+    )
+    plan_task = _task(
+        "task-current",
+        "Current plan task",
+        WorkspaceTaskStatus.IN_PROGRESS,
+        metadata={"task_role": "execution_task"},
+    )
+    stale_next_iteration = _task(
+        "next-root",
+        "Continue next iteration",
+        WorkspaceTaskStatus.TODO,
+        metadata={"task_role": "goal_root", "goal_health": "healthy"},
+    )
+
+    diagnostics = await _service(
+        workspace=_workspace(),
+        member=_member(),
+        tasks=[root_task, plan_task, stale_next_iteration],
+        plan=_completed_plan_with_current_task("task-current"),
+    ).get_diagnostics(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        workspace_id="workspace-1",
+        actor_user_id="user-1",
+    )
+
+    assert diagnostics.task_status_counts == {"done": 2}
+    assert diagnostics.completion_gate["allowed"] is True
+    assert diagnostics.blocked_reason is None
 
 
 @pytest.mark.unit

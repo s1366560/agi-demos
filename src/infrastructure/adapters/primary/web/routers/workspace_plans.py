@@ -31,6 +31,7 @@ from src.domain.model.workspace_plan import (
     Plan,
     PlanNode,
     PlanNodeId,
+    PlanNodeKind,
     PlanStatus,
     Progress,
 )
@@ -701,6 +702,7 @@ def _to_node_response(plan: Plan) -> list[WorkspacePlanNodeResponse]:
     responses: list[WorkspacePlanNodeResponse] = []
     for node in nodes:
         metadata = _node_response_metadata(node)
+        intent = _node_response_intent(plan, node)
         phase_id = _node_iteration_phase(node)
         evidence_bundle = _node_evidence_bundle_response(node, metadata)
         gate_status = _node_gate_status_response(
@@ -738,10 +740,10 @@ def _to_node_response(plan: Plan) -> list[WorkspacePlanNodeResponse]:
                     {"name": capability.name, "weight": capability.weight}
                     for capability in node.recommended_capabilities
                 ],
-                intent=node.intent.value,
+                intent=intent.value,
                 execution=node.execution.value,
                 progress={
-                    "percent": node.progress.percent,
+                    "percent": 100.0 if intent is TaskIntent.DONE else node.progress.percent,
                     "confidence": node.progress.confidence,
                     "note": node.progress.note,
                 },
@@ -765,6 +767,12 @@ def _to_node_response(plan: Plan) -> list[WorkspacePlanNodeResponse]:
             )
         )
     return responses
+
+
+def _node_response_intent(plan: Plan, node: PlanNode) -> TaskIntent:
+    if plan.status is PlanStatus.COMPLETED and node.kind is PlanNodeKind.GOAL:
+        return TaskIntent.DONE
+    return node.intent
 
 
 def _node_response_metadata(node: PlanNode) -> dict[str, Any]:
@@ -1158,7 +1166,8 @@ def _metadata_nonempty_string(value: object) -> bool:
 def _to_plan_response(plan: Plan) -> WorkspacePlanResponse:
     counts: dict[str, int] = {}
     for node in plan.nodes.values():
-        counts[f"intent:{node.intent.value}"] = counts.get(f"intent:{node.intent.value}", 0) + 1
+        intent = _node_response_intent(plan, node)
+        counts[f"intent:{intent.value}"] = counts.get(f"intent:{intent.value}", 0) + 1
         counts[f"execution:{node.execution.value}"] = (
             counts.get(f"execution:{node.execution.value}", 0) + 1
         )
@@ -2890,7 +2899,7 @@ async def _load_root_goal_response(
         row = result.scalar_one_or_none()
     if row is None:
         return None
-    return _to_root_goal_response(row)
+    return _to_root_goal_response(row, plan=plan)
 
 
 async def _load_workspace_plan_history(
@@ -2971,7 +2980,11 @@ async def _resolve_root_goal_task_id(
     return None
 
 
-def _to_root_goal_response(row: WorkspaceTaskModel) -> WorkspacePlanRootGoalResponse:
+def _to_root_goal_response(
+    row: WorkspaceTaskModel,
+    *,
+    plan: Plan | None = None,
+) -> WorkspacePlanRootGoalResponse:
     metadata = dict(row.metadata_json or {})
     evidence = metadata.get("goal_evidence")
     evidence_grade = (
@@ -2979,23 +2992,27 @@ def _to_root_goal_response(row: WorkspaceTaskModel) -> WorkspacePlanRootGoalResp
         if isinstance(evidence, dict) and isinstance(evidence.get("verification_grade"), str)
         else None
     )
+    response_status = "done" if plan is not None and plan.status is PlanStatus.COMPLETED else row.status
     return WorkspacePlanRootGoalResponse(
         id=row.id,
         title=row.title,
-        status=row.status,
-        blocker_reason=row.blocker_reason,
+        status=response_status,
+        blocker_reason=None if response_status == "done" else row.blocker_reason,
         goal_health=_metadata_text(metadata, "goal_health"),
         remediation_status=_metadata_text(metadata, "remediation_status"),
         remediation_summary=_metadata_text(metadata, "remediation_summary"),
         evidence_grade=evidence_grade,
         completion_blocker_reason=_root_completion_blocker_reason(
-            status=row.status,
+            status=response_status,
             blocker_reason=row.blocker_reason,
             metadata=metadata,
             evidence_grade=evidence_grade,
         ),
         updated_at=row.updated_at,
-        completed_at=row.completed_at,
+        completed_at=(
+            row.completed_at
+            or (plan.updated_at if response_status == "done" and plan is not None else None)
+        ),
     )
 
 

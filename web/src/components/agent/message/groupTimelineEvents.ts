@@ -188,6 +188,14 @@ export function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
   // Track which observe events have been consumed by fallback matching
   const consumedObserves = new Set<string>();
 
+  // Track act executions already rendered as a step. The same tool execution can
+  // appear more than once in the timeline when persisted history is merged with
+  // live-streamed events: each occurrence carries a different event id but the
+  // same execution_id. Without this guard the duplicate renders a second step
+  // that is stuck "running" (no matching observe), producing the doubled tool
+  // execution UI.
+  const seenActExecIds = new Set<string>();
+
   const flushGroup = () => {
     if (currentSteps.length >= 1) {
       result.push({ kind: 'timeline', steps: currentSteps, startIndex: groupStartIndex });
@@ -216,9 +224,21 @@ export function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
     }
 
     if (event.type === 'act') {
+      const act = event;
+
+      // Skip duplicate occurrences of the same execution. observeByExecId is
+      // built from the whole timeline, so the retained occurrence still resolves
+      // its observe (completed/error) regardless of which copy is kept.
+      const execId = act.execution_id;
+      if (execId) {
+        if (seenActExecIds.has(execId)) {
+          continue;
+        }
+        seenActExecIds.add(execId);
+      }
+
       if (currentSteps.length === 0) groupStartIndex = i;
 
-      const act = event;
       // Priority 1: match by execution_id
       let obs: ObserveEvent | undefined = act.execution_id
         ? observeByExecId.get(act.execution_id)

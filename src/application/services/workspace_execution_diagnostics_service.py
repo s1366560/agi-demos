@@ -168,7 +168,11 @@ class WorkspaceExecutionDiagnosticsService:
         active_plan = await self._get_active_plan(workspace.id)
         active_plan_task_ids = self._active_plan_task_ids(active_plan)
 
-        task_status_counts = Counter(task.status.value for task in tasks)
+        task_status_counts = self._task_status_counts(
+            tasks,
+            active_plan=active_plan,
+            active_plan_task_ids=active_plan_task_ids,
+        )
         attempt_status_counts: Counter[str] = Counter()
         tool_status_counts: Counter[str] = Counter()
         task_rows: list[dict[str, Any]] = []
@@ -451,6 +455,35 @@ class WorkspaceExecutionDiagnosticsService:
             and task_id
         }
         return task_ids or None
+
+    def _task_status_counts(
+        self,
+        tasks: list[WorkspaceTask],
+        *,
+        active_plan: Plan | None,
+        active_plan_task_ids: set[str] | None,
+    ) -> Counter[str]:
+        if active_plan is None or active_plan.status is not PlanStatus.COMPLETED:
+            return Counter(task.status.value for task in tasks)
+
+        counts: Counter[str] = Counter()
+        for task in tasks:
+            if active_plan_task_ids is not None and task.id in active_plan_task_ids:
+                counts[WorkspaceTaskStatus.DONE.value] += 1
+                continue
+            if self._is_completed_root_goal_projection(task):
+                counts[WorkspaceTaskStatus.DONE.value] += 1
+        return counts
+
+    @staticmethod
+    def _is_completed_root_goal_projection(task: WorkspaceTask) -> bool:
+        if task.metadata.get("task_role") != "goal_root":
+            return False
+        return (
+            task.status is WorkspaceTaskStatus.DONE
+            or task.metadata.get("goal_health") == "achieved"
+            or task.metadata.get("remediation_status") == "ready_for_completion"
+        )
 
     def _is_current_execution_task(
         self,

@@ -290,6 +290,45 @@ def test_node_response_metadata_derives_pipeline_status_from_evidence_refs() -> 
     assert task_response.metadata["pipeline_run_id"] == "pipeline-run-1"
 
 
+def test_completed_plan_response_projects_goal_node_as_done() -> None:
+    plan = replace(_make_plan("workspace-plan-api"), status=PlanStatus.COMPLETED)
+
+    response = workspace_plans._to_plan_response(plan)
+    goal_response = next(node for node in response.nodes if node.kind == "goal")
+
+    assert response.counts["intent:done"] == 1
+    assert "intent:todo" not in response.counts
+    assert goal_response.intent == "done"
+    assert goal_response.progress["percent"] == 100.0
+
+
+def test_completed_plan_root_goal_response_suppresses_stale_blocker() -> None:
+    plan = replace(_make_plan("workspace-plan-api"), status=PlanStatus.COMPLETED)
+    plan.updated_at = datetime.now(UTC)
+    root_task = WorkspaceTaskModel(
+        id="root-task",
+        workspace_id="workspace-plan-api",
+        title="Complete autonomous objective",
+        created_by="plan-api-user",
+        status="in_progress",
+        blocker_reason="active or retryable outbox items remain",
+        metadata_json={
+            "task_role": "goal_root",
+            "goal_health": "achieved",
+            "remediation_status": "ready_for_completion",
+            "remediation_summary": "active or retryable outbox items remain",
+            "goal_evidence": {"verification_grade": "pass"},
+        },
+    )
+
+    response = workspace_plans._to_root_goal_response(root_task, plan=plan)
+
+    assert response.status == "done"
+    assert response.blocker_reason is None
+    assert response.completion_blocker_reason is None
+    assert response.completed_at == plan.updated_at
+
+
 def test_iteration_summary_prefers_loop_current_iteration_over_old_active_nodes() -> None:
     plan = _make_plan("workspace-plan-api")
     goal = plan.nodes[PlanNodeId("goal-api")]

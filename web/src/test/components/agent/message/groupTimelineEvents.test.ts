@@ -176,3 +176,80 @@ describe('groupTimelineEvents HITL tool completion', () => {
     });
   });
 });
+
+describe('groupTimelineEvents act deduplication', () => {
+  it('renders a single step when the same execution is duplicated in the timeline', () => {
+    // The same tool execution can appear twice when persisted history is merged
+    // with live-streamed events: each copy has a distinct event id but the same
+    // execution_id. Only the persisted copy carries a matching observe.
+    const timeline = [
+      {
+        id: 'history-act',
+        type: 'act',
+        timestamp: 1,
+        eventTimeUs: 1_000,
+        eventCounter: 0,
+        toolName: 'todowrite',
+        toolInput: { action: 'update' },
+        execution_id: 'exec-1',
+      },
+      {
+        id: 'history-observe',
+        type: 'observe',
+        timestamp: 2,
+        eventTimeUs: 2_000,
+        eventCounter: 0,
+        toolName: 'todowrite',
+        execution_id: 'exec-1',
+        toolOutput: 'ok',
+        isError: false,
+      },
+      {
+        id: 'live-act-duplicate',
+        type: 'act',
+        timestamp: 3,
+        eventTimeUs: 3_000,
+        eventCounter: 0,
+        toolName: 'todowrite',
+        toolInput: { action: 'update' },
+        execution_id: 'exec-1',
+      },
+    ] as unknown as TimelineEvent[];
+
+    const grouped = groupTimelineEvents(timeline);
+
+    const steps = grouped.flatMap((item) => (item.kind === 'timeline' ? item.steps : []));
+    expect(steps).toHaveLength(1);
+    expect(steps[0]?.status).toBe('success');
+  });
+
+  it('keeps distinct executions of the same tool as separate steps', () => {
+    const timeline = [
+      {
+        id: 'act-1',
+        type: 'act',
+        timestamp: 1,
+        eventTimeUs: 1_000,
+        eventCounter: 0,
+        toolName: 'todowrite',
+        toolInput: { action: 'update' },
+        execution_id: 'exec-1',
+      },
+      {
+        id: 'act-2',
+        type: 'act',
+        timestamp: 2,
+        eventTimeUs: 2_000,
+        eventCounter: 0,
+        toolName: 'todowrite',
+        toolInput: { action: 'update' },
+        execution_id: 'exec-2',
+      },
+    ] as unknown as TimelineEvent[];
+
+    const grouped = groupTimelineEvents(timeline);
+
+    const steps = grouped.flatMap((item) => (item.kind === 'timeline' ? item.steps : []));
+    expect(steps).toHaveLength(2);
+  });
+});
