@@ -6466,6 +6466,16 @@
         "shorten": "精简",
         "translate": "翻译",
         "summarize": "总结"
+      },
+      "resolvingMedia": "加载中…",
+      "image": {
+        "zoomIn": "放大",
+        "zoomOut": "缩小",
+        "resetZoom": "重置",
+        "fit": "适应屏幕",
+        "rotateLeft": "向左旋转",
+        "rotateRight": "向右旋转",
+        "fullscreen": "全屏"
       }
     },
     "artifact": {

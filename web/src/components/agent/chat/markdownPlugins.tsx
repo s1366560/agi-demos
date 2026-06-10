@@ -17,6 +17,12 @@ import type { Components } from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
 
+import {
+  isSafeArtifactUrl,
+  looksLikeSandboxImagePath,
+  resolveSandboxArtifactUrl,
+} from '@/utils/sandboxArtifactPath';
+
 /**
  * Rehype plugin that strips empty `data` attributes from elements.
  * Prevents React warning: "An empty string was passed to the data attribute."
@@ -108,15 +114,51 @@ export const remarkPlugins = baseRemarkPlugins;
 export const rehypePlugins = baseRehypePlugins;
 
 /**
- * Safe img component that suppresses empty src warnings.
+ * Image renderer that resolves sandbox/workspace paths (e.g.
+ * `/workspace/output/chart.png`) to the backing artifact's presigned URL.
+ *
+ * Without this, markdown such as `![](/workspace/output/chart.png)` resolves
+ * against the web origin and 404s / returns the SPA HTML, so the image breaks.
+ * Absolute URLs render immediately and unchanged.
+ */
+const SandboxImage: NonNullable<Components['img']> = ({ src, alt, ...props }) => {
+  const initialSrc = typeof src === 'string' ? src : '';
+  const needsResolution = !!initialSrc && looksLikeSandboxImagePath(initialSrc);
+
+  // Directly-loadable sources render synchronously; only sandbox paths are resolved
+  // asynchronously below. Keying the resolved value by source avoids showing a stale
+  // URL when the src prop changes between renders.
+  const directSrc = initialSrc && !needsResolution ? initialSrc : null;
+  const [resolved, setResolved] = useState<{ key: string; url: string } | null>(null);
+
+  useEffect(() => {
+    if (!needsResolution) return;
+
+    let cancelled = false;
+    void (async () => {
+      const url = await resolveSandboxArtifactUrl(initialSrc);
+      if (!cancelled && url && isSafeArtifactUrl(url)) {
+        setResolved({ key: initialSrc, url });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSrc, needsResolution]);
+
+  const finalSrc = directSrc ?? (resolved?.key === initialSrc ? resolved.url : null);
+  if (!finalSrc) return null;
+  return <img src={finalSrc} alt={typeof alt === 'string' ? alt : ''} {...props} />;
+};
+
+/**
+ * Safe img component that resolves sandbox paths and suppresses empty src warnings.
  * Markdown like `![]()` produces `<img src="">` which triggers a React warning
  * and causes the browser to re-fetch the current page.
  */
 export const safeMarkdownComponents: Partial<Components> = {
-  img: ({ src, alt, ...props }) => {
-    if (!src) return null;
-    return <img src={src} alt={typeof alt === 'string' ? alt : ''} {...props} />;
-  },
+  img: SandboxImage,
   table: ({ children, ...props }) => (
     <div className="overflow-x-auto w-full">
       <table {...props}>{children}</table>

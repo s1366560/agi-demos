@@ -39,6 +39,12 @@ import {
   AppWindow,
   Pin,
   Music,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  RotateCcw,
+  Maximize2,
+  Scan,
 } from 'lucide-react';
 
 import {
@@ -55,6 +61,11 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 import { artifactService, fetchArtifactResource } from '@/services/artifactService';
 
 import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
+import {
+  isSafeArtifactUrl,
+  looksLikeSandboxImagePath,
+  resolveSandboxArtifactUrl,
+} from '@/utils/sandboxArtifactPath';
 import { sanitizeHtml } from '@/utils/sanitize';
 
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -445,6 +456,228 @@ ${htmlContent}
 });
 IsolatedPreviewFrame.displayName = 'IsolatedPreviewFrame';
 
+const IMAGE_MIN_SCALE = 0.1;
+const IMAGE_MAX_SCALE = 8;
+const IMAGE_ZOOM_STEP = 1.2;
+
+const clampScale = (value: number) =>
+  Math.min(IMAGE_MAX_SCALE, Math.max(IMAGE_MIN_SCALE, value));
+
+/**
+ * Interactive image viewer for the canvas preview.
+ *
+ * Adds the operations users expect from an image previewer: zoom in/out
+ * (buttons + ctrl/⌘ or pinch wheel), rotate, reset to fit, drag-to-pan when
+ * zoomed, double-click to toggle 100%/fit, fullscreen, and download.
+ */
+const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) => {
+  const { t } = useTranslation();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(
+    null,
+  );
+  const [dragging, setDragging] = useState(false);
+
+  const reset = useCallback(() => {
+    setScale(1);
+    setRotation(0);
+    setOffset({ x: 0, y: 0 });
+  }, []);
+
+  const zoomTo = useCallback((next: number) => {
+    const clamped = clampScale(next);
+    setScale(clamped);
+    if (clamped <= 1) setOffset({ x: 0, y: 0 });
+  }, []);
+
+  const zoomIn = useCallback(() => {
+    zoomTo(scale * IMAGE_ZOOM_STEP);
+  }, [scale, zoomTo]);
+  const zoomOut = useCallback(() => {
+    zoomTo(scale / IMAGE_ZOOM_STEP);
+  }, [scale, zoomTo]);
+  const rotateCw = useCallback(() => {
+    setRotation((r) => r + 90);
+  }, []);
+  const rotateCcw = useCallback(() => {
+    setRotation((r) => r - 90);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      void el.requestFullscreen();
+    }
+  }, []);
+
+  const handleDownload = useCallback(() => {
+    const a = document.createElement('a');
+    a.href = src;
+    a.download = title;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.click();
+  }, [src, title]);
+
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      zoomTo(scale * (e.deltaY < 0 ? IMAGE_ZOOM_STEP : 1 / IMAGE_ZOOM_STEP));
+    },
+    [scale, zoomTo],
+  );
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (scale <= 1) return;
+      dragRef.current = {
+        startX: e.clientX,
+        startY: e.clientY,
+        originX: offset.x,
+        originY: offset.y,
+      };
+      setDragging(true);
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [scale, offset],
+  );
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    setOffset({
+      x: drag.originX + (e.clientX - drag.startX),
+      y: drag.originY + (e.clientY - drag.startY),
+    });
+  }, []);
+
+  const endDrag = useCallback(() => {
+    dragRef.current = null;
+    setDragging(false);
+  }, []);
+
+  const handleDoubleClick = useCallback(() => {
+    if (scale > 1) reset();
+    else zoomTo(2);
+  }, [scale, reset, zoomTo]);
+
+  const zoomPercent = Math.round(scale * 100);
+
+  const buttonClass =
+    'flex items-center justify-center w-7 h-7 rounded-md text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors';
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative h-full w-full bg-slate-50 dark:bg-slate-900 overflow-hidden"
+    >
+      <div
+        role="presentation"
+        className="h-full w-full flex items-center justify-center overflow-hidden p-4 select-none"
+        style={{ cursor: scale > 1 ? (dragging ? 'grabbing' : 'grab') : 'default' }}
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endDrag}
+        onPointerLeave={endDrag}
+        onDoubleClick={handleDoubleClick}
+      >
+        <img
+          src={src}
+          alt={title}
+          draggable={false}
+          style={{
+            maxWidth: '100%',
+            maxHeight: '100%',
+            objectFit: 'contain',
+            transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale}) rotate(${rotation}deg)`,
+            transition: dragging ? 'none' : 'transform 0.15s ease-out',
+          }}
+        />
+      </div>
+
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 rounded-lg bg-white/90 dark:bg-slate-800/90 shadow-md backdrop-blur border border-slate-200/70 dark:border-slate-700/70">
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={zoomOut}
+          disabled={scale <= IMAGE_MIN_SCALE}
+          title={t('agent.canvas.image.zoomOut', { defaultValue: 'Zoom out' })}
+        >
+          <ZoomOut size={15} />
+        </button>
+        <button
+          type="button"
+          className="min-w-[3rem] text-center text-xs tabular-nums text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700/70 rounded-md py-1 transition-colors"
+          onClick={reset}
+          title={t('agent.canvas.image.resetZoom', { defaultValue: 'Reset' })}
+        >
+          {zoomPercent}%
+        </button>
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={zoomIn}
+          disabled={scale >= IMAGE_MAX_SCALE}
+          title={t('agent.canvas.image.zoomIn', { defaultValue: 'Zoom in' })}
+        >
+          <ZoomIn size={15} />
+        </button>
+        <span className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-0.5" />
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={reset}
+          title={t('agent.canvas.image.fit', { defaultValue: 'Fit to screen' })}
+        >
+          <Scan size={15} />
+        </button>
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={rotateCcw}
+          title={t('agent.canvas.image.rotateLeft', { defaultValue: 'Rotate left' })}
+        >
+          <RotateCcw size={15} />
+        </button>
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={rotateCw}
+          title={t('agent.canvas.image.rotateRight', { defaultValue: 'Rotate right' })}
+        >
+          <RotateCw size={15} />
+        </button>
+        <span className="w-px h-4 bg-slate-200 dark:bg-slate-700 mx-0.5" />
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={toggleFullscreen}
+          title={t('agent.canvas.image.fullscreen', { defaultValue: 'Fullscreen' })}
+        >
+          <Maximize2 size={15} />
+        </button>
+        <button
+          type="button"
+          className={buttonClass}
+          onClick={handleDownload}
+          title={t('agent.canvas.download', { defaultValue: 'Download' })}
+        >
+          <Download size={15} />
+        </button>
+      </div>
+    </div>
+  );
+});
+CanvasImageViewer.displayName = 'CanvasImageViewer';
+
 /** Preview media files (image, video, audio, SVG) directly in canvas */
 const CanvasMediaPreview = memo<{
   src: string;
@@ -453,29 +686,56 @@ const CanvasMediaPreview = memo<{
 }>(({ src, mimeType, title }) => {
   const { t } = useTranslation();
 
-  if (mimeType.startsWith('image/')) {
+  // A persisted/auto-opened tab may carry a sandbox/workspace path (e.g.
+  // `/workspace/output/chart.png`) instead of a loadable URL. Such a path
+  // resolves against the web origin and breaks, so resolve it to the backing
+  // artifact's presigned URL before rendering.
+  const needsResolution = looksLikeSandboxImagePath(src);
+  const [resolved, setResolved] = useState<{ key: string; url: string } | null>(null);
+
+  useEffect(() => {
+    if (!needsResolution) return;
+
+    let cancelled = false;
+    void (async () => {
+      const url = await resolveSandboxArtifactUrl(src);
+      if (!cancelled && url && isSafeArtifactUrl(url)) {
+        setResolved({ key: src, url });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [src, needsResolution]);
+
+  const resolvedSrc = needsResolution ? (resolved?.key === src ? resolved.url : null) : src;
+
+  if (!resolvedSrc) {
     return (
-      <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900 overflow-auto p-4">
-        <img
-          src={src}
-          alt={title}
-          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-        />
+      <div className="h-full w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <div className="text-sm text-slate-500 dark:text-slate-400">
+          {t('agent.canvas.resolvingMedia', { defaultValue: 'Loading…' })}
+        </div>
       </div>
     );
+  }
+
+  if (mimeType.startsWith('image/')) {
+    return <CanvasImageViewer key={resolvedSrc} src={resolvedSrc} title={title} />;
   }
   if (mimeType.startsWith('video/')) {
     return (
       <div className="h-full w-full flex items-center justify-center bg-black">
         <video
-          src={src}
+          src={resolvedSrc}
           controls
           playsInline
           preload="metadata"
           style={{ maxWidth: '100%', maxHeight: '100%' }}
         >
           <track kind="captions" />
-          <source src={src} type={mimeType} />
+          <source src={resolvedSrc} type={mimeType} />
         </video>
       </div>
     );
@@ -486,7 +746,7 @@ const CanvasMediaPreview = memo<{
         <div className="flex flex-col items-center gap-4 p-8">
           <Music size={48} className="text-slate-300 dark:text-slate-600" />
           <div className="text-sm text-slate-500 dark:text-slate-400 mb-2">{title}</div>
-          <audio src={src} controls preload="metadata" style={{ width: 320 }}>
+          <audio src={resolvedSrc} controls preload="metadata" style={{ width: 320 }}>
             <track kind="captions" />
             {t('components.audioPlayer.unsupported', {
               defaultValue: 'Your browser does not support the audio element.',
@@ -499,7 +759,7 @@ const CanvasMediaPreview = memo<{
   // SVG - render in iframe for safety
   return (
     <iframe
-      src={src}
+      src={resolvedSrc}
       title={title}
       sandbox="allow-same-origin"
       className="w-full h-full border-0 bg-white rounded-b-lg"

@@ -6443,6 +6443,16 @@
         "shorten": "Shorten",
         "translate": "Translate",
         "summarize": "Summarize"
+      },
+      "resolvingMedia": "Loading…",
+      "image": {
+        "zoomIn": "Zoom in",
+        "zoomOut": "Zoom out",
+        "resetZoom": "Reset",
+        "fit": "Fit to screen",
+        "rotateLeft": "Rotate left",
+        "rotateRight": "Rotate right",
+        "fullscreen": "Fullscreen"
       }
     },
     "artifact": {

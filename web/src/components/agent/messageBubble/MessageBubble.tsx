@@ -49,6 +49,11 @@ import { useLocaleNumberFormat } from '@/i18n/formatters';
 import { formatDateTime, formatTimeOnly } from '@/utils/date';
 import { normalizeExecutionSummary } from '@/utils/executionSummary';
 import { isOfficeMimeType, isOfficeExtension } from '@/utils/filePreview';
+import {
+  findArtifactForSandboxPath,
+  isSafeArtifactUrl,
+  normalizeSandboxPath,
+} from '@/utils/sandboxArtifactPath';
 
 import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
 import { safeMarkdownComponents, useMarkdownPlugins } from '../chat/markdownPlugins';
@@ -312,41 +317,7 @@ function isSandboxFilePathText(value: string): boolean {
   );
 }
 
-function normalizeSandboxPath(path: string): string {
-  if (path.startsWith('~/')) return `/workspace/${path.slice(2)}`;
-  return path;
-}
 
-function pathMatchesArtifact(path: string, artifact: Artifact): boolean {
-  const normalized = normalizeSandboxPath(path);
-  const sourcePath = artifact.sourcePath ? normalizeSandboxPath(artifact.sourcePath) : '';
-  const filename = artifact.filename;
-  return (
-    sourcePath === normalized ||
-    sourcePath.endsWith(`/${path}`) ||
-    normalized.endsWith(`/${filename}`) ||
-    path === filename
-  );
-}
-
-function getCurrentProjectId(): string | null {
-  const activeProjectId = useSandboxStore.getState().activeProjectId;
-  if (activeProjectId) return activeProjectId;
-  if (typeof window === 'undefined') return null;
-  return new URLSearchParams(window.location.search).get('projectId');
-}
-
-async function findArtifactForSandboxPath(path: string): Promise<Artifact | undefined> {
-  const storeArtifacts = Array.from(useSandboxStore.getState().artifacts.values());
-  const storeArtifact = storeArtifacts.find((item) => pathMatchesArtifact(path, item));
-  if (storeArtifact) return storeArtifact;
-
-  const projectId = getCurrentProjectId();
-  if (!projectId) return undefined;
-
-  const { artifacts } = await artifactService.list(projectId, { limit: 500 });
-  return artifacts.find((item) => pathMatchesArtifact(path, item));
-}
 
 async function openArtifactInCanvas(artifact: Artifact, requestedPath: string): Promise<boolean> {
   const url = artifact.url || artifact.previewUrl;
@@ -691,20 +662,6 @@ function safeDecodeURIComponent(value: string): string {
     return decodeURIComponent(value);
   } catch {
     return value;
-  }
-}
-
-function isSafeArtifactUrl(src: string): boolean {
-  if (!src) return false;
-  if (src.startsWith('/')) return true;
-  const lower = src.toLowerCase();
-  if (lower.startsWith('data:application/pdf')) return true;
-  if (lower.startsWith('data:')) return false;
-  try {
-    const url = new URL(src, window.location.origin);
-    return url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'blob:';
-  } catch {
-    return false;
   }
 }
 
