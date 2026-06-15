@@ -1078,6 +1078,10 @@
         "createSuccess": "Agent definition created",
         "updateSuccess": "Agent definition updated"
       },
+      "deleteConfirm": {
+        "title": "Delete {{name}}?",
+        "content": "This removes the agent definition and cannot be undone."
+      },
       "noSystemPrompt": "No system prompt",
       "capabilities": {
         "spawn": "Spawn"
@@ -1276,6 +1280,20 @@
       "card": {
         "tools": "Tools",
         "version": "v{{version}}"
+      },
+      "systemConfig": {
+        "disable": "Tenant disabled",
+        "override": "Tenant override",
+        "disableAction": "Disable for tenant",
+        "disableAria": "Disable {{name}} for this tenant",
+        "disableConfirm": "Disable this system skill for the tenant?",
+        "disableSuccess": "System skill disabled for this tenant",
+        "disableFailed": "Failed to disable system skill",
+        "restoreAction": "Restore system default",
+        "restoreAria": "Restore {{name}} system default for this tenant",
+        "restoreConfirm": "Restore the system default for this tenant?",
+        "restoreSuccess": "System skill default restored",
+        "restoreFailed": "Failed to restore system skill"
       },
       "deleteConfirm": "Are you sure you want to delete this skill?",
       "deleteSuccess": "Skill deleted successfully",
@@ -6326,6 +6344,7 @@
       "uploading": "Uploading...",
       "uploadFailed": "Upload failed",
       "openInCanvas": "Canvas",
+      "openSandboxFileInCanvas": "Open {{path}} in Canvas",
       "subAgentIcon": "SubAgent Icon"
     },
     "inputBar": {
@@ -9060,6 +9079,9 @@
       "stop": "Stop",
       "start": "Start"
     }
+  },
+  "executionDag": {
+    "graphStats": "{{nodes}} nodes · {{edges}} edges"
   },
   "theme": {
     "dark": "Dark",

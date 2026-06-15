@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
-import { Alert, Badge, Dropdown, Spin, Switch, Tag } from 'antd';
+import { Alert, Badge, Dropdown, Modal, Spin, Switch, Tag } from 'antd';
 import {
   ArrowLeft,
   Bot,
@@ -21,6 +21,8 @@ import {
 
 import { AgentDefinitionModal } from '../../components/agent/AgentDefinitionModal';
 import { definitionsService } from '../../services/agent/definitionsService';
+import { useUser } from '../../stores/auth';
+import { useCurrentTenant } from '../../stores/tenant';
 
 import type { AgentBinding, AgentDefinition } from '../../types/multiAgent';
 import type { MenuProps } from 'antd';
@@ -61,6 +63,19 @@ function formatPercent(value: number | null | undefined): string {
 
 function jsonBlock(value: unknown): string {
   return JSON.stringify(value ?? null, null, 2);
+}
+
+function canManageTenantAgents(
+  user: ReturnType<typeof useUser>,
+  tenant: ReturnType<typeof useCurrentTenant>
+): boolean {
+  const roles = new Set((user?.roles ?? []).map((role) => role.toLowerCase()));
+  return (
+    roles.has('admin') ||
+    roles.has('owner') ||
+    roles.has('system_admin') ||
+    tenant?.owner_id === user?.id
+  );
 }
 
 function isEmptyArray(value: unknown[] | null | undefined): boolean {
@@ -179,6 +194,8 @@ export const AgentDefinitionDetail: React.FC = () => {
   const params = useParams<{ definitionId: string }>();
   const definitionId = params.definitionId;
 
+  const user = useUser();
+  const currentTenant = useCurrentTenant();
   const [definition, setDefinition] = useState<AgentDefinition | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -187,6 +204,7 @@ export const AgentDefinitionDetail: React.FC = () => {
 
   const listPath = useMemo(() => getDefinitionListPath(location.pathname), [location.pathname]);
   const rawDefinition = useMemo(() => jsonBlock(definition), [definition]);
+  const canManageAgents = canManageTenantAgents(user, currentTenant);
 
   const loadDefinition = useCallback(async () => {
     if (!definitionId) {
@@ -246,20 +264,42 @@ export const AgentDefinitionDetail: React.FC = () => {
     }
   }, [definition, listPath, navigate]);
 
-  const menuItems = useMemo<MenuProps['items']>(
-    () => [
-      {
-        key: 'delete',
-        label: t('common.delete', 'Delete'),
-        icon: <Trash2 size={14} />,
-        danger: true,
-        disabled: !definition,
-        onClick: () => {
-          void handleDelete();
-        },
+  const confirmDelete = useCallback(() => {
+    if (!definition) {
+      return;
+    }
+    Modal.confirm({
+      title: t('tenant.agentDefinitions.deleteConfirm.title', {
+        name: definition.display_name ?? definition.name,
+        defaultValue: 'Delete {{name}}?',
+      }),
+      content: t('tenant.agentDefinitions.deleteConfirm.content', {
+        defaultValue: 'This removes the agent definition and cannot be undone.',
+      }),
+      okText: t('common.delete', 'Delete'),
+      okType: 'danger',
+      cancelText: t('common.cancel', 'Cancel'),
+      onOk: async () => {
+        await handleDelete();
       },
-    ],
-    [definition, handleDelete, t]
+    });
+  }, [definition, handleDelete, t]);
+
+  const menuItems = useMemo<MenuProps['items']>(
+    () =>
+      canManageAgents && definition?.source !== 'builtin'
+        ? [
+            {
+              key: 'delete',
+              label: t('common.delete', 'Delete'),
+              icon: <Trash2 size={14} />,
+              danger: true,
+              disabled: !definition || isSubmitting,
+              onClick: confirmDelete,
+            },
+          ]
+        : [],
+    [canManageAgents, confirmDelete, definition, isSubmitting, t]
   );
 
   if (isLoading) {
@@ -314,37 +354,51 @@ export const AgentDefinitionDetail: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Switch
-            checked={definition.enabled}
-            disabled={isSubmitting}
-            aria-label={t('tenant.agentDefinitions.toggleAgent', {
-              name: definition.display_name ?? definition.name,
-              defaultValue: 'Toggle {{name}}',
-            })}
-            onChange={(checked) => {
-              void handleToggle(checked);
-            }}
-          />
+          {canManageAgents && definition.source !== 'builtin' ? (
+            <Switch
+              checked={definition.enabled}
+              disabled={isSubmitting}
+              aria-label={t('tenant.agentDefinitions.toggleAgent', {
+                name: definition.display_name ?? definition.name,
+                defaultValue: 'Toggle {{name}}',
+              })}
+              onChange={(checked) => {
+                void handleToggle(checked);
+              }}
+            />
+          ) : (
+            <Tag>{t('common.readOnly', { defaultValue: 'Read-only' })}</Tag>
+          )}
           <button type="button" className={actionButton} onClick={() => void loadDefinition()}>
             <RefreshCw size={15} />
             {t('common.refresh', 'Refresh')}
           </button>
-          <button type="button" className={actionButton} onClick={() => { setIsModalOpen(true); }}>
-            <Edit2 size={15} />
-            {t('common.edit', 'Edit')}
-          </button>
-          <Dropdown menu={{ items: menuItems ?? [] }} trigger={['click']}>
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-[4px] border border-[oklch(0.86_0.006_255)] text-[oklch(0.42_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] dark:border-[oklch(0.34_0.006_255)] dark:text-[oklch(0.78_0.006_255)] dark:hover:bg-[oklch(0.24_0.006_255)]"
-              aria-label={t('tenant.agentDefinitions.openActions', {
-                name: definition.display_name ?? definition.name,
-                defaultValue: 'Open actions for {{name}}',
-              })}
-            >
-              <MoreVertical size={16} />
-            </button>
-          </Dropdown>
+          {canManageAgents && definition.source !== 'builtin' ? (
+            <>
+              <button
+                type="button"
+                className={actionButton}
+                onClick={() => {
+                  setIsModalOpen(true);
+                }}
+              >
+                <Edit2 size={15} />
+                {t('common.edit', 'Edit')}
+              </button>
+              <Dropdown menu={{ items: menuItems ?? [] }} trigger={['click']}>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[4px] border border-[oklch(0.86_0.006_255)] text-[oklch(0.42_0.01_255)] transition-colors hover:bg-[oklch(0.95_0.005_255)] dark:border-[oklch(0.34_0.006_255)] dark:text-[oklch(0.78_0.006_255)] dark:hover:bg-[oklch(0.24_0.006_255)]"
+                  aria-label={t('tenant.agentDefinitions.openActions', {
+                    name: definition.display_name ?? definition.name,
+                    defaultValue: 'Open actions for {{name}}',
+                  })}
+                >
+                  <MoreVertical size={16} />
+                </button>
+              </Dropdown>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -525,10 +579,7 @@ export const AgentDefinitionDetail: React.FC = () => {
               label="Avg execution time"
               value={formatMilliseconds(definition.avg_execution_time_ms)}
             />
-            <InfoRow
-              label="Success rate"
-              value={formatPercent(definition.success_rate)}
-            />
+            <InfoRow label="Success rate" value={formatPercent(definition.success_rate)} />
           </Section>
 
           <Section
@@ -552,15 +603,19 @@ export const AgentDefinitionDetail: React.FC = () => {
         </aside>
       </div>
 
-      <AgentDefinitionModal
-        isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); }}
-        onSuccess={() => {
-          setIsModalOpen(false);
-          void loadDefinition();
-        }}
-        definition={definition}
-      />
+      {canManageAgents ? (
+        <AgentDefinitionModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+          }}
+          onSuccess={() => {
+            setIsModalOpen(false);
+            void loadDefinition();
+          }}
+          definition={definition}
+        />
+      ) : null}
     </div>
   );
 };

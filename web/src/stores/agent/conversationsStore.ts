@@ -108,7 +108,7 @@ export const initialState = {
   conversationsNextOffset: 0,
 };
 
-const groupedConversationListOptions = { groupByWorkspace: false };
+const groupedConversationListOptions = { groupByWorkspace: true };
 
 function conversationActivityTime(conversation: Conversation): number {
   const rawTimestamp = conversation.updated_at || conversation.created_at;

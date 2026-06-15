@@ -6,7 +6,7 @@
  * - Object vs string result handling
  */
 
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 
 import '@testing-library/jest-dom/vitest';
@@ -208,8 +208,10 @@ describe('ToolExecutionCardDisplay', () => {
       // Should NOT show "Show Full" button for non-folded content
       expect(screen.queryByText(/Show Full/)).not.toBeInTheDocument();
       // All lines should be visible
-      expect(screen.getByText(/Line 1/)).toBeInTheDocument();
-      expect(screen.getByText(/Line 10/)).toBeInTheDocument();
+      const outputSection = screen.getByText('Output').closest('.space-y-1');
+      expect(outputSection).not.toBeNull();
+      expect(within(outputSection as HTMLElement).getByText(/Line 1/)).toBeInTheDocument();
+      expect(within(outputSection as HTMLElement).getByText(/Line 10/)).toBeInTheDocument();
     });
 
     it('should expand folded content when Show Full is clicked', () => {

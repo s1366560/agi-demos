@@ -3,6 +3,7 @@ import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TaskBoard } from '@/components/workspace/TaskBoard';
+import { buildTaskCreatePayload } from '@/components/workspace/taskBoardCreateModel';
 import { workspaceAutonomyService, workspaceTaskService } from '@/services/workspaceService';
 import { render, screen, fireEvent } from '@/test/utils';
 
@@ -45,11 +46,7 @@ function renderTaskBoard({
   })) as WorkspaceTask[];
 
   return render(
-    <TaskBoard
-      workspaceId="ws-1"
-      tasks={normalizedTasks}
-      showAutonomyAction={showAutonomyAction}
-    />
+    <TaskBoard workspaceId="ws-1" tasks={normalizedTasks} showAutonomyAction={showAutonomyAction} />
   );
 }
 
@@ -89,6 +86,32 @@ describe('TaskBoard', () => {
     });
 
     expect(workspaceTaskService.create).toHaveBeenCalledWith('ws-1', { title: 'Build MVP' });
+    expect(workspaceTaskService.update).not.toHaveBeenCalled();
+  });
+
+  it('builds atomic create payloads with optional task metadata', () => {
+    expect(
+      buildTaskCreatePayload({
+        title: 'Fix release gate',
+        priority: 'P1',
+        effort: 'M',
+        blockerReason: 'Needs credentials',
+      })
+    ).toEqual({
+      title: 'Fix release gate',
+      priority: 'P1',
+      estimated_effort: 'M',
+      blocker_reason: 'Needs credentials',
+    });
+
+    expect(
+      buildTaskCreatePayload({
+        title: 'Plain task',
+        priority: '',
+        effort: '',
+        blockerReason: '   ',
+      })
+    ).toEqual({ title: 'Plain task' });
   });
 
   it('labels the show archived switch', () => {

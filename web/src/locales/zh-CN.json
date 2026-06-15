@@ -1142,6 +1142,10 @@
         "createSuccess": "智能体定义已创建",
         "updateSuccess": "智能体定义已更新"
       },
+      "deleteConfirm": {
+        "title": "删除 {{name}}？",
+        "content": "这将移除智能体定义，且无法撤销。"
+      },
       "noSystemPrompt": "无系统提示词",
       "capabilities": {
         "spawn": "可派生"
@@ -1987,6 +1991,20 @@
       "card": {
         "tools": "工具",
         "version": "v{{version}}"
+      },
+      "systemConfig": {
+        "disable": "租户已禁用",
+        "override": "租户已覆盖",
+        "disableAction": "在租户禁用",
+        "disableAria": "在此租户禁用 {{name}}",
+        "disableConfirm": "确定在此租户禁用这个系统技能吗？",
+        "disableSuccess": "系统技能已在此租户禁用",
+        "disableFailed": "禁用系统技能失败",
+        "restoreAction": "恢复系统默认",
+        "restoreAria": "为此租户恢复 {{name}} 系统默认",
+        "restoreConfirm": "确定为此租户恢复系统默认吗？",
+        "restoreSuccess": "已恢复系统技能默认配置",
+        "restoreFailed": "恢复系统技能失败"
       },
       "deleteConfirm": "确定要删除这个技能吗？",
       "deleteSuccess": "技能删除成功",
@@ -6349,6 +6367,7 @@
       "uploading": "上传中...",
       "uploadFailed": "上传失败",
       "openInCanvas": "画布",
+      "openSandboxFileInCanvas": "在画布中打开 {{path}}",
       "subAgentIcon": "SubAgent 图标"
     },
     "inputBar": {
@@ -9083,6 +9102,9 @@
       "stop": "停止",
       "start": "启动"
     }
+  },
+  "executionDag": {
+    "graphStats": "{{nodes}} 个节点 · {{edges}} 条边"
   },
   "theme": {
     "dark": "深色",

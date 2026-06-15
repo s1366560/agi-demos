@@ -21,6 +21,7 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.i18n import gettext as _
 
+from .access import require_tenant_access
 from .utils import get_container_with_db
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,7 @@ async def create_binding(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
+        await require_tenant_access(db, current_user, tenant_id, require_admin=True)
         container = get_container_with_db(request, db)
         repo = container.agent_binding_repository()
 
@@ -156,6 +158,7 @@ async def delete_binding(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
+        await require_tenant_access(db, current_user, tenant_id, require_admin=True)
         container = get_container_with_db(request, db)
         repo = container.agent_binding_repository()
 
@@ -190,6 +193,7 @@ async def set_binding_enabled(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
+        await require_tenant_access(db, current_user, tenant_id, require_admin=True)
         container = get_container_with_db(request, db)
         repo = container.agent_binding_repository()
 

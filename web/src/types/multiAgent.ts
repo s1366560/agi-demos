@@ -1,6 +1,6 @@
 export type SpawnMode = 'run' | 'session';
 
-export type AgentSource = 'filesystem' | 'database';
+export type AgentSource = 'filesystem' | 'database' | 'builtin';
 
 export type SpawnStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 

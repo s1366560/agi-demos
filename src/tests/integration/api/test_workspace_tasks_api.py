@@ -330,6 +330,88 @@ async def test_update_task_accepts_canonical_priority_strings(
 
 
 @pytest.mark.asyncio
+async def test_create_task_accepts_canonical_priority_and_planning_fields(
+    authenticated_async_client, test_db
+) -> None:
+    client: AsyncClient = authenticated_async_client
+
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-create-priority@example.com",
+        hashed_password="hash",
+        full_name="Owner",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-create-priority",
+        name="TenantCreatePriority",
+        slug="tenant-ws-api-create-priority",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-create-priority",
+        tenant_id=tenant.id,
+        name="ProjectCreatePriority",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-create-priority",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Create Priority",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-api-create-priority",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="owner",
+        invited_by=user.id,
+    )
+    user_tenant = UserTenant(
+        id="ut-api-create-priority",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-api-create-priority",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+
+    test_db.add_all([user, tenant, project, workspace, membership, user_tenant, user_project])
+    await test_db.commit()
+
+    response = await client.post(
+        f"/api/v1/workspaces/{workspace.id}/tasks",
+        json={
+            "title": "Create with planning fields",
+            "priority": "P2",
+            "estimated_effort": "2h",
+            "blocker_reason": "Waiting for fixture",
+        },
+    )
+
+    assert response.status_code == status.HTTP_201_CREATED
+    payload = response.json()
+    assert payload["priority"] == "P2"
+    assert payload["estimated_effort"] == "2h"
+    assert payload["blocker_reason"] == "Waiting for fixture"
+
+
+@pytest.mark.asyncio
 async def test_assign_agent_emits_full_task_payload_with_workspace_binding(
     authenticated_async_client,
     test_db,
@@ -829,6 +911,8 @@ async def test_create_objective_schedules_autonomy_tick_without_leader_mention(
     )
     assert message is None
     assert scheduled_ticks == [(workspace.id, user.id)]
+
+
 @pytest.mark.asyncio
 async def test_update_rejects_immutable_human_root_goal_title_change(
     authenticated_async_client, test_db
@@ -1263,8 +1347,6 @@ async def test_project_objective_to_existing_task_requires_membership(
     assert "workspace member" in response.json()["detail"]
 
 
-
-
 @pytest.mark.asyncio
 async def test_execution_task_mutations_reconcile_root_goal_progress(
     authenticated_async_client, test_db
@@ -1496,8 +1578,6 @@ async def test_blackboard_triggered_runtime_skips_inferred_root_creation_without
         .all()
     )
     assert persisted_tasks == []
-
-
 
 
 @pytest.mark.asyncio

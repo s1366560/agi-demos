@@ -2450,7 +2450,7 @@ async def rollback_skill(
     if "error" in result:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_("Skill rollback failed"),
+            detail=result["error"] or _("Skill rollback failed"),
         )
 
     await db.commit()

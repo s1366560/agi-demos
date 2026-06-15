@@ -39,6 +39,16 @@ class TestSkillReverseSync:
         )
         return service, skill_repo, version_repo
 
+    def _make_service_at(self, host_path: Path):
+        skill_repo = AsyncMock()
+        version_repo = AsyncMock()
+        service = SkillReverseSync(
+            skill_repository=skill_repo,
+            skill_version_repository=version_repo,
+            host_project_path=host_path,
+        )
+        return service, skill_repo, version_repo
+
     async def test_sync_from_sandbox_no_files(self):
         service, _skill_repo, _version_repo = self._make_service()
         adapter = AsyncMock()
@@ -198,3 +208,32 @@ class TestSkillReverseSync:
         paths = SkillReverseSync._extract_file_paths(glob_result)
         assert len(paths) == 2
         assert "file1.py" in paths
+
+    @pytest.mark.parametrize(
+        "rel_path",
+        [
+            "../outside.txt",
+            "scripts/../../outside.txt",
+            "/tmp/outside.txt",
+            "./relative.txt",
+        ],
+    )
+    async def test_write_to_host_rejects_unsafe_paths(
+        self,
+        tmp_path: Path,
+        rel_path: str,
+    ) -> None:
+        service, _skill_repo, _version_repo = self._make_service_at(tmp_path)
+
+        with pytest.raises(ValueError, match="skill resource path|Absolute skill resource"):
+            await service._write_to_host("test-skill", {"SKILL.md": SAMPLE_SKILL_MD, rel_path: "x"})
+
+        assert not (tmp_path / "outside.txt").exists()
+
+    async def test_write_to_host_rejects_invalid_binary_base64(self, tmp_path: Path) -> None:
+        service, _skill_repo, _version_repo = self._make_service_at(tmp_path)
+
+        with pytest.raises(ValueError, match="Invalid base64 content"):
+            await service._write_to_host("test-skill", {"image.png": "not valid base64!!!"})
+
+        assert not (tmp_path / ".memstack" / "skills" / "test-skill" / "image.png").exists()

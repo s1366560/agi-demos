@@ -248,6 +248,10 @@ class SkillReverseSync:
 
             for file_path in file_paths:
                 try:
+                    rel_path = self._resolve_rel_path(
+                        file_path, container_path_stripped, rel_prefix
+                    )
+                    self._validate_relative_file_path(rel_path)
                     abs_path = self._resolve_read_path(
                         file_path, container_path_stripped, rel_prefix
                     )
@@ -258,9 +262,6 @@ class SkillReverseSync:
                     )
                     content = self._extract_content(read_result)
                     if content is not None:
-                        rel_path = self._resolve_rel_path(
-                            file_path, container_path_stripped, rel_prefix
-                        )
                         files[rel_path] = content
                 except Exception as e:
                     logger.warning(f"Failed to read file {file_path}: {e}")
@@ -309,6 +310,18 @@ class SkillReverseSync:
         if rel_prefix and file_path == rel_prefix:
             return file_path
         return file_path
+
+    @staticmethod
+    def _validate_relative_file_path(rel_path: str) -> None:
+        """Reject paths that would escape the skill directory."""
+        if "\\" in rel_path:
+            raise ValueError(f"Unsafe skill resource path: {rel_path}")
+        raw_parts = rel_path.split("/")
+        if any(part in {"", ".", ".."} for part in raw_parts):
+            raise ValueError(f"Unsafe skill resource path: {rel_path}")
+        path = Path(rel_path)
+        if path.is_absolute():
+            raise ValueError(f"Absolute skill resource paths are not allowed: {rel_path}")
 
     async def _upsert_skill(
         self,
@@ -433,19 +446,26 @@ class SkillReverseSync:
         """Write skill files to host filesystem."""
         skill_dir = self._host_project_path / ".memstack" / "skills" / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
+        skill_dir_resolved = skill_dir.resolve()
 
         for rel_path, content in files.items():
+            self._validate_relative_file_path(rel_path)
             file_path = skill_dir / rel_path
+            resolved_file_path = file_path.resolve()
+            if not resolved_file_path.is_relative_to(skill_dir_resolved):
+                raise ValueError(f"Skill resource path escapes skill directory: {rel_path}")
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Check if content is base64-encoded binary
             ext = Path(rel_path).suffix.lower()
             if ext in BINARY_EXTENSIONS:
                 try:
-                    binary_data = base64.b64decode(content)
+                    binary_data = base64.b64decode(content, validate=True)
                     file_path.write_bytes(binary_data)
-                except Exception:
-                    file_path.write_text(content, encoding="utf-8")
+                except Exception as e:
+                    raise ValueError(
+                        f"Invalid base64 content for binary resource: {rel_path}"
+                    ) from e
             else:
                 file_path.write_text(content, encoding="utf-8")
 

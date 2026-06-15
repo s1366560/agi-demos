@@ -167,7 +167,7 @@ describe('ConversationsStore', () => {
       expect(conversationsLoading).toBe(false);
       expect(conversationsError).toBe(null);
       expect(listConversationsMock).toHaveBeenCalledWith('proj-1', undefined, 10, 0, undefined, {
-        groupByWorkspace: false,
+        groupByWorkspace: true,
       });
     });
 
@@ -185,7 +185,7 @@ describe('ConversationsStore', () => {
       await useConversationsStore.getState().listConversations('proj-1', 'active');
 
       expect(listConversationsMock).toHaveBeenCalledWith('proj-1', 'active', 10, 0, undefined, {
-        groupByWorkspace: false,
+        groupByWorkspace: true,
       });
     });
 
@@ -200,7 +200,7 @@ describe('ConversationsStore', () => {
       await useConversationsStore.getState().listConversations('proj-1', undefined, 100);
 
       expect(listConversationsMock).toHaveBeenCalledWith('proj-1', undefined, 100, 0, undefined, {
-        groupByWorkspace: false,
+        groupByWorkspace: true,
       });
     });
 

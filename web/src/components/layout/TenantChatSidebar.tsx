@@ -145,7 +145,7 @@ function isDerivedAgentConversation(conversation: Conversation): boolean {
 
   return Boolean(
     readMetadataString(conversation.metadata, 'spawned_by_agent_id') ||
-      readMetadataString(conversation.metadata, 'spawned_agent_id')
+    readMetadataString(conversation.metadata, 'spawned_agent_id')
   );
 }
 
@@ -552,6 +552,20 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   );
 
   const { projects, currentProject, listProjects, setCurrentProject } = useProjectStore();
+  const uniqueProjects = useMemo(() => {
+    const seenProjectIds = new Set<string>();
+    return projects.filter((project) => {
+      if (seenProjectIds.has(project.id)) {
+        return false;
+      }
+      seenProjectIds.add(project.id);
+      return true;
+    });
+  }, [projects]);
+  const projectById = useMemo(
+    () => new Map(uniqueProjects.map((project) => [project.id, project])),
+    [uniqueProjects]
+  );
   const preferredWorkspaceId = currentWorkspace?.id ?? workspaces[0]?.id ?? null;
   const normalizedTenantId = tenantId?.trim() ?? '';
   const resolvedTenantId = normalizedTenantId || undefined;
@@ -627,18 +641,27 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     if (queryProjectId && selectedProjectId !== queryProjectId) {
       setSelectedProjectId(queryProjectId);
       localStorage.setItem('agent:lastProjectId', queryProjectId);
-      const project = projects.find((p) => p.id === queryProjectId);
+      const project = projectById.get(queryProjectId);
       if (project) {
         setCurrentProject(project);
       }
-    } else if (!selectedProjectId && projects.length > 0) {
-      const project = currentProject || projects[0];
+    } else if (!selectedProjectId && uniqueProjects.length > 0) {
+      const project = currentProject
+        ? (projectById.get(currentProject.id) ?? currentProject)
+        : uniqueProjects[0];
       if (!project) return;
       setSelectedProjectId(project.id);
       setCurrentProject(project);
       localStorage.setItem('agent:lastProjectId', project.id);
     }
-  }, [projects, currentProject, selectedProjectId, setCurrentProject, queryProjectId]);
+  }, [
+    currentProject,
+    projectById,
+    queryProjectId,
+    selectedProjectId,
+    setCurrentProject,
+    uniqueProjects,
+  ]);
 
   // Load conversations when selected project changes
   // NOTE: Use ref pattern to avoid dependency on loadConversations function
@@ -698,8 +721,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   // Enrich conversations with project info
   const selectedProjectName = useMemo(
-    () => projects.find((project) => project.id === selectedProjectId)?.name || 'Unknown Project',
-    [projects, selectedProjectId]
+    () => projectById.get(selectedProjectId ?? '')?.name || 'Unknown Project',
+    [projectById, selectedProjectId]
   );
 
   const enrichedConversations: ConversationWithProject[] = useMemo(() => {
@@ -710,21 +733,24 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       workspaceNameById.set(currentWorkspace.id, currentWorkspace.name);
     }
     const workspaceTaskTitleById = new Map(workspaceTasks.map((task) => [task.id, task.title]));
-    return conversations.filter((conv) => !isDerivedAgentConversation(conv)).map((conv) => ({
-      ...conv,
-      projectId: selectedProjectId || '',
-      projectName: selectedProjectName,
-      workspaceTaskTitle: (() => {
-        const taskId = workspaceNodeIdFromConversation(conv);
-        return taskId ? (workspaceTaskTitleById.get(taskId) ?? null) : null;
-      })(),
-      workspaceName: (() => {
-        const workspaceId = workspaceIdFromConversation(conv);
-        return (
-          conv.workspace_name ?? (workspaceId ? (workspaceNameById.get(workspaceId) ?? null) : null)
-        );
-      })(),
-    }));
+    return conversations
+      .filter((conv) => !isDerivedAgentConversation(conv))
+      .map((conv) => ({
+        ...conv,
+        projectId: selectedProjectId || '',
+        projectName: selectedProjectName,
+        workspaceTaskTitle: (() => {
+          const taskId = workspaceNodeIdFromConversation(conv);
+          return taskId ? (workspaceTaskTitleById.get(taskId) ?? null) : null;
+        })(),
+        workspaceName: (() => {
+          const workspaceId = workspaceIdFromConversation(conv);
+          return (
+            conv.workspace_name ??
+            (workspaceId ? (workspaceNameById.get(workspaceId) ?? null) : null)
+          );
+        })(),
+      }));
   }, [
     conversations,
     currentWorkspace,
@@ -941,14 +967,14 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     (projectId: string) => {
       setSelectedProjectId(projectId);
       localStorage.setItem('agent:lastProjectId', projectId);
-      const project = projects.find((p) => p.id === projectId);
+      const project = projectById.get(projectId);
       if (project) {
         setCurrentProject(project);
       }
       // NOTE: loadConversations is called by useEffect when selectedProjectId changes
       // Do NOT call it here to avoid duplicate requests
     },
-    [projects, setCurrentProject]
+    [projectById, setCurrentProject]
   );
 
   // Get current width for render
@@ -1041,9 +1067,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             onChange={handleProjectChange}
             className="w-full"
             placeholder={t('agent.sidebar.selectProject', 'Select a project')}
-            disabled={projects.length === 0}
+            disabled={uniqueProjects.length === 0}
             suffixIcon={<ChevronDown size={16} />}
-            options={projects.map((p) => ({
+            options={uniqueProjects.map((p) => ({
               value: p.id,
               label: (
                 <div className="flex items-center gap-2">
@@ -1061,7 +1087,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         <div className="px-2 pb-2 flex justify-center">
           <Tooltip
             title={
-              projects.find((p) => p.id === selectedProjectId)?.name ||
+              projectById.get(selectedProjectId)?.name ||
               t('agent.sidebar.selectProjectTitle', 'Select Project')
             }
           >
@@ -1072,13 +1098,13 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               }}
               aria-label={t('agent.sidebar.expandProjectSidebar', {
                 project:
-                  projects.find((p) => p.id === selectedProjectId)?.name ||
+                  projectById.get(selectedProjectId)?.name ||
                   t('agent.sidebar.selectProjectTitle', 'Select Project'),
                 defaultValue: 'Expand project sidebar for {{project}}',
               })}
               title={t('agent.sidebar.expandProjectSidebar', {
                 project:
-                  projects.find((p) => p.id === selectedProjectId)?.name ||
+                  projectById.get(selectedProjectId)?.name ||
                   t('agent.sidebar.selectProjectTitle', 'Select Project'),
                 defaultValue: 'Expand project sidebar for {{project}}',
               })}

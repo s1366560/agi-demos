@@ -58,6 +58,13 @@ def _patch_container(monkeypatch: pytest.MonkeyPatch, container: object) -> None
     monkeypatch.setattr(binding_router, "get_container_with_db", lambda _request, _db: container)
 
 
+def _patch_admin_access(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow_admin_access(*_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr(binding_router, "require_tenant_access", _allow_admin_access)
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -76,6 +83,7 @@ async def test_binding_routes_sanitize_internal_errors(
     route_name: str,
     expected_detail: str,
 ) -> None:
+    _patch_admin_access(monkeypatch)
     _patch_container(monkeypatch, FailingContainer())
     db = SimpleNamespace(commit=AsyncMock())
     request = SimpleNamespace()
@@ -141,6 +149,7 @@ async def test_binding_routes_sanitize_internal_errors(
 async def test_create_binding_value_error_is_sanitized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _patch_admin_access(monkeypatch)
     _patch_container(
         monkeypatch,
         SimpleNamespace(agent_binding_repository=lambda: object()),
@@ -166,6 +175,7 @@ async def test_create_binding_value_error_is_sanitized(
 async def test_set_binding_enabled_value_error_is_sanitized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _patch_admin_access(monkeypatch)
     _patch_container(monkeypatch, ValueErrorContainer())
 
     with pytest.raises(HTTPException) as exc_info:
@@ -181,3 +191,51 @@ async def test_set_binding_enabled_value_error_is_sanitized(
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Invalid binding update"
     assert "internal" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route_name", ["create", "delete", "enabled"])
+async def test_binding_mutation_routes_require_admin(
+    monkeypatch: pytest.MonkeyPatch,
+    route_name: str,
+) -> None:
+    async def _deny_admin_access(*_args: Any, **_kwargs: Any) -> None:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    monkeypatch.setattr(binding_router, "require_tenant_access", _deny_admin_access)
+    request = SimpleNamespace()
+    current_user = SimpleNamespace(id="user-1")
+    db = SimpleNamespace(commit=AsyncMock())
+
+    route_calls: dict[str, Any] = {
+        "create": lambda: binding_router.create_binding(
+            body=binding_router.CreateBindingRequest(agent_id="agent-1", channel_type="slack"),
+            request=request,
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        ),
+        "delete": lambda: binding_router.delete_binding(
+            binding_id="binding-1",
+            request=request,
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        ),
+        "enabled": lambda: binding_router.set_binding_enabled(
+            binding_id="binding-1",
+            body=binding_router.SetEnabledRequest(enabled=False),
+            request=request,
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        ),
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_calls[route_name]()
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Admin access required"
+    db.commit.assert_not_called()

@@ -252,7 +252,7 @@ describe('TenantHeader', () => {
     expect(screen.queryByRole('link', { name: 'Agent Workspace' })).not.toBeInTheDocument();
   });
 
-  it('keeps overflow destinations reachable from derived project nav', () => {
+  it('keeps blackboard reachable from derived project nav', () => {
     render(
       <TenantHeader
         tenantId="tenant-1"
@@ -263,12 +263,8 @@ describe('TenantHeader', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /more/i }));
-
-    expect(screen.getByRole('button', { name: 'Blackboard' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Blackboard' }));
-
-    expect(mockNavigate).toHaveBeenCalledWith(
+    expect(screen.getByRole('link', { name: 'Blackboard' })).toHaveAttribute(
+      'href',
       '/tenant/tenant-1/project/project-1/blackboard?workspaceId=ws-current'
     );
   });

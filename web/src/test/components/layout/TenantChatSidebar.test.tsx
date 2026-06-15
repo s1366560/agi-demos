@@ -246,6 +246,23 @@ describe('TenantChatSidebar', () => {
     ).toBeTruthy();
   });
 
+  it('deduplicates project switcher options by project id', () => {
+    projectState.projects = [
+      { id: 'Project Aurora', name: 'Project Aurora' },
+      { id: 'Project Aurora', name: 'Project Aurora' },
+    ];
+    projectState.currentProject = { id: 'Project Aurora', name: 'Project Aurora' };
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    const options = screen.getAllByRole('option');
+
+    expect(options).toHaveLength(1);
+    expect(options[0]).toHaveValue('Project Aurora');
+  });
+
   it('keeps the conversation list visible while switching session history', () => {
     conversationsState.conversationsLoading = false;
 

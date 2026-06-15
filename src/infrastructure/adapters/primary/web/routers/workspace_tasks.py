@@ -137,6 +137,7 @@ class WorkspaceTaskCreateRequest(BaseModel):
     assignee_user_id: str | None = None
     metadata: dict[str, Any] | None = None
     preferred_language: PreferredLanguage | None = None
+    priority: WorkspaceTaskPriority | None = None
     estimated_effort: str | None = None
     blocker_reason: str | None = None
 
@@ -461,6 +462,7 @@ async def create_workspace_task(
                 body.metadata,
                 _resolve_preferred_language(body.preferred_language, current_user),
             ),
+            priority=body.priority,
             estimated_effort=body.estimated_effort,
             blocker_reason=body.blocker_reason,
         )

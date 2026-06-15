@@ -29,6 +29,8 @@ import {
   useToggleBinding,
 } from '../../stores/agentBindings';
 import { useDefinitions, useListDefinitions } from '../../stores/agentDefinitions';
+import { useUser } from '../../stores/auth';
+import { useCurrentTenant } from '../../stores/tenant';
 
 import type {
   AgentBinding,
@@ -54,9 +56,24 @@ const optionalString = (value: string | undefined) => {
 
 const formatProgressPercent = (percent: number | undefined) => `${(percent ?? 0).toFixed(0)}%`;
 
+function canManageTenantAgents(
+  user: ReturnType<typeof useUser>,
+  tenant: ReturnType<typeof useCurrentTenant>
+): boolean {
+  const roles = new Set((user?.roles ?? []).map((role) => role.toLowerCase()));
+  return (
+    roles.has('admin') ||
+    roles.has('owner') ||
+    roles.has('system_admin') ||
+    tenant?.owner_id === user?.id
+  );
+}
+
 export const AgentBindings: React.FC = () => {
   const { t } = useTranslation();
 
+  const user = useUser();
+  const currentTenant = useCurrentTenant();
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
@@ -76,6 +93,7 @@ export const AgentBindings: React.FC = () => {
 
   const definitions = useDefinitions();
   const listDefinitions = useListDefinitions();
+  const canManageAgents = canManageTenantAgents(user, currentTenant);
 
   const defNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -346,6 +364,7 @@ export const AgentBindings: React.FC = () => {
           <Switch
             size="small"
             checked={record.enabled}
+            disabled={!canManageAgents}
             aria-label={t('tenant.agentBindings.toggleBinding', {
               name: defNameMap.get(record.agent_id) ?? record.agent_id,
               defaultValue: 'Toggle binding for {{name}}',
@@ -360,26 +379,29 @@ export const AgentBindings: React.FC = () => {
         title: t('common.actions.label'),
         key: 'actions',
         width: 60,
-        render: (_: unknown, record: AgentBinding) => (
-          <Popconfirm
-            title={t('tenant.agentBindings.deleteConfirm.title')}
-            onConfirm={() => {
-              void handleDelete(record.id);
-            }}
-            okText={t('common.delete')}
-            cancelText={t('common.cancel')}
-          >
-            <button
-              type="button"
-              className="text-slate-400 hover:text-red-500 transition-colors text-xs"
+        render: (_: unknown, record: AgentBinding) =>
+          canManageAgents ? (
+            <Popconfirm
+              title={t('tenant.agentBindings.deleteConfirm.title')}
+              onConfirm={() => {
+                void handleDelete(record.id);
+              }}
+              okText={t('common.delete')}
+              cancelText={t('common.cancel')}
             >
-              {t('common.delete', 'Delete')}
-            </button>
-          </Popconfirm>
-        ),
+              <button
+                type="button"
+                className="text-slate-400 hover:text-red-500 transition-colors text-xs"
+              >
+                {t('common.delete', 'Delete')}
+              </button>
+            </Popconfirm>
+          ) : (
+            <span className="text-xs text-slate-400">-</span>
+          ),
       },
     ],
-    [defNameMap, handleToggle, handleDelete, t]
+    [canManageAgents, defNameMap, handleToggle, handleDelete, t]
   );
 
   return (
@@ -405,16 +427,18 @@ export const AgentBindings: React.FC = () => {
             <Route size={16} />
             {t('tenant.agentBindings.testRoutingButton', 'Test Routing')}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsModalOpen(true);
-            }}
-            className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors sm:w-auto"
-          >
-            <Plus size={16} />
-            {t('tenant.agentBindings.createNew', 'Create Binding')}
-          </button>
+          {canManageAgents ? (
+            <button
+              type="button"
+              onClick={() => {
+                setIsModalOpen(true);
+              }}
+              className="inline-flex w-full items-center justify-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors sm:w-auto"
+            >
+              <Plus size={16} />
+              {t('tenant.agentBindings.createNew', 'Create Binding')}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -458,7 +482,7 @@ export const AgentBindings: React.FC = () => {
               ? t('tenant.agentBindings.noResults', 'No bindings match your search')
               : t('tenant.agentBindings.empty', 'No agent bindings yet')}
           </p>
-          {!search && (
+          {!search && canManageAgents && (
             <button
               type="button"
               onClick={() => {
@@ -482,11 +506,13 @@ export const AgentBindings: React.FC = () => {
         />
       )}
 
-      <AgentBindingModal
-        isOpen={isModalOpen}
-        onClose={handleModalClose}
-        onSuccess={handleModalSuccess}
-      />
+      {canManageAgents ? (
+        <AgentBindingModal
+          isOpen={isModalOpen}
+          onClose={handleModalClose}
+          onSuccess={handleModalSuccess}
+        />
+      ) : null}
 
       {/* Test Routing Modal */}
       <Modal

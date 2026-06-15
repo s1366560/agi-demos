@@ -258,9 +258,7 @@ describe('MemoryList Compound Component', () => {
         />
       );
 
-      fireEvent.change(screen.getByLabelText('Memory type'), {
-        target: { value: 'document' },
-      });
+      fireEvent.click(screen.getByRole('button', { name: 'Document' }));
 
       expect(onContentTypeFilterChange).toHaveBeenCalledWith('document');
     });
@@ -319,7 +317,7 @@ describe('MemoryList Compound Component', () => {
 
     it('should render content type', async () => {
       await renderMemoryRow();
-      expect(screen.getByText('text')).toBeInTheDocument();
+      expect(screen.getByText('Text')).toBeInTheDocument();
     });
 
     it('should render status badge', async () => {
@@ -344,7 +342,7 @@ describe('MemoryList Compound Component', () => {
     it('should render empty state message', async () => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       render(<MemoryList.Empty />);
-      expect(screen.getByText(/no memories yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/no memories found/i)).toBeInTheDocument();
     });
   });
 
@@ -356,7 +354,7 @@ describe('MemoryList Compound Component', () => {
     it('should render loading message', async () => {
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       render(<MemoryList.Loading />);
-      expect(screen.getByText('Loading...')).toBeInTheDocument();
+      expect(screen.getByLabelText('Loading...')).toBeInTheDocument();
     });
   });
 
@@ -462,9 +460,7 @@ describe('MemoryList Compound Component', () => {
         expect(screen.getByText('Research Findings')).toBeInTheDocument();
       });
 
-      fireEvent.change(screen.getByLabelText('Memory type'), {
-        target: { value: 'document' },
-      });
+      fireEvent.click(screen.getByRole('button', { name: 'Document' }));
 
       await waitFor(() => {
         expect(screen.queryByText('Meeting Notes')).not.toBeInTheDocument();

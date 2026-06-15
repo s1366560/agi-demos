@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 from collections.abc import Mapping
 from copy import deepcopy
 from datetime import UTC, datetime
@@ -712,15 +713,53 @@ def select_root_progress_child_tasks(child_tasks: list[WorkspaceTask]) -> list[W
     return plan_projected or child_tasks
 
 
+async def _acquire_root_reconciliation_lock_if_supported(
+    task_repo: Any,  # noqa: ANN401
+    root_goal_task_id: str,
+) -> None:
+    acquire_lock = getattr(task_repo, "acquire_root_reconciliation_lock", None)
+    if acquire_lock is None:
+        return
+    lock_result = acquire_lock(root_goal_task_id)
+    if inspect.isawaitable(lock_result):
+        await lock_result
+
+
+async def _find_current_plan_child_tasks(
+    task_repo: Any,  # noqa: ANN401
+    *,
+    workspace_id: str,
+    root_goal_task_id: str,
+) -> list[WorkspaceTask] | None:
+    find_current_plan_children = getattr(
+        task_repo,
+        "find_current_plan_children_by_root_goal_task_id",
+        None,
+    )
+    if find_current_plan_children is None:
+        return None
+
+    current_plan_children_result = find_current_plan_children(
+        workspace_id,
+        root_goal_task_id,
+    )
+    current_plan_children = (
+        await current_plan_children_result
+        if inspect.isawaitable(current_plan_children_result)
+        else current_plan_children_result
+    )
+    if isinstance(current_plan_children, list) and current_plan_children:
+        return current_plan_children
+    return None
+
+
 async def reconcile_root_goal_progress(
     *,
     task_repo: Any,  # noqa: ANN401
     workspace_id: str,
     root_goal_task_id: str,
 ) -> WorkspaceTask | None:
-    acquire_lock = getattr(task_repo, "acquire_root_reconciliation_lock", None)
-    if acquire_lock is not None:
-        await acquire_lock(root_goal_task_id)
+    await _acquire_root_reconciliation_lock_if_supported(task_repo, root_goal_task_id)
 
     root_task = await task_repo.find_by_id(root_goal_task_id)
     if (
@@ -731,15 +770,13 @@ async def reconcile_root_goal_progress(
         return None
 
     raw_child_tasks = await task_repo.find_by_root_goal_task_id(workspace_id, root_goal_task_id)
-    find_current_plan_children = getattr(
+    current_plan_children = await _find_current_plan_child_tasks(
         task_repo,
-        "find_current_plan_children_by_root_goal_task_id",
-        None,
+        workspace_id=workspace_id,
+        root_goal_task_id=root_goal_task_id,
     )
-    if find_current_plan_children is not None:
-        current_plan_children = await find_current_plan_children(workspace_id, root_goal_task_id)
-        if current_plan_children:
-            raw_child_tasks = current_plan_children
+    if current_plan_children is not None:
+        raw_child_tasks = current_plan_children
     child_tasks = select_root_progress_child_tasks(raw_child_tasks)
     active_child_task_ids = [
         task.id

@@ -21,8 +21,14 @@ vi.mock('lucide-react', () => ({
   RefreshCw: () => <span data-testid="refresh-icon">Refresh</span>,
   AlertCircle: () => <span data-testid="alert-icon">Alert</span>,
   Box: () => <span data-testid="box-icon">Box</span>,
+  Database: () => <span data-testid="database-icon">Database</span>,
+  Network: () => <span data-testid="network-icon">Network</span>,
   Power: () => <span data-testid="power-icon">Power</span>,
   RotateCcw: () => <span data-testid="rotate-icon">Rotate</span>,
+  Server: () => <span data-testid="server-icon">Server</span>,
+  ShieldAlert: () => <span data-testid="shield-alert-icon">ShieldAlert</span>,
+  SlidersHorizontal: () => <span data-testid="sliders-icon">Sliders</span>,
+  Wrench: () => <span data-testid="wrench-icon">Wrench</span>,
 }));
 
 // Mock i18n
@@ -182,31 +188,41 @@ describe('ProjectSettings Compound Component', () => {
     it('should render basic settings section', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      expect(screen.getByText('project.settings.basicTitle')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: 'project.settings.basicTitle', level: 2 })
+      ).toBeInTheDocument();
     });
 
     it('should render memory rules section', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      expect(screen.getByText('project.settings.memoryTitle')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: 'project.settings.memoryTitle', level: 2 })
+      ).toBeInTheDocument();
     });
 
     it('should render graph config section', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      expect(screen.getByText('project.settings.graphTitle')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: 'project.settings.graphTitle', level: 2 })
+      ).toBeInTheDocument();
     });
 
     it('should render advanced section', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      expect(screen.getByText('project.settings.advancedTitle')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: 'project.settings.advancedTitle', level: 2 })
+      ).toBeInTheDocument();
     });
 
     it('should render danger zone', async () => {
       const { ProjectSettings } = await import('../../../pages/project/Settings');
       render(<ProjectSettings />);
-      expect(screen.getByText('project.settings.dangerTitle')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: 'project.settings.dangerTitle', level: 2 })
+      ).toBeInTheDocument();
     });
 
     it('should show no project state when project is null', async () => {

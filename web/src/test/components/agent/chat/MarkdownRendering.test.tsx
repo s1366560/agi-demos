@@ -11,7 +11,7 @@
  * TDD Phase: RED - Tests are written first, will fail initially
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 
 import '@testing-library/jest-dom/vitest';
@@ -190,7 +190,9 @@ describe('ToolExecutionCardDisplay - Markdown Result Rendering', () => {
     );
 
     expect(screen.getByText('Important:')).toBeInTheDocument();
-    expect(screen.getByText(/This is a key finding/)).toBeInTheDocument();
+    const outputSection = screen.getByText('Output').closest('.space-y-1');
+    expect(outputSection).not.toBeNull();
+    expect(within(outputSection as HTMLElement).getByText(/This is a key finding/)).toBeInTheDocument();
   });
 
   it('should render code blocks in tool results', () => {

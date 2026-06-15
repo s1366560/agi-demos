@@ -68,6 +68,7 @@ class TestProcessorCompletionGate:
                 "step_count": 1,
                 "tenant_id": None,
                 "project_id": None,
+                "conversation_id": None,
                 "runtime_context": {},
                 "task_authority": None,
                 "workspace_id": None,
@@ -128,7 +129,10 @@ class TestProcessorCompletionGate:
         )
 
         async def _mock_process_step(session_id, messages):
-            yield {"type": "task_list_updated", "data": {"tasks": [{"id": "t1", "status": "pending"}]}}
+            yield {
+                "type": "task_list_updated",
+                "data": {"tasks": [{"id": "t1", "status": "pending"}]},
+            }
 
         processor._process_step = _mock_process_step  # type: ignore[method-assign]
         processor._goal_evaluator.evaluate_goal_completion = AsyncMock(  # type: ignore[method-assign]

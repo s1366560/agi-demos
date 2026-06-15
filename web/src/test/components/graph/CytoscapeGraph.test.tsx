@@ -11,8 +11,49 @@ import React from 'react';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Import mocks FIRST before component imports
-import { mockCytoscapeInstance } from '../../mocks/cytoscape';
+const { mockCytoscapeInstance, cytoscapeMock } = vi.hoisted(() => {
+  const mockElements = {
+    remove: vi.fn(),
+    add: vi.fn(),
+    length: 0,
+  };
+
+  const mockLayout = {
+    run: vi.fn(),
+    stop: vi.fn(),
+  };
+
+  const instance = {
+    on: vi.fn(),
+    off: vi.fn(),
+    elements: vi.fn(() => mockElements),
+    add: vi.fn(),
+    remove: vi.fn(),
+    style: vi.fn(),
+    layout: vi.fn(() => mockLayout),
+    fit: vi.fn(),
+    png: vi.fn(() => 'data:image/png;base64,mock'),
+    stop: vi.fn(),
+    destroy: vi.fn(),
+    destroyed: vi.fn(() => false),
+    boxSelectionEnabled: vi.fn(),
+    $: vi.fn(() => ({ unselect: vi.fn() })),
+    ready: vi.fn((cb?: () => void) => cb?.()),
+    minZoom: 0.1,
+    maxZoom: 3,
+    wheelSensitivity: 0.2,
+  };
+
+  return {
+    mockCytoscapeInstance: instance,
+    cytoscapeMock: vi.fn(() => instance),
+  };
+});
+
+vi.mock('cytoscape', () => ({
+  default: cytoscapeMock,
+  cytoscape: cytoscapeMock,
+}));
 
 const { graphService } = vi.hoisted(() => {
   const graphService = {

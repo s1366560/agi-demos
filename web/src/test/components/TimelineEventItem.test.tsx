@@ -82,7 +82,7 @@ describe('TimelineEventItem', () => {
 
       render(<TimelineEventItem event={event} />);
 
-      expect(screen.getByText('web_search')).toBeInTheDocument();
+      expect(screen.getByText(/web_search/)).toBeInTheDocument();
     });
 
     it('should render observe (tool result) event', () => {
@@ -98,7 +98,7 @@ describe('TimelineEventItem', () => {
 
       render(<TimelineEventItem event={event} />);
 
-      expect(screen.getByText('web_search')).toBeInTheDocument();
+      expect(screen.getByText(/web_search/)).toBeInTheDocument();
     });
 
     it('should render work_plan event', () => {

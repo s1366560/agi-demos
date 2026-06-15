@@ -27,6 +27,8 @@ import {
 } from '@/components/workspace/taskBoardSignals';
 import { TaskExperiencePanel } from '@/components/workspace/TaskExperiencePanel';
 
+import { buildTaskCreatePayload } from './taskBoardCreateModel';
+
 import type {
   TaskExecutionSession,
   TaskRecoveryAction,
@@ -158,6 +160,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState<WorkspaceTaskPriority>('');
   const [effort, setEffort] = useState<string>('');
+  const [blockerReason, setBlockerReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAutonomyTicking, setIsAutonomyTicking] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -257,16 +260,19 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
 
     setIsSubmitting(true);
     try {
-      const taskResponse = await workspaceTaskService.create(workspaceId, { title: trimmedTitle });
-      if (priority || effort) {
-        await workspaceTaskService.update(workspaceId, taskResponse.id, {
-          ...(priority ? { priority } : {}),
-          ...(effort ? { estimated_effort: effort } : {}),
-        });
-      }
+      await workspaceTaskService.create(
+        workspaceId,
+        buildTaskCreatePayload({
+          title: trimmedTitle,
+          priority,
+          effort,
+          blockerReason,
+        })
+      );
       setTitle('');
       setPriority('');
       setEffort('');
+      setBlockerReason('');
       setShowAddForm(false);
     } catch {
       message?.error(t('workspaceDetail.taskBoard.createFailed'));
@@ -483,6 +489,19 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
             className="w-20"
             size="small"
             allowClear
+          />
+          <Input
+            aria-label={t('workspaceDetail.taskBoard.blockerReason', 'Blocker reason')}
+            placeholder={t('workspaceDetail.taskBoard.blockerReason', 'Blocker reason')}
+            value={blockerReason}
+            onChange={(event) => {
+              setBlockerReason(event.target.value);
+            }}
+            onPressEnter={() => {
+              void handleAddTask();
+            }}
+            className="flex-1"
+            size="small"
           />
           <Button
             type="primary"

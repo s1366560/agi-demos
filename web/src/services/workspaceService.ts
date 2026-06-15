@@ -457,7 +457,12 @@ export const workspaceTaskService = {
   create: async (
     workspaceId: string,
     data: Pick<WorkspaceTask, 'title'> &
-      Partial<Pick<WorkspaceTask, 'description' | 'assignee_user_id'>>
+      Partial<
+        Pick<
+          WorkspaceTask,
+          'description' | 'assignee_user_id' | 'priority' | 'estimated_effort' | 'blocker_reason'
+        >
+      >
   ): Promise<WorkspaceTask> => {
     const response = await apiFetch.post(taskBase(workspaceId), {
       ...data,

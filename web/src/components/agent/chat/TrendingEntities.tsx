@@ -10,6 +10,8 @@ import { TrendingUp } from 'lucide-react';
 
 import { projectStatsService, type TrendingEntity } from '@/services/projectStatsService';
 
+import { buildTrendingEntityKey } from './trendingEntitiesModel';
+
 interface TrendingEntitiesProps {
   projectId: string;
   onEntityClick?: ((entityName: string) => void) | undefined;
@@ -59,9 +61,9 @@ export const TrendingEntities = memo<TrendingEntitiesProps>(({ projectId, onEnti
         <span>{t('agent.projectContext.trending', 'Trending')}</span>
       </div>
       <div className="flex flex-wrap gap-1.5">
-        {entities.map((entity) => (
+        {entities.map((entity, index) => (
           <button
-            key={entity.name}
+            key={buildTrendingEntityKey(entity, index)}
             type="button"
             onClick={() =>
               onEntityClick?.(

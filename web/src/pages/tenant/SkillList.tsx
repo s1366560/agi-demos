@@ -12,6 +12,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Input, Modal, Switch } from 'antd';
 import {
+  Ban,
   Download,
   Eye,
   FileText,
@@ -28,6 +29,17 @@ import {
 } from 'lucide-react';
 
 import {
+  useSkillStore,
+  useSkillLoading,
+  useSkillError,
+  useActiveSkillsCount,
+  useSkillTotal,
+} from '@/stores/skill';
+
+import { skillAPI } from '@/services/skillService';
+
+import { SkillModal } from '@/components/skill/SkillModal';
+import {
   useLazyMessage,
   LazyPopconfirm,
   LazySelect,
@@ -35,17 +47,9 @@ import {
   LazySpin,
 } from '@/components/ui/lazyAntd';
 
-import { SkillModal } from '../../components/skill/SkillModal';
-import { skillAPI } from '../../services/skillService';
-import {
-  useSkillStore,
-  useSkillLoading,
-  useSkillError,
-  useActiveSkillsCount,
-  useSkillTotal,
-} from '../../stores/skill';
+import { getSystemSkillConfigAction } from './skillListModel';
 
-import type { SkillResponse, SkillVersionResponse } from '../../types/agent';
+import type { SkillResponse, SkillVersionResponse } from '@/types/agent';
 
 const { Search } = Input;
 const { TextArea } = Input;
@@ -165,7 +169,7 @@ export const SkillList: FC = () => {
   const [rollbackVersion, setRollbackVersion] = useState<number | null>(null);
 
   // Store hooks
-  const { skills } = useSkillStore();
+  const { skills, tenantConfigs } = useSkillStore();
   const isLoading = useSkillLoading();
   const error = useSkillError();
   const activeCount = useActiveSkillsCount();
@@ -217,12 +221,24 @@ export const SkillList: FC = () => {
   const visibleCount = filteredSkills.length;
   const managedCount = useMemo(() => skills.filter(isManagedSkill).length, [skills]);
   const readonlyCount = total - managedCount;
-  const { listSkills, deleteSkill, clearError } = useSkillStore();
+  const configBySystemSkillName = useMemo(
+    () => new Map(tenantConfigs.map((config) => [config.system_skill_name, config.action])),
+    [tenantConfigs]
+  );
+  const {
+    listSkills,
+    deleteSkill,
+    clearError,
+    listTenantConfigs,
+    disableSystemSkill,
+    enableSystemSkill,
+  } = useSkillStore();
 
   // Load data on mount
   useEffect(() => {
     void listSkills();
-  }, [listSkills]);
+    void listTenantConfigs();
+  }, [listSkills, listTenantConfigs]);
 
   // Clear error on unmount
   useEffect(() => {
@@ -300,6 +316,32 @@ export const SkillList: FC = () => {
       }
     },
     [deleteSkill, message, t]
+  );
+
+  const handleDisableSystemSkill = useCallback(
+    async (skillName: string) => {
+      try {
+        await disableSystemSkill(skillName);
+        message?.success(t('tenant.skills.systemConfig.disableSuccess'));
+        void listSkills({ search });
+      } catch {
+        message?.error(t('tenant.skills.systemConfig.disableFailed'));
+      }
+    },
+    [disableSystemSkill, listSkills, message, search, t]
+  );
+
+  const handleRestoreSystemSkill = useCallback(
+    async (skillName: string) => {
+      try {
+        await enableSystemSkill(skillName);
+        message?.success(t('tenant.skills.systemConfig.restoreSuccess'));
+        void listSkills({ search });
+      } catch {
+        message?.error(t('tenant.skills.systemConfig.restoreFailed'));
+      }
+    },
+    [enableSystemSkill, listSkills, message, search, t]
   );
 
   const handleExport = useCallback(
@@ -520,6 +562,7 @@ export const SkillList: FC = () => {
           {filteredSkills.map((skill) => {
             const source = getSkillSource(skill);
             const managed = isManagedSkill(skill);
+            const systemConfigAction = getSystemSkillConfigAction(skill, configBySystemSkillName);
             return (
               <article
                 key={skill.id}
@@ -542,6 +585,13 @@ export const SkillList: FC = () => {
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <StatusBadge status={skill.status} label={t(`common.status.${skill.status}`)} />
+                    {systemConfigAction ? (
+                      <span
+                        className={`inline-flex h-6 items-center gap-1.5 rounded-full border border-[oklch(0.84_0.08_75)] bg-[oklch(0.98_0.022_75)] px-2 text-[11px] font-medium text-[oklch(0.45_0.1_75)] dark:border-[oklch(0.38_0.07_75)] dark:bg-[oklch(0.21_0.035_75)] dark:text-[oklch(0.82_0.1_75)]`}
+                      >
+                        {t(`tenant.skills.systemConfig.${systemConfigAction}`)}
+                      </span>
+                    ) : null}
                     <SourceBadge source={source} label={t(`tenant.skills.source.${source}`)} />
                   </div>
                 </div>
@@ -635,6 +685,49 @@ export const SkillList: FC = () => {
                           </button>
                         </LazyPopconfirm>
                       </>
+                    ) : null}
+                    {skill.is_system_skill ? (
+                      systemConfigAction ? (
+                        <LazyPopconfirm
+                          title={t('tenant.skills.systemConfig.restoreConfirm')}
+                          onConfirm={() => {
+                            void handleRestoreSystemSkill(skill.name);
+                          }}
+                          okText={t('common.confirm')}
+                          cancelText={t('common.cancel')}
+                        >
+                          <button
+                            type="button"
+                            className={iconButton}
+                            title={t('tenant.skills.systemConfig.restoreAction')}
+                            aria-label={t('tenant.skills.systemConfig.restoreAria', {
+                              name: skill.name,
+                            })}
+                          >
+                            <RotateCcw size={16} />
+                          </button>
+                        </LazyPopconfirm>
+                      ) : (
+                        <LazyPopconfirm
+                          title={t('tenant.skills.systemConfig.disableConfirm')}
+                          onConfirm={() => {
+                            void handleDisableSystemSkill(skill.name);
+                          }}
+                          okText={t('common.confirm')}
+                          cancelText={t('common.cancel')}
+                        >
+                          <button
+                            type="button"
+                            className={iconButton}
+                            title={t('tenant.skills.systemConfig.disableAction')}
+                            aria-label={t('tenant.skills.systemConfig.disableAria', {
+                              name: skill.name,
+                            })}
+                          >
+                            <Ban size={16} />
+                          </button>
+                        </LazyPopconfirm>
+                      )
                     ) : null}
                   </div>
                 </div>
