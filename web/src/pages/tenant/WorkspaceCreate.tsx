@@ -3,14 +3,13 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { Button, Input, message, Select, Tag } from 'antd';
+import { Button, Input, message, Tag } from 'antd';
 import {
   ArrowLeft,
   BookOpenCheck,
   BriefcaseBusiness,
   Code2,
   FolderKanban,
-  GitBranch,
   LayoutGrid,
   MessageSquareText,
   Network,
@@ -22,103 +21,24 @@ import { useCurrentProject, useProjectStore } from '@/stores/project';
 import { useCurrentTenant } from '@/stores/tenant';
 import { useWorkspaceActions } from '@/stores/workspace';
 
+import { ApiError } from '@/services/client/ApiError';
+
 import {
-  DEFAULT_GITHUB_SERVER_URL,
-  DEFAULT_GITLAB_SERVER_URL,
-  buildDefaultSourceControlConfig,
-  buildDefaultDroneDeliveryConfig,
-  buildSourceCloneUrl,
   buildWorkspaceCreateRequest,
   isIsolatedSandboxCodeRoot,
   MIN_WORKSPACE_DESCRIPTION_LENGTH,
   normaliseSandboxCodeRoot,
-  normaliseWorkspaceSourceControlConfig,
-  sourceControlDefaultsForProvider,
 } from '@/utils/workspaceConfig';
 
 import { EmptyStateSimple } from '@/components/shared/ui/EmptyStateVariant';
 
-import type {
-  WorkspaceCollaborationMode,
-  WorkspaceDeliveryDroneConfig,
-  WorkspaceSourceControlProvider,
-  WorkspaceUseCase,
-} from '@/types/workspace';
+import type { WorkspaceCollaborationMode, WorkspaceUseCase } from '@/types/workspace';
 
 interface CreationOption<T extends string> {
   label: string;
   description: string;
   value: T;
   icon: ReactNode;
-}
-
-interface DroneEnvironmentDraft {
-  repo: string;
-  branch: string;
-  pollIntervalSeconds: string;
-  serverUrlEnv: string;
-  tokenEnv: string;
-  serverPort: string;
-  serverHost: string;
-  serverProto: string;
-  rpcSecretEnv: string;
-  userCreate: string;
-  githubClientIdEnv: string;
-  githubClientSecretEnv: string;
-  gitlabClientIdEnv: string;
-  gitlabClientSecretEnv: string;
-  runnerPort: string;
-  runnerCapacity: string;
-  runnerName: string;
-  runnerRpcProto: string;
-  runnerRpcHost: string;
-  runnerRpcSecretEnv: string;
-}
-
-interface SourceControlDraft {
-  provider: WorkspaceSourceControlProvider;
-  repo: string;
-  defaultBranch: string;
-  serverUrl: string;
-  cloneUrl: string;
-  authTokenEnv: string;
-}
-
-const EMPTY_DRONE_ENVIRONMENT_DRAFT: DroneEnvironmentDraft = {
-  repo: '',
-  branch: '',
-  pollIntervalSeconds: '',
-  serverUrlEnv: '',
-  tokenEnv: '',
-  serverPort: '',
-  serverHost: '',
-  serverProto: '',
-  rpcSecretEnv: '',
-  userCreate: '',
-  githubClientIdEnv: '',
-  githubClientSecretEnv: '',
-  gitlabClientIdEnv: '',
-  gitlabClientSecretEnv: '',
-  runnerPort: '',
-  runnerCapacity: '',
-  runnerName: '',
-  runnerRpcProto: '',
-  runnerRpcHost: '',
-  runnerRpcSecretEnv: '',
-};
-
-const EMPTY_SOURCE_CONTROL_DRAFT: SourceControlDraft = {
-  provider: 'github',
-  repo: '',
-  defaultBranch: '',
-  serverUrl: '',
-  cloneUrl: '',
-  authTokenEnv: '',
-};
-
-function positiveInteger(value: string, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : fallback;
 }
 
 export function WorkspaceCreate() {
@@ -147,12 +67,6 @@ export function WorkspaceCreate() {
     null
   );
   const [sandboxCodeRoot, setSandboxCodeRoot] = useState('');
-  const [sourceControlDraft, setSourceControlDraft] = useState<SourceControlDraft>(
-    EMPTY_SOURCE_CONTROL_DRAFT
-  );
-  const [droneDraft, setDroneDraft] = useState<DroneEnvironmentDraft>(
-    EMPTY_DRONE_ENVIRONMENT_DRAFT
-  );
   const [submitting, setSubmitting] = useState(false);
 
   const useCaseLabels = useMemo(
@@ -252,113 +166,6 @@ export function WorkspaceCreate() {
   const normalizedCodeRoot = normaliseSandboxCodeRoot(sandboxCodeRoot);
   const needsCodeRoot = workspaceUseCase === 'programming';
   const hasValidCodeRoot = !needsCodeRoot || isIsolatedSandboxCodeRoot(normalizedCodeRoot);
-  const defaultSourceControl = needsCodeRoot
-    ? buildDefaultSourceControlConfig(name.trim() || 'workspace', sourceControlDraft.provider)
-    : null;
-  const sourceControlProvider = sourceControlDraft.provider;
-  const sourceControlServerUrl =
-    sourceControlDraft.serverUrl ||
-    defaultSourceControl?.server_url ||
-    sourceControlDefaultsForProvider(sourceControlProvider).serverUrl;
-  const sourceControlRepo = sourceControlDraft.repo || defaultSourceControl?.repo || '';
-  const sourceControlDefaultBranch =
-    sourceControlDraft.defaultBranch || defaultSourceControl?.default_branch || 'main';
-  const sourceControlForm = {
-    provider: sourceControlProvider,
-    repo: sourceControlRepo,
-    defaultBranch: sourceControlDefaultBranch,
-    serverUrl: sourceControlServerUrl,
-    cloneUrl:
-      sourceControlDraft.cloneUrl ||
-      buildSourceCloneUrl(sourceControlProvider, sourceControlServerUrl, sourceControlRepo),
-    authTokenEnv:
-      sourceControlDraft.authTokenEnv ||
-      defaultSourceControl?.auth_token_env ||
-      sourceControlDefaultsForProvider(sourceControlProvider).authTokenEnv,
-  };
-  const normalizedSourceControl = needsCodeRoot
-    ? normaliseWorkspaceSourceControlConfig(
-        {
-          provider: sourceControlForm.provider,
-          repo: sourceControlForm.repo,
-          default_branch: sourceControlForm.defaultBranch,
-          server_url: sourceControlForm.serverUrl,
-          clone_url: sourceControlForm.cloneUrl,
-          auth_token_env: sourceControlForm.authTokenEnv,
-        },
-        name.trim() || 'workspace'
-      )
-    : undefined;
-  const defaultDroneDelivery = needsCodeRoot
-    ? buildDefaultDroneDeliveryConfig(
-        name.trim() || 'workspace',
-        normalizedCodeRoot,
-        normalizedSourceControl
-      )
-    : null;
-  const defaultDrone = defaultDroneDelivery?.drone;
-  const defaultDroneEnvironment = defaultDrone?.environment;
-  const droneForm = {
-    repo: droneDraft.repo || defaultDrone?.repo || '',
-    branch: droneDraft.branch || defaultDrone?.branch || 'main',
-    pollIntervalSeconds:
-      droneDraft.pollIntervalSeconds || String(defaultDrone?.poll_interval_seconds ?? 5),
-    serverUrlEnv:
-      droneDraft.serverUrlEnv ||
-      defaultDroneEnvironment?.api?.server_url_env ||
-      defaultDrone?.server_url_env ||
-      'DRONE_SERVER_URL',
-    tokenEnv:
-      droneDraft.tokenEnv ||
-      defaultDroneEnvironment?.api?.token_env ||
-      defaultDrone?.token_env ||
-      'DRONE_TOKEN',
-    serverPort:
-      droneDraft.serverPort || String(defaultDroneEnvironment?.server?.server_port ?? 8080),
-    serverHost:
-      droneDraft.serverHost || defaultDroneEnvironment?.server?.server_host || 'localhost:8080',
-    serverProto: droneDraft.serverProto || defaultDroneEnvironment?.server?.server_proto || 'http',
-    rpcSecretEnv:
-      droneDraft.rpcSecretEnv ||
-      defaultDroneEnvironment?.server?.rpc_secret_env ||
-      'DRONE_RPC_SECRET',
-    userCreate:
-      droneDraft.userCreate ||
-      defaultDroneEnvironment?.server?.user_create ||
-      'username:memstack,admin:true',
-    githubClientIdEnv:
-      droneDraft.githubClientIdEnv ||
-      defaultDroneEnvironment?.server?.github_client_id_env ||
-      'DRONE_GITHUB_CLIENT_ID',
-    githubClientSecretEnv:
-      droneDraft.githubClientSecretEnv ||
-      defaultDroneEnvironment?.server?.github_client_secret_env ||
-      'DRONE_GITHUB_CLIENT_SECRET',
-    gitlabClientIdEnv:
-      droneDraft.gitlabClientIdEnv ||
-      defaultDroneEnvironment?.server?.gitlab_client_id_env ||
-      'DRONE_GITLAB_CLIENT_ID',
-    gitlabClientSecretEnv:
-      droneDraft.gitlabClientSecretEnv ||
-      defaultDroneEnvironment?.server?.gitlab_client_secret_env ||
-      'DRONE_GITLAB_CLIENT_SECRET',
-    runnerPort:
-      droneDraft.runnerPort || String(defaultDroneEnvironment?.runner?.runner_port ?? 3001),
-    runnerCapacity:
-      droneDraft.runnerCapacity || String(defaultDroneEnvironment?.runner?.runner_capacity ?? 2),
-    runnerName:
-      droneDraft.runnerName ||
-      defaultDroneEnvironment?.runner?.runner_name ||
-      'memstack-drone-runner',
-    runnerRpcProto:
-      droneDraft.runnerRpcProto || defaultDroneEnvironment?.runner?.rpc_proto || 'http',
-    runnerRpcHost:
-      droneDraft.runnerRpcHost || defaultDroneEnvironment?.runner?.rpc_host || 'drone-server',
-    runnerRpcSecretEnv:
-      droneDraft.runnerRpcSecretEnv ||
-      defaultDroneEnvironment?.runner?.rpc_secret_env ||
-      'DRONE_RPC_SECRET',
-  };
   const descriptionReady = trimmedDescription.length >= MIN_WORKSPACE_DESCRIPTION_LENGTH;
   const canCreate =
     !!tenantId &&
@@ -373,34 +180,6 @@ export function WorkspaceCreate() {
   const selectedModeOption = collaborationModeOptions.find(
     (option) => option.value === collaborationMode
   );
-  const updateSourceControlDraft = <TKey extends keyof SourceControlDraft>(
-    key: TKey,
-    value: SourceControlDraft[TKey]
-  ) => {
-    setSourceControlDraft((current) => ({ ...current, [key]: value }));
-  };
-  const updateSourceControlProvider = (provider: WorkspaceSourceControlProvider) => {
-    setSourceControlDraft((current) => {
-      const currentDefaults = sourceControlDefaultsForProvider(current.provider);
-      const nextDefaults = sourceControlDefaultsForProvider(provider);
-      return {
-        ...current,
-        provider,
-        serverUrl:
-          !current.serverUrl || current.serverUrl === currentDefaults.serverUrl
-            ? nextDefaults.serverUrl
-            : current.serverUrl,
-        authTokenEnv:
-          !current.authTokenEnv || current.authTokenEnv === currentDefaults.authTokenEnv
-            ? nextDefaults.authTokenEnv
-            : current.authTokenEnv,
-        cloneUrl: '',
-      };
-    });
-  };
-  const updateDroneDraft = (key: keyof DroneEnvironmentDraft, value: string) => {
-    setDroneDraft((current) => ({ ...current, [key]: value }));
-  };
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -410,55 +189,6 @@ export function WorkspaceCreate() {
 
     setSubmitting(true);
     try {
-      const droneConfig: WorkspaceDeliveryDroneConfig | undefined = needsCodeRoot
-        ? {
-            repo: droneForm.repo.trim(),
-            branch: droneForm.branch.trim(),
-            server_url_env: droneForm.serverUrlEnv.trim(),
-            token_env: droneForm.tokenEnv.trim(),
-            poll_interval_seconds: positiveInteger(droneForm.pollIntervalSeconds, 5),
-            ...(normalizedSourceControl ? { source_control: normalizedSourceControl } : {}),
-            environment: {
-              api: {
-                server_url_env: droneForm.serverUrlEnv.trim(),
-                token_env: droneForm.tokenEnv.trim(),
-              },
-              server: {
-                server_port: positiveInteger(droneForm.serverPort, 8080),
-                server_host: droneForm.serverHost.trim(),
-                server_proto: droneForm.serverProto.trim(),
-                rpc_secret_env: droneForm.rpcSecretEnv.trim(),
-                user_create: droneForm.userCreate.trim(),
-                ...(normalizedSourceControl
-                  ? {
-                      source_provider: normalizedSourceControl.provider,
-                      github_server:
-                        normalizedSourceControl.provider === 'github'
-                          ? normalizedSourceControl.server_url
-                          : DEFAULT_GITHUB_SERVER_URL,
-                      gitlab_server:
-                        normalizedSourceControl.provider === 'gitlab'
-                          ? normalizedSourceControl.server_url
-                          : DEFAULT_GITLAB_SERVER_URL,
-                    }
-                  : {}),
-                github_client_id_env: droneForm.githubClientIdEnv.trim(),
-                github_client_secret_env: droneForm.githubClientSecretEnv.trim(),
-                gitlab_client_id_env: droneForm.gitlabClientIdEnv.trim(),
-                gitlab_client_secret_env: droneForm.gitlabClientSecretEnv.trim(),
-                git_always_auth: false,
-              },
-              runner: {
-                runner_port: positiveInteger(droneForm.runnerPort, 3001),
-                runner_capacity: positiveInteger(droneForm.runnerCapacity, 2),
-                runner_name: droneForm.runnerName.trim(),
-                rpc_proto: droneForm.runnerRpcProto.trim(),
-                rpc_host: droneForm.runnerRpcHost.trim(),
-                rpc_secret_env: droneForm.runnerRpcSecretEnv.trim(),
-              },
-            },
-          }
-        : undefined;
       const workspace = await createWorkspace(
         tenantId,
         projectId,
@@ -468,16 +198,23 @@ export function WorkspaceCreate() {
           useCase: workspaceUseCase,
           collaborationMode,
           sandboxCodeRoot: normalizedCodeRoot,
-          ...(normalizedSourceControl ? { sourceControl: normalizedSourceControl } : {}),
-          ...(droneConfig ? { droneConfig } : {}),
         })
       );
       message.success(t('tenant.workspaceList.createSuccess', 'Workspace created'));
       void navigate(
         `/tenant/${tenantId}/project/${projectId}/blackboard?workspaceId=${workspace.id}`
       );
-    } catch {
-      message.error(t('tenant.workspaceList.createError', 'Failed to create workspace'));
+    } catch (error) {
+      const duplicateName =
+        error instanceof ApiError && error.statusCode === 409 && error.code === 'CONFLICT';
+      message.error(
+        duplicateName
+          ? t(
+              'tenant.workspaceList.createDuplicateError',
+              'A workspace with this name already exists.'
+            )
+          : t('tenant.workspaceList.createError', 'Failed to create workspace')
+      );
     } finally {
       setSubmitting(false);
     }
@@ -627,376 +364,6 @@ export function WorkspaceCreate() {
                       'tenant.workspaceList.codeRootHint',
                       'Use an isolated child path such as /workspace/my-evo.'
                     )}
-                  </div>
-                </div>
-              ) : null}
-
-              {needsCodeRoot ? (
-                <div className="grid gap-3 border-t border-border-light pt-4 dark:border-border-dark">
-                  <div className="text-xs font-semibold text-text-secondary dark:text-text-muted">
-                    {t('workspaceSettings.sourceControl.title', 'Source control')}
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                      {t('workspaceSettings.sourceControl.provider', 'SCM provider')}
-                      <Select
-                        aria-label={t('workspaceSettings.sourceControl.provider', 'SCM provider')}
-                        value={sourceControlForm.provider}
-                        onChange={(value: WorkspaceSourceControlProvider) => {
-                          updateSourceControlProvider(value);
-                        }}
-                        options={[
-                          {
-                            value: 'github',
-                            label: t('workspaceSettings.sourceControl.providerGithub', 'GitHub'),
-                          },
-                          {
-                            value: 'gitlab',
-                            label: t('workspaceSettings.sourceControl.providerGitlab', 'GitLab'),
-                          },
-                        ]}
-                        disabled={submitting}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                      {t('workspaceSettings.sourceControl.repo', 'Repository')}
-                      <Input
-                        prefix={<GitBranch size={14} className="text-text-muted" />}
-                        value={sourceControlForm.repo}
-                        onChange={(event) => {
-                          updateSourceControlDraft('repo', event.target.value);
-                        }}
-                        placeholder="memstack/my-workspace"
-                        disabled={submitting}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                      {t('workspaceSettings.sourceControl.defaultBranch', 'Default branch')}
-                      <Input
-                        value={sourceControlForm.defaultBranch}
-                        onChange={(event) => {
-                          updateSourceControlDraft('defaultBranch', event.target.value);
-                        }}
-                        placeholder="main"
-                        disabled={submitting}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                      {t('workspaceSettings.sourceControl.serverUrl', 'Server URL')}
-                      <Input
-                        value={sourceControlForm.serverUrl}
-                        onChange={(event) => {
-                          updateSourceControlDraft('serverUrl', event.target.value);
-                        }}
-                        placeholder="https://github.com"
-                        disabled={submitting}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                      {t('workspaceSettings.sourceControl.authTokenEnv', 'Auth token env')}
-                      <Input
-                        value={sourceControlForm.authTokenEnv}
-                        onChange={(event) => {
-                          updateSourceControlDraft('authTokenEnv', event.target.value);
-                        }}
-                        placeholder="GITHUB_TOKEN"
-                        disabled={submitting}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted sm:col-span-2">
-                      {t('workspaceSettings.sourceControl.cloneUrl', 'Clone URL')}
-                      <Input
-                        value={sourceControlForm.cloneUrl}
-                        onChange={(event) => {
-                          updateSourceControlDraft('cloneUrl', event.target.value);
-                        }}
-                        placeholder="https://github.com/memstack/my-workspace.git"
-                        disabled={submitting}
-                      />
-                    </label>
-                  </div>
-                </div>
-              ) : null}
-
-              {needsCodeRoot ? (
-                <div className="grid gap-3 border-t border-border-light pt-4 dark:border-border-dark">
-                  <div className="text-xs font-semibold text-text-secondary dark:text-text-muted">
-                    {t('workspaceSettings.delivery.droneEnvironment', 'Drone environment')}
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                      {t('workspaceSettings.delivery.droneRepo', 'Drone repository')}
-                      <Input
-                        value={droneForm.repo}
-                        onChange={(event) => {
-                          updateDroneDraft('repo', event.target.value);
-                        }}
-                        placeholder="memstack/my-workspace"
-                        disabled={submitting}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                      {t('workspaceSettings.delivery.droneBranch', 'Drone branch')}
-                      <Input
-                        value={droneForm.branch}
-                        onChange={(event) => {
-                          updateDroneDraft('branch', event.target.value);
-                        }}
-                        placeholder="main"
-                        disabled={submitting}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                      {t('workspaceSettings.delivery.droneServerUrlEnv', 'Drone server URL env')}
-                      <Input
-                        value={droneForm.serverUrlEnv}
-                        onChange={(event) => {
-                          updateDroneDraft('serverUrlEnv', event.target.value);
-                        }}
-                        placeholder="DRONE_SERVER_URL"
-                        disabled={submitting}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                      {t('workspaceSettings.delivery.droneTokenEnv', 'Drone token env')}
-                      <Input
-                        value={droneForm.tokenEnv}
-                        onChange={(event) => {
-                          updateDroneDraft('tokenEnv', event.target.value);
-                        }}
-                        placeholder="DRONE_TOKEN"
-                        disabled={submitting}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                      {t(
-                        'workspaceSettings.delivery.dronePollIntervalSeconds',
-                        'Drone poll interval seconds'
-                      )}
-                      <Input
-                        type="number"
-                        min={1}
-                        value={droneForm.pollIntervalSeconds}
-                        onChange={(event) => {
-                          updateDroneDraft('pollIntervalSeconds', event.target.value);
-                        }}
-                        disabled={submitting}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="grid gap-3 border-t border-border-light pt-3 dark:border-border-dark">
-                    <div className="text-xs font-semibold text-text-secondary dark:text-text-muted">
-                      {t(
-                        'workspaceSettings.delivery.droneServerEnvironment',
-                        'Drone server environment'
-                      )}
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t('workspaceSettings.delivery.droneServerPort', 'Drone server port')}
-                        <Input
-                          type="number"
-                          min={1}
-                          value={droneForm.serverPort}
-                          onChange={(event) => {
-                            updateDroneDraft('serverPort', event.target.value);
-                          }}
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t('workspaceSettings.delivery.droneServerHost', 'Drone server host')}
-                        <Input
-                          value={droneForm.serverHost}
-                          onChange={(event) => {
-                            updateDroneDraft('serverHost', event.target.value);
-                          }}
-                          placeholder="localhost:8080"
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t('workspaceSettings.delivery.droneServerProto', 'Drone server proto')}
-                        <Input
-                          value={droneForm.serverProto}
-                          onChange={(event) => {
-                            updateDroneDraft('serverProto', event.target.value);
-                          }}
-                          placeholder="http"
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t('workspaceSettings.delivery.droneRpcSecretEnv', 'Drone RPC secret env')}
-                        <Input
-                          value={droneForm.rpcSecretEnv}
-                          onChange={(event) => {
-                            updateDroneDraft('rpcSecretEnv', event.target.value);
-                          }}
-                          placeholder="DRONE_RPC_SECRET"
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t('workspaceSettings.delivery.droneUserCreate', 'Drone user create')}
-                        <Input
-                          value={droneForm.userCreate}
-                          onChange={(event) => {
-                            updateDroneDraft('userCreate', event.target.value);
-                          }}
-                          placeholder="username:memstack,admin:true"
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t(
-                          'workspaceSettings.delivery.droneGithubClientIdEnv',
-                          'Drone GitHub client ID env'
-                        )}
-                        <Input
-                          value={droneForm.githubClientIdEnv}
-                          onChange={(event) => {
-                            updateDroneDraft('githubClientIdEnv', event.target.value);
-                          }}
-                          placeholder="DRONE_GITHUB_CLIENT_ID"
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t(
-                          'workspaceSettings.delivery.droneGithubClientSecretEnv',
-                          'Drone GitHub client secret env'
-                        )}
-                        <Input
-                          value={droneForm.githubClientSecretEnv}
-                          onChange={(event) => {
-                            updateDroneDraft('githubClientSecretEnv', event.target.value);
-                          }}
-                          placeholder="DRONE_GITHUB_CLIENT_SECRET"
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t(
-                          'workspaceSettings.delivery.droneGitlabClientIdEnv',
-                          'Drone GitLab client ID env'
-                        )}
-                        <Input
-                          value={droneForm.gitlabClientIdEnv}
-                          onChange={(event) => {
-                            updateDroneDraft('gitlabClientIdEnv', event.target.value);
-                          }}
-                          placeholder="DRONE_GITLAB_CLIENT_ID"
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t(
-                          'workspaceSettings.delivery.droneGitlabClientSecretEnv',
-                          'Drone GitLab client secret env'
-                        )}
-                        <Input
-                          value={droneForm.gitlabClientSecretEnv}
-                          onChange={(event) => {
-                            updateDroneDraft('gitlabClientSecretEnv', event.target.value);
-                          }}
-                          placeholder="DRONE_GITLAB_CLIENT_SECRET"
-                          disabled={submitting}
-                        />
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 border-t border-border-light pt-3 dark:border-border-dark">
-                    <div className="text-xs font-semibold text-text-secondary dark:text-text-muted">
-                      {t(
-                        'workspaceSettings.delivery.droneRunnerEnvironment',
-                        'Drone runner environment'
-                      )}
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t('workspaceSettings.delivery.droneRunnerPort', 'Drone runner port')}
-                        <Input
-                          type="number"
-                          min={1}
-                          value={droneForm.runnerPort}
-                          onChange={(event) => {
-                            updateDroneDraft('runnerPort', event.target.value);
-                          }}
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t(
-                          'workspaceSettings.delivery.droneRunnerCapacity',
-                          'Drone runner capacity'
-                        )}
-                        <Input
-                          type="number"
-                          min={1}
-                          value={droneForm.runnerCapacity}
-                          onChange={(event) => {
-                            updateDroneDraft('runnerCapacity', event.target.value);
-                          }}
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t('workspaceSettings.delivery.droneRunnerName', 'Drone runner name')}
-                        <Input
-                          value={droneForm.runnerName}
-                          onChange={(event) => {
-                            updateDroneDraft('runnerName', event.target.value);
-                          }}
-                          placeholder="memstack-drone-runner"
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t(
-                          'workspaceSettings.delivery.droneRunnerRpcProto',
-                          'Drone runner RPC proto'
-                        )}
-                        <Input
-                          value={droneForm.runnerRpcProto}
-                          onChange={(event) => {
-                            updateDroneDraft('runnerRpcProto', event.target.value);
-                          }}
-                          placeholder="http"
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t(
-                          'workspaceSettings.delivery.droneRunnerRpcHost',
-                          'Drone runner RPC host'
-                        )}
-                        <Input
-                          value={droneForm.runnerRpcHost}
-                          onChange={(event) => {
-                            updateDroneDraft('runnerRpcHost', event.target.value);
-                          }}
-                          placeholder="drone-server"
-                          disabled={submitting}
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-semibold text-text-secondary dark:text-text-muted">
-                        {t(
-                          'workspaceSettings.delivery.droneRunnerRpcSecretEnv',
-                          'Drone runner RPC secret env'
-                        )}
-                        <Input
-                          value={droneForm.runnerRpcSecretEnv}
-                          onChange={(event) => {
-                            updateDroneDraft('runnerRpcSecretEnv', event.target.value);
-                          }}
-                          placeholder="DRONE_RPC_SECRET"
-                          disabled={submitting}
-                        />
-                      </label>
-                    </div>
                   </div>
                 </div>
               ) : null}

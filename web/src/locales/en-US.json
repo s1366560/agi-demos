@@ -3558,6 +3558,7 @@
       "codeRootPlaceholder": "Sandbox code root",
       "codeRootHint": "Use an isolated child path such as /workspace/my-evo.",
       "createSuccess": "Workspace created",
+      "createDuplicateError": "A workspace with this name already exists.",
       "createError": "Failed to create workspace",
       "archived": "Archived",
       "active": "Active",

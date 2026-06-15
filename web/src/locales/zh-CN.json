@@ -3716,6 +3716,7 @@
       "codeRootPlaceholder": "沙箱代码根目录",
       "codeRootHint": "使用隔离子路径，例如 /workspace/my-evo。",
       "createSuccess": "工作空间已创建",
+      "createDuplicateError": "已存在同名工作空间",
       "createError": "创建工作空间失败",
       "archived": "已归档",
       "active": "进行中",

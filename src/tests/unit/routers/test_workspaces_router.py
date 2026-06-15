@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
 from src.domain.model.workspace.workspace import Workspace
 from src.domain.model.workspace.workspace_agent import WorkspaceAgent
@@ -131,7 +132,7 @@ class TestWorkspacesRouter:
         assert metadata["collaboration_mode"] == "single_agent"
         assert metadata["agent_conversation_mode"] == "single_agent"
 
-    def test_create_workspace_forwards_scenario_and_collaboration_metadata(
+    def test_create_workspace_forwards_programming_metadata_without_delivery_defaults(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
     ) -> None:
         response = workspaces_client.post(
@@ -155,104 +156,31 @@ class TestWorkspacesRouter:
         assert metadata["autonomy_profile"] == {"workspace_type": "software_development"}
         assert metadata["sandbox_code_root"] == "/workspace/my-evo"
         assert metadata["code_context"]["sandbox_code_root"] == "/workspace/my-evo"
-        assert metadata["source_control"] == {
-            "provider": "github",
-            "repo": "memstack/delivery-room",
-            "default_branch": "main",
-            "server_url": "https://github.com",
-            "auth_token_env": "GITHUB_TOKEN",
-            "clone_url": "https://github.com/memstack/delivery-room.git",
-        }
-        delivery = metadata["delivery_cicd"]
-        assert delivery["provider"] == "drone"
-        assert delivery["code_root"] == "/workspace/my-evo"
-        assert delivery["agent_managed"] is False
-        assert delivery["contract_source"] == "workspace_defaults"
-        assert delivery["contract_confidence"] == 1.0
-        assert delivery["timeout_seconds"] == 600
-        assert delivery["auto_deploy"] is False
-        assert delivery["drone"] == {
-            "repo": "memstack/delivery-room",
-            "branch": "main",
-            "server_url_env": "DRONE_SERVER_URL",
-            "token_env": "DRONE_TOKEN",
-            "poll_interval_seconds": 5,
-            "source_control": {
-                "provider": "github",
-                "repo": "memstack/delivery-room",
-                "default_branch": "main",
-                "server_url": "https://github.com",
-                "auth_token_env": "GITHUB_TOKEN",
-                "clone_url": "https://github.com/memstack/delivery-room.git",
-            },
-            "environment": {
-                "api": {
-                    "server_url_env": "DRONE_SERVER_URL",
-                    "token_env": "DRONE_TOKEN",
-                },
-                "server": {
-                    "server_port": 8080,
-                    "server_host": "localhost:8080",
-                    "server_proto": "http",
-                    "rpc_secret_env": "DRONE_RPC_SECRET",
-                    "user_create": "username:memstack,admin:true",
-                    "source_provider": "github",
-                    "github_server": "https://github.com",
-                    "github_client_id_env": "DRONE_GITHUB_CLIENT_ID",
-                    "github_client_secret_env": "DRONE_GITHUB_CLIENT_SECRET",
-                    "gitlab_server": "https://gitlab.com",
-                    "gitlab_client_id_env": "DRONE_GITLAB_CLIENT_ID",
-                    "gitlab_client_secret_env": "DRONE_GITLAB_CLIENT_SECRET",
-                    "git_always_auth": False,
-                },
-                "runner": {
-                    "runner_port": 3001,
-                    "runner_capacity": 2,
-                    "runner_name": "memstack-drone-runner",
-                    "rpc_proto": "http",
-                    "rpc_host": "drone-server",
-                    "rpc_secret_env": "DRONE_RPC_SECRET",
-                },
-            },
-            "deploy": {
-                "enabled": False,
-                "mode": "cli",
-                "stage": "deploy",
-                "required": True,
-                "cli": {
-                    "image": "alpine:3.20",
-                    "commands": [],
-                },
-                "docker": {
-                    "trusted": True,
-                    "context": ".",
-                    "dockerfile": "Dockerfile",
-                    "tags": ["latest"],
-                    "deploy_strategy": "local_build",
-                    "deploy_host_port": 18080,
-                    "reserved_host_ports": [
-                        3000,
-                        3001,
-                        5001,
-                        5432,
-                        6379,
-                        7474,
-                        7687,
-                        8000,
-                        8080,
-                    ],
-                    "allow_daemon_registry_pull": False,
-                },
-                "kubernetes": {
-                    "namespace": "default",
-                    "manifest_paths": ["k8s/*.yaml"],
-                    "kubeconfig_secret": "kubeconfig",
-                    "kubectl_image": "bitnami/kubectl:latest",
-                },
-            },
-        }
+        assert "source_control" not in metadata
+        assert "delivery_cicd" not in metadata
 
-    def test_create_workspace_links_gitlab_source_control_to_drone(
+    def test_create_workspace_maps_duplicate_name_to_conflict(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        mock_workspace_service.create_workspace.side_effect = IntegrityError(
+            "secret insert statement",
+            {"name": "secret-workspace"},
+            Exception(
+                'duplicate key value violates unique constraint "uq_workspaces_project_name"'
+            ),
+        )
+
+        response = workspaces_client.post(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
+            json={"name": "Team Workspace", "description": "Workspace description"},
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.json()["detail"] == "Workspace already exists"
+        assert "secret" not in response.text
+        workspaces_client.mock_db.rollback.assert_awaited_once()  # type: ignore[attr-defined]
+
+    def test_create_workspace_ignores_top_level_source_control_defaults(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
     ) -> None:
         response = workspaces_client.post(
@@ -273,22 +201,10 @@ class TestWorkspacesRouter:
 
         assert response.status_code == status.HTTP_201_CREATED
         metadata = mock_workspace_service.create_workspace.await_args.kwargs["metadata"]
-        assert metadata["source_control"] == {
-            "provider": "gitlab",
-            "repo": "platform/gitlab-delivery",
-            "default_branch": "develop",
-            "server_url": "https://gitlab.example.com",
-            "auth_token_env": "GITLAB_TOKEN",
-            "clone_url": "https://gitlab.example.com/platform/gitlab-delivery.git",
-        }
-        drone = metadata["delivery_cicd"]["drone"]
-        assert drone["repo"] == "platform/gitlab-delivery"
-        assert drone["branch"] == "develop"
-        assert drone["source_control"] == metadata["source_control"]
-        assert drone["environment"]["server"]["source_provider"] == "gitlab"
-        assert drone["environment"]["server"]["gitlab_server"] == "https://gitlab.example.com"
-        assert drone["deploy"]["enabled"] is False
-        assert drone["deploy"]["mode"] == "cli"
+        assert metadata["workspace_use_case"] == "programming"
+        assert metadata["sandbox_code_root"] == "/workspace/gitlab-delivery"
+        assert "source_control" not in metadata
+        assert "delivery_cicd" not in metadata
 
     def test_create_workspace_preserves_explicit_programming_delivery_provider(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
@@ -312,7 +228,6 @@ class TestWorkspacesRouter:
         metadata = mock_workspace_service.create_workspace.await_args.kwargs["metadata"]
         delivery = metadata["delivery_cicd"]
         assert delivery["provider"] == "sandbox_native"
-        assert delivery["code_root"] == "/workspace/my-evo"
         assert delivery["install_command"] == "pnpm install"
         assert "drone" not in delivery
 

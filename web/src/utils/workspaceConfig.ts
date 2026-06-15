@@ -410,31 +410,16 @@ export function buildWorkspaceCreateRequest({
   useCase,
   collaborationMode,
   sandboxCodeRoot,
-  sourceControl,
-  droneConfig,
 }: {
   name: string;
   description: string;
   useCase: WorkspaceUseCase;
   collaborationMode: WorkspaceCollaborationMode;
   sandboxCodeRoot: string;
-  sourceControl?: WorkspaceSourceControlConfig;
-  droneConfig?: WorkspaceDeliveryDroneConfig;
 }): WorkspaceCreateRequest {
   const workspaceType = workspaceTypeForUseCase(useCase);
   const workspaceName = name.trim();
   const normalizedCodeRoot = normaliseSandboxCodeRoot(sandboxCodeRoot);
-  const sourceControlConfig =
-    useCase === 'programming'
-      ? normaliseWorkspaceSourceControlConfig(sourceControl, workspaceName)
-      : undefined;
-  const deliveryCicd =
-    useCase === 'programming'
-      ? buildDefaultDroneDeliveryConfig(workspaceName, normalizedCodeRoot, sourceControlConfig)
-      : undefined;
-  if (deliveryCicd) {
-    deliveryCicd.drone = mergeDroneConfig(deliveryCicd.drone, droneConfig);
-  }
 
   return {
     name: workspaceName,
@@ -442,7 +427,6 @@ export function buildWorkspaceCreateRequest({
     use_case: useCase,
     collaboration_mode: collaborationMode,
     ...(useCase === 'programming' ? { sandbox_code_root: normalizedCodeRoot } : {}),
-    ...(sourceControlConfig ? { source_control: sourceControlConfig } : {}),
     metadata: {
       workspace_use_case: useCase,
       workspace_type: workspaceType,
@@ -453,8 +437,6 @@ export function buildWorkspaceCreateRequest({
         ? {
             sandbox_code_root: normalizedCodeRoot,
             code_context: { sandbox_code_root: normalizedCodeRoot },
-            source_control: sourceControlConfig,
-            ...(deliveryCicd ? { delivery_cicd: deliveryCicd } : {}),
           }
         : {}),
     },

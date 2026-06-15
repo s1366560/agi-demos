@@ -878,7 +878,6 @@ export interface WorkspaceCreateRequest {
   collaboration_mode?: WorkspaceCollaborationMode | undefined;
   autonomy_profile?: WorkspaceAutonomyProfile | undefined;
   sandbox_code_root?: string | undefined;
-  source_control?: WorkspaceSourceControlConfig | undefined;
 }
 
 export interface WorkspaceUpdateRequest {

@@ -221,6 +221,7 @@ const commonTranslations: Record<string, string> = {
   'tenant.workspaceList.codeRootPlaceholder': 'Sandbox code root',
   'tenant.workspaceList.codeRootHint': 'Use an isolated child path such as /workspace/my-evo.',
   'tenant.workspaceList.createSuccess': 'Workspace created',
+  'tenant.workspaceList.createDuplicateError': 'A workspace with this name already exists.',
   'tenant.workspaceList.createError': 'Failed to create workspace',
   'tenant.workspaceList.archived': 'Archived',
   'tenant.workspaceList.active': 'Active',
