@@ -164,6 +164,62 @@ describe('AgentDefinitionModal', () => {
     });
   });
 
+  it('round-trips session and delegate policies on update', async () => {
+    render(
+      <AgentDefinitionModal
+        isOpen
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        definition={makeDefinition({
+          session_policy: {
+            dm_scope: 'global',
+            max_messages: 20,
+            idle_reset_minutes: 30,
+            daily_reset_hour: 5,
+            session_ttl_hours: 48,
+          },
+          delegate_config: {
+            capability_tier: 'read_write',
+            max_delegation_depth: 2,
+            allowed_tools: ['read_file'],
+            budget_limit_tokens: 12000,
+          },
+        })}
+      />
+    );
+
+    fireEvent.click(await screen.findByText('Sandbox & Isolation'));
+
+    expect(await screen.findByText('Session Policy')).toBeInTheDocument();
+    expect(screen.getByText('Global')).toBeInTheDocument();
+    expect(screen.getByText('Delegate Config')).toBeInTheDocument();
+    expect(screen.getByText('Read/write')).toBeInTheDocument();
+    expect(screen.getByText('read_file')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(mocks.updateDefinition).toHaveBeenCalledWith(
+        'agent-1',
+        expect.objectContaining({
+          session_policy: {
+            dm_scope: 'global',
+            max_messages: 20,
+            idle_reset_minutes: 30,
+            daily_reset_hour: 5,
+            session_ttl_hours: 48,
+          },
+          delegate_config: {
+            capability_tier: 'read_write',
+            max_delegation_depth: 2,
+            allowed_tools: ['read_file'],
+            budget_limit_tokens: 12000,
+          },
+        })
+      );
+    });
+  });
+
   it('only offers backend-supported model enum values', async () => {
     render(
       <AgentDefinitionModal

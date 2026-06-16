@@ -35,6 +35,25 @@ export interface AgentDefinitionToolPolicy {
   precedence?: 'allow_first' | 'deny_first' | undefined;
 }
 
+export type AgentDefinitionDmScope = 'per_user' | 'per_chat' | 'global';
+
+export interface AgentDefinitionSessionPolicy {
+  dm_scope?: AgentDefinitionDmScope | undefined;
+  max_messages?: number | null | undefined;
+  idle_reset_minutes?: number | null | undefined;
+  daily_reset_hour?: number | null | undefined;
+  session_ttl_hours?: number | null | undefined;
+}
+
+export type AgentDefinitionDelegateCapabilityTier = 'full' | 'read_write' | 'read_only' | 'none';
+
+export interface AgentDefinitionDelegateConfig {
+  capability_tier?: AgentDefinitionDelegateCapabilityTier | undefined;
+  max_delegation_depth?: number | undefined;
+  allowed_tools?: string[] | null | undefined;
+  budget_limit_tokens?: number | null | undefined;
+}
+
 export interface AgentBinding {
   id: string;
   tenant_id: string;
@@ -75,6 +94,8 @@ export interface AgentDefinition {
   agent_to_agent_allowlist: string[] | null;
   spawn_policy: AgentDefinitionSpawnPolicy | null;
   tool_policy: AgentDefinitionToolPolicy | null;
+  session_policy?: AgentDefinitionSessionPolicy | null | undefined;
+  delegate_config?: AgentDefinitionDelegateConfig | null | undefined;
   discoverable: boolean;
   source: AgentSource;
   enabled: boolean;
@@ -181,6 +202,8 @@ export interface CreateDefinitionRequest {
   fallback_models?: string[] | undefined;
   spawn_policy?: AgentDefinitionSpawnPolicy | null | undefined;
   tool_policy?: AgentDefinitionToolPolicy | null | undefined;
+  session_policy?: AgentDefinitionSessionPolicy | null | undefined;
+  delegate_config?: AgentDefinitionDelegateConfig | null | undefined;
   metadata?: Record<string, unknown> | undefined;
 }
 
@@ -211,6 +234,8 @@ export interface UpdateDefinitionRequest {
   fallback_models?: string[] | undefined;
   spawn_policy?: AgentDefinitionSpawnPolicy | null | undefined;
   tool_policy?: AgentDefinitionToolPolicy | null | undefined;
+  session_policy?: AgentDefinitionSessionPolicy | null | undefined;
+  delegate_config?: AgentDefinitionDelegateConfig | null | undefined;
   metadata?: Record<string, unknown> | undefined;
 }
 

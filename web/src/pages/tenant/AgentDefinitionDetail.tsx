@@ -605,6 +605,68 @@ export const AgentDefinitionDetail: React.FC = () => {
           </Section>
 
           <Section
+            title={t('tenant.agentDefinitions.detail.sections.sessionDelegation', {
+              defaultValue: 'Session and delegation',
+            })}
+            icon={<Network size={16} />}
+          >
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.dmScope', {
+                defaultValue: 'DM Scope',
+              })}
+              value={definition.session_policy?.dm_scope}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.maxMessages', {
+                defaultValue: 'Max Messages',
+              })}
+              value={formatNumber(definition.session_policy?.max_messages)}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.idleResetMinutes', {
+                defaultValue: 'Idle Reset Minutes',
+              })}
+              value={formatNumber(definition.session_policy?.idle_reset_minutes)}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.dailyResetHour', {
+                defaultValue: 'Daily Reset Hour',
+              })}
+              value={formatNumber(definition.session_policy?.daily_reset_hour)}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.sessionTtlHours', {
+                defaultValue: 'Session TTL Hours',
+              })}
+              value={formatNumber(definition.session_policy?.session_ttl_hours)}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.delegateCapabilityTier', {
+                defaultValue: 'Capability Tier',
+              })}
+              value={definition.delegate_config?.capability_tier}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.maxDelegationDepth', {
+                defaultValue: 'Max Delegation Depth',
+              })}
+              value={formatNumber(definition.delegate_config?.max_delegation_depth)}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.delegateBudgetLimitTokens', {
+                defaultValue: 'Budget Limit Tokens',
+              })}
+              value={formatNumber(definition.delegate_config?.budget_limit_tokens)}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.delegateAllowedTools', {
+                defaultValue: 'Delegate Tools',
+              })}
+              value={<StringList values={definition.delegate_config?.allowed_tools} />}
+            />
+          </Section>
+
+          <Section
             title={t('tenant.agentDefinitions.detail.sections.metrics', {
               defaultValue: 'Metrics',
             })}

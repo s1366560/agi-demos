@@ -24,6 +24,10 @@ import { StateDisplay } from '../shared/ui/StateDisplay';
 import type { SkillResponse, MCPServerResponse, ToolInfo } from '../../types/agent';
 import type {
   AgentDefinition,
+  AgentDefinitionDelegateCapabilityTier,
+  AgentDefinitionDelegateConfig,
+  AgentDefinitionDmScope,
+  AgentDefinitionSessionPolicy,
   AgentDefinitionSpawnPolicy,
   AgentDefinitionToolPolicy,
   CreateDefinitionRequest,
@@ -88,6 +92,15 @@ interface AgentDefinitionFormValues {
   tool_policy_allow?: string[] | undefined;
   tool_policy_deny?: string[] | undefined;
   tool_policy_precedence?: 'allow_first' | 'deny_first' | undefined;
+  session_policy_dm_scope?: AgentDefinitionDmScope | undefined;
+  session_policy_max_messages?: number | undefined;
+  session_policy_idle_reset_minutes?: number | undefined;
+  session_policy_daily_reset_hour?: number | undefined;
+  session_policy_ttl_hours?: number | undefined;
+  delegate_config_capability_tier?: AgentDefinitionDelegateCapabilityTier | undefined;
+  delegate_config_max_delegation_depth?: number | undefined;
+  delegate_config_allowed_tools?: string[] | undefined;
+  delegate_config_budget_limit_tokens?: number | undefined;
 }
 
 function getMetadataNumber(metadata: Record<string, unknown>, key: string): number | undefined {
@@ -181,6 +194,73 @@ function buildToolPolicy(
     deny: deny ?? [],
     precedence,
   };
+}
+
+function buildSessionPolicy(
+  values: AgentDefinitionFormValues,
+  force = false
+): AgentDefinitionSessionPolicy | undefined {
+  const hasPolicy =
+    force ||
+    values.session_policy_dm_scope !== undefined ||
+    values.session_policy_max_messages !== undefined ||
+    values.session_policy_idle_reset_minutes !== undefined ||
+    values.session_policy_daily_reset_hour !== undefined ||
+    values.session_policy_ttl_hours !== undefined;
+
+  if (!hasPolicy) {
+    return undefined;
+  }
+
+  const policy: AgentDefinitionSessionPolicy = {};
+  if (values.session_policy_dm_scope !== undefined) {
+    policy.dm_scope = values.session_policy_dm_scope;
+  }
+  if (values.session_policy_max_messages !== undefined) {
+    policy.max_messages = values.session_policy_max_messages;
+  }
+  if (values.session_policy_idle_reset_minutes !== undefined) {
+    policy.idle_reset_minutes = values.session_policy_idle_reset_minutes;
+  }
+  if (values.session_policy_daily_reset_hour !== undefined) {
+    policy.daily_reset_hour = values.session_policy_daily_reset_hour;
+  }
+  if (values.session_policy_ttl_hours !== undefined) {
+    policy.session_ttl_hours = values.session_policy_ttl_hours;
+  }
+  return policy;
+}
+
+function buildDelegateConfig(
+  values: AgentDefinitionFormValues,
+  force = false
+): AgentDefinitionDelegateConfig | undefined {
+  const allowedTools = normalizeStringList(values.delegate_config_allowed_tools);
+  const hasConfig =
+    force ||
+    values.delegate_config_capability_tier !== undefined ||
+    values.delegate_config_max_delegation_depth !== undefined ||
+    values.delegate_config_budget_limit_tokens !== undefined ||
+    allowedTools !== undefined;
+
+  if (!hasConfig) {
+    return undefined;
+  }
+
+  const config: AgentDefinitionDelegateConfig = {};
+  if (values.delegate_config_capability_tier !== undefined) {
+    config.capability_tier = values.delegate_config_capability_tier;
+  }
+  if (values.delegate_config_max_delegation_depth !== undefined) {
+    config.max_delegation_depth = values.delegate_config_max_delegation_depth;
+  }
+  if (allowedTools !== undefined) {
+    config.allowed_tools = allowedTools;
+  }
+  if (values.delegate_config_budget_limit_tokens !== undefined) {
+    config.budget_limit_tokens = values.delegate_config_budget_limit_tokens;
+  }
+  return config;
 }
 
 function toWorkspaceConfigFormValues(
@@ -389,6 +469,58 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
         }
         fieldValues.tool_policy_precedence = definition.tool_policy?.precedence ?? 'deny_first';
 
+        if (definition.session_policy) {
+          fieldValues.session_policy_dm_scope = definition.session_policy.dm_scope ?? 'per_user';
+          if (
+            definition.session_policy.max_messages !== null &&
+            definition.session_policy.max_messages !== undefined
+          ) {
+            fieldValues.session_policy_max_messages = definition.session_policy.max_messages;
+          }
+          if (
+            definition.session_policy.idle_reset_minutes !== null &&
+            definition.session_policy.idle_reset_minutes !== undefined
+          ) {
+            fieldValues.session_policy_idle_reset_minutes =
+              definition.session_policy.idle_reset_minutes;
+          }
+          if (
+            definition.session_policy.daily_reset_hour !== null &&
+            definition.session_policy.daily_reset_hour !== undefined
+          ) {
+            fieldValues.session_policy_daily_reset_hour =
+              definition.session_policy.daily_reset_hour;
+          }
+          if (
+            definition.session_policy.session_ttl_hours !== null &&
+            definition.session_policy.session_ttl_hours !== undefined
+          ) {
+            fieldValues.session_policy_ttl_hours = definition.session_policy.session_ttl_hours;
+          }
+        }
+
+        if (definition.delegate_config) {
+          fieldValues.delegate_config_capability_tier =
+            definition.delegate_config.capability_tier ?? 'read_only';
+          if (definition.delegate_config.max_delegation_depth !== undefined) {
+            fieldValues.delegate_config_max_delegation_depth =
+              definition.delegate_config.max_delegation_depth;
+          }
+          if (
+            definition.delegate_config.allowed_tools !== null &&
+            definition.delegate_config.allowed_tools !== undefined
+          ) {
+            fieldValues.delegate_config_allowed_tools = definition.delegate_config.allowed_tools;
+          }
+          if (
+            definition.delegate_config.budget_limit_tokens !== null &&
+            definition.delegate_config.budget_limit_tokens !== undefined
+          ) {
+            fieldValues.delegate_config_budget_limit_tokens =
+              definition.delegate_config.budget_limit_tokens;
+          }
+        }
+
         form.setFieldsValue(fieldValues as Parameters<typeof form.setFieldsValue>[0]);
         setKeywords(definition.trigger?.keywords ?? []);
       } else {
@@ -415,6 +547,8 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
       const values = await form.validateFields();
       const spawnPolicy = buildSpawnPolicy(values, Boolean(definition?.spawn_policy));
       const toolPolicy = buildToolPolicy(values, Boolean(definition?.tool_policy));
+      const sessionPolicy = buildSessionPolicy(values, Boolean(definition?.session_policy));
+      const delegateConfig = buildDelegateConfig(values, Boolean(definition?.delegate_config));
 
       if (definition) {
         const data: UpdateDefinitionRequest = {
@@ -439,6 +573,8 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           workspace_config: values.workspace_config,
           spawn_policy: spawnPolicy,
           tool_policy: toolPolicy,
+          session_policy: sessionPolicy,
+          delegate_config: delegateConfig,
           metadata: stripLegacyPolicyMetadata(definition.metadata) ?? {},
         };
         await updateDefinition(definition.id, data);
@@ -469,6 +605,8 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           workspace_config: values.workspace_config,
           spawn_policy: spawnPolicy,
           tool_policy: toolPolicy,
+          session_policy: sessionPolicy,
+          delegate_config: delegateConfig,
         };
         await createDefinition(data);
         message.success(
@@ -923,6 +1061,145 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
                 />
               </Form.Item>
             </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+            <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+              {t('tenant.agentDefinitions.modal.sessionPolicy', 'Session Policy')}
+            </h4>
+            <div className="grid grid-cols-2 gap-4">
+              <Form.Item
+                name="session_policy_dm_scope"
+                label={t('tenant.agentDefinitions.modal.dmScope', 'DM Scope')}
+                tooltip={t(
+                  'tenant.agentDefinitions.modal.dmScopeTooltip',
+                  'Controls how direct-message conversations share or isolate session state.'
+                )}
+              >
+                <Select
+                  allowClear
+                  placeholder={t('tenant.agentDefinitions.modal.dmScopePlaceholder', 'Use default')}
+                >
+                  <Option value="per_user">
+                    {t('tenant.agentDefinitions.modal.dmScopePerUser', 'Per user')}
+                  </Option>
+                  <Option value="per_chat">
+                    {t('tenant.agentDefinitions.modal.dmScopePerChat', 'Per chat')}
+                  </Option>
+                  <Option value="global">
+                    {t('tenant.agentDefinitions.modal.dmScopeGlobal', 'Global')}
+                  </Option>
+                </Select>
+              </Form.Item>
+              <Form.Item
+                name="session_policy_max_messages"
+                label={t('tenant.agentDefinitions.modal.maxMessages', 'Max Messages')}
+                tooltip={t(
+                  'tenant.agentDefinitions.modal.maxMessagesTooltip',
+                  'Maximum messages before the session is trimmed.'
+                )}
+              >
+                <InputNumber min={1} className="w-full" />
+              </Form.Item>
+              <Form.Item
+                name="session_policy_idle_reset_minutes"
+                label={t('tenant.agentDefinitions.modal.idleResetMinutes', 'Idle Reset Minutes')}
+              >
+                <InputNumber min={1} className="w-full" />
+              </Form.Item>
+              <Form.Item
+                name="session_policy_daily_reset_hour"
+                label={t('tenant.agentDefinitions.modal.dailyResetHour', 'Daily Reset Hour')}
+                tooltip={t(
+                  'tenant.agentDefinitions.modal.dailyResetHourTooltip',
+                  'UTC hour from 0 to 23. Leave empty for no daily reset.'
+                )}
+              >
+                <InputNumber min={0} max={23} className="w-full" />
+              </Form.Item>
+              <Form.Item
+                name="session_policy_ttl_hours"
+                label={t('tenant.agentDefinitions.modal.sessionTtlHours', 'Session TTL Hours')}
+              >
+                <InputNumber min={1} className="w-full" />
+              </Form.Item>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+            <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+              {t('tenant.agentDefinitions.modal.delegateConfig', 'Delegate Config')}
+            </h4>
+            <div className="grid grid-cols-2 gap-4">
+              <Form.Item
+                name="delegate_config_capability_tier"
+                label={t('tenant.agentDefinitions.modal.delegateCapabilityTier', 'Capability Tier')}
+                tooltip={t(
+                  'tenant.agentDefinitions.modal.delegateCapabilityTierTooltip',
+                  'Capability tier granted to delegated work.'
+                )}
+              >
+                <Select
+                  allowClear
+                  placeholder={t(
+                    'tenant.agentDefinitions.modal.delegateCapabilityTierPlaceholder',
+                    'Use default'
+                  )}
+                >
+                  <Option value="full">
+                    {t('tenant.agentDefinitions.modal.delegateCapabilityFull', 'Full')}
+                  </Option>
+                  <Option value="read_write">
+                    {t('tenant.agentDefinitions.modal.delegateCapabilityReadWrite', 'Read/write')}
+                  </Option>
+                  <Option value="read_only">
+                    {t('tenant.agentDefinitions.modal.delegateCapabilityReadOnly', 'Read-only')}
+                  </Option>
+                  <Option value="none">
+                    {t('tenant.agentDefinitions.modal.delegateCapabilityNone', 'None')}
+                  </Option>
+                </Select>
+              </Form.Item>
+              <Form.Item
+                name="delegate_config_max_delegation_depth"
+                label={t(
+                  'tenant.agentDefinitions.modal.maxDelegationDepth',
+                  'Max Delegation Depth'
+                )}
+              >
+                <InputNumber min={0} className="w-full" />
+              </Form.Item>
+              <Form.Item
+                name="delegate_config_budget_limit_tokens"
+                label={t(
+                  'tenant.agentDefinitions.modal.delegateBudgetLimitTokens',
+                  'Budget Limit Tokens'
+                )}
+              >
+                <InputNumber min={1} className="w-full" />
+              </Form.Item>
+            </div>
+            <Form.Item
+              name="delegate_config_allowed_tools"
+              label={t('tenant.agentDefinitions.modal.delegateAllowedTools', 'Delegate Tools')}
+              tooltip={t(
+                'tenant.agentDefinitions.modal.delegateAllowedToolsTooltip',
+                'Tool names this agent may grant to delegated work. Leave empty to inherit the tier boundary.'
+              )}
+            >
+              <Select
+                mode="tags"
+                allowClear
+                placeholder={t('tenant.agentDefinitions.modal.delegateAllowedToolsPlaceholder')}
+                loading={loadingResources}
+                showSearch={{ filterOption: filterSelectOption }}
+                options={availableTools.map((tool) => ({
+                  label: tool.name,
+                  value: tool.name,
+                  title: tool.description,
+                }))}
+              />
+            </Form.Item>
           </div>
 
           <div className="pt-4 border-t border-slate-200 dark:border-slate-700">

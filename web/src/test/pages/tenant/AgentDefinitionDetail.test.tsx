@@ -100,6 +100,19 @@ const makeDefinition = (overrides: Partial<AgentDefinition> = {}): AgentDefiniti
     deny: ['bash'],
     precedence: 'deny_first',
   },
+  session_policy: {
+    dm_scope: 'global',
+    max_messages: 20,
+    idle_reset_minutes: 30,
+    daily_reset_hour: 5,
+    session_ttl_hours: 48,
+  },
+  delegate_config: {
+    capability_tier: 'read_write',
+    max_delegation_depth: 2,
+    allowed_tools: ['read_file'],
+    budget_limit_tokens: 12000,
+  },
   discoverable: true,
   source: 'database',
   enabled: true,
@@ -164,6 +177,10 @@ describe('AgentDefinitionDetail', () => {
     expect(screen.getAllByText('web_search').length).toBeGreaterThan(0);
     expect(screen.getByText('bash')).toBeInTheDocument();
     expect(screen.getByText('deny_first')).toBeInTheDocument();
+    expect(screen.getByText('Session and delegation')).toBeInTheDocument();
+    expect(screen.getByText('global')).toBeInTheDocument();
+    expect(screen.getByText('read_write')).toBeInTheDocument();
+    expect(screen.getByText('12000')).toBeInTheDocument();
     expect(screen.getByText('binding-1')).toBeInTheDocument();
     expect(screen.getAllByText(/"owner": "platform"/).length).toBeGreaterThan(0);
     expect(screen.getByText(/"fallback_models"/)).toBeInTheDocument();
