@@ -28,6 +28,7 @@ import {
   Wrench,
 } from 'lucide-react';
 
+import { useProjectStore } from '@/stores/project';
 import {
   useSkillStore,
   useSkillLoading,
@@ -35,7 +36,6 @@ import {
   useActiveSkillsCount,
   useSkillTotal,
 } from '@/stores/skill';
-import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
 import { skillAPI } from '@/services/skillService';
