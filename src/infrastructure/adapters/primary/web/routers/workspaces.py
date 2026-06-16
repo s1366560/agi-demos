@@ -7,8 +7,9 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Literal, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,8 +25,9 @@ from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.domain.model.workspace.workspace_member import WorkspaceMember
 from src.domain.model.workspace.workspace_role import WorkspaceRole
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
 from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(
@@ -60,6 +62,7 @@ def get_workspace_service(request: Request, db: AsyncSession = Depends(get_db)) 
         workspace_agent_repo=container.workspace_agent_repository(),
         topology_repo=container.topology_repository(),
         workspace_event_publisher=_publish_event if redis_client is not None else None,
+        agent_registry=container.agent_registry(),
     )
 
 
@@ -99,6 +102,7 @@ async def _publish_pending_workspace_events(
     workspace_service: WorkspaceService,
     *,
     workspace_id: str,
+    background_tasks: BackgroundTasks | None = None,
 ) -> None:
     try:
         await workspace_service.publish_pending_events()
@@ -107,11 +111,70 @@ async def _publish_pending_workspace_events(
             "Failed to publish workspace events",
             extra={"workspace_id": workspace_id},
         )
+        if background_tasks is not None:
+            background_tasks.add_task(
+                _retry_publish_pending_workspace_events,
+                workspace_service,
+                workspace_id=workspace_id,
+            )
+
+
+async def _retry_publish_pending_workspace_events(
+    workspace_service: WorkspaceService,
+    *,
+    workspace_id: str,
+) -> None:
+    try:
+        await workspace_service.publish_pending_events()
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace events after background retry",
+            extra={"workspace_id": workspace_id},
+        )
 
 
 def _ensure_workspace_scope(workspace: Workspace, tenant_id: str, project_id: str) -> None:
     if workspace.tenant_id != tenant_id or workspace.project_id != project_id:
         raise ValueError("Workspace not found")
+
+
+async def _ensure_project_access_for_workspace_create(
+    *,
+    tenant_id: str,
+    project_id: str,
+    current_user: User,
+    db: AsyncSession,
+) -> None:
+    await _ensure_project_member(
+        tenant_id=tenant_id,
+        project_id=project_id,
+        user_id=current_user.id,
+        db=db,
+    )
+
+
+async def _ensure_project_member(
+    *,
+    tenant_id: str,
+    project_id: str,
+    user_id: str,
+    db: AsyncSession,
+) -> None:
+    result = await db.execute(
+        refresh_select_statement(
+            select(Project.id)
+            .join(UserProject, UserProject.project_id == Project.id)
+            .where(
+                and_(
+                    Project.id == project_id,
+                    Project.tenant_id == tenant_id,
+                    UserProject.user_id == user_id,
+                )
+            )
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise PermissionError("Access denied to project")
 
 
 WorkspaceUseCase = Literal["general", "programming", "conversation", "research", "operations"]
@@ -425,24 +488,36 @@ async def create_workspace(
     tenant_id: str,
     project_id: str,
     payload: WorkspaceCreateRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
 ) -> WorkspaceResponse:
     try:
+        metadata = _compose_workspace_metadata(payload)
+        await _ensure_project_access_for_workspace_create(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            current_user=current_user,
+            db=db,
+        )
         workspace = await workspace_service.create_workspace(
             tenant_id=tenant_id,
             project_id=project_id,
             name=payload.name,
             created_by=current_user.id,
             description=payload.description,
-            metadata=_compose_workspace_metadata(payload),
+            metadata=metadata,
         )
         await db.commit()
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
-    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace.id)
+    await _publish_pending_workspace_events(
+        workspace_service,
+        workspace_id=workspace.id,
+        background_tasks=background_tasks,
+    )
     return _to_workspace_response(workspace)
 
 
@@ -493,6 +568,7 @@ async def update_workspace(
     project_id: str,
     workspace_id: str,
     payload: WorkspaceUpdateRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
@@ -515,7 +591,11 @@ async def update_workspace(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
-    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
+    await _publish_pending_workspace_events(
+        workspace_service,
+        workspace_id=workspace_id,
+        background_tasks=background_tasks,
+    )
     return _to_workspace_response(updated)
 
 
@@ -524,6 +604,7 @@ async def delete_workspace(
     tenant_id: str,
     project_id: str,
     workspace_id: str,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
@@ -542,7 +623,11 @@ async def delete_workspace(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
-    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
+    await _publish_pending_workspace_events(
+        workspace_service,
+        workspace_id=workspace_id,
+        background_tasks=background_tasks,
+    )
 
 
 @router.get("/{workspace_id}/members", response_model=list[WorkspaceMemberResponse])
@@ -597,6 +682,7 @@ async def add_workspace_member(
     project_id: str,
     workspace_id: str,
     payload: WorkspaceMemberCreateRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
@@ -607,6 +693,12 @@ async def add_workspace_member(
             actor_user_id=current_user.id,
         )
         _ensure_workspace_scope(workspace, tenant_id=tenant_id, project_id=project_id)
+        await _ensure_project_member(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            user_id=payload.user_id,
+            db=db,
+        )
         member = await workspace_service.add_member(
             workspace_id=workspace_id,
             actor_user_id=current_user.id,
@@ -617,7 +709,11 @@ async def add_workspace_member(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
-    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
+    await _publish_pending_workspace_events(
+        workspace_service,
+        workspace_id=workspace_id,
+        background_tasks=background_tasks,
+    )
     return _to_member_response(member)
 
 
@@ -628,6 +724,7 @@ async def update_workspace_member(
     workspace_id: str,
     user_id: str,
     payload: WorkspaceMemberUpdateRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
@@ -648,7 +745,11 @@ async def update_workspace_member(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
-    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
+    await _publish_pending_workspace_events(
+        workspace_service,
+        workspace_id=workspace_id,
+        background_tasks=background_tasks,
+    )
     return _to_member_response(member)
 
 
@@ -658,6 +759,7 @@ async def remove_workspace_member(
     project_id: str,
     workspace_id: str,
     user_id: str,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
@@ -677,7 +779,11 @@ async def remove_workspace_member(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
-    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
+    await _publish_pending_workspace_events(
+        workspace_service,
+        workspace_id=workspace_id,
+        background_tasks=background_tasks,
+    )
 
 
 @router.get("/{workspace_id}/agents", response_model=list[WorkspaceAgentResponse])
@@ -719,6 +825,7 @@ async def bind_workspace_agent(
     project_id: str,
     workspace_id: str,
     payload: WorkspaceAgentCreateRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
@@ -746,7 +853,11 @@ async def bind_workspace_agent(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
-    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
+    await _publish_pending_workspace_events(
+        workspace_service,
+        workspace_id=workspace_id,
+        background_tasks=background_tasks,
+    )
     return _to_agent_response(binding)
 
 
@@ -757,6 +868,7 @@ async def update_workspace_agent(
     workspace_id: str,
     workspace_agent_id: str,
     payload: WorkspaceAgentUpdateRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
@@ -784,7 +896,11 @@ async def update_workspace_agent(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
-    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
+    await _publish_pending_workspace_events(
+        workspace_service,
+        workspace_id=workspace_id,
+        background_tasks=background_tasks,
+    )
     return _to_agent_response(binding)
 
 
@@ -796,6 +912,7 @@ async def delete_workspace_agent(
     project_id: str,
     workspace_id: str,
     workspace_agent_id: str,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workspace_service: WorkspaceService = Depends(get_workspace_service),
@@ -815,4 +932,8 @@ async def delete_workspace_agent(
     except Exception as exc:
         await db.rollback()
         raise _map_error(exc) from exc
-    await _publish_pending_workspace_events(workspace_service, workspace_id=workspace_id)
+    await _publish_pending_workspace_events(
+        workspace_service,
+        workspace_id=workspace_id,
+        background_tasks=background_tasks,
+    )

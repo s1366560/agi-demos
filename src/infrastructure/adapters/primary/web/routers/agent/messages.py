@@ -87,15 +87,44 @@ _DISPLAYABLE_EVENTS: set[str] = {
 }
 
 
-async def _verify_conversation_access(
-    conversation_id: str, current_user: User, db: AsyncSession
+def _assert_conversation_scope(
+    conversation: Any,
+    *,
+    current_user: User,
+    tenant_id: str,
+    project_id: str,
 ) -> None:
-    query = select(DBConversation.user_id).where(DBConversation.id == conversation_id).limit(1)
+    if getattr(conversation, "tenant_id", None) != tenant_id:
+        raise HTTPException(status_code=404, detail=_("Conversation not found"))
+    if getattr(conversation, "user_id", None) != current_user.id:
+        raise HTTPException(status_code=403, detail=_("Access denied"))
+    if getattr(conversation, "project_id", None) != project_id:
+        raise HTTPException(status_code=403, detail=_("Access denied"))
+
+
+async def _verify_conversation_access(
+    conversation_id: str,
+    current_user: User,
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    project_id: str | None = None,
+) -> None:
+    query = (
+        select(DBConversation.user_id, DBConversation.tenant_id, DBConversation.project_id)
+        .where(DBConversation.id == conversation_id)
+        .limit(1)
+    )
     result = await db.execute(refresh_select_statement(query))
-    owner_id = result.scalar_one_or_none()
-    if owner_id is None:
+    row = result.one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=_("Conversation not found"))
+    owner_id, conversation_tenant_id, conversation_project_id = row
+    if conversation_tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail=_("Conversation not found"))
     if owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail=_("Access denied"))
+    if project_id is not None and conversation_project_id != project_id:
         raise HTTPException(status_code=403, detail=_("Access denied"))
 
 
@@ -1356,8 +1385,12 @@ async def get_conversation_tool_executions(
         if not conversation:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
-        if conversation.user_id != current_user.id:
-            raise HTTPException(status_code=403, detail=_("Access denied"))
+        _assert_conversation_scope(
+            conversation,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
 
         tool_execution_repo = container.tool_execution_record_repository()
 
@@ -1397,6 +1430,7 @@ async def get_conversation_execution_status(
         0, description="Client's last known event_time_us (for recovery calculation)"
     ),
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get the current execution status of a conversation with optional recovery info."""
@@ -1410,8 +1444,12 @@ async def get_conversation_execution_status(
         if not conversation:
             raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
-        if conversation.user_id != current_user.id or conversation.project_id != project_id:
-            raise HTTPException(status_code=403, detail=_("Access denied"))
+        _assert_conversation_scope(
+            conversation,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
 
         redis_client = container.redis_client
         is_running = False
@@ -1480,31 +1518,9 @@ async def _get_recovery_info(
 
     try:
         if redis_client and message_id:
-            import redis.asyncio as redis
-
-            if isinstance(redis_client, redis.Redis):
-                stream_key = f"agent:events:{conversation_id}"
-                try:
-                    stream_info = await redis_client.xinfo_stream(stream_key)
-                    if stream_info:
-                        recovery_info["stream_exists"] = True
-                        last_entry = await redis_client.xrevrange(stream_key, count=1)
-                        if last_entry:
-                            _, fields = last_entry[0]
-                            data_raw = fields.get(b"data") or fields.get("data")
-                            if data_raw:
-                                import json
-
-                                data_obj = json.loads(data_raw)
-                                evt_time = data_obj.get("event_time_us", 0)
-                                evt_counter = data_obj.get("event_counter", 0)
-                                if evt_time:
-                                    recovery_info["last_event_time_us"] = evt_time
-                                    recovery_info["last_event_counter"] = evt_counter
-                                    recovery_info["can_recover"] = True
-                                    recovery_info["recovery_source"] = "stream"
-                except redis.ResponseError:
-                    pass
+            stream_recovery = await _get_stream_recovery_info(redis_client, conversation_id)
+            if stream_recovery is not None:
+                recovery_info.update(stream_recovery)
 
         if not recovery_info["stream_exists"]:
             event_repo = container.agent_execution_event_repository()
@@ -1518,6 +1534,67 @@ async def _get_recovery_info(
     except Exception as e:
         logger.warning(f"Error getting recovery info: {e}")
 
+    return recovery_info
+
+
+async def _get_stream_recovery_info(
+    redis_client: Any,
+    conversation_id: str,
+) -> dict[str, Any] | None:
+    """Read recovery metadata from the Redis event stream when present."""
+    import redis.asyncio as redis
+
+    if not isinstance(redis_client, redis.Redis):
+        return None
+
+    stream_key = f"agent:events:{conversation_id}"
+    recovery_info: dict[str, Any] | None = None
+    try:
+        stream_info = await redis_client.xinfo_stream(stream_key)
+        if stream_info:
+            last_entry = await redis_client.xrevrange(stream_key, count=1)
+            if last_entry:
+                _, fields = last_entry[0]
+                recovery_info = _decode_stream_recovery_payload(
+                    fields.get(b"data") or fields.get("data"),
+                    conversation_id,
+                )
+    except redis.ResponseError:
+        recovery_info = None
+    return recovery_info
+
+
+def _decode_stream_recovery_payload(
+    data_raw: Any,
+    conversation_id: str,
+) -> dict[str, Any] | None:
+    if not data_raw:
+        return None
+
+    try:
+        data_obj = json.loads(data_raw)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Skipping malformed recovery stream payload",
+            extra={"conversation_id": conversation_id},
+        )
+        return None
+
+    if not isinstance(data_obj, dict):
+        return None
+
+    evt_time = data_obj.get("event_time_us", 0)
+    evt_counter = data_obj.get("event_counter", 0)
+    recovery_info: dict[str, Any] = {"stream_exists": True}
+    if evt_time:
+        recovery_info.update(
+            {
+                "last_event_time_us": evt_time,
+                "last_event_counter": evt_counter,
+                "can_recover": True,
+                "recovery_source": "stream",
+            }
+        )
     return recovery_info
 
 
@@ -1628,11 +1705,17 @@ async def get_message_replies(
     conversation_id: str,
     message_id: str,
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """Get replies to a specific message."""
     try:
-        await _verify_conversation_access(conversation_id, current_user, db)
+        await _verify_conversation_access(
+            conversation_id,
+            current_user,
+            db,
+            tenant_id=tenant_id,
+        )
 
         query = (
             select(DBMessage)

@@ -12,12 +12,18 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.di_container import DIContainer
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
+    get_current_user_tenant,
+)
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
 from src.infrastructure.i18n import gettext as _
 
 
@@ -36,6 +42,96 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/subagents", tags=["SubAgents"])
+
+
+async def _ensure_project_access(
+    *,
+    project_id: str | None,
+    tenant_id: str,
+    current_user: User,
+    db: AsyncSession,
+) -> None:
+    if project_id is None:
+        return
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(Project.id)
+            .join(UserProject, UserProject.project_id == Project.id)
+            .where(
+                and_(
+                    Project.id == project_id,
+                    Project.tenant_id == tenant_id,
+                    UserProject.user_id == current_user.id,
+                )
+            )
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied"))
+
+
+async def _accessible_project_ids(
+    *,
+    tenant_id: str,
+    current_user: User,
+    db: AsyncSession,
+) -> set[str]:
+    result = await db.execute(
+        refresh_select_statement(
+            select(Project.id)
+            .join(UserProject, UserProject.project_id == Project.id)
+            .where(
+                and_(
+                    Project.tenant_id == tenant_id,
+                    UserProject.user_id == current_user.id,
+                )
+            )
+        )
+    )
+    return {str(project_id) for project_id in result.scalars().all()}
+
+
+async def _ensure_subagent_access(
+    *,
+    subagent: SubAgent,
+    tenant_id: str,
+    current_user: User,
+    db: AsyncSession,
+) -> None:
+    if subagent.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("SubAgent not found"),
+        )
+    await _ensure_project_access(
+        project_id=subagent.project_id,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    )
+
+
+async def _filter_accessible_subagents(
+    subagents: list[SubAgent],
+    *,
+    tenant_id: str,
+    current_user: User,
+    db: AsyncSession,
+) -> list[SubAgent]:
+    if not any(subagent.project_id for subagent in subagents):
+        return subagents
+
+    project_ids = await _accessible_project_ids(
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    )
+    return [
+        subagent
+        for subagent in subagents
+        if subagent.project_id is None or subagent.project_id in project_ids
+    ]
 
 
 # === Pydantic Models ===
@@ -309,6 +405,7 @@ async def create_subagent(
     request: Request,
     data: SubAgentCreate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentResponse:
     """
@@ -318,6 +415,12 @@ async def create_subagent(
     """
     try:
         container = get_container_with_db(request, db)
+        await _ensure_project_access(
+            project_id=data.project_id,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            db=db,
+        )
 
         # Check if name already exists
         repo = container.subagent_repository()
@@ -373,6 +476,7 @@ async def list_subagents(
     limit: int = Query(100, ge=1, le=500, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentListResponse:
     """
@@ -399,10 +503,25 @@ async def list_subagents(
         page = all_subagents[offset : offset + limit]
     elif source == "database" or not include_filesystem:
         # Only database SubAgents
-        page = await repo.list_by_tenant(
-            tenant_id, enabled_only=enabled_only, limit=limit, offset=offset
+        db_total = await repo.count_by_tenant(tenant_id, enabled_only=enabled_only)
+        all_subagents = (
+            await repo.list_by_tenant(
+                tenant_id,
+                enabled_only=enabled_only,
+                limit=db_total,
+                offset=0,
+            )
+            if db_total
+            else []
         )
-        total = await repo.count_by_tenant(tenant_id, enabled_only=enabled_only)
+        all_subagents = await _filter_accessible_subagents(
+            all_subagents,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            db=db,
+        )
+        total = len(all_subagents)
+        page = all_subagents[offset : offset + limit]
     else:
         # Merged: DB + FS (default)
         from src.application.services.subagent_service import SubAgentService
@@ -410,7 +529,23 @@ async def list_subagents(
 
         loader = FileSystemSubAgentLoader(base_path=Path.cwd(), tenant_id=tenant_id)
         service = SubAgentService(filesystem_loader=loader)
-        db_subagents = await repo.list_by_tenant(tenant_id, enabled_only=False)
+        db_total = await repo.count_by_tenant(tenant_id, enabled_only=False)
+        db_subagents = (
+            await repo.list_by_tenant(
+                tenant_id,
+                enabled_only=False,
+                limit=db_total,
+                offset=0,
+            )
+            if db_total
+            else []
+        )
+        db_subagents = await _filter_accessible_subagents(
+            db_subagents,
+            tenant_id=tenant_id,
+            current_user=current_user,
+            db=db,
+        )
         fs_subagents = await service.load_filesystem_subagents()
         all_subagents = service.merge(db_subagents, fs_subagents)
         if enabled_only:
@@ -503,6 +638,7 @@ async def import_filesystem_subagent(
     name: str,
     project_id: str | None = Query(None, description="Optional project to scope to"),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentResponse:
     """
@@ -515,6 +651,13 @@ async def import_filesystem_subagent(
     from pathlib import Path
 
     from src.infrastructure.agent.subagent.filesystem_loader import FileSystemSubAgentLoader
+
+    await _ensure_project_access(
+        project_id=project_id,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    )
 
     loader = FileSystemSubAgentLoader(
         base_path=Path.cwd(),
@@ -808,6 +951,7 @@ async def export_subagent_as_template(
     request: Request,
     subagent_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TemplateResponse:
     """
@@ -822,6 +966,12 @@ async def export_subagent_as_template(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("SubAgent not found"),
         )
+    await _ensure_subagent_access(
+        subagent=subagent,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    )
 
     template_repo = container.subagent_template_repository()
 
@@ -855,6 +1005,7 @@ async def get_subagent(
     request: Request,
     subagent_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentResponse:
     """
@@ -870,12 +1021,12 @@ async def get_subagent(
             detail=_("SubAgent not found"),
         )
 
-    # Verify tenant access
-    if subagent.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("SubAgent not found"),
-        )
+    await _ensure_subagent_access(
+        subagent=subagent,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    )
 
     return subagent_to_response(subagent)
 
@@ -886,6 +1037,7 @@ async def update_subagent(
     subagent_id: str,
     data: SubAgentUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentResponse:
     """
@@ -901,12 +1053,12 @@ async def update_subagent(
             detail=_("SubAgent not found"),
         )
 
-    # Verify tenant access
-    if subagent.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("SubAgent not found"),
-        )
+    await _ensure_subagent_access(
+        subagent=subagent,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    )
 
     # Check name uniqueness if changing
     if data.name and data.name != subagent.name:
@@ -975,6 +1127,7 @@ async def delete_subagent(
     request: Request,
     subagent_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """
@@ -990,12 +1143,12 @@ async def delete_subagent(
             detail=_("SubAgent not found"),
         )
 
-    # Verify tenant access
-    if subagent.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("SubAgent not found"),
-        )
+    await _ensure_subagent_access(
+        subagent=subagent,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    )
 
     await repo.delete(subagent_id)
     await db.commit()
@@ -1009,6 +1162,7 @@ async def toggle_subagent_enabled(
     subagent_id: str,
     enabled: bool = Query(..., description="Enable or disable"),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentResponse:
     """
@@ -1024,12 +1178,12 @@ async def toggle_subagent_enabled(
             detail=_("SubAgent not found"),
         )
 
-    # Verify tenant access
-    if subagent.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("SubAgent not found"),
-        )
+    await _ensure_subagent_access(
+        subagent=subagent,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    )
 
     result = await repo.set_enabled(subagent_id, enabled)
     await db.commit()
@@ -1044,6 +1198,7 @@ async def get_subagent_stats(
     request: Request,
     subagent_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentStatsResponse:
     """
@@ -1059,12 +1214,12 @@ async def get_subagent_stats(
             detail=_("SubAgent not found"),
         )
 
-    # Verify tenant access
-    if subagent.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("SubAgent not found"),
-        )
+    await _ensure_subagent_access(
+        subagent=subagent,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
+    )
 
     return SubAgentStatsResponse(
         subagent_id=subagent.id,
@@ -1082,6 +1237,7 @@ async def match_subagent(
     request: Request,
     data: SubAgentMatchRequest,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentMatchResponse:
     """
@@ -1095,6 +1251,12 @@ async def match_subagent(
     # First try keyword matching
     keyword_matches = await repo.find_by_keywords(
         tenant_id, data.task_description, enabled_only=True
+    )
+    keyword_matches = await _filter_accessible_subagents(
+        keyword_matches,
+        tenant_id=tenant_id,
+        current_user=current_user,
+        db=db,
     )
 
     if keyword_matches:

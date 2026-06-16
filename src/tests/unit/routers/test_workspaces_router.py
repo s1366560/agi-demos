@@ -98,6 +98,9 @@ def workspaces_client(mock_workspace_service: AsyncMock) -> TestClient:
     mock_db = AsyncMock()
     mock_db.commit = AsyncMock()
     mock_db.rollback = AsyncMock()
+    project_access_result = Mock()
+    project_access_result.scalar_one_or_none.return_value = "project-1"
+    mock_db.execute = AsyncMock(return_value=project_access_result)
 
     async def override_get_db():
         yield mock_db
@@ -110,6 +113,7 @@ def workspaces_client(mock_workspace_service: AsyncMock) -> TestClient:
     app.dependency_overrides[get_workspace_service] = lambda: mock_workspace_service
     client = TestClient(app)
     client.mock_db = mock_db  # type: ignore[attr-defined]
+    client.mock_project_access_result = project_access_result  # type: ignore[attr-defined]
     return client
 
 
@@ -246,6 +250,21 @@ class TestWorkspacesRouter:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         mock_workspace_service.create_workspace.assert_not_awaited()
 
+    def test_create_workspace_requires_project_membership(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        workspaces_client.mock_project_access_result.scalar_one_or_none.return_value = None  # type: ignore[attr-defined]
+
+        response = workspaces_client.post(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces",
+            json={"name": "Unauthorized Workspace"},
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json()["detail"] == "Access denied"
+        mock_workspace_service.create_workspace.assert_not_awaited()
+        workspaces_client.mock_db.rollback.assert_awaited_once()  # type: ignore[attr-defined]
+
     def test_list_workspaces_success(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
     ) -> None:
@@ -315,6 +334,21 @@ class TestWorkspacesRouter:
         assert response.json()["detail"] == "Invalid workspace request"
         assert "already" not in response.text.lower()
 
+    def test_add_member_requires_target_project_membership(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        workspaces_client.mock_project_access_result.scalar_one_or_none.return_value = None  # type: ignore[attr-defined]
+
+        response = workspaces_client.post(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/members",
+            json={"user_id": "user-2", "role": "editor"},
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.json()["detail"] == "Access denied"
+        mock_workspace_service.add_member.assert_not_awaited()
+        workspaces_client.mock_db.rollback.assert_awaited_once()  # type: ignore[attr-defined]
+
     def test_list_agents_success(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
     ) -> None:
@@ -374,9 +408,10 @@ class TestWorkspacesRouter:
     def test_update_agent_still_succeeds_when_event_publish_fails(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
     ) -> None:
-        mock_workspace_service.publish_pending_events.side_effect = RuntimeError(
-            "redis unavailable"
-        )
+        mock_workspace_service.publish_pending_events.side_effect = [
+            RuntimeError("redis unavailable"),
+            None,
+        ]
 
         response = workspaces_client.patch(
             "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/agents/wa-1",
@@ -385,6 +420,7 @@ class TestWorkspacesRouter:
 
         assert response.status_code == status.HTTP_200_OK
         assert workspaces_client.mock_db.commit.await_count == 1  # type: ignore[attr-defined]
+        assert mock_workspace_service.publish_pending_events.await_count == 2
 
     def test_update_agent_rejects_user_supplied_status_field(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
