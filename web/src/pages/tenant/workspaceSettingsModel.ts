@@ -463,9 +463,10 @@ export function buildWorkspaceMetadataDraft(draft: SettingsDraft): {
     delete metadata.source_control;
   }
 
+  const deliveryProvider = draft.deliveryProvider.trim() || 'sandbox_native';
   const deliveryCicd: WorkspaceDeliveryCicdConfig = {
     ...(metadata.delivery_cicd ?? {}),
-    provider: draft.deliveryProvider || 'sandbox_native',
+    provider: deliveryProvider,
     code_root: normalizedCodeRoot || undefined,
     agent_managed: draft.deliveryAgentManaged,
     contract_source: draft.deliveryContractSource || 'metadata',
@@ -482,7 +483,7 @@ export function buildWorkspaceMetadataDraft(draft: SettingsDraft): {
     deploy_command: draft.deliveryDeployCommand.trim() || undefined,
     services: normaliseDeliveryServices(draft.deliveryServices),
   };
-  if (draft.deliveryProvider === 'drone' || metadata.delivery_cicd?.drone) {
+  if (deliveryProvider === 'drone') {
     const sourceProvider = sourceControl.provider ?? 'github';
     const githubServer =
       sourceProvider === 'github'
@@ -576,6 +577,8 @@ export function buildWorkspaceMetadataDraft(draft: SettingsDraft): {
         },
       },
     };
+  } else {
+    delete deliveryCicd.drone;
   }
   metadata.delivery_cicd = deliveryCicd;
 

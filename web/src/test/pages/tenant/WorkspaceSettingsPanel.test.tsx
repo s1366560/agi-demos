@@ -297,4 +297,43 @@ describe('WorkspaceSettingsPanel', () => {
       })
     );
   });
+
+  it('clears hidden Drone delivery settings when provider changes away from Drone', async () => {
+    mockState.workspace = {
+      ...buildWorkspace(),
+      metadata: {
+        ...buildWorkspace().metadata,
+        delivery_cicd: {
+          provider: 'drone',
+          code_root: '/workspace/my-evo',
+          agent_managed: false,
+          drone: {
+            repo: 'memstack/old-workspace',
+            branch: 'main',
+            server_url_env: 'DRONE_SERVER_URL',
+            token_env: 'DRONE_TOKEN',
+          },
+        },
+      },
+    };
+
+    render(<WorkspaceSettingsPanel tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
+
+    fireEvent.change(screen.getByLabelText('workspaceSettings.delivery.provider'), {
+      target: { value: ' sandbox_native ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+
+    await waitFor(() => expect(mockState.updateWorkspace).toHaveBeenCalled());
+
+    const payload = mockState.updateWorkspace.mock.calls[0]?.[3] as
+      | { metadata?: { delivery_cicd?: Record<string, unknown> } }
+      | undefined;
+
+    expect(payload?.metadata?.delivery_cicd).toMatchObject({
+      provider: 'sandbox_native',
+      code_root: '/workspace/my-evo',
+    });
+    expect(payload?.metadata?.delivery_cicd).not.toHaveProperty('drone');
+  });
 });
