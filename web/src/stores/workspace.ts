@@ -147,6 +147,23 @@ function isBlackboardReply(value: unknown): value is BlackboardReply {
   );
 }
 
+function isWorkspaceTask(value: unknown): value is WorkspaceTask {
+  return (
+    hasStringId(value) &&
+    hasStringProperty(value, 'workspace_id') &&
+    hasStringProperty(value, 'title') &&
+    hasStringProperty(value, 'status') &&
+    hasStringProperty(value, 'created_at') &&
+    'metadata' in value &&
+    typeof value.metadata === 'object' &&
+    value.metadata !== null
+  );
+}
+
+function hasOnlyIdentifiedItems<T extends { id: string }>(items: unknown[]): items is T[] {
+  return items.every(hasStringId);
+}
+
 function getBlackboardFileEventWorkspaceId(data: Record<string, unknown>): string | null {
   if (typeof data.workspace_id === 'string' && data.workspace_id.length > 0) {
     return data.workspace_id;
@@ -162,6 +179,64 @@ function getBlackboardFileEventWorkspaceId(data: Record<string, unknown>): strin
     return file.workspace_id;
   }
   return null;
+}
+
+function getWorkspaceId(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const workspaceId = (value as { workspace_id?: unknown }).workspace_id;
+  return typeof workspaceId === 'string' && workspaceId.length > 0 ? workspaceId : null;
+}
+
+function getEventWorkspaceId(data: Record<string, unknown>): string | null {
+  const directWorkspaceId = getWorkspaceId(data);
+  if (directWorkspaceId) {
+    return directWorkspaceId;
+  }
+
+  const objectKeys = [
+    'workspace',
+    'message',
+    'task',
+    'member',
+    'agent',
+    'post',
+    'reply',
+    'node',
+    'edge',
+    'file',
+  ];
+  for (const key of objectKeys) {
+    const workspaceId = getWorkspaceId(data[key]);
+    if (workspaceId) {
+      return workspaceId;
+    }
+  }
+
+  for (const key of ['nodes', 'edges']) {
+    const items = data[key];
+    if (!Array.isArray(items)) {
+      continue;
+    }
+    for (const item of items) {
+      const workspaceId = getWorkspaceId(item);
+      if (workspaceId) {
+        return workspaceId;
+      }
+    }
+  }
+
+  return null;
+}
+
+function isCurrentWorkspaceEvent(
+  data: Record<string, unknown>,
+  currentWorkspaceId: string | undefined
+): boolean {
+  const eventWorkspaceId = getEventWorkspaceId(data);
+  return !eventWorkspaceId || !currentWorkspaceId || eventWorkspaceId === currentWorkspaceId;
 }
 
 function mergeWorkspaceAgentById(
@@ -969,10 +1044,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       handleTopologyEvent: (event) => {
         const { type, data } = event;
+        if (!isCurrentWorkspaceEvent(data, get().currentWorkspace?.id)) {
+          return;
+        }
         if (type === 'workspace.topology.agent_moved') {
           const agentId = data.agent_id as string;
           const hexQ = data.hex_q as number;
           const hexR = data.hex_r as number;
+          if (typeof agentId !== 'string' || typeof hexQ !== 'number' || typeof hexR !== 'number') {
+            return;
+          }
           set({
             agents: get().agents.map((a) =>
               a.agent_id === agentId ? { ...a, hex_q: hexQ, hex_r: hexR } : a
@@ -982,6 +1063,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           const nodes = data.nodes as TopologyNode[] | undefined;
           const edges = data.edges as TopologyEdge[] | undefined;
           if (Array.isArray(nodes) || Array.isArray(edges)) {
+            if (
+              (Array.isArray(nodes) && !hasOnlyIdentifiedItems<TopologyNode>(nodes)) ||
+              (Array.isArray(edges) && !hasOnlyIdentifiedItems<TopologyEdge>(edges))
+            ) {
+              return;
+            }
             set((state) => ({
               topologyNodes: nodes ?? state.topologyNodes,
               topologyEdges: edges ?? state.topologyEdges,
@@ -1030,12 +1117,18 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       handleTaskEvent: (event) => {
         const { type, data } = event;
+        if (!isCurrentWorkspaceEvent(data, get().currentWorkspace?.id)) {
+          return;
+        }
         if (
           type === 'workspace_task_created' ||
           type === 'workspace_task_updated' ||
           type === 'workspace_task_status_changed'
         ) {
-          const task = data.task as WorkspaceTask;
+          const task = data.task;
+          if (!isWorkspaceTask(task)) {
+            return;
+          }
           set((state) => ({
             tasks: state.tasks.some((t) => t.id === task.id)
               ? state.tasks.map((t) => (t.id === task.id ? task : t))
@@ -1047,8 +1140,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             tasks: state.tasks.filter((t) => t.id !== taskId),
           }));
         } else if (type === 'workspace_task_assigned') {
-          const task = data.task as WorkspaceTask | undefined;
-          if (task) {
+          const task = data.task;
+          if (isWorkspaceTask(task)) {
             const workspaceAgentId =
               typeof data.workspace_agent_id === 'string' && data.workspace_agent_id.length > 0
                 ? data.workspace_agent_id
@@ -1087,6 +1180,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       handleBlackboardEvent: (event) => {
         const { type, data } = event;
+        if (!isCurrentWorkspaceEvent(data, get().currentWorkspace?.id)) {
+          return;
+        }
         if (!isOwnedBlackboardEventData(data)) {
           return;
         }
@@ -1156,6 +1252,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       handleMemberEvent: (event) => {
         const { type, data } = event;
+        if (!isCurrentWorkspaceEvent(data, get().currentWorkspace?.id)) {
+          return;
+        }
         if (type === 'workspace_member_joined') {
           const member = data.member as WorkspaceMember | undefined;
           if (member) {
@@ -1199,6 +1298,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       handleAgentBindingEvent: (event) => {
         const { type, data } = event;
+        if (!isCurrentWorkspaceEvent(data, get().currentWorkspace?.id)) {
+          return;
+        }
         if (type === 'workspace_agent_bound') {
           const agent = data.agent as WorkspaceAgent | undefined;
           if (agent) {
@@ -1218,6 +1320,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       handlePresenceEvent: (event) => {
         const { type, data } = event;
+        if (!isCurrentWorkspaceEvent(data, get().currentWorkspace?.id)) {
+          return;
+        }
         if (type === 'workspace.presence.joined') {
           const user: PresenceUser = {
             user_id: data.user_id as string,
@@ -1237,6 +1342,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       handleAgentStatusEvent: (event) => {
         const { data } = event;
+        if (!isCurrentWorkspaceEvent(data, get().currentWorkspace?.id)) {
+          return;
+        }
         const agent: PresenceAgent = {
           agent_id: data.agent_id as string,
           display_name: data.display_name as string,
@@ -1280,6 +1388,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       handleChatEvent: (event) => {
         const { type, data } = event;
+        if (!isCurrentWorkspaceEvent(data, get().currentWorkspace?.id)) {
+          return;
+        }
         if (!isHostedSensingChatEventData(data)) {
           return;
         }

@@ -995,6 +995,35 @@ describe('workspace store', () => {
     ]);
   });
 
+  it('handleTaskEvent ignores malformed task payloads', () => {
+    useWorkspaceStore.setState({
+      tasks: [
+        {
+          id: 'task-existing',
+          workspace_id: 'ws-1',
+          title: 'Existing task',
+          status: 'todo',
+          metadata: {},
+          created_at: '2026-04-15T09:00:00Z',
+        },
+      ] as any,
+    });
+
+    useWorkspaceStore.getState().handleTaskEvent({
+      type: 'workspace_task_created',
+      data: {
+        task: {
+          title: 'Missing identity',
+          status: 'todo',
+        },
+      },
+    });
+
+    expect(useWorkspaceStore.getState().tasks).toEqual([
+      expect.objectContaining({ id: 'task-existing' }),
+    ]);
+  });
+
   it('handlePlanEvent increments the workspace plan refresh counter', () => {
     useWorkspaceStore.setState({
       currentWorkspace: {
@@ -1098,5 +1127,213 @@ describe('workspace store', () => {
     expect(useWorkspaceStore.getState().topologyEdges).toEqual([
       expect.objectContaining({ id: 'edge-1' }),
     ]);
+  });
+
+  it('handleTopologyEvent ignores malformed topology snapshots', () => {
+    useWorkspaceStore.setState({
+      topologyNodes: [{ id: 'old-node' }] as any,
+      topologyEdges: [{ id: 'old-edge' }] as any,
+    });
+
+    useWorkspaceStore.getState().handleTopologyEvent({
+      type: 'topology_updated',
+      data: {
+        nodes: [{ title: 'Missing identity' }],
+        edges: [{ source_node_id: 'old-node' }],
+      },
+    });
+
+    expect(useWorkspaceStore.getState().topologyNodes).toEqual([
+      expect.objectContaining({ id: 'old-node' }),
+    ]);
+    expect(useWorkspaceStore.getState().topologyEdges).toEqual([
+      expect.objectContaining({ id: 'old-edge' }),
+    ]);
+  });
+
+  it('ignores live surface events for inactive workspaces', () => {
+    useWorkspaceStore.setState({
+      currentWorkspace: {
+        id: 'ws-1',
+        tenant_id: 't-1',
+        project_id: 'p-1',
+        name: 'Alpha',
+        created_by: 'u-1',
+        created_at: '',
+      } as any,
+      chatMessages: [
+        {
+          id: 'msg-current',
+          workspace_id: 'ws-1',
+          content: 'current',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+      ] as any,
+      tasks: [
+        {
+          id: 'task-current',
+          workspace_id: 'ws-1',
+          title: 'Current task',
+          status: 'todo',
+          metadata: {},
+          created_at: '2026-03-30T10:00:00Z',
+        },
+      ] as any,
+      posts: [
+        {
+          id: 'post-current',
+          workspace_id: 'ws-1',
+          author_id: 'u-1',
+          title: 'Current post',
+          content: 'hello',
+          status: 'open',
+          is_pinned: false,
+          metadata: {},
+          created_at: '2026-03-30T10:00:00Z',
+        },
+      ] as any,
+      members: [
+        {
+          id: 'member-current',
+          workspace_id: 'ws-1',
+          user_id: 'u-1',
+          role: 'owner',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+      ] as any,
+      agents: [
+        {
+          id: 'binding-current',
+          workspace_id: 'ws-1',
+          agent_id: 'agent-current',
+          is_active: true,
+          created_at: '2026-03-30T10:00:00Z',
+        },
+      ] as any,
+      topologyNodes: [
+        {
+          id: 'node-current',
+          workspace_id: 'ws-1',
+          node_type: 'corridor',
+          title: 'Current node',
+          position_x: 0,
+          position_y: 0,
+          data: {},
+        },
+      ] as any,
+      topologyEdges: [],
+      onlineUsers: [],
+      onlineAgents: [],
+    });
+
+    useWorkspaceStore.getState().handleChatEvent({
+      type: 'workspace_message_created',
+      data: {
+        message: {
+          id: 'msg-other',
+          workspace_id: 'ws-2',
+          content: 'other',
+          created_at: '2026-03-30T10:01:00Z',
+        },
+        surface_boundary: HOSTED,
+        signal_role: SENSING_CAPABLE,
+      },
+    });
+    useWorkspaceStore.getState().handleTaskEvent({
+      type: 'workspace_task_created',
+      data: {
+        task: {
+          id: 'task-other',
+          workspace_id: 'ws-2',
+          title: 'Other task',
+          status: 'todo',
+          metadata: {},
+          created_at: '2026-03-30T10:01:00Z',
+        },
+      },
+    });
+    useWorkspaceStore.getState().handleBlackboardEvent({
+      type: 'blackboard_post_created',
+      data: {
+        post: {
+          id: 'post-other',
+          workspace_id: 'ws-2',
+          author_id: 'u-2',
+          title: 'Other post',
+          content: 'ignored',
+          status: 'open',
+          is_pinned: false,
+          metadata: {},
+          created_at: '2026-03-30T10:01:00Z',
+        },
+        surface_boundary: OWNED,
+        authority_class: AUTHORITATIVE,
+      },
+    });
+    useWorkspaceStore.getState().handleMemberEvent({
+      type: 'workspace_member_joined',
+      data: {
+        member: {
+          id: 'member-other',
+          workspace_id: 'ws-2',
+          user_id: 'u-2',
+          role: 'editor',
+          created_at: '2026-03-30T10:01:00Z',
+        },
+      },
+    });
+    useWorkspaceStore.getState().handleAgentBindingEvent({
+      type: 'workspace_agent_bound',
+      data: {
+        agent: {
+          id: 'binding-other',
+          workspace_id: 'ws-2',
+          agent_id: 'agent-other',
+          is_active: true,
+          created_at: '2026-03-30T10:01:00Z',
+        },
+      },
+    });
+    useWorkspaceStore.getState().handleTopologyEvent({
+      type: 'topology_updated',
+      data: {
+        workspace_id: 'ws-2',
+        nodes: [
+          {
+            id: 'node-other',
+            workspace_id: 'ws-2',
+            node_type: 'corridor',
+            title: 'Other node',
+            position_x: 0,
+            position_y: 0,
+            data: {},
+          },
+        ],
+        edges: [],
+      },
+    });
+    useWorkspaceStore.getState().handlePresenceEvent({
+      type: 'workspace.presence.joined',
+      data: { workspace_id: 'ws-2', user_id: 'u-2', display_name: 'Other' },
+    });
+    useWorkspaceStore.getState().handleAgentStatusEvent({
+      type: 'workspace.agent.status',
+      data: {
+        workspace_id: 'ws-2',
+        agent_id: 'agent-other',
+        display_name: 'Other',
+        status: 'idle',
+      },
+    });
+
+    const state = useWorkspaceStore.getState();
+    expect(state.chatMessages).toEqual([expect.objectContaining({ id: 'msg-current' })]);
+    expect(state.tasks).toEqual([expect.objectContaining({ id: 'task-current' })]);
+    expect(state.posts).toEqual([expect.objectContaining({ id: 'post-current' })]);
+    expect(state.members).toEqual([expect.objectContaining({ id: 'member-current' })]);
+    expect(state.agents).toEqual([expect.objectContaining({ id: 'binding-current' })]);
+    expect(state.topologyNodes).toEqual([expect.objectContaining({ id: 'node-current' })]);
+    expect(state.onlineUsers).toEqual([]);
+    expect(state.onlineAgents).toEqual([]);
   });
 });
