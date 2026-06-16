@@ -148,6 +148,9 @@ const initialState = {
   error: null,
 };
 
+let skillListRequestSequence = 0;
+let tenantConfigRequestSequence = 0;
+
 // ============================================================================
 // STORE CREATION
 // ============================================================================
@@ -160,6 +163,7 @@ export const useSkillStore = create<SkillState>()(
       // ========== Skill CRUD ==========
 
       listSkills: async (params = {}) => {
+        const requestId = ++skillListRequestSequence;
         set({ isLoading: true, error: null });
         try {
           const { filters } = get();
@@ -184,6 +188,9 @@ export const useSkillStore = create<SkillState>()(
             offset,
           };
           const response = await skillAPI.list(queryParams);
+          if (skillListRequestSequence !== requestId) {
+            return;
+          }
           set({
             skills: response.skills,
             total: response.total,
@@ -192,6 +199,9 @@ export const useSkillStore = create<SkillState>()(
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (skillListRequestSequence !== requestId) {
+            return;
+          }
           const errorMessage = getErrorMessage(error, 'Failed to list skills');
           set({ error: errorMessage, isLoading: false });
           throw error;
@@ -324,14 +334,21 @@ export const useSkillStore = create<SkillState>()(
       // ========== Tenant Skill Config ==========
 
       listTenantConfigs: async (options = {}) => {
+        const requestId = ++tenantConfigRequestSequence;
         set({ isLoading: true, error: null });
         try {
           const response = await tenantSkillConfigAPI.list(options);
+          if (tenantConfigRequestSequence !== requestId) {
+            return;
+          }
           set({
             tenantConfigs: response.configs,
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (tenantConfigRequestSequence !== requestId) {
+            return;
+          }
           const errorMessage = getErrorMessage(error, 'Failed to list tenant configs');
           set({ error: errorMessage, isLoading: false });
           throw error;
