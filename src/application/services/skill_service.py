@@ -11,6 +11,7 @@ Three-level scoping for multi-tenant isolation:
 """
 
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
@@ -472,6 +473,35 @@ class SkillService:
             return skill.full_content
 
         return None
+
+    async def record_skill_usage(
+        self,
+        tenant_id: str,
+        skill_name: str,
+        success: bool = True,
+    ) -> None:
+        """Record best-effort usage statistics for a persisted skill."""
+        skill = await self._skill_repo.get_by_name(tenant_id, skill_name)
+        if not skill:
+            logger.debug("Skipping usage update for unpersisted skill '%s'", skill_name)
+            return
+
+        now = datetime.now(UTC)
+        metadata = dict(skill.metadata or {})
+        usage_count = metadata.get("usage_count", 0)
+        success_count = metadata.get("success_count", 0)
+        failure_count = metadata.get("failure_count", 0)
+
+        metadata["usage_count"] = usage_count + 1 if isinstance(usage_count, int) else 1
+        if success:
+            metadata["success_count"] = success_count + 1 if isinstance(success_count, int) else 1
+        else:
+            metadata["failure_count"] = failure_count + 1 if isinstance(failure_count, int) else 1
+        metadata["last_used_at"] = now.isoformat()
+
+        skill.metadata = metadata
+        skill.updated_at = now
+        await self._skill_repo.update(skill)
 
     async def sync_filesystem_skills(
         self,

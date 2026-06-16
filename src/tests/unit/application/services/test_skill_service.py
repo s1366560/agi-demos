@@ -168,6 +168,60 @@ class TestSkillService:
         assert skill is None
 
     @pytest.mark.unit
+    async def test_record_skill_usage_updates_success_metadata(
+        self, skill_service, mock_skill_repository, sample_skill
+    ):
+        """Test record_skill_usage persists usage and success counters."""
+        sample_skill.metadata = {
+            "usage_count": 2,
+            "success_count": 1,
+            "owner": "team-a",
+        }
+        original_updated_at = sample_skill.updated_at
+        mock_skill_repository.get_by_name.return_value = sample_skill
+
+        await skill_service.record_skill_usage("tenant-1", "test-skill", success=True)
+
+        mock_skill_repository.get_by_name.assert_called_once_with("tenant-1", "test-skill")
+        mock_skill_repository.update.assert_called_once_with(sample_skill)
+        assert sample_skill.metadata == {
+            "usage_count": 3,
+            "success_count": 2,
+            "owner": "team-a",
+            "last_used_at": sample_skill.metadata["last_used_at"],
+        }
+        assert "last_used_at" in sample_skill.metadata
+        assert sample_skill.updated_at != original_updated_at
+
+    @pytest.mark.unit
+    async def test_record_skill_usage_updates_failure_metadata(
+        self, skill_service, mock_skill_repository, sample_skill
+    ):
+        """Test record_skill_usage persists failure counters."""
+        sample_skill.metadata = {"usage_count": 4, "failure_count": 2}
+        mock_skill_repository.get_by_name.return_value = sample_skill
+
+        await skill_service.record_skill_usage("tenant-1", "test-skill", success=False)
+
+        mock_skill_repository.update.assert_called_once_with(sample_skill)
+        assert sample_skill.metadata["usage_count"] == 5
+        assert sample_skill.metadata["failure_count"] == 3
+        assert "success_count" not in sample_skill.metadata
+        assert "last_used_at" in sample_skill.metadata
+
+    @pytest.mark.unit
+    async def test_record_skill_usage_noops_for_unpersisted_skill(
+        self, skill_service, mock_skill_repository
+    ):
+        """Test record_skill_usage does not create records for filesystem-only skills."""
+        mock_skill_repository.get_by_name.return_value = None
+
+        await skill_service.record_skill_usage("tenant-1", "system-skill", success=True)
+
+        mock_skill_repository.get_by_name.assert_called_once_with("tenant-1", "system-skill")
+        mock_skill_repository.update.assert_not_called()
+
+    @pytest.mark.unit
     async def test_create_skill_success(self, skill_service, mock_skill_repository, sample_skill):
         """Test successful skill creation."""
         mock_skill_repository.create.return_value = sample_skill
