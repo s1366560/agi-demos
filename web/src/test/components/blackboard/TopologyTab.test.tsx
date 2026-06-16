@@ -7,7 +7,7 @@ describe('TopologyTab', () => {
   it('marks topology as a hosted non-authoritative projection', () => {
     render(<TopologyTab topologyNodes={[]} topologyEdges={[]} topologyNodeTitles={new Map()} />);
 
-    const boundaryBadge = screen.getByText('blackboard.topologySurfaceHint').closest('div');
+    const boundaryBadge = screen.getByText('workspace topology projection').closest('div');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'hosted');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
   });

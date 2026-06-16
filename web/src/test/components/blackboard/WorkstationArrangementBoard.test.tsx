@@ -150,7 +150,7 @@ describe('WorkstationArrangementBoard', () => {
     renderBoard();
 
     expect(screen.getByText('Test Workspace')).toBeInTheDocument();
-    const boundaryBadge = screen.getByText('blackboard.arrangementSurfaceHint').closest('div');
+    const boundaryBadge = screen.getByText('workspace arrangement projection').closest('div');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'hosted');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
     // The SVG grid should be present (aria-hidden img role)
@@ -335,8 +335,8 @@ describe('WorkstationArrangementBoard', () => {
     fireEvent.keyDown(board, { key: 'Escape' });
 
     // The action drawer should show the "no selection" hint text
-    // When selection is null, the drawer title reads 'blackboard.arrangement.drawerTitle'
-    expect(screen.getByText('blackboard.arrangement.drawerTitle')).toBeInTheDocument();
+    // When selection is null, the drawer title reads "Action drawer".
+    expect(screen.getByText('Action drawer')).toBeInTheDocument();
   });
 
   it('12. 2/3 switches between 2D/3D mode', async () => {
@@ -350,10 +350,14 @@ describe('WorkstationArrangementBoard', () => {
     // Press 3 to switch to 3D
     fireEvent.keyDown(board, { key: '3' });
 
-    expect(screen.getByText('blackboard.arrangement.threeDPreviewNote')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        '3D view is preview only. Use pointer controls here, or switch back to 2D for keyboard editing.'
+      )
+    ).toBeInTheDocument();
 
     // Switch back via toggle button (keyboard '2' only works on the 2D board div)
-    const twoDButton = screen.getByText('blackboard.arrangement.modes.twoD');
+    const twoDButton = screen.getByText('2D layout');
     fireEvent.click(twoDButton);
 
     expect(screen.getByRole('group', { name: /arrangement/i })).toBeInTheDocument();
@@ -415,12 +419,12 @@ describe('WorkstationArrangementBoard', () => {
 
     // Find the center hex cell group (data-hex-cell with the center text)
     const hexCells = document.querySelectorAll('[data-hex-cell="true"]');
-    // The center hex contains the text 'blackboard.arrangement.centerTitle'
+    // The center hex contains the text "Central blackboard".
     let centerHex: Element | null = null;
     hexCells.forEach((cell) => {
       const texts = cell.querySelectorAll('text');
       texts.forEach((t) => {
-        if (t.textContent === 'blackboard.arrangement.centerTitle') {
+        if (t.textContent === 'Central blackboard') {
           centerHex = cell;
         }
       });
@@ -453,8 +457,8 @@ describe('WorkstationArrangementBoard', () => {
 
     // When an agent is selected, the action drawer shows agent-specific info.
     // The agent selection shows 'Open workspace' link and 'Move' and 'Remove' buttons.
-    expect(screen.getByText('blackboard.arrangement.openWorkspace')).toBeInTheDocument();
-    expect(screen.getByText('blackboard.arrangement.actions.move')).toBeInTheDocument();
+    expect(screen.getByText('Open workspace')).toBeInTheDocument();
+    expect(screen.getByText('Move')).toBeInTheDocument();
   });
 
   // ---- Selection state machine -------------------------------------------
@@ -470,18 +474,18 @@ describe('WorkstationArrangementBoard', () => {
     });
 
     // Start: no selection -> drawerTitle displayed
-    expect(screen.getByText('blackboard.arrangement.drawerTitle')).toBeInTheDocument();
+    expect(screen.getByText('Action drawer')).toBeInTheDocument();
 
     // Move to (1,0) where agent is, and activate
     fireEvent.keyDown(board, { key: 'ArrowRight' });
     fireEvent.keyDown(board, { key: 'Enter' });
 
     // Selection kind = 'agent' -> shows agent actions
-    expect(screen.getByText('blackboard.arrangement.openWorkspace')).toBeInTheDocument();
+    expect(screen.getByText('Open workspace')).toBeInTheDocument();
 
     // Escape -> back to no selection
     fireEvent.keyDown(board, { key: 'Escape' });
-    expect(screen.getByText('blackboard.arrangement.drawerTitle')).toBeInTheDocument();
+    expect(screen.getByText('Action drawer')).toBeInTheDocument();
 
     // Move to (0,0) center and activate
     fireEvent.keyDown(board, { key: 'ArrowLeft' }); // back to 0,0
@@ -489,7 +493,7 @@ describe('WorkstationArrangementBoard', () => {
 
     // Selection kind = 'blackboard' -> shows 'Open central blackboard' in drawer
     // The blackboard selection shows the open board button in the action area
-    const openBoardBtns = screen.getAllByText('blackboard.openBoard');
+    const openBoardBtns = screen.getAllByText('Open central blackboard');
     expect(openBoardBtns.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -499,8 +503,8 @@ describe('WorkstationArrangementBoard', () => {
     renderBoard();
 
     // There should be two toggle buttons for 2d and 3d
-    const twoDButton = screen.getByText('blackboard.arrangement.modes.twoD');
-    const threeDButton = screen.getByText('blackboard.arrangement.modes.threeD');
+    const twoDButton = screen.getByText('2D layout');
+    const threeDButton = screen.getByText('3D view');
 
     expect(twoDButton).toBeInTheDocument();
     expect(threeDButton).toBeInTheDocument();
@@ -509,7 +513,11 @@ describe('WorkstationArrangementBoard', () => {
     fireEvent.click(threeDButton);
 
     // 3D preview note should appear
-    expect(screen.getByText('blackboard.arrangement.threeDPreviewNote')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        '3D view is preview only. Use pointer controls here, or switch back to 2D for keyboard editing.'
+      )
+    ).toBeInTheDocument();
 
     // Click 2D button to go back
     fireEvent.click(twoDButton);
@@ -525,7 +533,7 @@ describe('WorkstationArrangementBoard', () => {
 
     const svgG = document.querySelector('svg g[transform]');
 
-    const resetButton = screen.getByText('blackboard.arrangement.resetView').closest('button')!;
+    const resetButton = screen.getByTitle('Reset view');
 
     // Zoom buttons are siblings of the reset button: ZoomOut, ZoomIn, Reset
     const parent = resetButton.parentElement!;

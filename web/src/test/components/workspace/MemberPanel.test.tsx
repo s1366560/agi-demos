@@ -30,7 +30,7 @@ describe('MemberPanel', () => {
   it('marks member panel as a hosted non-authoritative projection', () => {
     render(<MemberPanel tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
 
-    const boundaryBadge = screen.getByText('blackboard.membersSurfaceHint').closest('div');
+    const boundaryBadge = screen.getByText('workspace membership projection').closest('div');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'hosted');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
   });

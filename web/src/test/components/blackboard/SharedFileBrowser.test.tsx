@@ -108,7 +108,7 @@ describe('SharedFileBrowser', () => {
       expect(listFilesMock).toHaveBeenCalledWith('t-1', 'p-1', 'ws-1', '/');
     });
 
-    const boundaryBadge = screen.getByText('blackboard.filesSurfaceHint').closest('div');
+    const boundaryBadge = screen.getByText('blackboard file workspace').closest('div');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'owned');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'authoritative');
   });
@@ -130,11 +130,11 @@ describe('SharedFileBrowser', () => {
   it('creates folders in the active path and refreshes the listing', async () => {
     render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'blackboard.files.newFolder' }));
-    fireEvent.change(screen.getByLabelText('blackboard.files.folderName'), {
+    fireEvent.click(screen.getByRole('button', { name: 'New Folder' }));
+    fireEvent.change(screen.getByLabelText('Folder name'), {
       target: { value: 'docs' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'blackboard.files.create' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => {
       expect(createDirectoryMock).toHaveBeenCalledWith('t-1', 'p-1', 'ws-1', '/', 'docs');
@@ -169,7 +169,7 @@ describe('SharedFileBrowser', () => {
     listFilesMock.mockResolvedValueOnce([makeFile()]);
     render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
 
-    fireEvent.click(await screen.findByTitle('blackboard.files.delete'));
+    fireEvent.click(await screen.findByTitle('Delete'));
     fireEvent.click(await screen.findByRole('button', { name: 'Yes' }));
 
     await waitFor(() => {
@@ -183,11 +183,11 @@ describe('SharedFileBrowser', () => {
     listFilesMock.mockResolvedValueOnce([makeFile()]);
     render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
 
-    fireEvent.click(await screen.findByTitle('blackboard.files.rename'));
-    fireEvent.change(screen.getByLabelText('blackboard.files.name'), {
+    fireEvent.click(await screen.findByTitle('Rename'));
+    fireEvent.change(screen.getByLabelText('Name'), {
       target: { value: 'renamed.txt' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'blackboard.files.rename' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
 
     await waitFor(() => {
       expect(renameFileMock).toHaveBeenCalledWith('t-1', 'p-1', 'ws-1', 'file-1', 'renamed.txt');
@@ -199,11 +199,11 @@ describe('SharedFileBrowser', () => {
     listFilesMock.mockResolvedValueOnce([makeFile()]);
     render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
 
-    fireEvent.click(await screen.findByTitle('blackboard.files.move'));
-    fireEvent.change(screen.getByLabelText('blackboard.files.destinationPath'), {
+    fireEvent.click(await screen.findByTitle('Move'));
+    fireEvent.change(screen.getByLabelText('Destination path'), {
       target: { value: 'docs' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'blackboard.files.move' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Move' }));
 
     await waitFor(() => {
       expect(moveFileMock).toHaveBeenCalledWith('t-1', 'p-1', 'ws-1', 'file-1', '/docs/');
@@ -215,14 +215,14 @@ describe('SharedFileBrowser', () => {
     listFilesMock.mockResolvedValueOnce([makeFile()]);
     render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
 
-    fireEvent.click(await screen.findByTitle('blackboard.files.copy'));
-    fireEvent.change(screen.getByLabelText('blackboard.files.name'), {
+    fireEvent.click(await screen.findByTitle('Copy'));
+    fireEvent.change(screen.getByLabelText('Name'), {
       target: { value: 'copy.txt' },
     });
-    fireEvent.change(screen.getByLabelText('blackboard.files.destinationPath'), {
+    fireEvent.change(screen.getByLabelText('Destination path'), {
       target: { value: '/archive/' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'blackboard.files.copy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
 
     await waitFor(() => {
       expect(copyFileMock).toHaveBeenCalledWith(
@@ -243,7 +243,7 @@ describe('SharedFileBrowser', () => {
     ]);
     render(<SharedFileBrowser tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
 
-    fireEvent.click(await screen.findByTitle('blackboard.files.delete'));
+    fireEvent.click(await screen.findByTitle('Delete'));
     fireEvent.click(await screen.findByRole('button', { name: 'Yes' }));
 
     await waitFor(() => {

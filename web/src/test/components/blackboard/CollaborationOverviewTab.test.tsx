@@ -17,7 +17,7 @@ describe('CollaborationOverviewTab', () => {
       <CollaborationOverviewTab tenantId="t-1" projectId="p-1" workspaceId="ws-1" agents={[]} />
     );
 
-    const boundaryBadge = screen.getByText('blackboard.collaborationSurfaceHint').closest('div');
+    const boundaryBadge = screen.getByText('workspace chat projection').closest('div');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'hosted');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
   });

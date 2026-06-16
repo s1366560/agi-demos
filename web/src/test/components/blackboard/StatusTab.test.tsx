@@ -136,19 +136,19 @@ describe('StatusTab', () => {
     expect(
       screen.getAllByText((content, node) => {
         const text = node?.textContent ?? content;
-        return text.includes('Worker A') && text.includes('blackboard.pendingAdjudicationWorker');
+        return text.includes('Worker A') && text.includes('Worker');
       })[0]
     ).toBeInTheDocument();
-    const boundaryBadge = screen
-      .getByText('blackboard.pendingAdjudicationSurfaceHint')
-      .closest('div');
+    const boundaryBadge = screen.getByText('workspace task projection').closest('div');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'hosted');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
 
-    const derivedBadge = screen.getByText('blackboard.statusOverviewDerivedHint').closest('div');
+    const derivedBadge = screen.getByText('workspace execution summary').closest('div');
     expect(derivedBadge).toHaveAttribute('data-blackboard-surface', 'derived');
     expect(derivedBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
-    expect(await screen.findByText('blackboard.planRunEmpty')).toBeInTheDocument();
+    expect(
+      await screen.findByText('No durable plan has been started for this workspace.')
+    ).toBeInTheDocument();
   });
 
   it('renders execution diagnostics signals from the blackboard API', async () => {
@@ -542,22 +542,22 @@ describe('StatusTab', () => {
     expect(graph).toHaveStyle({ minHeight: '640px' });
     expect(graph).not.toHaveAttribute('data-fit-to-width');
     expect(screen.getByLabelText('Zoom level')).toHaveValue('100');
-    fireEvent.click(screen.getByRole('button', { name: 'blackboard.planRunListView' }));
+    fireEvent.click(screen.getByRole('button', { name: 'List' }));
     expect(screen.queryByTestId('execution-dag-graph')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'blackboard.planRunGraphView' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'blackboard.iterationLedgerTitle' }));
-    expect(screen.getAllByText('blackboard.iterationLedgerTitle').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('blackboard.iterationTasksTitle')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Graph' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Iteration ledger' }));
+    expect(screen.getAllByText('Iteration ledger').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Iteration tasks')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'web/src/App.tsx' }));
-    expect(screen.getByText(/blackboard.iterationOutputPreviewTitle/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Preview/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('artifact.spec').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Iteration 1').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('active').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Finalize workspace persistence tests/).length).toBeGreaterThan(0);
-    const expandButtons = screen.getAllByRole('button', { name: 'blackboard.expandText' });
+    const expandButtons = screen.getAllByRole('button', { name: 'Expand' });
     expect(expandButtons.length).toBeGreaterThanOrEqual(1);
     fireEvent.click(expandButtons[0]);
-    expect(screen.getByRole('button', { name: 'blackboard.collapseText' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Collapse' })).toBeInTheDocument();
     expect(screen.getAllByText('Review requested implementation evidence.').length).toBeGreaterThan(
       0
     );
@@ -574,7 +574,7 @@ describe('StatusTab', () => {
         'Additional feedback should stay hidden until the operator expands the feedback list.'
       )
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'blackboard.expandText (1)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand (1)' }));
     expect(
       screen.getByText(
         'Additional feedback should stay hidden until the operator expands the feedback list.'
@@ -585,8 +585,12 @@ describe('StatusTab', () => {
     expect(screen.getByText('unhealthy')).toBeInTheDocument();
     expect(screen.getByText('Provider drone · run 3bda65b...0967 · failed')).toBeInTheDocument();
     expect(screen.getByText(/Drone build failed because repository-smoke/)).toBeInTheDocument();
-    expect(screen.getByText('blackboard.planRunPlanNextManual')).toBeInTheDocument();
-    expect(screen.getByText('blackboard.planRunIterationLimitHint')).toBeInTheDocument();
+    expect(screen.getByText('Plan next manually')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The automatic iteration limit has been reached. Plan next remains available as a deliberate operator action.'
+      )
+    ).toBeInTheDocument();
     expect(screen.getByText('Phase contract')).toBeInTheDocument();
     expect(screen.getAllByText(/commit or recovery ref/).length).toBeGreaterThanOrEqual(1);
     fireEvent.click(screen.getByRole('button', { name: 'Evidence' }));
@@ -596,7 +600,7 @@ describe('StatusTab', () => {
     expect(screen.getAllByText('Verifier accepted')[0]).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
     expect(screen.getByText('Review gate')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('blackboard.iterationOpenTask'));
+    fireEvent.click(screen.getByText('Open task details'));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await waitFor(() => {
       expect(workspaceTaskService.getExperience).toHaveBeenCalledWith('ws-1', 'task-1');
@@ -739,7 +743,7 @@ describe('StatusTab', () => {
       />
     );
 
-    const historySelect = await screen.findByLabelText('blackboard.planRunGoalHistory');
+    const historySelect = await screen.findByLabelText('Goal history');
     expect(historySelect).toHaveValue('plan-new');
 
     fireEvent.change(historySelect, { target: { value: 'plan-old' } });
@@ -752,7 +756,9 @@ describe('StatusTab', () => {
       });
     });
     expect((await screen.findAllByText('Original sprint goal')).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('blackboard.planRunHistoryReadOnly')).toBeInTheDocument();
+    expect(
+      screen.getByText('Viewing a historical goal. Plan actions are read-only.')
+    ).toBeInTheDocument();
   });
 
   it('refreshes durable plan snapshot when workspace plan events arrive', async () => {
@@ -828,15 +834,17 @@ describe('StatusTab', () => {
       />
     );
 
-    expect(await screen.findByText('blackboard.planRunEmpty')).toBeInTheDocument();
+    expect(
+      await screen.findByText('No durable plan has been started for this workspace.')
+    ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('blackboard.planRunRunAutonomy'));
+    fireEvent.click(screen.getByText('Run'));
     await waitFor(() => {
       expect(workspaceAutonomyService.tick).toHaveBeenCalledWith('ws-1', { force: false });
     });
-    expect(await screen.findByText('blackboard.planRunAutonomyTriggered')).toBeInTheDocument();
+    expect(await screen.findByText('Leader scheduled the next autonomy step.')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('blackboard.planRunForceAutonomy'));
+    fireEvent.click(screen.getByText('Force'));
     await waitFor(() => {
       expect(workspaceAutonomyService.tick).toHaveBeenCalledWith('ws-1', { force: true });
     });
@@ -988,7 +996,7 @@ describe('StatusTab', () => {
     );
 
     expect((await screen.findAllByText('Blocked implementation')).length).toBeGreaterThanOrEqual(2);
-    fireEvent.change(screen.getByLabelText('blackboard.planRunSearch'), {
+    fireEvent.change(screen.getByLabelText('Search plan run'), {
       target: { value: 'blocked' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
@@ -998,7 +1006,7 @@ describe('StatusTab', () => {
       '/tenant/tenant-1/agent-workspace/conv-1?projectId=project-1&workspaceId=ws-1'
     );
 
-    fireEvent.change(screen.getByLabelText('blackboard.planRunOperatorReason'), {
+    fireEvent.change(screen.getByLabelText('Operator reason'), {
       target: { value: 'operator reviewed blocked evidence' },
     });
 

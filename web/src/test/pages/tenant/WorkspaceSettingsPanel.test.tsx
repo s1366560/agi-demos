@@ -104,7 +104,7 @@ describe('WorkspaceSettingsPanel', () => {
   it('marks workspace settings as a hosted non-authoritative projection', () => {
     render(<WorkspaceSettingsPanel tenantId="t-1" projectId="p-1" workspaceId="ws-1" />);
 
-    const boundaryBadge = screen.getByText('blackboard.settingsSurfaceHint').closest('div');
+    const boundaryBadge = screen.getByText('workspace settings projection').closest('div');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'hosted');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
   });

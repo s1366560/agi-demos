@@ -42,7 +42,7 @@ describe('DiscussionTab', () => {
   it('marks discussion as an owned authoritative surface', () => {
     render(<DiscussionTab {...defaultProps()} />);
 
-    const boundaryBadge = screen.getByText('blackboard.discussionSurfaceHint').closest('div');
+    const boundaryBadge = screen.getByText('blackboard discussion content').closest('div');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-boundary', 'owned');
     expect(boundaryBadge).toHaveAttribute('data-blackboard-authority', 'authoritative');
   });
@@ -72,7 +72,7 @@ describe('DiscussionTab', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'blackboard.edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     fireEvent.change(screen.getByDisplayValue('Original title'), {
       target: { value: 'Updated title' },
     });
@@ -127,7 +127,7 @@ describe('DiscussionTab', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'blackboard.editReply' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit reply' }));
     fireEvent.change(screen.getByDisplayValue('Original reply'), {
       target: { value: 'Updated reply' },
     });
