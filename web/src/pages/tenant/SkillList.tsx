@@ -10,7 +10,7 @@ import type { FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import { Input, Modal, Switch } from 'antd';
+import { Input, Modal, Pagination, Switch } from 'antd';
 import {
   Ban,
   Download,
@@ -39,6 +39,7 @@ import {
 import { useTenantStore } from '@/stores/tenant';
 
 import { skillAPI } from '@/services/skillService';
+import type { SkillListParams as SkillApiListParams } from '@/services/skillService';
 
 import { SkillModal } from '@/components/skill/SkillModal';
 import {
@@ -61,6 +62,17 @@ type SkillSource = NonNullable<SkillResponse['source']>;
 type SkillLibraryView = 'all' | 'managed' | 'readonly';
 type SkillScopeFilter = 'all' | 'system' | 'tenant' | 'project' | `project:${string}`;
 type SkillImportScope = 'tenant' | 'project';
+type SkillListQueryOverrides = {
+  search?: string | undefined;
+  status?: 'all' | SkillStatus | undefined;
+  scope?: SkillScopeFilter | undefined;
+  page?: number | undefined;
+  pageSize?: number | undefined;
+};
+type SkillStoreListParams = SkillApiListParams & {
+  page?: number | undefined;
+  pageSize?: number | undefined;
+};
 
 const pageText = 'text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.94_0.006_255)]';
 const mutedText = 'text-[oklch(0.48_0.01_255)] dark:text-[oklch(0.68_0.008_255)]';
@@ -184,7 +196,7 @@ export const SkillList: FC = () => {
   const [rollbackVersion, setRollbackVersion] = useState<number | null>(null);
 
   // Store hooks
-  const { skills, tenantConfigs } = useSkillStore();
+  const { skills, tenantConfigs, page, pageSize } = useSkillStore();
   const isLoading = useSkillLoading();
   const error = useSkillError();
   const activeCount = useActiveSkillsCount();
@@ -228,54 +240,34 @@ export const SkillList: FC = () => {
     [projectNameById, t]
   );
 
-  // Filter skills locally with useMemo to prevent infinite loops
+  const buildListParams = useCallback(
+    (overrides?: SkillListQueryOverrides): SkillStoreListParams => {
+      const effectiveSearch = overrides?.search ?? search;
+      const effectiveStatus = overrides?.status ?? statusFilter;
+      const effectiveScope = overrides?.scope ?? scopeFilter;
+      const projectId = getProjectIdFromScopeFilter(effectiveScope);
+      const scope =
+        projectId || effectiveScope === 'project'
+          ? 'project'
+          : effectiveScope === 'tenant' || effectiveScope === 'system'
+            ? effectiveScope
+            : undefined;
+      return {
+        search: effectiveSearch.trim() || undefined,
+        status: effectiveStatus === 'all' ? undefined : effectiveStatus,
+        scope,
+        project_id: projectId ?? undefined,
+        page: overrides?.page ?? page,
+        pageSize: overrides?.pageSize ?? pageSize,
+      };
+    },
+    [page, pageSize, scopeFilter, search, statusFilter]
+  );
+
+  // The API owns search/status/scope/project filtering and pagination.
+  // Keep only UI-only library view filtering local.
   const filteredSkills = useMemo(() => {
     return skills.filter((skill) => {
-      if (search) {
-        const searchLower = search.toLowerCase();
-        const matchesName = skill.name.toLowerCase().includes(searchLower);
-        const matchesDescription = skill.description.toLowerCase().includes(searchLower);
-        const matchesVersion = [skill.version_label].some((value) =>
-          value?.toLowerCase().includes(searchLower)
-        );
-        const matchesSource = [skill.source, skill.file_path].some((value) =>
-          value?.toLowerCase().includes(searchLower)
-        );
-        const matchesMetadata = JSON.stringify(skill.metadata ?? {})
-          .toLowerCase()
-          .includes(searchLower);
-        if (
-          !matchesName &&
-          !matchesDescription &&
-          !matchesVersion &&
-          !matchesSource &&
-          !matchesMetadata
-        ) {
-          return false;
-        }
-      }
-
-      if (statusFilter !== 'all' && skill.status !== statusFilter) {
-        return false;
-      }
-
-      if (scopeFilter === 'system' && skill.scope !== 'system') {
-        return false;
-      }
-
-      if (scopeFilter === 'tenant' && skill.scope !== 'tenant') {
-        return false;
-      }
-
-      if (scopeFilter === 'project' && skill.scope !== 'project') {
-        return false;
-      }
-
-      const projectFilterId = getProjectIdFromScopeFilter(scopeFilter);
-      if (projectFilterId && (skill.scope !== 'project' || skill.project_id !== projectFilterId)) {
-        return false;
-      }
-
       if (libraryView === 'managed' && !isManagedSkill(skill)) {
         return false;
       }
@@ -286,7 +278,7 @@ export const SkillList: FC = () => {
 
       return true;
     });
-  }, [libraryView, scopeFilter, skills, search, statusFilter]);
+  }, [libraryView, skills]);
 
   const visibleCount = filteredSkills.length;
   const managedCount = useMemo(() => skills.filter(isManagedSkill).length, [skills]);
@@ -306,7 +298,7 @@ export const SkillList: FC = () => {
 
   // Load data on mount
   useEffect(() => {
-    void listSkills();
+    void listSkills({ page: 1, pageSize: 20 });
     void listTenantConfigs();
   }, [listSkills, listTenantConfigs]);
 
@@ -392,7 +384,7 @@ export const SkillList: FC = () => {
       message?.success(t('tenant.skills.import.success'));
       resetImportState();
       setIsImportOpen(false);
-      void listSkills();
+      void listSkills(buildListParams({ page: 1 }));
     } catch {
       message?.error(t('tenant.skills.import.failed'));
     } finally {
@@ -405,6 +397,7 @@ export const SkillList: FC = () => {
     importProjectId,
     importScope,
     listSkills,
+    buildListParams,
     message,
     resetImportState,
     t,
@@ -440,12 +433,12 @@ export const SkillList: FC = () => {
       try {
         await disableSystemSkill(skillName);
         message?.success(t('tenant.skills.systemConfig.disableSuccess'));
-        void listSkills({ search });
+        void listSkills(buildListParams({ page: 1 }));
       } catch {
         message?.error(t('tenant.skills.systemConfig.disableFailed'));
       }
     },
-    [disableSystemSkill, listSkills, message, search, t]
+    [buildListParams, disableSystemSkill, listSkills, message, t]
   );
 
   const handleRestoreSystemSkill = useCallback(
@@ -453,12 +446,12 @@ export const SkillList: FC = () => {
       try {
         await enableSystemSkill(skillName);
         message?.success(t('tenant.skills.systemConfig.restoreSuccess'));
-        void listSkills({ search });
+        void listSkills(buildListParams({ page: 1 }));
       } catch {
         message?.error(t('tenant.skills.systemConfig.restoreFailed'));
       }
     },
-    [enableSystemSkill, listSkills, message, search, t]
+    [buildListParams, enableSystemSkill, listSkills, message, t]
   );
 
   const handleExport = useCallback(
@@ -523,14 +516,14 @@ export const SkillList: FC = () => {
         setVersionSkill(updated);
         message?.success(t('tenant.skills.versions.rollbackSuccess'));
         await loadVersions(updated);
-        void listSkills({ search });
+        void listSkills(buildListParams({ page }));
       } catch {
         message?.error(t('tenant.skills.versions.rollbackFailed'));
       } finally {
         setRollbackVersion(null);
       }
     },
-    [listSkills, loadVersions, message, search, t, versionSkill]
+    [buildListParams, listSkills, loadVersions, message, page, t, versionSkill]
   );
 
   const handleModalClose = useCallback(() => {
@@ -541,21 +534,52 @@ export const SkillList: FC = () => {
   const handleModalSuccess = useCallback(() => {
     setIsModalOpen(false);
     setEditingSkill(null);
-    void listSkills();
-  }, [listSkills]);
+    void listSkills(buildListParams({ page: 1 }));
+  }, [buildListParams, listSkills]);
 
   const handleRefresh = useCallback(() => {
-    void listSkills({ search });
-  }, [listSkills, search]);
+    void listSkills(buildListParams({ page }));
+  }, [buildListParams, listSkills, page]);
 
   const handleSearchChange = useCallback(
     (value: string) => {
       setSearch(value);
       if (!value.trim()) {
-        void listSkills();
+        void listSkills(buildListParams({ search: '', page: 1 }));
       }
     },
-    [listSkills]
+    [buildListParams, listSkills]
+  );
+
+  const handleSearchSubmit = useCallback(
+    (value: string) => {
+      setSearch(value);
+      void listSkills(buildListParams({ search: value, page: 1 }));
+    },
+    [buildListParams, listSkills]
+  );
+
+  const handleStatusFilterChange = useCallback(
+    (value: 'all' | SkillStatus) => {
+      setStatusFilter(value);
+      void listSkills(buildListParams({ status: value, page: 1 }));
+    },
+    [buildListParams, listSkills]
+  );
+
+  const handleScopeFilterChange = useCallback(
+    (value: SkillScopeFilter) => {
+      setScopeFilter(value);
+      void listSkills(buildListParams({ scope: value, page: 1 }));
+    },
+    [buildListParams, listSkills]
+  );
+
+  const handlePageChange = useCallback(
+    (nextPage: number, nextPageSize: number) => {
+      void listSkills(buildListParams({ page: nextPage, pageSize: nextPageSize }));
+    },
+    [buildListParams, listSkills]
   );
 
   return (
@@ -639,9 +663,7 @@ export const SkillList: FC = () => {
               onChange={(e) => {
                 handleSearchChange(e.target.value);
               }}
-              onSearch={(value) => {
-                void listSkills({ search: value });
-              }}
+              onSearch={handleSearchSubmit}
               allowClear
               className="min-w-0 flex-1"
             />
@@ -649,7 +671,7 @@ export const SkillList: FC = () => {
           <LazySelect
             aria-label={t('tenant.skills.statusFilterLabel')}
             value={statusFilter}
-            onChange={setStatusFilter}
+            onChange={handleStatusFilterChange}
             className="w-full md:w-44"
             options={[
               { label: t('common.status.all'), value: 'all' },
@@ -662,7 +684,7 @@ export const SkillList: FC = () => {
             aria-label={t('tenant.skills.scopeFilterLabel')}
             value={scopeFilter}
             onChange={(event) => {
-              setScopeFilter(event.target.value as SkillScopeFilter);
+              handleScopeFilterChange(event.target.value as SkillScopeFilter);
             }}
             className="h-9 w-full rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-white px-3 text-sm text-[oklch(0.34_0.01_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.18_0.006_255)] dark:text-[oklch(0.82_0.006_255)] md:w-48"
           >
@@ -878,6 +900,28 @@ export const SkillList: FC = () => {
               </article>
             );
           })}
+          {total > pageSize ? (
+            <div className="md:col-span-2 xl:col-span-3">
+              <Pagination
+                aria-label={t('common.pagination.label', { defaultValue: 'Pagination' })}
+                current={page}
+                pageSize={pageSize}
+                total={total}
+                showSizeChanger
+                pageSizeOptions={['20', '50', '100']}
+                showTotal={(count, range) =>
+                  t('common.pagination.total', {
+                    start: range[0],
+                    end: range[1],
+                    total: count,
+                    defaultValue: `${String(range[0])}-${String(range[1])} of ${String(count)}`,
+                  })
+                }
+                onChange={handlePageChange}
+                className="flex justify-end"
+              />
+            </div>
+          ) : null}
         </div>
       )}
 

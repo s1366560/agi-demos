@@ -43,6 +43,18 @@ interface SkillFilters {
   scope: 'system' | 'tenant' | 'project' | null;
 }
 
+interface SkillListParams {
+  search?: string | undefined;
+  status?: SkillFilters['status'] | undefined;
+  scope?: SkillFilters['scope'] | undefined;
+  project_id?: string | null | undefined;
+  skip?: number | undefined;
+  offset?: number | undefined;
+  limit?: number | undefined;
+  page?: number | undefined;
+  pageSize?: number | undefined;
+}
+
 interface SkillState {
   // Data
   skills: SkillResponse[];
@@ -66,15 +78,7 @@ interface SkillState {
   error: string | null;
 
   // Actions - Skill CRUD
-  listSkills: (params?: {
-    search?: string | undefined;
-    status?: string | undefined;
-    scope?: string | undefined;
-    project_id?: string | null | undefined;
-    skip?: number | undefined;
-    offset?: number | undefined;
-    limit?: number | undefined;
-  }) => Promise<void>;
+  listSkills: (params?: SkillListParams) => Promise<void>;
   listSystemSkills: () => Promise<void>;
   getSkill: (id: string) => Promise<SkillResponse>;
   createSkill: (data: SkillCreate) => Promise<SkillResponse>;
@@ -138,15 +142,29 @@ export const useSkillStore = create<SkillState>()(
         set({ isLoading: true, error: null });
         try {
           const { filters } = get();
+          const nextPageSize = params.pageSize ?? params.limit ?? get().pageSize;
+          const explicitOffset = params.offset ?? params.skip;
+          const nextPage =
+            params.page ??
+            (explicitOffset !== undefined ? Math.floor(explicitOffset / nextPageSize) + 1 : get().page);
+          const offset = explicitOffset ?? (nextPage - 1) * nextPageSize;
+          const search = params.search ?? filters.search;
+          const status = params.status === undefined ? filters.status : params.status;
+          const scope = params.scope === undefined ? filters.scope : params.scope;
           const queryParams = {
-            ...params,
-            status: filters.status || undefined,
-            scope: filters.scope || undefined,
+            search: search.trim() || undefined,
+            status: status || undefined,
+            scope: scope || undefined,
+            project_id: params.project_id || undefined,
+            limit: nextPageSize,
+            offset,
           };
           const response = await skillAPI.list(queryParams);
           set({
             skills: response.skills,
             total: response.total,
+            page: nextPage,
+            pageSize: nextPageSize,
             isLoading: false,
           });
         } catch (error: unknown) {

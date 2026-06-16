@@ -23,6 +23,9 @@ const skillApiMock = vi.hoisted(() => ({
 const skillStore = vi.hoisted(() => ({
   skills: [] as SkillResponse[],
   tenantConfigs: [] as TenantSkillConfigResponse[],
+  total: 0,
+  page: 1,
+  pageSize: 20,
   listSkills: vi.fn(),
   listTenantConfigs: vi.fn(),
   deleteSkill: vi.fn(),
@@ -46,7 +49,7 @@ vi.mock('@/stores/skill', () => ({
   useSkillLoading: () => false,
   useSkillError: () => null,
   useActiveSkillsCount: () => skillStore.skills.filter((skill) => skill.status === 'active').length,
-  useSkillTotal: () => skillStore.skills.length,
+  useSkillTotal: () => skillStore.total,
 }));
 
 vi.mock('@/services/skillService', () => ({
@@ -107,6 +110,9 @@ describe('SkillList', () => {
     vi.clearAllMocks();
     skillStore.skills = [];
     skillStore.tenantConfigs = [];
+    skillStore.total = 0;
+    skillStore.page = 1;
+    skillStore.pageSize = 20;
     skillStore.listSkills.mockResolvedValue(undefined);
     skillStore.listTenantConfigs.mockResolvedValue(undefined);
     skillApiMock.importPackage.mockResolvedValue({
@@ -225,18 +231,22 @@ describe('SkillList', () => {
     fireEvent.keyDown(searchInput, { key: 'Enter', code: 'Enter' });
 
     await waitFor(() => {
-      expect(skillStore.listSkills).toHaveBeenCalledWith({ search: 'memory' });
+      expect(skillStore.listSkills).toHaveBeenCalledWith(
+        expect.objectContaining({ search: 'memory', page: 1, pageSize: 20 })
+      );
     });
     skillStore.listSkills.mockClear();
 
     fireEvent.change(searchInput, { target: { value: '' } });
 
     await waitFor(() => {
-      expect(skillStore.listSkills).toHaveBeenCalledWith();
+      expect(skillStore.listSkills).toHaveBeenCalledWith(
+        expect.objectContaining({ search: undefined, page: 1, pageSize: 20 })
+      );
     });
   });
 
-  it('filters skills by tenant, system, and project scope', async () => {
+  it('requests server-side filtering by tenant, system, and project scope', async () => {
     useProjectStore.setState({
       projects: [makeProject()],
     });
@@ -274,10 +284,42 @@ describe('SkillList', () => {
       target: { value: 'project:project-1' },
     });
 
-    expect(screen.queryByRole('button', { name: 'system-skill' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'tenant-skill' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'project-skill' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(skillStore.listSkills).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: 'project',
+          project_id: 'project-1',
+          page: 1,
+          pageSize: 20,
+        })
+      );
+    });
     expect(screen.getAllByText('Project Alpha').length).toBeGreaterThan(0);
+  });
+
+  it('requests the selected page from the server', async () => {
+    skillStore.total = 45;
+    skillStore.skills = Array.from({ length: 20 }, (_, index) =>
+      systemSkill({
+        id: `skill-${String(index + 1)}`,
+        name: `skill-${String(index + 1)}`,
+      })
+    );
+
+    render(
+      <Suspense fallback={<div>Loading</div>}>
+        <SkillList />
+      </Suspense>
+    );
+
+    const pageTwo = await screen.findByTitle('2');
+    fireEvent.click(pageTwo);
+
+    await waitFor(() => {
+      expect(skillStore.listSkills).toHaveBeenCalledWith(
+        expect.objectContaining({ page: 2, pageSize: 20 })
+      );
+    });
   });
 
   it('imports pasted skill packages into the selected project scope', async () => {

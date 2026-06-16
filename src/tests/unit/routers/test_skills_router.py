@@ -958,10 +958,14 @@ def test_skill_search_matches_name_description_version_and_metadata() -> None:
         metadata={"author": "platform"},
     )
     skill.version_label = "1.2.3"
+    skill.source = SkillSource.FILESYSTEM
+    skill.file_path = ".codex/skills/alpha-skill/SKILL.md"
 
     assert router._skill_matches_search(skill, "platform")
     assert router._skill_matches_search(skill, "1.2")
     assert router._skill_matches_search(skill, "packages")
+    assert router._skill_matches_search(skill, "filesystem")
+    assert router._skill_matches_search(skill, "alpha-skill/SKILL.md")
     assert not router._skill_matches_search(skill, "billing")
 
 

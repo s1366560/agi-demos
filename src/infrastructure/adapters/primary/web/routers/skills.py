@@ -432,6 +432,8 @@ def _skill_matches_search(skill: Skill, search: str | None) -> bool:
             skill.name,
             skill.description,
             skill.version_label or "",
+            skill.source.value if getattr(skill, "source", None) else "",
+            getattr(skill, "file_path", None) or "",
             metadata_text,
         ]
     ).lower()
