@@ -10,7 +10,10 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
 from src.domain.model.agent.agent_definition import Agent, AgentModel
-from src.domain.model.agent.tool_policy import ToolPolicyPrecedence
+from src.domain.model.agent.delegate_config import DelegateConfig
+from src.domain.model.agent.session_policy import SessionPolicy
+from src.domain.model.agent.spawn_policy import SpawnPolicy
+from src.domain.model.agent.tool_policy import ToolPolicy, ToolPolicyPrecedence
 from src.domain.model.agent.workspace_config import WorkspaceConfig
 from src.infrastructure.adapters.primary.web.routers.agent.definitions_router import (
     CreateDefinitionBody,
@@ -266,7 +269,9 @@ class TestDefinitionsRouterA2AConfig:
         registry.set_enabled.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_create_definition_enabling_a2a_without_allowlist_uses_builtin_default_sender(self):
+    async def test_create_definition_enabling_a2a_without_allowlist_uses_builtin_default_sender(
+        self,
+    ):
         registry = _make_registry()
         container = _make_container(registry)
         db = _make_db()
@@ -531,7 +536,9 @@ class TestDefinitionsRouterA2AConfig:
         registry.get_by_id.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_update_definition_enabling_a2a_without_allowlist_uses_builtin_default_sender(self):
+    async def test_update_definition_enabling_a2a_without_allowlist_uses_builtin_default_sender(
+        self,
+    ):
         registry = _make_registry()
         db = _make_db()
         existing = _make_agent(agent_to_agent_enabled=False, agent_to_agent_allowlist=None)
@@ -729,6 +736,52 @@ class TestDefinitionsRouterA2AConfig:
         assert updated_agent.tool_policy.precedence == ToolPolicyPrecedence.DENY_FIRST
         assert response["spawn_policy"]["allowed_subagents"] == ["planner"]
         assert response["tool_policy"]["precedence"] == "deny_first"
+
+    @pytest.mark.asyncio
+    async def test_update_definition_clears_structured_policies_with_null_payloads(self):
+        registry = _make_registry()
+        db = _make_db()
+        existing = _make_agent(
+            spawn_policy=SpawnPolicy(max_depth=1),
+            tool_policy=ToolPolicy(deny=("bash",)),
+            session_policy=SessionPolicy.from_dict({"dm_scope": "global"}),
+            delegate_config=DelegateConfig.from_dict({"capability_tier": "read_write"}),
+        )
+        registry.get_by_id = AsyncMock(return_value=existing)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
+                return_value=_make_container(registry),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
+                AsyncMock(),
+            ),
+        ):
+            response = await update_definition(
+                "agent-1",
+                UpdateDefinitionBody(
+                    spawn_policy=None,
+                    tool_policy=None,
+                    session_policy=None,
+                    delegate_config=None,
+                ),
+                request=MagicMock(),
+                current_user=SimpleNamespace(id="user-1"),
+                tenant_id="tenant-1",
+                db=db,
+            )
+
+        updated_agent = registry.update.await_args.args[0]
+        assert updated_agent.spawn_policy is None
+        assert updated_agent.tool_policy is None
+        assert updated_agent.session_policy is None
+        assert updated_agent.delegate_config is None
+        assert response["spawn_policy"] is None
+        assert response["tool_policy"] is None
+        assert response["session_policy"] is None
+        assert response["delegate_config"] is None
 
     @pytest.mark.asyncio
     async def test_set_definition_enabled_value_errors_are_sanitized(self):

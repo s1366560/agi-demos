@@ -2,6 +2,12 @@ import { fireEvent, render, screen, waitFor, within } from '../../utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentDefinitionModal } from '@/components/agent/AgentDefinitionModal';
+import {
+  buildDelegateConfig,
+  buildSessionPolicy,
+  buildSpawnPolicy,
+  buildToolPolicy,
+} from '@/components/agent/agentDefinitionPolicyForm';
 
 import type { AgentDefinition } from '@/types/multiAgent';
 
@@ -218,6 +224,20 @@ describe('AgentDefinitionModal', () => {
         })
       );
     });
+  });
+
+  it('builds null clear payloads when existing policy groups are emptied', () => {
+    expect(buildSpawnPolicy({ can_spawn: false }, true)).toBeNull();
+    expect(buildToolPolicy({ tool_policy_precedence: 'deny_first' }, true)).toBeNull();
+    expect(buildSessionPolicy({}, true)).toBeNull();
+    expect(buildDelegateConfig({}, true)).toBeNull();
+  });
+
+  it('keeps omitted policy groups out of create payloads', () => {
+    expect(buildSpawnPolicy({ can_spawn: false })).toBeUndefined();
+    expect(buildToolPolicy({ tool_policy_precedence: 'deny_first' })).toBeUndefined();
+    expect(buildSessionPolicy({})).toBeUndefined();
+    expect(buildDelegateConfig({})).toBeUndefined();
   });
 
   it('only offers backend-supported model enum values', async () => {

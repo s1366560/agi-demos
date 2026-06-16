@@ -21,15 +21,19 @@ import {
 } from '../../stores/agentDefinitions';
 import { StateDisplay } from '../shared/ui/StateDisplay';
 
+import {
+  buildDelegateConfig,
+  buildSessionPolicy,
+  buildSpawnPolicy,
+  buildToolPolicy,
+  normalizeStringList,
+} from './agentDefinitionPolicyForm';
+
 import type { SkillResponse, MCPServerResponse, ToolInfo } from '../../types/agent';
 import type {
   AgentDefinition,
   AgentDefinitionDelegateCapabilityTier,
-  AgentDefinitionDelegateConfig,
   AgentDefinitionDmScope,
-  AgentDefinitionSessionPolicy,
-  AgentDefinitionSpawnPolicy,
-  AgentDefinitionToolPolicy,
   CreateDefinitionRequest,
   UpdateDefinitionRequest,
   WorkspaceConfig,
@@ -118,25 +122,6 @@ function getMetadataStringArray(
     : undefined;
 }
 
-function normalizeStringList(values: string[] | null | undefined): string[] | undefined {
-  if (!values) {
-    return undefined;
-  }
-
-  const seen = new Set<string>();
-  const normalized = values
-    .map((value) => value.trim())
-    .filter((value) => {
-      if (!value || seen.has(value)) {
-        return false;
-      }
-      seen.add(value);
-      return true;
-    });
-
-  return normalized.length > 0 ? normalized : undefined;
-}
-
 function stripLegacyPolicyMetadata(
   metadata: Record<string, unknown> | undefined
 ): Record<string, unknown> | undefined {
@@ -151,116 +136,6 @@ function stripLegacyPolicyMetadata(
   delete next.tool_policy_allow;
   delete next.tool_policy_deny;
   return next;
-}
-
-function buildSpawnPolicy(
-  values: AgentDefinitionFormValues,
-  force = false
-): AgentDefinitionSpawnPolicy | undefined {
-  const allowedSubagents = normalizeStringList(values.spawn_policy_allowed_subagents);
-  const hasPolicy =
-    force ||
-    values.can_spawn === true ||
-    values.spawn_policy_max_active_runs !== undefined ||
-    values.spawn_policy_max_children_per_requester !== undefined ||
-    allowedSubagents !== undefined;
-
-  if (!hasPolicy) {
-    return undefined;
-  }
-
-  return {
-    max_depth: values.max_spawn_depth ?? 2,
-    max_active_runs: values.spawn_policy_max_active_runs ?? 16,
-    max_children_per_requester: values.spawn_policy_max_children_per_requester ?? 8,
-    allowed_subagents: allowedSubagents ?? null,
-  };
-}
-
-function buildToolPolicy(
-  values: AgentDefinitionFormValues,
-  force = false
-): AgentDefinitionToolPolicy | undefined {
-  const allow = normalizeStringList(values.tool_policy_allow);
-  const deny = normalizeStringList(values.tool_policy_deny);
-  const precedence = values.tool_policy_precedence ?? 'deny_first';
-
-  if (!force && allow === undefined && deny === undefined && precedence === 'deny_first') {
-    return undefined;
-  }
-
-  return {
-    allow: allow ?? [],
-    deny: deny ?? [],
-    precedence,
-  };
-}
-
-function buildSessionPolicy(
-  values: AgentDefinitionFormValues,
-  force = false
-): AgentDefinitionSessionPolicy | undefined {
-  const hasPolicy =
-    force ||
-    values.session_policy_dm_scope !== undefined ||
-    values.session_policy_max_messages !== undefined ||
-    values.session_policy_idle_reset_minutes !== undefined ||
-    values.session_policy_daily_reset_hour !== undefined ||
-    values.session_policy_ttl_hours !== undefined;
-
-  if (!hasPolicy) {
-    return undefined;
-  }
-
-  const policy: AgentDefinitionSessionPolicy = {};
-  if (values.session_policy_dm_scope !== undefined) {
-    policy.dm_scope = values.session_policy_dm_scope;
-  }
-  if (values.session_policy_max_messages !== undefined) {
-    policy.max_messages = values.session_policy_max_messages;
-  }
-  if (values.session_policy_idle_reset_minutes !== undefined) {
-    policy.idle_reset_minutes = values.session_policy_idle_reset_minutes;
-  }
-  if (values.session_policy_daily_reset_hour !== undefined) {
-    policy.daily_reset_hour = values.session_policy_daily_reset_hour;
-  }
-  if (values.session_policy_ttl_hours !== undefined) {
-    policy.session_ttl_hours = values.session_policy_ttl_hours;
-  }
-  return policy;
-}
-
-function buildDelegateConfig(
-  values: AgentDefinitionFormValues,
-  force = false
-): AgentDefinitionDelegateConfig | undefined {
-  const allowedTools = normalizeStringList(values.delegate_config_allowed_tools);
-  const hasConfig =
-    force ||
-    values.delegate_config_capability_tier !== undefined ||
-    values.delegate_config_max_delegation_depth !== undefined ||
-    values.delegate_config_budget_limit_tokens !== undefined ||
-    allowedTools !== undefined;
-
-  if (!hasConfig) {
-    return undefined;
-  }
-
-  const config: AgentDefinitionDelegateConfig = {};
-  if (values.delegate_config_capability_tier !== undefined) {
-    config.capability_tier = values.delegate_config_capability_tier;
-  }
-  if (values.delegate_config_max_delegation_depth !== undefined) {
-    config.max_delegation_depth = values.delegate_config_max_delegation_depth;
-  }
-  if (allowedTools !== undefined) {
-    config.allowed_tools = allowedTools;
-  }
-  if (values.delegate_config_budget_limit_tokens !== undefined) {
-    config.budget_limit_tokens = values.delegate_config_budget_limit_tokens;
-  }
-  return config;
 }
 
 function toWorkspaceConfigFormValues(
