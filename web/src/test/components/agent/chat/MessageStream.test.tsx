@@ -84,6 +84,29 @@ describe('ToolExecutionCardDisplay', () => {
       expect(screen.getByText(/item1/)).toBeInTheDocument();
     });
 
+    it('should summarize todo results with locale-neutral separators', () => {
+      render(
+        <ToolExecutionCardDisplay
+          toolName="todo_write"
+          status="success"
+          parameters={{
+            action: 'update',
+            todos: [
+              { status: 'completed', content: 'Ship definition' },
+              { status: 'in_progress', content: 'Verify workspace' },
+              { status: 'pending', content: 'Audit evolution' },
+            ],
+          }}
+        />
+      );
+
+      const summary = screen.getByText(/Update 3 todos:/).textContent ?? '';
+      expect(summary).toContain(
+        '1 completed, 1 in progress, 1 pending: Ship definition, Verify workspace and 1 more'
+      );
+      expect(summary).not.toMatch(/[，、：]/);
+    });
+
     it('should handle nested object result with folding', () => {
       const nestedResult = {
         data: {

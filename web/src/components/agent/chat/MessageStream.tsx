@@ -422,6 +422,9 @@ export interface ToolExecutionCardDisplayProps {
 
 type ToolPurposeKind = 'read' | 'write' | 'command' | 'search' | 'open' | 'tool';
 
+const SUMMARY_LIST_SEPARATOR = ', ';
+const SUMMARY_DETAIL_SEPARATOR = ': ';
+
 const TOOL_PREVIEW_KEYS = [
   'command',
   'cmd',
@@ -570,14 +573,14 @@ function summarizeTodoTool(
   const statusText = Array.from(statusCounts.entries())
     .slice(0, 3)
     .map(([status, count]) => getTodoStatusText(status, count, t))
-    .join('，');
+    .join(SUMMARY_LIST_SEPARATOR);
   const titles = source.map(getTodoTitle).filter((title): title is string => Boolean(title));
-  const visibleTitles = titles.slice(0, 2).join('、');
+  const visibleTitles = titles.slice(0, 2).join(SUMMARY_LIST_SEPARATOR);
   const hiddenTitleCount = Math.max(0, titles.length - 2);
   const titleText = visibleTitles
     ? `${visibleTitles}${hiddenTitleCount > 0 ? t('components.messageStream.todo.moreItems', { defaultValue: ' and {{count}} more', count: hiddenTitleCount }) : ''}`
     : '';
-  const summary = [statusText, titleText].filter(Boolean).join('：');
+  const summary = [statusText, titleText].filter(Boolean).join(SUMMARY_DETAIL_SEPARATOR);
   const total = source.length;
 
   if (toolName.toLowerCase().includes('read')) {

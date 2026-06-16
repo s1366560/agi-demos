@@ -170,6 +170,9 @@ const getPreviewFromUnknown = (value: unknown): string | null => {
 
 type ToolActionKind = 'read' | 'write' | 'command' | 'search' | 'open' | 'todo' | 'tool';
 
+const SUMMARY_LIST_SEPARATOR = ', ';
+const SUMMARY_DETAIL_SEPARATOR = ': ';
+
 interface ToolActionSummaryItem {
   kind: ToolActionKind;
   label: string;
@@ -256,15 +259,15 @@ const summarizeTodoDetails = (
   const statusText = Array.from(statusCounts.entries())
     .slice(0, 3)
     .map(([status, count]) => getTodoStatusText(status, count, t))
-    .join('，');
+    .join(SUMMARY_LIST_SEPARATOR);
   const titles = source.map(getTodoTitle).filter((title): title is string => Boolean(title));
-  const visibleTitles = titles.slice(0, 2).join('、');
+  const visibleTitles = titles.slice(0, 2).join(SUMMARY_LIST_SEPARATOR);
   const hiddenTitleCount = Math.max(0, titles.length - 2);
   const baseTitle = visibleTitles || knownTitle || '';
   const titleText = baseTitle
     ? `${baseTitle}${hiddenTitleCount > 0 ? t('agent.timeline.actionGroup.moreItems', ' and {{count}} more', { count: hiddenTitleCount }) : ''}`
     : '';
-  const suffix = [statusText, titleText].filter(Boolean).join('：');
+  const suffix = [statusText, titleText].filter(Boolean).join(SUMMARY_DETAIL_SEPARATOR);
   const total = source.length;
 
   if (toolName.toLowerCase().includes('read')) {
@@ -394,7 +397,7 @@ const getVisibleLabels = (
   t: ReturnType<typeof useTranslation>['t'],
   maxVisible = 3
 ): string => {
-  const visible = labels.slice(0, maxVisible).join('、');
+  const visible = labels.slice(0, maxVisible).join(SUMMARY_LIST_SEPARATOR);
   const hiddenCount = labels.length - maxVisible;
   if (hiddenCount <= 0) return visible;
   return `${visible}${t('agent.timeline.actionGroup.moreItems', ' and {{count}} more', {
