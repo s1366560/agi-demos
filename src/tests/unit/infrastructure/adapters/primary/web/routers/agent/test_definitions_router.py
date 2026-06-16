@@ -19,6 +19,7 @@ from src.infrastructure.adapters.primary.web.routers.agent.definitions_router im
     CreateDefinitionBody,
     SetEnabledBody,
     UpdateDefinitionBody,
+    _get_selected_definition_tenant_id,
     create_definition,
     delete_definition,
     get_definition,
@@ -84,6 +85,41 @@ def _make_agent(**overrides: object) -> Agent:
 
 @pytest.mark.unit
 class TestDefinitionsRouterA2AConfig:
+    @pytest.mark.asyncio
+    async def test_selected_tenant_defaults_to_authenticated_tenant(self):
+        with patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
+            AsyncMock(),
+        ) as require_access:
+            tenant_id = await _get_selected_definition_tenant_id(
+                selected_tenant_id=None,
+                fallback_tenant_id="tenant-default",
+                current_user=SimpleNamespace(id="user-1"),
+                db=_make_db(),
+            )
+
+        assert tenant_id == "tenant-default"
+        require_access.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_selected_tenant_validates_explicit_tenant_access(self):
+        db = _make_db()
+        current_user = SimpleNamespace(id="user-1")
+
+        with patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
+            AsyncMock(),
+        ) as require_access:
+            tenant_id = await _get_selected_definition_tenant_id(
+                selected_tenant_id="tenant-selected",
+                fallback_tenant_id="tenant-default",
+                current_user=current_user,
+                db=db,
+            )
+
+        assert tenant_id == "tenant-selected"
+        require_access.assert_awaited_once_with(db, current_user, "tenant-selected")
+
     @pytest.mark.asyncio
     async def test_create_definition_requires_admin_access(self):
         db = _make_db()

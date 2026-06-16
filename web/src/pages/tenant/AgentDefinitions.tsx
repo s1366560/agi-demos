@@ -68,6 +68,7 @@ export const AgentDefinitions: React.FC = () => {
 
   const user = useUser();
   const currentTenant = useCurrentTenant();
+  const tenantId = currentTenant?.id ?? null;
   const projects = useProjectStore((state) => state.projects);
   const listProjects = useProjectStore((state) => state.listProjects);
   const definitions = useDefinitions();
@@ -124,9 +125,13 @@ export const AgentDefinitions: React.FC = () => {
 
   const loadDefinitionsPage = useCallback(
     (options?: { page?: number; pageSize?: number }) => {
+      if (!tenantId) {
+        return Promise.resolve();
+      }
       const nextPage = options?.page ?? 1;
       const nextPageSize = options?.pageSize ?? pageSize;
       return listDefinitionsPage({
+        tenant_id: tenantId,
         project_id: selectedProjectId,
         scope: scopeFilter === 'tenant' ? 'tenant' : undefined,
         search: search.trim() || undefined,
@@ -136,7 +141,16 @@ export const AgentDefinitions: React.FC = () => {
         offset: Math.max(nextPage - 1, 0) * nextPageSize,
       });
     },
-    [listDefinitionsPage, pageSize, scopeFilter, search, selectedProjectId, sortField, statusFilter]
+    [
+      listDefinitionsPage,
+      pageSize,
+      scopeFilter,
+      search,
+      selectedProjectId,
+      sortField,
+      statusFilter,
+      tenantId,
+    ]
   );
 
   const getScopeLabel = useCallback(
@@ -197,8 +211,11 @@ export const AgentDefinitions: React.FC = () => {
 
   const handleToggle = useCallback(
     async (id: string, enabled: boolean) => {
+      if (!tenantId) {
+        return;
+      }
       try {
-        await toggleEnabled(id, enabled);
+        await toggleEnabled(id, enabled, { tenant_id: tenantId });
         message.success(
           enabled
             ? t('tenant.agentDefinitions.messages.enabled', { defaultValue: 'Agent enabled' })
@@ -209,13 +226,16 @@ export const AgentDefinitions: React.FC = () => {
         // Error handled by store
       }
     },
-    [loadDefinitionsPage, page, toggleEnabled, t]
+    [loadDefinitionsPage, page, tenantId, toggleEnabled, t]
   );
 
   const handleDelete = useCallback(
     async (id: string) => {
+      if (!tenantId) {
+        return;
+      }
       try {
-        await deleteDefinition(id);
+        await deleteDefinition(id, { tenant_id: tenantId });
         message.success(
           t('tenant.agentDefinitions.messages.deleted', {
             defaultValue: 'Agent definition deleted',
@@ -227,7 +247,7 @@ export const AgentDefinitions: React.FC = () => {
         // Error handled by store
       }
     },
-    [definitions.length, deleteDefinition, loadDefinitionsPage, page, t]
+    [definitions.length, deleteDefinition, loadDefinitionsPage, page, tenantId, t]
   );
 
   const handleRefresh = useCallback(() => {
@@ -633,6 +653,7 @@ export const AgentDefinitions: React.FC = () => {
           definition={editingDef}
           projectOptions={projectScopeOptions}
           initialProjectId={createProjectId}
+          tenantId={tenantId}
         />
       ) : null}
     </div>

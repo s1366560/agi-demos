@@ -44,9 +44,14 @@ interface DefinitionFilters {
   projectId: string | null;
 }
 
-type DefinitionListRequestParams = Omit<DefinitionListParams, 'project_id'> & {
+type DefinitionListRequestParams = Omit<DefinitionListParams, 'project_id' | 'tenant_id'> & {
   project_id?: string | null | undefined;
+  tenant_id?: string | null | undefined;
 };
+
+interface DefinitionActionOptions {
+  tenant_id?: string | null | undefined;
+}
 
 interface AgentDefinitionState {
   // Data
@@ -69,11 +74,22 @@ interface AgentDefinitionState {
   // Actions - CRUD
   listDefinitions: (params?: DefinitionListRequestParams) => Promise<void>;
   listDefinitionsPage: (params?: DefinitionListRequestParams) => Promise<void>;
-  getDefinition: (id: string) => Promise<AgentDefinition>;
-  createDefinition: (data: CreateDefinitionRequest) => Promise<AgentDefinition>;
-  updateDefinition: (id: string, data: UpdateDefinitionRequest) => Promise<AgentDefinition>;
-  deleteDefinition: (id: string) => Promise<void>;
-  toggleEnabled: (id: string, enabled: boolean) => Promise<void>;
+  getDefinition: (id: string, options?: DefinitionActionOptions) => Promise<AgentDefinition>;
+  createDefinition: (
+    data: CreateDefinitionRequest,
+    options?: DefinitionActionOptions
+  ) => Promise<AgentDefinition>;
+  updateDefinition: (
+    id: string,
+    data: UpdateDefinitionRequest,
+    options?: DefinitionActionOptions
+  ) => Promise<AgentDefinition>;
+  deleteDefinition: (id: string, options?: DefinitionActionOptions) => Promise<void>;
+  toggleEnabled: (
+    id: string,
+    enabled: boolean,
+    options?: DefinitionActionOptions
+  ) => Promise<void>;
   setCurrentDefinition: (definition: AgentDefinition | null) => void;
 
   // Actions - Filters
@@ -127,6 +143,7 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
             (params.enabled !== undefined ? undefined : filters.enabled === true ? true : undefined);
           const queryParams = {
             ...params,
+            tenant_id: params.tenant_id ?? undefined,
             project_id:
               params.project_id === null
                 ? undefined
@@ -148,6 +165,7 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
           const { filters, pageSize: currentPageSize } = get();
           const queryParams = {
             ...params,
+            tenant_id: params.tenant_id ?? undefined,
             project_id:
               params.project_id === null
                 ? undefined
@@ -171,10 +189,10 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
         }
       },
 
-      getDefinition: async (id: string) => {
+      getDefinition: async (id: string, options = {}) => {
         set({ isLoading: true, error: null });
         try {
-          const definition = await definitionsService.getById(id);
+          const definition = await definitionsService.getById(id, options);
           set({ currentDefinition: definition, isLoading: false });
           return definition;
         } catch (error: unknown) {
@@ -184,10 +202,10 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
         }
       },
 
-      createDefinition: async (data: CreateDefinitionRequest) => {
+      createDefinition: async (data: CreateDefinitionRequest, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          const created = await definitionsService.create(data);
+          const created = await definitionsService.create(data, options);
           const { definitions } = get();
           set({
             definitions: [created, ...definitions],
@@ -203,10 +221,10 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
         }
       },
 
-      updateDefinition: async (id: string, data: UpdateDefinitionRequest) => {
+      updateDefinition: async (id: string, data: UpdateDefinitionRequest, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          const updated = await definitionsService.update(id, data);
+          const updated = await definitionsService.update(id, data, options);
           const { definitions, currentDefinition } = get();
           set({
             definitions: definitions.map((d) => (d.id === id ? updated : d)),
@@ -221,10 +239,10 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
         }
       },
 
-      deleteDefinition: async (id: string) => {
+      deleteDefinition: async (id: string, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          await definitionsService.delete(id);
+          await definitionsService.delete(id, options);
           const { definitions, currentDefinition } = get();
           set({
             definitions: definitions.filter((d) => d.id !== id),
@@ -239,7 +257,7 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
         }
       },
 
-      toggleEnabled: async (id: string, enabled: boolean) => {
+      toggleEnabled: async (id: string, enabled: boolean, options = {}) => {
         // Optimistic update
         const { definitions } = get();
         const original = [...definitions];
@@ -248,7 +266,7 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
         });
 
         try {
-          const updated = await definitionsService.setEnabled(id, enabled);
+          const updated = await definitionsService.setEnabled(id, enabled, options);
           const { currentDefinition } = get();
           set({
             definitions: get().definitions.map((d) => (d.id === id ? updated : d)),

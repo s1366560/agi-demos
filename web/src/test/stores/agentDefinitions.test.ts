@@ -55,4 +55,19 @@ describe('agent definition store', () => {
       enabled_only: undefined,
     });
   });
+
+  it('passes selected tenant options to definition actions', async () => {
+    vi.mocked(definitionsService.setEnabled).mockResolvedValue({
+      id: 'agent-1',
+      enabled: false,
+    } as never);
+
+    await useAgentDefinitionStore
+      .getState()
+      .toggleEnabled('agent-1', false, { tenant_id: 'tenant-1' });
+
+    expect(definitionsService.setEnabled).toHaveBeenCalledWith('agent-1', false, {
+      tenant_id: 'tenant-1',
+    });
+  });
 });

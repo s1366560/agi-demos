@@ -11,6 +11,7 @@ const api = httpClient;
 
 export interface DefinitionListParams {
   project_id?: string | undefined;
+  tenant_id?: string | null | undefined;
   scope?: 'all' | 'tenant' | undefined;
   search?: string | undefined;
   sort?: 'name' | 'recent' | 'invocations' | undefined;
@@ -29,6 +30,13 @@ export interface DefinitionListResponse {
 }
 
 type RawDefinitionListResponse = AgentDefinition[] | DefinitionListResponse;
+
+interface TenantScopedOptions {
+  tenant_id?: string | null | undefined;
+}
+
+const tenantConfig = (options: TenantScopedOptions = {}) =>
+  options.tenant_id ? { params: { tenant_id: options.tenant_id } } : undefined;
 
 function normalizeDefinitionListResponse(
   response: RawDefinitionListResponse,
@@ -59,23 +67,51 @@ export const definitionsService = {
     return normalizeDefinitionListResponse(response, queryParams);
   },
 
-  getById: async (id: string): Promise<AgentDefinition> => {
-    return await api.get<AgentDefinition>(`/agent/definitions/${id}`);
+  getById: async (
+    id: string,
+    options: TenantScopedOptions = {}
+  ): Promise<AgentDefinition> => {
+    return await api.get<AgentDefinition>(`/agent/definitions/${id}`, tenantConfig(options));
   },
 
-  create: async (data: CreateDefinitionRequest): Promise<AgentDefinition> => {
-    return await api.post<AgentDefinition>('/agent/definitions', data);
+  create: async (
+    data: CreateDefinitionRequest,
+    options: TenantScopedOptions = {}
+  ): Promise<AgentDefinition> => {
+    return await api.post<AgentDefinition>('/agent/definitions', data, tenantConfig(options));
   },
 
-  update: async (id: string, data: UpdateDefinitionRequest): Promise<AgentDefinition> => {
-    return await api.put<AgentDefinition>(`/agent/definitions/${id}`, data);
+  update: async (
+    id: string,
+    data: UpdateDefinitionRequest,
+    options: TenantScopedOptions = {}
+  ): Promise<AgentDefinition> => {
+    return await api.put<AgentDefinition>(
+      `/agent/definitions/${id}`,
+      data,
+      tenantConfig(options)
+    );
   },
 
-  delete: async (id: string): Promise<DeleteDefinitionResponse> => {
-    return await api.delete<DeleteDefinitionResponse>(`/agent/definitions/${id}`);
+  delete: async (
+    id: string,
+    options: TenantScopedOptions = {}
+  ): Promise<DeleteDefinitionResponse> => {
+    return await api.delete<DeleteDefinitionResponse>(
+      `/agent/definitions/${id}`,
+      tenantConfig(options)
+    );
   },
 
-  setEnabled: async (id: string, enabled: boolean): Promise<AgentDefinition> => {
-    return await api.patch<AgentDefinition>(`/agent/definitions/${id}/enabled`, { enabled });
+  setEnabled: async (
+    id: string,
+    enabled: boolean,
+    options: TenantScopedOptions = {}
+  ): Promise<AgentDefinition> => {
+    return await api.patch<AgentDefinition>(
+      `/agent/definitions/${id}/enabled`,
+      { enabled },
+      tenantConfig(options)
+    );
   },
 };

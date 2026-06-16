@@ -56,6 +56,7 @@ export interface AgentDefinitionModalProps {
   definition: AgentDefinition | null;
   projectOptions?: AgentDefinitionProjectOption[] | undefined;
   initialProjectId?: string | null | undefined;
+  tenantId?: string | null | undefined;
 }
 
 interface WorkspaceConfigFormValues {
@@ -189,6 +190,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
   definition,
   projectOptions = [],
   initialProjectId = null,
+  tenantId = null,
 }) => {
   const { t } = useTranslation();
   const [form] = Form.useForm<AgentDefinitionFormValues>();
@@ -255,7 +257,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
         try {
           const [toolsRes, skillsRes, mcpRes] = await Promise.all([
             agentService.listTools(),
-            skillAPI.list({ limit: 100 }),
+            skillAPI.list(tenantId ? { limit: 100, tenant_id: tenantId } : { limit: 100 }),
             mcpAPI.list({ limit: 100 }),
           ]);
           setAvailableTools(toolsRes.tools);
@@ -275,7 +277,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
       };
       void fetchResources();
     }
-  }, [isOpen, t]);
+  }, [isOpen, tenantId, t]);
 
   // Reset form when modal opens/closes or definition changes
   useEffect(() => {
@@ -452,7 +454,11 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           delegate_config: delegateConfig,
           metadata: stripLegacyPolicyMetadata(definition.metadata) ?? {},
         };
-        await updateDefinition(definition.id, data);
+        if (tenantId) {
+          await updateDefinition(definition.id, data, { tenant_id: tenantId });
+        } else {
+          await updateDefinition(definition.id, data);
+        }
         message.success(
           t('tenant.agentDefinitions.messages.updateSuccess', 'Agent definition updated')
         );
@@ -483,7 +489,11 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           session_policy: sessionPolicy,
           delegate_config: delegateConfig,
         };
-        await createDefinition(data);
+        if (tenantId) {
+          await createDefinition(data, { tenant_id: tenantId });
+        } else {
+          await createDefinition(data);
+        }
         message.success(
           t('tenant.agentDefinitions.messages.createSuccess', 'Agent definition created')
         );
@@ -506,7 +516,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
         }
       }
     }
-  }, [form, definition, keywords, createDefinition, updateDefinition, onSuccess, t]);
+  }, [form, definition, keywords, createDefinition, updateDefinition, onSuccess, tenantId, t]);
 
   // Keyword handlers
   const handleAddKeyword = useCallback(() => {

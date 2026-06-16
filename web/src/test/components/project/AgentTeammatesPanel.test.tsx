@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentTeammatesPanel } from '@/components/project/AgentTeammatesPanel';
 import { definitionsService } from '@/services/agent/definitionsService';
 import { agentService } from '@/services/agentService';
+import { useTenantStore } from '@/stores/tenant';
 
 import type { AgentDefinition } from '@/types/multiAgent';
 
@@ -90,6 +91,18 @@ describe('AgentTeammatesPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     navigateMock.mockReset();
+    useTenantStore.setState({
+      currentTenant: {
+        id: 'tenant-1',
+        name: 'Tenant One',
+        owner_id: 'user-1',
+        plan: 'enterprise',
+        max_projects: 100,
+        max_users: 100,
+        max_storage: 1024,
+        created_at: '2024-01-01T00:00:00Z',
+      },
+    });
   });
 
   it('renders responsive custom rows without the cramped AntD meta layout', async () => {
@@ -98,6 +111,10 @@ describe('AgentTeammatesPanel', () => {
     const { container } = renderPanel();
 
     expect(await screen.findByText('Workspace Iteration Reviewer')).toBeInTheDocument();
+    expect(definitionsService.list).toHaveBeenCalledWith({
+      project_id: 'project-1',
+      tenant_id: 'tenant-1',
+    });
     expect(container.querySelector('.ant-list-item-meta')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /start conversation/i })).toHaveClass('w-full');
   });

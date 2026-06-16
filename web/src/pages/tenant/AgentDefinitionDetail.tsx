@@ -196,6 +196,7 @@ export const AgentDefinitionDetail: React.FC = () => {
 
   const user = useUser();
   const currentTenant = useCurrentTenant();
+  const tenantId = currentTenant?.id ?? null;
   const [definition, setDefinition] = useState<AgentDefinition | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -211,11 +212,16 @@ export const AgentDefinitionDetail: React.FC = () => {
       setIsLoading(false);
       return;
     }
+    if (!tenantId) {
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
     try {
-      const nextDefinition = await definitionsService.getById(definitionId);
+      const nextDefinition = await definitionsService.getById(definitionId, {
+        tenant_id: tenantId,
+      });
       setDefinition(nextDefinition);
     } catch {
       setDefinition(null);
@@ -227,7 +233,7 @@ export const AgentDefinitionDetail: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [definitionId, t]);
+  }, [definitionId, tenantId, t]);
 
   useEffect(() => {
     void loadDefinition();
@@ -235,34 +241,36 @@ export const AgentDefinitionDetail: React.FC = () => {
 
   const handleToggle = useCallback(
     async (enabled: boolean) => {
-      if (!definition) {
+      if (!definition || !tenantId) {
         return;
       }
 
       setIsSubmitting(true);
       try {
-        const updated = await definitionsService.setEnabled(definition.id, enabled);
+        const updated = await definitionsService.setEnabled(definition.id, enabled, {
+          tenant_id: tenantId,
+        });
         setDefinition(updated);
       } finally {
         setIsSubmitting(false);
       }
     },
-    [definition]
+    [definition, tenantId]
   );
 
   const handleDelete = useCallback(async () => {
-    if (!definition) {
+    if (!definition || !tenantId) {
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await definitionsService.delete(definition.id);
+      await definitionsService.delete(definition.id, { tenant_id: tenantId });
       void navigate(listPath);
     } finally {
       setIsSubmitting(false);
     }
-  }, [definition, listPath, navigate]);
+  }, [definition, listPath, navigate, tenantId]);
 
   const confirmDelete = useCallback(() => {
     if (!definition) {
@@ -712,6 +720,7 @@ export const AgentDefinitionDetail: React.FC = () => {
             void loadDefinition();
           }}
           definition={definition}
+          tenantId={tenantId}
         />
       ) : null}
     </div>

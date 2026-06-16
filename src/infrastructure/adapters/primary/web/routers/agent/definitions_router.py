@@ -6,7 +6,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
@@ -132,6 +132,23 @@ class DefinitionListResponse(BaseModel):
     offset: int
 
 
+async def _get_selected_definition_tenant_id(
+    selected_tenant_id: str | None = Query(
+        None,
+        alias="tenant_id",
+        min_length=1,
+        description="Explicit tenant scope for multi-tenant callers.",
+    ),
+    fallback_tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    if selected_tenant_id is None:
+        return fallback_tenant_id
+    await require_tenant_access(db, cast(Any, current_user), selected_tenant_id)
+    return selected_tenant_id
+
+
 async def _ensure_project_definition_access(
     db: AsyncSession,
     *,
@@ -213,7 +230,7 @@ async def create_definition(
     body: CreateDefinitionBody,
     request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_definition_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
@@ -324,7 +341,7 @@ async def list_definitions(  # noqa: PLR0913
     offset: int = 0,
     include_total: bool = False,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_definition_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]] | DefinitionListResponse:
     try:
@@ -435,7 +452,7 @@ async def get_definition(
     definition_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_definition_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
@@ -481,7 +498,7 @@ async def update_definition(
     body: UpdateDefinitionBody,
     request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_definition_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
@@ -548,7 +565,7 @@ async def delete_definition(
     definition_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_definition_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
@@ -596,7 +613,7 @@ async def set_definition_enabled(
     body: SetEnabledBody,
     request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_definition_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:

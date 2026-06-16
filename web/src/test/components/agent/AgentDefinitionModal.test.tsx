@@ -226,6 +226,32 @@ describe('AgentDefinitionModal', () => {
     });
   });
 
+  it('loads tenant-scoped resources and submits updates with the selected tenant', async () => {
+    render(
+      <AgentDefinitionModal
+        isOpen
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        definition={makeDefinition()}
+        tenantId="tenant-1"
+      />
+    );
+
+    await waitFor(() => {
+      expect(mocks.listSkills).toHaveBeenCalledWith({ limit: 100, tenant_id: 'tenant-1' });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(mocks.updateDefinition).toHaveBeenCalledWith(
+        'agent-1',
+        expect.objectContaining({ name: 'research_agent' }),
+        { tenant_id: 'tenant-1' }
+      );
+    });
+  });
+
   it('builds null clear payloads when existing policy groups are emptied', () => {
     expect(buildSpawnPolicy({ can_spawn: false }, true)).toBeNull();
     expect(buildToolPolicy({ tool_policy_precedence: 'deny_first' }, true)).toBeNull();

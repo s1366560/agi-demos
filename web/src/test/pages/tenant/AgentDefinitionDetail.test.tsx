@@ -26,16 +26,19 @@ vi.mock('../../../components/agent/AgentDefinitionModal', () => ({
   AgentDefinitionModal: ({
     isOpen,
     initialProjectId,
+    tenantId,
     projectOptions = [],
   }: {
     isOpen: boolean;
     initialProjectId?: string | null;
+    tenantId?: string | null;
     projectOptions?: Array<{ id: string; name: string }>;
   }) =>
     isOpen ? (
       <div
         data-testid="agent-definition-modal"
         data-initial-project-id={initialProjectId ?? 'tenant'}
+        data-tenant-id={tenantId ?? ''}
       >
         {projectOptions.map((project) => (
           <span key={project.id}>{project.name}</span>
@@ -138,6 +141,17 @@ const makeDefinitionPage = (definitions: AgentDefinition[]) => ({
   offset: 0,
 });
 
+const makeTenant = () => ({
+  id: 'tenant-1',
+  name: 'Tenant One',
+  owner_id: 'admin-1',
+  plan: 'enterprise' as const,
+  max_projects: 100,
+  max_users: 100,
+  max_storage: 1024,
+  created_at: '2026-06-03T05:00:00Z',
+});
+
 describe('AgentDefinitionDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -146,7 +160,7 @@ describe('AgentDefinitionDetail', () => {
       isAuthenticated: false,
     });
     useTenantStore.setState({
-      currentTenant: null,
+      currentTenant: makeTenant(),
     });
     useProjectStore.setState({
       projects: [],
@@ -156,6 +170,7 @@ describe('AgentDefinitionDetail', () => {
       total: 0,
       page: 1,
       pageSize: 20,
+      listProjects: vi.fn().mockResolvedValue(undefined),
     });
   });
 
@@ -174,7 +189,9 @@ describe('AgentDefinitionDetail', () => {
     );
 
     await waitFor(() => {
-      expect(definitionsService.getById).toHaveBeenCalledWith('agent-1');
+      expect(definitionsService.getById).toHaveBeenCalledWith('agent-1', {
+        tenant_id: 'tenant-1',
+      });
     });
 
     expect(await screen.findByRole('heading', { name: 'Research Agent' })).toBeInTheDocument();
@@ -283,6 +300,10 @@ describe('AgentDefinitionDetail', () => {
     expect(screen.getByTestId('agent-definition-modal')).toHaveAttribute(
       'data-initial-project-id',
       'project-1'
+    );
+    expect(screen.getByTestId('agent-definition-modal')).toHaveAttribute(
+      'data-tenant-id',
+      'tenant-1'
     );
   });
 });

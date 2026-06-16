@@ -18,6 +18,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Badge, Button, Card, Empty, Skeleton, Space, Tag, Typography, message } from 'antd';
 import { Bot, MessageSquarePlus } from 'lucide-react';
 
+import { useCurrentTenant } from '@/stores/tenant';
+
 import { definitionsService } from '@/services/agent/definitionsService';
 import { agentService } from '@/services/agentService';
 
@@ -45,12 +47,14 @@ function initials(name: string): string {
 export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const currentTenant = useCurrentTenant();
+  const tenantId = currentTenant?.id ?? null;
   const [startingId, setStartingId] = useState<string | null>(null);
 
   const query = useQuery<AgentDefinition[]>({
-    queryKey: ['project', projectId, 'agent-definitions'],
-    queryFn: () => definitionsService.list({ project_id: projectId }),
-    enabled: Boolean(projectId),
+    queryKey: ['project', projectId, 'agent-definitions', tenantId],
+    queryFn: () => definitionsService.list({ project_id: projectId, tenant_id: tenantId }),
+    enabled: Boolean(projectId && tenantId),
     refetchInterval: 30_000,
     staleTime: 10_000,
   });
