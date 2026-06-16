@@ -95,6 +95,40 @@ describe('AgentBindingModal', () => {
     });
   });
 
+  it('loads definitions and creates bindings with the selected tenant', async () => {
+    mocks.definitions = [
+      makeDefinition({ id: 'tenant-agent', display_name: 'Tenant Agent', project_id: null }),
+    ];
+
+    render(
+      <AgentBindingModal
+        isOpen
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        tenantId="tenant-1"
+      />
+    );
+
+    await waitFor(() => {
+      expect(mocks.listDefinitions).toHaveBeenCalledWith({
+        enabled_only: true,
+        tenant_id: 'tenant-1',
+      });
+    });
+
+    const [agentSelect] = screen.getAllByRole('combobox');
+    fireEvent.mouseDown(agentSelect);
+    fireEvent.click(await screen.findByText('Tenant Agent'));
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => {
+      expect(mocks.createBinding).toHaveBeenCalledWith(
+        expect.objectContaining({ agent_id: 'tenant-agent' }),
+        { tenant_id: 'tenant-1' }
+      );
+    });
+  });
+
   it('disables creation when no tenant-level agents are available', async () => {
     mocks.definitions = [
       makeDefinition({ id: 'project-agent', display_name: 'Project Agent', project_id: 'project-1' }),

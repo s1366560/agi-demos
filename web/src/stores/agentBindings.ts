@@ -3,6 +3,7 @@ import { devtools } from 'zustand/middleware';
 
 import { bindingsService } from '../services/agent/bindingsService';
 
+import type { BindingListParams } from '../services/agent/bindingsService';
 import type { UnknownError } from '../types/common';
 import type { AgentBinding, CreateBindingRequest } from '../types/multiAgent';
 
@@ -27,6 +28,15 @@ interface BindingFilters {
   enabledOnly: boolean;
 }
 
+type BindingListRequestParams = Omit<BindingListParams, 'agent_id' | 'tenant_id'> & {
+  agent_id?: string | null | undefined;
+  tenant_id?: string | null | undefined;
+};
+
+interface BindingActionOptions {
+  tenant_id?: string | null | undefined;
+}
+
 interface AgentBindingState {
   bindings: AgentBinding[];
   isLoading: boolean;
@@ -34,13 +44,17 @@ interface AgentBindingState {
   error: string | null;
   filters: BindingFilters;
 
-  listBindings: (params?: {
-    agent_id?: string | undefined;
-    enabled_only?: boolean | undefined;
-  }) => Promise<void>;
-  createBinding: (data: CreateBindingRequest) => Promise<AgentBinding>;
-  deleteBinding: (id: string) => Promise<void>;
-  toggleBinding: (id: string, enabled: boolean) => Promise<void>;
+  listBindings: (params?: BindingListRequestParams) => Promise<void>;
+  createBinding: (
+    data: CreateBindingRequest,
+    options?: BindingActionOptions
+  ) => Promise<AgentBinding>;
+  deleteBinding: (id: string, options?: BindingActionOptions) => Promise<void>;
+  toggleBinding: (
+    id: string,
+    enabled: boolean,
+    options?: BindingActionOptions
+  ) => Promise<void>;
 
   setFilters: (filters: Partial<BindingFilters>) => void;
   resetFilters: () => void;
@@ -80,8 +94,9 @@ export const useAgentBindingStore = create<AgentBindingState>()(
           const { filters } = get();
           const queryParams = {
             ...params,
+            tenant_id: params.tenant_id ?? undefined,
             agent_id: params.agent_id ?? filters.agentId ?? undefined,
-            enabled_only: filters.enabledOnly || undefined,
+            enabled_only: params.enabled_only ?? (filters.enabledOnly || undefined),
           };
           const bindings = await bindingsService.list(queryParams);
           set({ bindings, isLoading: false });
@@ -92,10 +107,10 @@ export const useAgentBindingStore = create<AgentBindingState>()(
         }
       },
 
-      createBinding: async (data: CreateBindingRequest) => {
+      createBinding: async (data: CreateBindingRequest, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          const created = await bindingsService.create(data);
+          const created = await bindingsService.create(data, options);
           const { bindings } = get();
           set({
             bindings: [created, ...bindings],
@@ -109,10 +124,10 @@ export const useAgentBindingStore = create<AgentBindingState>()(
         }
       },
 
-      deleteBinding: async (id: string) => {
+      deleteBinding: async (id: string, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          await bindingsService.delete(id);
+          await bindingsService.delete(id, options);
           const { bindings } = get();
           set({
             bindings: bindings.filter((b) => b.id !== id),
@@ -125,7 +140,7 @@ export const useAgentBindingStore = create<AgentBindingState>()(
         }
       },
 
-      toggleBinding: async (id: string, enabled: boolean) => {
+      toggleBinding: async (id: string, enabled: boolean, options = {}) => {
         const { bindings } = get();
         const original = [...bindings];
         set({
@@ -133,7 +148,7 @@ export const useAgentBindingStore = create<AgentBindingState>()(
         });
 
         try {
-          const updated = await bindingsService.setEnabled(id, enabled);
+          const updated = await bindingsService.setEnabled(id, enabled, options);
           set({
             bindings: get().bindings.map((b) => (b.id === id ? updated : b)),
           });

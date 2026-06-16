@@ -79,6 +79,46 @@ def _patch_admin_access(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_selected_binding_tenant_defaults_to_authenticated_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    require_access = AsyncMock()
+    monkeypatch.setattr(binding_router, "require_tenant_access", require_access)
+
+    tenant_id = await binding_router._get_selected_binding_tenant_id(
+        selected_tenant_id=None,
+        fallback_tenant_id="tenant-default",
+        current_user=SimpleNamespace(id="user-1"),
+        db=SimpleNamespace(),
+    )
+
+    assert tenant_id == "tenant-default"
+    require_access.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_selected_binding_tenant_validates_explicit_tenant_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    require_access = AsyncMock()
+    monkeypatch.setattr(binding_router, "require_tenant_access", require_access)
+    db = SimpleNamespace()
+    current_user = SimpleNamespace(id="user-1")
+
+    tenant_id = await binding_router._get_selected_binding_tenant_id(
+        selected_tenant_id="tenant-selected",
+        fallback_tenant_id="tenant-default",
+        current_user=current_user,
+        db=db,
+    )
+
+    assert tenant_id == "tenant-selected"
+    require_access.assert_awaited_once_with(db, current_user, "tenant-selected")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("route_name", "expected_detail"),
     [

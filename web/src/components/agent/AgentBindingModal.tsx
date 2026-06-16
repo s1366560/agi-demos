@@ -17,6 +17,7 @@ export interface AgentBindingModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  tenantId?: string | null | undefined;
 }
 
 const CHANNEL_TYPES = [
@@ -75,10 +76,13 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  tenantId = null,
 }) => {
   const { t } = useTranslation();
   const [form] = Form.useForm<FormValues>();
-  const [definitionsLoaded, setDefinitionsLoaded] = useState(false);
+  const [definitionsLoadedForTenant, setDefinitionsLoadedForTenant] = useState<
+    string | null | undefined
+  >(undefined);
 
   const isSubmitting = useBindingSubmitting();
   const createBinding = useCreateBinding();
@@ -105,10 +109,13 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
   const specificityInfo = useMemo(() => getSpecificityLabel(specificityScore), [specificityScore]);
 
   useEffect(() => {
-    if (isOpen && !definitionsLoaded) {
-      listDefinitions({ enabled_only: true })
+    if (isOpen && definitionsLoadedForTenant !== tenantId) {
+      listDefinitions({
+        enabled_only: true,
+        ...(tenantId ? { tenant_id: tenantId } : {}),
+      })
         .then(() => {
-          setDefinitionsLoaded(true);
+          setDefinitionsLoadedForTenant(tenantId);
         })
         .catch((err: unknown) => {
           void message.error(
@@ -117,7 +124,7 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
           console.error('AgentBindingModal: listDefinitions failed', err);
         });
     }
-  }, [isOpen, definitionsLoaded, listDefinitions]);
+  }, [isOpen, definitionsLoadedForTenant, listDefinitions, tenantId]);
 
   useEffect(() => {
     if (isOpen) {
@@ -143,7 +150,11 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
       if (groupId) data.group_id = groupId;
       if (values.priority !== undefined) data.priority = values.priority;
 
-      await createBinding(data);
+      if (tenantId) {
+        await createBinding(data, { tenant_id: tenantId });
+      } else {
+        await createBinding(data);
+      }
       message.success(t('tenant.agentBindings.messages.createSuccess', 'Binding created'));
       onSuccess();
     } catch (error: unknown) {
@@ -152,7 +163,7 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
         message.error(t('tenant.agentBindings.messages.createError', 'Failed to create binding'));
       }
     }
-  }, [form, createBinding, onSuccess, t]);
+  }, [form, createBinding, onSuccess, tenantId, t]);
 
   return (
     <Modal

@@ -6,7 +6,7 @@ import logging
 import uuid
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -74,12 +74,29 @@ class TestBindingResponse(BaseModel):
     trace: list[BindingTraceEntry]
 
 
+async def _get_selected_binding_tenant_id(
+    selected_tenant_id: str | None = Query(
+        None,
+        alias="tenant_id",
+        min_length=1,
+        description="Explicit tenant scope for multi-tenant callers.",
+    ),
+    fallback_tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    if selected_tenant_id is None:
+        return fallback_tenant_id
+    await require_tenant_access(db, cast(Any, current_user), selected_tenant_id)
+    return selected_tenant_id
+
+
 @router.post("/bindings")
 async def create_binding(
     body: CreateBindingRequest,
     request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_binding_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
@@ -125,7 +142,7 @@ async def list_bindings(
     agent_id: str | None = None,
     enabled_only: bool = False,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_binding_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     try:
@@ -165,7 +182,7 @@ async def delete_binding(
     binding_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_binding_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
@@ -200,7 +217,7 @@ async def set_binding_enabled(
     body: SetEnabledRequest,
     request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_binding_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
@@ -236,7 +253,7 @@ async def list_group_bindings(
     group_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_binding_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     try:
@@ -266,7 +283,7 @@ async def test_binding_match(
     body: TestBindingRequest,
     request: Request,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_binding_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> TestBindingResponse:
     """Test which SubAgent would handle a message with given context.

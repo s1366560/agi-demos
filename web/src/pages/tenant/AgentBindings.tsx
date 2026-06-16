@@ -74,6 +74,7 @@ export const AgentBindings: React.FC = () => {
 
   const user = useUser();
   const currentTenant = useCurrentTenant();
+  const tenantId = currentTenant?.id ?? null;
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
@@ -119,9 +120,12 @@ export const AgentBindings: React.FC = () => {
   }, [bindings, search, defNameMap]);
 
   useEffect(() => {
-    void listBindings();
-    void listDefinitions();
-  }, [listBindings, listDefinitions]);
+    if (!tenantId) {
+      return;
+    }
+    void listBindings({ tenant_id: tenantId });
+    void listDefinitions({ tenant_id: tenantId });
+  }, [listBindings, listDefinitions, tenantId]);
 
   useEffect(() => {
     if (error) message.error(error);
@@ -136,8 +140,11 @@ export const AgentBindings: React.FC = () => {
 
   const handleToggle = useCallback(
     async (id: string, enabled: boolean) => {
+      if (!tenantId) {
+        return;
+      }
       try {
-        await toggleBinding(id, enabled);
+        await toggleBinding(id, enabled, { tenant_id: tenantId });
         message.success(
           enabled
             ? t('tenant.agentBindings.messages.enabled')
@@ -147,24 +154,30 @@ export const AgentBindings: React.FC = () => {
         // handled by store
       }
     },
-    [toggleBinding, t]
+    [tenantId, toggleBinding, t]
   );
 
   const handleDelete = useCallback(
     async (id: string) => {
+      if (!tenantId) {
+        return;
+      }
       try {
-        await deleteBinding(id);
+        await deleteBinding(id, { tenant_id: tenantId });
         message.success(t('tenant.agentBindings.messages.deleted'));
       } catch {
         // handled by store
       }
     },
-    [deleteBinding, t]
+    [deleteBinding, tenantId, t]
   );
 
   const handleRefresh = useCallback(() => {
-    void listBindings();
-  }, [listBindings]);
+    if (!tenantId) {
+      return;
+    }
+    void listBindings({ tenant_id: tenantId });
+  }, [listBindings, tenantId]);
 
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
@@ -172,14 +185,24 @@ export const AgentBindings: React.FC = () => {
 
   const handleModalSuccess = useCallback(() => {
     setIsModalOpen(false);
-    void listBindings();
-  }, [listBindings]);
+    if (!tenantId) {
+      return;
+    }
+    void listBindings({ tenant_id: tenantId });
+  }, [listBindings, tenantId]);
 
   const handleTestModalOpen = useCallback(() => {
     setIsTestModalOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isTestModalOpen) {
+      return;
+    }
     testForm.resetFields();
     setTestResult(null);
-  }, [testForm]);
+    setShowTrace(false);
+  }, [isTestModalOpen, testForm]);
 
   const handleTestModalClose = useCallback(() => {
     setIsTestModalOpen(false);
@@ -190,12 +213,15 @@ export const AgentBindings: React.FC = () => {
     try {
       const values = await testForm.validateFields();
       setIsTestLoading(true);
-      const result = await bindingsService.test({
+      const request = {
         channel_type: values.channel_type,
         channel_id: optionalString(values.channel_id),
         account_id: optionalString(values.account_id),
         peer_id: optionalString(values.peer_id),
-      });
+      };
+      const result = tenantId
+        ? await bindingsService.test(request, { tenant_id: tenantId })
+        : await bindingsService.test(request);
       setTestResult(result);
     } catch (err: unknown) {
       const error = err as { errorFields?: unknown[] | undefined };
@@ -205,7 +231,7 @@ export const AgentBindings: React.FC = () => {
     } finally {
       setIsTestLoading(false);
     }
-  }, [testForm, t]);
+  }, [tenantId, testForm, t]);
 
   const traceColumns: ColumnsType<BindingTraceEntry> = useMemo(
     () => [
@@ -511,6 +537,7 @@ export const AgentBindings: React.FC = () => {
           isOpen={isModalOpen}
           onClose={handleModalClose}
           onSuccess={handleModalSuccess}
+          tenantId={tenantId}
         />
       ) : null}
 
