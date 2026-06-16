@@ -634,6 +634,7 @@ export function WorkstationArrangementBoard({
 
       <AddAgentModal
         open={actions.addAgentOpen}
+        projectId={projectId}
         onClose={() => {
           actions.setAddAgentOpen(false);
         }}

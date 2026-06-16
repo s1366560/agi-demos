@@ -84,6 +84,10 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
   const createBinding = useCreateBinding();
   const definitions = useDefinitions();
   const listDefinitions = useListDefinitions();
+  const tenantLevelDefinitions = useMemo(
+    () => definitions.filter((definition) => definition.project_id === null),
+    [definitions]
+  );
 
   const colors = useThemeColors({
     warning: '--color-warning',
@@ -161,6 +165,7 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
       okText={t('common.create', 'Create')}
       cancelText={t('common.cancel', 'Cancel')}
       confirmLoading={isSubmitting}
+      okButtonProps={{ disabled: tenantLevelDefinitions.length === 0 }}
       width={560}
       destroyOnHidden
     >
@@ -168,6 +173,10 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
         <Form.Item
           name="agent_id"
           label={t('tenant.agentBindings.modal.agent', 'Agent')}
+          tooltip={t(
+            'tenant.agentBindings.modal.tenantAgentOnly',
+            'Channel bindings can only target tenant-level agents.'
+          )}
           rules={[
             {
               required: true,
@@ -176,12 +185,19 @@ export const AgentBindingModal: React.FC<AgentBindingModalProps> = ({
           ]}
         >
           <Select
-            placeholder={t('tenant.agentBindings.modal.selectAgent', 'Select an agent definition')}
+            placeholder={t(
+              'tenant.agentBindings.modal.selectAgent',
+              'Select a tenant-level agent definition'
+            )}
+            notFoundContent={t(
+              'tenant.agentBindings.modal.noTenantAgents',
+              'No tenant-level agents available'
+            )}
             showSearch={{
               filterOption: (input, option) =>
                 (option?.label ?? '').toLowerCase().includes(input.toLowerCase()),
             }}
-            options={definitions.map((d) => ({
+            options={tenantLevelDefinitions.map((d) => ({
               label: d.display_name ?? d.name,
               value: d.id,
             }))}

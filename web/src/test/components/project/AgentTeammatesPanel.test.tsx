@@ -9,6 +9,16 @@ import { agentService } from '@/services/agentService';
 
 import type { AgentDefinition } from '@/types/multiAgent';
 
+const navigateMock = vi.hoisted(() => vi.fn());
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => navigateMock,
+  };
+});
+
 vi.mock('@/services/agent/definitionsService', () => ({
   definitionsService: {
     list: vi.fn(),
@@ -60,6 +70,8 @@ const makeAgent = (overrides: Partial<AgentDefinition> = {}): AgentDefinition =>
   max_spawn_depth: 1,
   agent_to_agent_enabled: true,
   agent_to_agent_allowlist: null,
+  spawn_policy: null,
+  tool_policy: null,
   discoverable: true,
   source: 'database',
   enabled: true,
@@ -77,6 +89,7 @@ const makeAgent = (overrides: Partial<AgentDefinition> = {}): AgentDefinition =>
 describe('AgentTeammatesPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    navigateMock.mockReset();
   });
 
   it('renders responsive custom rows without the cramped AntD meta layout', async () => {
@@ -119,5 +132,10 @@ describe('AgentTeammatesPanel', () => {
         agent_config: expect.objectContaining({ agent_definition_id: expect.any(String) }),
       })
     );
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith(
+        '/tenant/agent-workspace/conv-1?projectId=project-1'
+      );
+    });
   });
 });

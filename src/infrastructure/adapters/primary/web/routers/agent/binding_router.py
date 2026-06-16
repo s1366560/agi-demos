@@ -98,6 +98,10 @@ async def create_binding(
             group_id=body.group_id,
             priority=body.priority,
         )
+        agent_registry = container.agent_registry()
+        agent = await agent_registry.get_by_id(binding.agent_id, tenant_id=tenant_id)
+        if agent is None or agent.project_id is not None:
+            raise ValueError("Agent is not available for tenant-level binding")
 
         created = await repo.create(binding)
         await db.commit()
@@ -125,14 +129,19 @@ async def list_bindings(
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     try:
+        await require_tenant_access(db, current_user, tenant_id)
         container = get_container_with_db(request, db)
         repo = container.agent_binding_repository()
 
         if agent_id:
-            bindings = await repo.list_by_agent(
-                agent_id=agent_id,
-                enabled_only=enabled_only,
-            )
+            bindings = [
+                binding
+                for binding in await repo.list_by_agent(
+                    agent_id=agent_id,
+                    enabled_only=enabled_only,
+                )
+                if binding.tenant_id == tenant_id
+            ]
         else:
             bindings = await repo.list_by_tenant(
                 tenant_id=tenant_id,
@@ -141,6 +150,8 @@ async def list_bindings(
 
         return [b.to_dict() for b in bindings]
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error listing bindings")
         raise HTTPException(
@@ -229,6 +240,7 @@ async def list_group_bindings(
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     try:
+        await require_tenant_access(db, current_user, tenant_id)
         container = get_container_with_db(request, db)
         repo = container.agent_binding_repository()
 
@@ -239,6 +251,8 @@ async def list_group_bindings(
 
         return [b.to_dict() for b in bindings]
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error listing group bindings")
         raise HTTPException(
@@ -267,6 +281,7 @@ async def test_binding_match(
         TestBindingResponse with matched agent info and confidence score
     """
     try:
+        await require_tenant_access(db, current_user, tenant_id)
         container = get_container_with_db(request, db)
         binding_repo = container.agent_binding_repository()
         agent_registry = container.agent_registry()
@@ -312,6 +327,8 @@ async def test_binding_match(
             trace=trace_entries,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error testing binding match")
         raise HTTPException(

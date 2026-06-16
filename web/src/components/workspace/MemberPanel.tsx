@@ -120,6 +120,7 @@ export const MemberPanel: FC<MemberPanelProps> = ({ tenantId, projectId, workspa
 
       <AddAgentModal
         open={showAddAgent}
+        projectId={projectId}
         onClose={() => {
           setShowAddAgent(false);
         }}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -9,6 +9,7 @@ import { useDefinitions, useListDefinitions } from '@/stores/agentDefinitions';
 
 export interface AddAgentModalProps {
   open: boolean;
+  projectId: string;
   onClose: () => void;
   onSubmit: (data: {
     agent_id: string;
@@ -25,7 +26,13 @@ interface FormValues {
   description: string;
 }
 
-export const AddAgentModal: FC<AddAgentModalProps> = ({ open, onClose, onSubmit, hexCoords }) => {
+export const AddAgentModal: FC<AddAgentModalProps> = ({
+  open,
+  projectId,
+  onClose,
+  onSubmit,
+  hexCoords,
+}) => {
   const { t } = useTranslation();
   const [form] = Form.useForm<FormValues>();
   const [submitting, setSubmitting] = useState(false);
@@ -33,10 +40,21 @@ export const AddAgentModal: FC<AddAgentModalProps> = ({ open, onClose, onSubmit,
 
   const definitions = useDefinitions();
   const listDefinitions = useListDefinitions();
+  const availableDefinitions = useMemo(
+    () =>
+      definitions.filter(
+        (definition) => definition.project_id === null || definition.project_id === projectId
+      ),
+    [definitions, projectId]
+  );
+
+  useEffect(() => {
+    setDefinitionsLoaded(false);
+  }, [projectId]);
 
   useEffect(() => {
     if (open && !definitionsLoaded) {
-      listDefinitions({ enabled_only: true })
+      listDefinitions({ enabled_only: true, project_id: projectId })
         .then(() => {
           setDefinitionsLoaded(true);
         })
@@ -44,7 +62,7 @@ export const AddAgentModal: FC<AddAgentModalProps> = ({ open, onClose, onSubmit,
           // Error handled by store
         });
     }
-  }, [open, definitionsLoaded, listDefinitions]);
+  }, [open, definitionsLoaded, listDefinitions, projectId]);
 
   useEffect(() => {
     if (open) {
@@ -54,14 +72,14 @@ export const AddAgentModal: FC<AddAgentModalProps> = ({ open, onClose, onSubmit,
 
   const handleAgentChange = useCallback(
     (agentId: string) => {
-      const def = definitions.find((d) => d.id === agentId);
+      const def = availableDefinitions.find((d) => d.id === agentId);
       if (def) {
         form.setFieldsValue({
           display_name: def.display_name ?? def.name,
         });
       }
     },
-    [definitions, form]
+    [availableDefinitions, form]
   );
 
   const handleOk = useCallback(async () => {
@@ -97,6 +115,7 @@ export const AddAgentModal: FC<AddAgentModalProps> = ({ open, onClose, onSubmit,
       okText={t('common.add', 'Add')}
       cancelText={t('common.cancel', 'Cancel')}
       confirmLoading={submitting}
+      okButtonProps={{ disabled: availableDefinitions.length === 0 }}
       width={480}
       destroyOnHidden
     >
@@ -114,13 +133,17 @@ export const AddAgentModal: FC<AddAgentModalProps> = ({ open, onClose, onSubmit,
           <Select
             placeholder={t(
               'workspaceDetail.agents.definitionPlaceholder',
-              'Select an agent definition'
+              'Select a tenant or current-project agent definition'
+            )}
+            notFoundContent={t(
+              'workspaceDetail.agents.noAvailableDefinitions',
+              'No tenant or current-project agents available'
             )}
             showSearch={{
               filterOption: (input, option) =>
                 (option?.label ?? '').toLowerCase().includes(input.toLowerCase()),
             }}
-            options={definitions.map((d) => ({
+            options={availableDefinitions.map((d) => ({
               label: d.display_name ?? d.name,
               value: d.id,
             }))}

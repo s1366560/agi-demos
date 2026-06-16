@@ -21,6 +21,8 @@ import { Bot, MessageSquarePlus } from 'lucide-react';
 import { definitionsService } from '@/services/agent/definitionsService';
 import { agentService } from '@/services/agentService';
 
+import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
+
 import type { AgentDefinition } from '@/types/multiAgent';
 
 const { Text, Title } = Typography;
@@ -64,7 +66,12 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
         title: t('project.agentTeammates.chatTitle', { name: displayName }),
         agent_config: { selected_agent_id: agent.id },
       });
-      void navigate(`/tenant/agent-workspace?conversation=${encodeURIComponent(conversation.id)}`);
+      void navigate(
+        buildAgentWorkspacePath({
+          conversationId: conversation.id,
+          projectId,
+        })
+      );
     } catch (error) {
       console.error('Failed to start chat with agent', error);
       message.error(t('project.agentTeammates.startError'));
