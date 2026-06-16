@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Protocol
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.graph.agent_graph import AgentGraph
@@ -17,7 +18,9 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import Project, UserProject
 from src.infrastructure.i18n import gettext as _
 
 from .utils import get_container_with_db
@@ -25,6 +28,7 @@ from .utils import get_container_with_db
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+_PROJECT_GRAPH_WRITE_ROLES = ("owner", "admin", "member")
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +156,36 @@ class _GraphOrchestrator(Protocol):
     async def get_run_status(self, run_id: str) -> GraphRun | None: ...
 
 
+async def _ensure_project_graph_access(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+    project_id: str,
+    required_roles: tuple[str, ...] | None = None,
+) -> None:
+    query = (
+        select(UserProject.id)
+        .join(Project, UserProject.project_id == Project.id)
+        .where(
+            and_(
+                UserProject.user_id == current_user.id,
+                UserProject.project_id == project_id,
+                Project.tenant_id == tenant_id,
+            )
+        )
+    )
+    if required_roles is not None:
+        query = query.where(UserProject.role.in_(required_roles))
+
+    result = await db.execute(refresh_select_statement(query))
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied to project"),
+        )
+
+
 def _graph_to_response(graph: AgentGraph) -> GraphResponse:
     return GraphResponse(
         id=graph.id,
@@ -231,10 +265,21 @@ async def _get_accessible_graph(
     repo: _GraphRepository,
     graph_id: str,
     user_tenant_id: str,
+    *,
+    db: AsyncSession,
+    current_user: User,
+    require_write: bool = False,
 ) -> AgentGraph:
     graph = await repo.find_by_id(graph_id)
     if graph is None or graph.tenant_id != user_tenant_id:
         raise HTTPException(status_code=404, detail=_("Graph not found"))
+    await _ensure_project_graph_access(
+        db,
+        current_user=current_user,
+        tenant_id=user_tenant_id,
+        project_id=graph.project_id,
+        required_roles=_PROJECT_GRAPH_WRITE_ROLES if require_write else None,
+    )
     return graph
 
 
@@ -242,10 +287,21 @@ async def _get_accessible_graph_run(
     orchestrator: _GraphOrchestrator,
     run_id: str,
     user_tenant_id: str,
+    *,
+    db: AsyncSession,
+    current_user: User,
+    require_write: bool = False,
 ) -> GraphRun:
     run = await orchestrator.get_run_status(run_id)
     if run is None or run.tenant_id != user_tenant_id:
         raise HTTPException(status_code=404, detail=_("Graph run not found"))
+    await _ensure_project_graph_access(
+        db,
+        current_user=current_user,
+        tenant_id=user_tenant_id,
+        project_id=run.project_id,
+        required_roles=_PROJECT_GRAPH_WRITE_ROLES if require_write else None,
+    )
     return run
 
 
@@ -306,6 +362,12 @@ async def list_graphs(
     container = get_container_with_db(request, db)
     repo = container.graph_repository()
     try:
+        await _ensure_project_graph_access(
+            db,
+            current_user=current_user,
+            tenant_id=user_tenant_id,
+            project_id=project_id,
+        )
         graphs = await repo.list_by_project(tenant_id=user_tenant_id, project_id=project_id)
         return GraphListResponse(
             graphs=[_graph_to_response(g) for g in graphs],
@@ -329,6 +391,14 @@ async def create_graph(
 ) -> GraphResponse:
     from src.domain.model.agent.graph.agent_edge import AgentEdge
     from src.domain.model.agent.graph.agent_node import AgentNode
+
+    await _ensure_project_graph_access(
+        db,
+        current_user=current_user,
+        tenant_id=user_tenant_id,
+        project_id=project_id,
+        required_roles=_PROJECT_GRAPH_WRITE_ROLES,
+    )
 
     try:
         pattern = GraphPattern(body.pattern)
@@ -400,12 +470,18 @@ async def get_graph(
     container = get_container_with_db(request, db)
     repo = container.graph_repository()
     try:
-        graph = await repo.find_by_id(graph_id)
+        graph = await _get_accessible_graph(
+            repo,
+            graph_id,
+            user_tenant_id,
+            db=db,
+            current_user=current_user,
+        )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Failed to get graph %s", graph_id)
         raise HTTPException(status_code=500, detail=_("Failed to get graph")) from None
-    if graph is None or graph.tenant_id != user_tenant_id:
-        raise HTTPException(status_code=404, detail=_("Graph not found"))
     return _graph_to_response(graph)
 
 
@@ -421,13 +497,19 @@ async def update_graph(
     container = get_container_with_db(request, db)
     repo = container.graph_repository()
     try:
-        graph = await repo.find_by_id(graph_id)
+        graph = await _get_accessible_graph(
+            repo,
+            graph_id,
+            user_tenant_id,
+            db=db,
+            current_user=current_user,
+            require_write=True,
+        )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Failed to find graph %s for update", graph_id)
         raise HTTPException(status_code=500, detail=_("Failed to update graph")) from None
-
-    if graph is None or graph.tenant_id != user_tenant_id:
-        raise HTTPException(status_code=404, detail=_("Graph not found"))
 
     _apply_graph_updates(graph, body)
 
@@ -457,16 +539,22 @@ async def delete_graph(
     container = get_container_with_db(request, db)
     repo = container.graph_repository()
     try:
-        graph = await repo.find_by_id(graph_id)
+        graph = await _get_accessible_graph(
+            repo,
+            graph_id,
+            user_tenant_id,
+            db=db,
+            current_user=current_user,
+            require_write=True,
+        )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Failed to find graph %s for deletion", graph_id)
         raise HTTPException(status_code=500, detail=_("Failed to delete graph")) from None
 
-    if graph is None or graph.tenant_id != user_tenant_id:
-        raise HTTPException(status_code=404, detail=_("Graph not found"))
-
     try:
-        await repo.delete(graph_id)
+        await repo.delete(graph.id)
         await db.commit()
     except HTTPException:
         raise
@@ -491,8 +579,19 @@ async def start_graph_run(
     db: AsyncSession = Depends(get_db),
 ) -> GraphRunResponse:
     container = get_container_with_db(request, db)
+    repo = container.graph_repository()
     orchestrator = container.graph_orchestrator()
     try:
+        graph = await _get_accessible_graph(
+            repo,
+            graph_id,
+            user_tenant_id,
+            db=db,
+            current_user=current_user,
+            require_write=True,
+        )
+        if graph.project_id != project_id:
+            raise HTTPException(status_code=404, detail=_("Graph not found"))
         run, _events = await orchestrator.start_run(
             graph_id=graph_id,
             conversation_id=body.conversation_id,
@@ -525,7 +624,13 @@ async def list_graph_runs(
     repo = container.graph_repository()
     orchestrator = container.graph_orchestrator()
     try:
-        access_checked_graph = await _get_accessible_graph(repo, graph_id, user_tenant_id)
+        access_checked_graph = await _get_accessible_graph(
+            repo,
+            graph_id,
+            user_tenant_id,
+            db=db,
+            current_user=current_user,
+        )
         runs = await orchestrator.list_runs_for_graph(access_checked_graph.id)
         return GraphRunListResponse(
             runs=[_run_to_response(r) for r in runs],
@@ -549,7 +654,13 @@ async def get_graph_run(
     container = get_container_with_db(request, db)
     orchestrator = container.graph_orchestrator()
     try:
-        run = await _get_accessible_graph_run(orchestrator, run_id, user_tenant_id)
+        run = await _get_accessible_graph_run(
+            orchestrator,
+            run_id,
+            user_tenant_id,
+            db=db,
+            current_user=current_user,
+        )
     except HTTPException:
         raise
     except Exception:
@@ -571,7 +682,14 @@ async def cancel_graph_run(
     orchestrator = container.graph_orchestrator()
     reason = body.reason if body else "User requested cancellation"
     try:
-        access_checked_run = await _get_accessible_graph_run(orchestrator, run_id, user_tenant_id)
+        access_checked_run = await _get_accessible_graph_run(
+            orchestrator,
+            run_id,
+            user_tenant_id,
+            db=db,
+            current_user=current_user,
+            require_write=True,
+        )
         run, _events = await orchestrator.cancel_run(access_checked_run.id, reason=reason)
         await db.commit()
         if run.tenant_id != user_tenant_id:
