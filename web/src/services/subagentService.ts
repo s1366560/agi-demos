@@ -25,6 +25,7 @@ export interface SubAgentListParams {
   source?: 'filesystem' | 'database' | undefined;
   include_filesystem?: boolean | undefined;
   skip?: number | undefined;
+  offset?: number | undefined;
   limit?: number | undefined;
 }
 
@@ -51,7 +52,12 @@ export const subagentAPI = {
    * List all SubAgents (merged: DB + filesystem by default)
    */
   list: async (params: SubAgentListParams = {}): Promise<SubAgentsListResponse> => {
-    return await api.get<SubAgentsListResponse>('/subagents/', { params });
+    const { skip, offset, ...rest } = params;
+    const queryParams = {
+      ...rest,
+      offset: offset ?? skip,
+    };
+    return await api.get<SubAgentsListResponse>('/subagents/', { params: queryParams });
   },
 
   /**

@@ -15,6 +15,7 @@ vi.mock('../../services/client/httpClient', () => ({
 
 describe('subagentAPI', () => {
   const mockHttpClient = httpClient as unknown as {
+    get: ReturnType<typeof vi.fn>;
     post: ReturnType<typeof vi.fn>;
   };
 
@@ -28,5 +29,32 @@ describe('subagentAPI', () => {
     await subagentAPI.createFromTemplate('template-1');
 
     expect(mockHttpClient.post).toHaveBeenCalledWith('/subagents/templates/template-1/install');
+  });
+
+  it('normalizes legacy skip pagination to backend offset', async () => {
+    mockHttpClient.get.mockResolvedValue({ subagents: [], total: 0 });
+
+    await subagentAPI.list({ skip: 20, limit: 10, enabled_only: true });
+
+    expect(mockHttpClient.get).toHaveBeenCalledWith('/subagents/', {
+      params: {
+        enabled_only: true,
+        limit: 10,
+        offset: 20,
+      },
+    });
+  });
+
+  it('prefers explicit offset over legacy skip when both are provided', async () => {
+    mockHttpClient.get.mockResolvedValue({ subagents: [], total: 0 });
+
+    await subagentAPI.list({ skip: 20, offset: 40, limit: 10 });
+
+    expect(mockHttpClient.get).toHaveBeenCalledWith('/subagents/', {
+      params: {
+        limit: 10,
+        offset: 40,
+      },
+    });
   });
 });

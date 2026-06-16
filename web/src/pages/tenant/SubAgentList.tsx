@@ -15,6 +15,7 @@ import { SubAgentFilters } from '../../components/subagent/SubAgentFilters';
 import { SubAgentGrid } from '../../components/subagent/SubAgentGrid';
 import { SubAgentModal } from '../../components/subagent/SubAgentModal';
 import { SubAgentStats } from '../../components/subagent/SubAgentStats';
+import { useProjectStore } from '../../stores/project';
 import {
   filterSubAgents,
   useAverageSuccessRate,
@@ -34,6 +35,7 @@ import {
   useToggleSubAgent,
   useTotalInvocations,
 } from '../../stores/subagent';
+import { useTenantStore } from '../../stores/tenant';
 
 import type { StatusFilter, SortField } from '../../components/subagent/SubAgentFilters';
 import type { SubAgentResponse, SubAgentTemplate } from '../../types/agent';
@@ -56,6 +58,7 @@ export const SubAgentList: React.FC = () => {
   const [sortField, setSortField] = useState<SortField>('name');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSubAgent, setEditingSubAgent] = useState<SubAgentResponse | null>(null);
+  const [importProjectId, setImportProjectId] = useState<string | null>(null);
 
   // Store data
   const subagentsData = useSubAgentData();
@@ -66,6 +69,44 @@ export const SubAgentList: React.FC = () => {
   const enabledCount = useEnabledSubAgentsCount();
   const avgSuccessRate = useAverageSuccessRate();
   const totalInvocations = useTotalInvocations();
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const projects = useProjectStore((state) => state.projects);
+  const listProjects = useProjectStore((state) => state.listProjects);
+
+  const projectNameById = useMemo(
+    () => new Map(projects.map((project) => [project.id, project.name])),
+    [projects]
+  );
+
+  const importProjectOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options = projects.map((project) => {
+      seen.add(project.id);
+      return { id: project.id, name: project.name };
+    });
+
+    for (const subagent of subagentsData) {
+      if (subagent.project_id && !seen.has(subagent.project_id)) {
+        seen.add(subagent.project_id);
+        options.push({
+          id: subagent.project_id,
+          name: subagent.project_id,
+        });
+      }
+    }
+
+    return options;
+  }, [projects, subagentsData]);
+
+  const getSubAgentScopeLabel = useCallback(
+    (subagent: SubAgentResponse): string => {
+      if (subagent.project_id) {
+        return projectNameById.get(subagent.project_id) ?? subagent.project_id;
+      }
+      return t('tenant.subagents.card.tenantScope', 'Tenant');
+    },
+    [projectNameById, t]
+  );
 
   // Store actions
   const listSubAgents = useListSubAgents();
@@ -92,6 +133,16 @@ export const SubAgentList: React.FC = () => {
     void listSubAgents();
     void listTemplates();
   }, [listSubAgents, listTemplates]);
+
+  useEffect(() => {
+    if (!currentTenant?.id) {
+      return;
+    }
+
+    void listProjects(currentTenant.id, { page_size: 100 }).catch(() => {
+      message.error(t('tenant.subagents.messages.projectsLoadFailed', 'Failed to load projects'));
+    });
+  }, [currentTenant?.id, listProjects, t]);
 
   // Sync filters to store
   useEffect(() => {
@@ -178,7 +229,7 @@ export const SubAgentList: React.FC = () => {
   const handleImportFilesystem = useCallback(
     async (name: string) => {
       try {
-        await importFilesystem(name);
+        await importFilesystem(name, importProjectId ?? undefined);
         message.success(
           t('tenant.subagents.messages.importSuccess', 'SubAgent imported to database')
         );
@@ -186,7 +237,7 @@ export const SubAgentList: React.FC = () => {
         // Error handled by store
       }
     },
-    [importFilesystem, t]
+    [importFilesystem, importProjectId, t]
   );
 
   const handleModalClose = useCallback(() => {
@@ -240,6 +291,24 @@ export const SubAgentList: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span>{t('tenant.subagents.importTarget.label', 'Import target')}</span>
+            <select
+              aria-label={t('tenant.subagents.importTarget.label', 'Import target')}
+              value={importProjectId ?? 'tenant'}
+              onChange={(event) => {
+                setImportProjectId(event.target.value === 'tenant' ? null : event.target.value);
+              }}
+              className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+            >
+              <option value="tenant">{t('tenant.subagents.importTarget.tenant', 'Tenant')}</option>
+              {importProjectOptions.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <Dropdown menu={{ items: templateMenuItems }} trigger={['click']}>
             <button
               type="button"
@@ -300,6 +369,7 @@ export const SubAgentList: React.FC = () => {
           onImport={(name) => {
             void handleImportFilesystem(name);
           }}
+          getScopeLabel={getSubAgentScopeLabel}
         />
       )}
 

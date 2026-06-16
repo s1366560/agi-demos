@@ -68,6 +68,7 @@ interface SubAgentState {
   listSubAgents: (params?: {
     enabled_only?: boolean | undefined;
     skip?: number | undefined;
+    offset?: number | undefined;
     limit?: number | undefined;
   }) => Promise<void>;
   getSubAgent: (id: string) => Promise<SubAgentResponse>;
@@ -82,7 +83,7 @@ interface SubAgentState {
   createFromTemplate: (templateId: string) => Promise<SubAgentResponse>;
 
   // Actions - Filesystem
-  importFilesystem: (name: string) => Promise<SubAgentResponse>;
+  importFilesystem: (name: string, projectId?: string) => Promise<SubAgentResponse>;
 
   // Actions - Filters
   setFilters: (filters: Partial<SubAgentFilters>) => void;
@@ -287,10 +288,10 @@ export const useSubAgentStore = create<SubAgentState>()(
 
       // ========== Filesystem Import ==========
 
-      importFilesystem: async (name: string) => {
+      importFilesystem: async (name: string, projectId?: string) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await subagentAPI.importFilesystem(name);
+          const response = await subagentAPI.importFilesystem(name, projectId);
           // Refresh the full list to get merged view
           await get().listSubAgents();
           set({ isSubmitting: false });

@@ -9,6 +9,8 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { SubAgentList } from '../../../pages/tenant/SubAgentList';
+import { useProjectStore } from '../../../stores/project';
+import { useTenantStore } from '../../../stores/tenant';
 
 // Mock react-i18next
 vi.mock('react-i18next', () => ({
@@ -52,11 +54,19 @@ vi.mock('../../../components/subagent/SubAgentFilters', () => ({
   ),
 }));
 
+const importFilesystemMock = vi.hoisted(() => vi.fn());
+
 vi.mock('../../../components/subagent/SubAgentGrid', () => ({
-  SubAgentGrid: ({ subagents }: any) => (
+  SubAgentGrid: ({ subagents, onImport, getScopeLabel }: any) => (
     <div data-testid="subagent-grid">
       {subagents.map((s: any) => (
-        <div key={s.id}>{s.display_name}</div>
+        <div key={s.id}>
+          <span>{s.display_name}</span>
+          <span>{getScopeLabel?.(s)}</span>
+          <button type="button" onClick={() => onImport?.(s.name)}>
+            Import {s.name}
+          </button>
+        </div>
       ))}
     </div>
   ),
@@ -94,6 +104,7 @@ const mockSubAgents = [
     id: '2',
     name: 'another-agent',
     display_name: 'Another Agent',
+    project_id: 'project-1',
     description: 'Another test agent',
     color: '#10b981',
     model: 'gpt-4',
@@ -133,12 +144,25 @@ vi.mock('../../../stores/subagent', () => ({
   useCreateFromTemplate: () => vi.fn(),
   useSetSubAgentFilters: () => vi.fn(),
   useClearSubAgentError: () => vi.fn(),
-  useImportFilesystem: () => vi.fn(),
+  useImportFilesystem: () => importFilesystemMock,
 }));
 
 describe('SubAgentList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    importFilesystemMock.mockResolvedValue(mockSubAgents[0]);
+    useTenantStore.setState({
+      currentTenant: null,
+    });
+    useProjectStore.setState({
+      projects: [],
+      currentProject: null,
+      isLoading: false,
+      error: null,
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    });
   });
 
   describe('Rendering', () => {
@@ -193,6 +217,46 @@ describe('SubAgentList', () => {
       render(<SubAgentList />);
       expect(screen.getByText('tenant.subagents.createNew')).toBeInTheDocument();
       expect(screen.getByText('tenant.subagents.fromTemplate')).toBeInTheDocument();
+    });
+
+    it('should import filesystem subagents into the selected project target', async () => {
+      useProjectStore.setState({
+        projects: [
+          {
+            id: 'project-1',
+            tenant_id: 'tenant-1',
+            name: 'Project Alpha',
+            owner_id: 'admin-1',
+            member_ids: ['admin-1'],
+            memory_rules: {
+              max_episodes: 100,
+              retention_days: 30,
+              auto_refresh: true,
+              refresh_interval: 3600,
+            },
+            graph_config: {
+              max_nodes: 1000,
+              max_edges: 5000,
+              similarity_threshold: 0.75,
+              community_detection: true,
+            },
+            is_public: false,
+            created_at: '2026-06-15T00:00:00Z',
+          },
+        ],
+      });
+
+      render(<SubAgentList />);
+
+      fireEvent.change(screen.getByLabelText('tenant.subagents.importTarget.label'), {
+        target: { value: 'project-1' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Import test-agent' }));
+
+      await waitFor(() => {
+        expect(importFilesystemMock).toHaveBeenCalledWith('test-agent', 'project-1');
+      });
+      expect(screen.getAllByText('Project Alpha').length).toBeGreaterThan(0);
     });
 
     it('should export SubAgentList component', async () => {

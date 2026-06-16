@@ -64,10 +64,11 @@ interface SubAgentCardProps {
   onDelete: (id: string) => void;
   onExport?: ((subagent: SubAgentResponse) => void) | undefined;
   onImport?: ((name: string) => void) | undefined;
+  getScopeLabel?: ((subagent: SubAgentResponse) => string) | undefined;
 }
 
 export const SubAgentCard = memo<SubAgentCardProps>(
-  ({ subagent, onToggle, onEdit, onDelete, onExport, onImport }) => {
+  ({ subagent, onToggle, onEdit, onDelete, onExport, onImport, getScopeLabel }) => {
     const { t } = useTranslation();
     const [menuOpen, setMenuOpen] = useState(false);
 
@@ -96,6 +97,11 @@ export const SubAgentCard = memo<SubAgentCardProps>(
       : String(subagent.allowed_tools.length);
     const skillCount = subagent.allowed_skills.length;
     const mcpCount = subagent.allowed_mcp_servers.length;
+    const scopeLabel =
+      getScopeLabel?.(subagent) ??
+      (subagent.project_id
+        ? subagent.project_id
+        : t('tenant.subagents.card.tenantScope', 'Tenant'));
 
     return (
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-colors overflow-hidden group">
@@ -135,6 +141,9 @@ export const SubAgentCard = memo<SubAgentCardProps>(
                       {t('tenant.subagents.card.database', 'DB')}
                     </span>
                   )}
+                  <span className="inline-flex max-w-[108px] items-center truncate rounded bg-slate-100 px-1.5 py-0.5 text-2xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                    {scopeLabel}
+                  </span>
                 </div>
               </div>
             </div>
