@@ -5,23 +5,28 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent.prompt_template import (
     PromptTemplate,
     TemplateVariable,
 )
+from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import (
     get_db,
 )
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.models import Project
 from src.infrastructure.adapters.secondary.persistence.sql_prompt_template_repository import (
     SqlPromptTemplateRepository,
 )
 from src.infrastructure.i18n import gettext as _
+
+from .access import require_tenant_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -92,6 +97,56 @@ def _to_response(t: PromptTemplate) -> TemplateResponse:
     )
 
 
+async def _require_project_scope(
+    db: AsyncSession,
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    result = await db.execute(
+        refresh_select_statement(
+            select(Project.id).where(
+                Project.id == project_id,
+                Project.tenant_id == tenant_id,
+            )
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail=_("Project not found"))
+
+
+async def _get_template_or_404(
+    repo: SqlPromptTemplateRepository,
+    template_id: str,
+) -> PromptTemplate:
+    template = await repo.find_by_id(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail=_("Template not found"))
+    return template
+
+
+async def _require_template_read_access(
+    db: AsyncSession,
+    current_user: User,
+    template: PromptTemplate,
+) -> None:
+    await require_tenant_access(db, current_user, template.tenant_id)
+
+
+async def _require_template_write_access(
+    db: AsyncSession,
+    current_user: User,
+    template: PromptTemplate,
+) -> None:
+    await require_tenant_access(
+        db,
+        current_user,
+        template.tenant_id,
+        require_admin=template.is_system,
+    )
+    if not template.is_system and template.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail=_("Not authorized to modify this template"))
+
+
 @router.post(
     "/templates",
     response_model=TemplateResponse,
@@ -105,9 +160,16 @@ async def create_template(
 ) -> TemplateResponse:
     """Create a new prompt template."""
     try:
+        await require_tenant_access(
+            db,
+            current_user,
+            tenant_id,
+            require_admin=data.is_system,
+        )
+        if data.project_id is not None:
+            await _require_project_scope(db, tenant_id, data.project_id)
+
         repo = SqlPromptTemplateRepository(db)
-        # Only admins can create system templates
-        is_system = data.is_system and getattr(current_user, "role", "") == "admin"
         template = PromptTemplate(
             tenant_id=tenant_id,
             project_id=data.project_id,
@@ -124,11 +186,13 @@ async def create_template(
                 )
                 for v in data.variables
             ],
-            is_system=is_system,
+            is_system=data.is_system,
         )
         saved = await repo.save(template)
         await db.commit()
         return _to_response(saved)
+    except HTTPException:
+        raise
     except Exception:
         await db.rollback()
         logger.exception("Error creating template")
@@ -147,8 +211,10 @@ async def list_templates(
 ) -> list[TemplateResponse]:
     """List prompt templates."""
     try:
+        await require_tenant_access(db, current_user, tenant_id)
         repo = SqlPromptTemplateRepository(db)
         if project_id:
+            await _require_project_scope(db, tenant_id, project_id)
             templates = await repo.list_by_project(project_id, limit=limit, offset=offset)
         else:
             templates = await repo.list_by_tenant(
@@ -158,6 +224,8 @@ async def list_templates(
                 offset=offset,
             )
         return [_to_response(t) for t in templates]
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Error listing templates")
         raise HTTPException(status_code=500, detail=_("Failed to list templates")) from None
@@ -171,9 +239,8 @@ async def get_template(
 ) -> TemplateResponse:
     """Get a specific prompt template."""
     repo = SqlPromptTemplateRepository(db)
-    template = await repo.find_by_id(template_id)
-    if not template:
-        raise HTTPException(status_code=404, detail=_("Template not found"))
+    template = await _get_template_or_404(repo, template_id)
+    await _require_template_read_access(db, current_user, template)
     return _to_response(template)
 
 
@@ -187,11 +254,8 @@ async def update_template(
     """Update a prompt template."""
     try:
         repo = SqlPromptTemplateRepository(db)
-        template = await repo.find_by_id(template_id)
-        if not template:
-            raise HTTPException(status_code=404, detail=_("Template not found"))
-        if template.created_by != current_user.id and not template.is_system:
-            raise HTTPException(status_code=403, detail=_("Not authorized to update this template"))
+        template = await _get_template_or_404(repo, template_id)
+        await _require_template_write_access(db, current_user, template)
         if data.title is not None:
             template.title = data.title
         if data.content is not None:
@@ -232,11 +296,8 @@ async def delete_template(
     """Delete a prompt template."""
     try:
         repo = SqlPromptTemplateRepository(db)
-        template = await repo.find_by_id(template_id)
-        if not template:
-            raise HTTPException(status_code=404, detail=_("Template not found"))
-        if template.created_by != current_user.id and not template.is_system:
-            raise HTTPException(status_code=403, detail=_("Not authorized to delete this template"))
+        template = await _get_template_or_404(repo, template_id)
+        await _require_template_write_access(db, current_user, template)
         deleted = await repo.delete(template_id)
         if not deleted:
             raise HTTPException(status_code=404, detail=_("Template not found"))
