@@ -26,6 +26,7 @@ from src.infrastructure.adapters.primary.web.routers.agent.participants import (
     _roster_response,
     add_participant,
     list_mention_candidates,
+    list_participants,
     remove_participant,
     set_coordinator,
     set_focused_agent,
@@ -131,6 +132,136 @@ async def test_list_mention_candidates_includes_workspace_binding_projection() -
 
 
 @pytest.mark.asyncio
+async def test_list_participants_allows_workspace_member_reader() -> None:
+    conversation = _conversation()
+    project = SimpleNamespace(owner_id="owner-1", tenant_id="tenant-1")
+    request = MagicMock()
+    db = MagicMock()
+    current_user = SimpleNamespace(id="member-1")
+    workspace_member_repo = MagicMock()
+    workspace_member_repo.find_by_workspace_and_user = AsyncMock(
+        return_value=SimpleNamespace(id="member-binding")
+    )
+    workspace_agent_repo = MagicMock()
+    workspace_agent_repo.find_by_workspace_and_agent_id = AsyncMock(return_value=_binding())
+    container = SimpleNamespace(
+        workspace_member_repository=lambda: workspace_member_repo,
+        workspace_agent_repository=lambda: workspace_agent_repo,
+    )
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+            AsyncMock(return_value=(MagicMock(), conversation, project)),
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
+            return_value=container,
+        ),
+    ):
+        response = await list_participants(
+            conversation_id="conv-1",
+            request=request,
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert response.participant_bindings[0].display_name == "Worker A"
+    workspace_member_repo.find_by_workspace_and_user.assert_awaited_once_with(
+        workspace_id="ws-1",
+        user_id="member-1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_mention_candidates_allows_workspace_member_reader() -> None:
+    conversation = _conversation()
+    project = SimpleNamespace(owner_id="owner-1", tenant_id="tenant-1")
+    request = MagicMock()
+    db = MagicMock()
+    current_user = SimpleNamespace(id="member-1")
+    workspace_member_repo = MagicMock()
+    workspace_member_repo.find_by_workspace_and_user = AsyncMock(
+        return_value=SimpleNamespace(id="member-binding")
+    )
+    mention_candidate = SimpleNamespace(
+        agent_id="agent-1",
+        workspace_agent_id="binding-1",
+        display_name="Worker A",
+        label="alpha",
+        status="idle",
+        is_active=True,
+        source="workspace",
+    )
+    container = SimpleNamespace(
+        workspace_member_repository=lambda: workspace_member_repo,
+        workspace_agent_repository=lambda: MagicMock(),
+    )
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+            AsyncMock(return_value=(MagicMock(), conversation, project)),
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
+            return_value=container,
+        ),
+        patch(
+            "src.application.services.agent.workspace_mention_candidates.WorkspaceMentionCandidatesResolver",
+        ) as resolver_cls,
+    ):
+        resolver_cls.return_value.resolve = AsyncMock(return_value=[mention_candidate])
+
+        response = await list_mention_candidates(
+            conversation_id="conv-1",
+            request=request,
+            include_inactive=False,
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert response.candidates[0].display_name == "Worker A"
+    workspace_member_repo.find_by_workspace_and_user.assert_awaited_once_with(
+        workspace_id="ws-1",
+        user_id="member-1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_participants_rejects_non_workspace_member_reader() -> None:
+    conversation = _conversation()
+    project = SimpleNamespace(owner_id="owner-1", tenant_id="tenant-1")
+    workspace_member_repo = MagicMock()
+    workspace_member_repo.find_by_workspace_and_user = AsyncMock(return_value=None)
+    container = SimpleNamespace(workspace_member_repository=lambda: workspace_member_repo)
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+            AsyncMock(return_value=(MagicMock(), conversation, project)),
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
+            return_value=container,
+        ),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await list_participants(
+            conversation_id="conv-1",
+            request=MagicMock(),
+            current_user=SimpleNamespace(id="member-1"),
+            tenant_id="tenant-1",
+            db=MagicMock(),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Forbidden"
+
+
+@pytest.mark.asyncio
 async def test_set_focused_agent_updates_conversation_and_returns_roster() -> None:
     conversation = _conversation()
     project = SimpleNamespace(owner_id="user-1")
@@ -216,11 +347,18 @@ async def test_add_participant_domain_errors_are_sanitized(
     project = SimpleNamespace(owner_id="user-1", agent_conversation_mode="multi_agent_shared")
     db = MagicMock()
     db.commit = AsyncMock()
+    agent_registry = MagicMock()
+    agent_registry.get_by_id = AsyncMock(return_value=SimpleNamespace(id="secret-agent"))
+    container = SimpleNamespace(agent_registry=lambda: agent_registry)
 
     with (
         patch(
             "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
             AsyncMock(return_value=(MagicMock(), conversation, project)),
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
+            return_value=container,
         ),
         pytest.raises(HTTPException) as exc_info,
     ):
@@ -236,6 +374,80 @@ async def test_add_participant_domain_errors_are_sanitized(
     assert exc_info.value.status_code == expected_status
     assert exc_info.value.detail == expected_detail
     assert "secret" not in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_add_participant_rejects_inaccessible_agent_before_mutating_roster() -> None:
+    conversation = _conversation()
+    conversation.add_participant = MagicMock()
+    project = SimpleNamespace(
+        owner_id="user-1",
+        tenant_id="tenant-1",
+        agent_conversation_mode="multi_agent_shared",
+    )
+    db = MagicMock()
+    db.commit = AsyncMock()
+    conv_repo = MagicMock()
+    conv_repo.save = AsyncMock()
+    agent_registry = MagicMock()
+    agent_registry.get_by_id = AsyncMock(return_value=None)
+    container = SimpleNamespace(agent_registry=lambda: agent_registry)
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+            AsyncMock(return_value=(conv_repo, conversation, project)),
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants.get_container_with_db",
+            return_value=container,
+        ),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await add_participant(
+            conversation_id="conv-1",
+            data=ParticipantAddRequest(agent_id="other-project-agent"),
+            request=MagicMock(),
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid agent selection"
+    agent_registry.get_by_id.assert_awaited_once_with(
+        "other-project-agent",
+        tenant_id="tenant-1",
+        project_id="proj-1",
+    )
+    conversation.add_participant.assert_not_called()
+    conv_repo.save.assert_not_awaited()
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_list_participants_rejects_cross_tenant_conversation_load() -> None:
+    conversation = _conversation()
+    conversation.tenant_id = "tenant-2"
+    project = SimpleNamespace(owner_id="user-1", tenant_id="tenant-2")
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.routers.agent.participants._load_conversation_and_project",
+            AsyncMock(return_value=(MagicMock(), conversation, project)),
+        ),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await list_participants(
+            conversation_id="conv-1",
+            request=MagicMock(),
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=MagicMock(),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Conversation not found"
 
 
 @pytest.mark.asyncio

@@ -152,6 +152,60 @@ async def _load_conversation_and_project(
     return conv_repo, conversation, project
 
 
+def _assert_tenant_scope(
+    conversation: Conversation,
+    project: Project,
+    tenant_id: str,
+) -> None:
+    """Reject cross-tenant participant access before permission checks."""
+    if conversation.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail=_("Conversation not found"))
+    if getattr(project, "tenant_id", tenant_id) != tenant_id:
+        raise HTTPException(status_code=404, detail=_("Project not found"))
+
+
+async def _assert_agent_access(
+    request: Request,
+    db: AsyncSession,
+    conversation: Conversation,
+    agent_id: str,
+) -> None:
+    """Ensure a roster addition targets an accessible agent definition."""
+    container = get_container_with_db(request, db)
+    agent = await container.agent_registry().get_by_id(
+        agent_id,
+        tenant_id=conversation.tenant_id,
+        project_id=conversation.project_id,
+    )
+    if agent is None:
+        raise HTTPException(status_code=400, detail=_("Invalid agent selection"))
+
+
+async def _assert_read_permission(
+    conversation: Conversation,
+    project: Project,
+    current_user: User,
+    request: Request,
+    db: AsyncSession,
+) -> None:
+    if conversation.user_id == current_user.id:
+        return
+    if getattr(project, "owner_id", None) == current_user.id:
+        return
+
+    workspace_id = getattr(conversation, "workspace_id", None)
+    if workspace_id:
+        member_repo = get_container_with_db(request, db).workspace_member_repository()
+        member = await member_repo.find_by_workspace_and_user(
+            workspace_id=workspace_id,
+            user_id=current_user.id,
+        )
+        if member is not None:
+            return
+
+    raise HTTPException(status_code=403, detail=_("Forbidden"))
+
+
 def _resolve_effective_mode(conversation: Conversation, project: Project) -> ConversationMode:
     """Pick the conversation override if present, else the project default."""
     if conversation.conversation_mode is not None:
@@ -287,13 +341,8 @@ async def list_participants(
     _conv_repo, conversation, project = await _load_conversation_and_project(
         request, db, conversation_id
     )
-    # Read access: must be owner OR an existing participant's user. For now
-    # enforce owner-or-project-owner; tightening this is phase-2.2.
-    if (
-        conversation.user_id != current_user.id
-        and getattr(project, "owner_id", None) != current_user.id
-    ):
-        raise HTTPException(status_code=403, detail=_("Forbidden"))
+    _assert_tenant_scope(conversation, project, tenant_id)
+    await _assert_read_permission(conversation, project, current_user, request, db)
     return await _roster_response(
         conversation,
         _resolve_effective_mode(conversation, project),
@@ -319,8 +368,10 @@ async def add_participant(
     conv_repo, conversation, project = await _load_conversation_and_project(
         request, db, conversation_id
     )
+    _assert_tenant_scope(conversation, project, tenant_id)
     effective_mode = _resolve_effective_mode(conversation, project)
     _assert_write_permission(conversation, project, current_user, effective_mode)
+    await _assert_agent_access(request, db, conversation, data.agent_id)
 
     try:
         conversation.add_participant(
@@ -363,6 +414,7 @@ async def remove_participant(
     conv_repo, conversation, project = await _load_conversation_and_project(
         request, db, conversation_id
     )
+    _assert_tenant_scope(conversation, project, tenant_id)
     effective_mode = _resolve_effective_mode(conversation, project)
     _assert_write_permission(conversation, project, current_user, effective_mode)
 
@@ -401,6 +453,7 @@ async def set_coordinator(
     conv_repo, conversation, project = await _load_conversation_and_project(
         request, db, conversation_id
     )
+    _assert_tenant_scope(conversation, project, tenant_id)
     effective_mode = _resolve_effective_mode(conversation, project)
     _assert_write_permission(conversation, project, current_user, effective_mode)
 
@@ -431,6 +484,7 @@ async def set_focused_agent(
     conv_repo, conversation, project = await _load_conversation_and_project(
         request, db, conversation_id
     )
+    _assert_tenant_scope(conversation, project, tenant_id)
     effective_mode = _resolve_effective_mode(conversation, project)
     _assert_write_permission(conversation, project, current_user, effective_mode)
 
@@ -496,11 +550,8 @@ async def list_mention_candidates(
     _conv_repo, conversation, project = await _load_conversation_and_project(
         request, db, conversation_id
     )
-    if (
-        conversation.user_id != current_user.id
-        and getattr(project, "owner_id", None) != current_user.id
-    ):
-        raise HTTPException(status_code=403, detail=_("Forbidden"))
+    _assert_tenant_scope(conversation, project, tenant_id)
+    await _assert_read_permission(conversation, project, current_user, request, db)
 
     container = get_container_with_db(request, db)
     resolver = WorkspaceMentionCandidatesResolver(container.workspace_agent_repository())
