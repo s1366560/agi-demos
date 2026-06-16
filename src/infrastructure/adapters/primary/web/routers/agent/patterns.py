@@ -16,11 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.i18n import gettext as _
 
+from .access import require_tenant_access
 from .schemas import (
     PatternsListResponse,
     PatternStepResponse,
@@ -44,7 +44,6 @@ async def list_patterns(
         None, ge=0, le=1, description="Minimum success rate filter"
     ),
     current_user: User = Depends(get_current_user),
-    user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> PatternsListResponse:
     """
@@ -54,9 +53,7 @@ async def list_patterns(
     Non-admin users have read-only access (FR-019).
     """
     try:
-        # Verify tenant access
-        if user_tenant_id != tenant_id and not getattr(current_user, "is_admin", False):
-            raise HTTPException(status_code=403, detail=_("Access denied to tenant patterns"))
+        await require_tenant_access(db, current_user, tenant_id)
 
         assert request is not None
         container = get_container_with_db(request, db)
@@ -119,16 +116,13 @@ async def get_pattern(
     request: Request,
     tenant_id: str = Query(..., description="Tenant ID for authorization"),
     current_user: User = Depends(get_current_user),
-    user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> WorkflowPatternResponse:
     """
     Get a workflow pattern by ID (T081).
     """
     try:
-        # Verify tenant access
-        if user_tenant_id != tenant_id and not getattr(current_user, "is_admin", False):
-            raise HTTPException(status_code=403, detail=_("Access denied to tenant patterns"))
+        await require_tenant_access(db, current_user, tenant_id)
 
         assert request is not None
         container = get_container_with_db(request, db)
@@ -177,6 +171,7 @@ async def get_pattern(
 async def delete_pattern(
     pattern_id: str,
     request: Request,
+    tenant_id: str = Query(..., description="Tenant ID for authorization"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -184,9 +179,7 @@ async def delete_pattern(
     Delete a workflow pattern by ID (T082) - Admin only.
     """
     try:
-        # Verify admin access
-        if not getattr(current_user, "is_admin", False):
-            raise HTTPException(status_code=403, detail=_("Admin access required"))
+        await require_tenant_access(db, current_user, tenant_id, require_admin=True)
 
         assert request is not None
         container = get_container_with_db(request, db)
@@ -196,9 +189,13 @@ async def delete_pattern(
         pattern = await pattern_repo.get_by_id(pattern_id)
         if not pattern:
             raise HTTPException(status_code=404, detail=_("Pattern not found"))
+        if pattern.tenant_id != tenant_id:
+            raise HTTPException(status_code=404, detail=_("Pattern not found"))
 
         # Delete pattern
-        await pattern_repo.delete(pattern_id)
+        deleted = await pattern_repo.delete(pattern_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail=_("Pattern not found"))
 
         return {"message": "Pattern deleted successfully", "pattern_id": pattern_id}
 
@@ -220,9 +217,7 @@ async def reset_patterns(
     Reset/delete all workflow patterns for a tenant (T083) - Admin only.
     """
     try:
-        # Verify admin access
-        if not getattr(current_user, "is_admin", False):
-            raise HTTPException(status_code=403, detail=_("Admin access required"))
+        await require_tenant_access(db, current_user, tenant_id, require_admin=True)
 
         assert request is not None
         container = get_container_with_db(request, db)
@@ -234,8 +229,9 @@ async def reset_patterns(
         # Delete all patterns
         deleted_count = 0
         for pattern in all_patterns:
-            await pattern_repo.delete(pattern.id)
-            deleted_count += 1
+            deleted = await pattern_repo.delete(pattern.id)
+            if deleted:
+                deleted_count += 1
 
         return ResetPatternsResponse(
             deleted_count=deleted_count,
