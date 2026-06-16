@@ -246,6 +246,84 @@ async def test_state_transition_validation_for_complete(
 
 
 @pytest.mark.asyncio
+async def test_viewer_cannot_complete_workspace_task(authenticated_async_client, test_db) -> None:
+    client: AsyncClient = authenticated_async_client
+
+    user = User(
+        id="550e8400-e29b-41d4-a716-446655440000",
+        email="ws-api-viewer@example.com",
+        hashed_password="hash",
+        full_name="Viewer",
+        is_active=True,
+    )
+    tenant = Tenant(
+        id="tenant-ws-api-viewer",
+        name="TenantViewer",
+        slug="tenant-ws-api-viewer",
+        description="tenant",
+        owner_id=user.id,
+        plan="free",
+        max_projects=10,
+        max_users=10,
+        max_storage=1024,
+    )
+    project = Project(
+        id="project-ws-api-viewer",
+        tenant_id=tenant.id,
+        name="ProjectViewer",
+        description="project",
+        owner_id=user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="workspace-api-viewer",
+        tenant_id=tenant.id,
+        project_id=project.id,
+        name="Workspace Viewer",
+        created_by=user.id,
+        metadata_json={},
+    )
+    membership = WorkspaceMemberModel(
+        id="wm-api-viewer",
+        workspace_id=workspace.id,
+        user_id=user.id,
+        role="viewer",
+        invited_by=user.id,
+    )
+    task = WorkspaceTaskModel(
+        id="task-api-viewer",
+        workspace_id=workspace.id,
+        title="Task",
+        created_by=user.id,
+        status="in_progress",
+        metadata_json={},
+        created_at=datetime.now(UTC),
+    )
+    user_tenant = UserTenant(
+        id="ut-api-viewer",
+        user_id=user.id,
+        tenant_id=tenant.id,
+        role="owner",
+        permissions={"admin": True, "read": True, "write": True},
+    )
+    user_project = UserProject(
+        id="up-api-viewer",
+        user_id=user.id,
+        project_id=project.id,
+        role="owner",
+    )
+
+    test_db.add_all([user, tenant, project, workspace, membership, task, user_tenant, user_project])
+    await test_db.commit()
+
+    response = await client.post(f"/api/v1/workspaces/{workspace.id}/tasks/{task.id}/complete")
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json()["detail"] == "Access denied"
+
+
+@pytest.mark.asyncio
 async def test_update_task_accepts_canonical_priority_strings(
     authenticated_async_client, test_db
 ) -> None:

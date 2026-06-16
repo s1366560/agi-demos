@@ -257,7 +257,7 @@ class TestWorkspaceTaskService:
         done_task = _make_task(status=WorkspaceTaskStatus.DONE)
         mock_workspace_repo.find_by_id.return_value = _make_workspace()
         mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
-            "member-1", WorkspaceRole.VIEWER
+            "member-1", WorkspaceRole.EDITOR
         )
         mock_task_repo.find_by_id.return_value = done_task
 
@@ -266,6 +266,39 @@ class TestWorkspaceTaskService:
                 workspace_id="ws-1",
                 task_id="wt-1",
                 actor_user_id="member-1",
+            )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("method_name", "status"),
+        [
+            ("claim_task", WorkspaceTaskStatus.TODO),
+            ("start_task", WorkspaceTaskStatus.TODO),
+            ("block_task", WorkspaceTaskStatus.TODO),
+            ("complete_task", WorkspaceTaskStatus.IN_PROGRESS),
+        ],
+    )
+    async def test_default_task_state_mutations_require_editor_permission(
+        self,
+        workspace_task_service,
+        mock_workspace_repo: MagicMock,
+        mock_member_repo: MagicMock,
+        mock_task_repo: MagicMock,
+        method_name: str,
+        status: WorkspaceTaskStatus,
+    ) -> None:
+        task = _make_task(status=status)
+        mock_workspace_repo.find_by_id.return_value = _make_workspace()
+        mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
+            "viewer-1", WorkspaceRole.VIEWER
+        )
+        mock_task_repo.find_by_id.return_value = task
+
+        with pytest.raises(PermissionError, match="permission"):
+            await getattr(workspace_task_service, method_name)(
+                workspace_id="ws-1",
+                task_id="wt-1",
+                actor_user_id="viewer-1",
             )
 
     @pytest.mark.asyncio
@@ -279,7 +312,7 @@ class TestWorkspaceTaskService:
         in_progress = _make_task(status=WorkspaceTaskStatus.IN_PROGRESS)
         mock_workspace_repo.find_by_id.return_value = _make_workspace()
         mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
-            "member-1", WorkspaceRole.VIEWER
+            "member-1", WorkspaceRole.EDITOR
         )
         mock_task_repo.find_by_id.return_value = in_progress
         mock_task_repo.save.side_effect = lambda task: task
@@ -357,7 +390,7 @@ class TestWorkspaceTaskService:
         root_task = _make_root_task()
         mock_workspace_repo.find_by_id.return_value = _make_workspace()
         mock_member_repo.find_by_workspace_and_user.return_value = _make_member(
-            "member-1", WorkspaceRole.VIEWER
+            "member-1", WorkspaceRole.EDITOR
         )
         mock_task_repo.find_by_id.return_value = root_task
 

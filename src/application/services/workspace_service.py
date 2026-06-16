@@ -11,6 +11,7 @@ from src.domain.model.workspace.workspace import Workspace
 from src.domain.model.workspace.workspace_agent import WorkspaceAgent
 from src.domain.model.workspace.workspace_member import WorkspaceMember
 from src.domain.model.workspace.workspace_role import WorkspaceRole
+from src.domain.ports.agent.agent_registry import AgentRegistryPort
 from src.domain.ports.repositories.workspace.topology_repository import TopologyRepository
 from src.domain.ports.repositories.workspace.workspace_agent_repository import (
     WorkspaceAgentRepository,
@@ -29,6 +30,8 @@ def _serialize_workspace_agent_event(agent: WorkspaceAgent) -> dict[str, Any]:
         "workspace_id": agent.workspace_id,
         "agent_id": agent.agent_id,
         "display_name": agent.display_name,
+        "description": agent.description,
+        "config": dict(agent.config or {}),
         "is_active": agent.is_active,
         "hex_q": agent.hex_q,
         "hex_r": agent.hex_r,
@@ -127,12 +130,14 @@ class WorkspaceService:
         topology_repo: TopologyRepository,
         workspace_event_publisher: Callable[[str, str, dict[str, Any]], Awaitable[None]]
         | None = None,
+        agent_registry: AgentRegistryPort | None = None,
     ) -> None:
         self._workspace_repo = workspace_repo
         self._workspace_member_repo = workspace_member_repo
         self._workspace_agent_repo = workspace_agent_repo
         self._topology_repo = topology_repo
         self._workspace_event_publisher = workspace_event_publisher
+        self._agent_registry = agent_registry
         self._pending_events: list[tuple[str, str, dict[str, Any]]] = []
 
     def consume_pending_events(self) -> list[tuple[str, str, dict[str, Any]]]:
@@ -427,6 +432,7 @@ class WorkspaceService:
             minimum=WorkspaceRole.EDITOR,
             error_message="Insufficient permission to bind workspace agent",
         )
+        await self._ensure_agent_available_for_workspace(workspace, agent_id)
 
         existing = await self._find_agent_binding_by_agent_id(
             workspace_id=workspace.id,
@@ -632,6 +638,21 @@ class WorkspaceService:
         if workspace is None:
             raise ValueError(f"Workspace {workspace_id} not found")
         return workspace
+
+    async def _ensure_agent_available_for_workspace(
+        self,
+        workspace: Workspace,
+        agent_id: str,
+    ) -> None:
+        if self._agent_registry is None:
+            return
+        agent = await self._agent_registry.get_by_id(
+            agent_id,
+            tenant_id=workspace.tenant_id,
+            project_id=workspace.project_id,
+        )
+        if agent is None:
+            raise ValueError("Agent definition is not available for this workspace")
 
     def _member_event_payload(self, member: WorkspaceMember) -> dict[str, Any]:
         serialized_member = _serialize_workspace_member_event(member)

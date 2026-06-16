@@ -440,11 +440,17 @@ class WorkspaceTaskService:
         authority: WorkspaceTaskAuthorityContext | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
-        await self._require_membership(workspace.id, actor_user_id)
+        authority_ctx = authority or WorkspaceTaskAuthorityContext()
+        await self._require_task_write_role(
+            workspace_id=workspace.id,
+            user_id=actor_user_id,
+            authority=authority_ctx,
+            error_message="Insufficient permission to claim workspace task",
+        )
         task = await self._require_task(workspace.id, task_id)
         self._ensure_structural_mutation_allowed(
             task=task,
-            authority=authority or WorkspaceTaskAuthorityContext(),
+            authority=authority_ctx,
             action="claim",
         )
         if task.status == WorkspaceTaskStatus.DONE:
@@ -481,13 +487,19 @@ class WorkspaceTaskService:
         authority: WorkspaceTaskAuthorityContext | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
-        await self._require_membership(workspace.id, actor_user_id)
+        authority_ctx = authority or WorkspaceTaskAuthorityContext()
+        await self._require_task_write_role(
+            workspace_id=workspace.id,
+            user_id=actor_user_id,
+            authority=authority_ctx,
+            error_message="Insufficient permission to update workspace task status",
+        )
         task = await self._require_task(workspace.id, task_id)
         await self._ensure_transition_allowed(
             workspace_id=workspace.id,
             task=task,
             target=WorkspaceTaskStatus.IN_PROGRESS,
-            authority=authority or WorkspaceTaskAuthorityContext(),
+            authority=authority_ctx,
         )
         self._apply_transition(task, WorkspaceTaskStatus.IN_PROGRESS)
         record_task_actor(
@@ -515,13 +527,19 @@ class WorkspaceTaskService:
         authority: WorkspaceTaskAuthorityContext | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
-        await self._require_membership(workspace.id, actor_user_id)
+        authority_ctx = authority or WorkspaceTaskAuthorityContext()
+        await self._require_task_write_role(
+            workspace_id=workspace.id,
+            user_id=actor_user_id,
+            authority=authority_ctx,
+            error_message="Insufficient permission to update workspace task status",
+        )
         task = await self._require_task(workspace.id, task_id)
         await self._ensure_transition_allowed(
             workspace_id=workspace.id,
             task=task,
             target=WorkspaceTaskStatus.BLOCKED,
-            authority=authority or WorkspaceTaskAuthorityContext(),
+            authority=authority_ctx,
         )
         self._apply_transition(task, WorkspaceTaskStatus.BLOCKED)
         record_task_actor(
@@ -549,13 +567,19 @@ class WorkspaceTaskService:
         authority: WorkspaceTaskAuthorityContext | None = None,
     ) -> WorkspaceTask:
         workspace = await self._require_workspace(workspace_id)
-        await self._require_membership(workspace.id, actor_user_id)
+        authority_ctx = authority or WorkspaceTaskAuthorityContext()
+        await self._require_task_write_role(
+            workspace_id=workspace.id,
+            user_id=actor_user_id,
+            authority=authority_ctx,
+            error_message="Insufficient permission to update workspace task status",
+        )
         task = await self._require_task(workspace.id, task_id)
         await self._ensure_transition_allowed(
             workspace_id=workspace.id,
             task=task,
             target=WorkspaceTaskStatus.DONE,
-            authority=authority or WorkspaceTaskAuthorityContext(),
+            authority=authority_ctx,
         )
         ensure_goal_completion_allowed_for_workspace(
             task,
@@ -599,6 +623,24 @@ class WorkspaceTaskService:
         member = await self._require_membership(workspace_id=workspace_id, user_id=user_id)
         if self._role_weight(member.role) < self._role_weight(minimum):
             raise PermissionError(error_message)
+
+    async def _require_task_write_role(
+        self,
+        *,
+        workspace_id: str,
+        user_id: str,
+        authority: WorkspaceTaskAuthorityContext,
+        error_message: str,
+    ) -> None:
+        if authority.role != "default":
+            await self._require_membership(workspace_id=workspace_id, user_id=user_id)
+            return
+        await self._require_minimum_role(
+            workspace_id=workspace_id,
+            user_id=user_id,
+            minimum=WorkspaceRole.EDITOR,
+            error_message=error_message,
+        )
 
     async def _require_task(self, workspace_id: str, task_id: str) -> WorkspaceTask:
         task = await self._workspace_task_repo.find_by_id(task_id)
