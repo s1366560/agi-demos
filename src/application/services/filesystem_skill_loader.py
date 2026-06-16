@@ -323,21 +323,12 @@ class FileSystemSkillLoader:
         if markdown.allowed_tools_raw:
             allowed_tools_parsed = AllowedTool.parse_many(markdown.allowed_tools_raw)
 
-        # Determine scope based on file source
-        if file_info.is_system:
-            scope = SkillScope.SYSTEM
-            is_system_skill = True
-        elif self.project_id:
-            scope = SkillScope.PROJECT
-            is_system_skill = False
-        else:
-            scope = SkillScope.TENANT
-            is_system_skill = False
+        scope, is_system_skill, project_id = self._resolve_scope(file_info)
 
         return Skill(
             id=str(uuid.uuid4()),
             tenant_id=self.tenant_id,
-            project_id=self.project_id,
+            project_id=project_id,
             name=markdown.name,
             description=markdown.description,
             tools=tools,
@@ -360,6 +351,16 @@ class FileSystemSkillLoader:
             allowed_tools_raw=markdown.allowed_tools_raw,
             allowed_tools_parsed=allowed_tools_parsed,
         )
+
+    def _resolve_scope(self, file_info: SkillFileInfo) -> tuple[SkillScope, bool, str | None]:
+        """Resolve skill scope from the scanned source instead of ambient project context alone."""
+        if file_info.is_system:
+            return SkillScope.SYSTEM, True, None
+
+        if self.project_id and not file_info.source_type.endswith("_global"):
+            return SkillScope.PROJECT, False, self.project_id
+
+        return SkillScope.TENANT, False, None
 
     async def load_skill_content(self, skill_name: str) -> str | None:
         """

@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.domain.model.agent.skill import Skill, SkillStatus
+from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
 from src.domain.model.agent.skill_source import SkillSource
 from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
@@ -257,6 +257,74 @@ class TestFileSystemSkillScanner:
 
 class TestFileSystemSkillLoader:
     """Tests for FileSystemSkillLoader."""
+
+    def test_project_context_keeps_global_skills_tenant_scoped(self):
+        """Global filesystem skills should not become project-scoped by ambient context."""
+        from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
+        from src.infrastructure.skill.filesystem_scanner import SkillFileInfo
+        from src.infrastructure.skill.markdown_parser import MarkdownParser
+
+        loader = FileSystemSkillLoader(
+            base_path=Path("/tmp/project"),
+            tenant_id="test-tenant",
+            project_id="test-project",
+            include_system=False,
+            scanner=FileSystemSkillScanner(include_system=False, include_global=False),
+        )
+        markdown = MarkdownParser().parse("""---
+name: global-skill
+description: Global skill
+---
+
+Content.
+""")
+        skill_dir = Path.home() / ".memstack" / "skills" / "global-skill"
+        file_info = SkillFileInfo(
+            file_path=skill_dir / "SKILL.md",
+            skill_dir=skill_dir,
+            skill_id="global-skill",
+            source_type="memstack_global",
+            is_system=False,
+        )
+
+        skill = loader._create_skill_from_markdown(markdown, file_info)
+
+        assert skill.scope == SkillScope.TENANT
+        assert skill.project_id is None
+
+    def test_project_context_scopes_project_local_skills_to_project(self):
+        """Project-local filesystem skills should keep project ownership."""
+        from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
+        from src.infrastructure.skill.filesystem_scanner import SkillFileInfo
+        from src.infrastructure.skill.markdown_parser import MarkdownParser
+
+        loader = FileSystemSkillLoader(
+            base_path=Path("/tmp/project"),
+            tenant_id="test-tenant",
+            project_id="test-project",
+            include_system=False,
+            scanner=FileSystemSkillScanner(include_system=False, include_global=False),
+        )
+        markdown = MarkdownParser().parse("""---
+name: project-skill
+description: Project skill
+---
+
+Content.
+""")
+        skill_dir = Path("/tmp/project/.memstack/skills/project-skill")
+        file_info = SkillFileInfo(
+            file_path=skill_dir / "SKILL.md",
+            skill_dir=skill_dir,
+            skill_id="project-skill",
+            source_type="memstack",
+            is_system=False,
+        )
+
+        skill = loader._create_skill_from_markdown(markdown, file_info)
+
+        assert skill.scope == SkillScope.PROJECT
+        assert skill.project_id == "test-project"
 
     @pytest.mark.asyncio
     async def test_load_all_returns_skills(self):
