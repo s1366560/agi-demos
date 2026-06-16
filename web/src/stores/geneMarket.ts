@@ -22,6 +22,7 @@ import type {
   EvolutionEventListParams,
   GeneReview,
   CreateReviewRequest,
+  TenantScopedOptions,
 } from '../services/geneMarketService';
 
 // ============================================================================
@@ -69,37 +70,77 @@ interface GeneMarketState {
 
   // Actions - Gene CRUD
   listGenes: (params?: GeneListParams) => Promise<void>;
-  getGene: (id: string) => Promise<GeneResponse>;
-  createGene: (data: GeneCreate) => Promise<GeneResponse>;
-  updateGene: (id: string, data: GeneUpdate) => Promise<GeneResponse>;
-  deleteGene: (id: string) => Promise<void>;
+  getGene: (id: string, options?: TenantScopedOptions) => Promise<GeneResponse>;
+  createGene: (data: GeneCreate, options?: TenantScopedOptions) => Promise<GeneResponse>;
+  updateGene: (
+    id: string,
+    data: GeneUpdate,
+    options?: TenantScopedOptions
+  ) => Promise<GeneResponse>;
+  deleteGene: (id: string, options?: TenantScopedOptions) => Promise<void>;
 
   // Actions - Genome CRUD
   listGenomes: (params?: GenomeListParams) => Promise<void>;
-  getGenome: (id: string) => Promise<GenomeResponse>;
-  createGenome: (data: GenomeCreate) => Promise<GenomeResponse>;
-  updateGenome: (id: string, data: GenomeUpdate) => Promise<GenomeResponse>;
-  deleteGenome: (id: string) => Promise<void>;
+  getGenome: (id: string, options?: TenantScopedOptions) => Promise<GenomeResponse>;
+  createGenome: (data: GenomeCreate, options?: TenantScopedOptions) => Promise<GenomeResponse>;
+  updateGenome: (
+    id: string,
+    data: GenomeUpdate,
+    options?: TenantScopedOptions
+  ) => Promise<GenomeResponse>;
+  deleteGenome: (id: string, options?: TenantScopedOptions) => Promise<void>;
 
   // Actions - Install
-  installGene: (instanceId: string, data: GeneInstallRequest) => Promise<void>;
-  uninstallGene: (instanceId: string, instanceGeneId: string) => Promise<void>;
-  listInstalledGenes: (instanceId: string) => Promise<void>;
+  installGene: (
+    instanceId: string,
+    data: GeneInstallRequest,
+    options?: TenantScopedOptions
+  ) => Promise<void>;
+  uninstallGene: (
+    instanceId: string,
+    instanceGeneId: string,
+    options?: TenantScopedOptions
+  ) => Promise<void>;
+  listInstalledGenes: (instanceId: string, options?: TenantScopedOptions) => Promise<void>;
 
   // Actions - Reviews
-  fetchGeneReviews: (geneId: string, page?: number, pageSize?: number) => Promise<void>;
-  createGeneReview: (geneId: string, data: CreateReviewRequest) => Promise<void>;
-  deleteGeneReview: (geneId: string, reviewId: string) => Promise<void>;
+  fetchGeneReviews: (
+    geneId: string,
+    page?: number,
+    pageSize?: number,
+    options?: TenantScopedOptions
+  ) => Promise<void>;
+  createGeneReview: (
+    geneId: string,
+    data: CreateReviewRequest,
+    options?: TenantScopedOptions
+  ) => Promise<void>;
+  deleteGeneReview: (
+    geneId: string,
+    reviewId: string,
+    options?: TenantScopedOptions
+  ) => Promise<void>;
 
   // Actions - Ratings
-  rateGene: (geneId: string, data: GeneRatingCreate) => Promise<void>;
-  rateGenome: (genomeId: string, data: GenomeRatingCreate) => Promise<void>;
+  rateGene: (
+    geneId: string,
+    data: GeneRatingCreate,
+    options?: TenantScopedOptions
+  ) => Promise<void>;
+  rateGenome: (
+    genomeId: string,
+    data: GenomeRatingCreate,
+    options?: TenantScopedOptions
+  ) => Promise<void>;
 
   // Actions - Evolution
   listEvolutionEvents: (instanceId: string, params?: EvolutionEventListParams) => Promise<void>;
   listGeneEvolutionEvents: (geneId: string, params?: EvolutionEventListParams) => Promise<void>;
-  getEvolutionEvent: (id: string) => Promise<EvolutionEventResponse>;
-  createEvolutionEvent: (data: EvolutionEventCreate) => Promise<EvolutionEventResponse>;
+  getEvolutionEvent: (id: string, options?: TenantScopedOptions) => Promise<EvolutionEventResponse>;
+  createEvolutionEvent: (
+    data: EvolutionEventCreate,
+    options?: TenantScopedOptions
+  ) => Promise<EvolutionEventResponse>;
 
   // Actions - UI
   setActiveTab: (tab: 'genes' | 'genomes') => void;
@@ -157,10 +198,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      getGene: async (id: string) => {
+      getGene: async (id: string, options?: TenantScopedOptions) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await geneMarketService.getGene(id);
+          const response = await geneMarketService.getGene(id, options);
           set({ currentGene: response, isLoading: false });
           return response;
         } catch (error: unknown) {
@@ -169,10 +210,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      createGene: async (data: GeneCreate) => {
+      createGene: async (data: GeneCreate, options?: TenantScopedOptions) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await geneMarketService.createGene(data);
+          const response = await geneMarketService.createGene(data, options);
           const { genes } = get();
           set({
             genes: [response, ...genes],
@@ -186,10 +227,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      updateGene: async (id: string, data: GeneUpdate) => {
+      updateGene: async (id: string, data: GeneUpdate, options?: TenantScopedOptions) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await geneMarketService.updateGene(id, data);
+          const response = await geneMarketService.updateGene(id, data, options);
           const { genes } = get();
           set({
             genes: genes.map((g) => (g.id === id ? response : g)),
@@ -203,10 +244,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      deleteGene: async (id: string) => {
+      deleteGene: async (id: string, options?: TenantScopedOptions) => {
         set({ isSubmitting: true, error: null });
         try {
-          await geneMarketService.deleteGene(id);
+          await geneMarketService.deleteGene(id, options);
           const { genes } = get();
           set({
             genes: genes.filter((g) => g.id !== id),
@@ -237,10 +278,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      getGenome: async (id: string) => {
+      getGenome: async (id: string, options?: TenantScopedOptions) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await geneMarketService.getGenome(id);
+          const response = await geneMarketService.getGenome(id, options);
           set({ currentGenome: response, isLoading: false });
           return response;
         } catch (error: unknown) {
@@ -249,10 +290,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      createGenome: async (data: GenomeCreate) => {
+      createGenome: async (data: GenomeCreate, options?: TenantScopedOptions) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await geneMarketService.createGenome(data);
+          const response = await geneMarketService.createGenome(data, options);
           const { genomes } = get();
           set({
             genomes: [response, ...genomes],
@@ -266,10 +307,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      updateGenome: async (id: string, data: GenomeUpdate) => {
+      updateGenome: async (id: string, data: GenomeUpdate, options?: TenantScopedOptions) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await geneMarketService.updateGenome(id, data);
+          const response = await geneMarketService.updateGenome(id, data, options);
           const { genomes } = get();
           set({
             genomes: genomes.map((g) => (g.id === id ? response : g)),
@@ -283,10 +324,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      deleteGenome: async (id: string) => {
+      deleteGenome: async (id: string, options?: TenantScopedOptions) => {
         set({ isSubmitting: true, error: null });
         try {
-          await geneMarketService.deleteGenome(id);
+          await geneMarketService.deleteGenome(id, options);
           const { genomes } = get();
           set({
             genomes: genomes.filter((g) => g.id !== id),
@@ -302,10 +343,14 @@ export const useGeneMarketStore = create<GeneMarketState>()(
 
       // ========== Install ==========
 
-      installGene: async (instanceId: string, data: GeneInstallRequest) => {
+      installGene: async (
+        instanceId: string,
+        data: GeneInstallRequest,
+        options?: TenantScopedOptions
+      ) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await geneMarketService.installGene(instanceId, data);
+          const response = await geneMarketService.installGene(instanceId, data, options);
           const { installedGenes } = get();
           set({ installedGenes: [...installedGenes, response], isSubmitting: false });
         } catch (error: unknown) {
@@ -314,10 +359,14 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      uninstallGene: async (instanceId: string, instanceGeneId: string) => {
+      uninstallGene: async (
+        instanceId: string,
+        instanceGeneId: string,
+        options?: TenantScopedOptions
+      ) => {
         set({ isSubmitting: true, error: null });
         try {
-          await geneMarketService.uninstallGene(instanceId, instanceGeneId);
+          await geneMarketService.uninstallGene(instanceId, instanceGeneId, options);
           const { installedGenes } = get();
           set({
             installedGenes: installedGenes.filter((ig) => ig.id !== instanceGeneId),
@@ -329,10 +378,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      listInstalledGenes: async (instanceId: string) => {
+      listInstalledGenes: async (instanceId: string, options?: TenantScopedOptions) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await geneMarketService.listInstanceGenes(instanceId);
+          const response = await geneMarketService.listInstanceGenes(instanceId, options);
           set({ installedGenes: response.items, isLoading: false });
         } catch (error: unknown) {
           set({
@@ -345,20 +394,29 @@ export const useGeneMarketStore = create<GeneMarketState>()(
 
       // ========== Ratings ==========
 
-      fetchGeneReviews: async (geneId: string, page = 1, pageSize = 10) => {
+      fetchGeneReviews: async (
+        geneId: string,
+        page = 1,
+        pageSize = 10,
+        options?: TenantScopedOptions
+      ) => {
         set({ reviewsLoading: true, error: null });
         try {
-          const response = await geneMarketService.getGeneReviews(geneId, page, pageSize);
+          const response = await geneMarketService.getGeneReviews(geneId, page, pageSize, options);
           set({ reviews: response.items, reviewsTotal: response.total, reviewsLoading: false });
         } catch (error: unknown) {
           set({ error: getErrorMessage(error, 'Failed to fetch reviews'), reviewsLoading: false });
         }
       },
 
-      createGeneReview: async (geneId: string, data: CreateReviewRequest) => {
+      createGeneReview: async (
+        geneId: string,
+        data: CreateReviewRequest,
+        options?: TenantScopedOptions
+      ) => {
         set({ isSubmitting: true, error: null });
         try {
-          await geneMarketService.createGeneReview(geneId, data);
+          await geneMarketService.createGeneReview(geneId, data, options);
           set({ isSubmitting: false });
           // Fetch again to update list
           void get().fetchGeneReviews(geneId);
@@ -368,10 +426,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      deleteGeneReview: async (geneId: string, reviewId: string) => {
+      deleteGeneReview: async (geneId: string, reviewId: string, options?: TenantScopedOptions) => {
         set({ isSubmitting: true, error: null });
         try {
-          await geneMarketService.deleteGeneReview(geneId, reviewId);
+          await geneMarketService.deleteGeneReview(geneId, reviewId, options);
           set({ isSubmitting: false });
           // Fetch again to update list
           void get().fetchGeneReviews(geneId);
@@ -381,10 +439,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      rateGene: async (geneId: string, data: GeneRatingCreate) => {
+      rateGene: async (geneId: string, data: GeneRatingCreate, options?: TenantScopedOptions) => {
         set({ isSubmitting: true, error: null });
         try {
-          await geneMarketService.rateGene(geneId, data);
+          await geneMarketService.rateGene(geneId, data, options);
           set({ isSubmitting: false });
         } catch (error: unknown) {
           set({ error: getErrorMessage(error, 'Failed to rate gene'), isSubmitting: false });
@@ -392,10 +450,14 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      rateGenome: async (genomeId: string, data: GenomeRatingCreate) => {
+      rateGenome: async (
+        genomeId: string,
+        data: GenomeRatingCreate,
+        options?: TenantScopedOptions
+      ) => {
         set({ isSubmitting: true, error: null });
         try {
-          await geneMarketService.rateGenome(genomeId, data);
+          await geneMarketService.rateGenome(genomeId, data, options);
           set({ isSubmitting: false });
         } catch (error: unknown) {
           set({ error: getErrorMessage(error, 'Failed to rate genome'), isSubmitting: false });
@@ -441,10 +503,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      getEvolutionEvent: async (id: string) => {
+      getEvolutionEvent: async (id: string, options?: TenantScopedOptions) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await geneMarketService.getEvolutionEvent(id);
+          const response = await geneMarketService.getEvolutionEvent(id, options);
           set({ isLoading: false });
           return response;
         } catch (error: unknown) {
@@ -456,10 +518,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
-      createEvolutionEvent: async (data: EvolutionEventCreate) => {
+      createEvolutionEvent: async (data: EvolutionEventCreate, options?: TenantScopedOptions) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await geneMarketService.createEvolutionEvent(data);
+          const response = await geneMarketService.createEvolutionEvent(data, options);
           const { evolutionEvents } = get();
           set({
             evolutionEvents: [response, ...evolutionEvents],

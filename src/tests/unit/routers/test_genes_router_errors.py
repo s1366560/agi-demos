@@ -88,6 +88,16 @@ class _EvolutionAccessContainer(_Container):
         return _EvolutionAccessGeneService()
 
 
+class _ReviewFailingGeneService(_FailingGeneService):
+    async def get_gene(self, gene_id: str, *_args: object, **_kwargs: object) -> object | None:
+        return SimpleNamespace(id=gene_id, tenant_id="tenant-1")
+
+
+class _ReviewFailingContainer(_Container):
+    def gene_service(self) -> _ReviewFailingGeneService:
+        return _ReviewFailingGeneService()
+
+
 @pytest.fixture(autouse=True)
 def patch_container(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(genes, "get_container_with_db", lambda _request, _db: _Container())
@@ -107,6 +117,21 @@ async def test_create_gene_sanitizes_value_errors() -> None:
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Invalid gene request"
     assert "secret-gene" not in str(exc_info.value.detail)
+
+
+@pytest.mark.unit
+async def test_create_gene_rejects_mismatched_payload_tenant() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.create_gene(
+            request=SimpleNamespace(),
+            data=GeneCreate(name="Gene", slug="gene", tenant_id="tenant-2"),
+            tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
+            db=SimpleNamespace(commit=None),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Access denied"
 
 
 @pytest.mark.unit
@@ -131,6 +156,26 @@ async def test_get_gene_sanitizes_missing_gene_id() -> None:
         await genes.get_gene(
             request=SimpleNamespace(),
             gene_id="gene-secret",
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Gene not found"
+
+
+@pytest.mark.unit
+async def test_get_gene_hides_foreign_gene(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _EvolutionAccessContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.get_gene(
+            request=SimpleNamespace(),
+            gene_id="foreign-gene",
             tenant_id="tenant-1",
             db=SimpleNamespace(),
         )
@@ -317,7 +362,14 @@ async def test_get_evolution_event_hides_foreign_instance(
 
 
 @pytest.mark.unit
-async def test_create_gene_review_sanitizes_value_errors() -> None:
+async def test_create_gene_review_sanitizes_value_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _ReviewFailingContainer(),
+    )
     with pytest.raises(HTTPException) as exc_info:
         await genes.create_gene_review(
             request=SimpleNamespace(),
@@ -333,7 +385,14 @@ async def test_create_gene_review_sanitizes_value_errors() -> None:
 
 
 @pytest.mark.unit
-async def test_delete_gene_review_sanitizes_permission_errors() -> None:
+async def test_delete_gene_review_sanitizes_permission_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _ReviewFailingContainer(),
+    )
     with pytest.raises(HTTPException) as exc_info:
         await genes.delete_gene_review(
             request=SimpleNamespace(),

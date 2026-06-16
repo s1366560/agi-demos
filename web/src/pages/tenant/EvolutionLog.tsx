@@ -63,7 +63,7 @@ const getStatusBadge = (status: string): 'success' | 'error' | 'processing' | 'd
 
 export const EvolutionLog: React.FC = () => {
   const { t } = useTranslation();
-  const { instanceId } = useParams();
+  const { tenantId, instanceId } = useParams<{ tenantId?: string; instanceId?: string }>();
   const navigate = useNavigate();
 
   const evolutionEvents = useEvolutionEvents();
@@ -79,13 +79,16 @@ export const EvolutionLog: React.FC = () => {
   const fetchEvents = useCallback(() => {
     if (!instanceId) return;
     const params: EvolutionEventListParams = { page, page_size: pageSize };
+    if (tenantId) {
+      params.tenant_id = tenantId;
+    }
     if (eventTypeFilter) {
       params.event_type = eventTypeFilter;
     }
     listEvolutionEvents(instanceId, params).catch((err: unknown) => {
       console.error('Failed to list evolution events:', err);
     });
-  }, [instanceId, page, pageSize, eventTypeFilter, listEvolutionEvents]);
+  }, [instanceId, page, pageSize, eventTypeFilter, listEvolutionEvents, tenantId]);
 
   useEffect(() => {
     fetchEvents();

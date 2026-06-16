@@ -55,6 +55,25 @@ describe('geneMarketService', () => {
     });
   });
 
+  it('scopes gene mutations with selected tenant query params', async () => {
+    mockHttpClient.post.mockResolvedValue({ id: 'rating-1' });
+
+    await geneMarketService.rateGene(
+      'gene-1',
+      { rating: 5, comment: 'Good' },
+      { tenant_id: 'tenant-2' }
+    );
+
+    expect(mockHttpClient.post).toHaveBeenCalledWith(
+      '/genes/gene-1/ratings',
+      {
+        rating: 5,
+        comment: 'Good',
+      },
+      { params: { tenant_id: 'tenant-2' } }
+    );
+  });
+
   it('lists gene evolution events with a gene_id query parameter', async () => {
     mockHttpClient.get.mockResolvedValue({ events: [], total: 0, page: 1, page_size: 20 });
 

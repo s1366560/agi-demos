@@ -34,6 +34,7 @@ import {
   useGeneMarketLoading,
   useGeneMarketActions,
 } from '../../stores/geneMarket';
+import { useCurrentTenant } from '../../stores/tenant';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -53,11 +54,13 @@ interface ReviewFormValues {
 }
 
 export const GeneDetail: FC = () => {
-  const { geneId } = useParams<{ geneId: string }>();
+  const { tenantId: routeTenantId, geneId } = useParams<{ tenantId?: string; geneId: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const shouldOpenInstallModal = searchParams.get('install') === '1';
   const { t } = useTranslation();
+  const currentTenant = useCurrentTenant();
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
 
   const currentGene = useCurrentGene();
   const evolutionEvents = useEvolutionEvents();
@@ -87,10 +90,11 @@ export const GeneDetail: FC = () => {
   const reviewPageSize = 5;
 
   useEffect(() => {
-    if (geneId) {
-      getGene(geneId).catch(() => message.error(t('tenant.genes.fetchError')));
-      listGeneEvolutionEvents(geneId).catch(() => {});
-      fetchGeneReviews(geneId, reviewPage, reviewPageSize).catch(() => {});
+    if (geneId && tenantId) {
+      const options = { tenant_id: tenantId };
+      getGene(geneId, options).catch(() => message.error(t('tenant.genes.fetchError')));
+      listGeneEvolutionEvents(geneId, options).catch(() => {});
+      fetchGeneReviews(geneId, reviewPage, reviewPageSize, options).catch(() => {});
     }
     return () => {
       clearError();
@@ -105,6 +109,7 @@ export const GeneDetail: FC = () => {
     reset,
     t,
     reviewPage,
+    tenantId,
   ]);
 
   useEffect(() => {
@@ -124,10 +129,14 @@ export const GeneDetail: FC = () => {
         configOverride = JSON.parse(values.config_override) as Record<string, unknown>;
       }
 
-      await installGene(values.instance_id, {
-        gene_id: geneId ?? '',
-        config: configOverride,
-      });
+      await installGene(
+        values.instance_id,
+        {
+          gene_id: geneId ?? '',
+          config: configOverride,
+        },
+        tenantId ? { tenant_id: tenantId } : undefined
+      );
       message.success(t('tenant.genes.installSuccess'));
       setIsInstallModalVisible(false);
       installForm.resetFields();
@@ -143,15 +152,19 @@ export const GeneDetail: FC = () => {
   const handleRateSubmit = async () => {
     try {
       const values = await rateForm.validateFields();
-      if (geneId) {
-        await rateGene(geneId, {
-          rating: values.score,
-          comment: values.comment ?? null,
-        });
+      if (geneId && tenantId) {
+        await rateGene(
+          geneId,
+          {
+            rating: values.score,
+            comment: values.comment ?? null,
+          },
+          { tenant_id: tenantId }
+        );
         message.success(t('tenant.genes.rateSuccess'));
         setIsRateModalVisible(false);
         rateForm.resetFields();
-        void getGene(geneId);
+        void getGene(geneId, { tenant_id: tenantId });
       }
     } catch (err) {
       console.error(err);
@@ -161,11 +174,15 @@ export const GeneDetail: FC = () => {
   const handleReviewSubmit = async () => {
     try {
       const values = await reviewForm.validateFields();
-      if (geneId) {
-        await createGeneReview(geneId, {
-          rating: values.rating,
-          content: values.content,
-        });
+      if (geneId && tenantId) {
+        await createGeneReview(
+          geneId,
+          {
+            rating: values.rating,
+            content: values.content,
+          },
+          { tenant_id: tenantId }
+        );
         message.success(t('gene.reviewSubmitSuccess'));
         setIsReviewModalVisible(false);
         reviewForm.resetFields();
@@ -182,9 +199,9 @@ export const GeneDetail: FC = () => {
       okText: t('common.yes'),
       cancelText: t('common.no'),
       onOk: async () => {
-        if (geneId) {
+        if (geneId && tenantId) {
           try {
-            await deleteGeneReview(geneId, reviewId);
+            await deleteGeneReview(geneId, reviewId, { tenant_id: tenantId });
             message.success(t('gene.reviewDeleteSuccess'));
           } catch (err) {
             console.error(err);

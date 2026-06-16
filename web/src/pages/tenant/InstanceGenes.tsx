@@ -54,10 +54,12 @@ export const InstanceGenes: React.FC = () => {
   const [selectedGeneId, setSelectedGeneId] = useState<string | null>(null);
 
   const fetchInstanceGenes = useCallback(async () => {
-    if (!instanceId) return;
+    if (!tenantId || !instanceId) return;
     setIsLoading(true);
     try {
-      const response = await geneMarketService.listInstanceGenes(instanceId);
+      const response = await geneMarketService.listInstanceGenes(instanceId, {
+        tenant_id: tenantId,
+      });
       setInstanceGenes(response.items);
     } catch (err) {
       console.error('Failed to fetch instance genes:', err);
@@ -65,12 +67,17 @@ export const InstanceGenes: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [instanceId, messageApi, t]);
+  }, [instanceId, messageApi, t, tenantId]);
 
   const fetchAvailableGenes = useCallback(async () => {
+    if (!tenantId) return;
     setIsGenesLoading(true);
     try {
-      const response = await geneMarketService.listGenes({ is_published: true, page_size: 100 });
+      const response = await geneMarketService.listGenes({
+        is_published: true,
+        page_size: 100,
+        tenant_id: tenantId,
+      });
       setAvailableGenes(response.genes);
     } catch (err) {
       console.error('Failed to fetch available genes:', err);
@@ -78,7 +85,7 @@ export const InstanceGenes: React.FC = () => {
     } finally {
       setIsGenesLoading(false);
     }
-  }, []);
+  }, [tenantId]);
 
   useEffect(() => {
     void fetchInstanceGenes();
@@ -112,13 +119,17 @@ export const InstanceGenes: React.FC = () => {
   );
 
   const handleInstallGene = useCallback(async () => {
-    if (!instanceId || !selectedGeneId) return;
+    if (!tenantId || !instanceId || !selectedGeneId) return;
     setIsSubmitting(true);
     try {
-      await geneMarketService.installGene(instanceId, {
-        gene_id: selectedGeneId,
-        config: {},
-      });
+      await geneMarketService.installGene(
+        instanceId,
+        {
+          gene_id: selectedGeneId,
+          config: {},
+        },
+        { tenant_id: tenantId }
+      );
       messageApi?.success(t('tenant.instances.genes.installSuccess'));
       setIsAddModalOpen(false);
       setSelectedGeneId(null);
@@ -129,14 +140,16 @@ export const InstanceGenes: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [instanceId, selectedGeneId, messageApi, t, fetchInstanceGenes]);
+  }, [instanceId, selectedGeneId, messageApi, t, fetchInstanceGenes, tenantId]);
 
   const handleUninstallGene = useCallback(
     async (instanceGeneId: string) => {
-      if (!instanceId) return;
+      if (!tenantId || !instanceId) return;
       setIsSubmitting(true);
       try {
-        await geneMarketService.uninstallGene(instanceId, instanceGeneId);
+        await geneMarketService.uninstallGene(instanceId, instanceGeneId, {
+          tenant_id: tenantId,
+        });
         messageApi?.success(t('tenant.instances.genes.uninstallSuccess'));
         void fetchInstanceGenes();
       } catch (err) {
@@ -146,7 +159,7 @@ export const InstanceGenes: React.FC = () => {
         setIsSubmitting(false);
       }
     },
-    [instanceId, messageApi, t, fetchInstanceGenes]
+    [instanceId, messageApi, t, fetchInstanceGenes, tenantId]
   );
 
   const handleViewGene = useCallback(

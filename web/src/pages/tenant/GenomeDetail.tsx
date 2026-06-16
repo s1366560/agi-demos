@@ -13,13 +13,19 @@ import {
   useGeneMarketError,
   useGeneMarketActions,
 } from '../../stores/geneMarket';
+import { useCurrentTenant } from '../../stores/tenant';
 
 const { Title, Text, Paragraph } = Typography;
 
 export const GenomeDetail: React.FC = () => {
   const { t } = useTranslation();
-  const { genomeId } = useParams();
+  const { tenantId: routeTenantId, genomeId } = useParams<{
+    tenantId?: string;
+    genomeId?: string;
+  }>();
   const navigate = useNavigate();
+  const currentTenant = useCurrentTenant();
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
 
   const genome = useCurrentGenome();
   const genes = useGenes();
@@ -28,15 +34,16 @@ export const GenomeDetail: React.FC = () => {
   const { getGenome, listGenes, clearError, setCurrentGenome } = useGeneMarketActions();
 
   useEffect(() => {
-    if (genomeId) {
-      getGenome(genomeId).catch(() => {});
-      listGenes().catch(() => {});
+    if (genomeId && tenantId) {
+      const options = { tenant_id: tenantId };
+      getGenome(genomeId, options).catch(() => {});
+      listGenes(options).catch(() => {});
     }
     return () => {
       setCurrentGenome(null);
       clearError();
     };
-  }, [genomeId, getGenome, listGenes, setCurrentGenome, clearError]);
+  }, [genomeId, getGenome, listGenes, setCurrentGenome, clearError, tenantId]);
 
   const genomeGenes = genes.filter((g) => genome?.gene_slugs.includes(g.slug));
 

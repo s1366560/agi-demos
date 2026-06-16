@@ -8,6 +8,7 @@ import { ArrowLeft, Copy, Rocket } from 'lucide-react';
 
 import { instanceTemplateService } from '../../services/instanceTemplateService';
 import { useGeneMarketActions, useGenes } from '../../stores/geneMarket';
+import { useCurrentTenant } from '../../stores/tenant';
 
 import type {
   InstanceTemplateResponse,
@@ -18,8 +19,13 @@ const { Title, Text, Paragraph } = Typography;
 
 export const TemplateDetail: React.FC = () => {
   const { t } = useTranslation();
-  const { templateId } = useParams();
+  const { tenantId: routeTenantId, templateId } = useParams<{
+    tenantId?: string;
+    templateId?: string;
+  }>();
   const navigate = useNavigate();
+  const currentTenant = useCurrentTenant();
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
 
   const [template, setTemplate] = useState<InstanceTemplateResponse | null>(null);
   const [items, setItems] = useState<TemplateItemResponse[]>([]);
@@ -50,8 +56,10 @@ export const TemplateDetail: React.FC = () => {
 
   useEffect(() => {
     void fetchData();
-    void listGenes();
-  }, [fetchData, listGenes]);
+    if (tenantId) {
+      void listGenes({ tenant_id: tenantId });
+    }
+  }, [fetchData, listGenes, tenantId]);
 
   const handleClone = async () => {
     if (!templateId || !template) return;

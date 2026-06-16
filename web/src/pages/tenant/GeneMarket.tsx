@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { Tabs, Input, Select, Button, Tag, Space, Card, Rate, Empty, Pagination } from 'antd';
 import { Download, Search as SearchIcon } from 'lucide-react';
@@ -16,6 +16,7 @@ import {
   useActiveTab,
   useGeneMarketActions,
 } from '../../stores/geneMarket';
+import { useCurrentTenant } from '../../stores/tenant';
 
 import type {
   GeneListParams,
@@ -30,6 +31,9 @@ const { Option } = Select;
 export const GeneMarket: FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
+  const currentTenant = useCurrentTenant();
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
 
   const genes = useGenes();
   const genomes = useGenomes();
@@ -50,35 +54,39 @@ export const GeneMarket: FC = () => {
   const [genomePage, setGenomePage] = useState(1);
   const [genomePageSize, setGenomePageSize] = useState(20);
 
-  const geneListParams = useMemo<GeneListParams>(
-    () => {
-      const params: GeneListParams = {
-        page: genePage,
-        page_size: genePageSize,
-      };
-      if (geneSearch) {
-        params.search = geneSearch;
-      }
-      if (geneCategory !== 'all') {
-        params.category = geneCategory;
-      }
-      if (geneVisibility !== 'all') {
-        params.visibility = geneVisibility;
-      }
-      return params;
-    },
-    [geneCategory, genePage, genePageSize, geneSearch, geneVisibility]
-  );
+  const geneListParams = useMemo<GeneListParams>(() => {
+    const params: GeneListParams = {
+      page: genePage,
+      page_size: genePageSize,
+    };
+    if (tenantId) {
+      params.tenant_id = tenantId;
+    }
+    if (geneSearch) {
+      params.search = geneSearch;
+    }
+    if (geneCategory !== 'all') {
+      params.category = geneCategory;
+    }
+    if (geneVisibility !== 'all') {
+      params.visibility = geneVisibility;
+    }
+    return params;
+  }, [geneCategory, genePage, genePageSize, geneSearch, geneVisibility, tenantId]);
 
   const genomeListParams = useMemo<GenomeListParams>(
     () => ({
       page: genomePage,
       page_size: genomePageSize,
+      tenant_id: tenantId,
     }),
-    [genomePage, genomePageSize]
+    [genomePage, genomePageSize, tenantId]
   );
 
   useEffect(() => {
+    if (!tenantId) {
+      return;
+    }
     if (activeTab === 'genes') {
       void listGenes(geneListParams).catch((error: unknown) => {
         console.error('Failed to list genes:', error);
@@ -88,7 +96,7 @@ export const GeneMarket: FC = () => {
         console.error('Failed to list genomes:', error);
       });
     }
-  }, [activeTab, geneListParams, genomeListParams, listGenes, listGenomes]);
+  }, [activeTab, geneListParams, genomeListParams, listGenes, listGenomes, tenantId]);
 
   useEffect(() => {
     return () => {
@@ -170,7 +178,14 @@ export const GeneMarket: FC = () => {
                   type="link"
                   onClick={(e) => {
                     e.stopPropagation();
-                    void rateGene(gene.id, { rating: 5, comment: '' }).catch((error: unknown) => {
+                    if (!tenantId) {
+                      return;
+                    }
+                    void rateGene(
+                      gene.id,
+                      { rating: 5, comment: '' },
+                      { tenant_id: tenantId }
+                    ).catch((error: unknown) => {
                       console.error('Failed to rate gene:', error);
                     });
                   }}

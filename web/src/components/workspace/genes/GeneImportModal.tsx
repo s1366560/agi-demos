@@ -15,6 +15,7 @@ import type { GenePayload } from './GeneEditorModal';
 
 export interface GeneImportModalProps {
   open: boolean;
+  tenantId: string;
   onCancel: () => void;
   /** Called when the user picks a marketplace gene. Receives a draft to seed the editor. */
   onSelect: (draft: Partial<GenePayload>, source: GeneResponse) => void;
@@ -22,7 +23,12 @@ export interface GeneImportModalProps {
 
 const PAGE_SIZE = 10;
 
-export const GeneImportModal: React.FC<GeneImportModalProps> = ({ open, onCancel, onSelect }) => {
+export const GeneImportModal: React.FC<GeneImportModalProps> = ({
+  open,
+  tenantId,
+  onCancel,
+  onSelect,
+}) => {
   const { t } = useTranslation();
 
   const [search, setSearch] = useState('');
@@ -32,27 +38,37 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({ open, onCancel
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPage = useCallback(async (nextPage: number, query: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params: { page: number; page_size: number; search?: string; is_published?: boolean } = {
-        page: nextPage,
-        page_size: PAGE_SIZE,
-        is_published: true,
-      };
-      if (query.trim() !== '') params.search = query.trim();
-      const data = await geneMarketService.listGenes(params);
-      setItems(data.genes);
-      setTotal(data.total);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load marketplace');
-      setItems([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchPage = useCallback(
+    async (nextPage: number, query: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params: {
+          page: number;
+          page_size: number;
+          search?: string;
+          is_published?: boolean;
+          tenant_id?: string;
+        } = {
+          page: nextPage,
+          page_size: PAGE_SIZE,
+          is_published: true,
+          tenant_id: tenantId,
+        };
+        if (query.trim() !== '') params.search = query.trim();
+        const data = await geneMarketService.listGenes(params);
+        setItems(data.genes);
+        setTotal(data.total);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load marketplace');
+        setItems([]);
+        setTotal(0);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [tenantId]
+  );
 
   useEffect(() => {
     if (!open) return undefined;

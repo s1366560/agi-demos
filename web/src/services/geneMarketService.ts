@@ -2,6 +2,38 @@ import { httpClient } from './client/httpClient';
 
 const BASE_URL = '/genes';
 
+export interface TenantScopedOptions {
+  tenant_id?: string | null | undefined;
+}
+
+const tenantParams = (options: TenantScopedOptions = {}): { tenant_id?: string } =>
+  options.tenant_id ? { tenant_id: options.tenant_id } : {};
+
+const tenantConfig = (options: TenantScopedOptions = {}) => {
+  const params = tenantParams(options);
+  return params.tenant_id ? { params } : undefined;
+};
+
+const getWithTenant = <T>(url: string, options?: TenantScopedOptions) => {
+  const config = tenantConfig(options);
+  return config ? httpClient.get<T>(url, config) : httpClient.get<T>(url);
+};
+
+const postWithTenant = <T>(url: string, data: unknown, options?: TenantScopedOptions) => {
+  const config = tenantConfig(options);
+  return config ? httpClient.post<T>(url, data, config) : httpClient.post<T>(url, data);
+};
+
+const putWithTenant = <T>(url: string, data: unknown, options?: TenantScopedOptions) => {
+  const config = tenantConfig(options);
+  return config ? httpClient.put<T>(url, data, config) : httpClient.put<T>(url, data);
+};
+
+const deleteWithTenant = <T = unknown>(url: string, options?: TenantScopedOptions) => {
+  const config = tenantConfig(options);
+  return config ? httpClient.delete<T>(url, config) : httpClient.delete<T>(url);
+};
+
 export interface GeneCreate {
   name: string;
   slug: string;
@@ -235,18 +267,21 @@ export interface GeneListParams {
   search?: string;
   visibility?: string;
   is_published?: boolean;
+  tenant_id?: string | null | undefined;
 }
 
 export interface GenomeListParams {
   page?: number;
   page_size?: number;
   is_published?: boolean;
+  tenant_id?: string | null | undefined;
 }
 
 export interface EvolutionEventListParams {
   page?: number;
   page_size?: number;
   event_type?: EvolutionEventType;
+  tenant_id?: string | null | undefined;
 }
 
 export interface GeneReview {
@@ -272,48 +307,57 @@ export const geneMarketService = {
   listGenes: (params?: GeneListParams) =>
     httpClient.get<GeneListResponse>(`${BASE_URL}/`, { params }),
 
-  createGene: (data: GeneCreate) => httpClient.post<GeneResponse>(`${BASE_URL}/`, data),
+  createGene: (data: GeneCreate, options?: TenantScopedOptions) =>
+    postWithTenant<GeneResponse>(`${BASE_URL}/`, data, options),
 
-  getGene: (id: string) => httpClient.get<GeneResponse>(`${BASE_URL}/${id}`),
+  getGene: (id: string, options?: TenantScopedOptions) =>
+    getWithTenant<GeneResponse>(`${BASE_URL}/${id}`, options),
 
-  updateGene: (id: string, data: GeneUpdate) =>
-    httpClient.put<GeneResponse>(`${BASE_URL}/${id}`, data),
+  updateGene: (id: string, data: GeneUpdate, options?: TenantScopedOptions) =>
+    putWithTenant<GeneResponse>(`${BASE_URL}/${id}`, data, options),
 
-  deleteGene: (id: string) => httpClient.delete(`${BASE_URL}/${id}`),
+  deleteGene: (id: string, options?: TenantScopedOptions) =>
+    deleteWithTenant(`${BASE_URL}/${id}`, options),
 
   listGenomes: (params?: GenomeListParams) =>
     httpClient.get<GenomeListResponse>(`${BASE_URL}/genomes`, { params }),
 
-  createGenome: (data: GenomeCreate) =>
-    httpClient.post<GenomeResponse>(`${BASE_URL}/genomes`, data),
+  createGenome: (data: GenomeCreate, options?: TenantScopedOptions) =>
+    postWithTenant<GenomeResponse>(`${BASE_URL}/genomes`, data, options),
 
-  getGenome: (id: string) => httpClient.get<GenomeResponse>(`${BASE_URL}/genomes/${id}`),
+  getGenome: (id: string, options?: TenantScopedOptions) =>
+    getWithTenant<GenomeResponse>(`${BASE_URL}/genomes/${id}`, options),
 
-  updateGenome: (id: string, data: GenomeUpdate) =>
-    httpClient.put<GenomeResponse>(`${BASE_URL}/genomes/${id}`, data),
+  updateGenome: (id: string, data: GenomeUpdate, options?: TenantScopedOptions) =>
+    putWithTenant<GenomeResponse>(`${BASE_URL}/genomes/${id}`, data, options),
 
-  deleteGenome: (id: string) => httpClient.delete(`${BASE_URL}/genomes/${id}`),
+  deleteGenome: (id: string, options?: TenantScopedOptions) =>
+    deleteWithTenant(`${BASE_URL}/genomes/${id}`, options),
 
-  installGene: (instanceId: string, data: GeneInstallRequest) =>
-    httpClient.post<InstanceGeneResponse>(`${BASE_URL}/instances/${instanceId}/install`, data),
+  installGene: (instanceId: string, data: GeneInstallRequest, options?: TenantScopedOptions) =>
+    postWithTenant<InstanceGeneResponse>(
+      `${BASE_URL}/instances/${instanceId}/install`,
+      data,
+      options
+    ),
 
-  uninstallGene: (instanceId: string, instanceGeneId: string) =>
-    httpClient.delete(`${BASE_URL}/instances/${instanceId}/genes/${instanceGeneId}`),
+  uninstallGene: (instanceId: string, instanceGeneId: string, options?: TenantScopedOptions) =>
+    deleteWithTenant(`${BASE_URL}/instances/${instanceId}/genes/${instanceGeneId}`, options),
 
-  listInstanceGenes: (instanceId: string) =>
-    httpClient.get<InstanceGeneListResponse>(`${BASE_URL}/instances/${instanceId}/genes`),
+  listInstanceGenes: (instanceId: string, options?: TenantScopedOptions) =>
+    getWithTenant<InstanceGeneListResponse>(`${BASE_URL}/instances/${instanceId}/genes`, options),
 
-  listGeneRatings: (geneId: string) =>
-    httpClient.get<GeneRatingResponse[]>(`${BASE_URL}/${geneId}/ratings`),
+  listGeneRatings: (geneId: string, options?: TenantScopedOptions) =>
+    getWithTenant<GeneRatingResponse[]>(`${BASE_URL}/${geneId}/ratings`, options),
 
-  rateGene: (geneId: string, data: GeneRatingCreate) =>
-    httpClient.post<GeneRatingResponse>(`${BASE_URL}/${geneId}/ratings`, data),
+  rateGene: (geneId: string, data: GeneRatingCreate, options?: TenantScopedOptions) =>
+    postWithTenant<GeneRatingResponse>(`${BASE_URL}/${geneId}/ratings`, data, options),
 
-  listGenomeRatings: (genomeId: string) =>
-    httpClient.get<GenomeRatingResponse[]>(`${BASE_URL}/genomes/${genomeId}/ratings`),
+  listGenomeRatings: (genomeId: string, options?: TenantScopedOptions) =>
+    getWithTenant<GenomeRatingResponse[]>(`${BASE_URL}/genomes/${genomeId}/ratings`, options),
 
-  rateGenome: (genomeId: string, data: GenomeRatingCreate) =>
-    httpClient.post<GenomeRatingResponse>(`${BASE_URL}/genomes/${genomeId}/ratings`, data),
+  rateGenome: (genomeId: string, data: GenomeRatingCreate, options?: TenantScopedOptions) =>
+    postWithTenant<GenomeRatingResponse>(`${BASE_URL}/genomes/${genomeId}/ratings`, data, options),
 
   listEvolutionEvents: (instanceId: string, params?: EvolutionEventListParams) =>
     httpClient.get<EvolutionEventListResponse>(`${BASE_URL}/evolution`, {
@@ -325,19 +369,19 @@ export const geneMarketService = {
       params: { gene_id: geneId, ...params },
     }),
 
-  createEvolutionEvent: (data: EvolutionEventCreate) =>
-    httpClient.post<EvolutionEventResponse>(`${BASE_URL}/evolution`, data),
+  createEvolutionEvent: (data: EvolutionEventCreate, options?: TenantScopedOptions) =>
+    postWithTenant<EvolutionEventResponse>(`${BASE_URL}/evolution`, data, options),
 
-  getEvolutionEvent: (id: string) =>
-    httpClient.get<EvolutionEventResponse>(`${BASE_URL}/evolution/${id}`),
-  getGeneReviews: (geneId: string, page = 1, pageSize = 10) =>
+  getEvolutionEvent: (id: string, options?: TenantScopedOptions) =>
+    getWithTenant<EvolutionEventResponse>(`${BASE_URL}/evolution/${id}`, options),
+  getGeneReviews: (geneId: string, page = 1, pageSize = 10, options: TenantScopedOptions = {}) =>
     httpClient.get<GeneReviewListResponse>(`${BASE_URL}/${geneId}/reviews`, {
-      params: { page, page_size: pageSize },
+      params: { page, page_size: pageSize, ...tenantParams(options) },
     }),
 
-  createGeneReview: (geneId: string, data: CreateReviewRequest) =>
-    httpClient.post<GeneReview>(`${BASE_URL}/${geneId}/reviews`, data),
+  createGeneReview: (geneId: string, data: CreateReviewRequest, options?: TenantScopedOptions) =>
+    postWithTenant<GeneReview>(`${BASE_URL}/${geneId}/reviews`, data, options),
 
-  deleteGeneReview: (geneId: string, reviewId: string) =>
-    httpClient.delete(`${BASE_URL}/${geneId}/reviews/${reviewId}`),
+  deleteGeneReview: (geneId: string, reviewId: string, options?: TenantScopedOptions) =>
+    deleteWithTenant(`${BASE_URL}/${geneId}/reviews/${reviewId}`, options),
 };

@@ -6,7 +6,7 @@ This is separate from CyberGenes (workspace-scoped) -- this is tenant-scoped mar
 """
 
 import logging
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -36,6 +36,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
 )
+from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.i18n import gettext as _
@@ -61,8 +62,29 @@ class _TenantScopedEntity(Protocol):
     tenant_id: str | None
 
 
+class _InstanceScopedEntity(Protocol):
+    id: str
+    instance_id: str
+    gene_id: str
+    genome_id: str | None
+    status: Any
+    installed_version: str | None
+    config_snapshot: dict[str, Any]
+    usage_count: int
+    installed_at: Any
+    created_at: Any
+
+
 class _GeneLookupService(Protocol):
     async def get_gene(self, gene_id: str) -> _TenantScopedEntity | None: ...
+
+
+class _GenomeLookupService(Protocol):
+    async def get_genome(self, genome_id: str) -> _TenantScopedEntity | None: ...
+
+
+class _InstanceGeneLookupService(Protocol):
+    async def get_instance_gene(self, instance_gene_id: str) -> _InstanceScopedEntity | None: ...
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +230,35 @@ def _gene_review_forbidden_error() -> HTTPException:
     )
 
 
+def _access_denied_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=_("Access denied"),
+    )
+
+
+async def _get_selected_gene_tenant_id(
+    selected_tenant_id: str | None = Query(
+        None,
+        alias="tenant_id",
+        min_length=1,
+        description="Explicit tenant scope for multi-tenant callers.",
+    ),
+    fallback_tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    if selected_tenant_id is None:
+        return fallback_tenant_id
+    await require_tenant_access(db, cast(Any, current_user), selected_tenant_id)
+    return selected_tenant_id
+
+
+def _ensure_request_tenant_matches(payload_tenant_id: str | None, tenant_id: str) -> None:
+    if payload_tenant_id is not None and payload_tenant_id != tenant_id:
+        raise _access_denied_error()
+
+
 def _evolution_event_response(event: EvolutionEvent) -> EvolutionEventResponse:
     details = event.details or {}
     payload = details.get("payload")
@@ -247,10 +298,42 @@ async def _ensure_gene_tenant_access(
     *,
     gene_id: str,
     tenant_id: str,
-) -> None:
+) -> _TenantScopedEntity:
     gene = await service.get_gene(gene_id)
     if gene is None or gene.tenant_id != tenant_id:
         raise _gene_not_found_error()
+    return gene
+
+
+async def _ensure_genome_tenant_access(
+    service: _GenomeLookupService,
+    *,
+    genome_id: str,
+    tenant_id: str,
+) -> _TenantScopedEntity:
+    genome = await service.get_genome(genome_id)
+    if genome is None or genome.tenant_id != tenant_id:
+        raise _genome_not_found_error()
+    return genome
+
+
+async def _ensure_instance_gene_tenant_access(
+    container: DIContainer,
+    service: _InstanceGeneLookupService,
+    *,
+    instance_id: str,
+    instance_gene_id: str,
+    tenant_id: str,
+) -> _InstanceScopedEntity:
+    await _ensure_instance_tenant_access(
+        container,
+        instance_id=instance_id,
+        tenant_id=tenant_id,
+    )
+    instance_gene = await service.get_instance_gene(instance_gene_id)
+    if instance_gene is None or instance_gene.instance_id != instance_id:
+        raise _instance_gene_not_found_error()
+    return instance_gene
 
 
 # ---------------------------------------------------------------------------
@@ -266,19 +349,20 @@ async def _ensure_gene_tenant_access(
 async def create_gene(
     request: Request,
     data: GeneCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GeneResponse:
     """Create a new gene in the marketplace."""
     try:
+        _ensure_request_tenant_matches(data.tenant_id, tenant_id)
         container = get_container_with_db(request, db)
         service = container.gene_service()
         gene = await service.create_gene(
             name=data.name,
             slug=data.slug,
             created_by=current_user.id,
-            tenant_id=data.tenant_id or tenant_id,
+            tenant_id=tenant_id,
             description=data.description,
             short_description=data.short_description,
             category=data.category,
@@ -306,7 +390,7 @@ async def list_genes(
     search: str | None = Query(None, description="Search by name, slug, or description"),
     visibility: str | None = Query(None, description="Filter by visibility"),
     is_published: bool | None = Query(None, description="Filter by published status"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GeneListResponse:
     """List genes with optional filtering."""
@@ -336,13 +420,14 @@ async def update_gene(
     request: Request,
     gene_id: str,
     data: GeneUpdate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GeneResponse:
     """Update a gene."""
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
         fields = data.model_dump(exclude_unset=True)
         gene = await service.update_gene(gene_id, **fields)
         await db.commit()
@@ -359,13 +444,14 @@ async def update_gene(
 async def delete_gene(
     request: Request,
     gene_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete (soft-delete) a gene."""
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
         await service.delete_gene(gene_id)
         await db.commit()
     except ValueError as e:
@@ -376,13 +462,14 @@ async def delete_gene(
 async def publish_gene(
     request: Request,
     gene_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GeneResponse:
     """Publish a gene to the marketplace."""
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
         gene = await service.publish_gene(gene_id)
         await db.commit()
         return GeneResponse.model_validate(gene, from_attributes=True)
@@ -394,13 +481,14 @@ async def publish_gene(
 async def unpublish_gene(
     request: Request,
     gene_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GeneResponse:
     """Remove a gene from the marketplace."""
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
         gene = await service.unpublish_gene(gene_id)
         await db.commit()
         return GeneResponse.model_validate(gene, from_attributes=True)
@@ -421,19 +509,20 @@ async def unpublish_gene(
 async def create_genome(
     request: Request,
     data: GenomeCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GenomeResponse:
     """Create a new genome (curated gene bundle)."""
     try:
+        _ensure_request_tenant_matches(data.tenant_id, tenant_id)
         container = get_container_with_db(request, db)
         service = container.gene_service()
         genome = await service.create_genome(
             name=data.name,
             slug=data.slug,
             created_by=current_user.id,
-            tenant_id=data.tenant_id or tenant_id,
+            tenant_id=tenant_id,
             description=data.description,
             short_description=data.short_description,
             icon=data.icon,
@@ -453,7 +542,7 @@ async def list_genomes(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
     is_published: bool | None = Query(None, description="Filter by published status"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GenomeListResponse:
     """List genomes with optional filtering."""
@@ -479,15 +568,13 @@ async def list_genomes(
 async def get_genome(
     request: Request,
     genome_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GenomeResponse:
     """Get a genome by ID."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
-    genome = await service.get_genome(genome_id)
-    if not genome:
-        raise _genome_not_found_error()
+    genome = await _ensure_genome_tenant_access(service, genome_id=genome_id, tenant_id=tenant_id)
     return GenomeResponse.model_validate(genome, from_attributes=True)
 
 
@@ -499,13 +586,14 @@ async def update_genome(
     request: Request,
     genome_id: str,
     data: GenomeUpdate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GenomeResponse:
     """Update a genome."""
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_genome_tenant_access(service, genome_id=genome_id, tenant_id=tenant_id)
         fields = data.model_dump(exclude_unset=True)
         genome = await service.update_genome(genome_id, **fields)
         await db.commit()
@@ -522,13 +610,14 @@ async def update_genome(
 async def delete_genome(
     request: Request,
     genome_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete (soft-delete) a genome."""
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_genome_tenant_access(service, genome_id=genome_id, tenant_id=tenant_id)
         await service.delete_genome(genome_id)
         await db.commit()
     except ValueError as e:
@@ -542,13 +631,14 @@ async def delete_genome(
 async def publish_genome(
     request: Request,
     genome_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GenomeResponse:
     """Publish a genome to the marketplace."""
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_genome_tenant_access(service, genome_id=genome_id, tenant_id=tenant_id)
         genome = await service.publish_genome(genome_id)
         await db.commit()
         return GenomeResponse.model_validate(genome, from_attributes=True)
@@ -570,13 +660,17 @@ async def install_gene(
     request: Request,
     instance_id: str,
     data: InstallGeneRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceGeneResponse:
     """Install a gene on an agent instance."""
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_instance_tenant_access(
+            container, instance_id=instance_id, tenant_id=tenant_id
+        )
+        await _ensure_gene_tenant_access(service, gene_id=data.gene_id, tenant_id=tenant_id)
         instance_gene = await service.install_gene(
             instance_id=instance_id,
             gene_id=data.gene_id,
@@ -610,13 +704,20 @@ async def uninstall_gene(
     request: Request,
     instance_id: str,
     instance_gene_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Uninstall a gene from an agent instance."""
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_instance_gene_tenant_access(
+            container,
+            service,
+            instance_id=instance_id,
+            instance_gene_id=instance_gene_id,
+            tenant_id=tenant_id,
+        )
         await service.uninstall_gene(instance_gene_id)
         await db.commit()
     except ValueError as e:
@@ -630,12 +731,13 @@ async def uninstall_gene(
 async def list_instance_genes(
     request: Request,
     instance_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceGeneListResponse:
     """List all genes installed on an agent instance."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
+    await _ensure_instance_tenant_access(container, instance_id=instance_id, tenant_id=tenant_id)
     instance_genes = await service.list_instance_genes(instance_id)
     items = [
         InstanceGeneResponse(
@@ -663,15 +765,19 @@ async def get_instance_gene(
     request: Request,
     instance_id: str,
     instance_gene_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceGeneResponse:
     """Get a specific installed gene record."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
-    ig = await service.get_instance_gene(instance_gene_id)
-    if not ig:
-        raise _instance_gene_not_found_error()
+    ig = await _ensure_instance_gene_tenant_access(
+        container,
+        service,
+        instance_id=instance_id,
+        instance_gene_id=instance_gene_id,
+        tenant_id=tenant_id,
+    )
     return InstanceGeneResponse(
         id=ig.id,
         instance_id=ig.instance_id,
@@ -700,7 +806,7 @@ async def rate_gene(
     request: Request,
     gene_id: str,
     data: GeneRatingCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GeneRatingResponse:
@@ -708,6 +814,7 @@ async def rate_gene(
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
         rating = await service.rate_gene(
             gene_id=gene_id,
             user_id=current_user.id,
@@ -729,12 +836,13 @@ async def list_gene_ratings(
     gene_id: str,
     limit: int = Query(50, ge=1, le=200, description="Max results"),
     offset: int = Query(0, ge=0, description="Offset"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> list[GeneRatingResponse]:
     """List ratings for a gene."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
+    await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
     ratings = await service.list_gene_ratings(
         gene_id=gene_id,
         limit=limit,
@@ -752,12 +860,13 @@ async def list_genome_ratings(
     genome_id: str,
     limit: int = Query(50, ge=1, le=200, description="Max results"),
     offset: int = Query(0, ge=0, description="Offset"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> list[GenomeRatingResponse]:
     """List ratings for a genome."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
+    await _ensure_genome_tenant_access(service, genome_id=genome_id, tenant_id=tenant_id)
     ratings = await service.list_genome_ratings(
         genome_id=genome_id,
         limit=limit,
@@ -775,7 +884,7 @@ async def rate_genome(
     request: Request,
     genome_id: str,
     data: GenomeRatingCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GenomeRatingResponse:
@@ -783,6 +892,7 @@ async def rate_genome(
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_genome_tenant_access(service, genome_id=genome_id, tenant_id=tenant_id)
         rating = await service.rate_genome(
             genome_id=genome_id,
             user_id=current_user.id,
@@ -811,7 +921,7 @@ async def list_evolution_events(
     event_type: EvolutionEventType | None = Query(None, description="Filter by event type"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> EvolutionEventListResponse:
     """List evolution events for an agent instance."""
@@ -858,7 +968,7 @@ async def list_evolution_events(
 async def create_evolution_event(
     request: Request,
     data: EvolutionEventCreateRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> EvolutionEventResponse:
     """Create an evolution event record."""
@@ -873,6 +983,12 @@ async def create_evolution_event(
         await _ensure_gene_tenant_access(
             service,
             gene_id=data.gene_id,
+            tenant_id=tenant_id,
+        )
+    if data.genome_id:
+        await _ensure_genome_tenant_access(
+            service,
+            genome_id=data.genome_id,
             tenant_id=tenant_id,
         )
     event = await service.create_evolution_event(
@@ -898,7 +1014,7 @@ async def create_evolution_event(
 async def get_evolution_event(
     request: Request,
     event_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> EvolutionEventResponse:
     """Get a specific evolution event."""
@@ -919,15 +1035,13 @@ async def get_evolution_event(
 async def get_gene(
     request: Request,
     gene_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GeneResponse:
     """Get a gene by ID."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
-    gene = await service.get_gene(gene_id)
-    if not gene:
-        raise _gene_not_found_error()
+    gene = await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
     return GeneResponse.model_validate(gene, from_attributes=True)
 
 
@@ -941,11 +1055,12 @@ async def list_gene_reviews(
     gene_id: str,
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(10, ge=1, le=100, description="Items per page"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GeneReviewListResponse:
     container = get_container_with_db(request, db)
     service = container.gene_service()
+    await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
     reviews, total = await service.list_gene_reviews(
         gene_id=gene_id,
         page=page,
@@ -969,13 +1084,14 @@ async def create_gene_review(
     request: Request,
     gene_id: str,
     data: GeneReviewCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GeneReviewResponse:
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
         review = await service.create_gene_review(
             gene_id=gene_id,
             user_id=current_user.id,
@@ -998,13 +1114,14 @@ async def delete_gene_review(
     request: Request,
     gene_id: str,
     review_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
+        await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
         await service.delete_gene_review(
             review_id=review_id,
             user_id=current_user.id,

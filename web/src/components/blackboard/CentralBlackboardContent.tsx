@@ -477,6 +477,7 @@ export function CentralBlackboardContent({
 
       <GeneImportModal
         open={geneImportOpen}
+        tenantId={tenantId}
         onCancel={() => {
           setGeneImportOpen(false);
         }}
