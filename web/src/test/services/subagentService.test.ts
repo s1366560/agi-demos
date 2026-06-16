@@ -34,13 +34,14 @@ describe('subagentAPI', () => {
   it('normalizes legacy skip pagination to backend offset', async () => {
     mockHttpClient.get.mockResolvedValue({ subagents: [], total: 0 });
 
-    await subagentAPI.list({ skip: 20, limit: 10, enabled_only: true });
+    await subagentAPI.list({ skip: 20, limit: 10, enabled_only: true, tenant_id: 'tenant-2' });
 
     expect(mockHttpClient.get).toHaveBeenCalledWith('/subagents/', {
       params: {
         enabled_only: true,
         limit: 10,
         offset: 20,
+        tenant_id: 'tenant-2',
       },
     });
   });
@@ -56,5 +57,38 @@ describe('subagentAPI', () => {
         offset: 40,
       },
     });
+  });
+
+  it('passes selected tenant when installing a template', async () => {
+    mockHttpClient.post.mockResolvedValue({ id: 'subagent-1' });
+
+    await subagentAPI.createFromTemplate('template-1', { tenant_id: 'tenant-2' });
+
+    expect(mockHttpClient.post).toHaveBeenCalledWith(
+      '/subagents/templates/template-1/install',
+      undefined,
+      {
+        params: {
+          tenant_id: 'tenant-2',
+        },
+      }
+    );
+  });
+
+  it('passes selected tenant and project when importing filesystem agents', async () => {
+    mockHttpClient.post.mockResolvedValue({ id: 'subagent-1' });
+
+    await subagentAPI.importFilesystem('test-agent', 'project-1', { tenant_id: 'tenant-2' });
+
+    expect(mockHttpClient.post).toHaveBeenCalledWith(
+      '/subagents/filesystem/test-agent/import',
+      null,
+      {
+        params: {
+          project_id: 'project-1',
+          tenant_id: 'tenant-2',
+        },
+      }
+    );
   });
 });

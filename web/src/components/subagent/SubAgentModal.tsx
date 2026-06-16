@@ -52,6 +52,7 @@ interface SubAgentModalProps {
   onSuccess: () => void;
   subagent: SubAgentResponse | null;
   subagents?: SubAgentResponse[];
+  tenantId?: string | null;
 }
 
 interface SubAgentFormValues {
@@ -118,6 +119,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
   onSuccess,
   subagent,
   subagents = [],
+  tenantId = null,
 }) => {
   const { t } = useTranslation();
   const [form] = Form.useForm<SubAgentFormValues>();
@@ -170,7 +172,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
         try {
           const [toolsRes, skillsRes, mcpRes] = await Promise.all([
             agentService.listTools(),
-            skillAPI.list({ limit: 100 }),
+            skillAPI.list({ limit: 100, ...(tenantId ? { tenant_id: tenantId } : {}) }),
             mcpAPI.list({ limit: 100 }),
           ]);
 
@@ -187,7 +189,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
       void fetchResources();
     }
-  }, [isOpen, t]);
+  }, [isOpen, tenantId, t]);
 
   // Reset form when modal opens/closes or subagent changes
   useEffect(() => {
@@ -324,11 +326,13 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
         identity: identityConfig,
       };
 
+      const requestOptions = tenantId ? { tenant_id: tenantId } : undefined;
+
       if (subagent) {
-        await updateSubAgent(subagent.id, data);
+        await updateSubAgent(subagent.id, data, requestOptions);
         message.success(t('tenant.subagents.updateSuccess'));
       } else {
-        await createSubAgent(data as SubAgentCreate);
+        await createSubAgent(data as SubAgentCreate, requestOptions);
         message.success(t('tenant.subagents.createSuccess'));
       }
 
@@ -359,6 +363,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
     identityMetadata,
     createSubAgent,
     updateSubAgent,
+    tenantId,
     onSuccess,
     t,
   ]);

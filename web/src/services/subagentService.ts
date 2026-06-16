@@ -20,10 +20,30 @@ import type {
 // Use centralized HTTP client
 const api = httpClient;
 
+interface TenantScopedOptions {
+  tenant_id?: string | null | undefined;
+}
+
+const tenantParams = (options: TenantScopedOptions = {}): { tenant_id?: string } =>
+  options.tenant_id ? { tenant_id: options.tenant_id } : {};
+
+const tenantConfig = (options: TenantScopedOptions = {}) => {
+  const params = tenantParams(options);
+  return params.tenant_id ? { params } : undefined;
+};
+
+const requestConfig = (params: Record<string, string | boolean | undefined>) => {
+  const cleanParams = Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== undefined)
+  );
+  return Object.keys(cleanParams).length > 0 ? { params: cleanParams } : undefined;
+};
+
 export interface SubAgentListParams {
   enabled_only?: boolean | undefined;
   source?: 'filesystem' | 'database' | undefined;
   include_filesystem?: boolean | undefined;
+  tenant_id?: string | null | undefined;
   skip?: number | undefined;
   offset?: number | undefined;
   limit?: number | undefined;
@@ -63,86 +83,133 @@ export const subagentAPI = {
   /**
    * List filesystem-only SubAgents
    */
-  listFilesystem: async (): Promise<FilesystemSubAgentListResponse> => {
-    return await api.get<FilesystemSubAgentListResponse>('/subagents/filesystem');
+  listFilesystem: async (
+    options: TenantScopedOptions = {}
+  ): Promise<FilesystemSubAgentListResponse> => {
+    return await api.get<FilesystemSubAgentListResponse>(
+      '/subagents/filesystem',
+      tenantConfig(options)
+    );
   },
 
   /**
    * Import a filesystem SubAgent into the database for customization
    */
-  importFilesystem: async (name: string, projectId?: string): Promise<SubAgentResponse> => {
+  importFilesystem: async (
+    name: string,
+    projectId?: string,
+    options: TenantScopedOptions = {}
+  ): Promise<SubAgentResponse> => {
+    const params = {
+      ...(projectId ? { project_id: projectId } : {}),
+      ...tenantParams(options),
+    };
     return await api.post<SubAgentResponse>(
       `/subagents/filesystem/${encodeURIComponent(name)}/import`,
       null,
-      { params: projectId ? { project_id: projectId } : undefined }
+      requestConfig(params)
     );
   },
 
   /**
    * Create a new SubAgent
    */
-  create: async (data: SubAgentCreate): Promise<SubAgentResponse> => {
-    return await api.post<SubAgentResponse>('/subagents/', data);
+  create: async (
+    data: SubAgentCreate,
+    options: TenantScopedOptions = {}
+  ): Promise<SubAgentResponse> => {
+    return await api.post<SubAgentResponse>('/subagents/', data, tenantConfig(options));
   },
 
   /**
    * Get a SubAgent by ID
    */
-  get: async (subagentId: string): Promise<SubAgentResponse> => {
-    return await api.get<SubAgentResponse>(`/subagents/${subagentId}`);
+  get: async (subagentId: string, options: TenantScopedOptions = {}): Promise<SubAgentResponse> => {
+    return await api.get<SubAgentResponse>(`/subagents/${subagentId}`, tenantConfig(options));
   },
 
   /**
    * Update a SubAgent
    */
-  update: async (subagentId: string, data: SubAgentUpdate): Promise<SubAgentResponse> => {
-    return await api.put<SubAgentResponse>(`/subagents/${subagentId}`, data);
+  update: async (
+    subagentId: string,
+    data: SubAgentUpdate,
+    options: TenantScopedOptions = {}
+  ): Promise<SubAgentResponse> => {
+    return await api.put<SubAgentResponse>(`/subagents/${subagentId}`, data, tenantConfig(options));
   },
 
   /**
    * Delete a SubAgent
    */
-  delete: async (subagentId: string): Promise<void> => {
-    await api.delete(`/subagents/${subagentId}`);
+  delete: async (subagentId: string, options: TenantScopedOptions = {}): Promise<void> => {
+    await api.delete(`/subagents/${subagentId}`, tenantConfig(options));
   },
 
   /**
    * Enable or disable a SubAgent
    */
-  toggle: async (subagentId: string, enabled: boolean): Promise<SubAgentResponse> => {
+  toggle: async (
+    subagentId: string,
+    enabled: boolean,
+    options: TenantScopedOptions = {}
+  ): Promise<SubAgentResponse> => {
     return await api.patch<SubAgentResponse>(`/subagents/${subagentId}/enable`, null, {
-      params: { enabled },
+      params: { enabled, ...tenantParams(options) },
     });
   },
 
   /**
    * Get SubAgent statistics
    */
-  getStats: async (subagentId: string): Promise<SubAgentStatsResponse> => {
-    return await api.get<SubAgentStatsResponse>(`/subagents/${subagentId}/stats`);
+  getStats: async (
+    subagentId: string,
+    options: TenantScopedOptions = {}
+  ): Promise<SubAgentStatsResponse> => {
+    return await api.get<SubAgentStatsResponse>(
+      `/subagents/${subagentId}/stats`,
+      tenantConfig(options)
+    );
   },
 
   /**
    * List available SubAgent templates
    */
-  listTemplates: async (): Promise<SubAgentTemplatesResponse> => {
-    return await api.get<SubAgentTemplatesResponse>('/subagents/templates/list');
+  listTemplates: async (options: TenantScopedOptions = {}): Promise<SubAgentTemplatesResponse> => {
+    return await api.get<SubAgentTemplatesResponse>(
+      '/subagents/templates/list',
+      tenantConfig(options)
+    );
   },
 
   /**
    * Create a SubAgent from a template
    */
-  createFromTemplate: async (templateId: string): Promise<SubAgentResponse> => {
-    return await api.post<SubAgentResponse>(`/subagents/templates/${templateId}/install`);
+  createFromTemplate: async (
+    templateId: string,
+    options: TenantScopedOptions = {}
+  ): Promise<SubAgentResponse> => {
+    const config = tenantConfig(options);
+    const path = `/subagents/templates/${templateId}/install`;
+    return config
+      ? await api.post<SubAgentResponse>(path, undefined, config)
+      : await api.post<SubAgentResponse>(path);
   },
 
   /**
    * Match a query to find the best SubAgent
    */
-  match: async (taskDescription: string): Promise<SubAgentMatchResponse> => {
-    return await api.post<SubAgentMatchResponse>('/subagents/match', {
-      task_description: taskDescription,
-    });
+  match: async (
+    taskDescription: string,
+    options: TenantScopedOptions = {}
+  ): Promise<SubAgentMatchResponse> => {
+    return await api.post<SubAgentMatchResponse>(
+      '/subagents/match',
+      {
+        task_description: taskDescription,
+      },
+      tenantConfig(options)
+    );
   },
 
   /**

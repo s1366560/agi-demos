@@ -72,6 +72,8 @@ export const SubAgentList: React.FC = () => {
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const projects = useProjectStore((state) => state.projects);
   const listProjects = useProjectStore((state) => state.listProjects);
+  const tenantId = currentTenant?.id ?? null;
+  const tenantOptions = useMemo(() => (tenantId ? { tenant_id: tenantId } : undefined), [tenantId]);
 
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
@@ -130,19 +132,23 @@ export const SubAgentList: React.FC = () => {
 
   // Load data on mount
   useEffect(() => {
-    void listSubAgents();
-    void listTemplates();
-  }, [listSubAgents, listTemplates]);
-
-  useEffect(() => {
-    if (!currentTenant?.id) {
+    if (!tenantOptions) {
       return;
     }
 
-    void listProjects(currentTenant.id, { page_size: 100 }).catch(() => {
+    void listSubAgents(tenantOptions);
+    void listTemplates(tenantOptions);
+  }, [listSubAgents, listTemplates, tenantOptions]);
+
+  useEffect(() => {
+    if (!tenantId) {
+      return;
+    }
+
+    void listProjects(tenantId, { page_size: 100 }).catch(() => {
       message.error(t('tenant.subagents.messages.projectsLoadFailed', 'Failed to load projects'));
     });
-  }, [currentTenant?.id, listProjects, t]);
+  }, [tenantId, listProjects, t]);
 
   // Sync filters to store
   useEffect(() => {
@@ -177,8 +183,12 @@ export const SubAgentList: React.FC = () => {
 
   const handleToggle = useCallback(
     async (id: string, enabled: boolean) => {
+      if (!tenantOptions) {
+        return;
+      }
+
       try {
-        await toggleSubAgent(id, enabled);
+        await toggleSubAgent(id, enabled, tenantOptions);
         message.success(
           t(
             enabled
@@ -191,25 +201,33 @@ export const SubAgentList: React.FC = () => {
         // Error handled by store
       }
     },
-    [toggleSubAgent, t]
+    [toggleSubAgent, tenantOptions, t]
   );
 
   const handleDelete = useCallback(
     async (id: string) => {
+      if (!tenantOptions) {
+        return;
+      }
+
       try {
-        await deleteSubAgent(id);
+        await deleteSubAgent(id, tenantOptions);
         message.success(t('tenant.subagents.messages.deleteSuccess', 'SubAgent deleted'));
       } catch {
         // Error handled by store
       }
     },
-    [deleteSubAgent, t]
+    [deleteSubAgent, tenantOptions, t]
   );
 
   const handleCreateFromTemplate = useCallback(
     async (templateId: string) => {
+      if (!tenantOptions) {
+        return;
+      }
+
       try {
-        const created = await createFromTemplate(templateId);
+        const created = await createFromTemplate(templateId, tenantOptions);
         message.success(
           t('tenant.subagents.messages.createFromTemplateSuccess', 'SubAgent created from template')
         );
@@ -219,17 +237,25 @@ export const SubAgentList: React.FC = () => {
         // Error handled by store
       }
     },
-    [createFromTemplate, t]
+    [createFromTemplate, tenantOptions, t]
   );
 
   const handleRefresh = useCallback(() => {
-    void listSubAgents();
-  }, [listSubAgents]);
+    if (!tenantOptions) {
+      return;
+    }
+
+    void listSubAgents(tenantOptions);
+  }, [listSubAgents, tenantOptions]);
 
   const handleImportFilesystem = useCallback(
     async (name: string) => {
+      if (!tenantOptions) {
+        return;
+      }
+
       try {
-        await importFilesystem(name, importProjectId ?? undefined);
+        await importFilesystem(name, importProjectId ?? undefined, tenantOptions);
         message.success(
           t('tenant.subagents.messages.importSuccess', 'SubAgent imported to database')
         );
@@ -237,7 +263,7 @@ export const SubAgentList: React.FC = () => {
         // Error handled by store
       }
     },
-    [importFilesystem, importProjectId, t]
+    [importFilesystem, importProjectId, tenantOptions, t]
   );
 
   const handleModalClose = useCallback(() => {
@@ -248,8 +274,10 @@ export const SubAgentList: React.FC = () => {
   const handleModalSuccess = useCallback(() => {
     setIsModalOpen(false);
     setEditingSubAgent(null);
-    void listSubAgents();
-  }, [listSubAgents]);
+    if (tenantOptions) {
+      void listSubAgents(tenantOptions);
+    }
+  }, [listSubAgents, tenantOptions]);
 
   // Template dropdown menu
   const templateMenuItems: MenuProps['items'] = useMemo(() => {
@@ -379,6 +407,7 @@ export const SubAgentList: React.FC = () => {
         onClose={handleModalClose}
         onSuccess={handleModalSuccess}
         subagent={editingSubAgent}
+        tenantId={tenantId}
       />
     </div>
   );

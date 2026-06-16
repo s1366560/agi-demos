@@ -8,7 +8,7 @@ isolated tool access and custom system prompts.
 
 import logging
 from datetime import UTC
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -21,6 +21,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
 )
+from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
@@ -42,6 +43,25 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/subagents", tags=["SubAgents"])
+
+
+async def _get_selected_subagent_tenant_id(
+    selected_tenant_id: str | None = Query(
+        None,
+        alias="tenant_id",
+        min_length=1,
+        description="Explicit tenant scope for multi-tenant callers",
+    ),
+    fallback_tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    """Resolve the tenant for a SubAgent request and validate explicit tenant scope."""
+    if selected_tenant_id is None:
+        return fallback_tenant_id
+
+    await require_tenant_access(db, cast(Any, current_user), selected_tenant_id)
+    return selected_tenant_id
 
 
 async def _ensure_project_access(
@@ -404,7 +424,7 @@ def subagent_to_response(subagent: SubAgent) -> SubAgentResponse:
 async def create_subagent(
     request: Request,
     data: SubAgentCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentResponse:
@@ -475,7 +495,7 @@ async def list_subagents(
     include_filesystem: bool = Query(True, description="Include filesystem SubAgents in results"),
     limit: int = Query(100, ge=1, le=500, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentListResponse:
@@ -584,7 +604,7 @@ class FilesystemSubAgentListResponse(BaseModel):
 @router.get("/filesystem", response_model=FilesystemSubAgentListResponse)
 async def list_filesystem_subagents(
     request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
 ) -> FilesystemSubAgentListResponse:
     """
     List SubAgents available from the filesystem (.memstack/agents/*.md).
@@ -637,7 +657,7 @@ async def import_filesystem_subagent(
     request: Request,
     name: str,
     project_id: str | None = Query(None, description="Optional project to scope to"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentResponse:
@@ -722,7 +742,7 @@ async def list_subagent_templates(
     query: str | None = Query(None, description="Search query"),
     limit: int = Query(50, ge=1, le=100, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> TemplateListResponse:
     """
@@ -754,7 +774,7 @@ async def list_subagent_templates(
 async def create_template(
     request: Request,
     data: TemplateCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> TemplateResponse:
     """
@@ -783,7 +803,7 @@ async def create_template(
 @router.get("/templates/categories")
 async def list_template_categories(
     request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -799,7 +819,7 @@ async def list_template_categories(
 async def get_template(
     request: Request,
     template_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> TemplateResponse:
     """
@@ -823,7 +843,7 @@ async def update_template(
     request: Request,
     template_id: str,
     data: TemplateUpdate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> TemplateResponse:
     """
@@ -858,7 +878,7 @@ async def update_template(
 async def delete_template(
     request: Request,
     template_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """
@@ -893,7 +913,7 @@ async def delete_template(
 async def install_template(
     request: Request,
     template_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentResponse:
     """
@@ -950,7 +970,7 @@ async def install_template(
 async def export_subagent_as_template(
     request: Request,
     subagent_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TemplateResponse:
@@ -1004,7 +1024,7 @@ async def export_subagent_as_template(
 async def get_subagent(
     request: Request,
     subagent_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentResponse:
@@ -1036,7 +1056,7 @@ async def update_subagent(
     request: Request,
     subagent_id: str,
     data: SubAgentUpdate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentResponse:
@@ -1126,7 +1146,7 @@ async def update_subagent(
 async def delete_subagent(
     request: Request,
     subagent_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
@@ -1161,7 +1181,7 @@ async def toggle_subagent_enabled(
     request: Request,
     subagent_id: str,
     enabled: bool = Query(..., description="Enable or disable"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentResponse:
@@ -1197,7 +1217,7 @@ async def toggle_subagent_enabled(
 async def get_subagent_stats(
     request: Request,
     subagent_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentStatsResponse:
@@ -1236,7 +1256,7 @@ async def get_subagent_stats(
 async def match_subagent(
     request: Request,
     data: SubAgentMatchRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SubAgentMatchResponse:
@@ -1276,7 +1296,7 @@ async def match_subagent(
 @router.post("/templates/seed")
 async def seed_templates(
     request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_subagent_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """

@@ -1139,22 +1139,6 @@ function App() {
 
               {/* Tenant specific routes */}
               <Route
-                path=":tenantId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <LegacyTenantWorkspaceRedirect />
-                  </Suspense>
-                }
-              />
-              <Route
-                path=":tenantId/:conversation"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <LegacyTenantConversationRedirect />
-                  </Suspense>
-                }
-              />
-              <Route
                 path=":tenantId/overview"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -1837,6 +1821,24 @@ function App() {
                   }
                 />
               </Route>
+
+              {/* Legacy tenant workspace/conversation routes must stay after known tenant pages. */}
+              <Route
+                path=":tenantId"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <LegacyTenantWorkspaceRedirect />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/:conversation"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <LegacyTenantConversationRedirect />
+                  </Suspense>
+                }
+              />
             </Route>
 
             {/* Legacy /project/:projectId redirect to tenant-scoped route */}

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 import { render, screen, waitFor } from '@testing-library/react';
@@ -98,5 +100,18 @@ describe('App route redirects', () => {
     await waitFor(() => {
       expect(screen.getByTestId('location')).toHaveTextContent('/tenant/tenant-1/audit-logs');
     });
+  });
+
+  it('declares tenant static pages before the legacy conversation catch-all route', () => {
+    const appSource = readFileSync('src/App.tsx', 'utf8');
+    const legacyConversationIndex = appSource.indexOf('path=":tenantId/:conversation"');
+
+    expect(appSource.indexOf('path=":tenantId/subagents"')).toBeGreaterThan(-1);
+    expect(appSource.indexOf('path=":tenantId/agent-definitions"')).toBeGreaterThan(-1);
+    expect(legacyConversationIndex).toBeGreaterThan(-1);
+    expect(appSource.indexOf('path=":tenantId/subagents"')).toBeLessThan(legacyConversationIndex);
+    expect(appSource.indexOf('path=":tenantId/agent-definitions"')).toBeLessThan(
+      legacyConversationIndex
+    );
   });
 });

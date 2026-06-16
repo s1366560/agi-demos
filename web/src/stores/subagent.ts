@@ -42,6 +42,10 @@ interface SubAgentFilters {
   enabled: boolean | null; // null = all, true = enabled only, false = disabled only
 }
 
+interface SubAgentActionOptions {
+  tenant_id?: string | null | undefined;
+}
+
 interface SubAgentState {
   // Data
   subagents: SubAgentResponse[];
@@ -67,23 +71,38 @@ interface SubAgentState {
   // Actions - SubAgent CRUD
   listSubAgents: (params?: {
     enabled_only?: boolean | undefined;
+    tenant_id?: string | null | undefined;
     skip?: number | undefined;
     offset?: number | undefined;
     limit?: number | undefined;
   }) => Promise<void>;
-  getSubAgent: (id: string) => Promise<SubAgentResponse>;
-  createSubAgent: (data: SubAgentCreate) => Promise<SubAgentResponse>;
-  updateSubAgent: (id: string, data: SubAgentUpdate) => Promise<SubAgentResponse>;
-  deleteSubAgent: (id: string) => Promise<void>;
-  toggleSubAgent: (id: string, enabled: boolean) => Promise<void>;
+  getSubAgent: (id: string, options?: SubAgentActionOptions) => Promise<SubAgentResponse>;
+  createSubAgent: (
+    data: SubAgentCreate,
+    options?: SubAgentActionOptions
+  ) => Promise<SubAgentResponse>;
+  updateSubAgent: (
+    id: string,
+    data: SubAgentUpdate,
+    options?: SubAgentActionOptions
+  ) => Promise<SubAgentResponse>;
+  deleteSubAgent: (id: string, options?: SubAgentActionOptions) => Promise<void>;
+  toggleSubAgent: (id: string, enabled: boolean, options?: SubAgentActionOptions) => Promise<void>;
   setCurrentSubAgent: (subagent: SubAgentResponse | null) => void;
 
   // Actions - Templates
-  listTemplates: () => Promise<void>;
-  createFromTemplate: (templateId: string) => Promise<SubAgentResponse>;
+  listTemplates: (options?: SubAgentActionOptions) => Promise<void>;
+  createFromTemplate: (
+    templateId: string,
+    options?: SubAgentActionOptions
+  ) => Promise<SubAgentResponse>;
 
   // Actions - Filesystem
-  importFilesystem: (name: string, projectId?: string) => Promise<SubAgentResponse>;
+  importFilesystem: (
+    name: string,
+    projectId?: string,
+    options?: SubAgentActionOptions
+  ) => Promise<SubAgentResponse>;
 
   // Actions - Filters
   setFilters: (filters: Partial<SubAgentFilters>) => void;
@@ -154,10 +173,10 @@ export const useSubAgentStore = create<SubAgentState>()(
         }
       },
 
-      getSubAgent: async (id: string) => {
+      getSubAgent: async (id: string, options = {}) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await subagentAPI.get(id);
+          const response = await subagentAPI.get(id, options);
           set({ currentSubAgent: response, isLoading: false });
           return response;
         } catch (error: unknown) {
@@ -167,10 +186,10 @@ export const useSubAgentStore = create<SubAgentState>()(
         }
       },
 
-      createSubAgent: async (data: SubAgentCreate) => {
+      createSubAgent: async (data: SubAgentCreate, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await subagentAPI.create(data);
+          const response = await subagentAPI.create(data, options);
           const { subagents } = get();
           set({
             subagents: [response, ...subagents],
@@ -186,10 +205,10 @@ export const useSubAgentStore = create<SubAgentState>()(
         }
       },
 
-      updateSubAgent: async (id: string, data: SubAgentUpdate) => {
+      updateSubAgent: async (id: string, data: SubAgentUpdate, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await subagentAPI.update(id, data);
+          const response = await subagentAPI.update(id, data, options);
           const { subagents, currentSubAgent } = get();
           set({
             subagents: subagents.map((sa) => (sa.id === id ? response : sa)),
@@ -204,10 +223,10 @@ export const useSubAgentStore = create<SubAgentState>()(
         }
       },
 
-      deleteSubAgent: async (id: string) => {
+      deleteSubAgent: async (id: string, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          await subagentAPI.delete(id);
+          await subagentAPI.delete(id, options);
           const { subagents, currentSubAgent } = get();
           set({
             subagents: subagents.filter((sa) => sa.id !== id),
@@ -222,7 +241,7 @@ export const useSubAgentStore = create<SubAgentState>()(
         }
       },
 
-      toggleSubAgent: async (id: string, enabled: boolean) => {
+      toggleSubAgent: async (id: string, enabled: boolean, options = {}) => {
         // Optimistic update
         const { subagents } = get();
         const originalSubagents = [...subagents];
@@ -231,7 +250,7 @@ export const useSubAgentStore = create<SubAgentState>()(
         });
 
         try {
-          const response = await subagentAPI.toggle(id, enabled);
+          const response = await subagentAPI.toggle(id, enabled, options);
           const { currentSubAgent } = get();
           set({
             subagents: get().subagents.map((sa) => (sa.id === id ? response : sa)),
@@ -252,10 +271,10 @@ export const useSubAgentStore = create<SubAgentState>()(
 
       // ========== Templates ==========
 
-      listTemplates: async () => {
+      listTemplates: async (options = {}) => {
         set({ isTemplatesLoading: true, error: null });
         try {
-          const response = await subagentAPI.listTemplates();
+          const response = await subagentAPI.listTemplates(options);
           set({
             templates: response.templates,
             isTemplatesLoading: false,
@@ -267,10 +286,10 @@ export const useSubAgentStore = create<SubAgentState>()(
         }
       },
 
-      createFromTemplate: async (templateId: string) => {
+      createFromTemplate: async (templateId: string, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await subagentAPI.createFromTemplate(templateId);
+          const response = await subagentAPI.createFromTemplate(templateId, options);
           const { subagents } = get();
           set({
             subagents: [response, ...subagents],
@@ -288,12 +307,12 @@ export const useSubAgentStore = create<SubAgentState>()(
 
       // ========== Filesystem Import ==========
 
-      importFilesystem: async (name: string, projectId?: string) => {
+      importFilesystem: async (name: string, projectId?: string, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await subagentAPI.importFilesystem(name, projectId);
+          const response = await subagentAPI.importFilesystem(name, projectId, options);
           // Refresh the full list to get merged view
-          await get().listSubAgents();
+          await get().listSubAgents(options);
           set({ isSubmitting: false });
           return response;
         } catch (error: unknown) {

@@ -153,6 +153,44 @@ def _make_subagent(
 
 
 @pytest.mark.unit
+async def test_get_selected_subagent_tenant_id_uses_fallback_without_query_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    require_access = AsyncMock()
+    monkeypatch.setattr(router, "require_tenant_access", require_access)
+
+    tenant_id = await router._get_selected_subagent_tenant_id(
+        selected_tenant_id=None,
+        fallback_tenant_id="home-tenant",
+        current_user=SimpleNamespace(id="user-1"),
+        db=SimpleNamespace(),
+    )
+
+    assert tenant_id == "home-tenant"
+    require_access.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_get_selected_subagent_tenant_id_validates_explicit_query_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    require_access = AsyncMock()
+    monkeypatch.setattr(router, "require_tenant_access", require_access)
+    current_user = SimpleNamespace(id="user-1")
+    db = SimpleNamespace()
+
+    tenant_id = await router._get_selected_subagent_tenant_id(
+        selected_tenant_id="selected-tenant",
+        fallback_tenant_id="home-tenant",
+        current_user=current_user,
+        db=db,
+    )
+
+    assert tenant_id == "selected-tenant"
+    require_access.assert_awaited_once_with(db, current_user, "selected-tenant")
+
+
+@pytest.mark.unit
 async def test_import_filesystem_subagent_sanitizes_missing_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -460,9 +498,7 @@ async def test_list_subagents_filters_project_scoped_agents_by_project_access(
         name="hidden-agent",
         project_id="project-hidden",
     )
-    repo = _SubagentAccessRepository(
-        subagents=[hidden_subagent, visible_subagent, tenant_subagent]
-    )
+    repo = _SubagentAccessRepository(subagents=[hidden_subagent, visible_subagent, tenant_subagent])
     _patch_container(monkeypatch, _Container(subagent_repo=repo))
     db = SimpleNamespace(
         execute=AsyncMock(return_value=_ScalarResult(None, values=["project-visible"])),

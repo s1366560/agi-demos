@@ -25,9 +25,9 @@ vi.mock('react-i18next', () => ({
 
 // Mock SubAgentModal
 vi.mock('../../../components/subagent/SubAgentModal', () => ({
-  SubAgentModal: ({ isOpen, onClose, onSuccess }: any) =>
+  SubAgentModal: ({ isOpen, onClose, onSuccess, tenantId }: any) =>
     isOpen ? (
-      <div data-testid="subagent-modal">
+      <div data-testid="subagent-modal" data-tenant-id={tenantId ?? ''}>
         <button type="button" onClick={onClose}>
           Close
         </button>
@@ -55,6 +55,14 @@ vi.mock('../../../components/subagent/SubAgentFilters', () => ({
 }));
 
 const importFilesystemMock = vi.hoisted(() => vi.fn());
+const listSubAgentsMock = vi.hoisted(() => vi.fn());
+const listTemplatesMock = vi.hoisted(() => vi.fn());
+const toggleSubAgentMock = vi.hoisted(() => vi.fn());
+const deleteSubAgentMock = vi.hoisted(() => vi.fn());
+const createFromTemplateMock = vi.hoisted(() => vi.fn());
+const setFiltersMock = vi.hoisted(() => vi.fn());
+const clearErrorMock = vi.hoisted(() => vi.fn());
+const listProjectsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../components/subagent/SubAgentGrid', () => ({
   SubAgentGrid: ({ subagents, onImport, getScopeLabel }: any) => (
@@ -137,13 +145,13 @@ vi.mock('../../../stores/subagent', () => ({
   useAverageSuccessRate: () => 90,
   useTotalInvocations: () => 150,
   filterSubAgents: vi.fn((data, _filters) => data),
-  useListSubAgents: () => vi.fn(),
-  useListTemplates: () => vi.fn(),
-  useToggleSubAgent: () => vi.fn(),
-  useDeleteSubAgent: () => vi.fn(),
-  useCreateFromTemplate: () => vi.fn(),
-  useSetSubAgentFilters: () => vi.fn(),
-  useClearSubAgentError: () => vi.fn(),
+  useListSubAgents: () => listSubAgentsMock,
+  useListTemplates: () => listTemplatesMock,
+  useToggleSubAgent: () => toggleSubAgentMock,
+  useDeleteSubAgent: () => deleteSubAgentMock,
+  useCreateFromTemplate: () => createFromTemplateMock,
+  useSetSubAgentFilters: () => setFiltersMock,
+  useClearSubAgentError: () => clearErrorMock,
   useImportFilesystem: () => importFilesystemMock,
 }));
 
@@ -151,6 +159,12 @@ describe('SubAgentList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     importFilesystemMock.mockResolvedValue(mockSubAgents[0]);
+    listSubAgentsMock.mockResolvedValue(undefined);
+    listTemplatesMock.mockResolvedValue(undefined);
+    toggleSubAgentMock.mockResolvedValue(undefined);
+    deleteSubAgentMock.mockResolvedValue(undefined);
+    createFromTemplateMock.mockResolvedValue(mockSubAgents[0]);
+    listProjectsMock.mockResolvedValue(undefined);
     useTenantStore.setState({
       currentTenant: null,
     });
@@ -162,6 +176,7 @@ describe('SubAgentList', () => {
       total: 0,
       page: 1,
       pageSize: 20,
+      listProjects: listProjectsMock,
     });
   });
 
@@ -219,7 +234,35 @@ describe('SubAgentList', () => {
       expect(screen.getByText('tenant.subagents.fromTemplate')).toBeInTheDocument();
     });
 
+    it('should load subagents and templates for the selected route tenant', async () => {
+      useTenantStore.setState({
+        currentTenant: { id: 'tenant-1', name: 'Tenant One' } as any,
+      });
+
+      render(<SubAgentList />);
+
+      await waitFor(() => {
+        expect(listSubAgentsMock).toHaveBeenCalledWith({ tenant_id: 'tenant-1' });
+        expect(listTemplatesMock).toHaveBeenCalledWith({ tenant_id: 'tenant-1' });
+      });
+      expect(listProjectsMock).toHaveBeenCalledWith('tenant-1', { page_size: 100 });
+    });
+
+    it('should pass selected route tenant into the create modal', () => {
+      useTenantStore.setState({
+        currentTenant: { id: 'tenant-1', name: 'Tenant One' } as any,
+      });
+
+      render(<SubAgentList />);
+      fireEvent.click(screen.getByRole('button', { name: 'tenant.subagents.createNew' }));
+
+      expect(screen.getByTestId('subagent-modal')).toHaveAttribute('data-tenant-id', 'tenant-1');
+    });
+
     it('should import filesystem subagents into the selected project target', async () => {
+      useTenantStore.setState({
+        currentTenant: { id: 'tenant-1', name: 'Tenant One' } as any,
+      });
       useProjectStore.setState({
         projects: [
           {
@@ -254,7 +297,9 @@ describe('SubAgentList', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Import test-agent' }));
 
       await waitFor(() => {
-        expect(importFilesystemMock).toHaveBeenCalledWith('test-agent', 'project-1');
+        expect(importFilesystemMock).toHaveBeenCalledWith('test-agent', 'project-1', {
+          tenant_id: 'tenant-1',
+        });
       });
       expect(screen.getAllByText('Project Alpha').length).toBeGreaterThan(0);
     });
