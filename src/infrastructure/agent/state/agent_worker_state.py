@@ -3347,6 +3347,7 @@ async def _merge_database_skills_for_worker(
                 db_skills.extend(
                     await skill_repo.list_by_project(
                         project_id=project_id,
+                        tenant_id=tenant_id,
                         status=SkillStatus.ACTIVE,
                         scope=SkillScope.PROJECT,
                     )
@@ -3528,12 +3529,14 @@ async def get_or_create_skill_loader_tool(  # noqa: C901
         async def list_by_project(
             self,
             project_id: str,
+            tenant_id: str | None = None,
             status: SkillStatus | None = None,
             scope: SkillScope | None = None,
         ) -> list[Skill]:
             async with async_session_factory() as session:
                 return await SqlSkillRepository(session).list_by_project(
                     project_id=project_id,
+                    tenant_id=tenant_id,
                     status=status,
                     scope=scope,
                 )

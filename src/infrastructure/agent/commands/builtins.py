@@ -200,7 +200,12 @@ async def _handle_agents(
     if agent_registry is None:
         return ReplyResult(text="Agent registry not available in current context.")
 
-    agents = await agent_registry.list_by_project(project_id)
+    from src.infrastructure.agent.commands.goal_mode import resolve_tenant_id
+
+    agents = await agent_registry.list_by_project(
+        project_id,
+        tenant_id=resolve_tenant_id(context),
+    )
     if not agents:
         return ReplyResult(text="No agents configured for this project.")
 

@@ -69,6 +69,19 @@ class AgentRouterService:
                 reason=f"builtin_default:agent_not_found:{binding.agent_id}",
             )
 
+        if agent.project_id is not None:
+            logger.warning(
+                "Binding %s references project-scoped agent %s (%s)",
+                binding.id,
+                agent.id,
+                agent.project_id,
+            )
+            return AgentResolutionResult(
+                agent=None,
+                binding_matched=True,
+                reason=f"invalid_binding:agent_project_scoped:{agent.id}",
+            )
+
         if not agent.is_enabled():
             logger.warning(
                 "Binding %s references disabled agent %s (%s)",

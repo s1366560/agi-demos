@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from src.infrastructure.agent.state import agent_worker_state
@@ -62,3 +64,52 @@ async def test_get_or_create_tools_exposes_planner_contract_without_agent_orches
     )
 
     assert WORKSPACE_SUBMIT_PLANNING_CONTRACT_TOOL_NAME in tools
+
+
+@pytest.mark.unit
+async def test_database_skill_merge_scopes_project_skills_by_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    class _FakeSessionContext:
+        async def __aenter__(self) -> object:
+            return object()
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    class _FakeSkillRepository:
+        def __init__(self, session: object) -> None:
+            self._session = session
+
+        async def list_by_tenant(self, **kwargs: object) -> list[object]:
+            calls.append(("tenant", kwargs))
+            return [SimpleNamespace(name="tenant-skill")]
+
+        async def list_by_project(self, **kwargs: object) -> list[object]:
+            calls.append(("project", kwargs))
+            return [SimpleNamespace(name="project-skill")]
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+        lambda: _FakeSessionContext(),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
+        _FakeSkillRepository,
+    )
+    loaded_by_name: dict[str, object] = {}
+
+    await agent_worker_state._merge_database_skills_for_worker(
+        loaded_by_name,
+        tenant_id="tenant-1",
+        project_id="project-1",
+        cache_key="tenant-1:project-1",
+    )
+
+    assert set(loaded_by_name) == {"tenant-skill", "project-skill"}
+    project_call = calls[1]
+    assert project_call[0] == "project"
+    assert project_call[1]["project_id"] == "project-1"
+    assert project_call[1]["tenant_id"] == "tenant-1"

@@ -776,9 +776,29 @@ class AgentOrchestrator:
     # Agent Definition CRUD (used by agent_definition_manage tool)
     # ------------------------------------------------------------------
 
-    async def get_agent(self, agent_id: str) -> Agent | None:
+    async def get_agent(
+        self,
+        agent_id: str,
+        *,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        exact_project: bool = False,
+    ) -> Agent | None:
         """Get an agent definition by ID."""
-        return await self._read_registry(self._agent_registry.get_by_id(agent_id))
+        agent = await self._read_registry(
+            self._agent_registry.get_by_id(
+                agent_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
+        )
+        if agent is None:
+            return None
+        if tenant_id is not None and agent.tenant_id != tenant_id:
+            return None
+        if exact_project and agent.project_id != project_id:
+            return None
+        return agent
 
     async def get_agent_by_name(
         self,
@@ -811,11 +831,26 @@ class AgentOrchestrator:
         )
         return created
 
-    async def update_agent(self, agent: Agent) -> Agent:
+    async def update_agent(
+        self,
+        agent: Agent,
+        *,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        exact_project: bool = False,
+    ) -> Agent:
         """Update an existing agent definition."""
         agent.validate()
-        existing = await self._agent_registry.get_by_id(agent.id)
+        existing = await self._agent_registry.get_by_id(
+            agent.id,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         if existing is None:
+            raise ValueError(f"Agent not found: {agent.id}")
+        if tenant_id is not None and existing.tenant_id != tenant_id:
+            raise ValueError(f"Agent not found: {agent.id}")
+        if exact_project and existing.project_id != project_id:
             raise ValueError(f"Agent not found: {agent.id}")
         updated = await self._agent_registry.update(agent)
         if self._db_session is not None:
@@ -823,10 +858,25 @@ class AgentOrchestrator:
         logger.info("Agent definition updated: id=%s", updated.id)
         return updated
 
-    async def delete_agent(self, agent_id: str) -> bool:
+    async def delete_agent(
+        self,
+        agent_id: str,
+        *,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        exact_project: bool = False,
+    ) -> bool:
         """Delete an agent definition by ID."""
-        existing = await self._agent_registry.get_by_id(agent_id)
+        existing = await self._agent_registry.get_by_id(
+            agent_id,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         if existing is None:
+            raise ValueError(f"Agent not found: {agent_id}")
+        if tenant_id is not None and existing.tenant_id != tenant_id:
+            raise ValueError(f"Agent not found: {agent_id}")
+        if exact_project and existing.project_id != project_id:
             raise ValueError(f"Agent not found: {agent_id}")
         deleted = await self._agent_registry.delete(agent_id)
         if deleted and self._db_session is not None:

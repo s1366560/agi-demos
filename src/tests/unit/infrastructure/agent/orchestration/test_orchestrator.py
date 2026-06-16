@@ -167,6 +167,60 @@ class TestRegistryTransactions:
         assert result is agent
         db_fx.db_session.rollback.assert_awaited_once()
 
+    async def test_get_agent_exact_project_rejects_tenant_level_fallback(
+        self, db_fx: _OrchestratorDbFixture
+    ) -> None:
+        agent = _make_agent(id="agent-1", project_id=None)
+        db_fx.agent_registry.get_by_id = AsyncMock(return_value=agent)
+
+        result = await db_fx.orchestrator.get_agent(
+            "agent-1",
+            tenant_id="tenant-1",
+            project_id="proj-1",
+            exact_project=True,
+        )
+
+        assert result is None
+        db_fx.agent_registry.get_by_id.assert_awaited_once_with(
+            "agent-1",
+            tenant_id="tenant-1",
+            project_id="proj-1",
+        )
+        db_fx.db_session.rollback.assert_awaited_once()
+
+    async def test_update_agent_exact_project_rejects_scope_mismatch(
+        self, fx: _OrchestratorFixture
+    ) -> None:
+        incoming = _make_real_agent(id="agent-1", project_id="proj-1")
+        existing = _make_real_agent(id="agent-1", project_id=None)
+        fx.agent_registry.get_by_id = AsyncMock(return_value=existing)
+
+        with pytest.raises(ValueError, match="Agent not found"):
+            await fx.orchestrator.update_agent(
+                incoming,
+                tenant_id="tenant-1",
+                project_id="proj-1",
+                exact_project=True,
+            )
+
+        fx.agent_registry.update.assert_not_awaited()
+
+    async def test_delete_agent_exact_project_rejects_scope_mismatch(
+        self, fx: _OrchestratorFixture
+    ) -> None:
+        existing = _make_real_agent(id="agent-1", project_id=None)
+        fx.agent_registry.get_by_id = AsyncMock(return_value=existing)
+
+        with pytest.raises(ValueError, match="Agent not found"):
+            await fx.orchestrator.delete_agent(
+                "agent-1",
+                tenant_id="tenant-1",
+                project_id="proj-1",
+                exact_project=True,
+            )
+
+        fx.agent_registry.delete.assert_not_awaited()
+
     async def test_list_agents_rolls_back_read_transaction(
         self, db_fx: _OrchestratorDbFixture
     ) -> None:

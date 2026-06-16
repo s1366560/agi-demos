@@ -9,7 +9,9 @@ Tests for:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -1110,6 +1112,40 @@ class TestBuiltinCommands:
         result = await invocation.definition.handler(invocation, {"skills": []})
         assert isinstance(result, ReplyResult)
         assert "No skills available" in result.text
+
+    async def test_agents_handler_scopes_registry_lookup_by_tenant(
+        self, registry_with_builtins: CommandRegistry
+    ) -> None:
+        invocation = registry_with_builtins.parse_and_resolve("/agents")
+        assert invocation is not None
+        agent_registry = SimpleNamespace(
+            list_by_project=AsyncMock(
+                return_value=[
+                    SimpleNamespace(
+                        name="reviewer",
+                        agent_type="custom",
+                        enabled=True,
+                        description="Reviews code",
+                    )
+                ]
+            )
+        )
+
+        result = await invocation.definition.handler(
+            invocation,
+            {
+                "agent_registry": agent_registry,
+                "project_id": "project-1",
+                "tenant_id": "tenant-1",
+            },
+        )
+
+        assert isinstance(result, ReplyResult)
+        assert "reviewer" in result.text
+        agent_registry.list_by_project.assert_awaited_once_with(
+            "project-1",
+            tenant_id="tenant-1",
+        )
 
     async def test_spawn_delegates_to_subagent(
         self, registry_with_builtins: CommandRegistry
