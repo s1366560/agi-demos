@@ -106,6 +106,10 @@ class GeneService:
         Returns:
             The created Gene entity.
         """
+        existing_gene = await self._gene_repo.find_by_slug(slug)
+        if existing_gene is not None:
+            raise ValueError("Gene slug already exists")
+
         gene = Gene(
             name=name,
             slug=slug,
@@ -361,6 +365,10 @@ class GeneService:
         Returns:
             The created Genome entity.
         """
+        existing_genome = await self._genome_repo.find_by_slug(slug)
+        if existing_genome is not None:
+            raise ValueError("Genome slug already exists")
+
         genome = Genome(
             name=name,
             slug=slug,
