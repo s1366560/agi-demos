@@ -1122,7 +1122,9 @@
       },
       "stats": {
         "agents": "{{count}} 个智能体",
-        "enabled": "{{count}} 个已启用"
+        "enabled": "{{count}} 个已启用",
+        "tenantScoped": "{{count}} 个租户范围",
+        "projectScoped": "{{count}} 个项目范围"
       },
       "filters": {
         "all": "全部",
@@ -1140,7 +1142,15 @@
         "disabled": "智能体已禁用",
         "deleted": "智能体定义已删除",
         "createSuccess": "智能体定义已创建",
-        "updateSuccess": "智能体定义已更新"
+        "updateSuccess": "智能体定义已更新",
+        "projectsLoadFailed": "加载项目失败"
+      },
+      "scope": {
+        "tenant": "租户范围"
+      },
+      "scopeFilter": {
+        "label": "按范围筛选",
+        "all": "全部范围"
       },
       "deleteConfirm": {
         "title": "删除 {{name}}？",
@@ -1172,6 +1182,7 @@
         "systemPrompt": "系统提示词",
         "systemPromptRequired": "系统提示词不能为空",
         "systemPromptPlaceholder": "定义智能体的角色、能力和行为...",
+        "scope": "范围",
         "personaFiles": "人格文件",
         "model": "模型",
         "maxRetries": "最大重试次数",
@@ -1711,7 +1722,9 @@
         "createTitle": "创建智能体绑定",
         "agent": "智能体",
         "agentRequired": "请选择智能体",
-        "selectAgent": "选择智能体定义",
+        "selectAgent": "选择租户级智能体定义",
+        "tenantAgentOnly": "渠道绑定只能指向租户级智能体。",
+        "noTenantAgents": "暂无可用的租户级智能体",
         "channelType": "渠道类型",
         "channelId": "渠道 ID",
         "channelIdTooltip": "留空以匹配所选类型的所有渠道",
@@ -1947,6 +1960,8 @@
       "createWithChatPrompt": "帮我创建一个新的技能。请先询问技能目标、触发场景、允许工具、输入输出和交付文件，然后生成符合规范的技能包。",
       "searchPlaceholder": "搜索技能...",
       "statusFilterLabel": "按状态筛选技能",
+      "scopeFilterLabel": "按范围筛选技能",
+      "projectsLoadFailed": "加载项目失败",
       "statusSelectAria": "设置 {{name}} 的状态",
       "allStatus": "所有状态",
       "activeOnly": "仅活跃",
@@ -1960,6 +1975,12 @@
         "all": "全部技能",
         "managed": "我管理的",
         "readonly": "只读来源"
+      },
+      "scope": {
+        "all": "全部范围",
+        "system": "系统",
+        "tenant": "租户",
+        "project": "项目"
       },
       "stats": {
         "total": "总技能数",
@@ -2017,6 +2038,12 @@
         "placeholder": "粘贴带 YAML frontmatter 的 SKILL.md 内容...",
         "zipPlaceholder": "选择 .zip 技能包",
         "zipButton": "浏览",
+        "scopeLabel": "导入范围",
+        "scopeTenant": "租户技能库",
+        "scopeProject": "项目技能库",
+        "projectLabel": "项目",
+        "projectPlaceholder": "选择项目",
+        "projectRequired": "项目范围导入需要选择项目",
         "overwrite": "覆盖同名技能",
         "confirm": "导入",
         "empty": "请先粘贴 SKILL.md 内容",
@@ -2235,6 +2262,8 @@
       "title": "进化观测台",
       "subtitle": "查看租户范围内的技能采集会话、评分覆盖、进化任务和调度策略。",
       "loadFailed": "加载技能进化数据失败",
+      "loadRetryHint": "重试请求以恢复进化观测台。",
+      "staleDataHint": "当前仍显示上一次加载的数据。请重试以刷新最新状态。",
       "empty": "暂无技能进化数据",
       "stats": {
         "captured": "已采集会话",
@@ -2360,7 +2389,12 @@
       },
       "skills": {
         "title": "技能证据",
-        "subtitle": "{{count}} 个技能已有采集样本"
+        "subtitle": "{{count}} 个技能已有采集样本",
+        "empty": "暂未采集到技能证据"
+      },
+      "scope": {
+        "tenant": "租户范围",
+        "project": "项目 {{projectId}}"
       },
       "table": {
         "skill": "技能",
@@ -2500,6 +2534,10 @@
       "createNew": "创建子智能体",
       "fromTemplate": "从模板创建",
       "noTemplates": "暂无可用模板",
+      "importTarget": {
+        "label": "导入目标",
+        "tenant": "租户"
+      },
       "stats": {
         "total": "子智能体总数",
         "enabled": "已启用",
@@ -2530,6 +2568,7 @@
         "deleteConfirm": "确定要删除此子智能体吗？",
         "filesystem": "文件",
         "database": "数据库",
+        "tenantScope": "租户",
         "importToDb": "导入到数据库"
       },
       "empty": {
@@ -2543,7 +2582,8 @@
         "disableSuccess": "子智能体已禁用",
         "deleteSuccess": "子智能体已删除",
         "createFromTemplateSuccess": "已从模板创建子智能体",
-        "importSuccess": "子智能体已导入数据库"
+        "importSuccess": "子智能体已导入数据库",
+        "projectsLoadFailed": "加载项目失败"
       },
       "createSuccess": "子智能体创建成功",
       "updateSuccess": "子智能体更新成功",
@@ -7550,7 +7590,8 @@
       "addError": "添加智能体失败",
       "definitionLabel": "智能体定义",
       "definitionRequired": "请选择智能体",
-      "definitionPlaceholder": "选择智能体定义",
+      "definitionPlaceholder": "选择租户级或当前项目级智能体定义",
+      "noAvailableDefinitions": "暂无可用的租户级或当前项目级智能体",
       "displayNameLabel": "显示名称",
       "displayNamePlaceholder": "在工作区中显示的名称（可选）",
       "descriptionLabel": "描述",

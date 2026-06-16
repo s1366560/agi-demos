@@ -409,6 +409,8 @@ const commonTranslations: Record<string, string> = {
   'tenant.skills.createWithChatPrompt': 'Help me create a new skill.',
   'tenant.skills.searchPlaceholder': 'Search skills...',
   'tenant.skills.statusFilterLabel': 'Filter skills by status',
+  'tenant.skills.scopeFilterLabel': 'Filter skills by scope',
+  'tenant.skills.projectsLoadFailed': 'Failed to load projects',
   'tenant.skills.statusSelectAria': 'Set status for {{name}}',
   'tenant.skills.allStatus': 'All Status',
   'tenant.skills.activeOnly': 'Active Only',
@@ -422,6 +424,10 @@ const commonTranslations: Record<string, string> = {
   'tenant.skills.libraryViews.all': 'All skills',
   'tenant.skills.libraryViews.managed': 'Managed',
   'tenant.skills.libraryViews.readonly': 'Read-only',
+  'tenant.skills.scope.all': 'All scopes',
+  'tenant.skills.scope.system': 'System',
+  'tenant.skills.scope.tenant': 'Tenant',
+  'tenant.skills.scope.project': 'Project',
   'tenant.skills.stats.total': 'Total Skills',
   'tenant.skills.stats.active': 'Active',
   'tenant.skills.stats.visible': 'Visible',
@@ -455,6 +461,22 @@ const commonTranslations: Record<string, string> = {
     'Restore the default system skill behavior for this tenant?',
   'tenant.skills.systemConfig.restoreSuccess': 'System skill default restored',
   'tenant.skills.systemConfig.restoreFailed': 'Failed to restore system skill default',
+  'tenant.skills.import.button': 'Import',
+  'tenant.skills.import.title': 'Import Agent Skill',
+  'tenant.skills.import.placeholder': 'Paste SKILL.md content with YAML frontmatter...',
+  'tenant.skills.import.zipPlaceholder': 'Choose a .zip skill package',
+  'tenant.skills.import.zipButton': 'Browse',
+  'tenant.skills.import.scopeLabel': 'Import scope',
+  'tenant.skills.import.scopeTenant': 'Tenant library',
+  'tenant.skills.import.scopeProject': 'Project library',
+  'tenant.skills.import.projectLabel': 'Project',
+  'tenant.skills.import.projectPlaceholder': 'Select a project',
+  'tenant.skills.import.projectRequired': 'Select a project for project-scoped imports',
+  'tenant.skills.import.overwrite': 'Overwrite existing skill with the same name',
+  'tenant.skills.import.confirm': 'Import',
+  'tenant.skills.import.empty': 'Paste SKILL.md content before importing',
+  'tenant.skills.import.success': 'Skill imported',
+  'tenant.skills.import.failed': 'Skill import failed',
   'tenant.skills.deleteConfirm': 'Are you sure you want to delete this skill?',
   'tenant.skills.deleteSuccess': 'Skill deleted successfully',
   'tenant.skills.enableSuccess': 'Skill enabled',
@@ -613,6 +635,8 @@ const commonTranslations: Record<string, string> = {
   'tenant.agentDefinitions.sort.label': 'Sort agent definitions',
   'tenant.agentDefinitions.modal.namePlaceholder': 'e.g., customer_support',
   'tenant.agentDefinitions.modal.displayNamePlaceholder': 'e.g., Customer Support Agent',
+  'tenant.agentDefinitions.modal.model': 'Model',
+  'tenant.agentDefinitions.modal.fallbackModels': 'Fallback Models',
   'tenant.agentDefinitions.modal.allowedToolsPlaceholder': 'Select tools',
   'tenant.agentDefinitions.modal.allToolsOption': 'All Tools (*)',
   'tenant.agentDefinitions.modal.allowedSkillsPlaceholder': 'Select skills (leave empty for none)',
@@ -620,7 +644,24 @@ const commonTranslations: Record<string, string> = {
     'Select servers (leave empty for none)',
   'tenant.agentDefinitions.modal.workspaceBaseDirPlaceholder': '/path/to/dir',
   'tenant.agentDefinitions.modal.loadingResources': 'Loading resources...',
+  'tenant.agentDefinitions.createNew': 'Create Agent',
+  'tenant.agentDefinitions.scope.tenant': 'Tenant scope',
+  'tenant.agentDefinitions.scopeFilter.label': 'Filter by scope',
+  'tenant.agentDefinitions.scopeFilter.all': 'All scopes',
+  'tenant.agentDefinitions.stats.tenantScoped': '{{count}} tenant',
+  'tenant.agentDefinitions.stats.projectScoped': '{{count}} project',
+  'tenant.agentDefinitions.modal.scope': 'Scope',
+  'tenant.agentBindings.modal.tenantAgentOnly':
+    'Channel bindings can only target tenant-level agents.',
+  'tenant.agentBindings.modal.noTenantAgents': 'No tenant-level agents available',
   'tenant.subagents.sort.label': 'Sort subagents',
+  'tenant.subagents.importTarget.label': 'Import target',
+  'tenant.subagents.importTarget.tenant': 'Tenant',
+  'tenant.subagents.card.tenantScope': 'Tenant',
+  'tenant.subagents.messages.projectsLoadFailed': 'Failed to load projects',
+  'workspaceDetail.agents.definitionPlaceholder':
+    'Select a tenant or current-project agent definition',
+  'workspaceDetail.agents.noAvailableDefinitions': 'No tenant or current-project agents available',
 
   // Tenant Genes
   'tenant.genes.configOverridePlaceholder': '{"key": "value"}',
@@ -1560,6 +1601,13 @@ const commonTranslations: Record<string, string> = {
   'skill.submit.versionHint': 'Use semantic versioning (e.g. 1.0.0)',
   'skill.submit.noteLabel': 'Submission note',
   'skill.submit.notePlaceholder': 'Notes for the reviewer (optional)',
+  'tenant.skillEvolution.loadFailed': 'Failed to load skill evolution data',
+  'tenant.skillEvolution.loadRetryHint': 'Retry the request to restore the evolution dashboard.',
+  'tenant.skillEvolution.staleDataHint':
+    'Showing the last loaded data. Retry to refresh the current state.',
+  'tenant.skillEvolution.skills.empty': 'No skill evidence has been captured yet',
+  'tenant.skillEvolution.scope.tenant': 'Tenant scope',
+  'tenant.skillEvolution.scope.project': 'Project {{projectId}}',
 
   // i18n Wave B — mcp tools
   'mcp.tools.allServers': 'All servers',
@@ -1981,17 +2029,25 @@ const commonTranslations: Record<string, string> = {
   'hitl.authorize': 'Authorize',
 };
 
+function interpolateTranslation(template: string, options?: Record<string, unknown>): string {
+  let result = template;
+  if (options) {
+    Object.keys(options).forEach((optKey) => {
+      result = result.replace(new RegExp(`\\{\\{${optKey}\\}\\}`, 'g'), String(options[optKey]));
+    });
+  }
+  return result;
+}
+
 // Create translation function using inline translations
-function getTranslation(key: string, options?: any): string {
+function getTranslation(key: string, optionsOrDefault?: any, interpolationOptions?: any): string {
+  const hasDefaultValue = typeof optionsOrDefault === 'string';
+  const options = hasDefaultValue ? interpolationOptions : optionsOrDefault;
+  const defaultValue = hasDefaultValue ? optionsOrDefault : optionsOrDefault?.defaultValue;
+
   // First try inline translations
   if (commonTranslations[key]) {
-    let result = commonTranslations[key];
-    if (options && typeof result === 'string') {
-      Object.keys(options).forEach((optKey) => {
-        result = result.replace(new RegExp(`\\{\\{${optKey}\\}\\}`, 'g'), String(options[optKey]));
-      });
-    }
-    return result;
+    return interpolateTranslation(commonTranslations[key], options);
   }
 
   // Fallback: try to navigate nested path in inline object
@@ -2001,21 +2057,11 @@ function getTranslation(key: string, options?: any): string {
     value = value?.[k];
   }
   if (value !== undefined && value !== null) {
-    let result = value;
-    if (options && typeof result === 'string') {
-      Object.keys(options).forEach((optKey) => {
-        result = result.replace(new RegExp(`\\{\\{${optKey}\\}\\}`, 'g'), String(options[optKey]));
-      });
-    }
-    return result;
+    return typeof value === 'string' ? interpolateTranslation(value, options) : value;
   }
 
-  if (options && typeof options.defaultValue === 'string') {
-    let result = options.defaultValue;
-    Object.keys(options).forEach((optKey) => {
-      result = result.replace(new RegExp(`\\{\\{${optKey}\\}\\}`, 'g'), String(options[optKey]));
-    });
-    return result;
+  if (typeof defaultValue === 'string') {
+    return interpolateTranslation(defaultValue, options);
   }
 
   // Return key if translation not found

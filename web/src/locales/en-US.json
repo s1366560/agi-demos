@@ -1058,7 +1058,9 @@
       },
       "stats": {
         "agents": "{{count}} agents",
-        "enabled": "{{count}} enabled"
+        "enabled": "{{count}} enabled",
+        "tenantScoped": "{{count}} tenant",
+        "projectScoped": "{{count}} project"
       },
       "filters": {
         "all": "All",
@@ -1076,7 +1078,15 @@
         "disabled": "Agent disabled",
         "deleted": "Agent definition deleted",
         "createSuccess": "Agent definition created",
-        "updateSuccess": "Agent definition updated"
+        "updateSuccess": "Agent definition updated",
+        "projectsLoadFailed": "Failed to load projects"
+      },
+      "scope": {
+        "tenant": "Tenant scope"
+      },
+      "scopeFilter": {
+        "label": "Filter by scope",
+        "all": "All scopes"
       },
       "deleteConfirm": {
         "title": "Delete {{name}}?",
@@ -1108,6 +1118,7 @@
         "systemPrompt": "System Prompt",
         "systemPromptRequired": "System prompt is required",
         "systemPromptPlaceholder": "Define the agent's role, capabilities, and behavior...",
+        "scope": "Scope",
         "personaFiles": "Persona files",
         "model": "Model",
         "maxRetries": "Max Retries",
@@ -1236,6 +1247,8 @@
       "createWithChatPrompt": "Help me create a new skill. Ask for the goal, trigger scenarios, allowed tools, inputs and outputs, and bundled files before generating a spec-compliant skill package.",
       "searchPlaceholder": "Search skills...",
       "statusFilterLabel": "Filter skills by status",
+      "scopeFilterLabel": "Filter skills by scope",
+      "projectsLoadFailed": "Failed to load projects",
       "statusSelectAria": "Set status for {{name}}",
       "allStatus": "All Status",
       "activeOnly": "Active Only",
@@ -1249,6 +1262,12 @@
         "all": "All skills",
         "managed": "Managed",
         "readonly": "Read-only"
+      },
+      "scope": {
+        "all": "All scopes",
+        "system": "System",
+        "tenant": "Tenant",
+        "project": "Project"
       },
       "stats": {
         "total": "Total Skills",
@@ -1306,6 +1325,12 @@
         "placeholder": "Paste SKILL.md content with YAML frontmatter...",
         "zipPlaceholder": "Choose a .zip skill package",
         "zipButton": "Browse",
+        "scopeLabel": "Import scope",
+        "scopeTenant": "Tenant library",
+        "scopeProject": "Project library",
+        "projectLabel": "Project",
+        "projectPlaceholder": "Select a project",
+        "projectRequired": "Select a project for project-scoped imports",
         "overwrite": "Overwrite existing skill with the same name",
         "confirm": "Import",
         "empty": "Paste SKILL.md content before importing",
@@ -1524,6 +1549,8 @@
       "title": "Evolution Observatory",
       "subtitle": "Inspect captured skill sessions, scoring coverage, evolution jobs, and scheduler policy across the tenant.",
       "loadFailed": "Failed to load skill evolution data",
+      "loadRetryHint": "Retry the request to restore the evolution dashboard.",
+      "staleDataHint": "Showing the last loaded data. Retry to refresh the current state.",
       "empty": "No skill evolution data available",
       "stats": {
         "captured": "Captured sessions",
@@ -1649,7 +1676,12 @@
       },
       "skills": {
         "title": "Skill evidence",
-        "subtitle": "{{count}} skills with captured sessions"
+        "subtitle": "{{count}} skills with captured sessions",
+        "empty": "No skill evidence has been captured yet"
+      },
+      "scope": {
+        "tenant": "Tenant scope",
+        "project": "Project {{projectId}}"
       },
       "table": {
         "skill": "Skill",
@@ -1789,6 +1821,10 @@
       "createNew": "Create SubAgent",
       "fromTemplate": "From Template",
       "noTemplates": "No templates available",
+      "importTarget": {
+        "label": "Import target",
+        "tenant": "Tenant"
+      },
       "stats": {
         "total": "Total SubAgents",
         "enabled": "Active",
@@ -1819,6 +1855,7 @@
         "deleteConfirm": "Delete this SubAgent?",
         "filesystem": "File",
         "database": "DB",
+        "tenantScope": "Tenant",
         "importToDb": "Import to Database"
       },
       "empty": {
@@ -1832,7 +1869,8 @@
         "disableSuccess": "SubAgent disabled",
         "deleteSuccess": "SubAgent deleted",
         "createFromTemplateSuccess": "SubAgent created from template",
-        "importSuccess": "SubAgent imported to database"
+        "importSuccess": "SubAgent imported to database",
+        "projectsLoadFailed": "Failed to load projects"
       },
       "createSuccess": "SubAgent created successfully",
       "updateSuccess": "SubAgent updated successfully",
@@ -1999,7 +2037,9 @@
         "createTitle": "Create Agent Binding",
         "agent": "Agent",
         "agentRequired": "Please select an agent",
-        "selectAgent": "Select an agent definition",
+        "selectAgent": "Select a tenant-level agent definition",
+        "tenantAgentOnly": "Channel bindings can only target tenant-level agents.",
+        "noTenantAgents": "No tenant-level agents available",
         "channelType": "Channel Type",
         "channelId": "Channel ID",
         "channelIdTooltip": "Leave empty to match all channels of the selected type",
@@ -7527,7 +7567,8 @@
       "addError": "Failed to add agent",
       "definitionLabel": "Agent Definition",
       "definitionRequired": "Please select an agent",
-      "definitionPlaceholder": "Select an agent definition",
+      "definitionPlaceholder": "Select a tenant or current-project agent definition",
+      "noAvailableDefinitions": "No tenant or current-project agents available",
       "displayNameLabel": "Display Name",
       "displayNamePlaceholder": "Name shown in workspace (optional)",
       "descriptionLabel": "Description",
