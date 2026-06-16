@@ -42,6 +42,7 @@ def _build_test_env(agents: list[MagicMock], agent_responses: dict[str, list[str
 
     member_repo = AsyncMock()
     member_repo.find_by_workspace.return_value = []
+    member_repo.find_by_workspace_and_user.return_value = MagicMock(id="member-1")
 
     message_repo = AsyncMock()
 
@@ -89,6 +90,7 @@ def _build_test_env(agents: list[MagicMock], agent_responses: dict[str, list[str
 
     router = WorkspaceMentionRouter(
         agent_repo_factory=lambda db: agent_repo,
+        member_repo_factory=lambda db: member_repo,
         agent_service_factory=lambda db, llm: agent_service,
         message_service_factory=message_service_factory,
         conversation_repo_factory=lambda db: conversation_repo,

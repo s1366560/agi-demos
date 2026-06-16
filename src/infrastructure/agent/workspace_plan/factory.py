@@ -411,10 +411,11 @@ async def _project_supervisor_disposition_to_workspace_task(
 
 def _attempt_candidate_evidence_refs(attempt: WorkspaceTaskSessionAttemptModel) -> list[str]:
     refs: list[str] = []
-    for raw_values in (
+    candidate_groups: tuple[object, object] = (
         attempt.candidate_artifacts_json,
         attempt.candidate_verifications_json,
-    ):
+    )
+    for raw_values in candidate_groups:
         if not isinstance(raw_values, list):
             continue
         for raw_value in raw_values:

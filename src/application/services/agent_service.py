@@ -719,8 +719,6 @@ class AgentService(AgentServicePort):
                 conversation_id=conversation_id, message_id=message_id
             )
             for me in msg_events:
-                if not isinstance(me.event_data, dict):
-                    continue
                 content = str(me.event_data.get("content", "")).strip()
                 if not content:
                     continue

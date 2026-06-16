@@ -8,7 +8,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from src.domain.events.agent_events import SubAgentAnnounceRetryEvent
 from src.domain.model.agent.announce_config import AnnounceConfig
@@ -115,7 +115,7 @@ class AnnounceService:
             try:
                 await self._redis.xadd(
                     stream_key,
-                    cast("dict[Any, Any]", {"data": json.dumps(message_data, default=str)}),
+                    {"data": json.dumps(message_data, default=str)},
                 )
                 logger.info(
                     "Published announce: agent=%s child_session=%s parent_session=%s success=%s",

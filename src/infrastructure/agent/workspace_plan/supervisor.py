@@ -2964,8 +2964,6 @@ def _should_request_pipeline_from_report(node: PlanNode, report: VerificationRep
 
 def _platform_pipeline_known_good_commit_ref_from_report(report: VerificationReport) -> str | None:
     summary = report.summary()
-    if not isinstance(summary, str):
-        return None
     normalized = summary.lower()
     if not (
         "missing harness-native ci pipeline evidence" in normalized
@@ -3964,8 +3962,6 @@ def _supervisor_decision_allows_human_block(
     if decision.event_payload.get("human_required") is True:
         return True
     for item in decision.feedback_items:
-        if not isinstance(item, Mapping):
-            continue
         target_layer = str(item.get("target_layer") or "").strip()
         recommended_action = str(item.get("recommended_action") or "").strip()
         next_action = str(item.get("next_action") or "").strip()

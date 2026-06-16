@@ -482,13 +482,18 @@ async def _load_current_root_progress_children(
         None,
     )
     if current_plan_children_loader is not None:
-        maybe_current_plan_children = current_plan_children_loader(workspace_id, root_task_id)
+        maybe_current_plan_children: object = current_plan_children_loader(
+            workspace_id, root_task_id
+        )
+        current_plan_children: object = []
         if inspect.isawaitable(maybe_current_plan_children):
             current_plan_children = await maybe_current_plan_children
-        else:
-            current_plan_children = []
-        if current_plan_children:
-            return current_plan_children
+        if isinstance(current_plan_children, list):
+            typed_current_plan_children = [
+                child for child in current_plan_children if isinstance(child, WorkspaceTask)
+            ]
+            if typed_current_plan_children:
+                return typed_current_plan_children
     return select_root_progress_child_tasks(
         await task_repo.find_by_root_goal_task_id(workspace_id, root_task_id)
     )

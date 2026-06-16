@@ -708,7 +708,7 @@ class _ComposeTaggedValue:
     value: object
 
 
-class _ComposeLoader(yaml.SafeLoader):
+class _ComposeLoader(yaml.SafeLoader):  # type: ignore[misc]
     """YAML loader that preserves Compose merge control tags."""
 
 
