@@ -13,6 +13,7 @@ from src.application.schemas.gene_schemas import (
     GeneUpdate,
     GenomeCreate,
 )
+from src.domain.model.gene.enums import EvolutionEventType
 from src.infrastructure.adapters.primary.web.routers import genes
 
 
@@ -25,6 +26,9 @@ class _FailingGeneService:
 
     async def get_gene(self, *_args: object, **_kwargs: object) -> object | None:
         return None
+
+    async def create_evolution_event(self, **_kwargs: object) -> object:
+        raise AssertionError("create_evolution_event should not run before access checks")
 
     async def create_genome(self, **_kwargs: object) -> object:
         raise ValueError("genome slug secret-genome already exists")
@@ -48,9 +52,37 @@ class _FailingGeneService:
         raise PermissionError("review secret denied")
 
 
+class _InstanceService:
+    async def get_instance(self, instance_id: str) -> object | None:
+        if instance_id == "missing-instance":
+            return None
+        tenant_id = "tenant-2" if instance_id == "foreign-instance" else "tenant-1"
+        return SimpleNamespace(id=instance_id, tenant_id=tenant_id)
+
+
 class _Container:
     def gene_service(self) -> _FailingGeneService:
         return _FailingGeneService()
+
+    def instance_service(self) -> _InstanceService:
+        return _InstanceService()
+
+
+class _EvolutionAccessGeneService(_FailingGeneService):
+    async def get_gene(self, gene_id: str, *_args: object, **_kwargs: object) -> object | None:
+        if gene_id == "missing-gene":
+            return None
+        tenant_id = "tenant-2" if gene_id == "foreign-gene" else "tenant-1"
+        return SimpleNamespace(id=gene_id, tenant_id=tenant_id)
+
+    async def get_evolution_event(self, event_id: str) -> object | None:
+        instance_id = "foreign-instance" if event_id == "foreign-event" else "instance-1"
+        return SimpleNamespace(instance_id=instance_id)
+
+
+class _EvolutionAccessContainer(_Container):
+    def gene_service(self) -> _EvolutionAccessGeneService:
+        return _EvolutionAccessGeneService()
 
 
 @pytest.fixture(autouse=True)
@@ -169,11 +201,110 @@ async def test_list_evolution_events_sanitizes_value_errors() -> None:
 
 
 @pytest.mark.unit
+async def test_list_evolution_events_hides_foreign_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _EvolutionAccessContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.list_evolution_events(
+            request=SimpleNamespace(),
+            instance_id="foreign-instance",
+            gene_id=None,
+            event_type=None,
+            page=1,
+            page_size=20,
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Evolution event not found"
+
+
+@pytest.mark.unit
+async def test_list_evolution_events_hides_foreign_gene(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _EvolutionAccessContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.list_evolution_events(
+            request=SimpleNamespace(),
+            instance_id=None,
+            gene_id="foreign-gene",
+            event_type=None,
+            page=1,
+            page_size=20,
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Gene not found"
+
+
+@pytest.mark.unit
+async def test_create_evolution_event_hides_foreign_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _EvolutionAccessContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.create_evolution_event(
+            request=SimpleNamespace(),
+            data=genes.EvolutionEventCreateRequest(
+                instance_id="foreign-instance",
+                event_type=EvolutionEventType.learned,
+            ),
+            tenant_id="tenant-1",
+            db=SimpleNamespace(commit=None),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Evolution event not found"
+
+
+@pytest.mark.unit
 async def test_get_evolution_event_sanitizes_missing_event_id() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.get_evolution_event(
             request=SimpleNamespace(),
             event_id="event-secret",
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Evolution event not found"
+
+
+@pytest.mark.unit
+async def test_get_evolution_event_hides_foreign_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _EvolutionAccessContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.get_evolution_event(
+            request=SimpleNamespace(),
+            event_id="foreign-event",
             tenant_id="tenant-1",
             db=SimpleNamespace(),
         )

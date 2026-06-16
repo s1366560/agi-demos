@@ -6,7 +6,7 @@ This is separate from CyberGenes (workspace-scoped) -- this is tenant-scoped mar
 """
 
 import logging
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -50,6 +50,19 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/genes", tags=["Genes"])
+
+
+# ---------------------------------------------------------------------------
+# Local typing helpers
+# ---------------------------------------------------------------------------
+
+
+class _TenantScopedEntity(Protocol):
+    tenant_id: str | None
+
+
+class _GeneLookupService(Protocol):
+    async def get_gene(self, gene_id: str) -> _TenantScopedEntity | None: ...
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +229,28 @@ def _evolution_event_response(event: EvolutionEvent) -> EvolutionEventResponse:
         status=_optional_str(details.get("status")) or "completed",
         created_at=event.created_at.isoformat(),
     )
+
+
+async def _ensure_instance_tenant_access(
+    container: DIContainer,
+    *,
+    instance_id: str,
+    tenant_id: str,
+) -> None:
+    instance = await container.instance_service().get_instance(instance_id)
+    if instance is None or instance.tenant_id != tenant_id:
+        raise _evolution_event_not_found_error()
+
+
+async def _ensure_gene_tenant_access(
+    service: _GeneLookupService,
+    *,
+    gene_id: str,
+    tenant_id: str,
+) -> None:
+    gene = await service.get_gene(gene_id)
+    if gene is None or gene.tenant_id != tenant_id:
+        raise _gene_not_found_error()
 
 
 # ---------------------------------------------------------------------------
@@ -780,6 +815,18 @@ async def list_evolution_events(
     service = container.gene_service()
     offset = (page - 1) * page_size
     try:
+        if instance_id:
+            await _ensure_instance_tenant_access(
+                container,
+                instance_id=instance_id,
+                tenant_id=tenant_id,
+            )
+        if gene_id:
+            await _ensure_gene_tenant_access(
+                service,
+                gene_id=gene_id,
+                tenant_id=tenant_id,
+            )
         events = await service.list_evolution_events(
             instance_id=instance_id,
             gene_id=gene_id,
@@ -813,6 +860,17 @@ async def create_evolution_event(
     """Create an evolution event record."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
+    await _ensure_instance_tenant_access(
+        container,
+        instance_id=data.instance_id,
+        tenant_id=tenant_id,
+    )
+    if data.gene_id:
+        await _ensure_gene_tenant_access(
+            service,
+            gene_id=data.gene_id,
+            tenant_id=tenant_id,
+        )
     event = await service.create_evolution_event(
         instance_id=data.instance_id,
         gene_id=data.gene_id,
@@ -845,6 +903,11 @@ async def get_evolution_event(
     event = await service.get_evolution_event(event_id)
     if not event:
         raise _evolution_event_not_found_error()
+    await _ensure_instance_tenant_access(
+        container,
+        instance_id=event.instance_id,
+        tenant_id=tenant_id,
+    )
     return _evolution_event_response(event)
 
 
