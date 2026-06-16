@@ -476,9 +476,21 @@ class _MissingContractTurnRunner:
 class _WorkspaceServiceStub:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
+        self.role_checks: list[tuple[str, str, object]] = []
 
     async def get_workspace(self, *, workspace_id: str, actor_user_id: str) -> object:
         self.calls.append((workspace_id, actor_user_id))
+        return object()
+
+    async def _require_minimum_role(
+        self,
+        *,
+        workspace_id: str,
+        user_id: str,
+        minimum: object,
+        error_message: str | None = None,
+    ) -> object:
+        self.role_checks.append((workspace_id, user_id, minimum))
         return object()
 
 
@@ -934,6 +946,9 @@ async def test_kickoff_worker_and_snapshot_api_flow_end_to_end(
     )
 
     assert workspace_service.calls == [("ws-abc", "bridge-user-1")]
+    assert workspace_service.role_checks == [
+        ("ws-abc", "bridge-user-1", workspace_plans.WorkspaceRole.EDITOR)
+    ]
     assert snapshot.plan is not None
     leaf_nodes = [node for node in snapshot.plan.nodes if node.kind in {"task", "verify"}]
     assert leaf_nodes
