@@ -38,7 +38,7 @@ export const GenomeDetail: React.FC = () => {
     };
   }, [genomeId, getGenome, listGenes, setCurrentGenome, clearError]);
 
-  const genomeGenes = genes.filter((g) => genome?.gene_ids.includes(g.id));
+  const genomeGenes = genes.filter((g) => genome?.gene_slugs.includes(g.slug));
 
   if (loading && !genome) {
     return (
@@ -131,13 +131,13 @@ export const GenomeDetail: React.FC = () => {
         )}
       </Card>
 
-      {Object.keys(genome.config).length > 0 && (
+      {Object.keys(genome.config_override).length > 0 && (
         <Card
           title={t('tenant.genomeDetail.configTitle', 'Configuration')}
           className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
         >
           <pre className="bg-slate-50 dark:bg-slate-900 p-4 rounded overflow-auto text-xs">
-            {JSON.stringify(genome.config, null, 2)}
+            {JSON.stringify(genome.config_override, null, 2)}
           </pre>
         </Card>
       )}

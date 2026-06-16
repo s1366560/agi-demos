@@ -4,20 +4,37 @@ const BASE_URL = '/genes';
 
 export interface GeneCreate {
   name: string;
+  slug: string;
+  tenant_id?: string | null;
   description?: string | null;
+  short_description?: string | null;
   category?: string | null;
-  version: string;
-  manifest: Record<string, unknown>;
+  version?: string;
+  source?: string;
+  source_ref?: string | null;
+  icon?: string | null;
+  manifest?: Record<string, unknown>;
+  dependencies?: string[];
+  synergies?: string[];
+  parent_gene_id?: string | null;
   visibility?: string;
   tags?: string[];
 }
 
 export interface GeneUpdate {
   name?: string;
+  slug?: string;
   description?: string | null;
+  short_description?: string | null;
   category?: string | null;
   version?: string;
+  source?: string;
+  source_ref?: string | null;
+  icon?: string | null;
   manifest?: Record<string, unknown>;
+  dependencies?: string[];
+  synergies?: string[];
+  parent_gene_id?: string | null;
   visibility?: string;
   tags?: string[];
 }
@@ -25,15 +42,29 @@ export interface GeneUpdate {
 export interface GeneResponse {
   id: string;
   name: string;
+  slug: string;
+  tenant_id: string | null;
   description: string | null;
+  short_description: string | null;
   category: string | null;
   version: string;
+  source: string;
+  source_ref: string | null;
+  icon: string | null;
   manifest: Record<string, unknown>;
+  dependencies: string[];
+  synergies: string[];
+  parent_gene_id: string | null;
   visibility: string;
   tags: string[];
-  author_id: string | null;
-  download_count: number;
+  install_count: number;
   avg_rating: number | null;
+  effectiveness_score: number | null;
+  is_featured: boolean;
+  review_status: string | null;
+  is_published: boolean;
+  created_by: string | null;
+  created_by_instance_id: string | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -47,29 +78,43 @@ export interface GeneListResponse {
 
 export interface GenomeCreate {
   name: string;
+  slug: string;
+  tenant_id?: string | null;
   description?: string | null;
-  gene_ids: string[];
-  config?: Record<string, unknown>;
+  short_description?: string | null;
+  icon?: string | null;
+  gene_slugs?: string[];
+  config_override?: Record<string, unknown>;
   visibility?: string;
 }
 
 export interface GenomeUpdate {
   name?: string;
+  slug?: string;
   description?: string | null;
-  gene_ids?: string[];
-  config?: Record<string, unknown>;
+  short_description?: string | null;
+  icon?: string | null;
+  gene_slugs?: string[];
+  config_override?: Record<string, unknown>;
   visibility?: string;
 }
 
 export interface GenomeResponse {
   id: string;
   name: string;
+  slug: string;
+  tenant_id: string | null;
   description: string | null;
-  gene_ids: string[];
-  config: Record<string, unknown>;
+  short_description: string | null;
+  icon: string | null;
+  gene_slugs: string[];
+  config_override: Record<string, unknown>;
   visibility: string;
-  author_id: string | null;
+  install_count: number;
   avg_rating: number | null;
+  is_featured: boolean;
+  is_published: boolean;
+  created_by: string | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -138,20 +183,27 @@ export interface InstanceGeneListResponse {
 
 export interface EvolutionEventCreate {
   instance_id: string;
-  gene_id: string;
+  gene_id?: string | null;
+  genome_id?: string | null;
   event_type: string;
   from_version?: string | null;
   to_version?: string | null;
   trigger?: string | null;
   payload?: Record<string, unknown>;
   status?: string;
+  gene_name?: string;
+  gene_slug?: string | null;
 }
 
 export interface EvolutionEventResponse {
   id: string;
   instance_id: string;
-  gene_id: string;
+  gene_id: string | null;
+  genome_id: string | null;
   event_type: string;
+  gene_name: string;
+  gene_slug: string | null;
+  details: Record<string, unknown>;
   from_version: string | null;
   to_version: string | null;
   trigger: string | null;
@@ -165,6 +217,36 @@ export interface EvolutionEventListResponse {
   total: number;
   page: number;
   page_size: number;
+}
+
+export type EvolutionEventType =
+  | 'learned'
+  | 'forgot'
+  | 'upgraded'
+  | 'created_variant'
+  | 'installed_genome'
+  | 'uninstalled_genome'
+  | 'simplified';
+
+export interface GeneListParams {
+  page?: number;
+  page_size?: number;
+  category?: string;
+  search?: string;
+  visibility?: string;
+  is_published?: boolean;
+}
+
+export interface GenomeListParams {
+  page?: number;
+  page_size?: number;
+  is_published?: boolean;
+}
+
+export interface EvolutionEventListParams {
+  page?: number;
+  page_size?: number;
+  event_type?: EvolutionEventType;
 }
 
 export interface GeneReview {
@@ -187,14 +269,8 @@ export interface GeneReviewListResponse {
 }
 
 export const geneMarketService = {
-  listGenes: (params?: {
-    page?: number;
-    page_size?: number;
-    category?: string;
-    search?: string;
-    visibility?: string;
-    is_published?: boolean;
-  }) => httpClient.get<GeneListResponse>(`${BASE_URL}/`, { params }),
+  listGenes: (params?: GeneListParams) =>
+    httpClient.get<GeneListResponse>(`${BASE_URL}/`, { params }),
 
   createGene: (data: GeneCreate) => httpClient.post<GeneResponse>(`${BASE_URL}/`, data),
 
@@ -205,7 +281,7 @@ export const geneMarketService = {
 
   deleteGene: (id: string) => httpClient.delete(`${BASE_URL}/${id}`),
 
-  listGenomes: (params?: { page?: number; page_size?: number }) =>
+  listGenomes: (params?: GenomeListParams) =>
     httpClient.get<GenomeListResponse>(`${BASE_URL}/genomes`, { params }),
 
   createGenome: (data: GenomeCreate) =>
@@ -239,12 +315,12 @@ export const geneMarketService = {
   rateGenome: (genomeId: string, data: GenomeRatingCreate) =>
     httpClient.post<GenomeRatingResponse>(`${BASE_URL}/genomes/${genomeId}/ratings`, data),
 
-  listEvolutionEvents: (instanceId: string, params?: { page?: number; page_size?: number }) =>
+  listEvolutionEvents: (instanceId: string, params?: EvolutionEventListParams) =>
     httpClient.get<EvolutionEventListResponse>(`${BASE_URL}/evolution`, {
       params: { instance_id: instanceId, ...params },
     }),
 
-  listGeneEvolutionEvents: (geneId: string, params?: { page?: number; page_size?: number }) =>
+  listGeneEvolutionEvents: (geneId: string, params?: EvolutionEventListParams) =>
     httpClient.get<EvolutionEventListResponse>(`${BASE_URL}/evolution`, {
       params: { gene_id: geneId, ...params },
     }),

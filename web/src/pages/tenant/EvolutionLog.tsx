@@ -18,26 +18,47 @@ import {
 
 import { formatDate } from './utils/instanceUtils';
 
+import type {
+  EvolutionEventListParams,
+  EvolutionEventType,
+} from '../../services/geneMarketService';
 import type { TFunction } from 'i18next';
 
 const { Title, Text } = Typography;
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
-  installed: 'green',
-  uninstalled: 'red',
+  learned: 'green',
+  forgot: 'red',
   upgraded: 'blue',
-  downgraded: 'orange',
-  config_changed: 'purple',
-  error: 'red',
+  created_variant: 'purple',
+  installed_genome: 'cyan',
+  uninstalled_genome: 'orange',
+  simplified: 'geekblue',
 };
+
+const EVENT_TYPE_OPTIONS: EvolutionEventType[] = [
+  'learned',
+  'forgot',
+  'upgraded',
+  'created_variant',
+  'installed_genome',
+  'uninstalled_genome',
+  'simplified',
+];
 
 const getEventColor = (eventType: string): string => {
   return EVENT_TYPE_COLORS[eventType] ?? 'default';
 };
 
 const getEventTypeLabel = (t: TFunction, type: string) => {
-  if (type === 'config_changed') return t('tenant.evolution.types.configChanged', 'Config Changed');
   return t(`tenant.evolution.types.${type}`, type);
+};
+
+const getStatusBadge = (status: string): 'success' | 'error' | 'processing' | 'default' => {
+  if (status === 'completed' || status === 'success') return 'success';
+  if (status === 'pending' || status === 'running') return 'processing';
+  if (status === 'failed' || status === 'error') return 'error';
+  return 'default';
 };
 
 export const EvolutionLog: React.FC = () => {
@@ -53,11 +74,11 @@ export const EvolutionLog: React.FC = () => {
 
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
-  const [eventTypeFilter, setEventTypeFilter] = useState<string | undefined>(undefined);
+  const [eventTypeFilter, setEventTypeFilter] = useState<EvolutionEventType | undefined>(undefined);
 
   const fetchEvents = useCallback(() => {
     if (!instanceId) return;
-    const params: Record<string, unknown> = { page, page_size: pageSize };
+    const params: EvolutionEventListParams = { page, page_size: pageSize };
     if (eventTypeFilter) {
       params.event_type = eventTypeFilter;
     }
@@ -100,21 +121,14 @@ export const EvolutionLog: React.FC = () => {
           placeholder={t('tenant.evolution.filterByType', 'Filter by event type')}
           value={eventTypeFilter}
           onChange={(val: string | undefined) => {
-            setEventTypeFilter(val);
+            setEventTypeFilter(val as EvolutionEventType | undefined);
             setPage(1);
           }}
           className="w-48"
-          options={[
-            { label: t('tenant.evolution.types.installed', 'Installed'), value: 'installed' },
-            { label: t('tenant.evolution.types.uninstalled', 'Uninstalled'), value: 'uninstalled' },
-            { label: t('tenant.evolution.types.upgraded', 'Upgraded'), value: 'upgraded' },
-            { label: t('tenant.evolution.types.downgraded', 'Downgraded'), value: 'downgraded' },
-            {
-              label: t('tenant.evolution.types.configChanged', 'Config Changed'),
-              value: 'config_changed',
-            },
-            { label: t('tenant.evolution.types.error', 'Error'), value: 'error' },
-          ]}
+          options={EVENT_TYPE_OPTIONS.map((value) => ({
+            label: getEventTypeLabel(t, value),
+            value,
+          }))}
         />
       </div>
 
@@ -140,11 +154,11 @@ export const EvolutionLog: React.FC = () => {
                       <Tag color={getEventColor(evt.event_type)}>
                         {getEventTypeLabel(t, evt.event_type)}
                       </Tag>
-                      <Badge
-                        status={evt.status === 'success' ? 'success' : 'error'}
-                        text={evt.status}
-                      />
+                      <Badge status={getStatusBadge(evt.status)} text={evt.status} />
                     </div>
+                    {(evt.gene_name || evt.gene_slug) && (
+                      <Text className="text-sm">{evt.gene_name || evt.gene_slug}</Text>
+                    )}
                     <Text type="secondary" className="text-xs">
                       {formatDate(evt.created_at)}
                     </Text>

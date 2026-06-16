@@ -17,6 +17,9 @@ import type {
   GeneRatingCreate,
   GenomeRatingCreate,
   EvolutionEventCreate,
+  GeneListParams,
+  GenomeListParams,
+  EvolutionEventListParams,
   GeneReview,
   CreateReviewRequest,
 } from '../services/geneMarketService';
@@ -65,14 +68,14 @@ interface GeneMarketState {
   reviewsLoading: boolean;
 
   // Actions - Gene CRUD
-  listGenes: (params?: Record<string, unknown>) => Promise<void>;
+  listGenes: (params?: GeneListParams) => Promise<void>;
   getGene: (id: string) => Promise<GeneResponse>;
   createGene: (data: GeneCreate) => Promise<GeneResponse>;
   updateGene: (id: string, data: GeneUpdate) => Promise<GeneResponse>;
   deleteGene: (id: string) => Promise<void>;
 
   // Actions - Genome CRUD
-  listGenomes: (params?: Record<string, unknown>) => Promise<void>;
+  listGenomes: (params?: GenomeListParams) => Promise<void>;
   getGenome: (id: string) => Promise<GenomeResponse>;
   createGenome: (data: GenomeCreate) => Promise<GenomeResponse>;
   updateGenome: (id: string, data: GenomeUpdate) => Promise<GenomeResponse>;
@@ -93,8 +96,8 @@ interface GeneMarketState {
   rateGenome: (genomeId: string, data: GenomeRatingCreate) => Promise<void>;
 
   // Actions - Evolution
-  listEvolutionEvents: (instanceId: string, params?: Record<string, unknown>) => Promise<void>;
-  listGeneEvolutionEvents: (geneId: string, params?: Record<string, unknown>) => Promise<void>;
+  listEvolutionEvents: (instanceId: string, params?: EvolutionEventListParams) => Promise<void>;
+  listGeneEvolutionEvents: (geneId: string, params?: EvolutionEventListParams) => Promise<void>;
   getEvolutionEvent: (id: string) => Promise<EvolutionEventResponse>;
   createEvolutionEvent: (data: EvolutionEventCreate) => Promise<EvolutionEventResponse>;
 

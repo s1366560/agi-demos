@@ -148,7 +148,7 @@ export const GeneMarket: FC = () => {
           <div className="flex justify-between items-center text-sm text-slate-500">
             <div>
               <Download size={14} className="mr-1 align-text-bottom" />
-              {gene.download_count}
+              {gene.install_count}
             </div>
             {renderStars(gene.avg_rating, 0)}
           </div>
@@ -178,7 +178,7 @@ export const GeneMarket: FC = () => {
 
           <div className="mb-4 flex gap-2">
             <Tag color="purple">
-              {genome.gene_ids.length} {t('tenant.genes.genesCount')}
+              {genome.gene_slugs.length} {t('tenant.genes.genesCount')}
             </Tag>
           </div>
 

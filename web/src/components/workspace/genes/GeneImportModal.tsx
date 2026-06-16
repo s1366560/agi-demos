@@ -172,7 +172,7 @@ export const GeneImportModal: React.FC<GeneImportModalProps> = ({ open, onCancel
                         )}
                       </div>
                       <div className="shrink-0 text-xs text-slate-400">
-                        <span>↓ {gene.download_count}</span>
+                        <span>↓ {gene.install_count}</span>
                       </div>
                     </div>
                   </button>

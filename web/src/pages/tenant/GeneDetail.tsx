@@ -281,7 +281,7 @@ export const GeneDetail: FC = () => {
             <div className="flex items-center justify-center gap-2">
               <Download className="w-5 h-5 text-blue-500" />
               <Title level={3} className="!mb-0">
-                {currentGene.download_count || 0}
+                {currentGene.install_count || 0}
               </Title>
             </div>
           </Space>

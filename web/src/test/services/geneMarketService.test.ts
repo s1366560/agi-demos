@@ -42,4 +42,63 @@ describe('geneMarketService', () => {
       params: { gene_id: 'gene-1', page: 2, page_size: 10 },
     });
   });
+
+  it('creates genes with the backend slug-based contract', async () => {
+    mockHttpClient.post.mockResolvedValue({ id: 'gene-1' });
+
+    await geneMarketService.createGene({
+      name: 'Code Review',
+      slug: 'code-review',
+      short_description: 'Review code changes',
+      manifest: { tools: ['lint'] },
+      dependencies: ['quality-base'],
+      synergies: ['test-writer'],
+    });
+
+    expect(mockHttpClient.post).toHaveBeenCalledWith('/genes/', {
+      name: 'Code Review',
+      slug: 'code-review',
+      short_description: 'Review code changes',
+      manifest: { tools: ['lint'] },
+      dependencies: ['quality-base'],
+      synergies: ['test-writer'],
+    });
+  });
+
+  it('creates genomes with gene slugs and config overrides', async () => {
+    mockHttpClient.post.mockResolvedValue({ id: 'genome-1' });
+
+    await geneMarketService.createGenome({
+      name: 'Review Pack',
+      slug: 'review-pack',
+      gene_slugs: ['code-review', 'test-writer'],
+      config_override: { 'code-review': { strict: true } },
+    });
+
+    expect(mockHttpClient.post).toHaveBeenCalledWith('/genes/genomes', {
+      name: 'Review Pack',
+      slug: 'review-pack',
+      gene_slugs: ['code-review', 'test-writer'],
+      config_override: { 'code-review': { strict: true } },
+    });
+  });
+
+  it('lists instance evolution events with backend event_type filters', async () => {
+    mockHttpClient.get.mockResolvedValue({ events: [], total: 0, page: 1, page_size: 20 });
+
+    await geneMarketService.listEvolutionEvents('instance-1', {
+      page: 1,
+      page_size: 20,
+      event_type: 'learned',
+    });
+
+    expect(mockHttpClient.get).toHaveBeenCalledWith('/genes/evolution', {
+      params: {
+        instance_id: 'instance-1',
+        page: 1,
+        page_size: 20,
+        event_type: 'learned',
+      },
+    });
+  });
 });
