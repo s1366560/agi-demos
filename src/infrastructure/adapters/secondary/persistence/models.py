@@ -2185,6 +2185,8 @@ class AgentDefinitionModel(Base):
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     session_policy: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     delegate_config: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    spawn_policy: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    tool_policy: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True

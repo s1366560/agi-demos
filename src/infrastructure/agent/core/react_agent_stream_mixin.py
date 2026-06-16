@@ -128,6 +128,72 @@ def _workspace_runtime_limit_overrides(
     return limits
 
 
+def _selected_agent_can_spawn(selected_agent: Any | None) -> bool:
+    if selected_agent is None:
+        return True
+    return bool(getattr(selected_agent, "can_spawn", True))
+
+
+def _selected_agent_spawn_limits(
+    selected_agent: Any | None,
+    *,
+    default_depth: int,
+    default_active_runs: int,
+    default_children_per_requester: int,
+    default_active_runs_per_lineage: int,
+) -> dict[str, int]:
+    spawn_policy = getattr(selected_agent, "spawn_policy", None) if selected_agent is not None else None
+    legacy_depth = getattr(selected_agent, "max_spawn_depth", default_depth)
+    policy_depth = getattr(spawn_policy, "max_depth", legacy_depth)
+    max_depth = min(default_depth, int(policy_depth))
+    max_active_runs = min(
+        default_active_runs,
+        int(getattr(spawn_policy, "max_active_runs", default_active_runs)),
+    )
+    max_children_per_requester = min(
+        default_children_per_requester,
+        int(
+            getattr(
+                spawn_policy,
+                "max_children_per_requester",
+                default_children_per_requester,
+            )
+        ),
+    )
+    return {
+        "max_delegation_depth": max_depth,
+        "max_active_runs": max(1, max_active_runs),
+        "max_active_runs_per_lineage": max(1, min(default_active_runs_per_lineage, max_active_runs)),
+        "max_children_per_requester": max(1, max_children_per_requester),
+    }
+
+
+def _filter_subagents_for_selected_agent_policy(
+    enabled_subagents: list[Any],
+    selected_agent: Any | None,
+) -> list[Any]:
+    spawn_policy = getattr(selected_agent, "spawn_policy", None) if selected_agent is not None else None
+    allowed_subagents = getattr(spawn_policy, "allowed_subagents", None)
+    if allowed_subagents is None:
+        return enabled_subagents
+    allowed = {str(item).strip() for item in allowed_subagents if str(item).strip()}
+    if not allowed:
+        return []
+    return [
+        subagent
+        for subagent in enabled_subagents
+        if any(
+            str(identifier).strip() in allowed
+            for identifier in (
+                getattr(subagent, "id", None),
+                getattr(subagent, "name", None),
+                getattr(subagent, "display_name", None),
+            )
+            if identifier is not None
+        )
+    ]
+
+
 class _StreamAgent(Protocol):
     """Subset of ``ReActAgent`` state used by :class:`StreamMixin`."""
 
@@ -148,6 +214,10 @@ class _StreamAgent(Protocol):
     _tool_provider: Any
     _processor_factory: Any
     _heartbeat_runner: Any
+    _max_subagent_delegation_depth: Any
+    _max_subagent_active_runs: Any
+    _max_subagent_children_per_requester: Any
+    _max_subagent_active_runs_per_lineage: Any
     _skill_mcp_manager: Any
     _skill_mcp_tools: Any
     _enable_subagent_as_tool: Any
@@ -1004,6 +1074,7 @@ class StreamMixin:
         workspace_root_task: Any | None = None,
         leader_agent_id: str | None = None,
         actor_user_id: str | None = None,
+        selected_agent: Any | None = None,
     ) -> list[ToolDefinition]:
         """Inject SubAgent-as-Tool delegation tools when enabled.
 
@@ -1011,9 +1082,34 @@ class StreamMixin:
         """
         if not self.subagents or not self._enable_subagent_as_tool:
             return tools_to_use
+        if not _selected_agent_can_spawn(selected_agent):
+            logger.info(
+                "[ReActAgent] Skipping SubAgent delegation tools because selected agent %s "
+                "cannot spawn",
+                getattr(selected_agent, "id", None),
+            )
+            return tools_to_use
 
-        enabled_subagents = [sa for sa in self.subagents if sa.enabled]
+        enabled_subagents = _filter_subagents_for_selected_agent_policy(
+            [sa for sa in self.subagents if sa.enabled],
+            selected_agent,
+        )
         if not enabled_subagents:
+            return tools_to_use
+        spawn_limits = _selected_agent_spawn_limits(
+            selected_agent,
+            default_depth=self._max_subagent_delegation_depth,
+            default_active_runs=self._max_subagent_active_runs,
+            default_children_per_requester=self._max_subagent_children_per_requester,
+            default_active_runs_per_lineage=self._max_subagent_active_runs_per_lineage,
+        )
+        if spawn_limits["max_delegation_depth"] <= 0:
+            logger.info(
+                "[ReActAgent] Skipping SubAgent delegation tools because selected agent %s "
+                "has max spawn depth %s",
+                getattr(selected_agent, "id", None),
+                spawn_limits["max_delegation_depth"],
+            )
             return tools_to_use
 
         subagent_map = {sa.name: sa for sa in enabled_subagents}
@@ -1242,6 +1338,10 @@ class StreamMixin:
             cancel_callback=_cancel_spawn_callback,
             conversation_id=conversation_id,
             tools_to_use=tools_to_use,
+            max_delegation_depth=spawn_limits["max_delegation_depth"],
+            max_active_runs=spawn_limits["max_active_runs"],
+            max_active_runs_per_lineage=spawn_limits["max_active_runs_per_lineage"],
+            max_children_per_requester=spawn_limits["max_children_per_requester"],
         )
 
         logger.info(
@@ -1264,6 +1364,10 @@ class StreamMixin:
         cancel_callback: Any,
         conversation_id: str,
         tools_to_use: list[ToolDefinition],
+        max_delegation_depth: int | None = None,
+        max_active_runs: int | None = None,
+        max_active_runs_per_lineage: int | None = None,
+        max_children_per_requester: int | None = None,
     ) -> list[ToolDefinition]:
         """Build and append all SubAgent tool definitions to tools list."""
         definitions = self._tool_builder.build_subagent_tool_definitions(
@@ -1275,6 +1379,10 @@ class StreamMixin:
             cancel_callback=cancel_callback,
             conversation_id=conversation_id,
             tools_to_use=tools_to_use,
+            max_delegation_depth=max_delegation_depth,
+            max_active_runs=max_active_runs,
+            max_active_runs_per_lineage=max_active_runs_per_lineage,
+            max_children_per_requester=max_children_per_requester,
         )
         return cast(list[ToolDefinition], definitions)
 
@@ -1682,6 +1790,7 @@ class StreamMixin:
             workspace_root_task=workspace_root_task,
             leader_agent_id=selected_agent.id,
             actor_user_id=user_id,
+            selected_agent=selected_agent,
         )
         tools_to_use = self._filter_tools_by_name_policy(
             tools_to_use,

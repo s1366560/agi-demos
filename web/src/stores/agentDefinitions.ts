@@ -59,7 +59,7 @@ interface AgentDefinitionState {
 
   // Actions - CRUD
   listDefinitions: (params?: {
-    project_id?: string | undefined;
+    project_id?: string | null | undefined;
     enabled_only?: boolean | undefined;
     limit?: number | undefined;
     offset?: number | undefined;
@@ -116,7 +116,10 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
           const { filters } = get();
           const queryParams = {
             ...params,
-            project_id: params.project_id ?? filters.projectId ?? undefined,
+            project_id:
+              params.project_id === null
+                ? undefined
+                : (params.project_id ?? filters.projectId ?? undefined),
             enabled_only: filters.enabled === true ? true : undefined,
           };
           const definitions = await definitionsService.list(queryParams);

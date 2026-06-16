@@ -469,6 +469,24 @@ export const AgentDefinitionDetail: React.FC = () => {
               value={<StringList values={definition.allowed_mcp_servers} />}
             />
             <InfoRow
+              label={t('tenant.agentDefinitions.modal.toolPolicyPrecedence', {
+                defaultValue: 'Tool policy precedence',
+              })}
+              value={definition.tool_policy?.precedence}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.toolPolicyAllow', {
+                defaultValue: 'Tool allow list',
+              })}
+              value={<StringList values={definition.tool_policy?.allow} />}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.toolPolicyDeny', {
+                defaultValue: 'Tool deny list',
+              })}
+              value={<StringList values={definition.tool_policy?.deny} />}
+            />
+            <InfoRow
               label={t('tenant.agentDefinitions.modal.personaFiles', {
                 defaultValue: 'Persona files',
               })}
@@ -556,7 +574,25 @@ export const AgentDefinitionDetail: React.FC = () => {
             />
             <InfoRow
               label={t('tenant.agentDefinitions.modal.maxSpawnDepth')}
-              value={formatNumber(definition.max_spawn_depth)}
+              value={formatNumber(definition.spawn_policy?.max_depth ?? definition.max_spawn_depth)}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.maxActiveRuns', {
+                defaultValue: 'Max active runs',
+              })}
+              value={formatNumber(definition.spawn_policy?.max_active_runs)}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.maxChildrenPerRequester', {
+                defaultValue: 'Max children per requester',
+              })}
+              value={formatNumber(definition.spawn_policy?.max_children_per_requester)}
+            />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.allowedSubagents', {
+                defaultValue: 'Allowed subagents',
+              })}
+              value={<StringList values={definition.spawn_policy?.allowed_subagents} />}
             />
             <InfoRow
               label={t('tenant.agentDefinitions.modal.agentToAgent')}

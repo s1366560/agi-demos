@@ -6,7 +6,13 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.domain.model.agent.agent_source import AgentSource
-from src.infrastructure.adapters.secondary.persistence.models import AgentDefinitionModel
+from src.domain.model.agent.spawn_policy import SpawnPolicy
+from src.domain.model.agent.tool_policy import ToolPolicy, ToolPolicyPrecedence
+from src.infrastructure.adapters.secondary.persistence.models import (
+    AgentDefinitionModel,
+    Project,
+    Tenant,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_agent_registry import (
     SqlAgentRegistryRepository,
 )
@@ -32,6 +38,29 @@ def _make_repo() -> SqlAgentRegistryRepository:
     session = MagicMock()
     session.execute = AsyncMock()
     return SqlAgentRegistryRepository(session)
+
+
+def _agent_model(
+    *,
+    agent_id: str,
+    tenant_id: str,
+    project_id: str | None,
+    name: str,
+) -> AgentDefinitionModel:
+    return AgentDefinitionModel(
+        id=agent_id,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        name=name,
+        display_name=name.replace("-", " ").title(),
+        system_prompt=f"You are {name}.",
+        trigger_description=f"{name} trigger",
+        allowed_tools=[],
+        allowed_skills=[],
+        allowed_mcp_servers=[],
+        source="database",
+        max_iterations=10,
+    )
 
 
 @pytest.mark.unit
@@ -173,6 +202,176 @@ class TestSqlAgentRegistryRepository:
         )
         assert refreshed is not None
         assert refreshed.max_iterations == 42
+
+    @pytest.mark.asyncio
+    async def test_create_round_trips_structured_policies(
+        self,
+        db_session: AsyncSession,
+        test_tenant_db,
+        test_project_db,
+    ) -> None:
+        repo = SqlAgentRegistryRepository(db_session)
+        agent = _build_custom_agent("policy-agent", "policy-agent", test_tenant_db.id)
+        agent.project_id = test_project_db.id
+        agent.spawn_policy = SpawnPolicy(
+            max_depth=1,
+            max_active_runs=3,
+            max_children_per_requester=2,
+            allowed_subagents=frozenset({"coder"}),
+        )
+        agent.tool_policy = ToolPolicy(
+            allow=("read", "grep"),
+            deny=("bash",),
+            precedence=ToolPolicyPrecedence.ALLOW_FIRST,
+        )
+
+        await repo.create(agent)
+        await db_session.commit()
+
+        loaded = await repo.get_by_id(
+            "policy-agent",
+            tenant_id=test_tenant_db.id,
+            project_id=test_project_db.id,
+        )
+
+        assert loaded is not None
+        assert loaded.spawn_policy is not None
+        assert loaded.spawn_policy.max_depth == 1
+        assert loaded.spawn_policy.max_active_runs == 3
+        assert loaded.spawn_policy.max_children_per_requester == 2
+        assert loaded.spawn_policy.allowed_subagents == frozenset({"coder"})
+        assert loaded.tool_policy is not None
+        assert loaded.tool_policy.allow == ("read", "grep")
+        assert loaded.tool_policy.deny == ("bash",)
+        assert loaded.tool_policy.precedence == ToolPolicyPrecedence.ALLOW_FIRST
+
+    @pytest.mark.asyncio
+    async def test_get_by_id_filters_database_agents_by_tenant_and_project(
+        self,
+        db_session: AsyncSession,
+        test_tenant_db,
+        test_project_db,
+        test_user,
+    ) -> None:
+        other_tenant = Tenant(
+            id="other-agent-tenant",
+            name="Other Agent Tenant",
+            slug="other-agent-tenant",
+            owner_id=test_user.id,
+        )
+        other_project = Project(
+            id="other-agent-project",
+            tenant_id=test_tenant_db.id,
+            name="Other Agent Project",
+            owner_id=test_user.id,
+            memory_rules={},
+            graph_config={},
+        )
+        db_session.add_all([other_tenant, other_project])
+        await db_session.flush()
+        db_session.add_all(
+            [
+                _agent_model(
+                    agent_id="tenant-wide-agent",
+                    tenant_id=test_tenant_db.id,
+                    project_id=None,
+                    name="tenant-wide-agent",
+                ),
+                _agent_model(
+                    agent_id="cross-tenant-agent",
+                    tenant_id=other_tenant.id,
+                    project_id=None,
+                    name="cross-tenant-agent",
+                ),
+                _agent_model(
+                    agent_id="wrong-project-agent",
+                    tenant_id=test_tenant_db.id,
+                    project_id=other_project.id,
+                    name="wrong-project-agent",
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        repo = SqlAgentRegistryRepository(db_session)
+
+        assert (
+            await repo.get_by_id(
+                "tenant-wide-agent",
+                tenant_id=test_tenant_db.id,
+                project_id=test_project_db.id,
+            )
+        ) is not None
+        assert (
+            await repo.get_by_id(
+                "cross-tenant-agent",
+                tenant_id=test_tenant_db.id,
+                project_id=test_project_db.id,
+            )
+        ) is None
+        assert (
+            await repo.get_by_id(
+                "wrong-project-agent",
+                tenant_id=test_tenant_db.id,
+                project_id=test_project_db.id,
+            )
+        ) is None
+
+    @pytest.mark.asyncio
+    async def test_list_by_project_filters_database_agents_by_tenant(
+        self,
+        db_session: AsyncSession,
+        test_tenant_db,
+        test_project_db,
+        test_user,
+    ) -> None:
+        other_tenant = Tenant(
+            id="other-list-tenant",
+            name="Other List Tenant",
+            slug="other-list-tenant",
+            owner_id=test_user.id,
+        )
+        db_session.add(other_tenant)
+        await db_session.flush()
+        db_session.add_all(
+            [
+                _agent_model(
+                    agent_id="project-agent",
+                    tenant_id=test_tenant_db.id,
+                    project_id=test_project_db.id,
+                    name="project-agent",
+                ),
+                _agent_model(
+                    agent_id="tenant-agent",
+                    tenant_id=test_tenant_db.id,
+                    project_id=None,
+                    name="tenant-agent",
+                ),
+                _agent_model(
+                    agent_id="cross-project-agent",
+                    tenant_id=other_tenant.id,
+                    project_id=test_project_db.id,
+                    name="cross-project-agent",
+                ),
+                _agent_model(
+                    agent_id="cross-tenant-agent-list",
+                    tenant_id=other_tenant.id,
+                    project_id=None,
+                    name="cross-tenant-agent-list",
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        repo = SqlAgentRegistryRepository(db_session)
+
+        agents = await repo.list_by_project(test_project_db.id, tenant_id=test_tenant_db.id)
+        names = {agent.name for agent in agents}
+
+        assert "project-agent" in names
+        assert "tenant-agent" in names
+        assert "cross-project-agent" not in names
+        assert "cross-tenant-agent-list" not in names
 
     @pytest.mark.asyncio
     async def test_list_excludes_legacy_workspace_scoped_auto_team_agents(

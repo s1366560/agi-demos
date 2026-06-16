@@ -21,12 +21,14 @@ import {
   useToggleDefinitionEnabled,
 } from '../../stores/agentDefinitions';
 import { useUser } from '../../stores/auth';
+import { useProjectStore } from '../../stores/project';
 import { useCurrentTenant } from '../../stores/tenant';
 
 import type { AgentDefinition } from '../../types/multiAgent';
 import type { MenuProps } from 'antd';
 
 type StatusFilter = 'all' | 'enabled' | 'disabled';
+type ScopeFilter = 'all' | 'tenant' | string;
 type SortField = 'name' | 'recent' | 'invocations';
 
 const SORT_FNS: Record<SortField, (a: AgentDefinition, b: AgentDefinition) => number> = {
@@ -56,12 +58,16 @@ export const AgentDefinitions: React.FC = () => {
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('all');
   const [sortField, setSortField] = useState<SortField>('name');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDef, setEditingDef] = useState<AgentDefinition | null>(null);
+  const [createProjectId, setCreateProjectId] = useState<string | null>(null);
 
   const user = useUser();
   const currentTenant = useCurrentTenant();
+  const projects = useProjectStore((state) => state.projects);
+  const listProjects = useProjectStore((state) => state.listProjects);
   const definitions = useDefinitions();
   const filters = useDefinitionFilters();
   const isLoading = useDefinitionLoading();
@@ -74,6 +80,32 @@ export const AgentDefinitions: React.FC = () => {
   const setFilters = useSetDefinitionFilters();
   const clearError = useClearDefinitionError();
   const canManageAgents = canManageTenantAgents(user, currentTenant);
+
+  const projectNameById = useMemo(
+    () => new Map(projects.map((project) => [project.id, project.name])),
+    [projects]
+  );
+  const projectScopeOptions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const project of projects) {
+      ids.add(project.id);
+    }
+    for (const definition of definitions) {
+      if (definition.project_id) {
+        ids.add(definition.project_id);
+      }
+    }
+    return [...ids].map((id) => ({
+      id,
+      name: projectNameById.get(id) ?? id,
+    }));
+  }, [definitions, projectNameById, projects]);
+  const tenantDefinitionCount = useMemo(
+    () => definitions.filter((definition) => definition.project_id === null).length,
+    [definitions]
+  );
+  const projectDefinitionCount = definitions.length - tenantDefinitionCount;
+  const hasActiveFilters = search !== '' || statusFilter !== 'all' || scopeFilter !== 'all';
 
   const listPath = useMemo(() => {
     const segments = location.pathname.split('/').filter(Boolean);
@@ -92,12 +124,43 @@ export const AgentDefinitions: React.FC = () => {
       search,
       enabled: statusFilter === 'all' ? null : statusFilter === 'enabled',
     });
-    return [...filtered].sort(SORT_FNS[sortField]);
-  }, [definitions, filters, search, statusFilter, sortField]);
+    const scoped = filtered.filter((definition) => {
+      if (scopeFilter === 'all') {
+        return true;
+      }
+      if (scopeFilter === 'tenant') {
+        return definition.project_id === null;
+      }
+      return definition.project_id === scopeFilter;
+    });
+    return [...scoped].sort(SORT_FNS[sortField]);
+  }, [definitions, filters, search, statusFilter, scopeFilter, sortField]);
+
+  const getScopeLabel = useCallback(
+    (projectId: string | null): string =>
+      projectId
+        ? (projectNameById.get(projectId) ?? projectId)
+        : t('tenant.agentDefinitions.scope.tenant', { defaultValue: 'Tenant scope' }),
+    [projectNameById, t]
+  );
 
   useEffect(() => {
-    void listDefinitions();
-  }, [listDefinitions]);
+    setFilters({ projectId: null });
+    void listDefinitions({ project_id: null });
+  }, [listDefinitions, setFilters]);
+
+  useEffect(() => {
+    if (!currentTenant?.id) {
+      return;
+    }
+    void listProjects(currentTenant.id, { page_size: 100 }).catch(() => {
+      message.error(
+        t('tenant.agentDefinitions.messages.projectsLoadFailed', {
+          defaultValue: 'Failed to load projects',
+        })
+      );
+    });
+  }, [currentTenant?.id, listProjects, t]);
 
   useEffect(() => {
     setFilters({
@@ -119,11 +182,13 @@ export const AgentDefinitions: React.FC = () => {
 
   const handleCreate = useCallback(() => {
     setEditingDef(null);
+    setCreateProjectId(scopeFilter !== 'all' && scopeFilter !== 'tenant' ? scopeFilter : null);
     setIsModalOpen(true);
-  }, []);
+  }, [scopeFilter]);
 
   const handleEdit = useCallback((def: AgentDefinition) => {
     setEditingDef(def);
+    setCreateProjectId(null);
     setIsModalOpen(true);
   }, []);
 
@@ -166,11 +231,13 @@ export const AgentDefinitions: React.FC = () => {
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
     setEditingDef(null);
+    setCreateProjectId(null);
   }, []);
 
   const handleModalSuccess = useCallback(() => {
     setIsModalOpen(false);
     setEditingDef(null);
+    setCreateProjectId(null);
     void listDefinitions();
   }, [listDefinitions]);
 
@@ -279,6 +346,20 @@ export const AgentDefinitions: React.FC = () => {
             defaultValue: '{{count}} enabled',
           })}
         </span>
+        <span className="text-slate-300 dark:text-slate-600">|</span>
+        <span>
+          {t('tenant.agentDefinitions.stats.tenantScoped', {
+            count: tenantDefinitionCount,
+            defaultValue: '{{count}} tenant',
+          })}
+        </span>
+        <span className="text-slate-300 dark:text-slate-600">|</span>
+        <span>
+          {t('tenant.agentDefinitions.stats.projectScoped', {
+            count: projectDefinitionCount,
+            defaultValue: '{{count}} project',
+          })}
+        </span>
       </div>
 
       {/* Filters */}
@@ -317,6 +398,29 @@ export const AgentDefinitions: React.FC = () => {
             </button>
           ))}
         </div>
+
+        <select
+          aria-label={t('tenant.agentDefinitions.scopeFilter.label', {
+            defaultValue: 'Filter by scope',
+          })}
+          value={scopeFilter}
+          onChange={(e) => {
+            setScopeFilter(e.target.value as ScopeFilter);
+          }}
+          className="px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+        >
+          <option value="all">
+            {t('tenant.agentDefinitions.scopeFilter.all', { defaultValue: 'All scopes' })}
+          </option>
+          <option value="tenant">
+            {t('tenant.agentDefinitions.scope.tenant', { defaultValue: 'Tenant scope' })}
+          </option>
+          {projectScopeOptions.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name}
+            </option>
+          ))}
+        </select>
 
         <select
           aria-label={t('tenant.agentDefinitions.sort.label', {
@@ -363,11 +467,11 @@ export const AgentDefinitions: React.FC = () => {
         <div className="flex flex-col items-center justify-center py-16 text-slate-500 dark:text-slate-400">
           <Bot size={48} className="mb-4 text-slate-300 dark:text-slate-600" />
           <p className="text-lg font-medium">
-            {search || statusFilter !== 'all'
+            {hasActiveFilters
               ? t('tenant.agentDefinitions.noResults', 'No agents match your filters')
               : t('tenant.agentDefinitions.empty', 'No agent definitions yet')}
           </p>
-          {!search && statusFilter === 'all' && canManageAgents && (
+          {!hasActiveFilters && canManageAgents && (
             <button
               type="button"
               onClick={handleCreate}
@@ -446,6 +550,12 @@ export const AgentDefinitions: React.FC = () => {
                 </p>
 
                 <div className="flex flex-wrap gap-1">
+                  <Tag
+                    {...(def.project_id ? { color: 'purple' as const } : {})}
+                    className="max-w-full truncate text-2xs"
+                  >
+                    {getScopeLabel(def.project_id)}
+                  </Tag>
                   {def.model && <Tag className="text-2xs">{def.model}</Tag>}
                   {def.can_spawn && (
                     <Tag color="blue" className="text-2xs">
@@ -493,6 +603,8 @@ export const AgentDefinitions: React.FC = () => {
           onClose={handleModalClose}
           onSuccess={handleModalSuccess}
           definition={editingDef}
+          projectOptions={projectScopeOptions}
+          initialProjectId={createProjectId}
         />
       ) : null}
     </div>

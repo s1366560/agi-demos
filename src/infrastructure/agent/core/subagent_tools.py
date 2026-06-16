@@ -20,6 +20,7 @@ from src.domain.model.agent.agent_role import (
 from src.domain.model.agent.subagent import SubAgent
 
 from .processor import ToolDefinition
+from .subagent_router import subagent_allows_tool
 from .tool_converter import convert_tools
 
 if TYPE_CHECKING:
@@ -99,6 +100,13 @@ class SubAgentToolBuilder:
         role_denied = self._get_role_denied_tools()
         if role_denied:
             filtered_tools = [t for t in filtered_tools if t.name not in role_denied]
+
+        known_tool_names = {tool.name for tool in filtered_tools}
+        filtered_tools = [
+            tool
+            for tool in filtered_tools
+            if subagent_allows_tool(subagent, tool.name, known_tool_names)
+        ]
 
         existing_tool_names = {tool.name for tool in filtered_tools}
         return filtered_tools, existing_tool_names
@@ -404,6 +412,10 @@ class SubAgentToolBuilder:
         cancel_callback: Any,
         conversation_id: str,
         tools_to_use: list[ToolDefinition],
+        max_delegation_depth: int | None = None,
+        max_active_runs: int | None = None,
+        max_active_runs_per_lineage: int | None = None,
+        max_children_per_requester: int | None = None,
     ) -> list[ToolDefinition]:
         """Build and append all SubAgent tool definitions to tools list."""
         from ..tools.define import get_registered_tools
@@ -419,6 +431,25 @@ class SubAgentToolBuilder:
             configure_subagents_control,
         )
 
+        effective_max_delegation_depth = (
+            max_delegation_depth
+            if max_delegation_depth is not None
+            else self.deps.max_subagent_delegation_depth
+        )
+        effective_max_active_runs = (
+            max_active_runs if max_active_runs is not None else self.deps.max_subagent_active_runs
+        )
+        effective_max_active_runs_per_lineage = (
+            max_active_runs_per_lineage
+            if max_active_runs_per_lineage is not None
+            else self.deps.max_subagent_active_runs_per_lineage
+        )
+        effective_max_children_per_requester = (
+            max_children_per_requester
+            if max_children_per_requester is not None
+            else self.deps.max_subagent_children_per_requester
+        )
+
         # Configure decorator-based tool globals for this conversation
         configure_delegate_subagent(
             execute_callback=delegate_callback,
@@ -427,20 +458,20 @@ class SubAgentToolBuilder:
             subagent_names=list(subagent_map.keys()),
             subagent_descriptions=subagent_descriptions,
             delegation_depth=0,
-            max_active_runs=self.deps.max_subagent_active_runs,
+            max_active_runs=effective_max_active_runs,
         )
         configure_session_tools(
             run_registry=self.deps.subagent_run_registry,
             spawn_callback=spawn_callback,
-            max_active_runs=self.deps.max_subagent_active_runs,
+            max_active_runs=effective_max_active_runs,
             subagent_names=list(subagent_map.keys()),
             subagent_descriptions=subagent_descriptions,
             conversation_id=conversation_id,
             requester_session_key=conversation_id,
             delegation_depth=0,
-            max_delegation_depth=(self.deps.max_subagent_delegation_depth),
-            max_active_runs_per_lineage=(self.deps.max_subagent_active_runs_per_lineage),
-            max_children_per_requester=(self.deps.max_subagent_children_per_requester),
+            max_delegation_depth=effective_max_delegation_depth,
+            max_active_runs_per_lineage=effective_max_active_runs_per_lineage,
+            max_children_per_requester=effective_max_children_per_requester,
             visibility_default="tree",
         )
         configure_sessions_overview(
@@ -463,12 +494,12 @@ class SubAgentToolBuilder:
             run_registry=self.deps.subagent_run_registry,
             conversation_id=conversation_id,
             spawn_callback=spawn_callback,
-            max_active_runs=(self.deps.max_subagent_active_runs),
-            max_active_runs_per_lineage=(self.deps.max_subagent_active_runs_per_lineage),
-            max_children_per_requester=(self.deps.max_subagent_children_per_requester),
+            max_active_runs=effective_max_active_runs,
+            max_active_runs_per_lineage=effective_max_active_runs_per_lineage,
+            max_children_per_requester=effective_max_children_per_requester,
             requester_session_key=conversation_id,
             delegation_depth=0,
-            max_delegation_depth=(self.deps.max_subagent_delegation_depth),
+            max_delegation_depth=effective_max_delegation_depth,
         )
         configure_subagents_control(
             run_registry=self.deps.subagent_run_registry,
@@ -477,12 +508,12 @@ class SubAgentToolBuilder:
             subagent_descriptions=subagent_descriptions,
             cancel_callback=cancel_callback,
             restart_callback=spawn_callback,
-            max_active_runs=(self.deps.max_subagent_active_runs),
-            max_active_runs_per_lineage=(self.deps.max_subagent_active_runs_per_lineage),
-            max_children_per_requester=(self.deps.max_subagent_children_per_requester),
+            max_active_runs=effective_max_active_runs,
+            max_active_runs_per_lineage=effective_max_active_runs_per_lineage,
+            max_children_per_requester=effective_max_children_per_requester,
             requester_session_key=conversation_id,
             delegation_depth=0,
-            max_delegation_depth=(self.deps.max_subagent_delegation_depth),
+            max_delegation_depth=effective_max_delegation_depth,
         )
 
         # Look up all @tool_define tools (delegate + session) from the registry

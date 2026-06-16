@@ -70,6 +70,16 @@ class TestToolPolicy:
         policy = ToolPolicy(allow=("shell",), deny=("shell",))
         assert policy.is_allowed("shell") is False
 
+    def test_deny_first_restricts_unlisted_when_allow_present(self) -> None:
+        policy = ToolPolicy(allow=("read",), deny=("shell",))
+        assert policy.is_allowed("read") is True
+        assert policy.is_allowed("search") is False
+
+    def test_deny_first_wildcard_allow_keeps_unlisted_open(self) -> None:
+        policy = ToolPolicy(allow=("*",), deny=("shell",))
+        assert policy.is_allowed("search") is True
+        assert policy.is_allowed("shell") is False
+
     def test_deny_first_empty_allows_everything(self) -> None:
         policy = ToolPolicy()
         assert policy.is_allowed("anything") is True
@@ -81,6 +91,15 @@ class TestToolPolicy:
             precedence=ToolPolicyPrecedence.ALLOW_FIRST,
         )
         assert policy.is_allowed("shell") is True
+
+    def test_allow_first_restricts_unlisted_when_allow_present(self) -> None:
+        policy = ToolPolicy(
+            allow=("read",),
+            deny=("shell",),
+            precedence=ToolPolicyPrecedence.ALLOW_FIRST,
+        )
+        assert policy.is_allowed("read") is True
+        assert policy.is_allowed("search") is False
 
     def test_allow_first_blocks_denied_not_allowed(self) -> None:
         policy = ToolPolicy(

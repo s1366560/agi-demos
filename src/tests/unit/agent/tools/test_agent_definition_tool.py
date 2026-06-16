@@ -170,6 +170,12 @@ class TestAgentDefinitionManageTool:
         data = json.loads(result.output)
         assert data["id"] == "agent-123"
         assert data["name"] == "test-agent-def"
+        orch.get_agent.assert_awaited_once_with(
+            "agent-123",
+            tenant_id="tenant-1",
+            project_id="proj-1",
+            exact_project=True,
+        )
 
     async def test_get_not_found_returns_error(self) -> None:
         orch = _mock_orchestrator()
@@ -212,7 +218,18 @@ class TestAgentDefinitionManageTool:
         assert result.is_error is False
         data = json.loads(result.output)
         assert data["display_name"] == "Updated Agent"
-        orch.update_agent.assert_awaited_once()
+        orch.get_agent.assert_awaited_once_with(
+            "agent-123",
+            tenant_id="tenant-1",
+            project_id="proj-1",
+            exact_project=True,
+        )
+        orch.update_agent.assert_awaited_once_with(
+            agent,
+            tenant_id="tenant-1",
+            project_id="proj-1",
+            exact_project=True,
+        )
         assert len(ctx._pending_events) == 1
         assert ctx._pending_events[0]["type"] == "agent_definition_updated"
 
@@ -261,7 +278,18 @@ class TestAgentDefinitionManageTool:
         data = json.loads(result.output)
         assert data["deleted"] is True
         assert data["id"] == "agent-123"
-        orch.delete_agent.assert_awaited_once_with("agent-123")
+        orch.get_agent.assert_awaited_once_with(
+            "agent-123",
+            tenant_id="tenant-1",
+            project_id="proj-1",
+            exact_project=True,
+        )
+        orch.delete_agent.assert_awaited_once_with(
+            "agent-123",
+            tenant_id="tenant-1",
+            project_id="proj-1",
+            exact_project=True,
+        )
         assert len(ctx._pending_events) == 1
         assert ctx._pending_events[0]["type"] == "agent_definition_deleted"
 

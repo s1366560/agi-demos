@@ -33,6 +33,7 @@ from src.domain.model.agent.agent_definition import Agent
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
+from src.domain.model.agent.tool_policy import ToolPolicyPrecedence
 
 from ..commands.builtins import register_builtin_commands
 from ..commands.interceptor import CommandInterceptor
@@ -621,11 +622,26 @@ class ReActAgent(
             and "*" not in selected_agent.allowed_tools
         ):
             allowlists.append(set(canonical_tool_policy_names(selected_agent.allowed_tools)))
+
+        agent_policy_deny: set[str] = set()
+        if selected_agent and selected_agent.tool_policy is not None:
+            agent_policy_allow = set(
+                canonical_tool_policy_names(selected_agent.tool_policy.allow)
+            )
+            if agent_policy_allow:
+                allowlists.append(agent_policy_allow)
+
+            agent_policy_deny = set(canonical_tool_policy_names(selected_agent.tool_policy.deny))
+            if selected_agent.tool_policy.precedence == ToolPolicyPrecedence.ALLOW_FIRST:
+                agent_policy_deny -= agent_policy_allow
+
         if tenant_agent_config.enabled_tools:
             allowlists.append(set(canonical_tool_policy_names(tenant_agent_config.enabled_tools)))
 
         effective_allow = set.intersection(*allowlists) if allowlists else set()
-        effective_deny = set(canonical_tool_policy_names(tenant_agent_config.disabled_tools))
+        effective_deny = agent_policy_deny | set(
+            canonical_tool_policy_names(tenant_agent_config.disabled_tools)
+        )
         return sorted(effective_allow), sorted(effective_deny)
 
     async def _inject_lane_jit_guidance(

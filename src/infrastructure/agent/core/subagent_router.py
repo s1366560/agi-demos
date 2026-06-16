@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
+from src.domain.model.agent.tool_policy import ToolPolicy, ToolPolicyPrecedence
 
 from .resolver import (
     DescriptionResolver,
@@ -21,8 +22,48 @@ from .resolver import (
     ResolverChain,
     ResolverResult,
 )
+from .tool_name_policy import canonical_tool_policy_name, canonical_tool_policy_names
 
 logger = logging.getLogger(__name__)
+
+
+def _tool_policy_allows(
+    policy: ToolPolicy | None,
+    tool_name: str,
+    known_tool_names: set[str],
+) -> bool:
+    if policy is None:
+        return True
+
+    canonical_name = canonical_tool_policy_name(tool_name, known_tool_names)
+    allow = set(canonical_tool_policy_names(policy.allow, known_tool_names))
+    deny = set(canonical_tool_policy_names(policy.deny, known_tool_names))
+    explicitly_allowed = canonical_name in allow or "*" in allow
+    has_allow_restriction = bool(allow) and "*" not in allow
+
+    if policy.precedence == ToolPolicyPrecedence.ALLOW_FIRST:
+        if explicitly_allowed:
+            return True
+        if canonical_name in deny:
+            return False
+        return not has_allow_restriction
+
+    if canonical_name in deny:
+        return False
+    return explicitly_allowed or not has_allow_restriction
+
+
+def subagent_allows_tool(
+    subagent: SubAgent,
+    tool_name: str,
+    known_tool_names: set[str],
+) -> bool:
+    """Return whether a tool is available under SubAgent legacy and structured policies."""
+    if "*" not in subagent.allowed_tools:
+        allowed_tools = set(canonical_tool_policy_names(subagent.allowed_tools, known_tool_names))
+        if canonical_tool_policy_name(tool_name, known_tool_names) not in allowed_tools:
+            return False
+    return _tool_policy_allows(subagent.tool_policy, tool_name, known_tool_names)
 
 
 @dataclass
@@ -160,13 +201,11 @@ class SubAgentRouter:
         Returns:
             Filtered dictionary of allowed tools
         """
-        # If wildcard "*" in allowed_tools, return all tools
-        if "*" in subagent.allowed_tools:
-            return available_tools
-
-        # Filter to only allowed tools
+        known_tool_names = set(available_tools)
         return {
-            name: tool for name, tool in available_tools.items() if name in subagent.allowed_tools
+            name: tool
+            for name, tool in available_tools.items()
+            if subagent_allows_tool(subagent, name, known_tool_names)
         }
 
     def get_or_create_explore_agent(

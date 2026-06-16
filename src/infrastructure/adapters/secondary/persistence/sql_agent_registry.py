@@ -128,6 +128,8 @@ class SqlAgentRegistryRepository(
             metadata_json=agent.metadata,
             session_policy=(agent.session_policy.to_dict() if agent.session_policy else None),
             delegate_config=(agent.delegate_config.to_dict() if agent.delegate_config else None),
+            spawn_policy=agent._spawn_policy_to_dict(),
+            tool_policy=agent._tool_policy_to_dict(),
             created_at=agent.created_at,
             updated_at=agent.updated_at,
         )
@@ -156,12 +158,19 @@ class SqlAgentRegistryRepository(
             AgentDefinitionModel,
         )
 
-        result = await self._session.execute(
-            refresh_select_statement(
-                select(AgentDefinitionModel)
-                .where(AgentDefinitionModel.id == agent_id)
-                .execution_options(populate_existing=True)
+        query = select(AgentDefinitionModel).where(AgentDefinitionModel.id == agent_id)
+        if tenant_id is not None:
+            query = query.where(AgentDefinitionModel.tenant_id == tenant_id)
+        if project_id is not None:
+            query = query.where(
+                or_(
+                    AgentDefinitionModel.project_id == project_id,
+                    AgentDefinitionModel.project_id.is_(None),
+                )
             )
+
+        result = await self._session.execute(
+            refresh_select_statement(query.execution_options(populate_existing=True))
         )
         db_agent = result.scalar_one_or_none()
         return self._to_domain(db_agent) if db_agent else None
@@ -245,6 +254,8 @@ class SqlAgentRegistryRepository(
         db_agent.delegate_config = (
             agent.delegate_config.to_dict() if agent.delegate_config else None
         )
+        db_agent.spawn_policy = agent._spawn_policy_to_dict()
+        db_agent.tool_policy = agent._tool_policy_to_dict()
         db_agent.updated_at = agent.updated_at
 
         await self._session.flush()
@@ -319,11 +330,11 @@ class SqlAgentRegistryRepository(
 
         if tenant_id:
             query = select(AgentDefinitionModel).where(
+                AgentDefinitionModel.tenant_id == tenant_id,
                 or_(
                     AgentDefinitionModel.project_id == project_id,
-                    (AgentDefinitionModel.project_id.is_(None))
-                    & (AgentDefinitionModel.tenant_id == tenant_id),
-                )
+                    AgentDefinitionModel.project_id.is_(None),
+                ),
             )
         else:
             query = select(AgentDefinitionModel).where(
@@ -440,6 +451,16 @@ class SqlAgentRegistryRepository(
         dc_data = db_agent.delegate_config
         delegate_config = DelegateConfig.from_dict(dc_data) if isinstance(dc_data, dict) else None
 
+        spawn_policy_data = db_agent.spawn_policy
+        spawn_policy = Agent._spawn_policy_from_dict(
+            spawn_policy_data if isinstance(spawn_policy_data, dict) else None
+        )
+
+        tool_policy_data = db_agent.tool_policy
+        tool_policy = Agent._tool_policy_from_dict(
+            tool_policy_data if isinstance(tool_policy_data, dict) else None
+        )
+
         return Agent(
             id=db_agent.id,
             tenant_id=db_agent.tenant_id,
@@ -475,4 +496,6 @@ class SqlAgentRegistryRepository(
             metadata=db_agent.metadata_json,
             session_policy=session_policy,
             delegate_config=delegate_config,
+            spawn_policy=spawn_policy,
+            tool_policy=tool_policy,
         )

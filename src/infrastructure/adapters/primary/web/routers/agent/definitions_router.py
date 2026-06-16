@@ -6,8 +6,9 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,7 +28,9 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     get_current_user_tenant,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import Project, UserProject
 from src.infrastructure.agent.tools._agent_definition_policy import (
     normalize_new_agent_a2a,
     normalize_updated_agent_a2a,
@@ -82,6 +85,8 @@ class CreateDefinitionBody(BaseModel):
     metadata: dict[str, Any] | None = None
     session_policy: dict[str, Any] | None = None
     delegate_config: dict[str, Any] | None = None
+    spawn_policy: dict[str, Any] | None = None
+    tool_policy: dict[str, Any] | None = None
 
 
 class UpdateDefinitionBody(BaseModel):
@@ -112,10 +117,77 @@ class UpdateDefinitionBody(BaseModel):
     metadata: dict[str, Any] | None = None
     session_policy: dict[str, Any] | None = None
     delegate_config: dict[str, Any] | None = None
+    spawn_policy: dict[str, Any] | None = None
+    tool_policy: dict[str, Any] | None = None
 
 
 class SetEnabledBody(BaseModel):
     enabled: bool
+
+
+async def _ensure_project_definition_access(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserProject.id)
+            .join(Project, UserProject.project_id == Project.id)
+            .where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == project_id,
+                    Project.tenant_id == tenant_id,
+                )
+            )
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied"),
+        )
+
+
+async def _ensure_existing_definition_access(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+    agent: Agent,
+) -> None:
+    if agent.project_id is None:
+        return
+    await _ensure_project_definition_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        project_id=agent.project_id,
+    )
+
+
+async def _accessible_definition_project_ids(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+) -> set[str]:
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserProject.project_id)
+            .join(Project, UserProject.project_id == Project.id)
+            .where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    Project.tenant_id == tenant_id,
+                )
+            )
+        )
+    )
+    return {str(project_id) for project_id in result.scalars().all()}
 
 
 @router.post("/definitions")
@@ -128,6 +200,13 @@ async def create_definition(
 ) -> dict[str, Any]:
     try:
         await require_tenant_access(db, current_user, tenant_id, require_admin=True)
+        if body.project_id is not None:
+            await _ensure_project_definition_access(
+                db,
+                current_user=current_user,
+                tenant_id=tenant_id,
+                project_id=body.project_id,
+            )
         container = get_container_with_db(request, db)
         orchestrator = container.agent_orchestrator()
 
@@ -135,9 +214,11 @@ async def create_definition(
             WorkspaceConfig.from_dict(body.workspace_config) if body.workspace_config else None
         )
 
-        sp = SessionPolicy.from_dict(body.session_policy) if body.session_policy else None
+        session_policy = SessionPolicy.from_dict(body.session_policy) if body.session_policy else None
 
-        dc = DelegateConfig.from_dict(body.delegate_config) if body.delegate_config else None
+        delegate_config = DelegateConfig.from_dict(body.delegate_config) if body.delegate_config else None
+        spawn_policy = Agent._spawn_policy_from_dict(body.spawn_policy)
+        tool_policy = Agent._tool_policy_from_dict(body.tool_policy)
         agent_to_agent_allowlist = normalize_new_agent_a2a(
             enabled=body.agent_to_agent_enabled,
             allowlist=body.agent_to_agent_allowlist,
@@ -173,8 +254,10 @@ async def create_definition(
                 body.metadata,
                 explicit=body.max_iterations != LEGACY_DEFAULT_MAX_ITERATIONS,
             ),
-            session_policy=sp,
-            delegate_config=dc,
+            session_policy=session_policy,
+            delegate_config=delegate_config,
+            spawn_policy=spawn_policy,
+            tool_policy=tool_policy,
         )
 
         created = await orchestrator.create_agent(agent)
@@ -217,6 +300,13 @@ async def list_definitions(
 ) -> list[dict[str, Any]]:
     try:
         await require_tenant_access(db, current_user, tenant_id)
+        if project_id:
+            await _ensure_project_definition_access(
+                db,
+                current_user=current_user,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
         container = get_container_with_db(request, db)
         registry = container.agent_registry()
 
@@ -233,6 +323,16 @@ async def list_definitions(
                 limit=limit,
                 offset=offset,
             )
+            accessible_project_ids = await _accessible_definition_project_ids(
+                db,
+                current_user=current_user,
+                tenant_id=tenant_id,
+            )
+            agents = [
+                agent
+                for agent in agents
+                if agent.project_id is None or agent.project_id in accessible_project_ids
+            ]
 
         return [a.to_dict() for a in agents]
 
@@ -272,6 +372,12 @@ async def get_definition(
 
         if agent.tenant_id != tenant_id:
             raise HTTPException(status_code=403, detail=_("Access denied"))
+        await _ensure_existing_definition_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            agent=agent,
+        )
 
         return cast(dict[str, Any], agent.to_dict())
 
@@ -300,6 +406,13 @@ async def update_definition(
 ) -> dict[str, Any]:
     try:
         await require_tenant_access(db, current_user, tenant_id, require_admin=True)
+        if body.project_id is not None:
+            await _ensure_project_definition_access(
+                db,
+                current_user=current_user,
+                tenant_id=tenant_id,
+                project_id=body.project_id,
+            )
         container = get_container_with_db(request, db)
         registry = container.agent_registry()
 
@@ -312,6 +425,12 @@ async def update_definition(
 
         if existing.tenant_id != tenant_id:
             raise HTTPException(status_code=403, detail=_("Access denied"))
+        await _ensure_existing_definition_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            agent=existing,
+        )
 
         updates = body.model_dump(exclude_unset=True)
         if "max_iterations" in updates:
@@ -366,6 +485,12 @@ async def delete_definition(
 
         if existing.tenant_id != tenant_id:
             raise HTTPException(status_code=403, detail=_("Access denied"))
+        await _ensure_existing_definition_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            agent=existing,
+        )
 
         await registry.delete(definition_id)
         await db.commit()
@@ -408,6 +533,12 @@ async def set_definition_enabled(
 
         if existing.tenant_id != tenant_id:
             raise HTTPException(status_code=403, detail=_("Access denied"))
+        await _ensure_existing_definition_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            agent=existing,
+        )
 
         updated = await registry.set_enabled(definition_id, body.enabled)
         await db.commit()
@@ -453,6 +584,10 @@ def _apply_updates(
             agent.session_policy = SessionPolicy.from_dict(value)
         elif key == "delegate_config" and isinstance(value, dict):
             agent.delegate_config = DelegateConfig.from_dict(value)
+        elif key == "spawn_policy":
+            agent.spawn_policy = Agent._spawn_policy_from_dict(value)
+        elif key == "tool_policy":
+            agent.tool_policy = Agent._tool_policy_from_dict(value)
         elif hasattr(agent, key):
             setattr(agent, key, value)
 

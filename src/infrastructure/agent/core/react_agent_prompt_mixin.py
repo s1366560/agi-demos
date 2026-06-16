@@ -331,7 +331,11 @@ class PromptMixin:
         orchestrator = get_agent_orchestrator()
         if orchestrator is not None:
             try:
-                agent_def = await orchestrator.get_agent(agent_id)
+                agent_def = await orchestrator.get_agent(
+                    agent_id,
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                )
                 if agent_def is not None:
                     return cast(Agent, agent_def)
             except Exception:

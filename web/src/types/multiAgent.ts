@@ -22,6 +22,19 @@ export interface WorkspaceConfig {
   retention_days?: number | undefined;
 }
 
+export interface AgentDefinitionSpawnPolicy {
+  max_depth?: number | undefined;
+  max_active_runs?: number | undefined;
+  max_children_per_requester?: number | undefined;
+  allowed_subagents?: string[] | null | undefined;
+}
+
+export interface AgentDefinitionToolPolicy {
+  allow?: string[] | undefined;
+  deny?: string[] | undefined;
+  precedence?: 'allow_first' | 'deny_first' | undefined;
+}
+
 export interface AgentBinding {
   id: string;
   tenant_id: string;
@@ -60,6 +73,8 @@ export interface AgentDefinition {
   max_spawn_depth: number;
   agent_to_agent_enabled: boolean;
   agent_to_agent_allowlist: string[] | null;
+  spawn_policy: AgentDefinitionSpawnPolicy | null;
+  tool_policy: AgentDefinitionToolPolicy | null;
   discoverable: boolean;
   source: AgentSource;
   enabled: boolean;
@@ -164,6 +179,8 @@ export interface CreateDefinitionRequest {
   discoverable?: boolean | undefined;
   max_retries?: number | undefined;
   fallback_models?: string[] | undefined;
+  spawn_policy?: AgentDefinitionSpawnPolicy | null | undefined;
+  tool_policy?: AgentDefinitionToolPolicy | null | undefined;
   metadata?: Record<string, unknown> | undefined;
 }
 
@@ -192,6 +209,8 @@ export interface UpdateDefinitionRequest {
   discoverable?: boolean | undefined;
   max_retries?: number | undefined;
   fallback_models?: string[] | undefined;
+  spawn_policy?: AgentDefinitionSpawnPolicy | null | undefined;
+  tool_policy?: AgentDefinitionToolPolicy | null | undefined;
   metadata?: Record<string, unknown> | undefined;
 }
 

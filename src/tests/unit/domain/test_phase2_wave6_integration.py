@@ -256,7 +256,7 @@ class TestE2EToolKillSteerViaTools:
 
 @pytest.mark.unit
 class TestLayeredToolPolicyResolution:
-    def test_deny_first_blocks_denied_allows_rest(self) -> None:
+    def test_deny_first_blocks_denied_and_restricts_unlisted(self) -> None:
         policy = ToolPolicy(
             allow=("search", "read"),
             deny=("terminal", "write"),
@@ -268,7 +268,7 @@ class TestLayeredToolPolicyResolution:
 
         assert "search" in filtered
         assert "read" in filtered
-        assert "plan" in filtered
+        assert "plan" not in filtered
         assert "terminal" not in filtered
         assert "write" not in filtered
 
@@ -281,7 +281,7 @@ class TestLayeredToolPolicyResolution:
 
         assert policy.is_allowed("search") is True
         assert policy.is_allowed("terminal") is False
-        assert policy.is_allowed("unknown") is True
+        assert policy.is_allowed("unknown") is False
 
     def test_empty_policy_allows_everything(self) -> None:
         policy = ToolPolicy()

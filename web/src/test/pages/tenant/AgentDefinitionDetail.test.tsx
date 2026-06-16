@@ -1,12 +1,16 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentDefinitionDetail } from '../../../pages/tenant/AgentDefinitionDetail';
 import { AgentDefinitions } from '../../../pages/tenant/AgentDefinitions';
 import { definitionsService } from '../../../services/agent/definitionsService';
+import { useAuthStore } from '../../../stores/auth';
+import { useProjectStore } from '../../../stores/project';
+import { useTenantStore } from '../../../stores/tenant';
 
 import type { AgentDefinition } from '../../../types/multiAgent';
+import type { Project } from '../../../types/memory';
 
 vi.mock('../../../services/agent/definitionsService', () => ({
   definitionsService: {
@@ -18,8 +22,25 @@ vi.mock('../../../services/agent/definitionsService', () => ({
 }));
 
 vi.mock('../../../components/agent/AgentDefinitionModal', () => ({
-  AgentDefinitionModal: ({ isOpen }: { isOpen: boolean }) =>
-    isOpen ? <div data-testid="agent-definition-modal" /> : null,
+  AgentDefinitionModal: ({
+    isOpen,
+    initialProjectId,
+    projectOptions = [],
+  }: {
+    isOpen: boolean;
+    initialProjectId?: string | null;
+    projectOptions?: Array<{ id: string; name: string }>;
+  }) =>
+    isOpen ? (
+      <div
+        data-testid="agent-definition-modal"
+        data-initial-project-id={initialProjectId ?? 'tenant'}
+      >
+        {projectOptions.map((project) => (
+          <span key={project.id}>{project.name}</span>
+        ))}
+      </div>
+    ) : null,
 }));
 
 const makeDefinition = (overrides: Partial<AgentDefinition> = {}): AgentDefinition => ({
@@ -68,6 +89,17 @@ const makeDefinition = (overrides: Partial<AgentDefinition> = {}): AgentDefiniti
   max_spawn_depth: 2,
   agent_to_agent_enabled: true,
   agent_to_agent_allowlist: ['planner'],
+  spawn_policy: {
+    max_depth: 2,
+    max_active_runs: 4,
+    max_children_per_requester: 2,
+    allowed_subagents: ['planner'],
+  },
+  tool_policy: {
+    allow: ['web_search'],
+    deny: ['bash'],
+    precedence: 'deny_first',
+  },
   discoverable: true,
   source: 'database',
   enabled: true,
@@ -88,6 +120,22 @@ const makeDefinition = (overrides: Partial<AgentDefinition> = {}): AgentDefiniti
 describe('AgentDefinitionDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useAuthStore.setState({
+      user: null,
+      isAuthenticated: false,
+    });
+    useTenantStore.setState({
+      currentTenant: null,
+    });
+    useProjectStore.setState({
+      projects: [],
+      currentProject: null,
+      isLoading: false,
+      error: null,
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    });
   });
 
   it('loads one definition and renders structured sections plus raw details', async () => {
@@ -113,7 +161,9 @@ describe('AgentDefinitionDetail', () => {
       screen.getByText('Investigate sources and produce concise findings.')
     ).toBeInTheDocument();
     expect(screen.getByText('research and source-backed synthesis')).toBeInTheDocument();
-    expect(screen.getByText('web_search')).toBeInTheDocument();
+    expect(screen.getAllByText('web_search').length).toBeGreaterThan(0);
+    expect(screen.getByText('bash')).toBeInTheDocument();
+    expect(screen.getByText('deny_first')).toBeInTheDocument();
     expect(screen.getByText('binding-1')).toBeInTheDocument();
     expect(screen.getAllByText(/"owner": "platform"/).length).toBeGreaterThan(0);
     expect(screen.getByText(/"fallback_models"/)).toBeInTheDocument();
@@ -132,5 +182,74 @@ describe('AgentDefinitionDetail', () => {
 
     const link = await screen.findByRole('link', { name: 'Research Agent' });
     expect(link).toHaveAttribute('href', '/tenant/tenant-1/agent-definitions/agent-1');
+  });
+
+  it('filters definitions by scope and creates with the selected project scope', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 'admin-1',
+        email: 'admin@example.com',
+        name: 'Admin',
+        roles: ['admin'],
+        is_active: true,
+        created_at: '2026-06-03T05:00:00Z',
+      },
+      isAuthenticated: true,
+    });
+    useProjectStore.setState({
+      projects: [
+        {
+          id: 'project-1',
+          tenant_id: 'tenant-1',
+          name: 'Project Alpha',
+          owner_id: 'admin-1',
+          member_ids: ['admin-1'],
+          memory_rules: {},
+          graph_config: {},
+          is_public: false,
+          created_at: '2026-06-03T05:00:00Z',
+        } as Project,
+      ],
+    });
+    vi.mocked(definitionsService.list).mockResolvedValue([
+      makeDefinition({
+        id: 'tenant-agent',
+        project_id: null,
+        name: 'tenant_agent',
+        display_name: 'Tenant Agent',
+      }),
+      makeDefinition({
+        id: 'project-agent',
+        project_id: 'project-1',
+        name: 'project_agent',
+        display_name: 'Project Agent',
+      }),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/agent-definitions']}>
+        <Routes>
+          <Route path="/tenant/:tenantId/agent-definitions" element={<AgentDefinitions />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('link', { name: 'Tenant Agent' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Project Agent' })).toBeInTheDocument();
+    expect(screen.getAllByText('Project Alpha').length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText('Filter by scope'), {
+      target: { value: 'project-1' },
+    });
+
+    expect(screen.queryByRole('link', { name: 'Tenant Agent' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Project Agent' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Agent' }));
+
+    expect(screen.getByTestId('agent-definition-modal')).toHaveAttribute(
+      'data-initial-project-id',
+      'project-1'
+    );
   });
 });

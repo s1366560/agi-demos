@@ -5,7 +5,7 @@
  * resource fetching on open, confirmLoading bound to store submitting.
  */
 
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -24,6 +24,8 @@ import { StateDisplay } from '../shared/ui/StateDisplay';
 import type { SkillResponse, MCPServerResponse, ToolInfo } from '../../types/agent';
 import type {
   AgentDefinition,
+  AgentDefinitionSpawnPolicy,
+  AgentDefinitionToolPolicy,
   CreateDefinitionRequest,
   UpdateDefinitionRequest,
   WorkspaceConfig,
@@ -32,12 +34,20 @@ import type { DefaultOptionType } from 'antd/es/select';
 
 const { TextArea } = Input;
 const { Option } = Select;
+const TENANT_SCOPE_VALUE = '__tenant__';
+
+export interface AgentDefinitionProjectOption {
+  id: string;
+  name: string;
+}
 
 export interface AgentDefinitionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   definition: AgentDefinition | null;
+  projectOptions?: AgentDefinitionProjectOption[] | undefined;
+  initialProjectId?: string | null | undefined;
 }
 
 interface WorkspaceConfigFormValues {
@@ -56,7 +66,9 @@ interface AgentDefinitionFormValues {
   name: string;
   display_name: string;
   system_prompt: string;
+  scope_id?: string | undefined;
   model: string;
+  fallback_models?: string[] | undefined;
   temperature?: number | undefined;
   max_tokens?: number | undefined;
   max_iterations?: number | undefined;
@@ -75,6 +87,7 @@ interface AgentDefinitionFormValues {
   spawn_policy_allowed_subagents?: string[] | undefined;
   tool_policy_allow?: string[] | undefined;
   tool_policy_deny?: string[] | undefined;
+  tool_policy_precedence?: 'allow_first' | 'deny_first' | undefined;
 }
 
 function getMetadataNumber(metadata: Record<string, unknown>, key: string): number | undefined {
@@ -90,6 +103,84 @@ function getMetadataStringArray(
   return Array.isArray(value) && value.every((item): item is string => typeof item === 'string')
     ? value
     : undefined;
+}
+
+function normalizeStringList(values: string[] | null | undefined): string[] | undefined {
+  if (!values) {
+    return undefined;
+  }
+
+  const seen = new Set<string>();
+  const normalized = values
+    .map((value) => value.trim())
+    .filter((value) => {
+      if (!value || seen.has(value)) {
+        return false;
+      }
+      seen.add(value);
+      return true;
+    });
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function stripLegacyPolicyMetadata(
+  metadata: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+
+  const next = { ...metadata };
+  delete next.spawn_policy_max_active_runs;
+  delete next.spawn_policy_max_children_per_requester;
+  delete next.spawn_policy_allowed_subagents;
+  delete next.tool_policy_allow;
+  delete next.tool_policy_deny;
+  return next;
+}
+
+function buildSpawnPolicy(
+  values: AgentDefinitionFormValues,
+  force = false
+): AgentDefinitionSpawnPolicy | undefined {
+  const allowedSubagents = normalizeStringList(values.spawn_policy_allowed_subagents);
+  const hasPolicy =
+    force ||
+    values.can_spawn === true ||
+    values.spawn_policy_max_active_runs !== undefined ||
+    values.spawn_policy_max_children_per_requester !== undefined ||
+    allowedSubagents !== undefined;
+
+  if (!hasPolicy) {
+    return undefined;
+  }
+
+  return {
+    max_depth: values.max_spawn_depth ?? 2,
+    max_active_runs: values.spawn_policy_max_active_runs ?? 16,
+    max_children_per_requester: values.spawn_policy_max_children_per_requester ?? 8,
+    allowed_subagents: allowedSubagents ?? null,
+  };
+}
+
+function buildToolPolicy(
+  values: AgentDefinitionFormValues,
+  force = false
+): AgentDefinitionToolPolicy | undefined {
+  const allow = normalizeStringList(values.tool_policy_allow);
+  const deny = normalizeStringList(values.tool_policy_deny);
+  const precedence = values.tool_policy_precedence ?? 'deny_first';
+
+  if (!force && allow === undefined && deny === undefined && precedence === 'deny_first') {
+    return undefined;
+  }
+
+  return {
+    allow: allow ?? [],
+    deny: deny ?? [],
+    precedence,
+  };
 }
 
 function toWorkspaceConfigFormValues(
@@ -129,14 +220,11 @@ const LLM_MODELS = [
   { value: 'inherit', label: 'Inherit from Tenant Config' },
   { value: 'qwen-max', label: 'Qwen Max' },
   { value: 'qwen-plus', label: 'Qwen Plus' },
-  { value: 'qwen-turbo', label: 'Qwen Turbo' },
   { value: 'gpt-4', label: 'GPT-4' },
-  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
-  { value: 'claude-3-opus', label: 'Claude 3 Opus' },
-  { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet' },
-  { value: 'gemini-pro', label: 'Gemini Pro' },
+  { value: 'gpt-4o', label: 'GPT-4o' },
+  { value: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet' },
   { value: 'deepseek-chat', label: 'Deepseek Chat' },
+  { value: 'gemini-pro', label: 'Gemini Pro' },
 ];
 
 export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
@@ -144,6 +232,8 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
   onClose,
   onSuccess,
   definition,
+  projectOptions = [],
+  initialProjectId = null,
 }) => {
   const { t } = useTranslation();
   const [form] = Form.useForm<AgentDefinitionFormValues>();
@@ -164,6 +254,39 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
   const updateDefinition = useUpdateDefinition();
 
   const isEditMode = !!definition;
+  const scopeOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options = [
+      {
+        label: t('tenant.agentDefinitions.scope.tenant', { defaultValue: 'Tenant scope' }),
+        value: TENANT_SCOPE_VALUE,
+      },
+      ...projectOptions
+        .filter((project) => {
+          if (seen.has(project.id)) {
+            return false;
+          }
+          seen.add(project.id);
+          return true;
+        })
+        .map((project) => ({
+          label: project.name,
+          value: project.id,
+        })),
+    ];
+
+    if (
+      definition?.project_id &&
+      !options.some((option) => option.value === definition.project_id)
+    ) {
+      options.push({
+        label: definition.project_id,
+        value: definition.project_id,
+      });
+    }
+
+    return options;
+  }, [definition?.project_id, projectOptions, t]);
 
   // Track previous state to avoid unnecessary resets
   const prevDefinitionRef = useRef<AgentDefinition | null>(null);
@@ -211,7 +334,9 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           name: definition.name,
           display_name: definition.display_name ?? '',
           system_prompt: definition.system_prompt ?? '',
+          scope_id: definition.project_id ?? TENANT_SCOPE_VALUE,
           model: definition.model ?? 'inherit',
+          fallback_models: [...definition.fallback_models],
           temperature: definition.temperature ?? 0.7,
           max_tokens: definition.max_tokens ?? 4096,
           max_iterations: definition.max_iterations,
@@ -219,7 +344,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           allowed_skills: definition.allowed_skills ?? [],
           allowed_mcp_servers: definition.allowed_mcp_servers ?? [],
           can_spawn: definition.can_spawn,
-          max_spawn_depth: definition.max_spawn_depth,
+          max_spawn_depth: definition.spawn_policy?.max_depth ?? definition.max_spawn_depth,
           agent_to_agent_enabled: definition.agent_to_agent_enabled,
           discoverable: definition.discoverable,
           max_retries: definition.max_retries,
@@ -230,38 +355,47 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           fieldValues.agent_to_agent_allowlist = definition.agent_to_agent_allowlist;
         }
 
-        const spawnMaxActiveRuns = getMetadataNumber(metadata, 'spawn_policy_max_active_runs');
+        const spawnMaxActiveRuns =
+          definition.spawn_policy?.max_active_runs ??
+          getMetadataNumber(metadata, 'spawn_policy_max_active_runs');
         if (spawnMaxActiveRuns !== undefined) {
           fieldValues.spawn_policy_max_active_runs = spawnMaxActiveRuns;
         }
 
-        const spawnMaxChildrenPerRequester = getMetadataNumber(
-          metadata,
-          'spawn_policy_max_children_per_requester'
-        );
+        const spawnMaxChildrenPerRequester =
+          definition.spawn_policy?.max_children_per_requester ??
+          getMetadataNumber(metadata, 'spawn_policy_max_children_per_requester');
         if (spawnMaxChildrenPerRequester !== undefined) {
           fieldValues.spawn_policy_max_children_per_requester = spawnMaxChildrenPerRequester;
         }
 
-        const allowedSubagents = getMetadataStringArray(metadata, 'spawn_policy_allowed_subagents');
+        const allowedSubagents =
+          definition.spawn_policy?.allowed_subagents ??
+          getMetadataStringArray(metadata, 'spawn_policy_allowed_subagents');
         if (allowedSubagents !== undefined) {
           fieldValues.spawn_policy_allowed_subagents = allowedSubagents;
         }
 
-        const toolPolicyAllow = getMetadataStringArray(metadata, 'tool_policy_allow');
+        const toolPolicyAllow =
+          definition.tool_policy?.allow ?? getMetadataStringArray(metadata, 'tool_policy_allow');
         if (toolPolicyAllow !== undefined) {
           fieldValues.tool_policy_allow = toolPolicyAllow;
         }
 
-        const toolPolicyDeny = getMetadataStringArray(metadata, 'tool_policy_deny');
+        const toolPolicyDeny =
+          definition.tool_policy?.deny ?? getMetadataStringArray(metadata, 'tool_policy_deny');
         if (toolPolicyDeny !== undefined) {
           fieldValues.tool_policy_deny = toolPolicyDeny;
         }
+        fieldValues.tool_policy_precedence = definition.tool_policy?.precedence ?? 'deny_first';
 
         form.setFieldsValue(fieldValues as Parameters<typeof form.setFieldsValue>[0]);
         setKeywords(definition.trigger?.keywords ?? []);
       } else {
         form.resetFields();
+        form.setFieldsValue({
+          scope_id: initialProjectId ?? TENANT_SCOPE_VALUE,
+        });
         setKeywords([]);
       }
       if (openStateChanged) {
@@ -273,19 +407,22 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
 
     prevDefinitionRef.current = definition ?? null;
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, definition, form]);
+  }, [isOpen, definition, form, initialProjectId]);
 
   // Handle form submission
   const handleSubmit = useCallback(async () => {
     try {
       const values = await form.validateFields();
+      const spawnPolicy = buildSpawnPolicy(values, Boolean(definition?.spawn_policy));
+      const toolPolicy = buildToolPolicy(values, Boolean(definition?.tool_policy));
 
       if (definition) {
         const data: UpdateDefinitionRequest = {
           name: values.name,
           display_name: values.display_name,
           system_prompt: values.system_prompt,
-          model: values.model === 'inherit' ? undefined : values.model,
+          model: values.model,
+          fallback_models: normalizeStringList(values.fallback_models) ?? [],
           temperature: values.temperature,
           max_tokens: values.max_tokens,
           max_iterations: values.max_iterations,
@@ -300,14 +437,9 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           discoverable: values.discoverable,
           max_retries: values.max_retries,
           workspace_config: values.workspace_config,
-          metadata: {
-            ...definition.metadata,
-            spawn_policy_max_active_runs: values.spawn_policy_max_active_runs,
-            spawn_policy_max_children_per_requester: values.spawn_policy_max_children_per_requester,
-            spawn_policy_allowed_subagents: values.spawn_policy_allowed_subagents,
-            tool_policy_allow: values.tool_policy_allow,
-            tool_policy_deny: values.tool_policy_deny,
-          },
+          spawn_policy: spawnPolicy,
+          tool_policy: toolPolicy,
+          metadata: stripLegacyPolicyMetadata(definition.metadata) ?? {},
         };
         await updateDefinition(definition.id, data);
         message.success(
@@ -318,7 +450,9 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           name: values.name,
           display_name: values.display_name,
           system_prompt: values.system_prompt,
+          project_id: values.scope_id === TENANT_SCOPE_VALUE ? undefined : values.scope_id,
           model: values.model === 'inherit' ? undefined : values.model,
+          fallback_models: normalizeStringList(values.fallback_models) ?? [],
           temperature: values.temperature,
           max_tokens: values.max_tokens,
           max_iterations: values.max_iterations,
@@ -333,13 +467,8 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           discoverable: values.discoverable,
           max_retries: values.max_retries,
           workspace_config: values.workspace_config,
-          metadata: {
-            spawn_policy_max_active_runs: values.spawn_policy_max_active_runs,
-            spawn_policy_max_children_per_requester: values.spawn_policy_max_children_per_requester,
-            spawn_policy_allowed_subagents: values.spawn_policy_allowed_subagents,
-            tool_policy_allow: values.tool_policy_allow,
-            tool_policy_deny: values.tool_policy_deny,
-          },
+          spawn_policy: spawnPolicy,
+          tool_policy: toolPolicy,
         };
         await createDefinition(data);
         message.success(
@@ -448,6 +577,18 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
             />
           </Form.Item>
 
+          <Form.Item
+            name="scope_id"
+            label={t('tenant.agentDefinitions.modal.scope', { defaultValue: 'Scope' })}
+            initialValue={initialProjectId ?? TENANT_SCOPE_VALUE}
+          >
+            <Select
+              disabled={isEditMode}
+              showSearch={{ filterOption: filterSelectOption }}
+              options={scopeOptions}
+            />
+          </Form.Item>
+
           <div className="grid grid-cols-2 gap-4">
             <Form.Item
               name="model"
@@ -471,6 +612,28 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
               <InputNumber min={0} max={10} className="w-full" />
             </Form.Item>
           </div>
+
+          <Form.Item
+            name="fallback_models"
+            label={t('tenant.agentDefinitions.modal.fallbackModels', 'Fallback Models')}
+            tooltip={t(
+              'tenant.agentDefinitions.modal.fallbackModelsTooltip',
+              'Models to try in order if the primary model cannot complete a request.'
+            )}
+          >
+            <Select
+              mode="tags"
+              allowClear
+              placeholder={t(
+                'tenant.agentDefinitions.modal.fallbackModelsPlaceholder',
+                'Add fallback model IDs'
+              )}
+              options={LLM_MODELS.filter((model) => model.value !== 'inherit').map((model) => ({
+                label: model.label,
+                value: model.value,
+              }))}
+            />
+          </Form.Item>
         </div>
       ),
     },
@@ -697,7 +860,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
                   'Maximum number of active subagent runs'
                 )}
               >
-                <InputNumber min={0} className="w-full" />
+                <InputNumber min={1} className="w-full" />
               </Form.Item>
               <Form.Item
                 name="spawn_policy_max_children_per_requester"
@@ -710,7 +873,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
                   'Maximum subagents allowed per requester'
                 )}
               >
-                <InputNumber min={0} className="w-full" />
+                <InputNumber min={1} className="w-full" />
               </Form.Item>
             </div>
             <Form.Item
@@ -766,6 +929,20 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
             <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
               {t('tenant.agentDefinitions.modal.toolPolicy', 'Tool Policy')}
             </h4>
+            <Form.Item
+              name="tool_policy_precedence"
+              label={t('tenant.agentDefinitions.modal.toolPolicyPrecedence', 'Precedence')}
+              initialValue="deny_first"
+            >
+              <Select>
+                <Option value="deny_first">
+                  {t('tenant.agentDefinitions.modal.toolPolicyPrecedenceDenyFirst', 'Deny first')}
+                </Option>
+                <Option value="allow_first">
+                  {t('tenant.agentDefinitions.modal.toolPolicyPrecedenceAllowFirst', 'Allow first')}
+                </Option>
+              </Select>
+            </Form.Item>
             <div className="grid grid-cols-2 gap-4">
               <Form.Item
                 name="tool_policy_allow"

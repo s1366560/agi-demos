@@ -397,7 +397,12 @@ async def _handle_update(  # noqa: PLR0913
             is_error=True,
         )
 
-    existing = await _orchestrator.get_agent(agent_id)
+    existing = await _orchestrator.get_agent(
+        agent_id,
+        tenant_id=ctx.tenant_id,
+        project_id=ctx.project_id or None,
+        exact_project=True,
+    )
     if existing is None:
         return ToolResult(
             output=json.dumps({"error": f"Agent not found: {agent_id}"}),
@@ -442,7 +447,12 @@ async def _handle_update(  # noqa: PLR0913
         trigger_examples=trigger_examples,
     )
 
-    updated = await _orchestrator.update_agent(existing)
+    updated = await _orchestrator.update_agent(
+        existing,
+        tenant_id=ctx.tenant_id,
+        project_id=ctx.project_id or None,
+        exact_project=True,
+    )
 
     await ctx.emit(
         {
@@ -471,14 +481,24 @@ async def _handle_delete(
             is_error=True,
         )
 
-    existing = await _orchestrator.get_agent(agent_id)
+    existing = await _orchestrator.get_agent(
+        agent_id,
+        tenant_id=ctx.tenant_id,
+        project_id=ctx.project_id or None,
+        exact_project=True,
+    )
     if existing is None:
         return ToolResult(
             output=json.dumps({"error": f"Agent not found: {agent_id}"}),
             is_error=True,
         )
 
-    deleted = await _orchestrator.delete_agent(agent_id)
+    deleted = await _orchestrator.delete_agent(
+        agent_id,
+        tenant_id=ctx.tenant_id,
+        project_id=ctx.project_id or None,
+        exact_project=True,
+    )
 
     if deleted:
         await ctx.emit(
@@ -495,6 +515,8 @@ async def _handle_delete(
 
 
 async def _handle_get(
+    ctx: ToolContext,
+    *,
     agent_id: str | None,
 ) -> ToolResult:
     """Handle the 'get' action."""
@@ -506,7 +528,12 @@ async def _handle_get(
             is_error=True,
         )
 
-    agent = await _orchestrator.get_agent(agent_id)
+    agent = await _orchestrator.get_agent(
+        agent_id,
+        tenant_id=ctx.tenant_id,
+        project_id=ctx.project_id or None,
+        exact_project=True,
+    )
     if agent is None:
         return ToolResult(
             output=json.dumps({"error": f"Agent not found: {agent_id}"}),
@@ -811,7 +838,7 @@ async def agent_definition_manage_tool(  # noqa: PLR0913
         elif action == "delete":
             result = await _handle_delete(ctx, agent_id=agent_id)
         elif action == "get":
-            result = await _handle_get(agent_id=agent_id)
+            result = await _handle_get(ctx, agent_id=agent_id)
         else:
             result = ToolResult(
                 output=json.dumps(
