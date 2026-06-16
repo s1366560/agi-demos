@@ -27,6 +27,9 @@ from src.infrastructure.adapters.primary.web.routers.agent.schemas import (
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent as DBAgentExecutionEvent,
     Conversation as DBConversation,
+    Project,
+    UserProject,
+    WorkspaceMemberModel,
     WorkspaceModel,
 )
 
@@ -66,6 +69,18 @@ def _request_with_container(container: object) -> MagicMock:
     return request
 
 
+def _db_with_project_access(*, allowed: bool = True) -> SimpleNamespace:
+    return SimpleNamespace(
+        execute=AsyncMock(
+            return_value=SimpleNamespace(
+                scalar_one_or_none=lambda: "membership" if allowed else None
+            )
+        ),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+    )
+
+
 @pytest.fixture(autouse=True)
 def _patch_llm_client(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
@@ -102,6 +117,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
     )
     request = _request_with_container(container)
     current_user = SimpleNamespace(id="user-1")
+    db = _db_with_project_access()
 
     route_calls: dict[str, Any] = {
         "list": lambda: conversations_router.list_conversations(
@@ -112,7 +128,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             offset=0,
             current_user=current_user,
             tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            db=db,
         ),
         "get": lambda: conversations_router.get_conversation(
             conversation_id="conversation-1",
@@ -120,7 +136,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            db=db,
         ),
         "context_status": lambda: conversations_router.get_context_status(
             conversation_id="conversation-1",
@@ -128,7 +144,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            db=db,
         ),
         "delete": lambda: conversations_router.delete_conversation(
             conversation_id="conversation-1",
@@ -136,7 +152,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            db=db,
         ),
         "title": lambda: conversations_router.update_conversation_title(
             conversation_id="conversation-1",
@@ -145,7 +161,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            db=db,
         ),
         "config": lambda: conversations_router.update_conversation_config(
             conversation_id="conversation-1",
@@ -154,7 +170,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=SimpleNamespace(rollback=AsyncMock()),
+            db=db,
         ),
         "mode": lambda: conversations_router.update_conversation_mode(
             conversation_id="conversation-1",
@@ -163,7 +179,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=SimpleNamespace(rollback=AsyncMock()),
+            db=db,
         ),
         "generate_title": lambda: conversations_router.generate_conversation_title(
             conversation_id="conversation-1",
@@ -171,7 +187,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            db=db,
         ),
         "summary": lambda: conversations_router.generate_summary(
             conversation_id="conversation-1",
@@ -179,7 +195,7 @@ async def test_service_backed_conversation_routes_sanitize_internal_errors(
             project_id="project-1",
             current_user=current_user,
             tenant_id="tenant-1",
-            db=SimpleNamespace(),
+            db=db,
         ),
     }
 
@@ -219,6 +235,15 @@ async def test_list_conversations_expands_workspace_group_and_names(
         participant_agents=[],
     )
     db_session.add_all([workspace, grouped_row])
+    db_session.add(
+        WorkspaceMemberModel(
+            id="wm-ws-group-user-1",
+            workspace_id="ws-group",
+            user_id="user-1",
+            role="viewer",
+            invited_by="user-1",
+        )
+    )
     await db_session.flush()
 
     base_conversation = Conversation(
@@ -236,6 +261,7 @@ async def test_list_conversations_expands_workspace_group_and_names(
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
+    monkeypatch.setattr(conversations_router, "_ensure_project_access", AsyncMock())
 
     response = await conversations_router.list_conversations(
         request=request,
@@ -323,6 +349,15 @@ async def test_grouped_workspace_conversations_use_stable_activity_order(
         ),
     ]
     db_session.add_all([workspace, *rows])
+    db_session.add(
+        WorkspaceMemberModel(
+            id="wm-ws-stable-order-user-1",
+            workspace_id="ws-stable-order",
+            user_id="user-1",
+            role="viewer",
+            invited_by="user-1",
+        )
+    )
     db_session.add_all(
         [
             DBAgentExecutionEvent(
@@ -356,12 +391,11 @@ async def test_grouped_workspace_conversations_use_stable_activity_order(
     )
     await db_session.flush()
 
-    container = SimpleNamespace(
-        list_conversations_use_case=lambda _llm: ListUseCase([], total=3)
-    )
+    container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=3))
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
+    monkeypatch.setattr(conversations_router, "_ensure_project_access", AsyncMock())
 
     response = await conversations_router.list_conversations(
         request=_request_with_container(container),
@@ -383,10 +417,69 @@ async def test_grouped_workspace_conversations_use_stable_activity_order(
     ]
 
 
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_list_workspace_conversations_requires_workspace_membership(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = Project(
+        id="project-workspace-list",
+        tenant_id="tenant-workspace-list",
+        name="Workspace list project",
+        description="Conversation list membership test",
+        owner_id="owner-user",
+        memory_rules={},
+        graph_config={},
+    )
+    workspace = WorkspaceModel(
+        id="ws-list-private",
+        tenant_id="tenant-workspace-list",
+        project_id="project-workspace-list",
+        name="Private Workspace",
+        created_by="owner-user",
+    )
+    db_session.add_all(
+        [
+            project,
+            workspace,
+            UserProject(
+                id="up-workspace-list-viewer",
+                user_id="user-1",
+                project_id="project-workspace-list",
+                role="viewer",
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    container = SimpleNamespace(list_conversations_use_case=lambda _llm: ListUseCase([], total=0))
+    monkeypatch.setattr(
+        conversations_router, "get_container_with_db", lambda _request, _db: container
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.list_conversations(
+            request=_request_with_container(container),
+            project_id="project-workspace-list",
+            status=None,
+            limit=10,
+            offset=0,
+            workspace_id="ws-list-private",
+            group_by_workspace=False,
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-workspace-list",
+            db=db_session,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Workspace access required"
+
+
 def test_list_conversations_accepts_large_workspace_refresh_pages() -> None:
-    limit_param = inspect.signature(conversations_router.list_conversations).parameters[
-        "limit"
-    ].default
+    limit_param = (
+        inspect.signature(conversations_router.list_conversations).parameters["limit"].default
+    )
 
     assert any(getattr(metadata, "le", None) == 500 for metadata in limit_param.metadata)
 
@@ -412,6 +505,7 @@ async def test_db_backed_conversation_routes_sanitize_internal_errors(
             conversation_id="conversation-1",
             message_id="message-1",
             current_user=current_user,
+            tenant_id="tenant-1",
             db=db,
         ),
         "edit_message": lambda: conversations_router.edit_message(
@@ -419,12 +513,14 @@ async def test_db_backed_conversation_routes_sanitize_internal_errors(
             message_id="message-1",
             data={"content": "updated"},
             current_user=current_user,
+            tenant_id="tenant-1",
             db=db,
         ),
         "tool_undo": lambda: conversations_router.request_tool_undo(
             conversation_id="conversation-1",
             execution_id="execution-1",
             current_user=current_user,
+            tenant_id="tenant-1",
             db=db,
         ),
     }
@@ -435,6 +531,133 @@ async def test_db_backed_conversation_routes_sanitize_internal_errors(
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == expected_detail
     assert "internal" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route_name", ["fork", "edit_message", "tool_undo"])
+async def test_db_backed_conversation_routes_reject_non_owner(
+    route_name: str,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        DBConversation(
+            id="conversation-owned-elsewhere",
+            project_id="project-1",
+            tenant_id="tenant-1",
+            user_id="other-user",
+            title="Private conversation",
+            status=ConversationStatus.ACTIVE.value,
+            agent_config={},
+            meta={},
+            message_count=0,
+            created_at=datetime.now(UTC),
+            current_mode="build",
+            participant_agents=[],
+        )
+    )
+    await db_session.flush()
+
+    current_user = SimpleNamespace(id="user-1")
+    route_calls: dict[str, Any] = {
+        "fork": lambda: conversations_router.fork_conversation(
+            conversation_id="conversation-owned-elsewhere",
+            message_id="message-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db_session,
+        ),
+        "edit_message": lambda: conversations_router.edit_message(
+            conversation_id="conversation-owned-elsewhere",
+            message_id="message-1",
+            data={"content": "updated"},
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db_session,
+        ),
+        "tool_undo": lambda: conversations_router.request_tool_undo(
+            conversation_id="conversation-owned-elsewhere",
+            execution_id="execution-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db_session,
+        ),
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_calls[route_name]()
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Access denied"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route_name", ["fork", "edit_message", "tool_undo"])
+async def test_db_backed_conversation_routes_require_project_access_for_owner(
+    route_name: str,
+    db_session: AsyncSession,
+) -> None:
+    db_session.add(
+        Project(
+            id="project-private",
+            tenant_id="tenant-1",
+            name="Private project",
+            description="Project without current user membership",
+            owner_id="other-user",
+            memory_rules={},
+            graph_config={},
+        )
+    )
+    db_session.add(
+        DBConversation(
+            id="conversation-owned-without-project",
+            project_id="project-private",
+            tenant_id="tenant-1",
+            user_id="user-1",
+            title="Former project conversation",
+            status=ConversationStatus.ACTIVE.value,
+            agent_config={},
+            meta={},
+            message_count=0,
+            created_at=datetime.now(UTC),
+            current_mode="build",
+            participant_agents=[],
+        )
+    )
+    await db_session.flush()
+
+    current_user = SimpleNamespace(id="user-1")
+    route_calls: dict[str, Any] = {
+        "fork": lambda: conversations_router.fork_conversation(
+            conversation_id="conversation-owned-without-project",
+            message_id="message-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db_session,
+        ),
+        "edit_message": lambda: conversations_router.edit_message(
+            conversation_id="conversation-owned-without-project",
+            message_id="message-1",
+            data={"content": "updated"},
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db_session,
+        ),
+        "tool_undo": lambda: conversations_router.request_tool_undo(
+            conversation_id="conversation-owned-without-project",
+            execution_id="execution-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db_session,
+        ),
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_calls[route_name]()
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Access denied"
 
 
 @pytest.mark.unit
@@ -462,6 +685,195 @@ async def test_create_conversation_validation_errors_are_sanitized() -> None:
     assert exc_info.value.detail == "Invalid request"
     assert "internal" not in exc_info.value.detail
     db.rollback.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_conversation_requires_project_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    container = SimpleNamespace(create_conversation_use_case=lambda _llm: object())
+    get_container = MagicMock(return_value=container)
+    monkeypatch.setattr(conversations_router, "get_container_with_db", get_container)
+    db = _db_with_project_access(allowed=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.create_conversation(
+            data=CreateConversationRequest(project_id="project-1"),
+            request=_request_with_container(container),
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Access denied"
+    get_container.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_conversation_rejects_inaccessible_selected_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    create_use_case = SimpleNamespace(execute=AsyncMock())
+    registry = SimpleNamespace(get_by_id=AsyncMock(return_value=None))
+    container = SimpleNamespace(
+        agent_registry=lambda: registry,
+        create_conversation_use_case=lambda _llm: create_use_case,
+    )
+    monkeypatch.setattr(
+        conversations_router, "get_container_with_db", lambda _request, _db: container
+    )
+    db = _db_with_project_access()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.create_conversation(
+            data=CreateConversationRequest(
+                project_id="project-1",
+                agent_config={"selected_agent_id": "agent-from-another-project"},
+            ),
+            request=_request_with_container(container),
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid agent selection"
+    registry.get_by_id.assert_awaited_once_with(
+        "agent-from-another-project",
+        tenant_id="tenant-1",
+        project_id="project-1",
+    )
+    create_use_case.execute.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_list_conversations_requires_project_access() -> None:
+    db = _db_with_project_access(allowed=False)
+    container = SimpleNamespace(list_conversations_use_case=lambda _llm: object())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await conversations_router.list_conversations(
+            request=_request_with_container(container),
+            project_id="project-1",
+            status=None,
+            limit=50,
+            offset=0,
+            workspace_id=None,
+            group_by_workspace=False,
+            current_user=SimpleNamespace(id="user-1"),
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Access denied"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "route_name",
+    [
+        "get",
+        "context_status",
+        "delete",
+        "title",
+        "config",
+        "mode",
+        "generate_title",
+        "summary",
+    ],
+)
+async def test_project_scoped_conversation_routes_require_project_access(
+    route_name: str,
+) -> None:
+    container = SimpleNamespace(
+        get_conversation_use_case=lambda _llm: object(),
+        agent_service=lambda _llm: object(),
+    )
+    request = _request_with_container(container)
+    db = _db_with_project_access(allowed=False)
+    current_user = SimpleNamespace(id="user-1")
+    route_calls: dict[str, Any] = {
+        "get": lambda: conversations_router.get_conversation(
+            conversation_id="conversation-1",
+            request=request,
+            project_id="project-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        ),
+        "context_status": lambda: conversations_router.get_context_status(
+            conversation_id="conversation-1",
+            request=request,
+            project_id="project-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        ),
+        "delete": lambda: conversations_router.delete_conversation(
+            conversation_id="conversation-1",
+            request=request,
+            project_id="project-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        ),
+        "title": lambda: conversations_router.update_conversation_title(
+            conversation_id="conversation-1",
+            data=UpdateConversationTitleRequest(title="New title"),
+            request=request,
+            project_id="project-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        ),
+        "config": lambda: conversations_router.update_conversation_config(
+            conversation_id="conversation-1",
+            data=UpdateConversationConfigRequest(llm_model_override="gpt-test"),
+            request=request,
+            project_id="project-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        ),
+        "mode": lambda: conversations_router.update_conversation_mode(
+            conversation_id="conversation-1",
+            data=UpdateConversationModeRequest(conversation_mode="single_agent"),
+            request=request,
+            project_id="project-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        ),
+        "generate_title": lambda: conversations_router.generate_conversation_title(
+            conversation_id="conversation-1",
+            request=request,
+            project_id="project-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        ),
+        "summary": lambda: conversations_router.generate_summary(
+            conversation_id="conversation-1",
+            request=request,
+            project_id="project-1",
+            current_user=current_user,
+            tenant_id="tenant-1",
+            db=db,
+        ),
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_calls[route_name]()
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Access denied"
+    request.app.state.container.with_db.assert_not_called()
 
 
 @pytest.mark.unit
@@ -540,7 +952,7 @@ async def test_update_conversation_mode_value_errors_are_sanitized(
         ),
     )
     container = SimpleNamespace(agent_service=lambda _llm: agent_service)
-    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    db = _db_with_project_access()
     monkeypatch.setattr(
         conversations_router,
         "get_container_with_db",

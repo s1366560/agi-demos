@@ -8,8 +8,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import func, or_, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import ColumnElement, Select, Subquery
@@ -18,6 +18,7 @@ from src.application.constants.error_ids import AGENT_CONVERSATION_CREATE_FAILED
 from src.application.services.conversation_events import publish_conversation_created
 from src.configuration.factories import create_llm_client
 from src.domain.model.agent import ConversationStatus
+from src.domain.model.agent.conversation.agent_config import selected_agent_id_from_config
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
@@ -28,8 +29,11 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent as AgentExecutionEventModel,
     Conversation as ConversationModel,
     Message as MessageModel,
+    Project,
     ToolExecutionRecord,
     User,
+    UserProject,
+    WorkspaceMemberModel,
     WorkspaceModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
@@ -126,6 +130,80 @@ def _workspace_link_filter(workspace_ids: set[str]) -> ColumnElement[bool]:
     return or_(*conditions)
 
 
+async def _ensure_project_access(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserProject.id)
+            .join(Project, UserProject.project_id == Project.id)
+            .where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == project_id,
+                    Project.tenant_id == tenant_id,
+                )
+            )
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied"),
+        )
+
+
+async def _ensure_selected_agent_access(
+    agent_config: dict[str, Any] | None,
+    *,
+    container: "DIContainer",
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    selected_agent_id = selected_agent_id_from_config(agent_config)
+    if selected_agent_id is None:
+        return
+
+    registry = container.agent_registry()
+    agent = await registry.get_by_id(
+        selected_agent_id,
+        tenant_id=tenant_id,
+        project_id=project_id,
+    )
+    if agent is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Invalid agent selection"),
+        )
+
+
+async def _load_owned_conversation_row(
+    db: AsyncSession,
+    *,
+    conversation_id: str,
+    current_user: User,
+    tenant_id: str,
+) -> ConversationModel:
+    conversation = await db.get(ConversationModel, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail=_("Conversation not found"))
+    if conversation.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail=_("Conversation not found"))
+    if conversation.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail=_("Access denied"))
+    await _ensure_project_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        project_id=conversation.project_id,
+    )
+    return conversation
+
+
 async def _workspace_name_by_id(
     db: AsyncSession,
     *,
@@ -145,6 +223,69 @@ async def _workspace_name_by_id(
         )
     )
     return {workspace_id: name for workspace_id, name in result.all()}
+
+
+async def _ensure_workspace_access(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str,
+) -> None:
+    workspace_exists = (
+        await db.execute(
+            refresh_select_statement(
+                select(WorkspaceModel.id).where(
+                    WorkspaceModel.id == workspace_id,
+                    WorkspaceModel.tenant_id == tenant_id,
+                    WorkspaceModel.project_id == project_id,
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    if workspace_exists is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Workspace not found"))
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(WorkspaceMemberModel.id).where(
+                WorkspaceMemberModel.workspace_id == workspace_id,
+                WorkspaceMemberModel.user_id == current_user.id,
+            )
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Workspace access required"),
+        )
+
+
+async def _accessible_workspace_ids(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+    project_id: str,
+    workspace_ids: set[str],
+) -> set[str]:
+    if not workspace_ids:
+        return set()
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(WorkspaceMemberModel.workspace_id)
+            .join(WorkspaceModel, WorkspaceMemberModel.workspace_id == WorkspaceModel.id)
+            .where(
+                WorkspaceMemberModel.user_id == current_user.id,
+                WorkspaceMemberModel.workspace_id.in_(workspace_ids),
+                WorkspaceModel.tenant_id == tenant_id,
+                WorkspaceModel.project_id == project_id,
+            )
+        )
+    )
+    return {str(workspace_id) for workspace_id in result.scalars().all()}
 
 
 async def _list_workspace_conversations(
@@ -303,7 +444,19 @@ async def create_conversation(
     """Create a new conversation."""
     try:
         assert request is not None
+        await _ensure_project_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=data.project_id,
+        )
         container = get_container_with_db(request, db)
+        await _ensure_selected_agent_access(
+            data.agent_config,
+            container=container,
+            tenant_id=tenant_id,
+            project_id=data.project_id,
+        )
         llm = await create_llm_client(tenant_id)
         use_case = container.create_conversation_use_case(llm)
         conversation = await use_case.execute(
@@ -328,6 +481,8 @@ async def create_conversation(
             )
         return ConversationResponse.from_domain(conversation)
 
+    except HTTPException:
+        raise
     except (ValueError, AttributeError) as e:
         await db.rollback()
         logger.error(
@@ -378,6 +533,14 @@ async def list_conversations(
 ) -> PaginatedConversationsResponse:
     """List conversations for a project with pagination."""
     try:
+        assert request is not None
+        await _ensure_project_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+
         engine = db.get_bind()
         pool = engine.pool  # type: ignore[union-attr]
         pool_size = getattr(pool, "size", lambda: 0)()
@@ -388,11 +551,17 @@ async def list_conversations(
             f"overflow={overflow}, queue_size={pool_size - checked_out}"
         )
 
-        assert request is not None
         conv_status = ConversationStatus(status) if status else None
         requested_workspace_id = workspace_id.strip() if workspace_id else None
 
         if requested_workspace_id:
+            await _ensure_workspace_access(
+                db,
+                current_user=current_user,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                workspace_id=requested_workspace_id,
+            )
             conversations = await _list_workspace_conversations(
                 db,
                 project_id=project_id,
@@ -433,6 +602,13 @@ async def list_conversations(
                 if conversation_workspace_id is not None:
                     workspace_ids.add(conversation_workspace_id)
             if group_by_workspace and workspace_ids:
+                workspace_ids = await _accessible_workspace_ids(
+                    db,
+                    current_user=current_user,
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    workspace_ids=workspace_ids,
+                )
                 workspace_conversations = await _list_workspace_conversations(
                     db,
                     project_id=project_id,
@@ -467,6 +643,8 @@ async def list_conversations(
             next_offset=next_offset,
         )
 
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Error listing conversations")
         raise HTTPException(status_code=500, detail=_("Failed to list conversations")) from exc
@@ -484,6 +662,12 @@ async def get_conversation(
     """Get a conversation by ID."""
     try:
         assert request is not None
+        await _ensure_project_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         use_case = container.get_conversation_use_case(llm)
@@ -523,6 +707,12 @@ async def get_context_status(
     """
     try:
         assert request is not None
+        await _ensure_project_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         use_case = container.get_conversation_use_case(llm)
@@ -585,6 +775,12 @@ async def delete_conversation(
     """Delete a conversation and all its messages."""
     try:
         assert request is not None
+        await _ensure_project_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -624,6 +820,12 @@ async def update_conversation_title(
     """Update conversation title."""
     try:
         assert request is not None
+        await _ensure_project_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -669,6 +871,12 @@ async def update_conversation_config(
     """Update conversation-level LLM configuration (model override, LLM params)."""
     try:
         assert request is not None
+        await _ensure_project_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -726,6 +934,12 @@ async def update_conversation_mode(
 
     try:
         assert request is not None
+        await _ensure_project_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -806,6 +1020,12 @@ async def generate_conversation_title(
     """
     try:
         assert request is not None
+        await _ensure_project_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -880,6 +1100,12 @@ async def generate_summary(
     """Generate an AI summary of the conversation."""
     try:
         assert request is not None
+        await _ensure_project_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -955,13 +1181,17 @@ async def fork_conversation(
     conversation_id: str,
     message_id: str = Query(..., description="Message ID to fork from"),
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Fork a conversation from a specific message point."""
     try:
-        original = await db.get(ConversationModel, conversation_id)
-        if not original:
-            raise HTTPException(status_code=404, detail=_("Conversation not found"))
+        original = await _load_owned_conversation_row(
+            db,
+            conversation_id=conversation_id,
+            current_user=current_user,
+            tenant_id=tenant_id,
+        )
 
         new_id = str(uuid.uuid4())
         new_conv = ConversationModel(
@@ -1025,10 +1255,17 @@ async def edit_message(
     message_id: str,
     data: dict[str, Any],
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Edit a message and increment version."""
     try:
+        await _load_owned_conversation_row(
+            db,
+            conversation_id=conversation_id,
+            current_user=current_user,
+            tenant_id=tenant_id,
+        )
         msg = await db.get(MessageModel, message_id)
         if not msg or msg.conversation_id != conversation_id:
             raise HTTPException(status_code=404, detail=_("Message not found"))
@@ -1063,6 +1300,7 @@ async def request_tool_undo(
     conversation_id: str,
     execution_id: str,
     current_user: User = Depends(get_current_user),
+    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Request undo of a tool execution.
@@ -1071,6 +1309,12 @@ async def request_tool_undo(
     the specified tool execution.
     """
     try:
+        await _load_owned_conversation_row(
+            db,
+            conversation_id=conversation_id,
+            current_user=current_user,
+            tenant_id=tenant_id,
+        )
         exec_record = await db.get(ToolExecutionRecord, execution_id)
         if not exec_record:
             raise HTTPException(status_code=404, detail=_("Tool execution not found"))
