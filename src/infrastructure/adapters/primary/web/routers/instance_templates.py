@@ -133,7 +133,7 @@ async def list_templates(
         service = container.instance_template_service()
 
         offset = (page - 1) * page_size
-        templates = await service.list_templates(
+        templates, total = await service.list_templates_with_total(
             tenant_id=tenant_id,
             is_published=is_published,
             limit=page_size,
@@ -144,7 +144,7 @@ async def list_templates(
             templates=[
                 InstanceTemplateResponse.model_validate(t, from_attributes=True) for t in templates
             ],
-            total=len(templates),
+            total=total,
             page=page,
             page_size=page_size,
         )

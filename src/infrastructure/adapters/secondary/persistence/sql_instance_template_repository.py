@@ -1,9 +1,9 @@
 """SQLAlchemy implementation of InstanceTemplateRepository using BaseRepository."""
 
 import logging
-from typing import override
+from typing import Any, override
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.instance_template.enums import TemplateItemType
@@ -47,13 +47,62 @@ class SqlInstanceTemplateRepository(
         return await self.list_all(limit=limit, offset=offset, tenant_id=tenant_id)
 
     @override
+    async def find_by_filters(
+        self,
+        *,
+        tenant_id: str,
+        is_published: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[InstanceTemplate]:
+        query = (
+            select(InstanceTemplateModel)
+            .where(*self._filter_conditions(tenant_id=tenant_id, is_published=is_published))
+            .order_by(InstanceTemplateModel.created_at.asc(), InstanceTemplateModel.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
+        db_models = result.scalars().all()
+        return [d for m in db_models if (d := self._to_domain(m)) is not None]
+
+    @override
+    async def count_by_filters(
+        self,
+        *,
+        tenant_id: str,
+        is_published: bool | None = None,
+    ) -> int:
+        query = (
+            select(func.count())
+            .select_from(InstanceTemplateModel)
+            .where(*self._filter_conditions(tenant_id=tenant_id, is_published=is_published))
+        )
+        result = await self._session.execute(refresh_select_statement(query))
+        return result.scalar() or 0
+
+    @staticmethod
+    def _filter_conditions(*, tenant_id: str, is_published: bool | None = None) -> list[Any]:
+        conditions: list[Any] = [
+            InstanceTemplateModel.tenant_id == tenant_id,
+            InstanceTemplateModel.deleted_at.is_(None),
+        ]
+        if is_published is not None:
+            conditions.append(InstanceTemplateModel.is_published == is_published)
+        return conditions
+
+    @override
     async def find_featured(self, limit: int = 20) -> list[InstanceTemplate]:
         return await self.list_all(limit=limit, is_featured=True, is_published=True)
 
     @override
     async def save_item(self, item: TemplateItem) -> TemplateItem:
         query = select(TemplateItemModel).where(TemplateItemModel.id == item.id).limit(1)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         existing = result.scalar_one_or_none()
         if existing is not None:
             existing.item_type = item.item_type.value
@@ -81,14 +130,18 @@ class SqlInstanceTemplateRepository(
             .where(TemplateItemModel.template_id == template_id)
             .order_by(TemplateItemModel.display_order)
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_items = result.scalars().all()
         return [self._item_to_domain(i) for i in db_items]
 
     @override
     async def delete_item(self, item_id: str) -> bool:
         query = select(TemplateItemModel).where(TemplateItemModel.id == item_id)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_item = result.scalar_one_or_none()
         if db_item is not None:
             await self._session.delete(db_item)

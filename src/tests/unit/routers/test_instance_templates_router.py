@@ -21,6 +21,9 @@ class _FailingTemplateService:
     async def list_templates(self, **_kwargs: object) -> list[object]:
         raise ValueError("internal list secret")
 
+    async def list_templates_with_total(self, **_kwargs: object) -> tuple[list[object], int]:
+        raise ValueError("internal list secret")
+
     async def update_template(self, **_kwargs: object) -> object:
         raise ValueError("Template tmpl-secret not found")
 

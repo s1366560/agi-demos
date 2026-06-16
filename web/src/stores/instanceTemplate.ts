@@ -12,6 +12,8 @@ import type {
   TemplateItemCreate,
 } from '../services/instanceTemplateService';
 
+type TemplateListParams = Parameters<typeof instanceTemplateService.list>[0];
+
 // ============================================================================
 // ERROR HELPER
 // ============================================================================
@@ -47,7 +49,7 @@ interface InstanceTemplateState {
   error: string | null;
 
   // Actions - Template CRUD
-  listTemplates: (params?: Record<string, unknown>) => Promise<void>;
+  listTemplates: (params?: TemplateListParams) => Promise<void>;
   getTemplate: (id: string) => Promise<InstanceTemplateResponse>;
   createTemplate: (data: InstanceTemplateCreate) => Promise<InstanceTemplateResponse>;
   updateTemplate: (id: string, data: InstanceTemplateUpdate) => Promise<InstanceTemplateResponse>;
@@ -102,6 +104,8 @@ export const useInstanceTemplateStore = create<InstanceTemplateState>()(
           set({
             templates: response.templates,
             total: response.total,
+            page: response.page,
+            pageSize: response.page_size,
             isLoading: false,
           });
         } catch (error: unknown) {
@@ -296,6 +300,14 @@ export const useTemplateLoading = () => useInstanceTemplateStore((s) => s.isLoad
 export const useTemplateSubmitting = () => useInstanceTemplateStore((s) => s.isSubmitting);
 export const useTemplateError = () => useInstanceTemplateStore((s) => s.error);
 export const useTemplateTotal = () => useInstanceTemplateStore((s) => s.total);
+export const useTemplatePagination = () =>
+  useInstanceTemplateStore(
+    useShallow((s) => ({
+      total: s.total,
+      page: s.page,
+      pageSize: s.pageSize,
+    }))
+  );
 
 export const useTemplateActions = () =>
   useInstanceTemplateStore(

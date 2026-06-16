@@ -1,10 +1,10 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import { Card, Tag, Form, Input, Typography, Space } from 'antd';
+import { Card, Tag, Form, Input, Typography, Space, Pagination } from 'antd';
 import { Copy, Upload, Trash2, Eye, Plus, Search } from 'lucide-react';
 
 import {
@@ -22,6 +22,7 @@ import {
   useTemplateLoading,
   useTemplateSubmitting,
   useTemplateActions,
+  useTemplatePagination,
 } from '../../stores/instanceTemplate';
 
 const { Title, Text, Paragraph } = Typography;
@@ -30,6 +31,14 @@ interface CreateFormValues {
   name: string;
   description?: string;
   default_config?: string;
+}
+
+type TemplateStatusFilter = 'all' | 'published' | 'draft';
+
+interface LoadTemplatesOptions {
+  page?: number;
+  pageSize?: number;
+  status?: TemplateStatusFilter;
 }
 
 const slugifyTemplateName = (name: string): string =>
@@ -42,6 +51,12 @@ const slugifyTemplateName = (name: string): string =>
 
 const buildCloneName = (name: string): string => `Copy of ${name}`.slice(0, 200);
 
+const templateStatusToPublished = (status: TemplateStatusFilter): boolean | undefined => {
+  if (status === 'published') return true;
+  if (status === 'draft') return false;
+  return undefined;
+};
+
 export const InstanceTemplateList: FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -50,6 +65,7 @@ export const InstanceTemplateList: FC = () => {
   const templates = useTemplates();
   const isLoading = useTemplateLoading();
   const isSubmitting = useTemplateSubmitting();
+  const { total, page, pageSize } = useTemplatePagination();
   const {
     listTemplates,
     createTemplate,
@@ -61,17 +77,33 @@ export const InstanceTemplateList: FC = () => {
   } = useTemplateActions();
 
   const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
+  const [statusFilter, setStatusFilter] = useState<TemplateStatusFilter>('all');
   const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
   const [form] = Form.useForm<CreateFormValues>();
 
+  const loadTemplates = useCallback(
+    (options?: LoadTemplatesOptions) => {
+      const selectedOptions = options ?? {};
+      const isPublished = templateStatusToPublished(selectedOptions.status ?? statusFilter);
+      return listTemplates({
+        page: selectedOptions.page ?? 1,
+        page_size: selectedOptions.pageSize ?? pageSize,
+        ...(isPublished === undefined ? {} : { is_published: isPublished }),
+      });
+    },
+    [listTemplates, pageSize, statusFilter]
+  );
+
   useEffect(() => {
-    listTemplates().catch(() => messageApi?.error(t('tenant.templates.fetchError')));
+    loadTemplates().catch(() => messageApi?.error(t('tenant.templates.fetchError')));
+  }, [loadTemplates, messageApi, t]);
+
+  useEffect(() => {
     return () => {
       clearError();
       reset();
     };
-  }, [listTemplates, clearError, reset, t, messageApi]);
+  }, [clearError, reset]);
 
   const filteredTemplates = useMemo(() => {
     return templates.filter((template) => {
@@ -119,7 +151,7 @@ export const InstanceTemplateList: FC = () => {
     try {
       await cloneTemplate(id, buildCloneName(name));
       messageApi?.success(t('tenant.templates.cloneSuccess'));
-      void listTemplates();
+      void loadTemplates({ page });
     } catch (err) {
       if (err instanceof Error) {
         messageApi?.error(err.message);
@@ -131,7 +163,7 @@ export const InstanceTemplateList: FC = () => {
     try {
       await publishTemplate(id);
       messageApi?.success(t('tenant.templates.publishSuccess'));
-      void listTemplates();
+      void loadTemplates({ page });
     } catch (err) {
       if (err instanceof Error) {
         messageApi?.error(err.message);
@@ -143,6 +175,7 @@ export const InstanceTemplateList: FC = () => {
     try {
       await deleteTemplate(id);
       messageApi?.success(t('tenant.templates.deleteSuccess'));
+      void loadTemplates({ page });
     } catch (err) {
       if (err instanceof Error) {
         messageApi?.error(err.message);
@@ -293,6 +326,22 @@ export const InstanceTemplateList: FC = () => {
               </div>
             </Card>
           ))}
+        </div>
+      )}
+
+      {total > pageSize && (
+        <div className="flex justify-end">
+          <Pagination
+            aria-label={t('common.pagination.label', { defaultValue: 'Pagination' })}
+            current={page}
+            pageSize={pageSize}
+            total={total}
+            showSizeChanger
+            pageSizeOptions={['12', '20', '50', '100']}
+            onChange={(nextPage, nextPageSize) => {
+              void loadTemplates({ page: nextPage, pageSize: nextPageSize });
+            }}
+          />
         </div>
       )}
 

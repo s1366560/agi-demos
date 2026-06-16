@@ -103,8 +103,24 @@ class InstanceTemplateService:
         limit: int = 50,
         offset: int = 0,
     ) -> list[InstanceTemplate]:
+        """List templates with optional filtering."""
+        templates, _total = await self.list_templates_with_total(
+            tenant_id=tenant_id,
+            is_published=is_published,
+            limit=limit,
+            offset=offset,
+        )
+        return templates
+
+    async def list_templates_with_total(
+        self,
+        tenant_id: str | None = None,
+        is_published: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[InstanceTemplate], int]:
         """
-        List templates with optional filtering.
+        List templates with optional filtering and total count.
 
         Args:
             tenant_id: Optional tenant ID to scope results.
@@ -113,27 +129,20 @@ class InstanceTemplateService:
             offset: Number of results to skip.
 
         Returns:
-            List of templates matching the criteria.
+            Page of templates and total matching count.
         """
-        if tenant_id is not None:
-            templates = await self._template_repo.find_by_tenant(
-                tenant_id,
-                limit=limit,
-                offset=offset,
-            )
-        else:
-            # No tenant scope — fetch global templates via tenant repo
-            # with empty string to represent "no tenant".
-            templates = await self._template_repo.find_by_tenant(
-                "",
-                limit=limit,
-                offset=offset,
-            )
-
-        if is_published is not None:
-            templates = [t for t in templates if t.is_published == is_published]
-
-        return templates
+        scoped_tenant_id = tenant_id or ""
+        templates = await self._template_repo.find_by_filters(
+            tenant_id=scoped_tenant_id,
+            is_published=is_published,
+            limit=limit,
+            offset=offset,
+        )
+        total = await self._template_repo.count_by_filters(
+            tenant_id=scoped_tenant_id,
+            is_published=is_published,
+        )
+        return templates, total
 
     async def update_template(
         self,
