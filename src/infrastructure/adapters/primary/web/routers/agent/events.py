@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import and_, select
@@ -22,9 +22,14 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User, UserTenant
+from src.infrastructure.adapters.secondary.persistence.models import (
+    User,
+    WorkspaceMemberModel,
+    WorkspaceModel,
+)
 from src.infrastructure.i18n import gettext as _
 
+from .access import get_tenant_role
 from .schemas import (
     EventReplayResponse,
     ExecutionStatusResponse,
@@ -34,6 +39,7 @@ from .schemas import (
 from .utils import get_container_with_db
 
 logger = logging.getLogger(__name__)
+_TENANT_ADMIN_ROLES = frozenset({"admin", "owner"})
 
 
 async def _check_redis_running(redis_client: Any, conversation_id: str) -> tuple[bool, str | None]:
@@ -101,9 +107,7 @@ async def _get_resume_service(db: AsyncSession) -> Any:
     return ExecutionResumeService(checkpoint_repo=checkpoint_repo)
 
 
-async def _get_accessible_conversation(
-    conversation_id: str, user: User, db: AsyncSession
-) -> Any:
+async def _get_accessible_conversation(conversation_id: str, user: User, db: AsyncSession) -> Any:
     from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
         SqlConversationRepository,
     )
@@ -113,23 +117,72 @@ async def _get_accessible_conversation(
     if not conversation:
         raise HTTPException(status_code=404, detail=_("Conversation not found"))
 
-    await _verify_tenant_access(conversation.tenant_id, user, db)
-    return conversation
+    tenant_role = await get_tenant_role(db, cast(Any, user), conversation.tenant_id)
+    if tenant_role is None:
+        raise HTTPException(status_code=403, detail=_("Access denied to this conversation"))
+    if conversation.user_id == user.id or tenant_role in _TENANT_ADMIN_ROLES:
+        return conversation
+    if _is_workspace_conversation(conversation) and await _has_workspace_access(
+        db=db,
+        user=user,
+        tenant_id=conversation.tenant_id,
+        project_id=conversation.project_id,
+        workspace_id=_workspace_id_from_conversation(conversation),
+    ):
+        return conversation
+
+    raise HTTPException(status_code=403, detail=_("Access denied to this conversation"))
 
 
-async def _verify_tenant_access(tenant_id: str, user: User, db: AsyncSession) -> None:
-    if user.is_superuser:
-        return
+def _is_workspace_conversation(conversation: Any) -> bool:
+    if getattr(conversation, "workspace_id", None):
+        return True
+    metadata = getattr(conversation, "metadata", None)
+    if isinstance(metadata, dict) and metadata.get("workspace_id"):
+        return True
+    conversation_id = str(getattr(conversation, "id", ""))
+    return conversation_id.startswith("workspace-") or conversation_id.startswith("workspace-chat:")
+
+
+def _workspace_id_from_conversation(conversation: Any) -> str | None:
+    workspace_id = getattr(conversation, "workspace_id", None)
+    if workspace_id:
+        return str(workspace_id)
+    metadata = getattr(conversation, "metadata", None)
+    if isinstance(metadata, dict) and metadata.get("workspace_id"):
+        return str(metadata["workspace_id"])
+    conversation_id = str(getattr(conversation, "id", ""))
+    if conversation_id.startswith("workspace-chat:"):
+        return conversation_id.split(":", 1)[1] or None
+    return None
+
+
+async def _has_workspace_access(
+    *,
+    db: AsyncSession,
+    user: User,
+    tenant_id: str,
+    project_id: str,
+    workspace_id: str | None,
+) -> bool:
+    if not workspace_id:
+        return False
 
     result = await db.execute(
         refresh_select_statement(
-            select(UserTenant).where(
-                and_(UserTenant.user_id == user.id, UserTenant.tenant_id == tenant_id)
+            select(WorkspaceMemberModel.id)
+            .join(WorkspaceModel, WorkspaceMemberModel.workspace_id == WorkspaceModel.id)
+            .where(
+                and_(
+                    WorkspaceMemberModel.user_id == user.id,
+                    WorkspaceMemberModel.workspace_id == workspace_id,
+                    WorkspaceModel.tenant_id == tenant_id,
+                    WorkspaceModel.project_id == project_id,
+                )
             )
         )
     )
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=403, detail=_("Access denied to this conversation"))
+    return result.scalar_one_or_none() is not None
 
 
 router = APIRouter()

@@ -12,7 +12,13 @@ from src.infrastructure.adapters.primary.web.routers.agent.events import (
     get_workflow_status,
     resume_execution,
 )
-from src.infrastructure.adapters.secondary.persistence.models import Conversation
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Conversation,
+    UserProject,
+    UserTenant,
+    WorkspaceMemberModel,
+    WorkspaceModel,
+)
 
 
 @pytest.mark.unit
@@ -94,6 +100,180 @@ class TestAgentEventsRouter:
 
         assert exc_info.value.status_code == 403
         container.agent_execution_event_repository.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_conversation_events_rejects_same_tenant_non_owner_private_conversation(
+        self,
+        test_db,
+        test_project_db,
+        test_tenant_db,
+        test_user,
+        another_user,
+    ) -> None:
+        conversation_id = await self._seed_conversation(
+            test_db, test_project_db, test_tenant_db, test_user
+        )
+        test_db.add(
+            UserTenant(
+                id="ut-events-router-other",
+                user_id=another_user.id,
+                tenant_id=test_tenant_db.id,
+                role="member",
+                permissions={"read": True},
+            )
+        )
+        await test_db.commit()
+        container = SimpleNamespace(agent_execution_event_repository=MagicMock())
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_conversation_events(
+                conversation_id,
+                request=self._request_with_container(container),
+                current_user=another_user,
+                db=test_db,
+            )
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == "Access denied to this conversation"
+        container.agent_execution_event_repository.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_conversation_events_rejects_project_member_without_workspace_membership(
+        self,
+        test_db,
+        test_project_db,
+        test_tenant_db,
+        test_user,
+        another_user,
+    ) -> None:
+        conversation_id = "workspace-chat:workspace-events-router"
+        test_db.add(
+            Conversation(
+                id=conversation_id,
+                project_id=test_project_db.id,
+                tenant_id=test_tenant_db.id,
+                user_id=test_user.id,
+                title="Workspace events router",
+                status="active",
+                agent_config={},
+                meta={},
+                message_count=0,
+                current_mode="build",
+                merge_strategy="result_only",
+                participant_agents=[],
+                workspace_id="workspace-events-router",
+            )
+        )
+        test_db.add(
+            UserTenant(
+                id="ut-events-router-project-member",
+                user_id=another_user.id,
+                tenant_id=test_tenant_db.id,
+                role="member",
+                permissions={"read": True},
+            )
+        )
+        test_db.add(
+            UserProject(
+                id="up-events-router-project-member",
+                user_id=another_user.id,
+                project_id=test_project_db.id,
+                role="viewer",
+            )
+        )
+        await test_db.commit()
+        container = SimpleNamespace(agent_execution_event_repository=MagicMock())
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_conversation_events(
+                conversation_id,
+                request=self._request_with_container(container),
+                from_time_us=0,
+                from_counter=0,
+                limit=1000,
+                current_user=another_user,
+                db=test_db,
+            )
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == "Access denied to this conversation"
+        container.agent_execution_event_repository.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_conversation_events_allows_workspace_member_for_workspace_conversation(
+        self,
+        test_db,
+        test_project_db,
+        test_tenant_db,
+        test_user,
+        another_user,
+    ) -> None:
+        conversation_id = "workspace-chat:workspace-events-member"
+        workspace_id = "workspace-events-member"
+        test_db.add(
+            Conversation(
+                id=conversation_id,
+                project_id=test_project_db.id,
+                tenant_id=test_tenant_db.id,
+                user_id=test_user.id,
+                title="Workspace events router",
+                status="active",
+                agent_config={},
+                meta={},
+                message_count=0,
+                current_mode="build",
+                merge_strategy="result_only",
+                participant_agents=[],
+                workspace_id=workspace_id,
+            )
+        )
+        test_db.add(
+            WorkspaceModel(
+                id=workspace_id,
+                tenant_id=test_tenant_db.id,
+                project_id=test_project_db.id,
+                name="Workspace Events Member",
+                created_by=test_user.id,
+            )
+        )
+        test_db.add(
+            UserTenant(
+                id="ut-events-router-workspace-member",
+                user_id=another_user.id,
+                tenant_id=test_tenant_db.id,
+                role="member",
+                permissions={"read": True},
+            )
+        )
+        test_db.add(
+            WorkspaceMemberModel(
+                id="wm-events-router-workspace-member",
+                user_id=another_user.id,
+                workspace_id=workspace_id,
+                role="viewer",
+                invited_by=test_user.id,
+            )
+        )
+        await test_db.commit()
+        event_repo = SimpleNamespace(get_events=AsyncMock(return_value=[]))
+        container = SimpleNamespace(agent_execution_event_repository=lambda: event_repo)
+        self.monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.agent.events.get_container_with_db",
+            lambda _request, _db: container,
+        )
+
+        response = await get_conversation_events(
+            conversation_id,
+            request=self._request_with_container(container),
+            from_time_us=0,
+            from_counter=0,
+            limit=1000,
+            current_user=another_user,
+            db=test_db,
+        )
+
+        assert response.events == []
+        event_repo.get_events.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_get_execution_status_rejects_before_event_repo_access(
