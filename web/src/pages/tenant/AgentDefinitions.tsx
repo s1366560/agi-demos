@@ -28,7 +28,7 @@ import type { AgentDefinition } from '../../types/multiAgent';
 import type { MenuProps } from 'antd';
 
 type StatusFilter = 'all' | 'enabled' | 'disabled';
-type ScopeFilter = 'all' | 'tenant' | string;
+type ScopeFilter = string;
 type SortField = 'name' | 'recent' | 'invocations';
 
 const SORT_FNS: Record<SortField, (a: AgentDefinition, b: AgentDefinition) => number> = {
@@ -405,7 +405,7 @@ export const AgentDefinitions: React.FC = () => {
           })}
           value={scopeFilter}
           onChange={(e) => {
-            setScopeFilter(e.target.value as ScopeFilter);
+            setScopeFilter(e.target.value);
           }}
           className="px-3 py-1.5 text-xs border border-slate-200 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
         >
