@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FC, ReactNode } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import {
   Activity,
@@ -510,9 +510,10 @@ export const SkillEvolution: FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
   const message = useLazyMessage();
   const currentTenant = useTenantStore((state) => state.currentTenant);
-  const tenantId = currentTenant?.id ?? null;
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
   const [overview, setOverview] = useState<SkillEvolutionOverviewResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activePanel, setActivePanel] = useState<EvolutionPanelTab>('skills');

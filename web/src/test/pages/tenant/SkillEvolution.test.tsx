@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Route, Routes } from 'react-router-dom';
 
 import { SkillEvolution } from '@/pages/tenant/SkillEvolution';
 import { useTenantStore } from '@/stores/tenant';
@@ -144,6 +145,15 @@ function makeTenant(overrides: Partial<Tenant> = {}): Tenant {
   };
 }
 
+function renderSkillEvolution(route = '/tenant/acme/evolution') {
+  return render(
+    <Routes>
+      <Route path="/tenant/:tenantId/evolution" element={<SkillEvolution />} />
+    </Routes>,
+    { route }
+  );
+}
+
 describe('SkillEvolution', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -153,7 +163,7 @@ describe('SkillEvolution', () => {
   });
 
   it('keeps same-name tenant and project skill summaries distinct', async () => {
-    render(<SkillEvolution />, { route: '/tenant/acme/evolution' });
+    renderSkillEvolution();
 
     await waitFor(() => {
       expect(screen.getAllByRole('link', { name: 'alpha-skill' })).toHaveLength(2);
@@ -162,9 +172,9 @@ describe('SkillEvolution', () => {
       job_limit: 25,
       session_limit: 25,
       skill_limit: 100,
-      tenant_id: 'tenant-1',
+      tenant_id: 'acme',
     });
-    expect(skillApiMocks.getEvolutionConfig).toHaveBeenCalledWith({ tenant_id: 'tenant-1' });
+    expect(skillApiMocks.getEvolutionConfig).toHaveBeenCalledWith({ tenant_id: 'acme' });
 
     const links = screen.getAllByRole('link', { name: 'alpha-skill' });
     expect(links[0]).toHaveAttribute('href', '/tenant/acme/skills/skill-tenant');
@@ -177,7 +187,7 @@ describe('SkillEvolution', () => {
 
   it('shows a retryable error instead of an empty state when loading fails', async () => {
     skillApiMocks.getEvolutionOverview.mockRejectedValueOnce(new Error('network'));
-    render(<SkillEvolution />, { route: '/tenant/acme/evolution' });
+    renderSkillEvolution();
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Failed to load skill evolution data');
@@ -212,7 +222,7 @@ describe('SkillEvolution', () => {
         },
       ],
     });
-    render(<SkillEvolution />, { route: '/tenant/acme/evolution' });
+    renderSkillEvolution();
 
     await waitFor(() => {
       expect(screen.getByText('No skill evidence has been captured yet')).toBeInTheDocument();
@@ -259,7 +269,7 @@ describe('SkillEvolution', () => {
         },
       ],
     });
-    render(<SkillEvolution />, { route: '/tenant/acme/evolution' });
+    renderSkillEvolution();
 
     await waitFor(() => {
       expect(screen.getAllByRole('link', { name: 'alpha-skill' })).toHaveLength(2);
