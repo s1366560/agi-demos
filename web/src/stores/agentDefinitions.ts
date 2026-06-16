@@ -122,13 +122,16 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
         set({ isLoading: true, error: null });
         try {
           const { filters } = get();
+          const enabledOnlyFilter =
+            params.enabled_only ??
+            (params.enabled !== undefined ? undefined : filters.enabled === true ? true : undefined);
           const queryParams = {
             ...params,
             project_id:
               params.project_id === null
                 ? undefined
                 : (params.project_id ?? filters.projectId ?? undefined),
-            enabled_only: filters.enabled === true ? true : undefined,
+            enabled_only: enabledOnlyFilter,
           };
           const definitions = await definitionsService.list(queryParams);
           set({ definitions, total: definitions.length, page: 1, isLoading: false });
