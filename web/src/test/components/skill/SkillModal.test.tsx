@@ -67,4 +67,48 @@ describe('SkillModal', () => {
       );
     });
   });
+
+  it('submits an empty metadata object when advanced metadata is cleared', async () => {
+    const skill: SkillResponse = {
+      id: 'skill-1',
+      tenant_id: 'tenant-1',
+      project_id: null,
+      name: 'pdf-processing',
+      description: 'Extract PDF text and tables. Use when working with PDF documents.',
+      tools: ['read_file'],
+      full_content:
+        '---\nname: pdf-processing\ndescription: "Extract PDF text and tables. Use when working with PDF documents."\nmetadata: {"owner":"docs"}\n---\n\n# PDF processing\n\nRead PDFs.',
+      status: 'active',
+      scope: 'tenant',
+      is_system_skill: false,
+      created_at: '2026-06-05T00:00:00Z',
+      updated_at: '2026-06-05T00:00:00Z',
+      metadata: { owner: 'docs' },
+      agent_modes: [],
+      license: null,
+      compatibility: null,
+      allowed_tools_raw: 'read_file',
+      spec_version: '1.0',
+      current_version: 1,
+      version_label: null,
+    };
+
+    render(<SkillModal isOpen onClose={vi.fn()} onSuccess={vi.fn()} skill={skill} />);
+
+    fireEvent.click(screen.getByRole('switch'));
+    fireEvent.change(await screen.findByLabelText('Metadata JSON'), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(skillStore.updateSkill).toHaveBeenCalledWith(
+        'skill-1',
+        expect.objectContaining({
+          metadata: {},
+          full_content: expect.not.stringContaining('metadata:'),
+        })
+      );
+    });
+  });
 });

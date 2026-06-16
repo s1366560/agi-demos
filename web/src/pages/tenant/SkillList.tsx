@@ -35,6 +35,8 @@ import {
   useActiveSkillsCount,
   useSkillTotal,
 } from '@/stores/skill';
+import { useProjectStore } from '@/stores/project';
+import { useTenantStore } from '@/stores/tenant';
 
 import { skillAPI } from '@/services/skillService';
 
@@ -57,6 +59,8 @@ const { TextArea } = Input;
 type SkillStatus = 'active' | 'disabled' | 'deprecated';
 type SkillSource = NonNullable<SkillResponse['source']>;
 type SkillLibraryView = 'all' | 'managed' | 'readonly';
+type SkillScopeFilter = 'all' | 'system' | 'tenant' | 'project' | `project:${string}`;
+type SkillImportScope = 'tenant' | 'project';
 
 const pageText = 'text-[oklch(0.24_0.01_255)] dark:text-[oklch(0.94_0.006_255)]';
 const mutedText = 'text-[oklch(0.48_0.01_255)] dark:text-[oklch(0.68_0.008_255)]';
@@ -119,6 +123,14 @@ function isManagedSkill(skill: SkillResponse): boolean {
   return !skill.is_system_skill && (source === 'database' || source === 'hybrid');
 }
 
+function getProjectFilterValue(projectId: string): `project:${string}` {
+  return `project:${projectId}`;
+}
+
+function getProjectIdFromScopeFilter(scopeFilter: SkillScopeFilter): string | null {
+  return scopeFilter.startsWith('project:') ? scopeFilter.slice('project:'.length) : null;
+}
+
 function getAgentWorkspacePath(pathname: string): string {
   const segments = pathname.split('/').filter(Boolean);
   const skillsIndex = segments.lastIndexOf('skills');
@@ -155,12 +167,15 @@ export const SkillList: FC = () => {
   const message = useLazyMessage();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | SkillStatus>('all');
+  const [scopeFilter, setScopeFilter] = useState<SkillScopeFilter>('all');
   const [libraryView, setLibraryView] = useState<SkillLibraryView>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importContent, setImportContent] = useState('');
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importOverwrite, setImportOverwrite] = useState(false);
+  const [importScope, setImportScope] = useState<SkillImportScope>('tenant');
+  const [importProjectId, setImportProjectId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [editingSkill, setEditingSkill] = useState<SkillResponse | null>(null);
   const [versionSkill, setVersionSkill] = useState<SkillResponse | null>(null);
@@ -174,6 +189,44 @@ export const SkillList: FC = () => {
   const error = useSkillError();
   const activeCount = useActiveSkillsCount();
   const total = useSkillTotal();
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const projects = useProjectStore((state) => state.projects);
+  const listProjects = useProjectStore((state) => state.listProjects);
+
+  const projectNameById = useMemo(
+    () => new Map(projects.map((project) => [project.id, project.name])),
+    [projects]
+  );
+
+  const projectScopeOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options = projects.map((project) => {
+      seen.add(project.id);
+      return { id: project.id, name: project.name };
+    });
+
+    for (const skill of skills) {
+      if (skill.scope === 'project' && skill.project_id && !seen.has(skill.project_id)) {
+        seen.add(skill.project_id);
+        options.push({ id: skill.project_id, name: skill.project_id });
+      }
+    }
+
+    return options;
+  }, [projects, skills]);
+
+  const getSkillScopeLabel = useCallback(
+    (skill: SkillResponse): string => {
+      if (skill.scope === 'project') {
+        return skill.project_id
+          ? (projectNameById.get(skill.project_id) ?? skill.project_id)
+          : t('tenant.skills.scope.project');
+      }
+
+      return t(`tenant.skills.scope.${skill.scope}`);
+    },
+    [projectNameById, t]
+  );
 
   // Filter skills locally with useMemo to prevent infinite loops
   const filteredSkills = useMemo(() => {
@@ -206,6 +259,23 @@ export const SkillList: FC = () => {
         return false;
       }
 
+      if (scopeFilter === 'system' && skill.scope !== 'system') {
+        return false;
+      }
+
+      if (scopeFilter === 'tenant' && skill.scope !== 'tenant') {
+        return false;
+      }
+
+      if (scopeFilter === 'project' && skill.scope !== 'project') {
+        return false;
+      }
+
+      const projectFilterId = getProjectIdFromScopeFilter(scopeFilter);
+      if (projectFilterId && (skill.scope !== 'project' || skill.project_id !== projectFilterId)) {
+        return false;
+      }
+
       if (libraryView === 'managed' && !isManagedSkill(skill)) {
         return false;
       }
@@ -216,7 +286,7 @@ export const SkillList: FC = () => {
 
       return true;
     });
-  }, [libraryView, skills, search, statusFilter]);
+  }, [libraryView, scopeFilter, skills, search, statusFilter]);
 
   const visibleCount = filteredSkills.length;
   const managedCount = useMemo(() => skills.filter(isManagedSkill).length, [skills]);
@@ -239,6 +309,16 @@ export const SkillList: FC = () => {
     void listSkills();
     void listTenantConfigs();
   }, [listSkills, listTenantConfigs]);
+
+  useEffect(() => {
+    if (!currentTenant?.id) {
+      return;
+    }
+
+    void listProjects(currentTenant.id, { page_size: 100 }).catch(() => {
+      message?.error(t('tenant.skills.projectsLoadFailed'));
+    });
+  }, [currentTenant?.id, listProjects, message, t]);
 
   // Clear error on unmount
   useEffect(() => {
@@ -263,27 +343,54 @@ export const SkillList: FC = () => {
     });
   }, [location.pathname, navigate, t]);
 
+  const resetImportState = useCallback(() => {
+    setImportContent('');
+    setImportFile(null);
+    setImportOverwrite(false);
+    setImportScope('tenant');
+    setImportProjectId(null);
+  }, []);
+
+  const handleOpenImport = useCallback(() => {
+    const filteredProjectId = getProjectIdFromScopeFilter(scopeFilter);
+    if (filteredProjectId) {
+      setImportScope('project');
+      setImportProjectId(filteredProjectId);
+    } else {
+      setImportScope('tenant');
+      setImportProjectId(null);
+    }
+    setIsImportOpen(true);
+  }, [scopeFilter]);
+
   const handleImport = useCallback(async () => {
     if (!importFile && !importContent.trim()) {
       message?.error(t('tenant.skills.import.empty'));
       return;
     }
+    if (importScope === 'project' && !importProjectId) {
+      message?.error(t('tenant.skills.import.projectRequired'));
+      return;
+    }
     setIsImporting(true);
     try {
+      const projectId = importScope === 'project' ? importProjectId : null;
       if (importFile) {
         await skillAPI.importZip(importFile, {
           overwrite: importOverwrite,
+          scope: importScope,
+          project_id: projectId,
         });
       } else {
         await skillAPI.importPackage({
           skill_md_content: importContent,
           overwrite: importOverwrite,
+          scope: importScope,
+          project_id: projectId,
         });
       }
       message?.success(t('tenant.skills.import.success'));
-      setImportContent('');
-      setImportFile(null);
-      setImportOverwrite(false);
+      resetImportState();
       setIsImportOpen(false);
       void listSkills();
     } catch {
@@ -291,7 +398,17 @@ export const SkillList: FC = () => {
     } finally {
       setIsImporting(false);
     }
-  }, [importContent, importFile, importOverwrite, listSkills, message, t]);
+  }, [
+    importContent,
+    importFile,
+    importOverwrite,
+    importProjectId,
+    importScope,
+    listSkills,
+    message,
+    resetImportState,
+    t,
+  ]);
 
   const handleEdit = useCallback((skill: SkillResponse) => {
     setEditingSkill(skill);
@@ -431,6 +548,16 @@ export const SkillList: FC = () => {
     void listSkills({ search });
   }, [listSkills, search]);
 
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearch(value);
+      if (!value.trim()) {
+        void listSkills();
+      }
+    },
+    [listSkills]
+  );
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
       <div className={`rounded-[8px] p-5 ${surface}`}>
@@ -449,13 +576,7 @@ export const SkillList: FC = () => {
               <MessageSquare size={16} />
               {t('tenant.skills.createWithChat')}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsImportOpen(true);
-              }}
-              className={secondaryButton}
-            >
+            <button type="button" onClick={handleOpenImport} className={secondaryButton}>
               <Upload size={16} />
               {t('tenant.skills.import.button')}
             </button>
@@ -516,7 +637,7 @@ export const SkillList: FC = () => {
                 </>
               }
               onChange={(e) => {
-                setSearch(e.target.value);
+                handleSearchChange(e.target.value);
               }}
               onSearch={(value) => {
                 void listSkills({ search: value });
@@ -537,6 +658,24 @@ export const SkillList: FC = () => {
               { label: t('common.status.deprecated'), value: 'deprecated' },
             ]}
           />
+          <select
+            aria-label={t('tenant.skills.scopeFilterLabel')}
+            value={scopeFilter}
+            onChange={(event) => {
+              setScopeFilter(event.target.value as SkillScopeFilter);
+            }}
+            className="h-9 w-full rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-white px-3 text-sm text-[oklch(0.34_0.01_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.18_0.006_255)] dark:text-[oklch(0.82_0.006_255)] md:w-48"
+          >
+            <option value="all">{t('tenant.skills.scope.all')}</option>
+            <option value="system">{t('tenant.skills.scope.system')}</option>
+            <option value="tenant">{t('tenant.skills.scope.tenant')}</option>
+            <option value="project">{t('tenant.skills.scope.project')}</option>
+            {projectScopeOptions.map((project) => (
+              <option key={project.id} value={getProjectFilterValue(project.id)}>
+                {project.name}
+              </option>
+            ))}
+          </select>
           <button type="button" onClick={handleRefresh} className={secondaryButton}>
             <RefreshCw size={16} />
             <span>{t('common.refresh')}</span>
@@ -609,6 +748,11 @@ export const SkillList: FC = () => {
                     >
                       <FileText size={14} />
                       {t('tenant.skills.card.tools')}: {skill.tools.length}
+                    </span>
+                    <span
+                      className={`inline-flex h-6 max-w-[148px] shrink-0 items-center truncate rounded-full border border-[oklch(0.86_0.006_255)] px-2 text-[11px] font-medium ${mutedText}`}
+                    >
+                      {getSkillScopeLabel(skill)}
                     </span>
                     {skill.version_label || skill.current_version > 0 ? (
                       <span
@@ -749,7 +893,7 @@ export const SkillList: FC = () => {
         title={t('tenant.skills.import.title')}
         open={isImportOpen}
         onCancel={() => {
-          setImportFile(null);
+          resetImportState();
           setIsImportOpen(false);
         }}
         onOk={() => {
@@ -782,6 +926,49 @@ export const SkillList: FC = () => {
               }}
             />
           </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className={`flex flex-col gap-1.5 text-sm ${mutedText}`}>
+              <span>{t('tenant.skills.import.scopeLabel')}</span>
+              <select
+                aria-label={t('tenant.skills.import.scopeLabel')}
+                value={importScope}
+                onChange={(event) => {
+                  const nextScope = event.target.value as SkillImportScope;
+                  setImportScope(nextScope);
+                  if (nextScope === 'project') {
+                    setImportProjectId(importProjectId ?? projectScopeOptions[0]?.id ?? null);
+                  } else {
+                    setImportProjectId(null);
+                  }
+                }}
+                className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-white px-3 text-sm text-[oklch(0.34_0.01_255)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.18_0.006_255)] dark:text-[oklch(0.82_0.006_255)]"
+              >
+                <option value="tenant">{t('tenant.skills.import.scopeTenant')}</option>
+                <option value="project" disabled={projectScopeOptions.length === 0}>
+                  {t('tenant.skills.import.scopeProject')}
+                </option>
+              </select>
+            </label>
+            <label className={`flex flex-col gap-1.5 text-sm ${mutedText}`}>
+              <span>{t('tenant.skills.import.projectLabel')}</span>
+              <select
+                aria-label={t('tenant.skills.import.projectLabel')}
+                value={importProjectId ?? ''}
+                disabled={importScope !== 'project'}
+                onChange={(event) => {
+                  setImportProjectId(event.target.value || null);
+                }}
+                className="h-9 rounded-[4px] border border-[oklch(0.86_0.006_255)] bg-white px-3 text-sm text-[oklch(0.34_0.01_255)] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[oklch(0.62_0.16_255_/_0.28)] dark:border-[oklch(0.34_0.006_255)] dark:bg-[oklch(0.18_0.006_255)] dark:text-[oklch(0.82_0.006_255)]"
+              >
+                <option value="">{t('tenant.skills.import.projectPlaceholder')}</option>
+                {projectScopeOptions.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <TextArea
             value={importContent}
             onChange={(event) => {

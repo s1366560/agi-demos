@@ -199,11 +199,15 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
     async def list_by_project(
         self,
         project_id: str,
+        tenant_id: str | None = None,
         status: SkillStatus | None = None,
         scope: SkillScope | None = None,
     ) -> list[Skill]:
         """List all skills for a specific project."""
         query = select(DBSkill).where(DBSkill.project_id == project_id)
+
+        if tenant_id:
+            query = query.where(DBSkill.tenant_id == tenant_id)
 
         if status:
             query = query.where(DBSkill.status == status.value)

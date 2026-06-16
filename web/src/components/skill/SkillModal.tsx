@@ -112,7 +112,7 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
         description: values.description,
         tools,
         full_content: fullContent,
-        metadata,
+        metadata: metadata ?? {},
         license: compact(values.license) ?? null,
         compatibility: compact(values.compatibility) ?? null,
         allowed_tools_raw: allowedToolsRaw ?? null,

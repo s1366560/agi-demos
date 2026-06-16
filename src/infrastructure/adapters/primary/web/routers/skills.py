@@ -15,11 +15,11 @@ import logging
 import uuid
 import zipfile
 from base64 import b64encode
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from fastapi import (
@@ -34,6 +34,7 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.di_container import DIContainer
@@ -41,8 +42,14 @@ from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
 from src.domain.model.agent.skill.skill_version import SkillVersion
 from src.domain.model.agent.skill_source import SkillSource
 from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
+    get_current_user_tenant,
+)
+from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.skill.markdown_parser import MarkdownParser, SkillMarkdown
 from src.infrastructure.skill.validator import AgentSkillsValidator
@@ -54,7 +61,7 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
     """
     app_container = request.app.state.container
     if hasattr(app_container, "with_db"):
-        return app_container.with_db(db)
+        return cast(DIContainer, app_container.with_db(db))
     return DIContainer(
         db=db,
         graph_service=app_container.graph_service,
@@ -65,6 +72,7 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/skills", tags=["Skills"])
+_PROJECT_SKILL_WRITE_ROLES = ("owner", "admin", "member")
 ParsedSkillPayload = tuple[
     str | None,
     str | None,
@@ -167,6 +175,7 @@ class SkillEvolutionSkillSummaryResponse(BaseModel):
     """Aggregated evolution evidence for one skill name."""
 
     skill_id: str | None = None
+    project_id: str | None = None
     skill_name: str
     session_count: int
     success_count: int
@@ -317,6 +326,7 @@ def _merge_agentskills_metadata(
     compatibility: str | None = None,
     allowed_tools_raw: str | None = None,
     spec_version: str | None = None,
+    cleared_fields: set[str] | None = None,
 ) -> dict[str, Any] | None:
     merged = _coerce_any_dict(metadata)
     agentskills = _coerce_any_dict(merged.get("agentskills"))
@@ -326,12 +336,66 @@ def _merge_agentskills_metadata(
         "allowed_tools": allowed_tools_raw,
         "spec_version": spec_version,
     }
+    clear_keys = cleared_fields or set()
     for key, value in updates.items():
-        if value is not None and value != "":
+        if key in clear_keys:
+            agentskills.pop(key, None)
+        elif value is not None and value != "":
             agentskills[key] = value
     if agentskills:
         merged["agentskills"] = agentskills
+    else:
+        merged.pop("agentskills", None)
     return merged or None
+
+
+def _model_fields_set(model: BaseModel) -> set[str]:
+    fields_set = getattr(model, "model_fields_set", None)
+    if fields_set is None:
+        fields_set = getattr(model, "__fields_set__", set())
+    if fields_set is None:
+        return set()
+    return set(fields_set)
+
+
+def _cleared_agentskills_fields(data: SkillUpdate, fields_set: set[str]) -> set[str]:
+    field_to_metadata_key = {
+        "license": "license",
+        "compatibility": "compatibility",
+        "allowed_tools_raw": "allowed_tools",
+        "spec_version": "spec_version",
+    }
+    return {
+        metadata_key
+        for field_name, metadata_key in field_to_metadata_key.items()
+        if field_name in fields_set and not getattr(data, field_name)
+    }
+
+
+def _resolve_optional_update_value(
+    *,
+    data: SkillUpdate,
+    field_name: str,
+    fields_set: set[str],
+    metadata_value: object | None,
+    current_value: str | None,
+) -> str | None:
+    if field_name in fields_set:
+        value = getattr(data, field_name)
+        return str(value) if value else None
+    return str(metadata_value) if metadata_value is not None else current_value
+
+
+def _resolve_spec_version_update(
+    *,
+    data: SkillUpdate,
+    fields_set: set[str],
+    metadata_value: object | None,
+    current_value: str,
+) -> str:
+    if "spec_version" in fields_set:
+        return data.spec_version or "1.0"
+    return str(metadata_value or current_value or "1.0")
 
 
 def _validate_skill_scope(scope_value: str, project_id: str | None) -> SkillScope:
@@ -553,7 +617,11 @@ async def _find_existing_skill(
     project_id: str | None,
 ) -> Skill | None:
     if scope == SkillScope.PROJECT and project_id:
-        project_skills = await repo.list_by_project(project_id=project_id, scope=SkillScope.PROJECT)
+        project_skills = await repo.list_by_project(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            scope=SkillScope.PROJECT,
+        )
         return next(
             (
                 skill
@@ -563,6 +631,144 @@ async def _find_existing_skill(
             None,
         )
     return await repo.get_by_name(tenant_id=tenant_id, name=name, scope=scope)
+
+
+async def _ensure_project_skill_access(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+    project_id: str,
+    required_roles: Collection[str] | None = None,
+) -> None:
+    query = (
+        select(UserProject.id)
+        .join(Project, UserProject.project_id == Project.id)
+        .where(
+            and_(
+                UserProject.user_id == current_user.id,
+                UserProject.project_id == project_id,
+                Project.tenant_id == tenant_id,
+            )
+        )
+    )
+    if required_roles is not None:
+        query = query.where(UserProject.role.in_(required_roles))
+
+    result = await db.execute(
+        refresh_select_statement(query)
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Project skill write access required")
+            if required_roles is not None
+            else _("Access denied"),
+        )
+
+
+async def _ensure_tenant_skill_write_access(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+) -> None:
+    await require_tenant_access(
+        db,
+        cast(Any, current_user),
+        tenant_id,
+        require_admin=True,
+    )
+
+
+async def _ensure_skill_scope_write_access(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+    scope: SkillScope,
+    project_id: str | None,
+) -> None:
+    if scope == SkillScope.PROJECT:
+        if project_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=_("project_id is required for project-scoped skills"),
+            )
+        await _ensure_project_skill_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            required_roles=_PROJECT_SKILL_WRITE_ROLES,
+        )
+        return
+
+    await _ensure_tenant_skill_write_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+    )
+
+
+async def _ensure_existing_skill_write_access(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+    skill: Skill,
+) -> None:
+    if skill.is_system_skill or skill.scope == SkillScope.SYSTEM:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Cannot modify system skills. Use tenant skill config to override instead."),
+        )
+
+    await _ensure_skill_scope_write_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        scope=skill.scope,
+        project_id=skill.project_id,
+    )
+
+
+async def _accessible_skill_project_ids(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+) -> set[str]:
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserProject.project_id)
+            .join(Project, UserProject.project_id == Project.id)
+            .where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    Project.tenant_id == tenant_id,
+                )
+            )
+        )
+    )
+    return {str(project_id) for project_id in result.scalars().all()}
+
+
+async def _ensure_existing_project_skill_access(
+    db: AsyncSession,
+    *,
+    current_user: User,
+    tenant_id: str,
+    skill: Skill,
+) -> None:
+    if skill.scope != SkillScope.PROJECT or not skill.project_id:
+        return
+    await _ensure_project_skill_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        project_id=skill.project_id,
+    )
 
 
 def _extract_version_label_from_parsed(parsed: SkillMarkdown) -> str | None:
@@ -720,6 +926,7 @@ async def create_skill(
     request: Request,
     data: SkillCreate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillResponse:
     """
@@ -744,11 +951,13 @@ async def create_skill(
                 detail=_("Cannot create system-level skills via API"),
             )
 
-        if scope == SkillScope.PROJECT and not data.project_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=_("project_id is required for project-scoped skills"),
-            )
+        await _ensure_skill_scope_write_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            scope=scope,
+            project_id=data.project_id,
+        )
 
         container = get_container_with_db(request, db)
         repo = container.skill_repository()
@@ -832,6 +1041,7 @@ async def list_skills(
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     skip: int | None = Query(None, ge=0, description="Legacy offset alias"),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillListResponse:
     """
@@ -849,6 +1059,14 @@ async def list_skills(
 
     skill_status = SkillStatus(status_filter) if status_filter else None
     skill_scope = SkillScope(scope_filter) if scope_filter else None
+
+    if project_id:
+        await _ensure_project_skill_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
 
     skill_service = SkillService.create(
         skill_repository=skill_repo,
@@ -884,6 +1102,7 @@ async def get_skill(
     request: Request,
     skill_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillResponse:
     """
@@ -898,6 +1117,12 @@ async def get_skill(
         tenant_id=tenant_id,
         allow_system=True,
     )
+    await _ensure_existing_project_skill_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        skill=skill,
+    )
 
     return skill_to_response(skill)
 
@@ -908,6 +1133,7 @@ async def update_skill(
     skill_id: str,
     data: SkillUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillResponse:
     """
@@ -929,6 +1155,12 @@ async def update_skill(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("Skill not found"),
         )
+    await _ensure_existing_skill_write_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        skill=skill,
+    )
 
     # Update fields
     from datetime import datetime
@@ -939,6 +1171,7 @@ async def update_skill(
         description=data.description,
         tools=data.tools,
     )
+    fields_set = _model_fields_set(data)
     metadata = _merge_agentskills_metadata(
         package_metadata
         if package_metadata is not None
@@ -949,25 +1182,37 @@ async def update_skill(
         compatibility=data.compatibility,
         allowed_tools_raw=data.allowed_tools_raw,
         spec_version=data.spec_version,
+        cleared_fields=_cleared_agentskills_fields(data, fields_set),
     )
     next_name = name or data.name or skill.name
     agentskills = metadata.get("agentskills", {}) if isinstance(metadata, dict) else {}
-    next_license = data.license if data.license is not None else agentskills.get("license")
-    if next_license is None:
-        next_license = skill.license
-    next_compatibility = (
-        data.compatibility if data.compatibility is not None else agentskills.get("compatibility")
+    next_license = _resolve_optional_update_value(
+        data=data,
+        field_name="license",
+        fields_set=fields_set,
+        metadata_value=agentskills.get("license"),
+        current_value=skill.license,
     )
-    if next_compatibility is None:
-        next_compatibility = skill.compatibility
-    next_allowed_tools_raw = (
-        data.allowed_tools_raw
-        if data.allowed_tools_raw is not None
-        else agentskills.get("allowed_tools")
+    next_compatibility = _resolve_optional_update_value(
+        data=data,
+        field_name="compatibility",
+        fields_set=fields_set,
+        metadata_value=agentskills.get("compatibility"),
+        current_value=skill.compatibility,
     )
-    if next_allowed_tools_raw is None:
-        next_allowed_tools_raw = skill.allowed_tools_raw
-    next_spec_version = data.spec_version or agentskills.get("spec_version") or skill.spec_version
+    next_allowed_tools_raw = _resolve_optional_update_value(
+        data=data,
+        field_name="allowed_tools_raw",
+        fields_set=fields_set,
+        metadata_value=agentskills.get("allowed_tools"),
+        current_value=skill.allowed_tools_raw,
+    )
+    next_spec_version = _resolve_spec_version_update(
+        data=data,
+        fields_set=fields_set,
+        metadata_value=agentskills.get("spec_version"),
+        current_value=skill.spec_version,
+    )
     if next_name != skill.name:
         existing = await _find_existing_skill(
             repo,
@@ -1021,6 +1266,7 @@ async def delete_skill(
     request: Request,
     skill_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """
@@ -1042,6 +1288,12 @@ async def delete_skill(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("Skill not found"),
         )
+    await _ensure_existing_skill_write_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        skill=skill,
+    )
 
     await repo.delete(skill_id)
     await db.commit()
@@ -1055,6 +1307,7 @@ async def update_skill_status(
     skill_id: str,
     status_value: str = Query(..., alias="status", description="New status"),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillResponse:
     """
@@ -1076,6 +1329,12 @@ async def update_skill_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("Skill not found"),
         )
+    await _ensure_existing_skill_write_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        skill=skill,
+    )
 
     try:
         new_status = SkillStatus(status_value)
@@ -1188,6 +1447,7 @@ async def get_skill_content(
     request: Request,
     skill_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillContentResponse:
     """
@@ -1211,6 +1471,12 @@ async def get_skill_content(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("Skill not found"),
         )
+    await _ensure_existing_project_skill_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        skill=skill,
+    )
 
     return SkillContentResponse(
         skill_id=skill.id,
@@ -1227,6 +1493,7 @@ async def update_skill_content(
     skill_id: str,
     data: SkillContentUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillResponse:
     """
@@ -1251,13 +1518,12 @@ async def update_skill_content(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=_("Skill not found"),
         )
-
-    # System skills cannot be modified
-    if skill.is_system_skill:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Cannot modify system skills. Use tenant skill config to override instead."),
-        )
+    await _ensure_existing_skill_write_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        skill=skill,
+    )
 
     from datetime import datetime
 
@@ -1343,11 +1609,19 @@ async def import_skill_package(
     request: Request,
     data: SkillImportRequest,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillLifecycleResponse:
     """Import SKILL.md plus resources into the tenant or project skill library."""
     scope = _validate_skill_scope(data.scope, data.project_id)
     parsed, metadata, tools = _parse_skill_package(data.skill_md_content)
+    await _ensure_skill_scope_write_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        scope=scope,
+        project_id=data.project_id,
+    )
 
     container = get_container_with_db(request, db)
     repo = container.skill_repository()
@@ -1431,6 +1705,7 @@ async def import_skill_zip_package(
     overwrite: bool = Form(False),
     change_summary: str | None = Form(None),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillLifecycleResponse:
     """Import a zipped skill directory containing one SKILL.md plus bundled files."""
@@ -1452,6 +1727,7 @@ async def import_skill_zip_package(
             change_summary=change_summary,
         ),
         tenant_id=tenant_id,
+        current_user=current_user,
         db=db,
     )
 
@@ -1465,6 +1741,7 @@ async def export_skill_package(
     request: Request,
     skill_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillPackageResponse:
     """Export a skill's latest SKILL.md snapshot and bundled resource files."""
@@ -1480,6 +1757,12 @@ async def export_skill_package(
         skill_id=skill_id,
         tenant_id=tenant_id,
         allow_system=True,
+    )
+    await _ensure_existing_project_skill_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        skill=skill,
     )
 
     version_repo = SqlSkillVersionRepository(db)
@@ -1536,6 +1819,7 @@ class SkillEvolutionJobResponse(BaseModel):
     """Schema for skill evolution job response."""
 
     id: str
+    project_id: str | None = None
     skill_name: str
     action: str
     status: str
@@ -1555,6 +1839,7 @@ class SkillEvolutionRouteEntry(BaseModel):
     kind: str
     id: str
     label: str
+    project_id: str | None = None
     status: str | None = None
     action: str | None = None
     version_number: int | None = None
@@ -1683,6 +1968,7 @@ def _evolution_job_to_response(job: Any) -> SkillEvolutionJobResponse:  # noqa: 
     candidate_text = candidate_content if isinstance(candidate_content, str) else None
     return SkillEvolutionJobResponse(
         id=job.id,
+        project_id=getattr(job, "project_id", None),
         skill_name=job.skill_name,
         action=job.action,
         status=job.status,
@@ -1760,6 +2046,7 @@ def _skill_summary_to_response(
     latest_job_at = summary.get("latest_job_at")
     return SkillEvolutionSkillSummaryResponse(
         skill_id=str(summary["skill_id"]) if summary.get("skill_id") else None,
+        project_id=str(summary["project_id"]) if summary.get("project_id") else None,
         skill_name=str(summary.get("skill_name", "")),
         session_count=_int_response_field(summary.get("session_count")),
         success_count=_int_response_field(summary.get("success_count")),
@@ -1800,6 +2087,7 @@ def _build_evolution_route(
                 kind="evolution_job",
                 id=job.id,
                 label=f"{job.action}:{job.status}",
+                project_id=getattr(job, "project_id", None),
                 status=job.status,
                 action=job.action,
                 skill_version_id=job.skill_version_id,
@@ -2008,6 +2296,7 @@ async def update_skill_evolution_config(
     payload: SkillEvolutionConfigUpdateRequest,
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionConfigResponse:
     """Persist tenant skill evolution strategy config."""
     from src.infrastructure.adapters.secondary.persistence.plugin_config_repository import (
@@ -2015,6 +2304,11 @@ async def update_skill_evolution_config(
     )
 
     tenant_id = _normalize_tenant_id(tenant)
+    await _ensure_tenant_skill_write_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+    )
     current = await _load_skill_evolution_config(db, tenant_id)
     next_config = current.with_overrides(_skill_evolution_config_payload(payload))
     await PluginConfigRepository(db).upsert(
@@ -2037,6 +2331,7 @@ async def get_skill_evolution_overview(
     job_limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionOverviewResponse:
     """Return tenant-wide evolution capture, scoring, and job state."""
     from src.infrastructure.agent.plugins.skill_evolution.repository import (
@@ -2046,17 +2341,28 @@ async def get_skill_evolution_overview(
     tenant_id = _normalize_tenant_id(tenant)
     repo = SkillEvolutionRepository(db)
     config = await _load_skill_evolution_config(db, tenant_id)
-    stats = await repo.get_overview_stats(tenant_id=tenant_id)
+    accessible_project_ids = await _accessible_skill_project_ids(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+    )
+    stats = await repo.get_overview_stats(
+        tenant_id=tenant_id,
+        project_ids=accessible_project_ids,
+    )
     skill_summaries = await repo.get_skill_session_summaries(
         tenant_id=tenant_id,
+        project_ids=accessible_project_ids,
         limit=skill_limit,
     )
     recent_sessions = await repo.list_recent_sessions(
         tenant_id=tenant_id,
+        project_ids=accessible_project_ids,
         limit=session_limit,
     )
     recent_jobs = await repo.list_jobs(
         tenant_id=tenant_id,
+        project_ids=accessible_project_ids,
         limit=job_limit,
     )
 
@@ -2091,6 +2397,7 @@ async def apply_skill_evolution_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionJobResponse:
     """Apply a pending evolution job and create a new SkillVersion."""
     from pathlib import Path
@@ -2116,6 +2423,12 @@ async def apply_skill_evolution_job(
     assert job is not None
 
     skill_repo = SqlSkillRepository(db)
+    await _ensure_evolution_job_write_access(
+        db,
+        job=job,
+        current_user=current_user,
+        tenant_id=tenant_id,
+    )
     skill_version_repo = SqlSkillVersionRepository(db)
     skill_service = SkillService.create(
         skill_repository=skill_repo,
@@ -2126,6 +2439,7 @@ async def apply_skill_evolution_job(
     version_id = await SkillMerger(skill_service=skill_service).apply_evolution(
         job,
         tenant_id=tenant_id,
+        project_id=getattr(job, "project_id", None),
         skill_repository=skill_repo,
         skill_version_repository=skill_version_repo,
     )
@@ -2154,6 +2468,7 @@ async def reject_skill_evolution_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionJobResponse:
     """Reject a pending evolution job without changing the target skill."""
     from src.infrastructure.agent.plugins.skill_evolution.repository import (
@@ -2164,6 +2479,13 @@ async def reject_skill_evolution_job(
     evolution_repo = SkillEvolutionRepository(db)
     job = await evolution_repo.get_job(job_id)
     _validate_pending_evolution_job(job, tenant_id=tenant_id)
+    assert job is not None
+    await _ensure_evolution_job_write_access(
+        db,
+        job=job,
+        current_user=current_user,
+        tenant_id=tenant_id,
+    )
 
     await evolution_repo.update_job_status(job.id, status="rejected")
     await db.commit()
@@ -2184,6 +2506,30 @@ def _validate_pending_evolution_job(job: Any, *, tenant_id: str) -> None:  # noq
         )
 
 
+async def _ensure_evolution_job_write_access(
+    db: AsyncSession,
+    *,
+    job: Any,  # noqa: ANN401
+    current_user: User,
+    tenant_id: str,
+) -> None:
+    project_id = getattr(job, "project_id", None)
+    if project_id is None:
+        await _ensure_tenant_skill_write_access(
+            db,
+            current_user=current_user,
+            tenant_id=tenant_id,
+        )
+        return
+    await _ensure_project_skill_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        project_id=str(project_id),
+        required_roles=_PROJECT_SKILL_WRITE_ROLES,
+    )
+
+
 @router.post(
     "/evolution/run",
     response_model=SkillEvolutionTenantRunResponse,
@@ -2193,9 +2539,15 @@ async def run_tenant_skill_evolution(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionTenantRunResponse:
     """Manually trigger one evolution cycle for the current tenant."""
     tenant_id = _normalize_tenant_id(tenant)
+    await _ensure_tenant_skill_write_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+    )
     container = get_container_with_db(request, db)
     plugin = container.skill_evolution_plugin()
     if plugin is None:
@@ -2225,6 +2577,7 @@ async def get_skill_evolution(
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionDetailResponse:
     """Return trigger metadata, evolution jobs, and version route for a skill."""
     from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
@@ -2241,6 +2594,12 @@ async def get_skill_evolution(
     config = await _load_skill_evolution_config(db, tenant_id)
     skill_repo = SqlSkillRepository(db)
     skill = await _get_tenant_skill_or_404(skill_repo, skill_id, tenant_id)
+    await _ensure_existing_project_skill_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        skill=skill,
+    )
 
     version_repo = SqlSkillVersionRepository(db)
     versions = await version_repo.list_by_skill(skill_id, limit=limit, offset=0)
@@ -2249,11 +2608,15 @@ async def get_skill_evolution(
     jobs = await evolution_repo.list_jobs(
         tenant_id=tenant_id,
         skill_name=skill.name,
+        project_id=skill.project_id,
+        filter_project_id=True,
         limit=limit,
     )
     captured_session_count = await evolution_repo.count_sessions_by_skill(
         tenant_id=tenant_id,
         skill_name=skill.name,
+        project_id=skill.project_id,
+        filter_project_id=True,
     )
 
     return SkillEvolutionDetailResponse(
@@ -2276,6 +2639,7 @@ async def run_skill_evolution(
     skill_id: str,
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionRunResponse:
     """Manually trigger one evolution cycle scoped to a single skill."""
     from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
@@ -2290,6 +2654,12 @@ async def run_skill_evolution(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("Skill evolution is only available for managed skills"),
         )
+    await _ensure_existing_skill_write_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        skill=skill,
+    )
 
     container = get_container_with_db(request, db)
     plugin = container.skill_evolution_plugin()
@@ -2322,6 +2692,7 @@ async def list_skill_versions(
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> SkillVersionListResponse:
     """List all versions of a skill, ordered by version_number DESC."""
     from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
@@ -2332,7 +2703,14 @@ async def list_skill_versions(
     )
 
     skill_repo = SqlSkillRepository(db)
-    await _get_tenant_skill_or_404(skill_repo, skill_id, _normalize_tenant_id(tenant))
+    tenant_id = _normalize_tenant_id(tenant)
+    skill = await _get_tenant_skill_or_404(skill_repo, skill_id, tenant_id)
+    await _ensure_existing_project_skill_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        skill=skill,
+    )
 
     version_repo = SqlSkillVersionRepository(db)
     versions = await version_repo.list_by_skill(skill_id, limit=limit, offset=offset)
@@ -2365,6 +2743,7 @@ async def get_skill_version(
     version_number: int,
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> SkillVersionDetailResponse:
     """Get a specific version of a skill including content and resource files."""
     from src.infrastructure.adapters.secondary.persistence.sql_skill_repository import (
@@ -2374,14 +2753,21 @@ async def get_skill_version(
         SqlSkillVersionRepository,
     )
 
+    skill_repo = SqlSkillRepository(db)
+    tenant_id = _normalize_tenant_id(tenant)
+    skill = await _get_tenant_skill_or_404(skill_repo, skill_id, tenant_id)
+    await _ensure_existing_project_skill_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        skill=skill,
+    )
+
     version_repo = SqlSkillVersionRepository(db)
     version = await version_repo.get_by_version(skill_id, version_number)
 
     if not version:
         raise _skill_version_not_found_error()
-
-    skill_repo = SqlSkillRepository(db)
-    await _get_tenant_skill_or_404(skill_repo, skill_id, _normalize_tenant_id(tenant))
 
     return SkillVersionDetailResponse(
         id=version.id,
@@ -2406,6 +2792,7 @@ async def rollback_skill(
     request_body: SkillRollbackRequest,
     db: AsyncSession = Depends(get_db),
     tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> SkillResponse:
     """Rollback a skill to a specific version. Creates a new version entry."""
     from pathlib import Path
@@ -2435,6 +2822,12 @@ async def rollback_skill(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Access denied"),
         )
+    await _ensure_existing_skill_write_access(
+        db,
+        current_user=current_user,
+        tenant_id=tenant_id,
+        skill=skill,
+    )
 
     reverse_sync = SkillReverseSync(
         skill_repository=skill_repo,

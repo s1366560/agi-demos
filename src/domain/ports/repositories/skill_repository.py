@@ -123,6 +123,7 @@ class SkillRepositoryPort(ABC):
     async def list_by_project(
         self,
         project_id: str,
+        tenant_id: str | None = None,
         status: SkillStatus | None = None,
         scope: SkillScope | None = None,
     ) -> list[Skill]:
@@ -131,6 +132,7 @@ class SkillRepositoryPort(ABC):
 
         Args:
             project_id: Project ID
+            tenant_id: Optional tenant ID for multi-tenant isolation
             status: Optional status filter
             scope: Optional scope filter
 

@@ -3,12 +3,22 @@ import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SkillList } from '@/pages/tenant/SkillList';
+import { useProjectStore } from '@/stores/project';
+import { useTenantStore } from '@/stores/tenant';
 
 import { fireEvent, render, screen, waitFor } from '../../utils';
 
 import type { SkillResponse, TenantSkillConfigResponse } from '@/types/agent';
+import type { Project } from '@/types/memory';
 
 const navigateMock = vi.hoisted(() => vi.fn());
+const skillApiMock = vi.hoisted(() => ({
+  importPackage: vi.fn(),
+  importZip: vi.fn(),
+  exportPackage: vi.fn(),
+  listVersions: vi.fn(),
+  rollback: vi.fn(),
+}));
 
 const skillStore = vi.hoisted(() => ({
   skills: [] as SkillResponse[],
@@ -39,6 +49,10 @@ vi.mock('@/stores/skill', () => ({
   useSkillTotal: () => skillStore.skills.length,
 }));
 
+vi.mock('@/services/skillService', () => ({
+  skillAPI: skillApiMock,
+}));
+
 function systemSkill(overrides: Partial<SkillResponse> = {}): SkillResponse {
   return {
     id: 'system-skill-1',
@@ -63,6 +77,31 @@ function systemSkill(overrides: Partial<SkillResponse> = {}): SkillResponse {
   };
 }
 
+function makeProject(overrides: Partial<Project> = {}): Project {
+  return {
+    id: 'project-1',
+    tenant_id: 'tenant-1',
+    name: 'Project Alpha',
+    owner_id: 'admin-1',
+    member_ids: ['admin-1'],
+    memory_rules: {
+      max_episodes: 100,
+      retention_days: 30,
+      auto_refresh: true,
+      refresh_interval: 3600,
+    },
+    graph_config: {
+      max_nodes: 1000,
+      max_edges: 5000,
+      similarity_threshold: 0.75,
+      community_detection: true,
+    },
+    is_public: false,
+    created_at: '2026-06-15T00:00:00Z',
+    ...overrides,
+  };
+}
+
 describe('SkillList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -70,6 +109,28 @@ describe('SkillList', () => {
     skillStore.tenantConfigs = [];
     skillStore.listSkills.mockResolvedValue(undefined);
     skillStore.listTenantConfigs.mockResolvedValue(undefined);
+    skillApiMock.importPackage.mockResolvedValue({
+      action: 'created',
+      skill: systemSkill({ is_system_skill: false, scope: 'tenant', source: 'database' }),
+      message: 'Skill imported',
+    });
+    skillApiMock.importZip.mockResolvedValue({
+      action: 'created',
+      skill: systemSkill({ is_system_skill: false, scope: 'tenant', source: 'database' }),
+      message: 'Skill imported',
+    });
+    useTenantStore.setState({
+      currentTenant: null,
+    });
+    useProjectStore.setState({
+      projects: [],
+      currentProject: null,
+      isLoading: false,
+      error: null,
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    });
   });
 
   it('routes skill creation to chat instead of the removed manual creation page', async () => {
@@ -132,5 +193,131 @@ describe('SkillList', () => {
     expect(
       screen.getByRole('button', { name: 'Restore memory-flush system default for this tenant' })
     ).toBeInTheDocument();
+  });
+
+  it('reloads the full registry when a submitted search is cleared', async () => {
+    skillStore.skills = [
+      systemSkill({
+        id: 'system-skill-1',
+        name: 'memory-flush',
+        description: 'Flush memory extraction',
+      }),
+      systemSkill({
+        id: 'system-skill-2',
+        name: 'pdf-processing',
+        description: 'Extract PDF tables',
+      }),
+    ];
+
+    render(
+      <Suspense fallback={<div>Loading</div>}>
+        <SkillList />
+      </Suspense>
+    );
+
+    await waitFor(() => {
+      expect(skillStore.listSkills).toHaveBeenCalled();
+    });
+    skillStore.listSkills.mockClear();
+
+    const searchInput = screen.getByRole('searchbox', { name: 'Search skills...' });
+    fireEvent.change(searchInput, { target: { value: 'memory' } });
+    fireEvent.keyDown(searchInput, { key: 'Enter', code: 'Enter' });
+
+    await waitFor(() => {
+      expect(skillStore.listSkills).toHaveBeenCalledWith({ search: 'memory' });
+    });
+    skillStore.listSkills.mockClear();
+
+    fireEvent.change(searchInput, { target: { value: '' } });
+
+    await waitFor(() => {
+      expect(skillStore.listSkills).toHaveBeenCalledWith();
+    });
+  });
+
+  it('filters skills by tenant, system, and project scope', async () => {
+    useProjectStore.setState({
+      projects: [makeProject()],
+    });
+    skillStore.skills = [
+      systemSkill({ id: 'system-skill', name: 'system-skill', scope: 'system' }),
+      systemSkill({
+        id: 'tenant-skill',
+        name: 'tenant-skill',
+        is_system_skill: false,
+        source: 'database',
+        scope: 'tenant',
+        project_id: null,
+      }),
+      systemSkill({
+        id: 'project-skill',
+        name: 'project-skill',
+        is_system_skill: false,
+        source: 'database',
+        scope: 'project',
+        project_id: 'project-1',
+      }),
+    ];
+
+    render(
+      <Suspense fallback={<div>Loading</div>}>
+        <SkillList />
+      </Suspense>
+    );
+
+    expect(await screen.findByRole('button', { name: 'system-skill' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'tenant-skill' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'project-skill' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Filter skills by scope'), {
+      target: { value: 'project:project-1' },
+    });
+
+    expect(screen.queryByRole('button', { name: 'system-skill' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'tenant-skill' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'project-skill' })).toBeInTheDocument();
+    expect(screen.getAllByText('Project Alpha').length).toBeGreaterThan(0);
+  });
+
+  it('imports pasted skill packages into the selected project scope', async () => {
+    useProjectStore.setState({
+      projects: [makeProject()],
+    });
+
+    render(
+      <Suspense fallback={<div>Loading</div>}>
+        <SkillList />
+      </Suspense>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+    fireEvent.change(screen.getByLabelText('Import scope'), {
+      target: { value: 'project' },
+    });
+    fireEvent.change(screen.getByLabelText('Project'), {
+      target: { value: 'project-1' },
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText('Paste SKILL.md content with YAML frontmatter...'),
+      {
+        target: {
+          value: '---\nname: imported-skill\ndescription: Imported skill\n---\n\n# Imported skill',
+        },
+      }
+    );
+
+    const importButtons = screen.getAllByRole('button', { name: 'Import' });
+    fireEvent.click(importButtons[importButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(skillApiMock.importPackage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: 'project',
+          project_id: 'project-1',
+          overwrite: false,
+        })
+      );
+    });
   });
 });

@@ -46,6 +46,13 @@ Use when managing Agent Skills packages.
 """
 
 
+@pytest.fixture(autouse=True)
+def _allow_tenant_skill_write(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    guard = AsyncMock()
+    monkeypatch.setattr(router, "_ensure_tenant_skill_write_access", guard)
+    return guard
+
+
 def _make_zip(files: dict[str, bytes | str]) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
@@ -77,11 +84,13 @@ class _Container:
 class _MemorySkillRepository:
     def __init__(self) -> None:
         self.skills_by_id: dict[str, Skill] = {}
-        self.skills_by_name: dict[str, Skill] = {}
+        self.skills_by_name: dict[str, list[Skill]] = {}
 
     async def create(self, skill: Skill) -> Skill:
         self.skills_by_id[skill.id] = skill
-        self.skills_by_name[skill.name] = skill
+        skills = [candidate for candidate in self.skills_by_name.get(skill.name, []) if candidate.id != skill.id]
+        skills.append(skill)
+        self.skills_by_name[skill.name] = skills
         return skill
 
     async def get_by_id(self, skill_id: str) -> Skill | None:
@@ -93,29 +102,44 @@ class _MemorySkillRepository:
         name: str,
         scope: SkillScope | None = None,
     ) -> Skill | None:
-        skill = self.skills_by_name.get(name)
-        if not skill or skill.tenant_id != tenant_id:
-            return None
-        if scope and skill.scope != scope:
-            return None
-        return skill
+        candidates = [
+            skill
+            for skill in self.skills_by_name.get(name, [])
+            if skill.tenant_id == tenant_id and (scope is None or skill.scope == scope)
+        ]
+        if scope is not None:
+            return candidates[0] if candidates else None
+        tenant_scoped = [
+            skill for skill in candidates if skill.scope == SkillScope.TENANT and skill.project_id is None
+        ]
+        return (tenant_scoped or candidates)[0] if candidates else None
 
     async def update(self, skill: Skill) -> Skill:
         self.skills_by_id[skill.id] = skill
-        self.skills_by_name[skill.name] = skill
+        skills = [candidate for candidate in self.skills_by_name.get(skill.name, []) if candidate.id != skill.id]
+        skills.append(skill)
+        self.skills_by_name[skill.name] = skills
         return skill
 
     async def delete(self, skill_id: str) -> bool:
-        self.skills_by_id.pop(skill_id, None)
+        skill = self.skills_by_id.pop(skill_id, None)
+        if skill is not None:
+            self.skills_by_name[skill.name] = [
+                candidate for candidate in self.skills_by_name.get(skill.name, []) if candidate.id != skill_id
+            ]
         return True
 
     async def list_by_tenant(self, *_args: object, **_kwargs: object) -> list[Skill]:
         return list(self.skills_by_id.values())
 
     async def list_by_project(
-        self, project_id: str, *_args: object, **_kwargs: object
+        self, project_id: str, *_args: object, tenant_id: str | None = None, **_kwargs: object
     ) -> list[Skill]:
-        return [skill for skill in self.skills_by_id.values() if skill.project_id == project_id]
+        return [
+            skill
+            for skill in self.skills_by_id.values()
+            if skill.project_id == project_id and (tenant_id is None or skill.tenant_id == tenant_id)
+        ]
 
     async def count_by_tenant(self, *_args: object, **_kwargs: object) -> int:
         return len(self.skills_by_id)
@@ -185,10 +209,22 @@ class _MemorySqlSkillRepository:
     async def update(self, skill: Skill) -> Skill:
         return await self._repo.update(skill)
 
+    async def list_by_project(
+        self, project_id: str, *_args: object, tenant_id: str | None = None, **_kwargs: object
+    ) -> list[Skill]:
+        return await self._repo.list_by_project(project_id, tenant_id=tenant_id)
+
 
 class _MemoryEvolutionRepository:
     def __init__(self, db: SimpleNamespace) -> None:
         self._db = db
+
+    @staticmethod
+    def _is_project_allowed(item: SimpleNamespace, project_ids: set[str] | None) -> bool:
+        if project_ids is None:
+            return True
+        project_id = getattr(item, "project_id", None)
+        return project_id is None or project_id in project_ids
 
     async def list_jobs(
         self,
@@ -196,6 +232,9 @@ class _MemoryEvolutionRepository:
         tenant_id: str,
         status: str | None = None,
         skill_name: str | None = None,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+        project_ids: set[str] | None = None,
         limit: int = 50,
     ) -> list[SimpleNamespace]:
         jobs = [
@@ -204,6 +243,11 @@ class _MemoryEvolutionRepository:
             if job.tenant_id == tenant_id
             and (status is None or job.status == status)
             and (skill_name is None or job.skill_name == skill_name)
+            and self._is_project_allowed(job, project_ids)
+            and (
+                not filter_project_id
+                or getattr(job, "project_id", None) == project_id
+            )
         ]
         return jobs[:limit]
 
@@ -226,18 +270,40 @@ class _MemoryEvolutionRepository:
         if status == "applied":
             job.applied_at = datetime.now(UTC)
 
-    async def count_sessions_by_skill(self, *, tenant_id: str, skill_name: str) -> int:
+    async def count_sessions_by_skill(
+        self,
+        *,
+        tenant_id: str,
+        skill_name: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+    ) -> int:
         return sum(
             1
             for session in self._db.evolution_sessions
             if session.tenant_id == tenant_id and session.skill_name == skill_name
+            and (
+                not filter_project_id
+                or getattr(session, "project_id", None) == project_id
+            )
         )
 
-    async def get_overview_stats(self, *, tenant_id: str) -> dict[str, object]:
+    async def get_overview_stats(
+        self,
+        *,
+        tenant_id: str,
+        project_ids: set[str] | None = None,
+    ) -> dict[str, object]:
         sessions = [
-            session for session in self._db.evolution_sessions if session.tenant_id == tenant_id
+            session
+            for session in self._db.evolution_sessions
+            if session.tenant_id == tenant_id and self._is_project_allowed(session, project_ids)
         ]
-        jobs = [job for job in self._db.evolution_jobs if job.tenant_id == tenant_id]
+        jobs = [
+            job
+            for job in self._db.evolution_jobs
+            if job.tenant_id == tenant_id and self._is_project_allowed(job, project_ids)
+        ]
         scores = [
             session.overall_score
             for session in sessions
@@ -265,19 +331,50 @@ class _MemoryEvolutionRepository:
         self,
         *,
         tenant_id: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+        project_ids: set[str] | None = None,
         limit: int = 50,
     ) -> list[dict[str, object]]:
         sessions = [
-            session for session in self._db.evolution_sessions if session.tenant_id == tenant_id
+            session
+            for session in self._db.evolution_sessions
+            if session.tenant_id == tenant_id
+            and self._is_project_allowed(session, project_ids)
+            and (
+                not filter_project_id
+                or getattr(session, "project_id", None) == project_id
+            )
         ]
-        jobs = [job for job in self._db.evolution_jobs if job.tenant_id == tenant_id]
+        jobs = [
+            job
+            for job in self._db.evolution_jobs
+            if job.tenant_id == tenant_id
+            and self._is_project_allowed(job, project_ids)
+            and (
+                not filter_project_id
+                or getattr(job, "project_id", None) == project_id
+            )
+        ]
         summaries: list[dict[str, object]] = []
-        skill_names = {
-            session.skill_name for session in sessions if session.skill_name != "__no_skill__"
+        skill_scopes = {
+            (session.skill_name, getattr(session, "project_id", None))
+            for session in sessions
+            if session.skill_name != "__no_skill__"
         }
-        for skill_name in sorted(skill_names):
-            skill_sessions = [session for session in sessions if session.skill_name == skill_name]
-            skill_jobs = [job for job in jobs if job.skill_name == skill_name]
+        for skill_name, scope_project_id in sorted(skill_scopes):
+            skill_sessions = [
+                session
+                for session in sessions
+                if session.skill_name == skill_name
+                and getattr(session, "project_id", None) == scope_project_id
+            ]
+            skill_jobs = [
+                job
+                for job in jobs
+                if job.skill_name == skill_name
+                and getattr(job, "project_id", None) == scope_project_id
+            ]
             scores = [
                 session.overall_score
                 for session in skill_sessions
@@ -286,6 +383,7 @@ class _MemoryEvolutionRepository:
             summaries.append(
                 {
                     "skill_name": skill_name,
+                    "project_id": scope_project_id,
                     "session_count": len(skill_sessions),
                     "success_count": sum(1 for session in skill_sessions if session.success),
                     "unprocessed_count": sum(
@@ -316,6 +414,9 @@ class _MemoryEvolutionRepository:
         *,
         tenant_id: str,
         skill_name: str | None = None,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+        project_ids: set[str] | None = None,
         limit: int = 50,
     ) -> list[SimpleNamespace]:
         sessions = [
@@ -323,6 +424,11 @@ class _MemoryEvolutionRepository:
             for session in self._db.evolution_sessions
             if session.tenant_id == tenant_id
             and (skill_name is None or session.skill_name == skill_name)
+            and self._is_project_allowed(session, project_ids)
+            and (
+                not filter_project_id
+                or getattr(session, "project_id", None) == project_id
+            )
         ]
         return sorted(sessions, key=lambda session: session.created_at, reverse=True)[:limit]
 
@@ -407,6 +513,262 @@ async def test_create_skill_preserves_agentskills_spec_fields(
 
 
 @pytest.mark.unit
+async def test_create_project_skill_requires_project_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    db = SimpleNamespace(commit=AsyncMock())
+    access_guard = AsyncMock(
+        side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    )
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+    monkeypatch.setattr(router, "_ensure_project_skill_access", access_guard)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.create_skill(
+            request=SimpleNamespace(),
+            data=router.SkillCreate(
+                name="project-skill",
+                description="Project scoped skill",
+                tools=["Read"],
+                scope="project",
+                project_id="foreign-project",
+            ),
+            tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
+            db=db,
+        )
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    access_guard.assert_awaited_once()
+    assert access_guard.await_args.kwargs["required_roles"] == router._PROJECT_SKILL_WRITE_ROLES
+    assert repo.skills_by_id == {}
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_create_tenant_skill_requires_tenant_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    db = SimpleNamespace(commit=AsyncMock())
+    write_guard = AsyncMock(
+        side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    )
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+    monkeypatch.setattr(router, "_ensure_tenant_skill_write_access", write_guard)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.create_skill(
+            request=SimpleNamespace(),
+            data=router.SkillCreate(
+                name="tenant-skill",
+                description="Tenant scoped skill",
+                tools=["Read"],
+            ),
+            tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
+            db=db,
+        )
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    assert repo.skills_by_id == {}
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_list_project_skills_requires_project_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    db = SimpleNamespace()
+    access_guard = AsyncMock(
+        side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    )
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+    monkeypatch.setattr(router, "_ensure_project_skill_access", access_guard)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.list_skills(
+            request=SimpleNamespace(),
+            search_query=None,
+            q=None,
+            status_filter=None,
+            scope_filter=None,
+            project_id="foreign-project",
+            limit=100,
+            offset=0,
+            skip=None,
+            tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
+            db=db,
+        )
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    access_guard.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "route_name",
+    [
+        "get",
+        "update",
+        "delete",
+        "status",
+        "content_get",
+        "content_update",
+        "export",
+        "versions",
+        "version",
+        "evolution",
+        "evolution_run",
+        "rollback",
+    ],
+)
+async def test_project_skill_raw_id_routes_require_project_access(
+    route_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        project_id="foreign-project",
+        name="project-skill",
+        description="Project scoped skill",
+        tools=["Read"],
+        scope=SkillScope.PROJECT,
+        full_content=SAMPLE_SKILL_MD,
+    )
+    await repo.create(skill)
+    db = SimpleNamespace(
+        commit=AsyncMock(),
+        skill_repo=repo,
+        versions=[],
+        evolution_jobs=[],
+        evolution_sessions=[],
+    )
+    current_user = SimpleNamespace(id="user-1")
+    access_guard = AsyncMock(
+        side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    )
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+    monkeypatch.setattr(router, "_ensure_project_skill_access", access_guard)
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
+        _MemorySqlSkillRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
+        "SqlSkillVersionRepository",
+        _MemoryVersionRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
+        _MemoryEvolutionRepository,
+    )
+
+    route_calls = {
+        "get": lambda: router.get_skill(
+            request=SimpleNamespace(),
+            skill_id=skill.id,
+            tenant_id="tenant-1",
+            current_user=current_user,
+            db=db,
+        ),
+        "update": lambda: router.update_skill(
+            request=SimpleNamespace(),
+            skill_id=skill.id,
+            data=router.SkillUpdate(description="Updated"),
+            tenant_id="tenant-1",
+            current_user=current_user,
+            db=db,
+        ),
+        "delete": lambda: router.delete_skill(
+            request=SimpleNamespace(),
+            skill_id=skill.id,
+            tenant_id="tenant-1",
+            current_user=current_user,
+            db=db,
+        ),
+        "status": lambda: router.update_skill_status(
+            request=SimpleNamespace(),
+            skill_id=skill.id,
+            status_value="disabled",
+            tenant_id="tenant-1",
+            current_user=current_user,
+            db=db,
+        ),
+        "content_get": lambda: router.get_skill_content(
+            request=SimpleNamespace(),
+            skill_id=skill.id,
+            tenant_id="tenant-1",
+            current_user=current_user,
+            db=db,
+        ),
+        "content_update": lambda: router.update_skill_content(
+            request=SimpleNamespace(),
+            skill_id=skill.id,
+            data=router.SkillContentUpdate(full_content=SAMPLE_SKILL_MD_WITH_SPEC),
+            tenant_id="tenant-1",
+            current_user=current_user,
+            db=db,
+        ),
+        "export": lambda: router.export_skill_package(
+            request=SimpleNamespace(),
+            skill_id=skill.id,
+            tenant_id="tenant-1",
+            current_user=current_user,
+            db=db,
+        ),
+        "versions": lambda: router.list_skill_versions(
+            skill_id=skill.id,
+            limit=50,
+            offset=0,
+            tenant={"id": "tenant-1"},
+            current_user=current_user,
+            db=db,
+        ),
+        "version": lambda: router.get_skill_version(
+            skill_id=skill.id,
+            version_number=1,
+            tenant={"id": "tenant-1"},
+            current_user=current_user,
+            db=db,
+        ),
+        "evolution": lambda: router.get_skill_evolution(
+            skill_id=skill.id,
+            limit=20,
+            tenant={"id": "tenant-1"},
+            current_user=current_user,
+            db=db,
+        ),
+        "evolution_run": lambda: router.run_skill_evolution(
+            request=SimpleNamespace(),
+            skill_id=skill.id,
+            tenant={"id": "tenant-1"},
+            current_user=current_user,
+            db=db,
+        ),
+        "rollback": lambda: router.rollback_skill(
+            skill_id=skill.id,
+            request_body=router.SkillRollbackRequest(version_number=1),
+            tenant={"id": "tenant-1"},
+            current_user=current_user,
+            db=db,
+        ),
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        await route_calls[route_name]()
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    assert exc_info.value.detail == "Access denied"
+    access_guard.assert_awaited_once()
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
 async def test_create_skill_rejects_mismatched_skill_md_frontmatter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -458,6 +820,60 @@ async def test_create_skill_from_skill_md_uses_frontmatter_as_canonical_source(
     assert stored.compatibility == "Requires git and internet access"
     assert stored.allowed_tools_raw == "Bash(git:*) Read"
     assert response.version_label == "1.2.3"
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_update_skill_clears_optional_agentskills_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        name="alpha-skill",
+        description="Searches, installs, and exports agent skills.",
+        tools=["Bash", "Read"],
+        full_content=SAMPLE_SKILL_MD_WITH_SPEC,
+        metadata={
+            "author": "test-suite",
+            "agentskills": {
+                "license": "MIT",
+                "compatibility": "Requires git and internet access",
+                "allowed_tools": "Bash(git:*) Read",
+                "spec_version": "1.0",
+            },
+        },
+        license="MIT",
+        compatibility="Requires git and internet access",
+        allowed_tools_raw="Bash(git:*) Read",
+    )
+    await repo.create(skill)
+    db = SimpleNamespace(commit=AsyncMock())
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
+
+    response = await router.update_skill(
+        request=SimpleNamespace(),
+        skill_id=skill.id,
+        data=router.SkillUpdate(
+            license=None,
+            compatibility=None,
+            allowed_tools_raw=None,
+            spec_version=None,
+        ),
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    stored = await repo.get_by_id(skill.id)
+    assert stored is not None
+    assert response.license is None
+    assert response.compatibility is None
+    assert response.allowed_tools_raw is None
+    assert response.spec_version == "1.0"
+    assert stored.license is None
+    assert stored.compatibility is None
+    assert stored.allowed_tools_raw is None
+    assert stored.metadata == {"author": "test-suite"}
     db.commit.assert_awaited_once()
 
 
@@ -799,6 +1215,15 @@ async def test_export_filesystem_skill_includes_directory_resource_files(
 async def test_get_skill_version_sanitizes_missing_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    repo = _MemorySkillRepository()
+    skill = Skill.create(
+        tenant_id="tenant-1",
+        name="skill-secret",
+        description="Test skill",
+        tools=["Read"],
+    )
+    await repo.create(skill)
+
     class _VersionRepository:
         def __init__(self, _db: object) -> None:
             pass
@@ -807,6 +1232,10 @@ async def test_get_skill_version_sanitizes_missing_version(
             return None
 
     monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
+        _MemorySqlSkillRepository,
+    )
+    monkeypatch.setattr(
         "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
         "SqlSkillVersionRepository",
         _VersionRepository,
@@ -814,9 +1243,9 @@ async def test_get_skill_version_sanitizes_missing_version(
 
     with pytest.raises(HTTPException) as exc_info:
         await router.get_skill_version(
-            skill_id="skill-secret",
+            skill_id=skill.id,
             version_number=42,
-            db=SimpleNamespace(),
+            db=SimpleNamespace(skill_repo=repo),
             tenant={"id": "tenant-1"},
         )
 
@@ -911,16 +1340,37 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
 ) -> None:
     created_at = datetime.now(UTC)
     db = SimpleNamespace(
+        execute=AsyncMock(
+            return_value=SimpleNamespace(
+                scalar_one_or_none=lambda: None,
+                scalars=lambda: SimpleNamespace(all=lambda: ["project-1"]),
+            )
+        ),
         evolution_jobs=[
             SimpleNamespace(
                 id="job-1",
                 tenant_id="tenant-1",
+                project_id="project-1",
                 skill_name="alpha-skill",
                 action="improve_skill",
                 status="pending_review",
                 rationale="Missing setup step",
                 candidate_content="# Improved alpha",
                 session_ids=["s1"],
+                skill_version_id=None,
+                created_at=created_at,
+                applied_at=None,
+            ),
+            SimpleNamespace(
+                id="hidden-job",
+                tenant_id="tenant-1",
+                project_id="project-2",
+                skill_name="hidden-skill",
+                action="improve_skill",
+                status="pending_review",
+                rationale="Hidden project",
+                candidate_content="# Hidden",
+                session_ids=["hidden-session"],
                 skill_version_id=None,
                 created_at=created_at,
                 applied_at=None,
@@ -959,6 +1409,22 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
                 processed=False,
                 created_at=created_at,
             ),
+            SimpleNamespace(
+                id="hidden-session",
+                tenant_id="tenant-1",
+                project_id="project-2",
+                skill_name="hidden-skill",
+                conversation_id="conv-hidden",
+                user_query="Use hidden",
+                summary="Hidden run",
+                judge_scores={"overall": 1.0},
+                overall_score=1.0,
+                success=True,
+                execution_time_ms=10,
+                tool_call_count=1,
+                processed=True,
+                created_at=created_at,
+            ),
         ],
     )
     monkeypatch.setattr(
@@ -972,6 +1438,7 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
         job_limit=20,
         db=db,
         tenant={"id": "tenant-1"},
+        current_user=SimpleNamespace(id="user-1"),
     )
 
     assert response.stats.total_sessions == 2
@@ -996,6 +1463,8 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
     assert response.skills[0].session_count == 1
     assert response.recent_sessions[0].id in {"s1", "s2"}
     assert response.recent_jobs[0].id == "job-1"
+    assert all(job.id != "hidden-job" for job in response.recent_jobs)
+    assert all(session.id != "hidden-session" for session in response.recent_sessions)
     assert response.recent_jobs[0].candidate_preview == "# Improved alpha"
     assert response.trigger.manual_trigger == "/api/v1/skills/{skill_id}/evolution/run"
 
@@ -1142,6 +1611,204 @@ async def test_apply_skill_evolution_job_rejects_cross_tenant(
 
 
 @pytest.mark.unit
+async def test_apply_tenant_skill_evolution_job_requires_tenant_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = SimpleNamespace(
+        evolution_jobs=[
+            SimpleNamespace(
+                id="job-tenant",
+                tenant_id="tenant-1",
+                project_id=None,
+                skill_name="alpha-skill",
+                action="improve_skill",
+                status="pending_review",
+                rationale=None,
+                candidate_content="# Tenant update",
+                session_ids=[],
+                skill_version_id=None,
+                created_at=datetime.now(UTC),
+                applied_at=None,
+            )
+        ],
+        commit=AsyncMock(),
+    )
+    write_guard = AsyncMock(
+        side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
+        _MemoryEvolutionRepository,
+    )
+    monkeypatch.setattr(router, "_ensure_tenant_skill_write_access", write_guard)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.apply_skill_evolution_job(
+            job_id="job-tenant",
+            db=db,
+            tenant={"id": "tenant-1"},
+            current_user=SimpleNamespace(id="user-1"),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_apply_skill_evolution_job_rejects_project_without_membership(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = SimpleNamespace(
+        skill_repo=_MemorySkillRepository(),
+        evolution_jobs=[
+            SimpleNamespace(
+                id="job-project",
+                tenant_id="tenant-1",
+                project_id="project-1",
+                skill_name="alpha-skill",
+                action="improve_skill",
+                status="pending_review",
+                rationale=None,
+                candidate_content="# Project update",
+                session_ids=[],
+                skill_version_id=None,
+                created_at=datetime.now(UTC),
+                applied_at=None,
+            )
+        ],
+        commit=AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
+        _MemorySqlSkillRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
+        _MemoryEvolutionRepository,
+    )
+    monkeypatch.setattr(
+        router,
+        "_ensure_project_skill_access",
+        AsyncMock(
+            side_effect=HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied",
+            )
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.apply_skill_evolution_job(
+            job_id="job-project",
+            db=db,
+            tenant={"id": "tenant-1"},
+            current_user=SimpleNamespace(id="user-2"),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_apply_skill_evolution_job_targets_project_skill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    tenant_skill = Skill.create(
+        tenant_id="tenant-1",
+        name="alpha-skill",
+        description="Tenant skill",
+        tools=["Read"],
+        full_content="# Tenant Skill",
+    )
+    project_skill = Skill.create(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        name="alpha-skill",
+        description="Project skill",
+        tools=["Read"],
+        full_content="# Project Skill",
+        scope=SkillScope.PROJECT,
+    )
+    await repo.create(tenant_skill)
+    await repo.create(project_skill)
+    db = SimpleNamespace(
+        skill_repo=repo,
+        versions=[],
+        evolution_jobs=[
+            SimpleNamespace(
+                id="job-project-apply",
+                tenant_id="tenant-1",
+                project_id="project-1",
+                skill_name="alpha-skill",
+                action="improve_skill",
+                status="pending_review",
+                rationale="Improve project instructions",
+                candidate_content="# Improved Project Skill",
+                session_ids=["s-project"],
+                skill_version_id=None,
+                created_at=datetime.now(UTC),
+                applied_at=None,
+            )
+        ],
+        commit=AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
+        _MemorySqlSkillRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
+        "SqlSkillVersionRepository",
+        _MemoryVersionRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
+        _MemoryEvolutionRepository,
+    )
+    ensure_access = AsyncMock()
+    monkeypatch.setattr(router, "_ensure_project_skill_access", ensure_access)
+
+    response = await router.apply_skill_evolution_job(
+        job_id="job-project-apply",
+        db=db,
+        tenant={"id": "tenant-1"},
+        current_user=SimpleNamespace(id="user-1"),
+    )
+
+    assert response.project_id == "project-1"
+    assert response.status == "applied"
+    assert tenant_skill.full_content == "# Tenant Skill"
+    assert project_skill.full_content == "# Improved Project Skill"
+    assert db.versions[0].skill_id == project_skill.id
+    ensure_access.assert_awaited_once()
+    assert ensure_access.await_args.kwargs["required_roles"] == router._PROJECT_SKILL_WRITE_ROLES
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_update_skill_evolution_config_requires_tenant_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db = SimpleNamespace(commit=AsyncMock())
+    write_guard = AsyncMock(
+        side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    )
+    monkeypatch.setattr(router, "_ensure_tenant_skill_write_access", write_guard)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.update_skill_evolution_config(
+            payload=router.SkillEvolutionConfigUpdateRequest(enabled=True),
+            db=db,
+            tenant={"id": "tenant-1"},
+            current_user=SimpleNamespace(id="user-1"),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
 async def test_run_skill_evolution_queues_single_skill_cycle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1208,6 +1875,36 @@ async def test_run_tenant_skill_evolution_queues_tenant_cycle() -> None:
         project_id=None,
         skill_name=None,
     )
+
+
+@pytest.mark.unit
+async def test_run_tenant_skill_evolution_requires_tenant_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin = SimpleNamespace(
+        schedule_evolution=MagicMock(return_value={"scheduled": True, "status": "queued"})
+    )
+    container = SimpleNamespace(skill_evolution_plugin=lambda: plugin)
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(container=SimpleNamespace(with_db=lambda _db: container))
+        )
+    )
+    write_guard = AsyncMock(
+        side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    )
+    monkeypatch.setattr(router, "_ensure_tenant_skill_write_access", write_guard)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.run_tenant_skill_evolution(
+            request=request,
+            db=SimpleNamespace(),
+            tenant={"id": "tenant-1"},
+            current_user=SimpleNamespace(id="user-1"),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    plugin.schedule_evolution.assert_not_called()
 
 
 @pytest.mark.unit

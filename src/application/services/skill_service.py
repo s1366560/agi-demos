@@ -356,6 +356,7 @@ class SkillService:
             try:
                 db_skills = await self._skill_repo.list_by_project(
                     project_id=project_id,
+                    tenant_id=tenant_id,
                     status=status,
                     scope=SkillScope.PROJECT,
                 )

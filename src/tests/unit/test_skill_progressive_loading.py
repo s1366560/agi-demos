@@ -771,3 +771,38 @@ Use fallback loader.
         set_available_skills(["cached-skill"])
         cached = get_available_skills()
         assert cached == ["cached-skill"]
+
+    def test_skill_sync_invalidation_adds_synced_skill_to_available_cache(
+        self, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Skill sync must update the module-level loader cache after legacy refresh removal."""
+        from src.infrastructure.agent.tools import skill_sync
+        from src.infrastructure.agent.tools.self_modifying_lifecycle import (
+            SelfModifyingLifecycleOrchestrator,
+        )
+        from src.infrastructure.agent.tools.skill_loader import (
+            get_available_skills,
+            set_available_skills,
+        )
+
+        set_available_skills(["existing-skill"])
+        monkeypatch.setattr(
+            SelfModifyingLifecycleOrchestrator,
+            "run_post_change",
+            staticmethod(
+                lambda **_kwargs: {
+                    "cache_invalidation": {"skill_loader": "invalidated:test-tenant"},
+                    "probe": {"status": "skipped"},
+                }
+            ),
+        )
+
+        result = skill_sync._skill_sync_invalidate_caches(
+            skill_name="new-skill",
+            tenant_id="test-tenant",
+            project_id="test-project",
+            skill_loader_tool=None,
+        )
+
+        assert get_available_skills() == ["existing-skill", "new-skill"]
+        assert result["cache_invalidation"]["skill_loader"] == "invalidated:test-tenant"

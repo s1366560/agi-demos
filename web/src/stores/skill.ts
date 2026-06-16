@@ -70,6 +70,7 @@ interface SkillState {
     search?: string | undefined;
     status?: string | undefined;
     scope?: string | undefined;
+    project_id?: string | null | undefined;
     skip?: number | undefined;
     offset?: number | undefined;
     limit?: number | undefined;

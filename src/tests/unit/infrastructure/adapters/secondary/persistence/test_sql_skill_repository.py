@@ -338,6 +338,34 @@ class TestSqlSkillRepositoryList:
         assert skills[0].project_id == "proj-A"
 
     @pytest.mark.asyncio
+    async def test_list_by_project_filters_by_tenant(self, v2_skill_repo: SqlSkillRepository):
+        """Test listing project skills with tenant isolation."""
+        skill1 = create_test_skill(
+            "skill-proj-tenant-A",
+            tenant_id="tenant-1",
+            project_id="shared-project",
+            scope=SkillScope.PROJECT,
+        )
+        await v2_skill_repo.create(skill1)
+
+        skill2 = create_test_skill(
+            "skill-proj-tenant-B",
+            tenant_id="tenant-2",
+            project_id="shared-project",
+            scope=SkillScope.PROJECT,
+        )
+        await v2_skill_repo.create(skill2)
+
+        skills = await v2_skill_repo.list_by_project(
+            "shared-project",
+            tenant_id="tenant-1",
+            scope=SkillScope.PROJECT,
+        )
+
+        assert len(skills) == 1
+        assert skills[0].tenant_id == "tenant-1"
+
+    @pytest.mark.asyncio
     async def test_list_by_project_with_filters(self, v2_skill_repo: SqlSkillRepository):
         """Test listing skills by project with filters."""
         # Create skills with different statuses

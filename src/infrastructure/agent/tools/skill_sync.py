@@ -81,6 +81,22 @@ def _skill_sync_invalidate_caches(
         skill_loader_tool.refresh_skills()
         logger.info("SkillLoaderTool cache invalidated after skill sync")
 
+    try:
+        from src.infrastructure.agent.tools.skill_loader import (
+            get_available_skills,
+            set_available_skills,
+        )
+
+        available_skills = get_available_skills()
+        if skill_name not in available_skills:
+            set_available_skills([*available_skills, skill_name])
+            logger.info("Skill loader available skills cache updated after skill sync")
+    except Exception:
+        logger.warning(
+            "Failed to update skill loader available skills cache after skill sync",
+            exc_info=True,
+        )
+
     from src.infrastructure.agent.tools.self_modifying_lifecycle import (
         SelfModifyingLifecycleOrchestrator,
     )
