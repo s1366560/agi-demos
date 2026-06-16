@@ -20,6 +20,8 @@ import {
   XCircle,
 } from 'lucide-react';
 
+import { useTenantStore } from '@/stores/tenant';
+
 import { skillAPI } from '@/services/skillService';
 
 import { LazyEmpty, LazySpin, useLazyMessage } from '@/components/ui/lazyAntd';
@@ -509,6 +511,8 @@ export const SkillEvolution: FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const message = useLazyMessage();
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const tenantId = currentTenant?.id ?? null;
   const [overview, setOverview] = useState<SkillEvolutionOverviewResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activePanel, setActivePanel] = useState<EvolutionPanelTab>('skills');
@@ -521,6 +525,11 @@ export const SkillEvolution: FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadOverview = useCallback(async () => {
+    if (!tenantId) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const [data, config] = await Promise.all([
@@ -528,8 +537,9 @@ export const SkillEvolution: FC = () => {
           job_limit: 25,
           session_limit: 25,
           skill_limit: 100,
+          tenant_id: tenantId,
         }),
-        skillAPI.getEvolutionConfig(),
+        skillAPI.getEvolutionConfig({ tenant_id: tenantId }),
       ]);
       setOverview(data);
       setPolicyDraft(config);
@@ -542,7 +552,7 @@ export const SkillEvolution: FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [message, t]);
+  }, [message, tenantId, t]);
 
   useEffect(() => {
     void loadOverview();
@@ -563,9 +573,13 @@ export const SkillEvolution: FC = () => {
   }, [autoRefresh, loadOverview, overview]);
 
   const handleManualRun = useCallback(async () => {
+    if (!tenantId) {
+      return;
+    }
+
     setIsManualRunLoading(true);
     try {
-      await skillAPI.runEvolutionOverview();
+      await skillAPI.runEvolutionOverview({ tenant_id: tenantId });
       message?.success(t('tenant.skillEvolution.manualRun.success'));
       await loadOverview();
     } catch {
@@ -573,15 +587,15 @@ export const SkillEvolution: FC = () => {
     } finally {
       setIsManualRunLoading(false);
     }
-  }, [loadOverview, message, t]);
+  }, [loadOverview, message, tenantId, t]);
 
   const handlePolicySave = useCallback(async () => {
-    if (!policyDraft) {
+    if (!policyDraft || !tenantId) {
       return;
     }
     setIsPolicySaving(true);
     try {
-      const saved = await skillAPI.updateEvolutionConfig(policyDraft);
+      const saved = await skillAPI.updateEvolutionConfig(policyDraft, { tenant_id: tenantId });
       setPolicyDraft(saved);
       message?.success(t('tenant.skillEvolution.policy.saveSuccess'));
       await loadOverview();
@@ -590,7 +604,7 @@ export const SkillEvolution: FC = () => {
     } finally {
       setIsPolicySaving(false);
     }
-  }, [loadOverview, message, policyDraft, t]);
+  }, [loadOverview, message, policyDraft, tenantId, t]);
 
   const updatePolicyDraft = useCallback((patch: Partial<SkillEvolutionConfigResponse>) => {
     setPolicyDraft((current) => (current ? { ...current, ...patch } : current));
@@ -598,9 +612,13 @@ export const SkillEvolution: FC = () => {
 
   const handleApplyJob = useCallback(
     async (jobId: string) => {
+      if (!tenantId) {
+        return;
+      }
+
       setProcessingJobId(jobId);
       try {
-        await skillAPI.applyEvolutionJob(jobId);
+        await skillAPI.applyEvolutionJob(jobId, { tenant_id: tenantId });
         message?.success(t('tenant.skillEvolution.jobs.applySuccess'));
         await loadOverview();
       } catch {
@@ -609,14 +627,18 @@ export const SkillEvolution: FC = () => {
         setProcessingJobId(null);
       }
     },
-    [loadOverview, message, t]
+    [loadOverview, message, tenantId, t]
   );
 
   const handleRejectJob = useCallback(
     async (jobId: string) => {
+      if (!tenantId) {
+        return;
+      }
+
       setProcessingJobId(jobId);
       try {
-        await skillAPI.rejectEvolutionJob(jobId);
+        await skillAPI.rejectEvolutionJob(jobId, { tenant_id: tenantId });
         message?.success(t('tenant.skillEvolution.jobs.rejectSuccess'));
         await loadOverview();
       } catch {
@@ -625,7 +647,7 @@ export const SkillEvolution: FC = () => {
         setProcessingJobId(null);
       }
     },
-    [loadOverview, message, t]
+    [loadOverview, message, tenantId, t]
   );
 
   const activeSkills = useMemo(

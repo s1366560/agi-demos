@@ -9,7 +9,7 @@ import { useTenantStore } from '@/stores/tenant';
 import { fireEvent, render, screen, waitFor } from '../../utils';
 
 import type { SkillResponse, TenantSkillConfigResponse } from '@/types/agent';
-import type { Project } from '@/types/memory';
+import type { Project, Tenant } from '@/types/memory';
 
 const navigateMock = vi.hoisted(() => vi.fn());
 const skillApiMock = vi.hoisted(() => ({
@@ -105,6 +105,20 @@ function makeProject(overrides: Partial<Project> = {}): Project {
   };
 }
 
+function makeTenant(overrides: Partial<Tenant> = {}): Tenant {
+  return {
+    id: 'tenant-1',
+    name: 'Acme',
+    owner_id: 'admin-1',
+    plan: 'enterprise',
+    max_projects: 100,
+    max_users: 100,
+    max_storage: 1000,
+    created_at: '2026-06-15T00:00:00Z',
+    ...overrides,
+  };
+}
+
 describe('SkillList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -126,7 +140,7 @@ describe('SkillList', () => {
       message: 'Skill imported',
     });
     useTenantStore.setState({
-      currentTenant: null,
+      currentTenant: makeTenant(),
     });
     useProjectStore.setState({
       projects: [],
@@ -136,6 +150,7 @@ describe('SkillList', () => {
       total: 0,
       page: 1,
       pageSize: 20,
+      listProjects: vi.fn().mockResolvedValue(undefined),
     });
   });
 
@@ -358,7 +373,8 @@ describe('SkillList', () => {
           scope: 'project',
           project_id: 'project-1',
           overwrite: false,
-        })
+        }),
+        { tenant_id: 'tenant-1' }
       );
     });
   });

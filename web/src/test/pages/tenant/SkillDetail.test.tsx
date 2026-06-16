@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SkillDetail } from '@/pages/tenant/SkillDetail';
+import { useTenantStore } from '@/stores/tenant';
 
 import { fireEvent, render, screen, waitFor } from '../../utils';
 
 import type { SkillResponse } from '@/types/agent';
+import type { Tenant } from '@/types/memory';
 
 const skillApiMocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -52,9 +54,24 @@ const skill: SkillResponse = {
   version_label: null,
 };
 
+function makeTenant(overrides: Partial<Tenant> = {}): Tenant {
+  return {
+    id: 'tenant-1',
+    name: 'Acme',
+    owner_id: 'admin-1',
+    plan: 'enterprise',
+    max_projects: 100,
+    max_users: 100,
+    max_storage: 1000,
+    created_at: '2026-06-15T00:00:00Z',
+    ...overrides,
+  };
+}
+
 describe('SkillDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useTenantStore.setState({ currentTenant: makeTenant() });
     skillApiMocks.get.mockResolvedValue(skill);
     skillApiMocks.exportPackage.mockResolvedValue({
       format: 'agentskill',
@@ -90,6 +107,7 @@ describe('SkillDetail', () => {
     await waitFor(() => {
       expect(screen.getAllByText('SKILL.md').length).toBeGreaterThan(0);
     });
+    expect(skillApiMocks.get).toHaveBeenCalledWith('skill-1', { tenant_id: 'tenant-1' });
 
     expect(screen.getByRole('button', { name: 'docs' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'schemas' })).toBeInTheDocument();

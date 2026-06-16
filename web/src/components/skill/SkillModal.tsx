@@ -48,9 +48,16 @@ interface SkillModalProps {
   onClose: () => void;
   onSuccess: () => void;
   skill: SkillResponse;
+  tenantId?: string | null | undefined;
 }
 
-export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, skill }) => {
+export const SkillModal: FC<SkillModalProps> = ({
+  isOpen,
+  onClose,
+  onSuccess,
+  skill,
+  tenantId,
+}) => {
   const { t } = useTranslation();
   const [form] = Form.useForm();
   const scopeValue = Form.useWatch('scope', form) as SkillScopeValue | undefined;
@@ -119,14 +126,18 @@ export const SkillModal: FC<SkillModalProps> = ({ isOpen, onClose, onSuccess, sk
         spec_version: compact(values.spec_version) ?? '1.0',
       };
 
-      await updateSkill(skill.id, commonData as SkillUpdate);
+      if (tenantId) {
+        await updateSkill(skill.id, commonData as SkillUpdate, { tenant_id: tenantId });
+      } else {
+        await updateSkill(skill.id, commonData as SkillUpdate);
+      }
       message.success(t('tenant.skills.updateSuccess'));
 
       onSuccess();
     } catch {
       // API errors handled by store
     }
-  }, [form, skill, updateSkill, onSuccess, t]);
+  }, [form, skill, tenantId, updateSkill, onSuccess, t]);
 
   const metadataRules = [
     {

@@ -7,16 +7,21 @@ allowing tenants to disable or override system skills.
 
 import logging
 from datetime import UTC
-from typing import Any
+from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.di_container import DIContainer
 from src.domain.model.agent.tenant_skill_config import TenantSkillAction, TenantSkillConfig
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
+    get_current_user_tenant,
+)
+from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
 
 
@@ -33,6 +38,25 @@ def get_container_with_db(request: Request, db: AsyncSession) -> DIContainer:
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/tenant/skills/config", tags=["Tenant Skill Config"])
+
+
+async def _get_selected_tenant_id(
+    selected_tenant_id: str | None = Query(
+        None,
+        alias="tenant_id",
+        min_length=1,
+        description="Explicit tenant scope for multi-tenant callers",
+    ),
+    fallback_tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    """Resolve tenant skill config scope and validate explicit tenant access."""
+    if selected_tenant_id is None:
+        return fallback_tenant_id
+
+    await require_tenant_access(db, cast(Any, current_user), selected_tenant_id)
+    return selected_tenant_id
 
 
 # === Pydantic Models ===
@@ -113,7 +137,7 @@ def _invalid_skill_config_request_error() -> HTTPException:
 @router.get("/", response_model=TenantSkillConfigListResponse)
 async def list_tenant_skill_configs(
     request: Request,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> TenantSkillConfigListResponse:
     """
@@ -137,7 +161,7 @@ async def list_tenant_skill_configs(
 async def get_tenant_skill_config(
     request: Request,
     system_skill_name: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> TenantSkillConfigResponse:
     """
@@ -164,7 +188,7 @@ async def get_tenant_skill_config(
 async def disable_system_skill(
     request: Request,
     data: DisableSkillRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> TenantSkillConfigResponse:
     """
@@ -209,7 +233,7 @@ async def disable_system_skill(
 async def override_system_skill(
     request: Request,
     data: OverrideSkillRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> TenantSkillConfigResponse:
     """
@@ -272,7 +296,7 @@ async def override_system_skill(
 async def enable_system_skill(
     request: Request,
     data: EnableSkillRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """
@@ -301,7 +325,7 @@ async def enable_system_skill(
 async def delete_tenant_skill_config(
     request: Request,
     system_skill_name: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """
@@ -330,7 +354,7 @@ async def delete_tenant_skill_config(
 async def get_skill_status(
     request: Request,
     system_skill_name: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """

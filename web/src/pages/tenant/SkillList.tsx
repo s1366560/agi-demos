@@ -202,6 +202,7 @@ export const SkillList: FC = () => {
   const activeCount = useActiveSkillsCount();
   const total = useSkillTotal();
   const currentTenant = useTenantStore((state) => state.currentTenant);
+  const tenantId = currentTenant?.id ?? null;
   const projects = useProjectStore((state) => state.projects);
   const listProjects = useProjectStore((state) => state.listProjects);
 
@@ -257,11 +258,12 @@ export const SkillList: FC = () => {
         status: effectiveStatus === 'all' ? undefined : effectiveStatus,
         scope,
         project_id: projectId ?? undefined,
+        tenant_id: tenantId,
         page: overrides?.page ?? page,
         pageSize: overrides?.pageSize ?? pageSize,
       };
     },
-    [page, pageSize, scopeFilter, search, statusFilter]
+    [page, pageSize, scopeFilter, search, statusFilter, tenantId]
   );
 
   // The API owns search/status/scope/project filtering and pagination.
@@ -298,9 +300,13 @@ export const SkillList: FC = () => {
 
   // Load data on mount
   useEffect(() => {
-    void listSkills({ page: 1, pageSize: 20 });
-    void listTenantConfigs();
-  }, [listSkills, listTenantConfigs]);
+    if (!tenantId) {
+      return;
+    }
+
+    void listSkills({ page: 1, pageSize: 20, tenant_id: tenantId });
+    void listTenantConfigs({ tenant_id: tenantId });
+  }, [listSkills, listTenantConfigs, tenantId]);
 
   useEffect(() => {
     if (!currentTenant?.id) {
@@ -356,6 +362,9 @@ export const SkillList: FC = () => {
   }, [scopeFilter]);
 
   const handleImport = useCallback(async () => {
+    if (!tenantId) {
+      return;
+    }
     if (!importFile && !importContent.trim()) {
       message?.error(t('tenant.skills.import.empty'));
       return;
@@ -368,18 +377,25 @@ export const SkillList: FC = () => {
     try {
       const projectId = importScope === 'project' ? importProjectId : null;
       if (importFile) {
-        await skillAPI.importZip(importFile, {
-          overwrite: importOverwrite,
-          scope: importScope,
-          project_id: projectId,
-        });
+        await skillAPI.importZip(
+          importFile,
+          {
+            overwrite: importOverwrite,
+            scope: importScope,
+            project_id: projectId,
+          },
+          { tenant_id: tenantId }
+        );
       } else {
-        await skillAPI.importPackage({
-          skill_md_content: importContent,
-          overwrite: importOverwrite,
-          scope: importScope,
-          project_id: projectId,
-        });
+        await skillAPI.importPackage(
+          {
+            skill_md_content: importContent,
+            overwrite: importOverwrite,
+            scope: importScope,
+            project_id: projectId,
+          },
+          { tenant_id: tenantId }
+        );
       }
       message?.success(t('tenant.skills.import.success'));
       resetImportState();
@@ -400,6 +416,7 @@ export const SkillList: FC = () => {
     buildListParams,
     message,
     resetImportState,
+    tenantId,
     t,
   ]);
 
@@ -418,46 +435,62 @@ export const SkillList: FC = () => {
 
   const handleDelete = useCallback(
     async (id: string) => {
+      if (!tenantId) {
+        return;
+      }
+
       try {
-        await deleteSkill(id);
+        await deleteSkill(id, { tenant_id: tenantId });
         message?.success(t('tenant.skills.deleteSuccess'));
       } catch {
         // Error handled by store
       }
     },
-    [deleteSkill, message, t]
+    [deleteSkill, message, tenantId, t]
   );
 
   const handleDisableSystemSkill = useCallback(
     async (skillName: string) => {
+      if (!tenantId) {
+        return;
+      }
+
       try {
-        await disableSystemSkill(skillName);
+        await disableSystemSkill(skillName, { tenant_id: tenantId });
         message?.success(t('tenant.skills.systemConfig.disableSuccess'));
         void listSkills(buildListParams({ page: 1 }));
       } catch {
         message?.error(t('tenant.skills.systemConfig.disableFailed'));
       }
     },
-    [buildListParams, disableSystemSkill, listSkills, message, t]
+    [buildListParams, disableSystemSkill, listSkills, message, tenantId, t]
   );
 
   const handleRestoreSystemSkill = useCallback(
     async (skillName: string) => {
+      if (!tenantId) {
+        return;
+      }
+
       try {
-        await enableSystemSkill(skillName);
+        await enableSystemSkill(skillName, { tenant_id: tenantId });
         message?.success(t('tenant.skills.systemConfig.restoreSuccess'));
         void listSkills(buildListParams({ page: 1 }));
       } catch {
         message?.error(t('tenant.skills.systemConfig.restoreFailed'));
       }
     },
-    [buildListParams, enableSystemSkill, listSkills, message, t]
+    [buildListParams, enableSystemSkill, listSkills, message, tenantId, t]
   );
 
   const handleExport = useCallback(
     async (skill: SkillResponse) => {
+      if (!tenantId) {
+        return;
+      }
+
       try {
-        const exported = await skillAPI.exportPackage(skill.id);
+        const exported = await skillAPI.exportPackage(skill.id, { tenant_id: tenantId });
         const blob = new Blob([JSON.stringify(exported, null, 2)], {
           type: 'application/json',
         });
@@ -472,14 +505,18 @@ export const SkillList: FC = () => {
         message?.error(t('tenant.skills.export.failed'));
       }
     },
-    [message, t]
+    [message, tenantId, t]
   );
 
   const loadVersions = useCallback(
     async (skill: SkillResponse) => {
+      if (!tenantId) {
+        return;
+      }
+
       setIsLoadingVersions(true);
       try {
-        const result = await skillAPI.listVersions(skill.id);
+        const result = await skillAPI.listVersions(skill.id, { tenant_id: tenantId });
         setVersionRows(result.versions);
       } catch {
         setVersionRows([]);
@@ -488,7 +525,7 @@ export const SkillList: FC = () => {
         setIsLoadingVersions(false);
       }
     },
-    [message, t]
+    [message, tenantId, t]
   );
 
   const handleOpenVersions = useCallback(
@@ -510,9 +547,14 @@ export const SkillList: FC = () => {
       if (!versionSkill) {
         return;
       }
+      if (!tenantId) {
+        return;
+      }
       setRollbackVersion(versionNumber);
       try {
-        const updated = await skillAPI.rollback(versionSkill.id, versionNumber);
+        const updated = await skillAPI.rollback(versionSkill.id, versionNumber, {
+          tenant_id: tenantId,
+        });
         setVersionSkill(updated);
         message?.success(t('tenant.skills.versions.rollbackSuccess'));
         await loadVersions(updated);
@@ -523,7 +565,7 @@ export const SkillList: FC = () => {
         setRollbackVersion(null);
       }
     },
-    [buildListParams, listSkills, loadVersions, message, page, t, versionSkill]
+    [buildListParams, listSkills, loadVersions, message, page, tenantId, t, versionSkill]
   );
 
   const handleModalClose = useCallback(() => {
@@ -929,6 +971,7 @@ export const SkillList: FC = () => {
         <SkillModal
           isOpen={isModalOpen}
           skill={editingSkill}
+          tenantId={tenantId}
           onClose={handleModalClose}
           onSuccess={handleModalSuccess}
         />

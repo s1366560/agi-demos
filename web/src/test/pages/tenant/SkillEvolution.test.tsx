@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SkillEvolution } from '@/pages/tenant/SkillEvolution';
+import { useTenantStore } from '@/stores/tenant';
 
 import { fireEvent, render, screen, waitFor } from '../../utils';
 
 import type { SkillEvolutionConfigResponse, SkillEvolutionOverviewResponse } from '@/types/agent';
+import type { Tenant } from '@/types/memory';
 
 const skillApiMocks = vi.hoisted(() => ({
   getEvolutionOverview: vi.fn(),
@@ -128,9 +130,24 @@ const overview: SkillEvolutionOverviewResponse = {
   },
 };
 
+function makeTenant(overrides: Partial<Tenant> = {}): Tenant {
+  return {
+    id: 'tenant-1',
+    name: 'Acme',
+    owner_id: 'admin-1',
+    plan: 'enterprise',
+    max_projects: 100,
+    max_users: 100,
+    max_storage: 1000,
+    created_at: '2026-06-15T00:00:00Z',
+    ...overrides,
+  };
+}
+
 describe('SkillEvolution', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useTenantStore.setState({ currentTenant: makeTenant() });
     skillApiMocks.getEvolutionOverview.mockResolvedValue(overview);
     skillApiMocks.getEvolutionConfig.mockResolvedValue(config);
   });
@@ -141,6 +158,13 @@ describe('SkillEvolution', () => {
     await waitFor(() => {
       expect(screen.getAllByRole('link', { name: 'alpha-skill' })).toHaveLength(2);
     });
+    expect(skillApiMocks.getEvolutionOverview).toHaveBeenCalledWith({
+      job_limit: 25,
+      session_limit: 25,
+      skill_limit: 100,
+      tenant_id: 'tenant-1',
+    });
+    expect(skillApiMocks.getEvolutionConfig).toHaveBeenCalledWith({ tenant_id: 'tenant-1' });
 
     const links = screen.getAllByRole('link', { name: 'alpha-skill' });
     expect(links[0]).toHaveAttribute('href', '/tenant/acme/skills/skill-tenant');

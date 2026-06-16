@@ -37,12 +37,28 @@ const api = httpClient;
 const skillNamePathSegment = (systemSkillName: string): string =>
   encodeURIComponent(systemSkillName);
 
+interface TenantScopedOptions {
+  tenant_id?: string | null | undefined;
+}
+
+const tenantParams = (options: TenantScopedOptions = {}): { tenant_id?: string } =>
+  options.tenant_id ? { tenant_id: options.tenant_id } : {};
+
+const tenantConfig = (options: TenantScopedOptions = {}) => {
+  const params = tenantParams(options);
+  return params.tenant_id ? { params } : undefined;
+};
+
+const tenantQuery = (options: TenantScopedOptions = {}): string =>
+  options.tenant_id ? `?tenant_id=${encodeURIComponent(options.tenant_id)}` : '';
+
 export interface SkillListParams {
   search?: string | undefined;
   q?: string | undefined;
   status?: 'active' | 'disabled' | 'deprecated' | null | undefined;
   scope?: 'system' | 'tenant' | 'project' | null | undefined;
   project_id?: string | null | undefined;
+  tenant_id?: string | null | undefined;
   skip?: number | undefined;
   offset?: number | undefined;
   limit?: number | undefined;
@@ -60,7 +76,7 @@ export const skillAPI = {
    * List system skills
    */
   listSystemSkills: async (
-    params: { status?: string | undefined } = {}
+    params: { status?: string | undefined; tenant_id?: string | null | undefined } = {}
   ): Promise<SkillsListResponse> => {
     return await api.get<SkillsListResponse>('/skills/system/list', { params });
   },
@@ -68,29 +84,33 @@ export const skillAPI = {
   /**
    * Create a new Skill
    */
-  create: async (data: SkillCreate): Promise<SkillResponse> => {
-    return await api.post<SkillResponse>('/skills/', data);
+  create: async (data: SkillCreate, options: TenantScopedOptions = {}): Promise<SkillResponse> => {
+    return await api.post<SkillResponse>('/skills/', data, tenantConfig(options));
   },
 
   /**
    * Get a Skill by ID
    */
-  get: async (skillId: string): Promise<SkillResponse> => {
-    return await api.get<SkillResponse>(`/skills/${skillId}`);
+  get: async (skillId: string, options: TenantScopedOptions = {}): Promise<SkillResponse> => {
+    return await api.get<SkillResponse>(`/skills/${skillId}`, tenantConfig(options));
   },
 
   /**
    * Update a Skill
    */
-  update: async (skillId: string, data: SkillUpdate): Promise<SkillResponse> => {
-    return await api.put<SkillResponse>(`/skills/${skillId}`, data);
+  update: async (
+    skillId: string,
+    data: SkillUpdate,
+    options: TenantScopedOptions = {}
+  ): Promise<SkillResponse> => {
+    return await api.put<SkillResponse>(`/skills/${skillId}`, data, tenantConfig(options));
   },
 
   /**
    * Delete a Skill
    */
-  delete: async (skillId: string): Promise<void> => {
-    await api.delete(`/skills/${skillId}`);
+  delete: async (skillId: string, options: TenantScopedOptions = {}): Promise<void> => {
+    await api.delete(`/skills/${skillId}`, tenantConfig(options));
   },
 
   /**
@@ -98,34 +118,49 @@ export const skillAPI = {
    */
   updateStatus: async (
     skillId: string,
-    status: 'active' | 'disabled' | 'deprecated'
+    status: 'active' | 'disabled' | 'deprecated',
+    options: TenantScopedOptions = {}
   ): Promise<SkillResponse> => {
     return await api.patch<SkillResponse>(`/skills/${skillId}/status`, null, {
-      params: { status },
+      params: { status, ...tenantParams(options) },
     });
   },
 
   /**
    * Get skill content
    */
-  getContent: async (skillId: string): Promise<SkillContentResponse> => {
-    return await api.get<SkillContentResponse>(`/skills/${skillId}/content`);
+  getContent: async (
+    skillId: string,
+    options: TenantScopedOptions = {}
+  ): Promise<SkillContentResponse> => {
+    return await api.get<SkillContentResponse>(`/skills/${skillId}/content`, tenantConfig(options));
   },
 
   /**
    * Update skill content
    */
-  updateContent: async (skillId: string, fullContent: string): Promise<SkillResponse> => {
-    return await api.put<SkillResponse>(`/skills/${skillId}/content`, {
-      full_content: fullContent,
-    });
+  updateContent: async (
+    skillId: string,
+    fullContent: string,
+    options: TenantScopedOptions = {}
+  ): Promise<SkillResponse> => {
+    return await api.put<SkillResponse>(
+      `/skills/${skillId}/content`,
+      {
+        full_content: fullContent,
+      },
+      tenantConfig(options)
+    );
   },
 
   /**
    * Import a complete AgentSkills.io package.
    */
-  importPackage: async (data: SkillImportRequest): Promise<SkillLifecycleResponse> => {
-    return await api.post<SkillLifecycleResponse>('/skills/import', data);
+  importPackage: async (
+    data: SkillImportRequest,
+    options: TenantScopedOptions = {}
+  ): Promise<SkillLifecycleResponse> => {
+    return await api.post<SkillLifecycleResponse>('/skills/import', data, tenantConfig(options));
   },
 
   /**
@@ -133,7 +168,8 @@ export const skillAPI = {
    */
   importZip: async (
     file: File,
-    data: SkillZipImportRequest = {}
+    data: SkillZipImportRequest = {},
+    options: TenantScopedOptions = {}
   ): Promise<SkillLifecycleResponse> => {
     const formData = new FormData();
     formData.append('archive', file);
@@ -145,14 +181,20 @@ export const skillAPI = {
     if (data.change_summary) {
       formData.append('change_summary', data.change_summary);
     }
-    return await api.upload<SkillLifecycleResponse>('/skills/import/zip', formData);
+    return await api.upload<SkillLifecycleResponse>(
+      `/skills/import/zip${tenantQuery(options)}`,
+      formData
+    );
   },
 
   /**
    * Export a Skill as an AgentSkills.io package.
    */
-  exportPackage: async (skillId: string): Promise<SkillPackageResponse> => {
-    return await api.get<SkillPackageResponse>(`/skills/${skillId}/export`);
+  exportPackage: async (
+    skillId: string,
+    options: TenantScopedOptions = {}
+  ): Promise<SkillPackageResponse> => {
+    return await api.get<SkillPackageResponse>(`/skills/${skillId}/export`, tenantConfig(options));
   },
 
   /**
@@ -160,7 +202,11 @@ export const skillAPI = {
    */
   listVersions: async (
     skillId: string,
-    params: { limit?: number | undefined; offset?: number | undefined } = {}
+    params: {
+      limit?: number | undefined;
+      offset?: number | undefined;
+      tenant_id?: string | null | undefined;
+    } = {}
   ): Promise<SkillVersionListResponse> => {
     return await api.get<SkillVersionListResponse>(`/skills/${skillId}/versions`, { params });
   },
@@ -170,27 +216,43 @@ export const skillAPI = {
    */
   getVersion: async (
     skillId: string,
-    versionNumber: number
+    versionNumber: number,
+    options: TenantScopedOptions = {}
   ): Promise<SkillVersionDetailResponse> => {
     return await api.get<SkillVersionDetailResponse>(
-      `/skills/${skillId}/versions/${String(versionNumber)}`
+      `/skills/${skillId}/versions/${String(versionNumber)}`,
+      tenantConfig(options)
     );
   },
 
   /**
    * Roll a Skill back to a previous version snapshot.
    */
-  rollback: async (skillId: string, versionNumber: number): Promise<SkillResponse> => {
-    return await api.post<SkillResponse>(`/skills/${skillId}/rollback`, {
-      version_number: versionNumber,
-    });
+  rollback: async (
+    skillId: string,
+    versionNumber: number,
+    options: TenantScopedOptions = {}
+  ): Promise<SkillResponse> => {
+    return await api.post<SkillResponse>(
+      `/skills/${skillId}/rollback`,
+      {
+        version_number: versionNumber,
+      },
+      tenantConfig(options)
+    );
   },
 
   /**
    * Get skill evolution trigger metadata, jobs, and route.
    */
-  getEvolution: async (skillId: string): Promise<SkillEvolutionDetailResponse> => {
-    return await api.get<SkillEvolutionDetailResponse>(`/skills/${skillId}/evolution`);
+  getEvolution: async (
+    skillId: string,
+    options: TenantScopedOptions = {}
+  ): Promise<SkillEvolutionDetailResponse> => {
+    return await api.get<SkillEvolutionDetailResponse>(
+      `/skills/${skillId}/evolution`,
+      tenantConfig(options)
+    );
   },
 
   /**
@@ -201,6 +263,7 @@ export const skillAPI = {
       skill_limit?: number | undefined;
       session_limit?: number | undefined;
       job_limit?: number | undefined;
+      tenant_id?: string | null | undefined;
     } = {}
   ): Promise<SkillEvolutionOverviewResponse> => {
     return await api.get<SkillEvolutionOverviewResponse>('/skills/evolution/overview', {
@@ -208,42 +271,79 @@ export const skillAPI = {
     });
   },
 
-  getEvolutionConfig: async (): Promise<SkillEvolutionConfigResponse> => {
-    return await api.get<SkillEvolutionConfigResponse>('/skills/evolution/config');
+  getEvolutionConfig: async (
+    options: TenantScopedOptions = {}
+  ): Promise<SkillEvolutionConfigResponse> => {
+    return await api.get<SkillEvolutionConfigResponse>(
+      '/skills/evolution/config',
+      tenantConfig(options)
+    );
   },
 
   updateEvolutionConfig: async (
-    data: SkillEvolutionConfigUpdateRequest
+    data: SkillEvolutionConfigUpdateRequest,
+    options: TenantScopedOptions = {}
   ): Promise<SkillEvolutionConfigResponse> => {
-    return await api.put<SkillEvolutionConfigResponse>('/skills/evolution/config', data);
+    return await api.put<SkillEvolutionConfigResponse>(
+      '/skills/evolution/config',
+      data,
+      tenantConfig(options)
+    );
   },
 
   /**
    * Run one evolution cycle for a Skill.
    */
-  runEvolution: async (skillId: string): Promise<SkillEvolutionRunResponse> => {
-    return await api.post<SkillEvolutionRunResponse>(`/skills/${skillId}/evolution/run`);
+  runEvolution: async (
+    skillId: string,
+    options: TenantScopedOptions = {}
+  ): Promise<SkillEvolutionRunResponse> => {
+    return await api.post<SkillEvolutionRunResponse>(
+      `/skills/${skillId}/evolution/run`,
+      undefined,
+      tenantConfig(options)
+    );
   },
 
   /**
    * Run one tenant-wide skill evolution cycle.
    */
-  runEvolutionOverview: async (): Promise<SkillEvolutionTenantRunResponse> => {
-    return await api.post<SkillEvolutionTenantRunResponse>('/skills/evolution/run');
+  runEvolutionOverview: async (
+    options: TenantScopedOptions = {}
+  ): Promise<SkillEvolutionTenantRunResponse> => {
+    return await api.post<SkillEvolutionTenantRunResponse>(
+      '/skills/evolution/run',
+      undefined,
+      tenantConfig(options)
+    );
   },
 
   /**
    * Apply a pending skill evolution job.
    */
-  applyEvolutionJob: async (jobId: string): Promise<SkillEvolutionJobResponse> => {
-    return await api.post<SkillEvolutionJobResponse>(`/skills/evolution/jobs/${jobId}/apply`);
+  applyEvolutionJob: async (
+    jobId: string,
+    options: TenantScopedOptions = {}
+  ): Promise<SkillEvolutionJobResponse> => {
+    return await api.post<SkillEvolutionJobResponse>(
+      `/skills/evolution/jobs/${jobId}/apply`,
+      undefined,
+      tenantConfig(options)
+    );
   },
 
   /**
    * Reject a pending skill evolution job.
    */
-  rejectEvolutionJob: async (jobId: string): Promise<SkillEvolutionJobResponse> => {
-    return await api.post<SkillEvolutionJobResponse>(`/skills/evolution/jobs/${jobId}/reject`);
+  rejectEvolutionJob: async (
+    jobId: string,
+    options: TenantScopedOptions = {}
+  ): Promise<SkillEvolutionJobResponse> => {
+    return await api.post<SkillEvolutionJobResponse>(
+      `/skills/evolution/jobs/${jobId}/reject`,
+      undefined,
+      tenantConfig(options)
+    );
   },
 };
 
@@ -254,26 +354,40 @@ export const tenantSkillConfigAPI = {
   /**
    * List all tenant skill configs
    */
-  list: async (): Promise<TenantSkillConfigListResponse> => {
-    return await api.get<TenantSkillConfigListResponse>('/tenant/skills/config/');
+  list: async (options: TenantScopedOptions = {}): Promise<TenantSkillConfigListResponse> => {
+    return await api.get<TenantSkillConfigListResponse>(
+      '/tenant/skills/config/',
+      tenantConfig(options)
+    );
   },
 
   /**
    * Get a specific tenant skill config
    */
-  get: async (systemSkillName: string): Promise<TenantSkillConfigResponse> => {
+  get: async (
+    systemSkillName: string,
+    options: TenantScopedOptions = {}
+  ): Promise<TenantSkillConfigResponse> => {
     return await api.get<TenantSkillConfigResponse>(
-      `/tenant/skills/config/${skillNamePathSegment(systemSkillName)}`
+      `/tenant/skills/config/${skillNamePathSegment(systemSkillName)}`,
+      tenantConfig(options)
     );
   },
 
   /**
    * Disable a system skill
    */
-  disable: async (systemSkillName: string): Promise<TenantSkillConfigResponse> => {
-    return await api.post<TenantSkillConfigResponse>('/tenant/skills/config/disable', {
-      system_skill_name: systemSkillName,
-    });
+  disable: async (
+    systemSkillName: string,
+    options: TenantScopedOptions = {}
+  ): Promise<TenantSkillConfigResponse> => {
+    return await api.post<TenantSkillConfigResponse>(
+      '/tenant/skills/config/disable',
+      {
+        system_skill_name: systemSkillName,
+      },
+      tenantConfig(options)
+    );
   },
 
   /**
@@ -281,36 +395,52 @@ export const tenantSkillConfigAPI = {
    */
   override: async (
     systemSkillName: string,
-    overrideSkillId: string
+    overrideSkillId: string,
+    options: TenantScopedOptions = {}
   ): Promise<TenantSkillConfigResponse> => {
-    return await api.post<TenantSkillConfigResponse>('/tenant/skills/config/override', {
-      system_skill_name: systemSkillName,
-      override_skill_id: overrideSkillId,
-    });
+    return await api.post<TenantSkillConfigResponse>(
+      '/tenant/skills/config/override',
+      {
+        system_skill_name: systemSkillName,
+        override_skill_id: overrideSkillId,
+      },
+      tenantConfig(options)
+    );
   },
 
   /**
    * Enable a previously disabled/overridden system skill
    */
-  enable: async (systemSkillName: string): Promise<void> => {
-    await api.post('/tenant/skills/config/enable', {
-      system_skill_name: systemSkillName,
-    });
+  enable: async (systemSkillName: string, options: TenantScopedOptions = {}): Promise<void> => {
+    await api.post(
+      '/tenant/skills/config/enable',
+      {
+        system_skill_name: systemSkillName,
+      },
+      tenantConfig(options)
+    );
   },
 
   /**
    * Delete a tenant skill config
    */
-  delete: async (systemSkillName: string): Promise<void> => {
-    await api.delete(`/tenant/skills/config/${skillNamePathSegment(systemSkillName)}`);
+  delete: async (systemSkillName: string, options: TenantScopedOptions = {}): Promise<void> => {
+    await api.delete(
+      `/tenant/skills/config/${skillNamePathSegment(systemSkillName)}`,
+      tenantConfig(options)
+    );
   },
 
   /**
    * Get status of a system skill
    */
-  getStatus: async (systemSkillName: string): Promise<SystemSkillStatus> => {
+  getStatus: async (
+    systemSkillName: string,
+    options: TenantScopedOptions = {}
+  ): Promise<SystemSkillStatus> => {
     return await api.get<SystemSkillStatus>(
-      `/tenant/skills/config/status/${skillNamePathSegment(systemSkillName)}`
+      `/tenant/skills/config/status/${skillNamePathSegment(systemSkillName)}`,
+      tenantConfig(options)
     );
   },
 };

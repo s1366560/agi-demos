@@ -53,6 +53,44 @@ def _allow_tenant_skill_write(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
     return guard
 
 
+@pytest.mark.unit
+async def test_selected_skill_tenant_uses_default_when_query_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard = AsyncMock()
+    monkeypatch.setattr(router, "require_tenant_access", guard)
+
+    resolved = await router._get_selected_skill_tenant_id(
+        selected_tenant_id=None,
+        fallback_tenant_id="tenant-default",
+        current_user=SimpleNamespace(id="user-1"),
+        db=SimpleNamespace(),
+    )
+
+    assert resolved == "tenant-default"
+    guard.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_selected_skill_tenant_validates_explicit_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard = AsyncMock()
+    db = SimpleNamespace()
+    current_user = SimpleNamespace(id="user-1")
+    monkeypatch.setattr(router, "require_tenant_access", guard)
+
+    resolved = await router._get_selected_skill_tenant_id(
+        selected_tenant_id="tenant-selected",
+        fallback_tenant_id="tenant-default",
+        current_user=current_user,
+        db=db,
+    )
+
+    assert resolved == "tenant-selected"
+    guard.assert_awaited_once_with(db, current_user, "tenant-selected")
+
+
 def _make_zip(files: dict[str, bytes | str]) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
@@ -88,7 +126,11 @@ class _MemorySkillRepository:
 
     async def create(self, skill: Skill) -> Skill:
         self.skills_by_id[skill.id] = skill
-        skills = [candidate for candidate in self.skills_by_name.get(skill.name, []) if candidate.id != skill.id]
+        skills = [
+            candidate
+            for candidate in self.skills_by_name.get(skill.name, [])
+            if candidate.id != skill.id
+        ]
         skills.append(skill)
         self.skills_by_name[skill.name] = skills
         return skill
@@ -110,13 +152,19 @@ class _MemorySkillRepository:
         if scope is not None:
             return candidates[0] if candidates else None
         tenant_scoped = [
-            skill for skill in candidates if skill.scope == SkillScope.TENANT and skill.project_id is None
+            skill
+            for skill in candidates
+            if skill.scope == SkillScope.TENANT and skill.project_id is None
         ]
         return (tenant_scoped or candidates)[0] if candidates else None
 
     async def update(self, skill: Skill) -> Skill:
         self.skills_by_id[skill.id] = skill
-        skills = [candidate for candidate in self.skills_by_name.get(skill.name, []) if candidate.id != skill.id]
+        skills = [
+            candidate
+            for candidate in self.skills_by_name.get(skill.name, [])
+            if candidate.id != skill.id
+        ]
         skills.append(skill)
         self.skills_by_name[skill.name] = skills
         return skill
@@ -125,7 +173,9 @@ class _MemorySkillRepository:
         skill = self.skills_by_id.pop(skill_id, None)
         if skill is not None:
             self.skills_by_name[skill.name] = [
-                candidate for candidate in self.skills_by_name.get(skill.name, []) if candidate.id != skill_id
+                candidate
+                for candidate in self.skills_by_name.get(skill.name, [])
+                if candidate.id != skill_id
             ]
         return True
 
@@ -138,7 +188,8 @@ class _MemorySkillRepository:
         return [
             skill
             for skill in self.skills_by_id.values()
-            if skill.project_id == project_id and (tenant_id is None or skill.tenant_id == tenant_id)
+            if skill.project_id == project_id
+            and (tenant_id is None or skill.tenant_id == tenant_id)
         ]
 
     async def count_by_tenant(self, *_args: object, **_kwargs: object) -> int:
@@ -244,10 +295,7 @@ class _MemoryEvolutionRepository:
             and (status is None or job.status == status)
             and (skill_name is None or job.skill_name == skill_name)
             and self._is_project_allowed(job, project_ids)
-            and (
-                not filter_project_id
-                or getattr(job, "project_id", None) == project_id
-            )
+            and (not filter_project_id or getattr(job, "project_id", None) == project_id)
         ]
         return jobs[:limit]
 
@@ -281,11 +329,9 @@ class _MemoryEvolutionRepository:
         return sum(
             1
             for session in self._db.evolution_sessions
-            if session.tenant_id == tenant_id and session.skill_name == skill_name
-            and (
-                not filter_project_id
-                or getattr(session, "project_id", None) == project_id
-            )
+            if session.tenant_id == tenant_id
+            and session.skill_name == skill_name
+            and (not filter_project_id or getattr(session, "project_id", None) == project_id)
         )
 
     async def get_overview_stats(
@@ -341,20 +387,14 @@ class _MemoryEvolutionRepository:
             for session in self._db.evolution_sessions
             if session.tenant_id == tenant_id
             and self._is_project_allowed(session, project_ids)
-            and (
-                not filter_project_id
-                or getattr(session, "project_id", None) == project_id
-            )
+            and (not filter_project_id or getattr(session, "project_id", None) == project_id)
         ]
         jobs = [
             job
             for job in self._db.evolution_jobs
             if job.tenant_id == tenant_id
             and self._is_project_allowed(job, project_ids)
-            and (
-                not filter_project_id
-                or getattr(job, "project_id", None) == project_id
-            )
+            and (not filter_project_id or getattr(job, "project_id", None) == project_id)
         ]
         summaries: list[dict[str, object]] = []
         skill_scopes = {
@@ -425,10 +465,7 @@ class _MemoryEvolutionRepository:
             if session.tenant_id == tenant_id
             and (skill_name is None or session.skill_name == skill_name)
             and self._is_project_allowed(session, project_ids)
-            and (
-                not filter_project_id
-                or getattr(session, "project_id", None) == project_id
-            )
+            and (not filter_project_id or getattr(session, "project_id", None) == project_id)
         ]
         return sorted(sessions, key=lambda session: session.created_at, reverse=True)[:limit]
 
@@ -553,7 +590,9 @@ async def test_create_tenant_skill_requires_tenant_admin(
     repo = _MemorySkillRepository()
     db = SimpleNamespace(commit=AsyncMock())
     write_guard = AsyncMock(
-        side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        side_effect=HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
     )
     monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _MemoryContainer(repo))
     monkeypatch.setattr(router, "_ensure_tenant_skill_write_access", write_guard)
@@ -1378,7 +1417,7 @@ async def test_get_skill_evolution_overview_returns_global_capture_state(
                 skill_version_id=None,
                 created_at=created_at,
                 applied_at=None,
-            )
+            ),
         ],
         evolution_sessions=[
             SimpleNamespace(
@@ -1638,7 +1677,9 @@ async def test_apply_tenant_skill_evolution_job_requires_tenant_admin(
         commit=AsyncMock(),
     )
     write_guard = AsyncMock(
-        side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        side_effect=HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
     )
     monkeypatch.setattr(
         "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
@@ -1796,7 +1837,9 @@ async def test_update_skill_evolution_config_requires_tenant_admin(
 ) -> None:
     db = SimpleNamespace(commit=AsyncMock())
     write_guard = AsyncMock(
-        side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        side_effect=HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
     )
     monkeypatch.setattr(router, "_ensure_tenant_skill_write_access", write_guard)
 
@@ -1895,7 +1938,9 @@ async def test_run_tenant_skill_evolution_requires_tenant_admin(
         )
     )
     write_guard = AsyncMock(
-        side_effect=HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+        side_effect=HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required"
+        )
     )
     monkeypatch.setattr(router, "_ensure_tenant_skill_write_access", write_guard)
 

@@ -53,6 +53,44 @@ def db() -> SimpleNamespace:
 
 
 @pytest.mark.unit
+async def test_selected_tenant_uses_default_when_query_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard = AsyncMock()
+    monkeypatch.setattr(router, "require_tenant_access", guard)
+
+    resolved = await router._get_selected_tenant_id(
+        selected_tenant_id=None,
+        fallback_tenant_id="tenant-default",
+        current_user=SimpleNamespace(id="user-1"),
+        db=SimpleNamespace(),
+    )
+
+    assert resolved == "tenant-default"
+    guard.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_selected_tenant_validates_explicit_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard = AsyncMock()
+    db = SimpleNamespace()
+    current_user = SimpleNamespace(id="user-1")
+    monkeypatch.setattr(router, "require_tenant_access", guard)
+
+    resolved = await router._get_selected_tenant_id(
+        selected_tenant_id="tenant-selected",
+        fallback_tenant_id="tenant-default",
+        current_user=current_user,
+        db=db,
+    )
+
+    assert resolved == "tenant-selected"
+    guard.assert_awaited_once_with(db, current_user, "tenant-selected")
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("call_name", "data"),
     [

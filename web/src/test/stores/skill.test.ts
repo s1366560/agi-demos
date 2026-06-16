@@ -77,4 +77,22 @@ describe('skill store', () => {
       offset: 0,
     });
   });
+
+  it('passes explicit tenant scope through list requests', async () => {
+    await useSkillStore.getState().listSkills({
+      tenant_id: 'tenant-2',
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(skillAPI.list).toHaveBeenCalledWith({
+      search: undefined,
+      status: undefined,
+      scope: undefined,
+      project_id: undefined,
+      tenant_id: 'tenant-2',
+      limit: 20,
+      offset: 0,
+    });
+  });
 });

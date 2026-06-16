@@ -48,11 +48,16 @@ interface SkillListParams {
   status?: SkillFilters['status'] | undefined;
   scope?: SkillFilters['scope'] | undefined;
   project_id?: string | null | undefined;
+  tenant_id?: string | null | undefined;
   skip?: number | undefined;
   offset?: number | undefined;
   limit?: number | undefined;
   page?: number | undefined;
   pageSize?: number | undefined;
+}
+
+interface SkillActionOptions {
+  tenant_id?: string | null | undefined;
 }
 
 interface SkillState {
@@ -79,20 +84,36 @@ interface SkillState {
 
   // Actions - Skill CRUD
   listSkills: (params?: SkillListParams) => Promise<void>;
-  listSystemSkills: () => Promise<void>;
-  getSkill: (id: string) => Promise<SkillResponse>;
-  createSkill: (data: SkillCreate) => Promise<SkillResponse>;
-  updateSkill: (id: string, data: SkillUpdate) => Promise<SkillResponse>;
-  deleteSkill: (id: string) => Promise<void>;
-  updateSkillStatus: (id: string, status: 'active' | 'disabled' | 'deprecated') => Promise<void>;
-  updateSkillContent: (id: string, content: string) => Promise<SkillResponse>;
+  listSystemSkills: (options?: SkillActionOptions) => Promise<void>;
+  getSkill: (id: string, options?: SkillActionOptions) => Promise<SkillResponse>;
+  createSkill: (data: SkillCreate, options?: SkillActionOptions) => Promise<SkillResponse>;
+  updateSkill: (
+    id: string,
+    data: SkillUpdate,
+    options?: SkillActionOptions
+  ) => Promise<SkillResponse>;
+  deleteSkill: (id: string, options?: SkillActionOptions) => Promise<void>;
+  updateSkillStatus: (
+    id: string,
+    status: 'active' | 'disabled' | 'deprecated',
+    options?: SkillActionOptions
+  ) => Promise<void>;
+  updateSkillContent: (
+    id: string,
+    content: string,
+    options?: SkillActionOptions
+  ) => Promise<SkillResponse>;
   setCurrentSkill: (skill: SkillResponse | null) => void;
 
   // Actions - Tenant Skill Config
-  listTenantConfigs: () => Promise<void>;
-  disableSystemSkill: (systemSkillName: string) => Promise<void>;
-  enableSystemSkill: (systemSkillName: string) => Promise<void>;
-  overrideSystemSkill: (systemSkillName: string, overrideSkillId: string) => Promise<void>;
+  listTenantConfigs: (options?: SkillActionOptions) => Promise<void>;
+  disableSystemSkill: (systemSkillName: string, options?: SkillActionOptions) => Promise<void>;
+  enableSystemSkill: (systemSkillName: string, options?: SkillActionOptions) => Promise<void>;
+  overrideSystemSkill: (
+    systemSkillName: string,
+    overrideSkillId: string,
+    options?: SkillActionOptions
+  ) => Promise<void>;
 
   // Actions - Filters
   setFilters: (filters: Partial<SkillFilters>) => void;
@@ -146,7 +167,9 @@ export const useSkillStore = create<SkillState>()(
           const explicitOffset = params.offset ?? params.skip;
           const nextPage =
             params.page ??
-            (explicitOffset !== undefined ? Math.floor(explicitOffset / nextPageSize) + 1 : get().page);
+            (explicitOffset !== undefined
+              ? Math.floor(explicitOffset / nextPageSize) + 1
+              : get().page);
           const offset = explicitOffset ?? (nextPage - 1) * nextPageSize;
           const search = params.search ?? filters.search;
           const status = params.status === undefined ? filters.status : params.status;
@@ -156,6 +179,7 @@ export const useSkillStore = create<SkillState>()(
             status: status || undefined,
             scope: scope || undefined,
             project_id: params.project_id || undefined,
+            ...(params.tenant_id ? { tenant_id: params.tenant_id } : {}),
             limit: nextPageSize,
             offset,
           };
@@ -174,10 +198,10 @@ export const useSkillStore = create<SkillState>()(
         }
       },
 
-      listSystemSkills: async () => {
+      listSystemSkills: async (options = {}) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await skillAPI.listSystemSkills();
+          const response = await skillAPI.listSystemSkills(options);
           set({
             systemSkills: response.skills,
             isLoading: false,
@@ -189,10 +213,10 @@ export const useSkillStore = create<SkillState>()(
         }
       },
 
-      getSkill: async (id: string) => {
+      getSkill: async (id: string, options = {}) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await skillAPI.get(id);
+          const response = await skillAPI.get(id, options);
           set({ currentSkill: response, isLoading: false });
           return response;
         } catch (error: unknown) {
@@ -202,10 +226,10 @@ export const useSkillStore = create<SkillState>()(
         }
       },
 
-      createSkill: async (data: SkillCreate) => {
+      createSkill: async (data: SkillCreate, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await skillAPI.create(data);
+          const response = await skillAPI.create(data, options);
           const { skills } = get();
           set({
             skills: [response, ...skills],
@@ -220,10 +244,10 @@ export const useSkillStore = create<SkillState>()(
         }
       },
 
-      updateSkill: async (id: string, data: SkillUpdate) => {
+      updateSkill: async (id: string, data: SkillUpdate, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await skillAPI.update(id, data);
+          const response = await skillAPI.update(id, data, options);
           const { skills } = get();
           set({
             skills: skills.map((s) => (s.id === id ? response : s)),
@@ -238,10 +262,10 @@ export const useSkillStore = create<SkillState>()(
         }
       },
 
-      deleteSkill: async (id: string) => {
+      deleteSkill: async (id: string, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          await skillAPI.delete(id);
+          await skillAPI.delete(id, options);
           const { skills } = get();
           set({
             skills: skills.filter((s) => s.id !== id),
@@ -255,10 +279,14 @@ export const useSkillStore = create<SkillState>()(
         }
       },
 
-      updateSkillStatus: async (id: string, status: 'active' | 'disabled' | 'deprecated') => {
+      updateSkillStatus: async (
+        id: string,
+        status: 'active' | 'disabled' | 'deprecated',
+        options = {}
+      ) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await skillAPI.updateStatus(id, status);
+          const response = await skillAPI.updateStatus(id, status, options);
           const { skills } = get();
           set({
             skills: skills.map((s) => (s.id === id ? response : s)),
@@ -275,10 +303,10 @@ export const useSkillStore = create<SkillState>()(
         set({ currentSkill: skill });
       },
 
-      updateSkillContent: async (id: string, content: string) => {
+      updateSkillContent: async (id: string, content: string, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          const response = await skillAPI.updateContent(id, content);
+          const response = await skillAPI.updateContent(id, content, options);
           const { skills } = get();
           set({
             skills: skills.map((s) => (s.id === id ? response : s)),
@@ -295,10 +323,10 @@ export const useSkillStore = create<SkillState>()(
 
       // ========== Tenant Skill Config ==========
 
-      listTenantConfigs: async () => {
+      listTenantConfigs: async (options = {}) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await tenantSkillConfigAPI.list();
+          const response = await tenantSkillConfigAPI.list(options);
           set({
             tenantConfigs: response.configs,
             isLoading: false,
@@ -310,10 +338,10 @@ export const useSkillStore = create<SkillState>()(
         }
       },
 
-      disableSystemSkill: async (systemSkillName: string) => {
+      disableSystemSkill: async (systemSkillName: string, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          const config = await tenantSkillConfigAPI.disable(systemSkillName);
+          const config = await tenantSkillConfigAPI.disable(systemSkillName, options);
           const { tenantConfigs } = get();
           const existingIndex = tenantConfigs.findIndex(
             (c) => c.system_skill_name === systemSkillName
@@ -336,10 +364,10 @@ export const useSkillStore = create<SkillState>()(
         }
       },
 
-      enableSystemSkill: async (systemSkillName: string) => {
+      enableSystemSkill: async (systemSkillName: string, options = {}) => {
         set({ isSubmitting: true, error: null });
         try {
-          await tenantSkillConfigAPI.enable(systemSkillName);
+          await tenantSkillConfigAPI.enable(systemSkillName, options);
           const { tenantConfigs } = get();
           set({
             tenantConfigs: tenantConfigs.filter((c) => c.system_skill_name !== systemSkillName),
@@ -352,10 +380,18 @@ export const useSkillStore = create<SkillState>()(
         }
       },
 
-      overrideSystemSkill: async (systemSkillName: string, overrideSkillId: string) => {
+      overrideSystemSkill: async (
+        systemSkillName: string,
+        overrideSkillId: string,
+        options = {}
+      ) => {
         set({ isSubmitting: true, error: null });
         try {
-          const config = await tenantSkillConfigAPI.override(systemSkillName, overrideSkillId);
+          const config = await tenantSkillConfigAPI.override(
+            systemSkillName,
+            overrideSkillId,
+            options
+          );
           const { tenantConfigs } = get();
           const existingIndex = tenantConfigs.findIndex(
             (c) => c.system_skill_name === systemSkillName

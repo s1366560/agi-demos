@@ -83,6 +83,25 @@ ParsedSkillPayload = tuple[
 ]
 
 
+async def _get_selected_skill_tenant_id(
+    selected_tenant_id: str | None = Query(
+        None,
+        alias="tenant_id",
+        min_length=1,
+        description="Explicit tenant scope for multi-tenant callers",
+    ),
+    fallback_tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    """Resolve the tenant for a skill request and validate explicit tenant scope."""
+    if selected_tenant_id is None:
+        return fallback_tenant_id
+
+    await require_tenant_access(db, cast(Any, current_user), selected_tenant_id)
+    return selected_tenant_id
+
+
 # === Pydantic Models ===
 
 
@@ -657,9 +676,7 @@ async def _ensure_project_skill_access(
     if required_roles is not None:
         query = query.where(UserProject.role.in_(required_roles))
 
-    result = await db.execute(
-        refresh_select_statement(query)
-    )
+    result = await db.execute(refresh_select_statement(query))
     if result.scalar_one_or_none() is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -927,7 +944,7 @@ async def _create_skill_version_snapshot(
 async def create_skill(
     request: Request,
     data: SkillCreate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillResponse:
@@ -1042,7 +1059,7 @@ async def list_skills(
     limit: int = Query(100, ge=1, le=500, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     skip: int | None = Query(None, ge=0, description="Legacy offset alias"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillListResponse:
@@ -1103,7 +1120,7 @@ async def list_skills(
 async def get_skill(
     request: Request,
     skill_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillResponse:
@@ -1134,7 +1151,7 @@ async def update_skill(
     request: Request,
     skill_id: str,
     data: SkillUpdate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillResponse:
@@ -1267,7 +1284,7 @@ async def update_skill(
 async def delete_skill(
     request: Request,
     skill_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
@@ -1308,7 +1325,7 @@ async def update_skill_status(
     request: Request,
     skill_id: str,
     status_value: str = Query(..., alias="status", description="New status"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillResponse:
@@ -1388,7 +1405,7 @@ async def update_skill_status(
 async def list_system_skills(
     request: Request,
     status_filter: str | None = Query(None, alias="status", description="Filter by status"),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> SkillListResponse:
     """
@@ -1448,7 +1465,7 @@ class SkillContentUpdate(BaseModel):
 async def get_skill_content(
     request: Request,
     skill_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillContentResponse:
@@ -1494,7 +1511,7 @@ async def update_skill_content(
     request: Request,
     skill_id: str,
     data: SkillContentUpdate,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillResponse:
@@ -1610,7 +1627,7 @@ async def update_skill_content(
 async def import_skill_package(
     request: Request,
     data: SkillImportRequest,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillLifecycleResponse:
@@ -1706,7 +1723,7 @@ async def import_skill_zip_package(
     project_id: str | None = Form(None),
     overwrite: bool = Form(False),
     change_summary: str | None = Form(None),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillLifecycleResponse:
@@ -1742,7 +1759,7 @@ async def import_skill_zip_package(
 async def export_skill_package(
     request: Request,
     skill_id: str,
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SkillPackageResponse:
@@ -2281,7 +2298,7 @@ def _skill_evolution_stage_responses(
 )
 async def get_skill_evolution_config(
     db: AsyncSession = Depends(get_db),
-    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
 ) -> SkillEvolutionConfigResponse:
     """Return tenant skill evolution strategy config."""
     tenant_id = _normalize_tenant_id(tenant)
@@ -2297,7 +2314,7 @@ async def get_skill_evolution_config(
 async def update_skill_evolution_config(
     payload: SkillEvolutionConfigUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionConfigResponse:
     """Persist tenant skill evolution strategy config."""
@@ -2332,7 +2349,7 @@ async def get_skill_evolution_overview(
     session_limit: int = Query(50, ge=1, le=200),
     job_limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
-    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionOverviewResponse:
     """Return tenant-wide evolution capture, scoring, and job state."""
@@ -2398,7 +2415,7 @@ async def get_skill_evolution_overview(
 async def apply_skill_evolution_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
-    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionJobResponse:
     """Apply a pending evolution job and create a new SkillVersion."""
@@ -2469,7 +2486,7 @@ async def apply_skill_evolution_job(
 async def reject_skill_evolution_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
-    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionJobResponse:
     """Reject a pending evolution job without changing the target skill."""
@@ -2540,7 +2557,7 @@ async def _ensure_evolution_job_write_access(
 async def run_tenant_skill_evolution(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionTenantRunResponse:
     """Manually trigger one evolution cycle for the current tenant."""
@@ -2578,7 +2595,7 @@ async def get_skill_evolution(
     skill_id: str,
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionDetailResponse:
     """Return trigger metadata, evolution jobs, and version route for a skill."""
@@ -2640,7 +2657,7 @@ async def run_skill_evolution(
     request: Request,
     skill_id: str,
     db: AsyncSession = Depends(get_db),
-    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
 ) -> SkillEvolutionRunResponse:
     """Manually trigger one evolution cycle scoped to a single skill."""
@@ -2693,7 +2710,7 @@ async def list_skill_versions(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
 ) -> SkillVersionListResponse:
     """List all versions of a skill, ordered by version_number DESC."""
@@ -2744,7 +2761,7 @@ async def get_skill_version(
     skill_id: str,
     version_number: int,
     db: AsyncSession = Depends(get_db),
-    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
 ) -> SkillVersionDetailResponse:
     """Get a specific version of a skill including content and resource files."""
@@ -2793,7 +2810,7 @@ async def rollback_skill(
     skill_id: str,
     request_body: SkillRollbackRequest,
     db: AsyncSession = Depends(get_db),
-    tenant: str | dict[str, Any] = Depends(get_current_user_tenant),
+    tenant: str | dict[str, Any] = Depends(_get_selected_skill_tenant_id),
     current_user: User = Depends(get_current_user),
 ) -> SkillResponse:
     """Rollback a skill to a specific version. Creates a new version entry."""

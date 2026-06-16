@@ -36,6 +36,8 @@ import {
   XCircle,
 } from 'lucide-react';
 
+import { useTenantStore } from '@/stores/tenant';
+
 import { skillAPI } from '@/services/skillService';
 
 import { SkillModal } from '@/components/skill/SkillModal';
@@ -618,6 +620,8 @@ export const SkillDetail: FC = () => {
   const navigate = useNavigate();
   const params = useParams<{ skillId: string }>();
   const message = useLazyMessage();
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const tenantId = currentTenant?.id ?? null;
   const skillId = params.skillId;
   const translate = useCallback(
     (key: string, options?: Record<string, unknown>) => {
@@ -686,11 +690,14 @@ export const SkillDetail: FC = () => {
       setIsLoading(false);
       return;
     }
+    if (!tenantId) {
+      return;
+    }
 
     setIsLoading(true);
     setIsLoadingPackageFiles(true);
     try {
-      const nextSkill = await skillAPI.get(skillId);
+      const nextSkill = await skillAPI.get(skillId, { tenant_id: tenantId });
       setSkill(nextSkill);
       setPackageSkillContent(nextSkill.full_content ?? '');
       setResourceFiles({});
@@ -698,7 +705,7 @@ export const SkillDetail: FC = () => {
 
       try {
         const exportId = getSkillSource(nextSkill) === 'filesystem' ? nextSkill.name : nextSkill.id;
-        const exported = await skillAPI.exportPackage(exportId);
+        const exported = await skillAPI.exportPackage(exportId, { tenant_id: tenantId });
         setPackageSkillContent(exported.skill_md_content);
         setResourceFiles(
           Object.fromEntries(
@@ -720,8 +727,8 @@ export const SkillDetail: FC = () => {
       } else {
         try {
           const [versionResult, evolutionResult] = await Promise.all([
-            skillAPI.listVersions(nextSkill.id),
-            skillAPI.getEvolution(nextSkill.id),
+            skillAPI.listVersions(nextSkill.id, { tenant_id: tenantId }),
+            skillAPI.getEvolution(nextSkill.id, { tenant_id: tenantId }),
           ]);
           setVersions(versionResult.versions);
           setEvolution(evolutionResult);
@@ -740,7 +747,7 @@ export const SkillDetail: FC = () => {
       setIsLoading(false);
       setIsLoadingPackageFiles(false);
     }
-  }, [message, skillId, t]);
+  }, [message, skillId, tenantId, t]);
 
   useEffect(() => {
     void loadSkill();
@@ -763,12 +770,12 @@ export const SkillDetail: FC = () => {
   }, []);
 
   const handleExport = useCallback(async () => {
-    if (!skill) {
+    if (!skill || !tenantId) {
       return;
     }
     try {
       const exportId = getSkillSource(skill) === 'filesystem' ? skill.name : skill.id;
-      const exported = await skillAPI.exportPackage(exportId);
+      const exported = await skillAPI.exportPackage(exportId, { tenant_id: tenantId });
       const blob = new Blob([JSON.stringify(exported, null, 2)], {
         type: 'application/json',
       });
@@ -782,7 +789,7 @@ export const SkillDetail: FC = () => {
     } catch {
       message?.error(t('tenant.skills.detail.exportFailed'));
     }
-  }, [message, skill, t]);
+  }, [message, skill, tenantId, t]);
 
   const handleCopyAssessmentReport = useCallback(async () => {
     if (!assessmentReport) {
@@ -798,7 +805,7 @@ export const SkillDetail: FC = () => {
 
   const handleRollback = useCallback(
     async (versionNumber: number) => {
-      if (!skill) {
+      if (!skill || !tenantId) {
         return;
       }
       if (!isManagedSkill(skill)) {
@@ -807,7 +814,7 @@ export const SkillDetail: FC = () => {
       }
       setRollbackVersion(versionNumber);
       try {
-        await skillAPI.rollback(skill.id, versionNumber);
+        await skillAPI.rollback(skill.id, versionNumber, { tenant_id: tenantId });
         message?.success(t('tenant.skills.detail.rollbackSuccess'));
         await loadSkill();
       } catch {
@@ -816,16 +823,16 @@ export const SkillDetail: FC = () => {
         setRollbackVersion(null);
       }
     },
-    [loadSkill, message, skill, t]
+    [loadSkill, message, skill, tenantId, t]
   );
 
   const handleRunEvolution = useCallback(async () => {
-    if (!skill || !managed) {
+    if (!skill || !managed || !tenantId) {
       return;
     }
     setIsEvolutionRunning(true);
     try {
-      await skillAPI.runEvolution(skill.id);
+      await skillAPI.runEvolution(skill.id, { tenant_id: tenantId });
       message?.success(t('tenant.skills.detail.evolutionRunSuccess'));
       await loadSkill();
     } catch {
@@ -833,13 +840,17 @@ export const SkillDetail: FC = () => {
     } finally {
       setIsEvolutionRunning(false);
     }
-  }, [loadSkill, managed, message, skill, t]);
+  }, [loadSkill, managed, message, skill, tenantId, t]);
 
   const handleApplyEvolutionJob = useCallback(
     async (jobId: string) => {
+      if (!tenantId) {
+        return;
+      }
+
       setProcessingEvolutionJobId(jobId);
       try {
-        await skillAPI.applyEvolutionJob(jobId);
+        await skillAPI.applyEvolutionJob(jobId, { tenant_id: tenantId });
         message?.success(t('tenant.skillEvolution.jobs.applySuccess'));
         await loadSkill();
       } catch {
@@ -848,14 +859,18 @@ export const SkillDetail: FC = () => {
         setProcessingEvolutionJobId(null);
       }
     },
-    [loadSkill, message, t]
+    [loadSkill, message, tenantId, t]
   );
 
   const handleRejectEvolutionJob = useCallback(
     async (jobId: string) => {
+      if (!tenantId) {
+        return;
+      }
+
       setProcessingEvolutionJobId(jobId);
       try {
-        await skillAPI.rejectEvolutionJob(jobId);
+        await skillAPI.rejectEvolutionJob(jobId, { tenant_id: tenantId });
         message?.success(t('tenant.skillEvolution.jobs.rejectSuccess'));
         await loadSkill();
       } catch {
@@ -864,7 +879,7 @@ export const SkillDetail: FC = () => {
         setProcessingEvolutionJobId(null);
       }
     },
-    [loadSkill, message, t]
+    [loadSkill, message, tenantId, t]
   );
 
   const handleModalSuccess = useCallback(() => {
@@ -1472,6 +1487,7 @@ export const SkillDetail: FC = () => {
         <SkillModal
           isOpen={isModalOpen}
           skill={skill}
+          tenantId={tenantId}
           onClose={() => {
             setIsModalOpen(false);
           }}
