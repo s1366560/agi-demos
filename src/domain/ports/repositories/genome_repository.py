@@ -26,6 +26,26 @@ class GenomeRepository(ABC):
     ) -> list[Genome]:
         """List all genomes in a tenant."""
 
+    async def find_by_filters(
+        self,
+        *,
+        tenant_id: str,
+        is_published: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Genome]:
+        """List genomes with filters applied before pagination."""
+        raise NotImplementedError
+
+    async def count_by_filters(
+        self,
+        *,
+        tenant_id: str,
+        is_published: bool | None = None,
+    ) -> int:
+        """Count genomes matching the same filters used for listing."""
+        raise NotImplementedError
+
     @abstractmethod
     async def find_featured(self, limit: int = 20) -> list[Genome]:
         """List featured genomes."""

@@ -42,6 +42,9 @@ class _FailingGeneService:
     async def list_evolution_events(self, **_kwargs: object) -> list[object]:
         raise ValueError("invalid event filter secret-instance")
 
+    async def list_evolution_events_with_total(self, **_kwargs: object) -> tuple[list[object], int]:
+        raise ValueError("invalid event filter secret-instance")
+
     async def get_evolution_event(self, *_args: object, **_kwargs: object) -> object | None:
         return None
 

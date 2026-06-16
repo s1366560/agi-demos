@@ -37,6 +37,38 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         return await self.list_all(limit=limit, offset=offset, tenant_id=tenant_id)
 
     @override
+    async def find_by_filters(
+        self,
+        *,
+        tenant_id: str | None = None,
+        category: str | None = None,
+        is_published: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Gene]:
+        filters = self._filters(
+            tenant_id=tenant_id,
+            category=category,
+            is_published=is_published,
+        )
+        return await self.list_all(limit=limit, offset=offset, **filters)
+
+    @override
+    async def count_by_filters(
+        self,
+        *,
+        tenant_id: str | None = None,
+        category: str | None = None,
+        is_published: bool | None = None,
+    ) -> int:
+        filters = self._filters(
+            tenant_id=tenant_id,
+            category=category,
+            is_published=is_published,
+        )
+        return await self.count(**filters)
+
+    @override
     async def search(
         self,
         query: str,
@@ -56,9 +88,27 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
                 )
             )
         stmt = stmt.offset(offset).limit(limit)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(stmt)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
         db_genes = result.scalars().all()
         return [d for g in db_genes if (d := self._to_domain(g)) is not None]
+
+    @staticmethod
+    def _filters(
+        *,
+        tenant_id: str | None = None,
+        category: str | None = None,
+        is_published: bool | None = None,
+    ) -> dict[str, object]:
+        filters: dict[str, object] = {}
+        if tenant_id is not None:
+            filters["tenant_id"] = tenant_id
+        if category is not None:
+            filters["category"] = category
+        if is_published is not None:
+            filters["is_published"] = is_published
+        return filters
 
     @override
     async def find_featured(self, limit: int = 20) -> list[Gene]:

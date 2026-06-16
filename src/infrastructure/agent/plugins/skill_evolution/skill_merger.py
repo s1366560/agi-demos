@@ -64,9 +64,7 @@ class SkillMerger:
             return None
 
         if skill is None:
-            logger.warning(
-                "Skill '%s' not found — cannot apply evolution", job.skill_name
-            )
+            logger.warning("Skill '%s' not found — cannot apply evolution", job.skill_name)
             return None
 
         if job.action == "optimize_description" and job.candidate_content:
@@ -139,12 +137,12 @@ class SkillMerger:
                         project_id=project_id,
                         tenant_id=tenant_id,
                     )
-                    for skill in skills:
-                        if skill.name == skill_name:
-                            return skill
-            skill = await skill_repository.get_by_name(tenant_id, skill_name)
-            if skill is not None:
-                return skill
+                    for candidate in skills:
+                        if candidate.name == skill_name:
+                            return candidate
+            repository_skill = await skill_repository.get_by_name(tenant_id, skill_name)
+            if repository_skill is not None:
+                return repository_skill
         return await self._skill_service.get_skill_by_name(
             tenant_id=tenant_id,
             skill_name=skill_name,

@@ -24,6 +24,28 @@ class GeneRepository(ABC):
     async def find_by_tenant(self, tenant_id: str, limit: int = 50, offset: int = 0) -> list[Gene]:
         """List all genes in a tenant."""
 
+    async def find_by_filters(
+        self,
+        *,
+        tenant_id: str | None = None,
+        category: str | None = None,
+        is_published: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Gene]:
+        """List genes with filters applied before pagination."""
+        raise NotImplementedError
+
+    async def count_by_filters(
+        self,
+        *,
+        tenant_id: str | None = None,
+        category: str | None = None,
+        is_published: bool | None = None,
+    ) -> int:
+        """Count genes matching the same filters used for listing."""
+        raise NotImplementedError
+
     @abstractmethod
     async def search(
         self,

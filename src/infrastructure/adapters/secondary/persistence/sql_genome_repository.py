@@ -35,6 +35,35 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
         return await self.list_all(limit=limit, offset=offset, tenant_id=tenant_id)
 
     @override
+    async def find_by_filters(
+        self,
+        *,
+        tenant_id: str,
+        is_published: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Genome]:
+        filters = self._filters(tenant_id=tenant_id, is_published=is_published)
+        return await self.list_all(limit=limit, offset=offset, **filters)
+
+    @override
+    async def count_by_filters(
+        self,
+        *,
+        tenant_id: str,
+        is_published: bool | None = None,
+    ) -> int:
+        filters = self._filters(tenant_id=tenant_id, is_published=is_published)
+        return await self.count(**filters)
+
+    @staticmethod
+    def _filters(*, tenant_id: str, is_published: bool | None = None) -> dict[str, object]:
+        filters: dict[str, object] = {"tenant_id": tenant_id}
+        if is_published is not None:
+            filters["is_published"] = is_published
+        return filters
+
+    @override
     async def find_featured(self, limit: int = 20) -> list[Genome]:
         return await self.list_all(limit=limit, is_featured=True, is_published=True)
 

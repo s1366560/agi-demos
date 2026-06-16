@@ -311,7 +311,7 @@ async def list_genes(
     container = get_container_with_db(request, db)
     service = container.gene_service()
     offset = (page - 1) * page_size
-    genes = await service.list_genes(
+    genes, total = await service.list_genes_with_total(
         tenant_id=tenant_id,
         category=category,
         is_published=is_published,
@@ -321,7 +321,7 @@ async def list_genes(
     items = [GeneResponse.model_validate(g, from_attributes=True) for g in genes]
     return GeneListResponse(
         genes=items,
-        total=len(items),
+        total=total,
         page=page,
         page_size=page_size,
     )
@@ -456,7 +456,7 @@ async def list_genomes(
     container = get_container_with_db(request, db)
     service = container.gene_service()
     offset = (page - 1) * page_size
-    genomes = await service.list_genomes(
+    genomes, total = await service.list_genomes_with_total(
         tenant_id=tenant_id,
         is_published=is_published,
         limit=page_size,
@@ -465,7 +465,7 @@ async def list_genomes(
     items = [GenomeResponse.model_validate(g, from_attributes=True) for g in genomes]
     return GenomeListResponse(
         genomes=items,
-        total=len(items),
+        total=total,
         page=page,
         page_size=page_size,
     )
@@ -827,7 +827,7 @@ async def list_evolution_events(
                 gene_id=gene_id,
                 tenant_id=tenant_id,
             )
-        events = await service.list_evolution_events(
+        events, total = await service.list_evolution_events_with_total(
             instance_id=instance_id,
             gene_id=gene_id,
             event_type=event_type,
@@ -840,7 +840,7 @@ async def list_evolution_events(
     return EvolutionEventListResponse(
         items=items,
         events=items,
-        total=len(items),
+        total=total,
         page=page,
         page_size=page_size,
     )

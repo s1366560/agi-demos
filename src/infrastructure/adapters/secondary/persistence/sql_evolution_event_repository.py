@@ -41,7 +41,9 @@ class SqlEvolutionEventRepository(
             order_desc=True,
         )
         query = query.offset(offset).limit(limit)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_events = result.scalars().all()
         return [d for e in db_events if (d := self._to_domain(e)) is not None]
 
@@ -55,9 +57,67 @@ class SqlEvolutionEventRepository(
             order_desc=True,
         )
         query = query.offset(offset).limit(limit)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_events = result.scalars().all()
         return [d for e in db_events if (d := self._to_domain(e)) is not None]
+
+    @override
+    async def find_by_filters(
+        self,
+        *,
+        instance_id: str | None = None,
+        gene_id: str | None = None,
+        event_type: EvolutionEventType | str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[EvolutionEvent]:
+        filters = self._filters(
+            instance_id=instance_id,
+            gene_id=gene_id,
+            event_type=event_type,
+        )
+        query = self._build_query(filters=filters, order_by="created_at", order_desc=True)
+        query = query.offset(offset).limit(limit)
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
+        db_events = result.scalars().all()
+        return [d for e in db_events if (d := self._to_domain(e)) is not None]
+
+    @override
+    async def count_by_filters(
+        self,
+        *,
+        instance_id: str | None = None,
+        gene_id: str | None = None,
+        event_type: EvolutionEventType | str | None = None,
+    ) -> int:
+        filters = self._filters(
+            instance_id=instance_id,
+            gene_id=gene_id,
+            event_type=event_type,
+        )
+        return await self.count(**filters)
+
+    @staticmethod
+    def _filters(
+        *,
+        instance_id: str | None = None,
+        gene_id: str | None = None,
+        event_type: EvolutionEventType | str | None = None,
+    ) -> dict[str, object]:
+        filters: dict[str, object] = {}
+        if instance_id is not None:
+            filters["instance_id"] = instance_id
+        if gene_id is not None:
+            filters["gene_id"] = gene_id
+        if event_type is not None:
+            filters["event_type"] = (
+                event_type.value if isinstance(event_type, EvolutionEventType) else event_type
+            )
+        return filters
 
     @override
     def _to_domain(self, db_model: EvolutionEventModel | None) -> EvolutionEvent | None:

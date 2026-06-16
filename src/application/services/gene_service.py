@@ -148,38 +148,53 @@ class GeneService:
         limit: int = 50,
         offset: int = 0,
     ) -> list[Gene]:
+        """List genes with optional filtering."""
+        genes, _total = await self.list_genes_with_total(
+            tenant_id=tenant_id,
+            category=category,
+            is_published=is_published,
+            limit=limit,
+            offset=offset,
+        )
+        return genes
+
+    async def list_genes_with_total(
+        self,
+        tenant_id: str | None = None,
+        category: str | None = None,
+        is_published: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[Gene], int]:
         """
-        List genes with optional filtering.
+        List genes with optional filtering and total count.
 
         Args:
             tenant_id: Filter by tenant.
-            category: Filter by category (in-memory).
-            is_published: Filter by published status (in-memory).
+            category: Filter by category.
+            is_published: Filter by published status.
             limit: Maximum results.
             offset: Pagination offset.
 
         Returns:
-            List of genes matching the filters.
+            Page of genes and total matching count.
         """
-        if tenant_id:
-            genes = await self._gene_repo.find_by_tenant(
-                tenant_id,
-                limit=limit,
-                offset=offset,
-            )
-        else:
-            genes = await self._gene_repo.search(
-                query="",
-                limit=limit,
-                offset=offset,
-            )
-
-        if category is not None:
-            genes = [g for g in genes if g.category == category]
-        if is_published is not None:
-            genes = [g for g in genes if g.is_published == is_published]
-
-        return genes
+        effective_is_published = (
+            True if tenant_id is None and is_published is None else is_published
+        )
+        genes = await self._gene_repo.find_by_filters(
+            tenant_id=tenant_id,
+            category=category,
+            is_published=effective_is_published,
+            limit=limit,
+            offset=offset,
+        )
+        total = await self._gene_repo.count_by_filters(
+            tenant_id=tenant_id,
+            category=category,
+            is_published=effective_is_published,
+        )
+        return genes, total
 
     async def update_gene(
         self,
@@ -370,31 +385,48 @@ class GeneService:
         limit: int = 50,
         offset: int = 0,
     ) -> list[Genome]:
+        """List genomes with optional filtering."""
+        genomes, _total = await self.list_genomes_with_total(
+            tenant_id=tenant_id,
+            is_published=is_published,
+            limit=limit,
+            offset=offset,
+        )
+        return genomes
+
+    async def list_genomes_with_total(
+        self,
+        tenant_id: str | None = None,
+        is_published: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[Genome], int]:
         """
-        List genomes with optional filtering.
+        List genomes with optional filtering and total count.
 
         Args:
             tenant_id: Filter by tenant.
-            is_published: Filter by published status (in-memory).
+            is_published: Filter by published status.
             limit: Maximum results.
             offset: Pagination offset.
 
         Returns:
-            List of genomes matching the filters.
+            Page of genomes and total matching count.
         """
         if not tenant_id:
             raise ValueError("tenant_id is required to list genomes")
 
-        genomes = await self._genome_repo.find_by_tenant(
-            tenant_id,
+        genomes = await self._genome_repo.find_by_filters(
+            tenant_id=tenant_id,
+            is_published=is_published,
             limit=limit,
             offset=offset,
         )
-
-        if is_published is not None:
-            genomes = [g for g in genomes if g.is_published == is_published]
-
-        return genomes
+        total = await self._genome_repo.count_by_filters(
+            tenant_id=tenant_id,
+            is_published=is_published,
+        )
+        return genomes, total
 
     async def update_genome(
         self,
@@ -832,8 +864,27 @@ class GeneService:
         limit: int = 50,
         offset: int = 0,
     ) -> list[EvolutionEvent]:
+        """List evolution events for an agent instance or gene."""
+        events, _total = await self.list_evolution_events_with_total(
+            instance_id=instance_id,
+            gene_id=gene_id,
+            event_type=event_type,
+            limit=limit,
+            offset=offset,
+        )
+        return events
+
+    async def list_evolution_events_with_total(
+        self,
+        instance_id: str | None = None,
+        *,
+        gene_id: str | None = None,
+        event_type: EvolutionEventType | str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[EvolutionEvent], int]:
         """
-        List evolution events for an agent instance.
+        List evolution events for an agent instance or gene with total count.
 
         Args:
             instance_id: Agent instance ID.
@@ -843,31 +894,29 @@ class GeneService:
             offset: Pagination offset.
 
         Returns:
-            List of EvolutionEvent records.
+            Page of EvolutionEvent records and total matching count.
         """
-        if gene_id:
-            events = await self._evolution_event_repo.find_by_gene(
-                gene_id,
-                limit=limit,
-                offset=offset,
-            )
-        elif instance_id:
-            events = await self._evolution_event_repo.find_by_instance(
-                instance_id,
-                limit=limit,
-                offset=offset,
-            )
-        else:
+        if not instance_id and not gene_id:
             raise ValueError("Either instance_id or gene_id is required")
 
-        if event_type is None:
-            return events
         event_type_value = (
             event_type
-            if isinstance(event_type, EvolutionEventType)
+            if event_type is None or isinstance(event_type, EvolutionEventType)
             else EvolutionEventType(event_type)
         )
-        return [event for event in events if event.event_type == event_type_value]
+        events = await self._evolution_event_repo.find_by_filters(
+            instance_id=instance_id,
+            gene_id=gene_id,
+            event_type=event_type_value,
+            limit=limit,
+            offset=offset,
+        )
+        total = await self._evolution_event_repo.count_by_filters(
+            instance_id=instance_id,
+            gene_id=gene_id,
+            event_type=event_type_value,
+        )
+        return events, total
 
     # ------------------------------------------------------------------
     # Reviews
