@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from src.infrastructure.agent.tools.define import (
+    _TOOL_REGISTRY,
     ToolInfo,
     clear_registry,
     get_registered_tools,
@@ -63,10 +64,12 @@ class TestToolDefineDecorator:
     """Tests for @tool_define decorator."""
 
     def setup_method(self) -> None:
+        self._registry_snapshot: dict[str, ToolInfo] = dict(_TOOL_REGISTRY)
         clear_registry()
 
     def teardown_method(self) -> None:
         clear_registry()
+        _TOOL_REGISTRY.update(self._registry_snapshot)
 
     def test_decorator_returns_tool_info(self) -> None:
         @tool_define(
@@ -146,10 +149,12 @@ class TestRegistryFunctions:
     """Tests for get_registered_tools and clear_registry."""
 
     def setup_method(self) -> None:
+        self._registry_snapshot: dict[str, ToolInfo] = dict(_TOOL_REGISTRY)
         clear_registry()
 
     def teardown_method(self) -> None:
         clear_registry()
+        _TOOL_REGISTRY.update(self._registry_snapshot)
 
     def test_get_registered_tools_returns_copy(self) -> None:
         @tool_define(name="t1", description="t", parameters={"type": "object"})
