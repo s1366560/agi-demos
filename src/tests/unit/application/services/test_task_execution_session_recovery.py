@@ -123,6 +123,7 @@ class TestTaskExecutionSessionRecoveryService:
                 "startup task execution session recovery: new_attempt; "
                 "incidents=agent_initialization_failed"
             ),
+            system_recovery=True,
         )
         session.commit.assert_awaited_once()
         session.rollback.assert_not_awaited()

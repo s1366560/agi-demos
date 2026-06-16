@@ -24,6 +24,8 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation,
     Project,
     User,
+    WorkspaceMemberModel,
+    WorkspaceModel,
 )
 
 _NOW = datetime(2020, 1, 1, 9, 0, tzinfo=UTC)
@@ -84,6 +86,73 @@ class TestTaskExecutionSessionMonitor:
 
         assert action == "new_attempt"
 
+    async def test_recovery_action_requires_workspace_editor(
+        self,
+        db_session: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        task = _task()
+        db_session.add(
+            WorkspaceModel(
+                id=task.workspace_id,
+                tenant_id=test_project_db.tenant_id,
+                project_id=test_project_db.id,
+                name="Session Monitor Workspace",
+                created_by=test_user.id,
+                metadata_json={},
+            )
+        )
+        db_session.add(
+            WorkspaceMemberModel(
+                id="wm-session-monitor-viewer",
+                workspace_id=task.workspace_id,
+                user_id=test_user.id,
+                role="viewer",
+                invited_by=test_user.id,
+            )
+        )
+        await db_session.flush()
+        state = TaskExecutionSessionState(
+            workspace_id=task.workspace_id,
+            task_id=task.id,
+            task_status="in_progress",
+            health="degraded",
+            session_status="initialization_failed",
+            conversation_id="conv-session-monitor-1",
+            attempt_id="attempt-session-monitor-1",
+            attempt_status="running",
+            execution_status=None,
+            last_event_at=_NOW,
+            last_assistant_event_at=None,
+            last_error="Agent initialization failed",
+            has_user_input=True,
+            has_assistant_output=False,
+            incidents=(),
+            recommended_recovery_action="new_attempt",
+            available_interventions=("new_attempt",),
+        )
+        task_service = AsyncMock()
+        command_service = AsyncMock()
+        attempt_repo = AsyncMock()
+        service = TaskExecutionSessionMonitor(
+            db=db_session,
+            task_service=task_service,
+            command_service=command_service,
+            attempt_repo=attempt_repo,
+        )
+        service.get_state = AsyncMock(return_value=state)  # type: ignore[method-assign]
+
+        with pytest.raises(PermissionError, match="recover workspace task execution"):
+            await service.apply_recovery_action(
+                workspace_id=task.workspace_id,
+                task_id=task.id,
+                actor_user_id=test_user.id,
+                action="new_attempt",
+            )
+
+        command_service.update_task.assert_not_awaited()
+
     async def test_retry_launch_on_terminal_failed_attempt_queues_fresh_attempt(
         self,
         db_session: AsyncSession,
@@ -139,6 +208,7 @@ class TestTaskExecutionSessionMonitor:
             task_id=task.id,
             actor_user_id="user-session-monitor-1",
             action="retry_launch",
+            system_recovery=True,
         )
 
         assert result.action == "new_attempt"
@@ -334,6 +404,7 @@ class TestTaskExecutionSessionMonitor:
             actor_user_id="user-session-monitor-1",
             action="mark_human_blocked",
             reason="recovery budget exhausted",
+            system_recovery=True,
         )
 
         assert result.status == "completed"
@@ -407,6 +478,7 @@ class TestTaskExecutionSessionMonitor:
             actor_user_id="user-session-monitor-1",
             action="mark_human_blocked",
             reason="recovery budget exhausted",
+            system_recovery=True,
         )
 
         assert result.status == "completed"

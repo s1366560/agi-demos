@@ -31,6 +31,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent,
     Conversation,
     MessageExecutionStatus,
+    WorkspaceMemberModel,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox import (
     SqlWorkspacePlanOutboxRepository,
@@ -58,6 +59,7 @@ _NO_ASSISTANT_RESPONSE_SECONDS = 30
 _STALE_PROCESSING_SECONDS = 15 * 60
 _MAX_RECOVERY_LEDGER_ITEMS = 20
 _MAX_AUTOMATIC_RECOVERY_ATTEMPTS = 3
+_EDITOR_ROLES = frozenset({"owner", "editor", "admin"})
 
 _ASSISTANT_OUTPUT_EVENT_TYPES = frozenset(
     {
@@ -225,7 +227,13 @@ class TaskExecutionSessionMonitor:
         action: TaskRecoveryAction,
         reason: str | None = None,
         workspace_agent_id: str | None = None,
+        system_recovery: bool = False,
     ) -> TaskRecoveryActionResult:
+        await self._require_recovery_actor(
+            workspace_id=workspace_id,
+            actor_user_id=actor_user_id,
+            system_recovery=system_recovery,
+        )
         before = await self.get_state(
             workspace_id=workspace_id,
             task_id=task_id,
@@ -430,6 +438,31 @@ class TaskExecutionSessionMonitor:
             )
 
         raise ValueError(f"Unsupported recovery action: {action}")
+
+    async def _require_recovery_actor(
+        self,
+        *,
+        workspace_id: str,
+        actor_user_id: str,
+        system_recovery: bool,
+    ) -> None:
+        if system_recovery:
+            return
+        await self._require_editor_role(workspace_id=workspace_id, actor_user_id=actor_user_id)
+
+    async def _require_editor_role(self, *, workspace_id: str, actor_user_id: str) -> None:
+        role = (
+            await self._db.execute(
+                refresh_select_statement(
+                    select(WorkspaceMemberModel.role).where(
+                        WorkspaceMemberModel.workspace_id == workspace_id,
+                        WorkspaceMemberModel.user_id == actor_user_id,
+                    )
+                )
+            )
+        ).scalar_one_or_none()
+        if str(role) not in _EDITOR_ROLES:
+            raise PermissionError("Insufficient permission to recover workspace task execution")
 
     async def _load_conversation(self, conversation_id: str | None) -> Conversation | None:
         if not conversation_id:

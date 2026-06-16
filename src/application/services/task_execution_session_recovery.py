@@ -274,6 +274,7 @@ class TaskExecutionSessionRecoveryService:
             actor_user_id=candidate.actor_user_id,
             action=action,
             reason=_automatic_recovery_reason(state, action, source),
+            system_recovery=True,
         )
         await session.commit()
         await self._publish_recovery_events(
