@@ -7,9 +7,11 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 
 import { definitionsService } from '../services/agent/definitionsService';
 
+import type { DefinitionListParams } from '../services/agent/definitionsService';
 import type { UnknownError } from '../types/common';
 import type {
   AgentDefinition,
@@ -42,10 +44,17 @@ interface DefinitionFilters {
   projectId: string | null;
 }
 
+type DefinitionListRequestParams = Omit<DefinitionListParams, 'project_id'> & {
+  project_id?: string | null | undefined;
+};
+
 interface AgentDefinitionState {
   // Data
   definitions: AgentDefinition[];
   currentDefinition: AgentDefinition | null;
+  total: number;
+  page: number;
+  pageSize: number;
 
   // Loading states
   isLoading: boolean;
@@ -58,12 +67,8 @@ interface AgentDefinitionState {
   filters: DefinitionFilters;
 
   // Actions - CRUD
-  listDefinitions: (params?: {
-    project_id?: string | null | undefined;
-    enabled_only?: boolean | undefined;
-    limit?: number | undefined;
-    offset?: number | undefined;
-  }) => Promise<void>;
+  listDefinitions: (params?: DefinitionListRequestParams) => Promise<void>;
+  listDefinitionsPage: (params?: DefinitionListRequestParams) => Promise<void>;
   getDefinition: (id: string) => Promise<AgentDefinition>;
   createDefinition: (data: CreateDefinitionRequest) => Promise<AgentDefinition>;
   updateDefinition: (id: string, data: UpdateDefinitionRequest) => Promise<AgentDefinition>;
@@ -93,6 +98,9 @@ const initialFilters: DefinitionFilters = {
 const initialState = {
   definitions: [],
   currentDefinition: null,
+  total: 0,
+  page: 1,
+  pageSize: 20,
   isLoading: false,
   isSubmitting: false,
   error: null,
@@ -123,7 +131,36 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
             enabled_only: filters.enabled === true ? true : undefined,
           };
           const definitions = await definitionsService.list(queryParams);
-          set({ definitions, isLoading: false });
+          set({ definitions, total: definitions.length, page: 1, isLoading: false });
+        } catch (error: unknown) {
+          const msg = getErrorMessage(error, 'Failed to list agent definitions');
+          set({ error: msg, isLoading: false });
+          throw error;
+        }
+      },
+
+      listDefinitionsPage: async (params = {}) => {
+        set({ isLoading: true, error: null });
+        try {
+          const { filters, pageSize: currentPageSize } = get();
+          const queryParams = {
+            ...params,
+            project_id:
+              params.project_id === null
+                ? undefined
+                : (params.project_id ?? filters.projectId ?? undefined),
+            limit: params.limit ?? currentPageSize,
+            offset: params.offset ?? 0,
+          };
+          const response = await definitionsService.listPage(queryParams);
+          const pageSize = response.limit || queryParams.limit || currentPageSize;
+          set({
+            definitions: response.definitions,
+            total: response.total,
+            page: Math.floor(response.offset / Math.max(pageSize, 1)) + 1,
+            pageSize,
+            isLoading: false,
+          });
         } catch (error: unknown) {
           const msg = getErrorMessage(error, 'Failed to list agent definitions');
           set({ error: msg, isLoading: false });
@@ -152,6 +189,7 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
           set({
             definitions: [created, ...definitions],
             currentDefinition: created,
+            total: get().total + 1,
             isSubmitting: false,
           });
           return created;
@@ -188,6 +226,7 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
           set({
             definitions: definitions.filter((d) => d.id !== id),
             currentDefinition: currentDefinition?.id === id ? null : currentDefinition,
+            total: Math.max(get().total - 1, 0),
             isSubmitting: false,
           });
         } catch (error: unknown) {
@@ -260,6 +299,14 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
 export const useDefinitions = () => useAgentDefinitionStore((state) => state.definitions);
 export const useCurrentDefinition = () =>
   useAgentDefinitionStore((state) => state.currentDefinition);
+export const useDefinitionPagination = () =>
+  useAgentDefinitionStore(
+    useShallow((state) => ({
+      total: state.total,
+      page: state.page,
+      pageSize: state.pageSize,
+    }))
+  );
 
 // Loading selectors
 export const useDefinitionLoading = () => useAgentDefinitionStore((state) => state.isLoading);
@@ -303,6 +350,8 @@ export const filterDefinitions = (
 
 // Action selectors - each returns a stable function reference
 export const useListDefinitions = () => useAgentDefinitionStore((state) => state.listDefinitions);
+export const useListDefinitionsPage = () =>
+  useAgentDefinitionStore((state) => state.listDefinitionsPage);
 export const useGetDefinition = () => useAgentDefinitionStore((state) => state.getDefinition);
 export const useCreateDefinition = () => useAgentDefinitionStore((state) => state.createDefinition);
 export const useUpdateDefinition = () => useAgentDefinitionStore((state) => state.updateDefinition);

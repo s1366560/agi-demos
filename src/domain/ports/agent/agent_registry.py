@@ -105,6 +105,11 @@ class AgentRegistryPort(ABC):
         enabled_only: bool = False,
         limit: int = 100,
         offset: int = 0,
+        *,
+        project_ids: set[str] | None = None,
+        enabled: bool | None = None,
+        search: str | None = None,
+        sort: str | None = None,
     ) -> list[Agent]:
         """
         List all agents for a tenant.
@@ -114,6 +119,10 @@ class AgentRegistryPort(ABC):
             enabled_only: If True, only return enabled agents
             limit: Maximum number of results
             offset: Number of results to skip
+            project_ids: Optional project scopes to include in addition to tenant-wide agents
+            enabled: Optional exact enabled/disabled filter
+            search: Optional name/display-name search term
+            sort: Optional sort key
 
         Returns:
             List of agents for the tenant
@@ -125,6 +134,12 @@ class AgentRegistryPort(ABC):
         project_id: str,
         tenant_id: str | None = None,
         enabled_only: bool = False,
+        limit: int | None = None,
+        offset: int = 0,
+        *,
+        enabled: bool | None = None,
+        search: str | None = None,
+        sort: str | None = None,
     ) -> list[Agent]:
         """
         List agents for a project, including tenant-wide ones.
@@ -136,6 +151,11 @@ class AgentRegistryPort(ABC):
             project_id: Project ID
             tenant_id: Optional tenant ID for tenant-wide agents
             enabled_only: If True, only return enabled agents
+            limit: Optional maximum number of results
+            offset: Number of results to skip when limit is provided
+            enabled: Optional exact enabled/disabled filter
+            search: Optional name/display-name search term
+            sort: Optional sort key
 
         Returns:
             List of agents for the project
@@ -188,6 +208,10 @@ class AgentRegistryPort(ABC):
         self,
         tenant_id: str,
         enabled_only: bool = False,
+        *,
+        project_ids: set[str] | None = None,
+        enabled: bool | None = None,
+        search: str | None = None,
     ) -> int:
         """
         Count agents for a tenant.
@@ -195,7 +219,43 @@ class AgentRegistryPort(ABC):
         Args:
             tenant_id: Tenant ID
             enabled_only: If True, only count enabled agents
+            project_ids: Optional project scopes to include in addition to tenant-wide agents
+            enabled: Optional exact enabled/disabled filter
+            search: Optional name/display-name search term
 
         Returns:
             Number of agents
         """
+
+    async def count_by_project(
+        self,
+        project_id: str,
+        tenant_id: str | None = None,
+        enabled_only: bool = False,
+        *,
+        enabled: bool | None = None,
+        search: str | None = None,
+    ) -> int:
+        """
+        Count agents for a project, including tenant-wide agents.
+
+        Args:
+            project_id: Project ID
+            tenant_id: Optional tenant ID for tenant-wide agents
+            enabled_only: If True, only count enabled agents
+            enabled: Optional exact enabled/disabled filter
+            search: Optional name/display-name search term
+
+        Returns:
+            Number of agents
+        """
+        return len(
+            await self.list_by_project(
+                project_id=project_id,
+                tenant_id=tenant_id,
+                enabled_only=enabled_only,
+                enabled=enabled,
+                search=search,
+                sort=None,
+            )
+        )

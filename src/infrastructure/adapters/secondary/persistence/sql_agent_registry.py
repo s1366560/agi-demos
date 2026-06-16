@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 
@@ -57,9 +58,30 @@ def _dedupe_agents_by_name_prefer_builtin(agents: list[Agent]) -> list[Agent]:
     return deduped
 
 
+def _filter_builtin_agents(
+    agents: list[Agent],
+    *,
+    enabled: bool | None,
+    search: str | None,
+) -> list[Agent]:
+    filtered = agents
+    if enabled is not None:
+        filtered = [agent for agent in filtered if agent.enabled is enabled]
+
+    search_term = search.strip().casefold() if search else ""
+    if search_term:
+        filtered = [
+            agent
+            for agent in filtered
+            if search_term in agent.name.casefold()
+            or search_term in (agent.display_name or "").casefold()
+        ]
+    return filtered
+
+
 def _exclude_legacy_workspace_scoped_auto_team(
-    query: Select[tuple[AgentDefinitionModel]],
-) -> Select[tuple[AgentDefinitionModel]]:
+    query: Select[Any],
+) -> Select[Any]:
     from src.infrastructure.adapters.secondary.persistence.models import (
         AgentDefinitionModel,
     )
@@ -72,6 +94,31 @@ def _exclude_legacy_workspace_scoped_auto_team(
             created_by.not_in(_WORKSPACE_AUTO_TEAM_CREATOR_MARKERS),
             workspace_id.is_(None),
         )
+    )
+
+
+def _apply_agent_list_order(
+    query: Select[tuple[AgentDefinitionModel]],
+    sort: str | None,
+) -> Select[tuple[AgentDefinitionModel]]:
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        AgentDefinitionModel,
+    )
+
+    if sort == "name":
+        return query.order_by(
+            AgentDefinitionModel.display_name.asc(),
+            AgentDefinitionModel.name.asc(),
+            AgentDefinitionModel.created_at.desc(),
+        )
+    if sort == "invocations":
+        return query.order_by(
+            AgentDefinitionModel.total_invocations.desc(),
+            AgentDefinitionModel.created_at.desc(),
+        )
+    return query.order_by(
+        func.coalesce(AgentDefinitionModel.updated_at, AgentDefinitionModel.created_at).desc(),
+        AgentDefinitionModel.created_at.desc(),
     )
 
 
@@ -286,6 +333,11 @@ class SqlAgentRegistryRepository(
         enabled_only: bool = False,
         limit: int = 100,
         offset: int = 0,
+        *,
+        project_ids: set[str] | None = None,
+        enabled: bool | None = None,
+        search: str | None = None,
+        sort: str | None = None,
     ) -> list[Agent]:
         from src.infrastructure.adapters.secondary.persistence.models import (
             AgentDefinitionModel,
@@ -294,10 +346,31 @@ class SqlAgentRegistryRepository(
         query = select(AgentDefinitionModel).where(AgentDefinitionModel.tenant_id == tenant_id)
         query = _exclude_legacy_workspace_scoped_auto_team(query)
 
-        if enabled_only:
-            query = query.where(AgentDefinitionModel.enabled.is_(True))
+        if project_ids is not None:
+            scope_filter: ColumnElement[bool] = AgentDefinitionModel.project_id.is_(None)
+            if project_ids:
+                scope_filter = or_(scope_filter, AgentDefinitionModel.project_id.in_(project_ids))
+            query = query.where(scope_filter)
 
-        builtin_agents = list_builtin_agents(tenant_id=tenant_id)
+        effective_enabled = True if enabled_only else enabled
+        if effective_enabled is not None:
+            query = query.where(AgentDefinitionModel.enabled.is_(effective_enabled))
+
+        search_term = search.strip() if search else ""
+        if search_term:
+            like_search = f"%{search_term}%"
+            query = query.where(
+                or_(
+                    AgentDefinitionModel.name.ilike(like_search),
+                    AgentDefinitionModel.display_name.ilike(like_search),
+                )
+            )
+
+        builtin_agents = _filter_builtin_agents(
+            list_builtin_agents(tenant_id=tenant_id),
+            enabled=effective_enabled,
+            search=search,
+        )
         builtin_slice = builtin_agents[offset : offset + limit]
         builtin_count = len(builtin_slice)
 
@@ -305,11 +378,7 @@ class SqlAgentRegistryRepository(
         db_offset = max(offset - len(builtin_agents), 0)
         db_agents: Sequence[AgentDefinitionModel] = ()
         if db_limit > 0:
-            query = (
-                query.order_by(AgentDefinitionModel.created_at.desc())
-                .limit(db_limit)
-                .offset(db_offset)
-            )
+            query = _apply_agent_list_order(query, sort).limit(db_limit).offset(db_offset)
             result = await self._session.execute(
                 refresh_select_statement(query.execution_options(populate_existing=True))
             )
@@ -323,6 +392,12 @@ class SqlAgentRegistryRepository(
         project_id: str,
         tenant_id: str | None = None,
         enabled_only: bool = False,
+        limit: int | None = None,
+        offset: int = 0,
+        *,
+        enabled: bool | None = None,
+        search: str | None = None,
+        sort: str | None = None,
     ) -> list[Agent]:
         from src.infrastructure.adapters.secondary.persistence.models import (
             AgentDefinitionModel,
@@ -345,23 +420,52 @@ class SqlAgentRegistryRepository(
             )
         query = _exclude_legacy_workspace_scoped_auto_team(query)
 
-        if enabled_only:
-            query = query.where(AgentDefinitionModel.enabled.is_(True))
+        effective_enabled = True if enabled_only else enabled
+        if effective_enabled is not None:
+            query = query.where(AgentDefinitionModel.enabled.is_(effective_enabled))
 
-        query = query.order_by(AgentDefinitionModel.created_at.desc())
+        search_term = search.strip() if search else ""
+        if search_term:
+            like_search = f"%{search_term}%"
+            query = query.where(
+                or_(
+                    AgentDefinitionModel.name.ilike(like_search),
+                    AgentDefinitionModel.display_name.ilike(like_search),
+                )
+            )
 
-        result = await self._session.execute(
-            refresh_select_statement(query.execution_options(populate_existing=True))
-        )
-        db_agents = result.scalars().all()
+        query = _apply_agent_list_order(query, sort)
 
         resolved_tenant_id = tenant_id or BUILTIN_AGENT_NAMESPACE
-        agents = [d for a in db_agents if (d := self._to_domain(a)) is not None]
-        builtin_agents = list_builtin_agents(
-            tenant_id=resolved_tenant_id,
-            project_id=project_id,
+        builtin_agents = _filter_builtin_agents(
+            list_builtin_agents(
+                tenant_id=resolved_tenant_id,
+                project_id=project_id,
+            ),
+            enabled=effective_enabled,
+            search=search,
         )
-        return _dedupe_agents_by_name_prefer_builtin(builtin_agents + agents)
+
+        if limit is None:
+            db_limit: int | None = None
+            db_offset = 0
+            builtin_slice = builtin_agents
+        else:
+            builtin_slice = builtin_agents[offset : offset + limit]
+            db_limit = max(limit - len(builtin_slice), 0)
+            db_offset = max(offset - len(builtin_agents), 0)
+
+        db_agents: Sequence[AgentDefinitionModel] = ()
+        if db_limit is None or db_limit > 0:
+            if db_limit is not None:
+                query = query.limit(db_limit).offset(db_offset)
+            result = await self._session.execute(
+                refresh_select_statement(query.execution_options(populate_existing=True))
+            )
+            db_agents = result.scalars().all()
+
+        agents = [d for a in db_agents if (d := self._to_domain(a)) is not None]
+        return _dedupe_agents_by_name_prefer_builtin(builtin_slice + agents)
 
     async def set_enabled(
         self,
@@ -413,6 +517,10 @@ class SqlAgentRegistryRepository(
         self,
         tenant_id: str,
         enabled_only: bool = False,
+        *,
+        project_ids: set[str] | None = None,
+        enabled: bool | None = None,
+        search: str | None = None,
     ) -> int:
         from src.infrastructure.adapters.secondary.persistence.models import (
             AgentDefinitionModel,
@@ -421,12 +529,93 @@ class SqlAgentRegistryRepository(
         query = select(func.count(AgentDefinitionModel.id)).where(
             AgentDefinitionModel.tenant_id == tenant_id
         )
+        query = _exclude_legacy_workspace_scoped_auto_team(query)
 
-        if enabled_only:
-            query = query.where(AgentDefinitionModel.enabled.is_(True))
+        if project_ids is not None:
+            scope_filter: ColumnElement[bool] = AgentDefinitionModel.project_id.is_(None)
+            if project_ids:
+                scope_filter = or_(scope_filter, AgentDefinitionModel.project_id.in_(project_ids))
+            query = query.where(scope_filter)
+
+        effective_enabled = True if enabled_only else enabled
+        if effective_enabled is not None:
+            query = query.where(AgentDefinitionModel.enabled.is_(effective_enabled))
+
+        search_term = search.strip() if search else ""
+        if search_term:
+            like_search = f"%{search_term}%"
+            query = query.where(
+                or_(
+                    AgentDefinitionModel.name.ilike(like_search),
+                    AgentDefinitionModel.display_name.ilike(like_search),
+                )
+            )
 
         result = await self._session.execute(refresh_select_statement(query))
-        builtin_count = len(list_builtin_agents(tenant_id=tenant_id))
+        builtin_count = len(
+            _filter_builtin_agents(
+                list_builtin_agents(tenant_id=tenant_id),
+                enabled=effective_enabled,
+                search=search,
+            )
+        )
+        return int(result.scalar() or 0) + builtin_count
+
+    async def count_by_project(
+        self,
+        project_id: str,
+        tenant_id: str | None = None,
+        enabled_only: bool = False,
+        *,
+        enabled: bool | None = None,
+        search: str | None = None,
+    ) -> int:
+        from src.infrastructure.adapters.secondary.persistence.models import (
+            AgentDefinitionModel,
+        )
+
+        if tenant_id:
+            query = select(func.count(AgentDefinitionModel.id)).where(
+                AgentDefinitionModel.tenant_id == tenant_id,
+                or_(
+                    AgentDefinitionModel.project_id == project_id,
+                    AgentDefinitionModel.project_id.is_(None),
+                ),
+            )
+        else:
+            query = select(func.count(AgentDefinitionModel.id)).where(
+                or_(
+                    AgentDefinitionModel.project_id == project_id,
+                    AgentDefinitionModel.project_id.is_(None),
+                )
+            )
+        query = _exclude_legacy_workspace_scoped_auto_team(query)
+
+        effective_enabled = True if enabled_only else enabled
+        if effective_enabled is not None:
+            query = query.where(AgentDefinitionModel.enabled.is_(effective_enabled))
+
+        search_term = search.strip() if search else ""
+        if search_term:
+            like_search = f"%{search_term}%"
+            query = query.where(
+                or_(
+                    AgentDefinitionModel.name.ilike(like_search),
+                    AgentDefinitionModel.display_name.ilike(like_search),
+                )
+            )
+
+        result = await self._session.execute(refresh_select_statement(query))
+        builtin_count = len(
+            _filter_builtin_agents(
+                list_builtin_agents(
+                    tenant_id=tenant_id or BUILTIN_AGENT_NAMESPACE,
+                    project_id=project_id,
+                ),
+                enabled=effective_enabled,
+                search=search,
+            )
+        )
         return int(result.scalar() or 0) + builtin_count
 
     def _to_domain(self, db_agent: object) -> Agent | None:

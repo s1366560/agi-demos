@@ -15,6 +15,7 @@ import type { Project } from '../../../types/memory';
 vi.mock('../../../services/agent/definitionsService', () => ({
   definitionsService: {
     list: vi.fn(),
+    listPage: vi.fn(),
     getById: vi.fn(),
     setEnabled: vi.fn(),
     delete: vi.fn(),
@@ -130,6 +131,13 @@ const makeDefinition = (overrides: Partial<AgentDefinition> = {}): AgentDefiniti
   ...overrides,
 });
 
+const makeDefinitionPage = (definitions: AgentDefinition[]) => ({
+  definitions,
+  total: definitions.length,
+  limit: 20,
+  offset: 0,
+});
+
 describe('AgentDefinitionDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -187,7 +195,9 @@ describe('AgentDefinitionDetail', () => {
   });
 
   it('links definition cards to the detail route', async () => {
-    vi.mocked(definitionsService.list).mockResolvedValue([makeDefinition()]);
+    vi.mocked(definitionsService.listPage).mockResolvedValue(
+      makeDefinitionPage([makeDefinition()])
+    );
 
     render(
       <MemoryRouter initialEntries={['/tenant/tenant-1/agent-definitions']}>
@@ -228,20 +238,24 @@ describe('AgentDefinitionDetail', () => {
         } as Project,
       ],
     });
-    vi.mocked(definitionsService.list).mockResolvedValue([
-      makeDefinition({
-        id: 'tenant-agent',
-        project_id: null,
-        name: 'tenant_agent',
-        display_name: 'Tenant Agent',
-      }),
-      makeDefinition({
-        id: 'project-agent',
-        project_id: 'project-1',
-        name: 'project_agent',
-        display_name: 'Project Agent',
-      }),
-    ]);
+    const tenantDefinition = makeDefinition({
+      id: 'tenant-agent',
+      project_id: null,
+      name: 'tenant_agent',
+      display_name: 'Tenant Agent',
+    });
+    const projectDefinition = makeDefinition({
+      id: 'project-agent',
+      project_id: 'project-1',
+      name: 'project_agent',
+      display_name: 'Project Agent',
+    });
+    vi.mocked(definitionsService.listPage).mockImplementation(async (params = {}) => {
+      if (params.project_id === 'project-1') {
+        return makeDefinitionPage([projectDefinition]);
+      }
+      return makeDefinitionPage([tenantDefinition, projectDefinition]);
+    });
 
     render(
       <MemoryRouter initialEntries={['/tenant/tenant-1/agent-definitions']}>
@@ -259,7 +273,9 @@ describe('AgentDefinitionDetail', () => {
       target: { value: 'project-1' },
     });
 
-    expect(screen.queryByRole('link', { name: 'Tenant Agent' })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: 'Tenant Agent' })).not.toBeInTheDocument();
+    });
     expect(screen.getByRole('link', { name: 'Project Agent' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Create Agent' }));

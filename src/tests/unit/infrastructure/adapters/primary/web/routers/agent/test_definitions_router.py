@@ -35,6 +35,8 @@ def _make_registry() -> MagicMock:
     registry.update = AsyncMock(side_effect=lambda agent: agent)
     registry.delete = AsyncMock(return_value=True)
     registry.set_enabled = AsyncMock(side_effect=lambda _agent_id, _enabled: _make_agent())
+    registry.count_by_tenant = AsyncMock(return_value=0)
+    registry.count_by_project = AsyncMock(return_value=0)
     return registry
 
 
@@ -203,6 +205,67 @@ class TestDefinitionsRouterA2AConfig:
 
         assert [agent["id"] for agent in response] == ["tenant-agent", "visible-agent"]
         registry.list_by_tenant.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_list_definitions_can_return_access_scoped_pagination_metadata(self):
+        db = _make_db(accessible_project_ids=["proj-1"])
+        registry = _make_registry()
+        registry.list_by_tenant = AsyncMock(
+            return_value=[
+                _make_agent(id="tenant-agent", project_id=None, name="tenant-agent"),
+                _make_agent(id="visible-agent", project_id="proj-1", name="visible-agent"),
+            ]
+        )
+        registry.count_by_tenant = AsyncMock(return_value=2)
+        container = _make_container(registry)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
+                return_value=container,
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
+                AsyncMock(),
+            ),
+        ):
+            response = await list_definitions(
+                request=MagicMock(),
+                project_id=None,
+                scope="all",
+                search="agent",
+                sort="name",
+                enabled=False,
+                limit=20,
+                offset=40,
+                include_total=True,
+                current_user=SimpleNamespace(id="user-1"),
+                tenant_id="tenant-1",
+                db=db,
+            )
+
+        assert response.model_dump()["total"] == 2
+        assert [agent["id"] for agent in response.model_dump()["definitions"]] == [
+            "tenant-agent",
+            "visible-agent",
+        ]
+        registry.list_by_tenant.assert_awaited_once_with(
+            tenant_id="tenant-1",
+            enabled_only=False,
+            limit=20,
+            offset=40,
+            project_ids={"proj-1"},
+            enabled=False,
+            search="agent",
+            sort="name",
+        )
+        registry.count_by_tenant.assert_awaited_once_with(
+            tenant_id="tenant-1",
+            enabled_only=False,
+            project_ids={"proj-1"},
+            enabled=False,
+            search="agent",
+        )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("route_name", ["get", "update", "delete", "enabled"])

@@ -125,6 +125,13 @@ class SetEnabledBody(BaseModel):
     enabled: bool
 
 
+class DefinitionListResponse(BaseModel):
+    definitions: list[dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
+
+
 async def _ensure_project_definition_access(
     db: AsyncSession,
     *,
@@ -190,6 +197,17 @@ async def _accessible_definition_project_ids(
     return {str(project_id) for project_id in result.scalars().all()}
 
 
+def _filter_agents_by_project_access(
+    agents: list[Agent],
+    accessible_project_ids: set[str],
+) -> list[Agent]:
+    return [
+        agent
+        for agent in agents
+        if agent.project_id is None or agent.project_id in accessible_project_ids
+    ]
+
+
 @router.post("/definitions")
 async def create_definition(
     body: CreateDefinitionBody,
@@ -214,9 +232,13 @@ async def create_definition(
             WorkspaceConfig.from_dict(body.workspace_config) if body.workspace_config else None
         )
 
-        session_policy = SessionPolicy.from_dict(body.session_policy) if body.session_policy else None
+        session_policy = (
+            SessionPolicy.from_dict(body.session_policy) if body.session_policy else None
+        )
 
-        delegate_config = DelegateConfig.from_dict(body.delegate_config) if body.delegate_config else None
+        delegate_config = (
+            DelegateConfig.from_dict(body.delegate_config) if body.delegate_config else None
+        )
         spawn_policy = Agent._spawn_policy_from_dict(body.spawn_policy)
         tool_policy = Agent._tool_policy_from_dict(body.tool_policy)
         agent_to_agent_allowlist = normalize_new_agent_a2a(
@@ -266,7 +288,9 @@ async def create_definition(
     except ValueError as e:
         status_code = 409 if "already exists" in str(e) else 400
         if status_code == 409:
-            raise HTTPException(status_code=status_code, detail=_("Definition already exists")) from e
+            raise HTTPException(
+                status_code=status_code, detail=_("Definition already exists")
+            ) from e
         raise HTTPException(status_code=status_code, detail=_("Invalid definition request")) from e
     except IntegrityError as e:
         raise HTTPException(
@@ -288,18 +312,36 @@ async def create_definition(
 
 
 @router.get("/definitions")
-async def list_definitions(
+async def list_definitions(  # noqa: PLR0913
     request: Request,
     project_id: str | None = None,
+    scope: str | None = None,
+    search: str | None = None,
+    sort: str | None = None,
     enabled_only: bool = False,
+    enabled: bool | None = None,
     limit: int = 100,
     offset: int = 0,
+    include_total: bool = False,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | DefinitionListResponse:
     try:
         await require_tenant_access(db, current_user, tenant_id)
+        if scope not in {None, "all", "tenant"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=_("Invalid definition scope"),
+            )
+        if sort not in {None, "name", "recent", "invocations"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=_("Invalid definition sort"),
+            )
+
+        safe_limit = max(limit, 0)
+        safe_offset = max(offset, 0)
         if project_id:
             await _ensure_project_definition_access(
                 db,
@@ -315,26 +357,64 @@ async def list_definitions(
                 project_id=project_id,
                 tenant_id=tenant_id,
                 enabled_only=enabled_only,
+                limit=safe_limit if include_total else None,
+                offset=safe_offset,
+                enabled=enabled,
+                search=search,
+                sort=sort,
+            )
+            total = (
+                await registry.count_by_project(
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    enabled_only=enabled_only,
+                    enabled=enabled,
+                    search=search,
+                )
+                if include_total
+                else len(agents)
             )
         else:
+            if scope == "tenant":
+                accessible_project_ids: set[str] = set()
+            else:
+                accessible_project_ids = await _accessible_definition_project_ids(
+                    db,
+                    current_user=current_user,
+                    tenant_id=tenant_id,
+                )
             agents = await registry.list_by_tenant(
                 tenant_id=tenant_id,
                 enabled_only=enabled_only,
-                limit=limit,
-                offset=offset,
+                limit=safe_limit,
+                offset=safe_offset,
+                project_ids=accessible_project_ids,
+                enabled=enabled,
+                search=search,
+                sort=sort,
             )
-            accessible_project_ids = await _accessible_definition_project_ids(
-                db,
-                current_user=current_user,
-                tenant_id=tenant_id,
+            agents = _filter_agents_by_project_access(agents, accessible_project_ids)
+            total = (
+                await registry.count_by_tenant(
+                    tenant_id=tenant_id,
+                    enabled_only=enabled_only,
+                    project_ids=accessible_project_ids,
+                    enabled=enabled,
+                    search=search,
+                )
+                if include_total
+                else len(agents)
             )
-            agents = [
-                agent
-                for agent in agents
-                if agent.project_id is None or agent.project_id in accessible_project_ids
-            ]
 
-        return [a.to_dict() for a in agents]
+        definitions = [a.to_dict() for a in agents]
+        if include_total:
+            return DefinitionListResponse(
+                definitions=definitions,
+                total=total,
+                limit=safe_limit,
+                offset=safe_offset,
+            )
+        return definitions
 
     except HTTPException:
         raise

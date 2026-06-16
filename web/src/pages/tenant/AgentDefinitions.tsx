@@ -3,20 +3,30 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 
-import { Badge, Card, Dropdown, message, Modal, Spin, Switch, Tag, Tooltip } from 'antd';
+import {
+  Badge,
+  Card,
+  Dropdown,
+  message,
+  Modal,
+  Pagination,
+  Spin,
+  Switch,
+  Tag,
+  Tooltip,
+} from 'antd';
 import { Bot, Edit2, Eye, MoreVertical, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 
 import { AgentDefinitionModal } from '../../components/agent/AgentDefinitionModal';
 import {
-  filterDefinitions,
   useClearDefinitionError,
   useDefinitionError,
-  useDefinitionFilters,
   useDefinitionLoading,
+  useDefinitionPagination,
   useDefinitions,
   useDeleteDefinition,
   useEnabledDefinitionsCount,
-  useListDefinitions,
+  useListDefinitionsPage,
   useSetDefinitionFilters,
   useToggleDefinitionEnabled,
 } from '../../stores/agentDefinitions';
@@ -30,14 +40,6 @@ import type { MenuProps } from 'antd';
 type StatusFilter = 'all' | 'enabled' | 'disabled';
 type ScopeFilter = string;
 type SortField = 'name' | 'recent' | 'invocations';
-
-const SORT_FNS: Record<SortField, (a: AgentDefinition, b: AgentDefinition) => number> = {
-  name: (a, b) => (a.display_name ?? a.name).localeCompare(b.display_name ?? b.name),
-  invocations: (a, b) => b.total_invocations - a.total_invocations,
-  recent: (a, b) =>
-    new Date(b.updated_at ?? b.created_at).getTime() -
-    new Date(a.updated_at ?? a.created_at).getTime(),
-};
 
 function canManageTenantAgents(
   user: ReturnType<typeof useUser>,
@@ -69,12 +71,12 @@ export const AgentDefinitions: React.FC = () => {
   const projects = useProjectStore((state) => state.projects);
   const listProjects = useProjectStore((state) => state.listProjects);
   const definitions = useDefinitions();
-  const filters = useDefinitionFilters();
   const isLoading = useDefinitionLoading();
   const error = useDefinitionError();
   const enabledCount = useEnabledDefinitionsCount();
+  const { total, page, pageSize } = useDefinitionPagination();
 
-  const listDefinitions = useListDefinitions();
+  const listDefinitionsPage = useListDefinitionsPage();
   const deleteDefinition = useDeleteDefinition();
   const toggleEnabled = useToggleDefinitionEnabled();
   const setFilters = useSetDefinitionFilters();
@@ -105,7 +107,9 @@ export const AgentDefinitions: React.FC = () => {
     [definitions]
   );
   const projectDefinitionCount = definitions.length - tenantDefinitionCount;
-  const hasActiveFilters = search !== '' || statusFilter !== 'all' || scopeFilter !== 'all';
+  const hasActiveFilters = search.trim() !== '' || statusFilter !== 'all' || scopeFilter !== 'all';
+
+  const selectedProjectId = scopeFilter !== 'all' && scopeFilter !== 'tenant' ? scopeFilter : null;
 
   const listPath = useMemo(() => {
     const segments = location.pathname.split('/').filter(Boolean);
@@ -118,23 +122,22 @@ export const AgentDefinitions: React.FC = () => {
     return `/${segments.slice(0, definitionsIndex + 1).join('/')}`;
   }, [location.pathname]);
 
-  const filteredDefinitions = useMemo(() => {
-    const filtered = filterDefinitions(definitions, {
-      ...filters,
-      search,
-      enabled: statusFilter === 'all' ? null : statusFilter === 'enabled',
-    });
-    const scoped = filtered.filter((definition) => {
-      if (scopeFilter === 'all') {
-        return true;
-      }
-      if (scopeFilter === 'tenant') {
-        return definition.project_id === null;
-      }
-      return definition.project_id === scopeFilter;
-    });
-    return [...scoped].sort(SORT_FNS[sortField]);
-  }, [definitions, filters, search, statusFilter, scopeFilter, sortField]);
+  const loadDefinitionsPage = useCallback(
+    (options?: { page?: number; pageSize?: number }) => {
+      const nextPage = options?.page ?? 1;
+      const nextPageSize = options?.pageSize ?? pageSize;
+      return listDefinitionsPage({
+        project_id: selectedProjectId,
+        scope: scopeFilter === 'tenant' ? 'tenant' : undefined,
+        search: search.trim() || undefined,
+        sort: sortField,
+        enabled: statusFilter === 'all' ? undefined : statusFilter === 'enabled',
+        limit: nextPageSize,
+        offset: Math.max(nextPage - 1, 0) * nextPageSize,
+      });
+    },
+    [listDefinitionsPage, pageSize, scopeFilter, search, selectedProjectId, sortField, statusFilter]
+  );
 
   const getScopeLabel = useCallback(
     (projectId: string | null): string =>
@@ -145,9 +148,8 @@ export const AgentDefinitions: React.FC = () => {
   );
 
   useEffect(() => {
-    setFilters({ projectId: null });
-    void listDefinitions({ project_id: null });
-  }, [listDefinitions, setFilters]);
+    void loadDefinitionsPage({ page: 1 });
+  }, [loadDefinitionsPage]);
 
   useEffect(() => {
     if (!currentTenant?.id) {
@@ -166,8 +168,9 @@ export const AgentDefinitions: React.FC = () => {
     setFilters({
       search,
       enabled: statusFilter === 'all' ? null : statusFilter === 'enabled',
+      projectId: selectedProjectId,
     });
-  }, [search, statusFilter, setFilters]);
+  }, [search, selectedProjectId, statusFilter, setFilters]);
 
   useEffect(() => {
     if (error) message.error(error);
@@ -201,11 +204,12 @@ export const AgentDefinitions: React.FC = () => {
             ? t('tenant.agentDefinitions.messages.enabled', { defaultValue: 'Agent enabled' })
             : t('tenant.agentDefinitions.messages.disabled', { defaultValue: 'Agent disabled' })
         );
+        void loadDefinitionsPage({ page });
       } catch {
         // Error handled by store
       }
     },
-    [toggleEnabled, t]
+    [loadDefinitionsPage, page, toggleEnabled, t]
   );
 
   const handleDelete = useCallback(
@@ -217,16 +221,18 @@ export const AgentDefinitions: React.FC = () => {
             defaultValue: 'Agent definition deleted',
           })
         );
+        const nextPage = definitions.length <= 1 && page > 1 ? page - 1 : page;
+        void loadDefinitionsPage({ page: nextPage });
       } catch {
         // Error handled by store
       }
     },
-    [deleteDefinition, t]
+    [definitions.length, deleteDefinition, loadDefinitionsPage, page, t]
   );
 
   const handleRefresh = useCallback(() => {
-    void listDefinitions();
-  }, [listDefinitions]);
+    void loadDefinitionsPage({ page });
+  }, [loadDefinitionsPage, page]);
 
   const handleModalClose = useCallback(() => {
     setIsModalOpen(false);
@@ -238,8 +244,8 @@ export const AgentDefinitions: React.FC = () => {
     setIsModalOpen(false);
     setEditingDef(null);
     setCreateProjectId(null);
-    void listDefinitions();
-  }, [listDefinitions]);
+    void loadDefinitionsPage({ page: 1 });
+  }, [loadDefinitionsPage]);
 
   const confirmDelete = useCallback(
     (def: AgentDefinition) => {
@@ -335,7 +341,7 @@ export const AgentDefinitions: React.FC = () => {
       <div className="flex items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
         <span>
           {t('tenant.agentDefinitions.stats.agents', {
-            count: definitions.length,
+            count: total,
             defaultValue: '{{count}} agents',
           })}
         </span>
@@ -463,7 +469,7 @@ export const AgentDefinitions: React.FC = () => {
         <div className="flex items-center justify-center py-16">
           <Spin size="large" />
         </div>
-      ) : filteredDefinitions.length === 0 ? (
+      ) : definitions.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-slate-500 dark:text-slate-400">
           <Bot size={48} className="mb-4 text-slate-300 dark:text-slate-600" />
           <p className="text-lg font-medium">
@@ -483,7 +489,7 @@ export const AgentDefinitions: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredDefinitions.map((def) => (
+          {definitions.map((def) => (
             <Card
               key={def.id}
               size="small"
@@ -593,6 +599,28 @@ export const AgentDefinitions: React.FC = () => {
               </div>
             </Card>
           ))}
+        </div>
+      )}
+
+      {total > pageSize && (
+        <div className="flex justify-end">
+          <Pagination
+            current={page}
+            pageSize={pageSize}
+            total={total}
+            showSizeChanger
+            pageSizeOptions={['20', '50', '100']}
+            aria-label={t('common.pagination.label', { defaultValue: 'Pagination' })}
+            showTotal={(nextTotal) =>
+              t('common.pagination.total', {
+                total: nextTotal,
+                defaultValue: '{{total}} total',
+              })
+            }
+            onChange={(nextPage, nextPageSize) => {
+              void loadDefinitionsPage({ page: nextPage, pageSize: nextPageSize });
+            }}
+          />
         </div>
       )}
 

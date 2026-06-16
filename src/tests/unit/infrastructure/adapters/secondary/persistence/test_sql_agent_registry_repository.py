@@ -1,5 +1,6 @@
 """Unit tests for SqlAgentRegistryRepository built-in agent behavior."""
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -46,8 +47,9 @@ def _agent_model(
     tenant_id: str,
     project_id: str | None,
     name: str,
+    created_at: datetime | None = None,
 ) -> AgentDefinitionModel:
-    return AgentDefinitionModel(
+    model = AgentDefinitionModel(
         id=agent_id,
         tenant_id=tenant_id,
         project_id=project_id,
@@ -61,6 +63,10 @@ def _agent_model(
         source="database",
         max_iterations=10,
     )
+    if created_at is not None:
+        model.created_at = created_at
+        model.updated_at = created_at
+    return model
 
 
 @pytest.mark.unit
@@ -148,6 +154,71 @@ class TestSqlAgentRegistryRepository:
         count = await repo.count_by_tenant("tenant-1")
 
         assert count == 2 + len(list_builtin_agents(tenant_id="tenant-1"))
+
+    @pytest.mark.asyncio
+    async def test_list_by_tenant_filters_project_scope_before_database_pagination(
+        self,
+        db_session: AsyncSession,
+        test_tenant_db,
+        test_project_db,
+        test_user,
+    ) -> None:
+        hidden_project = Project(
+            id="hidden-agent-project",
+            tenant_id=test_tenant_db.id,
+            name="Hidden Agent Project",
+            owner_id=test_user.id,
+            memory_rules={},
+            graph_config={},
+        )
+        db_session.add(hidden_project)
+        await db_session.flush()
+
+        base_time = datetime(2026, 6, 1, tzinfo=UTC)
+        db_session.add_all(
+            [
+                _agent_model(
+                    agent_id="hidden-newer-agent",
+                    tenant_id=test_tenant_db.id,
+                    project_id=hidden_project.id,
+                    name="hidden-newer-agent",
+                    created_at=base_time + timedelta(minutes=2),
+                ),
+                _agent_model(
+                    agent_id="visible-agent",
+                    tenant_id=test_tenant_db.id,
+                    project_id=test_project_db.id,
+                    name="visible-agent",
+                    created_at=base_time + timedelta(minutes=1),
+                ),
+                _agent_model(
+                    agent_id="tenant-agent",
+                    tenant_id=test_tenant_db.id,
+                    project_id=None,
+                    name="tenant-agent",
+                    created_at=base_time,
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        repo = SqlAgentRegistryRepository(db_session)
+        builtin_count = len(list_builtin_agents(tenant_id=test_tenant_db.id))
+
+        agents = await repo.list_by_tenant(
+            test_tenant_db.id,
+            project_ids={test_project_db.id},
+            limit=2,
+            offset=builtin_count,
+            sort="recent",
+        )
+        count = await repo.count_by_tenant(
+            test_tenant_db.id,
+            project_ids={test_project_db.id},
+        )
+
+        assert [agent.name for agent in agents] == ["visible-agent", "tenant-agent"]
+        assert count == builtin_count + 2
 
     @pytest.mark.asyncio
     async def test_get_by_id_refreshes_existing_identity_map_rows(
