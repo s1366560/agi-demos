@@ -413,3 +413,16 @@ class TestCreateFactory:
         assert agent.identity is ident
         assert agent.id  # UUID was generated
         assert agent.name == "full-agent"
+
+    def test_create_preserves_explicit_empty_allowed_tools(self) -> None:
+        agent = SubAgent.create(
+            tenant_id="t1",
+            name="deny-all",
+            display_name="Deny All",
+            system_prompt="prompt",
+            trigger_description="trigger",
+            allowed_tools=[],
+        )
+        assert agent.allowed_tools == []
+        assert agent.has_tool_access("terminal") is False
+        assert agent.get_filtered_tools(["terminal", "web_search"]) == []

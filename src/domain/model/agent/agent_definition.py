@@ -616,7 +616,7 @@ class Agent:
             temperature=temperature,
             max_tokens=max_tokens,
             max_iterations=max_iterations,
-            allowed_tools=allowed_tools or ["*"],
+            allowed_tools=(["*"] if allowed_tools is None else list(allowed_tools)),
             allowed_skills=allowed_skills or [],
             allowed_mcp_servers=(allowed_mcp_servers or []),
             bindings=bindings or [],

@@ -200,7 +200,7 @@ async def _handle_create(  # noqa: PLR0913
         project_id=ctx.project_id or None,
         persona_files=persona_files,
         model=_parse_model(model),
-        allowed_tools=allowed_tools or ["*"],
+        allowed_tools=allowed_tools,
         allowed_skills=allowed_skills,
         allowed_mcp_servers=allowed_mcp_servers,
         workspace_dir=workspace_dir,

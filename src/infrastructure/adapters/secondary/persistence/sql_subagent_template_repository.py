@@ -56,7 +56,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
             "max_tokens": row.max_tokens,
             "temperature": row.temperature,
             "max_iterations": row.max_iterations,
-            "allowed_tools": row.allowed_tools or ["*"],
+            "allowed_tools": (["*"] if row.allowed_tools is None else list(row.allowed_tools)),
             "author": row.author,
             "is_builtin": row.is_builtin,
             "is_published": row.is_published,

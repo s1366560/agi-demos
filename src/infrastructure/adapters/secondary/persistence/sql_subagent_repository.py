@@ -342,7 +342,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
             trigger=trigger,
             model=AgentModel(db_subagent.model),
             color=db_subagent.color,
-            allowed_tools=list(db_subagent.allowed_tools or ["*"]),
+            allowed_tools=list(db_subagent.allowed_tools),
             allowed_skills=list(db_subagent.allowed_skills or []),
             allowed_mcp_servers=list(db_subagent.allowed_mcp_servers or []),
             max_tokens=db_subagent.max_tokens,

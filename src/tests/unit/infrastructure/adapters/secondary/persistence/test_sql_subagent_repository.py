@@ -96,6 +96,22 @@ class TestSqlSubAgentRepositoryFind:
         assert result.name == "find_me"
 
     @pytest.mark.asyncio
+    async def test_get_by_id_preserves_explicit_empty_allowed_tools(
+        self,
+        v2_subagent_repo: SqlSubAgentRepository,
+    ):
+        """Explicit empty tool lists should remain deny-all after hydration."""
+        subagent = make_subagent("subagent-deny-tools", "tenant-1", "deny_tools")
+        subagent.allowed_tools = []
+        await v2_subagent_repo.create(subagent)
+
+        result = await v2_subagent_repo.get_by_id("subagent-deny-tools")
+
+        assert result is not None
+        assert result.allowed_tools == []
+        assert result.has_tool_access("terminal") is False
+
+    @pytest.mark.asyncio
     async def test_get_by_id_not_found(self, v2_subagent_repo: SqlSubAgentRepository):
         """Test getting a non-existent subagent returns None."""
         result = await v2_subagent_repo.get_by_id("non-existent")

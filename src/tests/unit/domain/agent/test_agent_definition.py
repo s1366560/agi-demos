@@ -310,3 +310,15 @@ class TestAgent:
         assert agent.allowed_tools == ["*"]
         assert agent.allowed_skills == []
         assert agent.can_spawn is False
+
+    def test_create_factory_preserves_explicit_empty_allowed_tools(self):
+        agent = Agent.create(
+            tenant_id="t1",
+            name="deny-all-agent",
+            display_name="Deny All Agent",
+            system_prompt="Test prompt.",
+            allowed_tools=[],
+        )
+        assert agent.allowed_tools == []
+        assert agent.has_tool_access("terminal") is False
+        assert agent.get_filtered_tools(["terminal", "web_search"]) == []

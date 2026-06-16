@@ -9,6 +9,8 @@ Tests cover:
 
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -18,6 +20,9 @@ from src.domain.ports.repositories.subagent_template_repository import (
 from src.infrastructure.adapters.secondary.persistence.seed_templates import (
     BUILTIN_TEMPLATES,
     seed_builtin_templates,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_subagent_template_repository import (
+    SqlSubAgentTemplateRepository,
 )
 
 # === Fake In-Memory Repository for Testing ===
@@ -181,6 +186,40 @@ class TestSubAgentTemplateRepository:
         assert result["is_builtin"] is False
         assert result["is_published"] is True
         assert result["install_count"] == 0
+
+    def test_sql_row_to_dict_preserves_explicit_empty_allowed_tools(self):
+        sql_repo = SqlSubAgentTemplateRepository(MagicMock())
+        row = SimpleNamespace(
+            id="template-deny-tools",
+            tenant_id=TENANT_ID,
+            name="deny-tools-template",
+            version="1.0.0",
+            display_name="Deny Tools Template",
+            description="Template with no runtime tool access.",
+            category="testing",
+            tags=[],
+            system_prompt="You cannot use runtime tools.",
+            trigger_description="Deny tools tasks",
+            trigger_keywords=[],
+            trigger_examples=[],
+            model="inherit",
+            max_tokens=4096,
+            temperature=0.7,
+            max_iterations=10,
+            allowed_tools=[],
+            author=None,
+            is_builtin=False,
+            is_published=True,
+            install_count=0,
+            rating=0.0,
+            metadata_json=None,
+            created_at=None,
+            updated_at=None,
+        )
+
+        result = sql_repo._row_to_dict(row)
+
+        assert result["allowed_tools"] == []
 
     async def test_get_by_id(self, repo):
         created = await repo.create(_make_template_data())

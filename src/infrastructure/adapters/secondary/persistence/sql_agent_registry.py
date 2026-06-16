@@ -474,7 +474,7 @@ class SqlAgentRegistryRepository(
             temperature=db_agent.temperature,
             max_tokens=db_agent.max_tokens,
             max_iterations=db_agent.max_iterations,
-            allowed_tools=list(db_agent.allowed_tools or ["*"]),
+            allowed_tools=list(db_agent.allowed_tools),
             allowed_skills=list(db_agent.allowed_skills or []),
             allowed_mcp_servers=list(db_agent.allowed_mcp_servers or []),
             workspace_dir=db_agent.workspace_dir,

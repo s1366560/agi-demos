@@ -113,6 +113,31 @@ class TestAgentDefinitionManageTool:
         assert len(ctx._pending_events) == 1
         assert ctx._pending_events[0]["type"] == "agent_definition_created"
 
+    async def test_create_preserves_explicit_empty_allowed_tools(self) -> None:
+        orch = _mock_orchestrator()
+
+        async def create_agent(agent: Agent) -> Agent:
+            return agent
+
+        orch.create_agent.side_effect = create_agent
+        configure_agent_definition_manage(orch)
+
+        ctx = _make_ctx()
+        result = await agent_definition_manage_tool.execute(
+            ctx,
+            action="create",
+            name="deny-tools-agent",
+            display_name="Deny Tools Agent",
+            system_prompt="You cannot use runtime tools.",
+            allowed_tools=[],
+        )
+
+        assert result.is_error is False
+        created_call = orch.create_agent.call_args[0][0]
+        assert created_call.allowed_tools == []
+        assert created_call.has_tool_access("terminal") is False
+        assert json.loads(result.output)["allowed_tools"] == []
+
     async def test_create_missing_name_returns_error(self) -> None:
         orch = _mock_orchestrator()
         configure_agent_definition_manage(orch)

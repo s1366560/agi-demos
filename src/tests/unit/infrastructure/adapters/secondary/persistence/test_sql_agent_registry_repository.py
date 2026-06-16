@@ -204,6 +204,43 @@ class TestSqlAgentRegistryRepository:
         assert refreshed.max_iterations == 42
 
     @pytest.mark.asyncio
+    async def test_get_by_id_preserves_explicit_empty_allowed_tools(
+        self,
+        db_session: AsyncSession,
+        test_tenant_db,
+        test_project_db,
+    ) -> None:
+        agent_id = "agent-deny-tools"
+        db_session.add(
+            AgentDefinitionModel(
+                id=agent_id,
+                tenant_id=test_tenant_db.id,
+                project_id=test_project_db.id,
+                name="deny-tools-agent",
+                display_name="Deny Tools Agent",
+                system_prompt="You cannot use runtime tools.",
+                trigger_description="Deny tools trigger",
+                allowed_tools=[],
+                allowed_skills=[],
+                allowed_mcp_servers=[],
+                source="database",
+                max_iterations=10,
+            )
+        )
+        await db_session.commit()
+
+        repo = SqlAgentRegistryRepository(db_session)
+        loaded = await repo.get_by_id(
+            agent_id,
+            tenant_id=test_tenant_db.id,
+            project_id=test_project_db.id,
+        )
+
+        assert loaded is not None
+        assert loaded.allowed_tools == []
+        assert loaded.has_tool_access("terminal") is False
+
+    @pytest.mark.asyncio
     async def test_create_round_trips_structured_policies(
         self,
         db_session: AsyncSession,
