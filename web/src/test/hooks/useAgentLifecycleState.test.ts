@@ -11,6 +11,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 vi.mock('../../services/agentService', () => ({
   agentService: {
     isConnected: vi.fn(() => true),
+    connect: vi.fn(() => Promise.resolve()),
     onStatusChange: vi.fn(() => vi.fn()),
     subscribeLifecycleState: vi.fn(() => vi.fn()),
     unsubscribeLifecycleState: vi.fn(),
@@ -29,6 +30,7 @@ describe('useAgentLifecycleState', () => {
     vi.clearAllMocks();
     // Reset default mock behavior
     vi.mocked(agentService.isConnected).mockReturnValue(true);
+    vi.mocked(agentService.connect).mockResolvedValue(undefined);
     vi.mocked(agentService.onStatusChange).mockReturnValue(vi.fn());
     vi.mocked(agentService.subscribeLifecycleState).mockReturnValue(vi.fn());
     localStorage.clear();
@@ -71,6 +73,39 @@ describe('useAgentLifecycleState', () => {
     });
 
     expect(result.current.isConnected).toBe(true);
+  });
+
+  it('should not collapse subscriptions for different tenants with the same project id', async () => {
+    const first = renderHook(() =>
+      useAgentLifecycleState({
+        projectId: mockProjectId,
+        tenantId: 'tenant-one',
+        enabled: true,
+      })
+    );
+    const second = renderHook(() =>
+      useAgentLifecycleState({
+        projectId: mockProjectId,
+        tenantId: 'tenant-two',
+        enabled: true,
+      })
+    );
+
+    await waitFor(() => {
+      expect(agentService.subscribeLifecycleState).toHaveBeenCalledWith(
+        mockProjectId,
+        'tenant-one',
+        expect.any(Function)
+      );
+      expect(agentService.subscribeLifecycleState).toHaveBeenCalledWith(
+        mockProjectId,
+        'tenant-two',
+        expect.any(Function)
+      );
+    });
+
+    first.unmount();
+    second.unmount();
   });
 
   it('should update state when lifecycle change callback is invoked', async () => {
@@ -430,6 +465,10 @@ describe('useAgentLifecycleState', () => {
     );
 
     expect(result.current.isConnected).toBe(false);
+
+    await waitFor(() => {
+      expect(statusChangeCallback).not.toBeNull();
+    });
 
     act(() => {
       if (statusChangeCallback) {

@@ -61,7 +61,7 @@ export function useAgentLifecycleState({
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const lockKey = `lifecycle-state-${projectId}`;
+  const lockKey = `lifecycle-state-${tenantId}:${projectId}`;
 
   useEffect(() => {
     if (!enabled || !projectId) {
