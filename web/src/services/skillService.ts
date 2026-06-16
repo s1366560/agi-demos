@@ -34,6 +34,9 @@ import type {
 // Use centralized HTTP client
 const api = httpClient;
 
+const skillNamePathSegment = (systemSkillName: string): string =>
+  encodeURIComponent(systemSkillName);
+
 export interface SkillListParams {
   search?: string | undefined;
   q?: string | undefined;
@@ -259,7 +262,9 @@ export const tenantSkillConfigAPI = {
    * Get a specific tenant skill config
    */
   get: async (systemSkillName: string): Promise<TenantSkillConfigResponse> => {
-    return await api.get<TenantSkillConfigResponse>(`/tenant/skills/config/${systemSkillName}`);
+    return await api.get<TenantSkillConfigResponse>(
+      `/tenant/skills/config/${skillNamePathSegment(systemSkillName)}`
+    );
   },
 
   /**
@@ -297,14 +302,16 @@ export const tenantSkillConfigAPI = {
    * Delete a tenant skill config
    */
   delete: async (systemSkillName: string): Promise<void> => {
-    await api.delete(`/tenant/skills/config/${systemSkillName}`);
+    await api.delete(`/tenant/skills/config/${skillNamePathSegment(systemSkillName)}`);
   },
 
   /**
    * Get status of a system skill
    */
   getStatus: async (systemSkillName: string): Promise<SystemSkillStatus> => {
-    return await api.get<SystemSkillStatus>(`/tenant/skills/config/status/${systemSkillName}`);
+    return await api.get<SystemSkillStatus>(
+      `/tenant/skills/config/status/${skillNamePathSegment(systemSkillName)}`
+    );
   },
 };
 
