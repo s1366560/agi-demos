@@ -102,6 +102,27 @@ function upsertManyById<T extends { id: string }>(items: T[], nextItems: T[]): T
   return nextItems.reduce((acc, item) => upsertById(acc, item), items);
 }
 
+function workspaceBelongsToScope(
+  workspace: Workspace | null,
+  tenantId: string,
+  projectId: string
+): workspace is Workspace {
+  return workspace?.tenant_id === tenantId && workspace.project_id === projectId;
+}
+
+function selectScopedWorkspace(
+  workspaces: Workspace[],
+  currentWorkspace: Workspace | null,
+  tenantId: string,
+  projectId: string
+): Workspace | null {
+  if (!workspaceBelongsToScope(currentWorkspace, tenantId, projectId)) {
+    return workspaces[0] ?? null;
+  }
+
+  return workspaces.find((workspace) => workspace.id === currentWorkspace.id) ?? currentWorkspace;
+}
+
 function hasStringId(value: unknown): value is { id: string } {
   return (
     typeof value === 'object' &&
@@ -591,9 +612,18 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         set({ isLoading: true, error: null });
         try {
           const workspaces = await workspaceService.listByProject(tenantId, projectId);
-          set({
+          const previousWorkspace = get().currentWorkspace;
+          const currentWorkspace = selectScopedWorkspace(
             workspaces,
-            currentWorkspace: get().currentWorkspace ?? workspaces[0] ?? null,
+            previousWorkspace,
+            tenantId,
+            projectId
+          );
+          const workspaceChanged = previousWorkspace?.id !== currentWorkspace?.id;
+          set({
+            ...(workspaceChanged ? createEmptySurfaceState() : {}),
+            workspaces,
+            currentWorkspace,
             isLoading: false,
           });
         } catch (error) {
@@ -1288,11 +1318,17 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           }
         } else if (type === 'workspace_deleted') {
           const workspaceId = data.workspace_id as string;
-          set((state) => ({
-            workspaces: state.workspaces.filter((w) => w.id !== workspaceId),
-            currentWorkspace:
-              state.currentWorkspace?.id === workspaceId ? null : state.currentWorkspace,
-          }));
+          set((state) => {
+            const workspaces = state.workspaces.filter((w) => w.id !== workspaceId);
+            const currentWorkspaceDeleted = state.currentWorkspace?.id === workspaceId;
+            return {
+              ...(currentWorkspaceDeleted ? createEmptySurfaceState() : {}),
+              workspaces,
+              currentWorkspace: currentWorkspaceDeleted
+                ? (workspaces[0] ?? null)
+                : state.currentWorkspace,
+            };
+          });
         }
       },
 

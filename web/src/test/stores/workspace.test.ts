@@ -111,6 +111,72 @@ describe('workspace store', () => {
     expect(state.currentWorkspace?.id).toBe('ws-1');
   });
 
+  it('loadWorkspaces drops stale current workspace from a different project', async () => {
+    useWorkspaceStore.setState({
+      currentWorkspace: {
+        id: 'old-ws',
+        tenant_id: 't-1',
+        project_id: 'old-project',
+        name: 'Old Project Workspace',
+        created_by: 'u-1',
+        created_at: '',
+      } as any,
+      members: [{ id: 'old-member' }] as any,
+      posts: [{ id: 'old-post' }] as any,
+      tasks: [{ id: 'old-task' }] as any,
+      chatMessages: [{ id: 'old-message' }] as any,
+    });
+    vi.mocked(workspaceService.listByProject).mockResolvedValueOnce([
+      {
+        id: 'new-ws',
+        tenant_id: 't-1',
+        project_id: 'new-project',
+        name: 'New Project Workspace',
+        created_by: 'u-1',
+        created_at: '',
+      },
+    ] as any);
+
+    await useWorkspaceStore.getState().loadWorkspaces('t-1', 'new-project');
+
+    const state = useWorkspaceStore.getState();
+    expect(state.currentWorkspace?.id).toBe('new-ws');
+    expect(state.members).toEqual([]);
+    expect(state.posts).toEqual([]);
+    expect(state.tasks).toEqual([]);
+    expect(state.chatMessages).toEqual([]);
+  });
+
+  it('loadWorkspaces keeps a same-scope current workspace that is outside the loaded page', async () => {
+    useWorkspaceStore.setState({
+      currentWorkspace: {
+        id: 'ws-99',
+        tenant_id: 't-1',
+        project_id: 'p-1',
+        name: 'Selected Workspace',
+        created_by: 'u-1',
+        created_at: '',
+      } as any,
+      members: [{ id: 'member-1' }] as any,
+    });
+    vi.mocked(workspaceService.listByProject).mockResolvedValueOnce([
+      {
+        id: 'ws-1',
+        tenant_id: 't-1',
+        project_id: 'p-1',
+        name: 'First Page Workspace',
+        created_by: 'u-1',
+        created_at: '',
+      },
+    ] as any);
+
+    await useWorkspaceStore.getState().loadWorkspaces('t-1', 'p-1');
+
+    const state = useWorkspaceStore.getState();
+    expect(state.currentWorkspace?.id).toBe('ws-99');
+    expect(state.members).toEqual([{ id: 'member-1' }]);
+  });
+
   it('loadWorkspaceSurface hydrates posts/tasks/topology for selected workspace', async () => {
     vi.mocked(workspaceService.getById).mockResolvedValueOnce({
       id: 'ws-1',
@@ -549,6 +615,52 @@ describe('workspace store', () => {
 
     expect(useWorkspaceStore.getState().workspaces[0]?.name).toBe('Renamed');
     expect(useWorkspaceStore.getState().currentWorkspace?.name).toBe('Renamed');
+  });
+
+  it('handleWorkspaceLifecycleEvent selects another workspace when the current one is deleted', () => {
+    useWorkspaceStore.setState({
+      workspaces: [
+        {
+          id: 'ws-1',
+          tenant_id: 't-1',
+          project_id: 'p-1',
+          name: 'Deleted',
+          created_by: 'u-1',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+        {
+          id: 'ws-2',
+          tenant_id: 't-1',
+          project_id: 'p-1',
+          name: 'Remaining',
+          created_by: 'u-1',
+          created_at: '2026-03-30T10:00:00Z',
+        },
+      ] as any,
+      currentWorkspace: {
+        id: 'ws-1',
+        tenant_id: 't-1',
+        project_id: 'p-1',
+        name: 'Deleted',
+        created_by: 'u-1',
+        created_at: '2026-03-30T10:00:00Z',
+      } as any,
+      posts: [{ id: 'old-post' }] as any,
+      tasks: [{ id: 'old-task' }] as any,
+    });
+
+    useWorkspaceStore.getState().handleWorkspaceLifecycleEvent({
+      type: 'workspace_deleted',
+      data: {
+        workspace_id: 'ws-1',
+      },
+    });
+
+    const state = useWorkspaceStore.getState();
+    expect(state.workspaces.map((workspace) => workspace.id)).toEqual(['ws-2']);
+    expect(state.currentWorkspace?.id).toBe('ws-2');
+    expect(state.posts).toEqual([]);
+    expect(state.tasks).toEqual([]);
   });
 
   it('loadReplies lets canonical API reply data win over earlier live payloads', async () => {
