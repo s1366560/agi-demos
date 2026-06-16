@@ -177,6 +177,47 @@ describe('workspace store', () => {
     expect(state.members).toEqual([{ id: 'member-1' }]);
   });
 
+  it('loadWorkspaces ignores stale responses from older project requests', async () => {
+    let resolveFirstList: ((value: any) => void) | null = null;
+    const firstListPromise = new Promise((resolve) => {
+      resolveFirstList = resolve;
+    });
+
+    vi.mocked(workspaceService.listByProject)
+      .mockReturnValueOnce(firstListPromise as Promise<any>)
+      .mockResolvedValueOnce([
+        {
+          id: 'ws-new',
+          tenant_id: 't-1',
+          project_id: 'new-project',
+          name: 'New Project Workspace',
+          created_by: 'u-1',
+          created_at: '',
+        },
+      ] as any);
+
+    const firstLoad = useWorkspaceStore.getState().loadWorkspaces('t-1', 'old-project');
+    const secondLoad = useWorkspaceStore.getState().loadWorkspaces('t-1', 'new-project');
+
+    await secondLoad;
+    resolveFirstList?.([
+      {
+        id: 'ws-old',
+        tenant_id: 't-1',
+        project_id: 'old-project',
+        name: 'Old Project Workspace',
+        created_by: 'u-1',
+        created_at: '',
+      },
+    ]);
+    await firstLoad;
+
+    const state = useWorkspaceStore.getState();
+    expect(state.workspaces).toEqual([expect.objectContaining({ id: 'ws-new' })]);
+    expect(state.currentWorkspace?.id).toBe('ws-new');
+    expect(state.isLoading).toBe(false);
+  });
+
   it('loadWorkspaceSurface hydrates posts/tasks/topology for selected workspace', async () => {
     vi.mocked(workspaceService.getById).mockResolvedValueOnce({
       id: 'ws-1',

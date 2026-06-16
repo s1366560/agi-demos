@@ -74,6 +74,7 @@ const hasLoadedReplies = (loadedReplyPostIds: Record<string, boolean>, postId: s
   loadedReplyPostIds[postId] === true;
 
 let workspaceSurfaceRequestSequence = 0;
+let workspaceListRequestSequence = 0;
 
 const mergeReplies = (
   fetchedReplies: BlackboardReply[],
@@ -609,9 +610,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       fileRefreshCounters: {},
 
       loadWorkspaces: async (tenantId, projectId) => {
+        const requestId = ++workspaceListRequestSequence;
         set({ isLoading: true, error: null });
         try {
           const workspaces = await workspaceService.listByProject(tenantId, projectId);
+          if (workspaceListRequestSequence !== requestId) {
+            return;
+          }
           const previousWorkspace = get().currentWorkspace;
           const currentWorkspace = selectScopedWorkspace(
             workspaces,
@@ -627,6 +632,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             isLoading: false,
           });
         } catch (error) {
+          if (workspaceListRequestSequence !== requestId) {
+            return;
+          }
           set({ error: getErrorMessage(error), isLoading: false });
           throw error;
         }
