@@ -5,7 +5,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,11 +42,11 @@ def get_message_service(
     async def _publish_event(workspace_id: str, event_name: str, payload: dict[str, Any]) -> None:
         from src.domain.events.types import AgentEventType
         from src.infrastructure.adapters.primary.web.routers.workspace_events import (
-            publish_workspace_event,
+            publish_workspace_event_with_retry,
         )
 
         event_type = AgentEventType(event_name)
-        await publish_workspace_event(
+        await publish_workspace_event_with_retry(
             redis_client,
             workspace_id=workspace_id,
             event_type=event_type,
@@ -64,6 +64,20 @@ def get_message_service(
             workspace_event_publisher=_publish_event if redis_client is not None else None,
         ),
     )
+
+
+async def _publish_pending_chat_events_after_failure(
+    service: WorkspaceMessageService,
+    *,
+    workspace_id: str,
+) -> None:
+    try:
+        await service.publish_pending_events()
+    except Exception:
+        logger.exception(
+            "Failed to publish workspace chat events after background retry",
+            extra={"workspace_id": workspace_id},
+        )
 
 
 def _map_error(exc: Exception) -> HTTPException:
@@ -131,13 +145,23 @@ async def send_message(
     workspace_id: str,
     payload: SendMessageRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    await require_workspace_access(db, current_user, tenant_id, project_id, workspace_id)
+    await require_workspace_access(
+        db,
+        current_user,
+        tenant_id,
+        project_id,
+        workspace_id,
+        require_editor=True,
+    )
     service = get_message_service(request, db)
     try:
         sender_type = MessageSenderType(payload.sender_type)
+        if sender_type != MessageSenderType.HUMAN:
+            raise ValueError("sender_type must be human")
         message = await service.send_message(
             workspace_id=workspace_id,
             sender_id=current_user.id,
@@ -154,6 +178,11 @@ async def send_message(
             logger.exception(
                 "Failed to publish workspace chat events",
                 extra={"workspace_id": workspace_id},
+            )
+            background_tasks.add_task(
+                _publish_pending_chat_events_after_failure,
+                service,
+                workspace_id=workspace_id,
             )
 
         if message.mentions:
@@ -199,6 +228,9 @@ def _fire_mention_routing(
     from src.infrastructure.adapters.secondary.persistence.sql_workspace_message_repository import (
         SqlWorkspaceMessageRepository,
     )
+    from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
+        SqlWorkspaceRepository,
+    )
 
     container = request.app.state.container if request is not None else get_app_container()
     if container is None:
@@ -208,11 +240,11 @@ def _fire_mention_routing(
     async def _publish_event(ws_id: str, event_name: str, event_payload: dict[str, Any]) -> None:
         from src.domain.events.types import AgentEventType
         from src.infrastructure.adapters.primary.web.routers.workspace_events import (
-            publish_workspace_event,
+            publish_workspace_event_with_retry,
         )
 
         event_type = AgentEventType(event_name)
-        await publish_workspace_event(
+        await publish_workspace_event_with_retry(
             redis_client,
             workspace_id=ws_id,
             event_type=event_type,
@@ -224,8 +256,14 @@ def _fire_mention_routing(
     def agent_repo_factory(db: AsyncSession) -> SqlWorkspaceAgentRepository:
         return SqlWorkspaceAgentRepository(db)
 
+    def member_repo_factory(db: AsyncSession) -> SqlWorkspaceMemberRepository:
+        return SqlWorkspaceMemberRepository(db)
+
     def conversation_repo_factory(db: AsyncSession) -> SqlConversationRepository:
         return SqlConversationRepository(db)
+
+    def workspace_repo_factory(db: AsyncSession) -> SqlWorkspaceRepository:
+        return SqlWorkspaceRepository(db)
 
     def agent_service_factory(db: AsyncSession, llm: object) -> object:
         return container.with_db(db).agent_service(cast(Any, llm))
@@ -245,10 +283,12 @@ def _fire_mention_routing(
 
     mention_router = WorkspaceMentionRouter(
         agent_repo_factory=agent_repo_factory,
+        member_repo_factory=member_repo_factory,
         agent_service_factory=agent_service_factory,
         message_service_factory=message_service_factory,
         conversation_repo_factory=conversation_repo_factory,
         db_session_factory=async_session_factory,
+        workspace_repo_factory=workspace_repo_factory,
     )
 
     mention_router.fire_and_forget(

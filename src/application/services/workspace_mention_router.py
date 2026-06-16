@@ -16,6 +16,9 @@ from src.domain.model.workspace.workspace_message import (
 from src.domain.ports.repositories.workspace.workspace_agent_repository import (
     WorkspaceAgentRepository,
 )
+from src.domain.ports.repositories.workspace.workspace_member_repository import (
+    WorkspaceMemberRepository,
+)
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_task_repository import (
     SqlWorkspaceTaskRepository,
 )
@@ -159,15 +162,19 @@ class WorkspaceMentionRouter:
     def __init__(
         self,
         agent_repo_factory: Callable[..., WorkspaceAgentRepository],
+        member_repo_factory: Callable[..., WorkspaceMemberRepository],
         agent_service_factory: Callable[..., Any],
         message_service_factory: Callable[..., Any],
         conversation_repo_factory: Callable[..., Any],
         db_session_factory: Callable[..., Any],
+        workspace_repo_factory: Callable[..., Any] | None = None,
     ) -> None:
         self._agent_repo_factory = agent_repo_factory
+        self._member_repo_factory = member_repo_factory
         self._agent_service_factory = agent_service_factory
         self._message_service_factory = message_service_factory
         self._conversation_repo_factory = conversation_repo_factory
+        self._workspace_repo_factory = workspace_repo_factory or conversation_repo_factory
         self._db_session_factory = db_session_factory
 
     def fire_and_forget(
@@ -226,6 +233,12 @@ class WorkspaceMentionRouter:
     ) -> None:
         """Route mentions to agents sequentially."""
         if not message.mentions:
+            return
+
+        if not await self._sender_is_workspace_member(
+            workspace_id=workspace_id,
+            user_id=user_id,
+        ):
             return
 
         async with self._db_session_factory() as db:
@@ -433,6 +446,12 @@ class WorkspaceMentionRouter:
         """Post an agent's response as a workspace chat message."""
         agent_name = agent.display_name or agent.agent_id
 
+        if not await self._sender_is_workspace_member(
+            workspace_id=workspace_id,
+            user_id=user_id,
+        ):
+            return
+
         async with self._db_session_factory() as db:
             message_service = self._message_service_factory(db, event_publisher)
             agent_message = await message_service.send_message(
@@ -493,6 +512,12 @@ class WorkspaceMentionRouter:
         user_id: str,
         event_publisher: (Callable[[str, str, dict[str, Any]], Awaitable[None]] | None) = None,
     ) -> None:
+        if not await self._sender_is_workspace_member(
+            workspace_id=workspace_id,
+            user_id=user_id,
+        ):
+            return
+
         for mentioned_user_id in message.mentions:
             async with self._db_session_factory() as db:
                 agent_repo = self._agent_repo_factory(db)
@@ -527,7 +552,7 @@ class WorkspaceMentionRouter:
         chain_depth: int = 0,
     ) -> None:
         async with self._db_session_factory() as db:
-            workspace_repo = self._conversation_repo_factory(db)
+            workspace_repo = self._workspace_repo_factory(db)
             workspace = await workspace_repo.find_by_id(workspace_id)
 
             if workspace:
@@ -568,6 +593,26 @@ class WorkspaceMentionRouter:
                 f"workspace:{workspace_id}:agent:{agent_id}{scope_suffix}",
             )
         )
+
+    async def _sender_is_workspace_member(self, *, workspace_id: str, user_id: str) -> bool:
+        try:
+            async with self._db_session_factory() as db:
+                member_repo = self._member_repo_factory(db)
+                member = await member_repo.find_by_workspace_and_user(workspace_id, user_id)
+        except Exception:
+            logger.exception(
+                "Failed to revalidate workspace mention routing membership",
+                extra={"workspace_id": workspace_id, "user_id": user_id},
+            )
+            return False
+
+        if member is None:
+            logger.warning(
+                "Skipping workspace mention routing because sender is no longer a member",
+                extra={"workspace_id": workspace_id, "user_id": user_id},
+            )
+            return False
+        return True
 
     async def _ensure_agent_conversation(
         self,
