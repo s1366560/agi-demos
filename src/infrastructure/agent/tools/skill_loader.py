@@ -269,6 +269,7 @@ async def skill_loader_tool(  # noqa: C901
         content: str | None = await deps.skill_service.load_skill_content(
             tenant_id=deps.tenant_id,
             skill_name=skill_name,
+            project_id=deps.project_id,
         )
         resolved_file_path = cached_skill.file_path if cached_skill else None
 
@@ -315,6 +316,7 @@ async def skill_loader_tool(  # noqa: C901
                 tenant_id=deps.tenant_id,
                 skill_name=skill_name,
                 success=True,
+                project_id=deps.project_id,
             )
         except Exception as exc:
             logger.warning("Failed to record skill usage: %s", exc)

@@ -332,7 +332,23 @@ class SkillReverseSync:
         skill_md_content: str,
     ) -> Skill:
         """Create or update a skill in the database."""
-        existing = await self._skill_repo.get_by_name(tenant_id, skill_name)
+        existing: Skill | None = None
+        if project_id:
+            project_skills = await self._skill_repo.list_by_project(
+                project_id=project_id,
+                tenant_id=tenant_id,
+                scope=SkillScope.PROJECT,
+            )
+            existing = next(
+                (skill for skill in project_skills if skill.name == skill_name),
+                None,
+            )
+        if existing is None and project_id is None:
+            existing = await self._skill_repo.get_by_name(
+                tenant_id,
+                skill_name,
+                scope=SkillScope.TENANT,
+            )
 
         if existing:
             # Update existing skill

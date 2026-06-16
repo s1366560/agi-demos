@@ -677,6 +677,7 @@ class TestSkillLoaderTool:
         mock_skill_service.load_skill_content.assert_called_once_with(
             tenant_id="test-tenant",
             skill_name="my-skill",
+            project_id="test-project",
         )
         mock_skill_service.list_available_skills.assert_awaited_once()
         assert mock_skill_service.list_available_skills.await_args.kwargs["skip_database"] is False

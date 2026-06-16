@@ -158,6 +158,49 @@ class TestSqlSkillRepositoryFind:
         assert retrieved.scope == SkillScope.PROJECT
 
     @pytest.mark.asyncio
+    async def test_get_by_name_prefers_tenant_over_system_scope(
+        self,
+        v2_skill_repo: SqlSkillRepository,
+    ):
+        """Unscoped name lookup should not fail when tenant and system copies coexist."""
+        system_skill = create_test_skill(
+            "skill-name-system",
+            name="shared-name",
+            scope=SkillScope.SYSTEM,
+        )
+        system_skill.is_system_skill = True
+        tenant_skill = create_test_skill(
+            "skill-name-tenant",
+            name="shared-name",
+            scope=SkillScope.TENANT,
+        )
+        await v2_skill_repo.create(system_skill)
+        await v2_skill_repo.create(tenant_skill)
+
+        retrieved = await v2_skill_repo.get_by_name("tenant-1", "shared-name")
+
+        assert retrieved is not None
+        assert retrieved.id == "skill-name-tenant"
+
+    @pytest.mark.asyncio
+    async def test_get_by_name_ignores_project_scope_without_project_context(
+        self,
+        v2_skill_repo: SqlSkillRepository,
+    ):
+        """Unscoped name lookup should not leak project-specific skills."""
+        project_skill = create_test_skill(
+            "skill-name-project",
+            name="project-only",
+            scope=SkillScope.PROJECT,
+            project_id="project-1",
+        )
+        await v2_skill_repo.create(project_skill)
+
+        retrieved = await v2_skill_repo.get_by_name("tenant-1", "project-only")
+
+        assert retrieved is None
+
+    @pytest.mark.asyncio
     async def test_get_by_name_not_found(self, v2_skill_repo: SqlSkillRepository):
         """Test getting a non-existent skill by name returns None."""
         retrieved = await v2_skill_repo.get_by_name("tenant-1", "nonexistent")

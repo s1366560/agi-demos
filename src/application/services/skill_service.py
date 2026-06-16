@@ -419,10 +419,74 @@ class SkillService:
             version_label=skill.version_label,
         )
 
+    async def _get_filesystem_skill_by_name(
+        self,
+        skill_name: str,
+        project_id: str | None = None,
+    ) -> Skill | None:
+        """Resolve a cached filesystem skill using list_available_skills priority."""
+        if not self._fs_loader:
+            return None
+
+        if not self._initialized:
+            await self.initialize()
+
+        candidates = [
+            skill
+            for skill in self._fs_loader.get_cached_skills()
+            if skill.name == skill_name
+        ]
+        if project_id:
+            for skill in candidates:
+                if skill.scope == SkillScope.PROJECT and skill.project_id == project_id:
+                    return skill
+
+        for skill in candidates:
+            if skill.scope == SkillScope.TENANT:
+                return skill
+
+        for skill in candidates:
+            if skill.scope == SkillScope.SYSTEM:
+                return skill
+
+        return None
+
+    async def _get_persisted_skill_by_name(
+        self,
+        tenant_id: str,
+        skill_name: str,
+        project_id: str | None = None,
+    ) -> Skill | None:
+        """Resolve a persisted skill by scope priority without leaking project skills."""
+        if project_id:
+            project_skills = await self._skill_repo.list_by_project(
+                project_id=project_id,
+                tenant_id=tenant_id,
+                scope=SkillScope.PROJECT,
+            )
+            for skill in project_skills:
+                if skill.name == skill_name:
+                    return skill
+
+        tenant_skill = await self._skill_repo.get_by_name(
+            tenant_id,
+            skill_name,
+            scope=SkillScope.TENANT,
+        )
+        if tenant_skill:
+            return tenant_skill
+
+        return await self._skill_repo.get_by_name(
+            tenant_id,
+            skill_name,
+            scope=SkillScope.SYSTEM,
+        )
+
     async def get_skill_by_name(
         self,
         tenant_id: str,
         skill_name: str,
+        project_id: str | None = None,
     ) -> Skill | None:
         """
         Get a skill by name.
@@ -430,26 +494,22 @@ class SkillService:
         Args:
             tenant_id: Tenant ID
             skill_name: Name of the skill
+            project_id: Optional project ID for project-scoped resolution
 
         Returns:
             Skill entity or None if not found
         """
-        # Check file system first
-        if self._fs_loader:
-            if not self._initialized:
-                await self.initialize()
+        fs_skill = await self._get_filesystem_skill_by_name(skill_name, project_id)
+        if fs_skill:
+            return fs_skill
 
-            for skill in self._fs_loader.get_cached_skills():
-                if skill.name == skill_name:
-                    return skill
-
-        # Fall back to database
-        return await self._skill_repo.get_by_name(tenant_id, skill_name)
+        return await self._get_persisted_skill_by_name(tenant_id, skill_name, project_id)
 
     async def load_skill_content(
         self,
         tenant_id: str,
         skill_name: str,
+        project_id: str | None = None,
     ) -> str | None:
         """
         Load the full content of a skill (Tier 3).
@@ -457,31 +517,23 @@ class SkillService:
         Args:
             tenant_id: Tenant ID
             skill_name: Name of the skill
+            project_id: Optional project ID for project-scoped resolution
 
         Returns:
             Full markdown content or None if not found
         """
-        # Try file system first
-        if self._fs_loader:
-            content = await self._fs_loader.load_skill_content(skill_name)
-            if content:
-                return content
-
-        # Fall back to database
-        skill = await self._skill_repo.get_by_name(tenant_id, skill_name)
-        if skill:
-            return skill.full_content
-
-        return None
+        skill = await self.get_skill_by_name(tenant_id, skill_name, project_id=project_id)
+        return skill.full_content if skill else None
 
     async def record_skill_usage(
         self,
         tenant_id: str,
         skill_name: str,
         success: bool = True,
+        project_id: str | None = None,
     ) -> None:
         """Record best-effort usage statistics for a persisted skill."""
-        skill = await self._skill_repo.get_by_name(tenant_id, skill_name)
+        skill = await self._get_persisted_skill_by_name(tenant_id, skill_name, project_id)
         if not skill:
             logger.debug("Skipping usage update for unpersisted skill '%s'", skill_name)
             return

@@ -151,21 +151,68 @@ class TestSkillService:
         self, skill_service, mock_skill_repository, sample_skill
     ):
         """Test get_skill_by_name returns skill when found."""
-        mock_skill_repository.get_by_name.return_value = sample_skill
+        mock_skill_repository.get_by_name.side_effect = [sample_skill]
 
         skill = await skill_service.get_skill_by_name("tenant-1", "test-skill")
 
         assert skill is not None
         assert skill.name == "test-skill"
+        mock_skill_repository.get_by_name.assert_called_once_with(
+            "tenant-1",
+            "test-skill",
+            scope=SkillScope.TENANT,
+        )
 
     @pytest.mark.unit
     async def test_get_skill_by_name_not_found(self, skill_service, mock_skill_repository):
         """Test get_skill_by_name returns None when not found."""
-        mock_skill_repository.get_by_name.return_value = None
+        mock_skill_repository.get_by_name.side_effect = [None, None]
 
         skill = await skill_service.get_skill_by_name("tenant-1", "nonexistent")
 
         assert skill is None
+        assert mock_skill_repository.get_by_name.await_count == 2
+
+    @pytest.mark.unit
+    async def test_get_skill_by_name_prefers_project_scope(
+        self, skill_service, mock_skill_repository
+    ):
+        """Project context resolves same-name skills before tenant/system scopes."""
+        project_skill = Skill(
+            id="project-skill-1",
+            name="shared-skill",
+            description="A project skill",
+            scope=SkillScope.PROJECT,
+            status=SkillStatus.ACTIVE,
+            tenant_id="tenant-1",
+            project_id="project-1",
+            source=SkillSource.DATABASE,
+            tools=["read"],
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        mock_skill_repository.list_by_project.return_value = [project_skill]
+
+        skill = await skill_service.get_skill_by_name(
+            "tenant-1",
+            "shared-skill",
+            project_id="project-1",
+        )
+
+        assert skill == project_skill
+        mock_skill_repository.get_by_name.assert_not_called()
+
+    @pytest.mark.unit
+    async def test_get_skill_by_name_falls_back_to_system_scope(
+        self, skill_service, mock_skill_repository, sample_system_skill
+    ):
+        """System-scope DB copies remain loadable when no tenant skill exists."""
+        mock_skill_repository.get_by_name.side_effect = [None, sample_system_skill]
+
+        skill = await skill_service.get_skill_by_name("tenant-1", "system-skill")
+
+        assert skill == sample_system_skill
+        assert mock_skill_repository.get_by_name.await_count == 2
 
     @pytest.mark.unit
     async def test_record_skill_usage_updates_success_metadata(
@@ -182,7 +229,11 @@ class TestSkillService:
 
         await skill_service.record_skill_usage("tenant-1", "test-skill", success=True)
 
-        mock_skill_repository.get_by_name.assert_called_once_with("tenant-1", "test-skill")
+        mock_skill_repository.get_by_name.assert_called_once_with(
+            "tenant-1",
+            "test-skill",
+            scope=SkillScope.TENANT,
+        )
         mock_skill_repository.update.assert_called_once_with(sample_skill)
         assert sample_skill.metadata == {
             "usage_count": 3,
@@ -218,8 +269,38 @@ class TestSkillService:
 
         await skill_service.record_skill_usage("tenant-1", "system-skill", success=True)
 
-        mock_skill_repository.get_by_name.assert_called_once_with("tenant-1", "system-skill")
+        assert mock_skill_repository.get_by_name.await_count == 2
         mock_skill_repository.update.assert_not_called()
+
+    @pytest.mark.unit
+    async def test_record_skill_usage_updates_project_skill(
+        self, skill_service, mock_skill_repository
+    ):
+        """Usage accounting follows project skill resolution when project context exists."""
+        project_skill = Skill(
+            id="project-skill-1",
+            name="shared-skill",
+            description="A project skill",
+            scope=SkillScope.PROJECT,
+            status=SkillStatus.ACTIVE,
+            tenant_id="tenant-1",
+            project_id="project-1",
+            source=SkillSource.DATABASE,
+            tools=["read"],
+            metadata={"usage_count": 1},
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        mock_skill_repository.list_by_project.return_value = [project_skill]
+
+        await skill_service.record_skill_usage(
+            "tenant-1",
+            "shared-skill",
+            project_id="project-1",
+        )
+
+        mock_skill_repository.update.assert_called_once_with(project_skill)
+        assert project_skill.metadata["usage_count"] == 2
 
     @pytest.mark.unit
     async def test_create_skill_success(self, skill_service, mock_skill_repository, sample_skill):

@@ -24,7 +24,7 @@ Key Features:
 import logging
 from typing import Any, cast
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -115,12 +115,25 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
 
         if scope:
             query = query.where(DBSkill.scope == scope.value)
+        else:
+            query = (
+                query.where(DBSkill.project_id.is_(None))
+                .order_by(
+                    case(
+                        (DBSkill.scope == SkillScope.TENANT.value, 0),
+                        (DBSkill.scope == SkillScope.SYSTEM.value, 1),
+                        else_=2,
+                    ),
+                    DBSkill.created_at.desc(),
+                )
+                .limit(1)
+            )
 
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(query.execution_options(populate_existing=True)))
         )
 
-        db_skill = result.scalar_one_or_none()
+        db_skill = result.scalars().first() if scope is None else result.scalar_one_or_none()
 
         return self._to_domain(db_skill)
 

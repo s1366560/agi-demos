@@ -6,7 +6,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.application.services.skill_reverse_sync import SkillReverseSync
+from src.domain.model.agent.skill import Skill, SkillScope
+from src.domain.model.agent.skill.skill_source import SkillSource
 from src.domain.model.agent.skill.skill_version import SkillVersion
+from src.infrastructure.skill.markdown_parser import MarkdownParser
 
 SAMPLE_SKILL_MD = """---
 name: test-skill
@@ -109,6 +112,7 @@ class TestSkillReverseSync:
         ]
 
         skill_repo.get_by_name.return_value = None
+        skill_repo.list_by_project.return_value = []
         skill_repo.create.return_value = None
         skill_repo.update.return_value = None
         version_repo.get_max_version_number.return_value = 0
@@ -126,6 +130,63 @@ class TestSkillReverseSync:
         assert result["version_label"] == "1.0.0"
         skill_repo.create.assert_called_once()
         version_repo.create.assert_called_once()
+
+    async def test_upsert_skill_updates_existing_project_skill(self):
+        service, skill_repo, _version_repo = self._make_service()
+        parsed = MarkdownParser().parse(SAMPLE_SKILL_MD)
+        existing = Skill(
+            id="skill-project-1",
+            tenant_id="t1",
+            project_id="project-1",
+            name="test-skill",
+            description="Old description",
+            tools=["terminal"],
+            source=SkillSource.DATABASE,
+            scope=SkillScope.PROJECT,
+        )
+        skill_repo.list_by_project.return_value = [existing]
+
+        result = await service._upsert_skill(
+            skill_name="test-skill",
+            parsed=parsed,
+            tenant_id="t1",
+            project_id="project-1",
+            skill_md_content=SAMPLE_SKILL_MD,
+        )
+
+        assert result is existing
+        assert existing.full_content == SAMPLE_SKILL_MD
+        skill_repo.update.assert_called_once_with(existing)
+        skill_repo.create.assert_not_called()
+        skill_repo.get_by_name.assert_not_called()
+
+    async def test_upsert_skill_creates_project_skill_when_only_tenant_exists(self):
+        service, skill_repo, _version_repo = self._make_service()
+        parsed = MarkdownParser().parse(SAMPLE_SKILL_MD)
+        tenant_skill = Skill(
+            id="skill-tenant-1",
+            tenant_id="t1",
+            name="test-skill",
+            description="Tenant description",
+            tools=["terminal"],
+            source=SkillSource.DATABASE,
+            scope=SkillScope.TENANT,
+        )
+        skill_repo.list_by_project.return_value = []
+        skill_repo.get_by_name.return_value = tenant_skill
+
+        result = await service._upsert_skill(
+            skill_name="test-skill",
+            parsed=parsed,
+            tenant_id="t1",
+            project_id="project-1",
+            skill_md_content=SAMPLE_SKILL_MD,
+        )
+
+        assert result.scope == SkillScope.PROJECT
+        assert result.project_id == "project-1"
+        skill_repo.get_by_name.assert_not_called()
+        skill_repo.create.assert_called_once_with(result)
 
     async def test_rollback_version_not_found(self):
         service, _skill_repo, version_repo = self._make_service()
