@@ -86,6 +86,16 @@ function getStageCountsText(t: TFunction, stage: SkillEvolutionStageResponse): s
   });
 }
 
+function getSkillSummaryKey(summary: SkillEvolutionSkillSummaryResponse): string {
+  return summary.skill_id ?? `${summary.skill_name}:${summary.project_id ?? 'tenant'}`;
+}
+
+function getSkillScopeText(t: TFunction, projectId: string | null): string {
+  return projectId
+    ? t('tenant.skillEvolution.scope.project', { projectId })
+    : t('tenant.skillEvolution.scope.tenant');
+}
+
 function StatusPill({ children, tone = 'neutral' }: { children: ReactNode; tone?: string }) {
   const toneClass =
     tone === 'success'
@@ -293,7 +303,6 @@ function SkillRow({
   tenantBasePath: string;
 }) {
   const { t } = useTranslation();
-  const skillDetailId = summary.skill_id ?? encodeURIComponent(summary.skill_name);
   const successRate = summary.session_count
     ? Math.round((summary.success_count / summary.session_count) * 100)
     : 0;
@@ -336,13 +345,22 @@ function SkillRow({
   return (
     <tr className="border-b border-[oklch(0.9_0.006_255)] last:border-b-0 dark:border-[oklch(0.28_0.006_255)]">
       <td className="max-w-[220px] px-4 py-3 align-top">
-        <Link
-          to={`${tenantBasePath}/skills/${skillDetailId}`}
-          className={`block min-w-0 truncate text-sm font-semibold text-[oklch(0.42_0.15_255)] underline-offset-4 hover:text-[oklch(0.35_0.18_255)] hover:underline dark:text-[oklch(0.76_0.12_255)] dark:hover:text-[oklch(0.84_0.13_255)]`}
-        >
-          {summary.skill_name}
-        </Link>
+        {summary.skill_id ? (
+          <Link
+            to={`${tenantBasePath}/skills/${encodeURIComponent(summary.skill_id)}`}
+            className={`block min-w-0 truncate text-sm font-semibold text-[oklch(0.42_0.15_255)] underline-offset-4 hover:text-[oklch(0.35_0.18_255)] hover:underline dark:text-[oklch(0.76_0.12_255)] dark:hover:text-[oklch(0.84_0.13_255)]`}
+          >
+            {summary.skill_name}
+          </Link>
+        ) : (
+          <span className={`block min-w-0 truncate text-sm font-semibold ${pageText}`}>
+            {summary.skill_name}
+          </span>
+        )}
         <div className={`mt-1 text-xs ${mutedText}`}>{formatDate(summary.latest_session_at)}</div>
+        <div className={`mt-1 truncate text-xs ${mutedText}`}>
+          {getSkillScopeText(t, summary.project_id)}
+        </div>
       </td>
       <td className={`px-4 py-3 text-sm ${pageText}`}>{formatNumber(summary.session_count)}</td>
       <td className="px-4 py-3">
@@ -387,6 +405,7 @@ function RecentSessionRow({ session }: { session: SkillEvolutionSessionResponse 
               : 'tenant.skillEvolution.status.queued'
           )}
         </StatusPill>
+        <StatusPill>{getSkillScopeText(t, session.project_id)}</StatusPill>
       </div>
       <div className={`mt-2 line-clamp-2 text-sm ${mutedText}`}>
         {session.user_query || session.summary || session.conversation_id}
@@ -437,6 +456,7 @@ function RecentJobRow({
             <StatusPill tone={tone}>
               {translateEnum(t, 'tenant.skillEvolution.jobStatuses', job.status)}
             </StatusPill>
+            <StatusPill>{getSkillScopeText(t, job.project_id)}</StatusPill>
           </div>
         </div>
         {actionable ? (
@@ -498,6 +518,7 @@ export const SkillEvolution: FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [policyDraft, setPolicyDraft] = useState<SkillEvolutionConfigResponse | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadOverview = useCallback(async () => {
     setIsLoading(true);
@@ -513,8 +534,11 @@ export const SkillEvolution: FC = () => {
       setOverview(data);
       setPolicyDraft(config);
       setLastUpdatedAt(new Date());
+      setLoadError(null);
     } catch {
-      message?.error(t('tenant.skillEvolution.loadFailed'));
+      const errorMessage = t('tenant.skillEvolution.loadFailed');
+      setLoadError(errorMessage);
+      message?.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -648,8 +672,35 @@ export const SkillEvolution: FC = () => {
 
   if (!overview) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <LazyEmpty description={t('tenant.skillEvolution.empty')} />
+      <div className="flex h-full items-center justify-center bg-[oklch(0.985_0.003_255)] px-4 py-6 dark:bg-[oklch(0.13_0.006_255)]">
+        <div className={`w-full max-w-xl rounded-[6px] p-6 ${surface}`}>
+          {loadError ? (
+            <div role="alert" className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] bg-[oklch(0.97_0.045_35)] text-[oklch(0.48_0.14_35)] dark:bg-[oklch(0.25_0.05_35)] dark:text-[oklch(0.82_0.11_35)]">
+                <AlertTriangle size={17} />
+              </div>
+              <div className="min-w-0">
+                <div className={`text-sm font-semibold ${pageText}`}>{loadError}</div>
+                <div className={`mt-1 text-sm ${mutedText}`}>
+                  {t('tenant.skillEvolution.loadRetryHint')}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <LazyEmpty description={t('tenant.skillEvolution.empty')} />
+          )}
+          <div className="mt-5 flex justify-end">
+            <button
+              type="button"
+              onClick={() => void loadOverview()}
+              disabled={isLoading}
+              className={`${actionButton} disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              <RefreshCw size={15} />
+              {isLoading ? t('common.loading') : t('common.retry')}
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -711,6 +762,35 @@ export const SkillEvolution: FC = () => {
             </button>
           </div>
         </header>
+
+        {loadError ? (
+          <section
+            role="alert"
+            className="flex flex-col gap-3 rounded-[6px] border border-[oklch(0.82_0.12_35)] bg-[oklch(0.98_0.035_35)] p-4 dark:border-[oklch(0.46_0.11_35)] dark:bg-[oklch(0.22_0.04_35)] sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="flex min-w-0 items-start gap-3">
+              <AlertTriangle
+                size={17}
+                className="mt-0.5 shrink-0 text-[oklch(0.5_0.14_35)] dark:text-[oklch(0.82_0.11_35)]"
+              />
+              <div>
+                <div className={`text-sm font-semibold ${pageText}`}>{loadError}</div>
+                <div className={`mt-1 text-sm ${mutedText}`}>
+                  {t('tenant.skillEvolution.staleDataHint')}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadOverview()}
+              disabled={isLoading}
+              className={`${actionButton} shrink-0 bg-[oklch(1_0_0_/_0.45)] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[oklch(0.18_0.006_255_/_0.5)]`}
+            >
+              <RefreshCw size={15} />
+              {isLoading ? t('common.loading') : t('common.retry')}
+            </button>
+          </section>
+        ) : null}
 
         <section
           className={`rounded-[6px] border p-4 ${
@@ -885,9 +965,7 @@ export const SkillEvolution: FC = () => {
                   <span className={pageText}>{t('tenant.skillEvolution.policy.autoApply')}</span>
                 </label>
                 <label className="flex flex-col gap-1 text-xs font-medium">
-                  <span className={mutedText}>
-                    {t('tenant.skillEvolution.policy.publishMode')}
-                  </span>
+                  <span className={mutedText}>{t('tenant.skillEvolution.policy.publishMode')}</span>
                   <select
                     value={policyDraft.publish_mode}
                     onChange={(event) => {
@@ -1078,46 +1156,54 @@ export const SkillEvolution: FC = () => {
                     {t('tenant.skillEvolution.skills.subtitle', { count: activeSkills.length })}
                   </p>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] text-left">
-                    <thead>
-                      <tr className={`border-y border-[oklch(0.9_0.006_255)] text-xs ${mutedText}`}>
-                        <th className="px-4 py-3 font-medium">
-                          {t('tenant.skillEvolution.table.skill')}
-                        </th>
-                        <th className="px-4 py-3 font-medium">
-                          {t('tenant.skillEvolution.table.sessions')}
-                        </th>
-                        <th className="px-4 py-3 font-medium">
-                          {t('tenant.skillEvolution.table.success')}
-                        </th>
-                        <th className="px-4 py-3 font-medium">
-                          {t('tenant.skillEvolution.table.score')}
-                        </th>
-                        <th className="px-4 py-3 font-medium">
-                          {t('tenant.skillEvolution.table.queued')}
-                        </th>
-                        <th className="px-4 py-3 font-medium">
-                          {t('tenant.skillEvolution.table.jobs')}
-                        </th>
-                        <th className="px-4 py-3 font-medium">
-                          {t('tenant.skillEvolution.table.eligibility')}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeSkills.map((summary) => (
-                        <SkillRow
-                          key={summary.skill_name}
-                          summary={summary}
-                          minSessions={trigger.min_sessions_per_skill}
-                          minAvgScore={trigger.min_avg_score}
-                          tenantBasePath={tenantBasePath}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {activeSkills.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[900px] text-left">
+                      <thead>
+                        <tr
+                          className={`border-y border-[oklch(0.9_0.006_255)] text-xs ${mutedText}`}
+                        >
+                          <th className="px-4 py-3 font-medium">
+                            {t('tenant.skillEvolution.table.skill')}
+                          </th>
+                          <th className="px-4 py-3 font-medium">
+                            {t('tenant.skillEvolution.table.sessions')}
+                          </th>
+                          <th className="px-4 py-3 font-medium">
+                            {t('tenant.skillEvolution.table.success')}
+                          </th>
+                          <th className="px-4 py-3 font-medium">
+                            {t('tenant.skillEvolution.table.score')}
+                          </th>
+                          <th className="px-4 py-3 font-medium">
+                            {t('tenant.skillEvolution.table.queued')}
+                          </th>
+                          <th className="px-4 py-3 font-medium">
+                            {t('tenant.skillEvolution.table.jobs')}
+                          </th>
+                          <th className="px-4 py-3 font-medium">
+                            {t('tenant.skillEvolution.table.eligibility')}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeSkills.map((summary) => (
+                          <SkillRow
+                            key={getSkillSummaryKey(summary)}
+                            summary={summary}
+                            minSessions={trigger.min_sessions_per_skill}
+                            minAvgScore={trigger.min_avg_score}
+                            tenantBasePath={tenantBasePath}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-6">
+                    <LazyEmpty description={t('tenant.skillEvolution.skills.empty')} />
+                  </div>
+                )}
               </>
             ) : null}
 

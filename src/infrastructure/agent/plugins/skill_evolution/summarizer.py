@@ -257,14 +257,14 @@ def _trajectory_from_events(
                 tool_call_count += 1
         elif event_type == "observe":
             tool_name = str(data.get("tool_name") or "")
-            content = data.get("result", data.get("observation", ""))
+            observation_content = data.get("result", data.get("observation", ""))
             status = str(data.get("status") or "")
             steps.append(
                 {
                     "type": "tool_result",
                     "name": tool_name,
                     "success": not bool(data.get("error")) and status != "failed",
-                    "content": str(content)[:2000],
+                    "content": str(observation_content)[:2000],
                     "error": data.get("error"),
                 }
             )

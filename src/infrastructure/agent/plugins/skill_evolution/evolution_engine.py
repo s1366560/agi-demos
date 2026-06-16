@@ -120,6 +120,8 @@ class EvolutionEngine:
                     repo,
                     tenant_id=tenant_id,
                     skill_name=group.skill_name,
+                    project_id=group.project_id,
+                    filter_project_id=True,
                     session_ids=session_ids,
                 )
                 if existing_job is not None:
@@ -170,7 +172,10 @@ class EvolutionEngine:
         skill_repository: SkillRepositoryPort | None = None,
     ) -> SkillEvolutionJob | None:
         skill = await self._load_skill(
-            group.skill_name, tenant_id=tenant_id, skill_repository=skill_repository
+            group.skill_name,
+            tenant_id=tenant_id,
+            project_id=group.project_id,
+            skill_repository=skill_repository,
         )
         current_content = (
             skill.full_content
@@ -222,6 +227,7 @@ class EvolutionEngine:
             id=f"evj-{uuid.uuid4().hex[:16]}",
             skill_name=group.skill_name,
             tenant_id=tenant_id,
+            project_id=group.project_id,
             action=action,
             candidate_content=candidate_content,
             rationale=rationale,
@@ -251,7 +257,7 @@ class EvolutionEngine:
             version_id = await self._merger.apply_evolution(
                 job,
                 tenant_id=tenant_id,
-                project_id=project_id,
+                project_id=job.project_id or project_id,
                 skill_repository=skill_repository,
                 skill_version_repository=skill_version_repository,
             )
@@ -265,9 +271,24 @@ class EvolutionEngine:
         skill_name: str,
         *,
         tenant_id: str,
+        project_id: str | None = None,
         skill_repository: SkillRepositoryPort | None = None,
     ) -> Any:  # noqa: ANN401
         if skill_repository is not None:
+            if project_id is not None:
+                list_by_project = getattr(skill_repository, "list_by_project", None)
+                if callable(list_by_project):
+                    typed_list_by_project = cast(
+                        Callable[..., Awaitable[list[Any]]],
+                        list_by_project,
+                    )
+                    skills = await typed_list_by_project(
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                    )
+                    for skill in skills:
+                        if skill.name == skill_name:
+                            return skill
             skill = await skill_repository.get_by_name(tenant_id, skill_name)
             if skill is not None:
                 return skill
@@ -334,6 +355,8 @@ async def _get_existing_job_for_sessions(
     *,
     tenant_id: str,
     skill_name: str,
+    project_id: str | None = None,
+    filter_project_id: bool = False,
     session_ids: list[str],
 ) -> SkillEvolutionJob | None:
     method = getattr(repo, "get_job_for_sessions", None)
@@ -346,6 +369,8 @@ async def _get_existing_job_for_sessions(
             return await typed_method(
                 tenant_id=tenant_id,
                 skill_name=skill_name,
+                project_id=project_id,
+                filter_project_id=filter_project_id,
                 session_ids=session_ids,
                 excluded_statuses={"rejected"},
             )
@@ -355,12 +380,15 @@ async def _get_existing_job_for_sessions(
     if await repo.has_job_for_sessions(
         tenant_id=tenant_id,
         skill_name=skill_name,
+        project_id=project_id,
+        filter_project_id=filter_project_id,
         session_ids=session_ids,
     ):
         return SkillEvolutionJob(
             id="existing",
             skill_name=skill_name,
             tenant_id=tenant_id,
+            project_id=project_id,
             action="unknown",
             status="pending_review",
             session_ids=session_ids,

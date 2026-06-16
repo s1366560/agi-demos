@@ -76,6 +76,7 @@ class SkillEvolutionJob(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     skill_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     tenant_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    project_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     action: Mapped[str] = mapped_column(String(30), nullable=False)
     candidate_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     rationale: Mapped[str | None] = mapped_column(Text, nullable=True)

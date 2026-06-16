@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import yaml
 
@@ -55,6 +56,7 @@ class SkillMerger:
             skill = await self._load_skill_for_apply(
                 job.skill_name,
                 tenant_id=tenant_id,
+                project_id=project_id or getattr(job, "project_id", None),
                 skill_repository=skill_repository,
             )
         except Exception:
@@ -122,9 +124,24 @@ class SkillMerger:
         skill_name: str,
         *,
         tenant_id: str,
+        project_id: str | None,
         skill_repository: SkillRepositoryPort | None,
     ) -> Skill | None:
         if skill_repository is not None:
+            if project_id is not None:
+                list_by_project = getattr(skill_repository, "list_by_project", None)
+                if callable(list_by_project):
+                    typed_list_by_project = cast(
+                        Callable[..., Awaitable[list[Skill]]],
+                        list_by_project,
+                    )
+                    skills = await typed_list_by_project(
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                    )
+                    for skill in skills:
+                        if skill.name == skill_name:
+                            return skill
             skill = await skill_repository.get_by_name(tenant_id, skill_name)
             if skill is not None:
                 return skill
@@ -190,7 +207,21 @@ class SkillMerger:
         project_id: str | None,
         skill_repository: SkillRepositoryPort,
     ) -> Skill:
-        existing = await skill_repository.get_by_name(tenant_id, skill.name)
+        existing: Skill | None = None
+        if project_id is not None:
+            list_by_project = getattr(skill_repository, "list_by_project", None)
+            if callable(list_by_project):
+                typed_list_by_project = cast(
+                    Callable[..., Awaitable[list[Skill]]],
+                    list_by_project,
+                )
+                skills = await typed_list_by_project(project_id=project_id, tenant_id=tenant_id)
+                existing = next(
+                    (candidate for candidate in skills if candidate.name == skill.name),
+                    None,
+                )
+        if existing is None:
+            existing = await skill_repository.get_by_name(tenant_id, skill.name)
         if existing is not None:
             return existing
 

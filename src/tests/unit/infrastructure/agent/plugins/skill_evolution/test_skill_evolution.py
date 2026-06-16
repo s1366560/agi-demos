@@ -1587,8 +1587,76 @@ class TestAggregator:
         aggregator = SkillSessionAggregator(config)
 
         groups = await aggregator.aggregate(repo, tenant_id="t1")
-        assert "debug-skill" in groups
-        assert groups["debug-skill"].session_count == 5
+        group = next(group for group in groups.values() if group.skill_name == "debug-skill")
+        assert group.project_id is None
+        assert group.session_count == 5
+
+    @pytest.mark.asyncio
+    async def test_aggregate_separates_same_skill_by_project(self) -> None:
+        from src.infrastructure.agent.plugins.skill_evolution.models import (
+            SkillEvolutionSession,
+        )
+
+        project_sessions = {
+            "project-a": [
+                SkillEvolutionSession(
+                    id=f"a{i}",
+                    skill_name="debug-skill",
+                    tenant_id="t1",
+                    project_id="project-a",
+                    conversation_id=f"ca{i}",
+                    user_query=f"project a query {i}",
+                    success=True,
+                    overall_score=0.8,
+                )
+                for i in range(3)
+            ],
+            "project-b": [
+                SkillEvolutionSession(
+                    id=f"b{i}",
+                    skill_name="debug-skill",
+                    tenant_id="t1",
+                    project_id="project-b",
+                    conversation_id=f"cb{i}",
+                    user_query=f"project b query {i}",
+                    success=True,
+                    overall_score=0.9,
+                )
+                for i in range(3)
+            ],
+        }
+        repo = MagicMock()
+        repo.get_scored_sessions_grouped_by_skill = AsyncMock(
+            return_value=[
+                {
+                    "skill_name": "debug-skill",
+                    "project_id": "project-a",
+                    "session_count": 3,
+                    "avg_score": 0.8,
+                    "success_count": 3,
+                },
+                {
+                    "skill_name": "debug-skill",
+                    "project_id": "project-b",
+                    "session_count": 3,
+                    "avg_score": 0.9,
+                    "success_count": 3,
+                },
+            ]
+        )
+
+        async def _sessions_by_skill(**kwargs):
+            return project_sessions[kwargs["project_id"]]
+
+        repo.get_sessions_by_skill = AsyncMock(side_effect=_sessions_by_skill)
+        aggregator = SkillSessionAggregator(
+            SkillEvolutionConfig(min_sessions_per_skill=3, min_avg_score=0.5)
+        )
+
+        groups = await aggregator.aggregate(repo, tenant_id="t1")
+
+        assert {group.project_id for group in groups.values()} == {"project-a", "project-b"}
+        assert {group.session_count for group in groups.values()} == {3}
 
 
 class TestEvolutionEngine:

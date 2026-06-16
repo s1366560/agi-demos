@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
+from sqlalchemy.sql.elements import ColumnElement
 
 from src.infrastructure.adapters.secondary.persistence.models import (
     AgentExecutionEvent,
@@ -19,6 +21,74 @@ from src.infrastructure.agent.plugins.skill_evolution.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _scope_key(project_id: str | None) -> str:
+    return project_id or ""
+
+
+def _project_scope_expression() -> ColumnElement[str]:
+    return func.coalesce(SkillEvolutionSession.project_id, "")
+
+
+def _apply_session_project_filter(
+    stmt: Select[Any],
+    *,
+    project_id: str | None,
+    filter_project_id: bool,
+) -> Select[Any]:
+    if not filter_project_id:
+        return stmt
+    if project_id is None:
+        return stmt.where(SkillEvolutionSession.project_id.is_(None))
+    return stmt.where(SkillEvolutionSession.project_id == project_id)
+
+
+def _apply_job_project_filter(
+    stmt: Select[Any],
+    *,
+    project_id: str | None,
+    filter_project_id: bool,
+) -> Select[Any]:
+    if not filter_project_id:
+        return stmt
+    if project_id is None:
+        return stmt.where(SkillEvolutionJob.project_id.is_(None))
+    return stmt.where(SkillEvolutionJob.project_id == project_id)
+
+
+def _apply_session_project_access_filter(
+    stmt: Select[Any],
+    *,
+    project_ids: set[str] | None,
+) -> Select[Any]:
+    if project_ids is None:
+        return stmt
+    if not project_ids:
+        return stmt.where(SkillEvolutionSession.project_id.is_(None))
+    return stmt.where(
+        or_(
+            SkillEvolutionSession.project_id.is_(None),
+            SkillEvolutionSession.project_id.in_(project_ids),
+        )
+    )
+
+
+def _apply_job_project_access_filter(
+    stmt: Select[Any],
+    *,
+    project_ids: set[str] | None,
+) -> Select[Any]:
+    if project_ids is None:
+        return stmt
+    if not project_ids:
+        return stmt.where(SkillEvolutionJob.project_id.is_(None))
+    return stmt.where(
+        or_(
+            SkillEvolutionJob.project_id.is_(None),
+            SkillEvolutionJob.project_id.in_(project_ids),
+        )
+    )
 
 
 class SkillEvolutionRepository:
@@ -68,6 +138,8 @@ class SkillEvolutionRepository:
         *,
         tenant_id: str,
         skill_name: str | None = None,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
         min_skill_sessions: int = 1,
         limit: int = 50,
     ) -> list[SkillEvolutionSession]:
@@ -84,9 +156,16 @@ class SkillEvolutionRepository:
             stmt = stmt.where(SkillEvolutionSession.skill_name == skill_name)
         else:
             stmt = stmt.where(SkillEvolutionSession.skill_name != "__no_skill__")
+        stmt = _apply_session_project_filter(
+            stmt,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
+        )
         stmt = self._filter_by_min_skill_sessions(
             stmt,
             tenant_id=tenant_id,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
             min_skill_sessions=min_skill_sessions,
         )
         result = await self._session.execute(stmt)
@@ -97,6 +176,8 @@ class SkillEvolutionRepository:
         *,
         tenant_id: str,
         skill_name: str | None = None,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
         min_skill_sessions: int = 1,
         limit: int = 50,
     ) -> list[SkillEvolutionSession]:
@@ -114,9 +195,16 @@ class SkillEvolutionRepository:
             stmt = stmt.where(SkillEvolutionSession.skill_name == skill_name)
         else:
             stmt = stmt.where(SkillEvolutionSession.skill_name != "__no_skill__")
+        stmt = _apply_session_project_filter(
+            stmt,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
+        )
         stmt = self._filter_by_min_skill_sessions(
             stmt,
             tenant_id=tenant_id,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
             min_skill_sessions=min_skill_sessions,
         )
         result = await self._session.execute(stmt)
@@ -127,22 +215,39 @@ class SkillEvolutionRepository:
         stmt: Select[tuple[SkillEvolutionSession]],
         *,
         tenant_id: str,
+        project_id: str | None,
+        filter_project_id: bool,
         min_skill_sessions: int,
     ) -> Select[tuple[SkillEvolutionSession]]:
         if min_skill_sessions <= 1:
             return stmt
+        project_scope = _project_scope_expression()
         eligible_skill_names = (
-            select(SkillEvolutionSession.skill_name)
+            select(
+                SkillEvolutionSession.skill_name,
+                project_scope.label("project_scope"),
+            )
             .where(
                 SkillEvolutionSession.tenant_id == tenant_id,
                 SkillEvolutionSession.skill_name != "__no_skill__",
             )
-            .group_by(SkillEvolutionSession.skill_name)
+            .group_by(SkillEvolutionSession.skill_name, project_scope)
             .having(func.count(SkillEvolutionSession.id) >= min_skill_sessions)
             .subquery()
         )
+        eligible_stmt = select(
+            eligible_skill_names.c.skill_name,
+            eligible_skill_names.c.project_scope,
+        )
+        if filter_project_id:
+            eligible_stmt = eligible_stmt.where(
+                eligible_skill_names.c.project_scope == _scope_key(project_id)
+            )
         return stmt.where(
-            SkillEvolutionSession.skill_name.in_(select(eligible_skill_names.c.skill_name))
+            tuple_(
+                SkillEvolutionSession.skill_name,
+                _project_scope_expression(),
+            ).in_(eligible_stmt)
         )
 
     async def mark_processed(self, session_ids: list[str]) -> None:
@@ -183,6 +288,8 @@ class SkillEvolutionRepository:
         *,
         tenant_id: str,
         skill_name: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
         min_score: float | None = None,
         limit: int = 100,
     ) -> list[SkillEvolutionSession]:
@@ -196,6 +303,11 @@ class SkillEvolutionRepository:
             .order_by(SkillEvolutionSession.created_at.desc())
             .limit(limit)
         )
+        stmt = _apply_session_project_filter(
+            stmt,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
+        )
         if min_score is not None:
             stmt = stmt.where(SkillEvolutionSession.overall_score >= min_score)
         result = await self._session.execute(stmt)
@@ -205,12 +317,17 @@ class SkillEvolutionRepository:
         self,
         *,
         tenant_id: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
         min_sessions: int = 5,
         min_avg_score: float = 0.6,
     ) -> list[dict[str, object]]:
+        project_scope = _project_scope_expression()
         sub = (
             select(
                 SkillEvolutionSession.skill_name,
+                SkillEvolutionSession.project_id,
+                project_scope.label("project_scope"),
                 func.count(SkillEvolutionSession.id).label("session_count"),
                 func.avg(SkillEvolutionSession.overall_score).label("avg_score"),
                 func.count(
@@ -221,18 +338,22 @@ class SkillEvolutionRepository:
                 SkillEvolutionSession.tenant_id == tenant_id,
                 SkillEvolutionSession.overall_score.isnot(None),
             )
-            .group_by(SkillEvolutionSession.skill_name)
+            .group_by(SkillEvolutionSession.skill_name, SkillEvolutionSession.project_id, project_scope)
             .having(
                 func.count(SkillEvolutionSession.id) >= min_sessions,
                 func.avg(SkillEvolutionSession.overall_score) >= min_avg_score,
             )
             .subquery()
         )
-        stmt = select(sub).order_by(sub.c.session_count.desc())
+        sub_select = select(sub)
+        if filter_project_id:
+            sub_select = sub_select.where(sub.c.project_scope == _scope_key(project_id))
+        stmt = sub_select.order_by(sub.c.session_count.desc())
         result = await self._session.execute(stmt)
         return [
             {
                 "skill_name": row.skill_name,
+                "project_id": row.project_id,
                 "session_count": row.session_count,
                 "avg_score": float(row.avg_score) if row.avg_score else 0.0,
                 "success_count": row.success_count or 0,
@@ -290,12 +411,16 @@ class SkillEvolutionRepository:
         *,
         tenant_id: str,
         skill_name: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
         session_ids: list[str],
     ) -> bool:
         """Return true when this exact session batch already produced a job."""
         job = await self.get_job_for_sessions(
             tenant_id=tenant_id,
             skill_name=skill_name,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
             session_ids=session_ids,
             excluded_statuses={"rejected"},
         )
@@ -306,6 +431,8 @@ class SkillEvolutionRepository:
         *,
         tenant_id: str,
         skill_name: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
         session_ids: list[str],
         excluded_statuses: set[str] | None = None,
     ) -> SkillEvolutionJob | None:
@@ -319,6 +446,11 @@ class SkillEvolutionRepository:
             SkillEvolutionJob.tenant_id == tenant_id,
             SkillEvolutionJob.skill_name == skill_name,
         )
+        stmt = _apply_job_project_filter(
+            stmt,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
+        )
         result = await self._session.execute(stmt)
         for job in result.scalars().all():
             if job.status in excluded:
@@ -328,7 +460,12 @@ class SkillEvolutionRepository:
         return None
 
     async def get_pending_jobs(
-        self, *, tenant_id: str, skill_name: str | None = None
+        self,
+        *,
+        tenant_id: str,
+        skill_name: str | None = None,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
     ) -> list[SkillEvolutionJob]:
         stmt = (
             select(SkillEvolutionJob)
@@ -340,6 +477,11 @@ class SkillEvolutionRepository:
         )
         if skill_name is not None:
             stmt = stmt.where(SkillEvolutionJob.skill_name == skill_name)
+        stmt = _apply_job_project_filter(
+            stmt,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
+        )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
@@ -370,6 +512,9 @@ class SkillEvolutionRepository:
         tenant_id: str,
         status: str | None = None,
         skill_name: str | None = None,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+        project_ids: set[str] | None = None,
         limit: int = 50,
     ) -> list[SkillEvolutionJob]:
         stmt = (
@@ -382,6 +527,12 @@ class SkillEvolutionRepository:
             stmt = stmt.where(SkillEvolutionJob.status == status)
         if skill_name is not None:
             stmt = stmt.where(SkillEvolutionJob.skill_name == skill_name)
+        stmt = _apply_job_project_filter(
+            stmt,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
+        )
+        stmt = _apply_job_project_access_filter(stmt, project_ids=project_ids)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
@@ -390,15 +541,27 @@ class SkillEvolutionRepository:
         *,
         tenant_id: str,
         skill_name: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
     ) -> int:
         stmt = select(func.count(SkillEvolutionSession.id)).where(
             SkillEvolutionSession.tenant_id == tenant_id,
             SkillEvolutionSession.skill_name == skill_name,
         )
+        stmt = _apply_session_project_filter(
+            stmt,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
+        )
         result = await self._session.execute(stmt)
         return int(result.scalar() or 0)
 
-    async def get_overview_stats(self, *, tenant_id: str) -> dict[str, object]:
+    async def get_overview_stats(
+        self,
+        *,
+        tenant_id: str,
+        project_ids: set[str] | None = None,
+    ) -> dict[str, object]:
         """Return tenant-level capture and processing totals for the evolution UI."""
         stmt = select(
             func.count(SkillEvolutionSession.id).label("total_sessions"),
@@ -433,6 +596,7 @@ class SkillEvolutionRepository:
             .filter(SkillEvolutionSession.skill_name != "__no_skill__")
             .label("avg_score"),
         ).where(SkillEvolutionSession.tenant_id == tenant_id)
+        stmt = _apply_session_project_access_filter(stmt, project_ids=project_ids)
         result = await self._session.execute(stmt)
         row = result.mappings().one()
 
@@ -443,6 +607,7 @@ class SkillEvolutionRepository:
             func.count().filter(SkillEvolutionJob.status == "skipped").label("skipped_jobs"),
             func.count().filter(SkillEvolutionJob.status == "rejected").label("rejected_jobs"),
         ).where(SkillEvolutionJob.tenant_id == tenant_id)
+        job_stmt = _apply_job_project_access_filter(job_stmt, project_ids=project_ids)
         job_result = await self._session.execute(job_stmt)
         job_row = job_result.mappings().one()
 
@@ -466,12 +631,18 @@ class SkillEvolutionRepository:
         self,
         *,
         tenant_id: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+        project_ids: set[str] | None = None,
         limit: int = 50,
     ) -> list[dict[str, object]]:
         """Group captured sessions by skill name for the evolution overview."""
-        job_counts = (
+        job_project_scope = func.coalesce(SkillEvolutionJob.project_id, "")
+        job_counts_stmt = (
             select(
                 SkillEvolutionJob.skill_name.label("skill_name"),
+                SkillEvolutionJob.project_id.label("project_id"),
+                job_project_scope.label("project_scope"),
                 func.count(SkillEvolutionJob.id).label("job_count"),
                 func.count()
                 .filter(SkillEvolutionJob.status == "pending_review")
@@ -479,12 +650,28 @@ class SkillEvolutionRepository:
                 func.max(SkillEvolutionJob.created_at).label("latest_job_at"),
             )
             .where(SkillEvolutionJob.tenant_id == tenant_id)
-            .group_by(SkillEvolutionJob.skill_name)
-            .subquery()
+            .group_by(
+                SkillEvolutionJob.skill_name,
+                SkillEvolutionJob.project_id,
+                job_project_scope,
+            )
         )
+        job_counts_stmt = _apply_job_project_filter(
+            job_counts_stmt,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
+        )
+        job_counts_stmt = _apply_job_project_access_filter(
+            job_counts_stmt,
+            project_ids=project_ids,
+        )
+        job_counts = job_counts_stmt.subquery()
+        project_scope = _project_scope_expression()
         stmt = (
             select(
                 func.min(Skill.id).label("skill_id"),
+                SkillEvolutionSession.project_id.label("project_id"),
+                project_scope.label("project_scope"),
                 SkillEvolutionSession.skill_name.label("skill_name"),
                 func.count(SkillEvolutionSession.id).label("session_count"),
                 func.count()
@@ -504,12 +691,14 @@ class SkillEvolutionRepository:
             )
             .outerjoin(
                 job_counts,
-                job_counts.c.skill_name == SkillEvolutionSession.skill_name,
+                (job_counts.c.skill_name == SkillEvolutionSession.skill_name)
+                & (job_counts.c.project_scope == project_scope),
             )
             .outerjoin(
                 Skill,
                 (Skill.tenant_id == tenant_id)
-                & (Skill.name == SkillEvolutionSession.skill_name),
+                & (Skill.name == SkillEvolutionSession.skill_name)
+                & (func.coalesce(Skill.project_id, "") == project_scope),
             )
             .where(
                 SkillEvolutionSession.tenant_id == tenant_id,
@@ -517,6 +706,8 @@ class SkillEvolutionRepository:
             )
             .group_by(
                 SkillEvolutionSession.skill_name,
+                SkillEvolutionSession.project_id,
+                project_scope,
                 job_counts.c.job_count,
                 job_counts.c.pending_job_count,
                 job_counts.c.latest_job_at,
@@ -527,12 +718,19 @@ class SkillEvolutionRepository:
             )
             .limit(limit)
         )
+        stmt = _apply_session_project_filter(
+            stmt,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
+        )
+        stmt = _apply_session_project_access_filter(stmt, project_ids=project_ids)
         result = await self._session.execute(stmt)
         summaries: list[dict[str, object]] = []
         for row in result.mappings().all():
             summaries.append(
                 {
                     "skill_id": row["skill_id"],
+                    "project_id": row["project_id"],
                     "skill_name": row["skill_name"],
                     "session_count": int(row["session_count"] or 0),
                     "success_count": int(row["success_count"] or 0),
@@ -554,6 +752,9 @@ class SkillEvolutionRepository:
         *,
         tenant_id: str,
         skill_name: str | None = None,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
+        project_ids: set[str] | None = None,
         limit: int = 50,
     ) -> list[SkillEvolutionSession]:
         """Return the newest captured sessions for audit and UI inspection."""
@@ -565,5 +766,11 @@ class SkillEvolutionRepository:
         )
         if skill_name is not None:
             stmt = stmt.where(SkillEvolutionSession.skill_name == skill_name)
+        stmt = _apply_session_project_filter(
+            stmt,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
+        )
+        stmt = _apply_session_project_access_filter(stmt, project_ids=project_ids)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())

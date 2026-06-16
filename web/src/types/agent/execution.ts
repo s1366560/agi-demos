@@ -294,6 +294,7 @@ export interface SkillVersionListResponse {
 
 export interface SkillEvolutionJobResponse {
   id: string;
+  project_id: string | null;
   skill_name: string;
   action: string;
   status: string;
@@ -311,6 +312,7 @@ export interface SkillEvolutionRouteEntry {
   kind: 'version' | 'evolution_job';
   id: string;
   label: string;
+  project_id: string | null;
   status: string | null;
   action: string | null;
   version_number: number | null;
@@ -388,6 +390,7 @@ export interface SkillEvolutionStageResponse {
 
 export interface SkillEvolutionSkillSummaryResponse {
   skill_id: string | null;
+  project_id: string | null;
   skill_name: string;
   session_count: number;
   success_count: number;

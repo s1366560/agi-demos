@@ -21,6 +21,7 @@ class SkillSessionGroup:
     """A group of scored sessions for a single skill."""
 
     skill_name: str
+    project_id: str | None = None
     sessions: list[SkillEvolutionSession] = field(default_factory=list)
     session_count: int = 0
     avg_score: float = 0.0
@@ -57,14 +58,18 @@ class SkillSessionAggregator:
         repo: SkillEvolutionRepository,
         *,
         tenant_id: str,
+        project_id: str | None = None,
+        filter_project_id: bool = False,
     ) -> dict[str, SkillSessionGroup]:
-        """Aggregate scored sessions grouped by skill name.
+        """Aggregate scored sessions grouped by skill and project scope.
 
-        Returns a dict mapping skill_name -> SkillSessionGroup.
+        Returns a dict mapping a stable skill/project key to SkillSessionGroup.
         Only groups meeting quality thresholds are included.
         """
         summary_rows = await repo.get_scored_sessions_grouped_by_skill(
             tenant_id=tenant_id,
+            project_id=project_id,
+            filter_project_id=filter_project_id,
             min_sessions=self._config.min_sessions_per_skill,
             min_avg_score=self._config.min_avg_score,
         )
@@ -75,18 +80,22 @@ class SkillSessionAggregator:
             skill_name = str(row["skill_name"])
             if not skill_name or skill_name == _NO_SKILL_KEY:
                 continue
+            row_project_id = row.get("project_id")
+            group_project_id = str(row_project_id) if row_project_id is not None else None
 
             sessions = await repo.get_sessions_by_skill(
                 tenant_id=tenant_id,
                 skill_name=skill_name,
+                project_id=group_project_id,
+                filter_project_id=True,
                 min_score=self._config.min_avg_score,
                 limit=self._config.max_sessions_per_batch,
             )
 
-            group = SkillSessionGroup(skill_name=skill_name)
+            group = SkillSessionGroup(skill_name=skill_name, project_id=group_project_id)
             for s in sessions:
                 group.add(s)
-            groups[skill_name] = group
+            groups[_group_key(skill_name, group_project_id)] = group
 
         logger.info(
             "Aggregated %d skill groups for evolution (tenant=%s)",
@@ -94,3 +103,7 @@ class SkillSessionAggregator:
             tenant_id,
         )
         return groups
+
+
+def _group_key(skill_name: str, project_id: str | None) -> str:
+    return f"{skill_name}\0{project_id or ''}"

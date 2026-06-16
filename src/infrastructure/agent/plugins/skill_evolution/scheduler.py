@@ -353,6 +353,8 @@ class EvolutionScheduler:
             unprocessed = await repo.get_unprocessed_sessions(
                 tenant_id=tenant_id,
                 skill_name=skill_name,
+                project_id=project_id,
+                filter_project_id=skill_name is not None or project_id is not None,
                 min_skill_sessions=run_config.scoring_min_sessions_per_skill,
                 limit=run_config.max_sessions_per_batch,
             )
@@ -372,6 +374,8 @@ class EvolutionScheduler:
             unscored = await repo.get_unscored_sessions(
                 tenant_id=tenant_id,
                 skill_name=skill_name,
+                project_id=project_id,
+                filter_project_id=skill_name is not None or project_id is not None,
                 min_skill_sessions=run_config.scoring_min_sessions_per_skill,
                 limit=run_config.max_sessions_per_batch,
             )
@@ -386,9 +390,16 @@ class EvolutionScheduler:
                 await db.commit()
 
             # Stage 3: Aggregate
-            groups = await self._aggregator.aggregate(repo, tenant_id=tenant_id)
+            groups = await self._aggregator.aggregate(
+                repo,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                filter_project_id=skill_name is not None or project_id is not None,
+            )
             if skill_name is not None:
-                groups = {name: group for name, group in groups.items() if name == skill_name}
+                groups = {
+                    name: group for name, group in groups.items() if group.skill_name == skill_name
+                }
             result["groups"] = len(groups)
 
             # Stage 4: Evolve

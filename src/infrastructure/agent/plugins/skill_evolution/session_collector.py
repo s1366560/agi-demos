@@ -137,17 +137,23 @@ class SessionCollector:
         if not self._config.enabled:
             return []
 
-        matched_skill_name = payload.get("matched_skill_name")
-        if isinstance(matched_skill_name, str):
-            matched_skill_name = matched_skill_name.strip() or None
+        raw_matched_skill_name = payload.get("matched_skill_name")
+        matched_skill_name = (
+            raw_matched_skill_name.strip() or None
+            if isinstance(raw_matched_skill_name, str)
+            else None
+        )
 
         loaded_skill_names = _loaded_skill_names(payload.get("loaded_skill_names"))
-        target_skill_names = [matched_skill_name] if matched_skill_name else loaded_skill_names
+        target_skill_names: list[str | None] = (
+            [matched_skill_name] if matched_skill_name else list(loaded_skill_names)
+        )
         if not target_skill_names:
             target_skill_names = [None]
 
-        sessions = [
-            self.build_session(
+        sessions: list[SkillEvolutionSession] = []
+        for skill_name in target_skill_names:
+            session = self.build_session(
                 tenant_id=str(payload.get("tenant_id", "")),
                 project_id=_str_or_none(payload.get("project_id")),
                 conversation_id=str(payload.get("conversation_id", "")),
@@ -159,9 +165,8 @@ class SessionCollector:
                 success=bool(payload.get("success", False)),
                 execution_time_ms=int(payload.get("execution_time_ms", 0)),
             )
-            for skill_name in target_skill_names
-        ]
-        sessions = [session for session in sessions if session is not None]
+            if session is not None:
+                sessions.append(session)
 
         if not sessions:
             return []
