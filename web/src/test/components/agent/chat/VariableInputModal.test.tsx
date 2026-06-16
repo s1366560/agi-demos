@@ -71,7 +71,7 @@ describe('VariableInputModal', () => {
     expect(screen.queryByDisplayValue('Bob')).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('Security')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'agent.templates.useTemplate' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use Template' }));
 
     expect(onSubmit).toHaveBeenCalledWith('Task Security');
     expect(onClose).toHaveBeenCalled();

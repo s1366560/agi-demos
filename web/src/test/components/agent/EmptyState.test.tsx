@@ -29,7 +29,7 @@ describe('EmptyState', () => {
 
     render(<EmptyState onNewConversation={onNewConversation} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /agent\.emptyState\.newConversation/i }));
+    fireEvent.click(screen.getByRole('button', { name: /start new conversation/i }));
 
     expect(onNewConversation).toHaveBeenCalledTimes(1);
   });
@@ -40,11 +40,13 @@ describe('EmptyState', () => {
     render(<EmptyState onNewConversation={vi.fn()} onSendPrompt={onSendPrompt} />);
 
     fireEvent.click(
-      screen.getByRole('button', { name: /agent\.emptyState\.cards\.analyzeTrends/i })
+      screen.getByRole('button', { name: /analyze project trends/i })
     );
 
     expect(onSendPrompt).toHaveBeenCalledTimes(1);
-    expect(onSendPrompt).toHaveBeenCalledWith('agent.emptyState.cards.analyzeTrendsPrompt');
+    expect(onSendPrompt).toHaveBeenCalledWith(
+      'Analyze the trends and patterns in my project data. Identify key insights and anomalies.'
+    );
   });
 
   it('resumes the last conversation when available', () => {

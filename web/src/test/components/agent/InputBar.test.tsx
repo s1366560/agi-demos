@@ -116,7 +116,7 @@ describe('InputBar autocomplete overlays', () => {
     await waitFor(() => {
       expect(mentionService.search).toHaveBeenCalledWith('doc', 'project-1');
     });
-    expect(screen.getByText('agent.mentions.title')).toBeInTheDocument();
+    expect(screen.getByText('Mention entities or memories')).toBeInTheDocument();
     expect(screen.getByText('docs')).toBeInTheDocument();
     expect(input.closest('.overflow-visible')).toBeInTheDocument();
   });

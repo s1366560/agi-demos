@@ -56,7 +56,7 @@ describe('SubAgentDetailPanel', () => {
     const errorGroup = { ...mockGroup, error: 'Execution failed', status: 'error' };
     render(<SubAgentDetailPanel group={errorGroup} onClose={mockOnClose} />);
 
-    expect(screen.getByText('agent.subagent.detail.error_title')).toBeInTheDocument();
+    expect(screen.getByText('Execution Error')).toBeInTheDocument();
     expect(screen.getByText('Execution failed')).toBeInTheDocument();
   });
 
@@ -68,7 +68,7 @@ describe('SubAgentDetailPanel', () => {
     };
     render(<SubAgentDetailPanel group={summaryGroup} onClose={mockOnClose} />);
 
-    expect(screen.getByText('agent.subagent.detail.summary_title')).toBeInTheDocument();
+    expect(screen.getByText('Execution Summary')).toBeInTheDocument();
     expect(screen.getByText('Task completed successfully')).toBeInTheDocument();
   });
 

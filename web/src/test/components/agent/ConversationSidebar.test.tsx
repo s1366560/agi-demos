@@ -62,6 +62,6 @@ describe('ConversationSidebar', () => {
     renderSidebar(true);
 
     expect(screen.queryByText('Implement backend purchase API')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'agent.sidebar.expandSidebar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
   });
 });

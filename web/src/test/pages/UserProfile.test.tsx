@@ -87,7 +87,7 @@ describe('UserProfile', () => {
   it('focuses the avatar URL field from the avatar action', () => {
     renderProfile();
 
-    fireEvent.click(screen.getByRole('button', { name: 'user_profile.avatar.change' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Change avatar' }));
 
     expect(screen.getByLabelText('user_profile.basic.avatar_url')).toHaveFocus();
   });
