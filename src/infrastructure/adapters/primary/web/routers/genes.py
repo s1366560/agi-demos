@@ -303,6 +303,8 @@ async def list_genes(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
     category: str | None = Query(None, description="Filter by category"),
+    search: str | None = Query(None, description="Search by name, slug, or description"),
+    visibility: str | None = Query(None, description="Filter by visibility"),
     is_published: bool | None = Query(None, description="Filter by published status"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
@@ -314,6 +316,8 @@ async def list_genes(
     genes, total = await service.list_genes_with_total(
         tenant_id=tenant_id,
         category=category,
+        search=search,
+        visibility=visibility,
         is_published=is_published,
         limit=page_size,
         offset=offset,

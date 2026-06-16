@@ -1,10 +1,11 @@
 """SQLAlchemy implementation of GeneRepository using BaseRepository."""
 
 import logging
-from typing import override
+from typing import Any, override
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from src.domain.model.gene.enums import ContentVisibility, GeneReviewStatus, GeneSource
 from src.domain.model.gene.gene import Gene
@@ -42,6 +43,8 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         *,
         tenant_id: str | None = None,
         category: str | None = None,
+        search: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -49,9 +52,17 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         filters = self._filters(
             tenant_id=tenant_id,
             category=category,
+            visibility=visibility,
             is_published=is_published,
         )
-        return await self.list_all(limit=limit, offset=offset, **filters)
+        stmt = self._build_query(filters=filters)
+        stmt = self._apply_search_filter(stmt, search)
+        stmt = stmt.offset(offset).limit(limit)
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
+        db_genes = result.scalars().all()
+        return [d for g in db_genes if (d := self._to_domain(g)) is not None]
 
     @override
     async def count_by_filters(
@@ -59,14 +70,21 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         *,
         tenant_id: str | None = None,
         category: str | None = None,
+        search: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
     ) -> int:
         filters = self._filters(
             tenant_id=tenant_id,
             category=category,
+            visibility=visibility,
             is_published=is_published,
         )
-        return await self.count(**filters)
+        stmt = select(func.count()).select_from(GeneMarketModel)
+        stmt = self._apply_filters(stmt, **filters)
+        stmt = self._apply_search_filter(stmt, search)
+        result = await self._session.execute(refresh_select_statement(stmt))
+        return result.scalar() or 0
 
     @override
     async def search(
@@ -99,6 +117,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         *,
         tenant_id: str | None = None,
         category: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
     ) -> dict[str, object]:
         filters: dict[str, object] = {}
@@ -106,9 +125,26 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
             filters["tenant_id"] = tenant_id
         if category is not None:
             filters["category"] = category
+        if visibility is not None:
+            filters["visibility"] = visibility
         if is_published is not None:
             filters["is_published"] = is_published
         return filters
+
+    @staticmethod
+    def _apply_search_filter(stmt: Select[Any], search: str | None) -> Select[Any]:
+        search_term = search.strip() if search else ""
+        if not search_term:
+            return stmt
+        pattern = f"%{search_term}%"
+        return stmt.where(
+            or_(
+                GeneMarketModel.name.ilike(pattern),
+                GeneMarketModel.slug.ilike(pattern),
+                GeneMarketModel.description.ilike(pattern),
+                GeneMarketModel.short_description.ilike(pattern),
+            )
+        )
 
     @override
     async def find_featured(self, limit: int = 20) -> list[Gene]:

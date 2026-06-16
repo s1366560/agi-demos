@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   Button,
@@ -55,6 +55,8 @@ interface ReviewFormValues {
 export const GeneDetail: FC = () => {
   const { geneId } = useParams<{ geneId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const shouldOpenInstallModal = searchParams.get('install') === '1';
   const { t } = useTranslation();
 
   const currentGene = useCurrentGene();
@@ -75,7 +77,7 @@ export const GeneDetail: FC = () => {
     deleteGeneReview,
   } = useGeneMarketActions();
 
-  const [isInstallModalVisible, setIsInstallModalVisible] = useState(false);
+  const [isInstallModalVisible, setIsInstallModalVisible] = useState(shouldOpenInstallModal);
   const [isRateModalVisible, setIsRateModalVisible] = useState(false);
   const [installForm] = Form.useForm<InstallFormValues>();
   const [rateForm] = Form.useForm<RateFormValues>();
@@ -104,6 +106,15 @@ export const GeneDetail: FC = () => {
     t,
     reviewPage,
   ]);
+
+  useEffect(() => {
+    if (!shouldOpenInstallModal) {
+      return;
+    }
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('install');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams, shouldOpenInstallModal]);
 
   const handleInstallSubmit = async () => {
     try {

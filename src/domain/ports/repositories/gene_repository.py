@@ -29,6 +29,8 @@ class GeneRepository(ABC):
         *,
         tenant_id: str | None = None,
         category: str | None = None,
+        search: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -41,6 +43,8 @@ class GeneRepository(ABC):
         *,
         tenant_id: str | None = None,
         category: str | None = None,
+        search: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
     ) -> int:
         """Count genes matching the same filters used for listing."""

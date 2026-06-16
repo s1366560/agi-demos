@@ -144,6 +144,8 @@ class GeneService:
         self,
         tenant_id: str | None = None,
         category: str | None = None,
+        search: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -152,6 +154,8 @@ class GeneService:
         genes, _total = await self.list_genes_with_total(
             tenant_id=tenant_id,
             category=category,
+            search=search,
+            visibility=visibility,
             is_published=is_published,
             limit=limit,
             offset=offset,
@@ -162,6 +166,8 @@ class GeneService:
         self,
         tenant_id: str | None = None,
         category: str | None = None,
+        search: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -172,6 +178,8 @@ class GeneService:
         Args:
             tenant_id: Filter by tenant.
             category: Filter by category.
+            search: Search by name, slug, description, or short description.
+            visibility: Filter by visibility.
             is_published: Filter by published status.
             limit: Maximum results.
             offset: Pagination offset.
@@ -185,6 +193,8 @@ class GeneService:
         genes = await self._gene_repo.find_by_filters(
             tenant_id=tenant_id,
             category=category,
+            search=search,
+            visibility=visibility,
             is_published=effective_is_published,
             limit=limit,
             offset=offset,
@@ -192,6 +202,8 @@ class GeneService:
         total = await self._gene_repo.count_by_filters(
             tenant_id=tenant_id,
             category=category,
+            search=search,
+            visibility=visibility,
             is_published=effective_is_published,
         )
         return genes, total

@@ -22,6 +22,28 @@ describe('geneMarketService', () => {
     vi.clearAllMocks();
   });
 
+  it('lists genes with marketplace filters and pagination', async () => {
+    mockHttpClient.get.mockResolvedValue({ genes: [], total: 0, page: 1, page_size: 20 });
+
+    await geneMarketService.listGenes({
+      page: 2,
+      page_size: 50,
+      search: 'review',
+      category: 'tool',
+      visibility: 'org_private',
+    });
+
+    expect(mockHttpClient.get).toHaveBeenCalledWith('/genes/', {
+      params: {
+        page: 2,
+        page_size: 50,
+        search: 'review',
+        category: 'tool',
+        visibility: 'org_private',
+      },
+    });
+  });
+
   it('rates genes with the backend rating field', async () => {
     mockHttpClient.post.mockResolvedValue({ id: 'rating-1' });
 

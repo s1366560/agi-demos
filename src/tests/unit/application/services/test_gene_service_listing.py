@@ -57,6 +57,51 @@ async def test_list_genes_with_total_filters_before_pagination(
 
 
 @pytest.mark.unit
+async def test_list_genes_with_total_filters_by_search_and_visibility(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+
+    await service.create_gene(
+        name="Needle Public Gene",
+        slug=_slug("needle-public"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        description="Matches the marketplace search",
+        visibility="public",
+    )
+    await service.create_gene(
+        name="Needle Private Gene",
+        slug=_slug("needle-private"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        description="Matches the marketplace search",
+        visibility="org_private",
+    )
+    await service.create_gene(
+        name="Other Public Gene",
+        slug=_slug("other-public"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        description="Does not match",
+        visibility="public",
+    )
+
+    genes, total = await service.list_genes_with_total(
+        tenant_id=test_project_db.tenant_id,
+        search="needle",
+        visibility="public",
+        limit=10,
+        offset=0,
+    )
+
+    assert total == 1
+    assert [gene.name for gene in genes] == ["Needle Public Gene"]
+
+
+@pytest.mark.unit
 async def test_list_genomes_with_total_filters_before_pagination(
     test_db: AsyncSession,
     test_project_db: Project,
