@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
@@ -48,11 +49,26 @@ from src.infrastructure.adapters.secondary.persistence.sql_workspace_plan_outbox
 
 
 class _WorkspaceServiceStub:
-    def __init__(self) -> None:
+    def __init__(self, *, allow_editor: bool = True) -> None:
+        self.allow_editor = allow_editor
         self.calls: list[tuple[str, str]] = []
+        self.editor_calls: list[tuple[str, str]] = []
 
     async def get_workspace(self, *, workspace_id: str, actor_user_id: str) -> object:
         self.calls.append((workspace_id, actor_user_id))
+        return object()
+
+    async def _require_minimum_role(
+        self,
+        *,
+        workspace_id: str,
+        user_id: str,
+        minimum: object,
+        error_message: str,
+    ) -> object:
+        self.editor_calls.append((workspace_id, user_id))
+        if not self.allow_editor:
+            raise PermissionError(error_message)
         return object()
 
 
@@ -2987,6 +3003,116 @@ async def test_get_workspace_plan_snapshot_returns_empty_state_without_plan(
     assert response.blackboard == []
     assert response.outbox == []
     assert response.events == []
+
+
+@pytest.mark.asyncio
+async def test_get_workspace_plan_snapshot_does_not_recover_stale_attempts_for_viewer(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-viewer-snapshot"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub(allow_editor=False)
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+    recover_stale_attempts = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        workspace_plans,
+        "_recover_stale_attempts_for_snapshot",
+        recover_stale_attempts,
+    )
+
+    response = await workspace_plans.get_workspace_plan_snapshot(
+        workspace_id=workspace_id,
+        request=cast(Request, SimpleNamespace()),
+        outbox_limit=5,
+        event_limit=5,
+        include_details=True,
+        recover_stale_attempts=True,
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert response.plan is not None
+    recover_stale_attempts.assert_not_awaited()
+    assert workspace_service.calls == [(workspace_id, "plan-api-user")]
+    assert workspace_service.editor_calls == [(workspace_id, "plan-api-user")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("handler", "extra_kwargs"),
+    [
+        (
+            workspace_plans.retry_workspace_plan_outbox_item,
+            {
+                "outbox_id": "outbox-denied",
+                "body": workspace_plans.WorkspacePlanActionRequest(reason="retry"),
+            },
+        ),
+        (
+            workspace_plans.pause_workspace_plan_iteration_loop,
+            {"body": workspace_plans.WorkspacePlanActionRequest(reason="pause")},
+        ),
+        (
+            workspace_plans.resume_workspace_plan_iteration_loop,
+            {"body": workspace_plans.WorkspacePlanActionRequest(reason="resume")},
+        ),
+        (
+            workspace_plans.trigger_workspace_plan_next_iteration,
+            {"body": workspace_plans.WorkspacePlanActionRequest(reason="next")},
+        ),
+        (
+            workspace_plans.request_workspace_plan_pipeline_run,
+            {"body": workspace_plans.WorkspacePlanPipelineRunRequest(reason="pipeline")},
+        ),
+        (
+            workspace_plans.request_workspace_plan_delivery_contract_regeneration,
+            {"body": workspace_plans.WorkspacePlanActionRequest(reason="regenerate")},
+        ),
+        (
+            workspace_plans.request_workspace_plan_node_replan,
+            {
+                "node_id": "node-denied",
+                "body": workspace_plans.WorkspacePlanActionRequest(reason="replan"),
+            },
+        ),
+        (
+            workspace_plans.reopen_blocked_workspace_plan_node,
+            {
+                "node_id": "node-denied",
+                "body": workspace_plans.WorkspacePlanActionRequest(reason="reopen"),
+            },
+        ),
+    ],
+)
+async def test_workspace_plan_operator_actions_require_editor(
+    monkeypatch: pytest.MonkeyPatch,
+    handler: Callable[..., Awaitable[Any]],
+    extra_kwargs: dict[str, object],
+) -> None:
+    async def deny_editor_access(**_: object) -> None:
+        raise PermissionError("viewer")
+
+    monkeypatch.setattr(workspace_plans, "_ensure_workspace_editor_access", deny_editor_access)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await handler(
+            workspace_id="workspace-plan-viewer",
+            request=cast(Request, SimpleNamespace()),
+            current_user=cast(User, SimpleNamespace(id="viewer-user")),
+            db=cast(AsyncSession, SimpleNamespace()),
+            **extra_kwargs,
+        )
+
+    assert exc_info.value.status_code == 403
 
 
 @pytest.mark.asyncio

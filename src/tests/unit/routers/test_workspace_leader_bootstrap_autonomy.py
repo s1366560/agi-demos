@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -31,6 +32,73 @@ class _FakeTaskRepo:
 
     async def find_by_root_goal_task_id(self, workspace_id: str, root_task_id: str) -> list[Any]:
         return self._children_map.get(root_task_id, [])
+
+
+class _ScalarResult:
+    def __init__(self, value: object) -> None:
+        self._value = value
+
+    def scalar_one_or_none(self) -> object:
+        return self._value
+
+
+class _RoleDb:
+    def __init__(self, role: str | None) -> None:
+        self.role = role
+
+    async def execute(self, _statement: object) -> _ScalarResult:
+        return _ScalarResult(self.role)
+
+
+class _SessionContext:
+    def __init__(self, db: object) -> None:
+        self._db = db
+
+    async def __aenter__(self) -> object:
+        return self._db
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
+
+
+@pytest.mark.unit
+class TestAutonomyTickAuthorization:
+    async def test_editor_role_can_trigger_manual_autonomy_tick(self) -> None:
+        await bootstrap._require_autonomy_tick_editor(
+            db=_RoleDb("editor"),  # type: ignore[arg-type]
+            workspace_id="ws-1",
+            user_id="user-1",
+        )
+
+    async def test_viewer_role_cannot_trigger_manual_autonomy_tick(self) -> None:
+        with pytest.raises(PermissionError, match="trigger workspace autonomy"):
+            await bootstrap._require_autonomy_tick_editor(
+                db=_RoleDb("viewer"),  # type: ignore[arg-type]
+                workspace_id="ws-1",
+                user_id="user-1",
+            )
+
+    async def test_background_autonomy_tick_uses_system_path(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, Any] = {}
+
+        class _Db:
+            async def get(self, _model: object, user_id: str) -> object:
+                return SimpleNamespace(id=user_id)
+
+        async def _fake_trigger(**kwargs: Any) -> dict[str, Any]:
+            captured.update(kwargs)
+            return {"triggered": False, "reason": "no_open_root", "root_task_id": None}
+
+        monkeypatch.setattr(bootstrap, "async_session_factory", lambda: _SessionContext(_Db()))
+        monkeypatch.setattr(bootstrap, "maybe_auto_trigger_existing_root_execution", _fake_trigger)
+
+        await bootstrap._run_autonomy_tick("ws-1", "user-1")
+
+        assert captured["workspace_id"] == "ws-1"
+        assert captured["current_user"].id == "user-1"
+        assert captured["system_tick"] is True
 
 
 @pytest.mark.unit
@@ -134,6 +202,7 @@ class TestSelectRootTaskNeedingProgress:
         )
         assert task is not None and task.id == "r-stable"
         assert has_children is True
+
 
 @pytest.mark.unit
 class TestCooldownHelpers:

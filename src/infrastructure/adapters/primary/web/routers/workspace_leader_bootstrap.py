@@ -22,6 +22,7 @@ from src.infrastructure.adapters.secondary.common.base_repository import refresh
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import (
     User,
+    WorkspaceMemberModel,
     WorkspacePlanEventModel,
     WorkspacePlanOutboxModel,
 )
@@ -43,6 +44,7 @@ _WORKER_SESSION_HEAL_MAX_PER_TICK_ENV = "WORKSPACE_AUTONOMY_MAX_WORKER_SESSION_H
 _DEFAULT_WORKER_SESSION_HEAL_MAX_PER_TICK = 2
 _WORKER_LAUNCH_OUTBOX_RECOVERY_STATUSES = frozenset({"pending", "processing", "failed"})
 _DURABLE_DISPOSED_METADATA_VALUES = frozenset({"disposed", "supervisor_agent_disposed_node"})
+_EDITOR_ROLES = frozenset({"owner", "editor", "admin"})
 
 _AUTO_TICK_ENV = "WORKSPACE_AUTONOMY_AUTO_TICK_ENABLED"
 _AUTO_COMPLETE_ENV = "WORKSPACE_AUTONOMY_AUTO_COMPLETE_ENABLED"
@@ -61,6 +63,26 @@ class _WorkspaceTaskChildrenRepository(Protocol):
         workspace_id: str,
         root_goal_task_id: str,
     ) -> Sequence[WorkspaceTask]: ...
+
+
+async def _require_autonomy_tick_editor(
+    *,
+    db: AsyncSession,
+    workspace_id: str,
+    user_id: str,
+) -> None:
+    role = (
+        await db.execute(
+            refresh_select_statement(
+                select(WorkspaceMemberModel.role).where(
+                    WorkspaceMemberModel.workspace_id == workspace_id,
+                    WorkspaceMemberModel.user_id == user_id,
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    if str(role) not in _EDITOR_ROLES:
+        raise PermissionError("Insufficient permission to trigger workspace autonomy")
 
 
 def _auto_tick_enabled() -> bool:
@@ -961,6 +983,7 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
     workspace_id: str,
     current_user: User,
     force: bool = False,
+    system_tick: bool = False,
 ) -> dict[str, Any]:
     """Advance an existing workspace root goal through the durable V2 plan.
 
@@ -984,6 +1007,10 @@ async def maybe_auto_trigger_existing_root_execution(  # noqa: C901, PLR0911, PL
     workspace = await container.workspace_repository().find_by_id(workspace_id)
     if workspace is None:
         return {"triggered": False, "root_task_id": None, "reason": "workspace_not_found"}
+    if not system_tick:
+        await _require_autonomy_tick_editor(
+            db=db, workspace_id=workspace_id, user_id=current_user.id
+        )
 
     leader_agent_id = WORKSPACE_PLAN_SYSTEM_ACTOR_ID
     task_service = WorkspaceTaskService(
@@ -1153,6 +1180,7 @@ async def _run_autonomy_tick(workspace_id: str, actor_user_id: str) -> None:
                 workspace_id=workspace_id,
                 current_user=user_row,
                 force=False,
+                system_tick=True,
             )
             logger.info(
                 "autonomy_tick.done",

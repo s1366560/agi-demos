@@ -571,6 +571,7 @@ def _get_workspace_service(request: Request, db: AsyncSession) -> WorkspaceServi
         workspace_member_repo=container.workspace_member_repository(),
         workspace_agent_repo=container.workspace_agent_repository(),
         topology_repo=container.topology_repository(),
+        agent_registry=container.agent_registry(),
     )
 
 
@@ -615,14 +616,34 @@ async def _ensure_workspace_editor_access(
     request: Request,
     db: AsyncSession,
     current_user: User,
+    error_message: str | None = None,
 ) -> None:
     workspace_service = _get_workspace_service(request, db)
     _ = await workspace_service._require_minimum_role(
         workspace_id=workspace_id,
         user_id=current_user.id,
         minimum=WorkspaceRole.EDITOR,
-        error_message="Only workspace owners and editors can accept a plan node after review",
+        error_message=error_message or "Only workspace owners and editors can modify workspace plans",
     )
+
+
+async def _workspace_user_can_edit(
+    *,
+    workspace_id: str,
+    request: Request,
+    db: AsyncSession,
+    current_user: User,
+) -> bool:
+    try:
+        await _ensure_workspace_editor_access(
+            workspace_id=workspace_id,
+            request=request,
+            db=db,
+            current_user=current_user,
+        )
+    except PermissionError:
+        return False
+    return True
 
 
 def _action(
@@ -3330,7 +3351,7 @@ async def _update_iteration_loop_for_operator(
     enqueue_tick: bool,
     require_next_iteration_ready: bool = False,
 ) -> WorkspacePlanActionResultResponse:
-    await _ensure_workspace_access(
+    await _ensure_workspace_editor_access(
         workspace_id=workspace_id,
         request=request,
         db=db,
@@ -4799,7 +4820,18 @@ async def get_workspace_plan_snapshot(
                 raise ValueError(f"workspace plan not found: {selected_plan_id}")
             plans = [*plans, plan]
         selected_is_latest = plan.id == latest_plan_id
-        if selected_is_latest and include_details and recover_stale_attempts:
+        can_recover_stale_attempts = (
+            selected_is_latest
+            and include_details
+            and recover_stale_attempts
+            and await _workspace_user_can_edit(
+                workspace_id=workspace_id,
+                request=request,
+                db=db,
+                current_user=current_user,
+            )
+        )
+        if can_recover_stale_attempts:
             if await _recover_stale_attempts_for_snapshot(
                 session=db,
                 workspace_id=workspace_id,
@@ -4913,7 +4945,7 @@ async def retry_workspace_plan_outbox_item(
 ) -> WorkspacePlanActionResultResponse:
     """Retry a failed/dead-letter durable plan job immediately."""
     try:
-        await _ensure_workspace_access(
+        await _ensure_workspace_editor_access(
             workspace_id=workspace_id,
             request=request,
             db=db,
@@ -5110,7 +5142,7 @@ async def request_workspace_plan_pipeline_run(
 ) -> WorkspacePlanActionResultResponse:
     """Request a harness-native CI/CD run for the selected or active delivery node."""
     try:
-        await _ensure_workspace_access(
+        await _ensure_workspace_editor_access(
             workspace_id=workspace_id,
             request=request,
             db=db,
@@ -5168,7 +5200,7 @@ async def request_workspace_plan_delivery_contract_regeneration(
 ) -> WorkspacePlanActionResultResponse:
     """Mark the delivery contract for agent-managed regeneration and tick the supervisor."""
     try:
-        await _ensure_workspace_access(
+        await _ensure_workspace_editor_access(
             workspace_id=workspace_id,
             request=request,
             db=db,
@@ -5291,7 +5323,7 @@ async def request_workspace_plan_node_replan(
 ) -> WorkspacePlanActionResultResponse:
     """Return an active plan node to TODO and schedule supervisor recovery."""
     try:
-        await _ensure_workspace_access(
+        await _ensure_workspace_editor_access(
             workspace_id=workspace_id,
             request=request,
             db=db,
@@ -5358,7 +5390,7 @@ async def reopen_blocked_workspace_plan_node(
 ) -> WorkspacePlanActionResultResponse:
     """Reopen a blocked durable plan node and schedule supervisor recovery."""
     try:
-        await _ensure_workspace_access(
+        await _ensure_workspace_editor_access(
             workspace_id=workspace_id,
             request=request,
             db=db,
