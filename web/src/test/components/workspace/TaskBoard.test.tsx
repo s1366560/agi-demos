@@ -76,7 +76,7 @@ describe('TaskBoard', () => {
     });
 
     await act(async () => {
-      fireEvent.change(screen.getByLabelText('workspaceDetail.taskBoard.taskTitle'), {
+      fireEvent.change(screen.getByLabelText('Task title'), {
         target: { value: 'Build MVP' },
       });
       const submitButtons = screen.getAllByRole('button', {
@@ -117,9 +117,7 @@ describe('TaskBoard', () => {
   it('labels the show archived switch', () => {
     renderTaskBoard({});
 
-    expect(
-      screen.getByRole('switch', { name: 'workspaceDetail.taskBoard.showArchived' })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Show archived' })).toBeInTheDocument();
   });
 
   it('renders root goal health, remediation, and evidence grade badges', () => {
@@ -182,22 +180,14 @@ describe('TaskBoard', () => {
 
     expect(screen.getByText(/Pending adjudication/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/workspaceDetail\.taskBoard\.pendingLeaderAdjudication/i)
+      screen.getByText(/Waiting for Sisyphus to review the worker result\./i)
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/workspaceDetail\.taskBoard\.workerReportType: completed/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Worker report: completed/i)).toBeInTheDocument();
     expect(screen.getByText(/Checklist drafted successfully/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/workspaceDetail\.taskBoard\.reportArtifacts: artifact:checklist/i)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/workspaceDetail\.taskBoard\.reportVerifications: worker_report:completed/i)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/workspaceDetail\.taskBoard\.workerLabel: Worker A/i)
-    ).toBeInTheDocument();
-    expect(screen.getByText(/workspaceDetail\.taskBoard\.attemptNumber #2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Artifacts: artifact:checklist/i)).toBeInTheDocument();
+    expect(screen.getByText(/Checks: worker_report:completed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Worker: Worker A/i)).toBeInTheDocument();
+    expect(screen.getByText(/Attempt #2/i)).toBeInTheDocument();
   });
 
   it('renders code context and launch anomaly signals for software tasks', () => {
@@ -226,7 +216,7 @@ describe('TaskBoard', () => {
     expect(screen.getByText(/no terminal event/i)).toBeInTheDocument();
     expect(screen.getByText(/Durable replan requested/i)).toBeInTheDocument();
     expect(screen.getByText(/No conversation/i)).toBeInTheDocument();
-    expect(screen.getByText(/workspaceDetail\.taskBoard\.codeRoot/)).toBeInTheDocument();
+    expect(screen.getByText(/Code root/)).toBeInTheDocument();
     expect(screen.getByText('/workspace/my-evo')).toBeInTheDocument();
     expect(screen.getByText(/AGENTS abcdef123456/)).toBeInTheDocument();
   });
@@ -289,9 +279,7 @@ describe('TaskBoard', () => {
     });
 
     await act(async () => {
-      fireEvent.click(
-        screen.getByRole('button', { name: 'workspaceDetail.taskBoard.openDetails' })
-      );
+      fireEvent.click(screen.getByRole('button', { name: 'Open task details' }));
     });
 
     expect(workspaceTaskService.getExperience).toHaveBeenCalledWith('ws-1', 'task-detail-1');
@@ -343,12 +331,12 @@ describe('TaskBoard', () => {
 
     expect(screen.getByText('Projected task')).toBeInTheDocument();
     expect(
-      screen.getAllByLabelText('workspaceDetail.taskBoard.assignee').find((element) => {
+      screen.getAllByLabelText('Assignee').find((element) => {
         return element.tagName === 'INPUT';
       })
     ).toBeDisabled();
     expect(
-      screen.getAllByLabelText('workspaceDetail.taskBoard.status').find((element) => {
+      screen.getAllByLabelText('Status').find((element) => {
         return element.tagName === 'INPUT';
       })
     ).toBeDisabled();
@@ -364,9 +352,7 @@ describe('TaskBoard', () => {
     renderTaskBoard({});
 
     await act(async () => {
-      fireEvent.click(
-        screen.getByRole('button', { name: 'workspaceDetail.taskBoard.forceAutonomy' })
-      );
+      fireEvent.click(screen.getByRole('button', { name: 'Force autonomy' }));
     });
 
     expect(workspaceAutonomyService.tick).toHaveBeenCalledWith('ws-1', { force: true });
@@ -375,8 +361,6 @@ describe('TaskBoard', () => {
   it('can hide the forced autonomy action when embedded in goals', () => {
     renderTaskBoard({ showAutonomyAction: false });
 
-    expect(
-      screen.queryByRole('button', { name: 'workspaceDetail.taskBoard.forceAutonomy' })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Force autonomy' })).not.toBeInTheDocument();
   });
 });

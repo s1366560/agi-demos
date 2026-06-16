@@ -337,8 +337,12 @@ describe('Blackboard', () => {
     expect(screen.getByTestId('blackboard-dashboard-header')).not.toHaveTextContent(
       'blackboard.shellHint'
     );
-    const sensingBadge = screen.getByText('blackboard.shellSensingHint').closest('div');
-    expect(sensingBadge?.closest('div[title="blackboard.shellHint"]')).toBeInTheDocument();
+    const sensingBadge = screen.getByText('workspace shell sync').closest('div');
+    expect(
+      sensingBadge?.closest(
+        'div[title="Blackboard hosts collaboration and projected workspace views; execution authority remains on tasks, attempts, and runtime."]'
+      )
+    ).toBeInTheDocument();
     expect(sensingBadge).toHaveAttribute('data-blackboard-surface', 'sensing');
     expect(sensingBadge).toHaveAttribute('data-blackboard-signal-role', 'sensing-capable');
     expect(sensingBadge).toHaveAttribute('data-blackboard-authority', 'non-authoritative');
@@ -373,13 +377,13 @@ describe('Blackboard', () => {
     renderBlackboard();
 
     await waitFor(() => {
-      expect(screen.getByText('blackboard.summary.completion')).toBeInTheDocument();
+      expect(screen.getByText('Completion')).toBeInTheDocument();
     });
 
     expect(screen.getByText('50%')).toBeInTheDocument();
-    expect(screen.getByText('blackboard.summary.tasks')).toBeInTheDocument();
-    expect(screen.getByText('blackboard.summary.activeAgents')).toBeInTheDocument();
-    expect(screen.getByText('blackboard.summary.openThreads')).toBeInTheDocument();
+    expect(screen.getByText('Tasks')).toBeInTheDocument();
+    expect(screen.getByText('Active agents')).toBeInTheDocument();
+    expect(screen.getByText('Open threads')).toBeInTheDocument();
   });
 
   it('uses current plan nodes for summary metrics when a plan snapshot exists', async () => {
@@ -622,7 +626,7 @@ describe('Blackboard', () => {
     renderBlackboard();
 
     await waitFor(() => {
-      expect(screen.getByText('blackboard.noWorkspaces')).toBeInTheDocument();
+      expect(screen.getByText('No workspaces found')).toBeInTheDocument();
     });
   });
 
@@ -640,7 +644,7 @@ describe('Blackboard', () => {
     renderBlackboard();
 
     await waitFor(() => {
-      expect(screen.getByText('blackboard.openInAgentWorkspace')).toBeInTheDocument();
+      expect(screen.getByText('Open in Agent Workspace')).toBeInTheDocument();
     });
 
     expect(screen.getByTestId('blackboard-dashboard-header').firstElementChild).toHaveClass(
@@ -648,7 +652,7 @@ describe('Blackboard', () => {
     );
     expect(screen.getByTestId('blackboard-dashboard-metrics')).toBeInTheDocument();
 
-    const link = screen.getByText('blackboard.openInAgentWorkspace').closest('a');
+    const link = screen.getByText('Open in Agent Workspace').closest('a');
     expect(link).toBeInTheDocument();
   });
 
@@ -737,7 +741,7 @@ describe('Blackboard', () => {
     renderBlackboard();
 
     await waitFor(() => {
-      expect(screen.getByText('blackboard.title')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Blackboard' })).toBeInTheDocument();
     });
   });
 });
