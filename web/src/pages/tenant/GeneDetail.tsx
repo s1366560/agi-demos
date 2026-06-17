@@ -32,6 +32,7 @@ import {
   useGeneReviewsLoading,
   useEvolutionEvents,
   useGeneMarketLoading,
+  useGeneMarketStore,
   useGeneMarketActions,
 } from '../../stores/geneMarket';
 import { useCurrentTenant } from '../../stores/tenant';
@@ -89,6 +90,9 @@ export const GeneDetail: FC = () => {
   const [reviewForm] = Form.useForm<ReviewFormValues>();
   const [reviewPage, setReviewPage] = useState(1);
   const reviewPageSize = 5;
+  const showActionError = (fallbackMessage: string) => {
+    message.error(useGeneMarketStore.getState().error ?? fallbackMessage);
+  };
 
   useEffect(() => {
     if (geneId && tenantId) {
@@ -172,8 +176,8 @@ export const GeneDetail: FC = () => {
         rateForm.resetFields();
         void getGene(geneId, { tenant_id: tenantId });
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      showActionError(t('tenant.genes.rateError'));
     }
   };
 
@@ -193,8 +197,8 @@ export const GeneDetail: FC = () => {
         setIsReviewModalVisible(false);
         reviewForm.resetFields();
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      showActionError(t('gene.reviewSubmitError'));
     }
   };
 
@@ -209,8 +213,8 @@ export const GeneDetail: FC = () => {
           try {
             await deleteGeneReview(geneId, reviewId, { tenant_id: tenantId });
             message.success(t('gene.reviewDeleteSuccess'));
-          } catch (err) {
-            console.error(err);
+          } catch {
+            showActionError(t('gene.reviewDeleteError'));
           }
         }
       },

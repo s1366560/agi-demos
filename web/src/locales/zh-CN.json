@@ -3283,6 +3283,7 @@
       "installSuccess": "基因安装成功",
       "invalidJson": "无效的 JSON 格式",
       "rateSuccess": "评分提交成功",
+      "rateError": "评分提交失败",
       "notFound": "基因未找到",
       "back": "返回市场",
       "rateAction": "评分",
@@ -7864,7 +7865,9 @@
     "deleteReviewConfirm": "确定要删除这条评价吗？",
     "reviewPlaceholder": "分享您对这个基因的想法...",
     "reviewSubmitSuccess": "评价提交成功",
+    "reviewSubmitError": "评价提交失败",
     "reviewDeleteSuccess": "评价删除成功",
+    "reviewDeleteError": "评价删除失败",
     "noReviews": "暂无评价。成为第一个评价的人吧！",
     "yourRating": "您的评分",
     "reviewContent": "评价内容"

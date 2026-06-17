@@ -1,12 +1,13 @@
 import { MemoryRouter } from 'react-router-dom';
 
+import { message, Modal } from 'antd';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GeneDetail } from '@/pages/tenant/GeneDetail';
 import { GeneMarket } from '@/pages/tenant/GeneMarket';
 
-import type { GeneResponse } from '@/services/geneMarketService';
+import type { GeneResponse, GeneReview } from '@/services/geneMarketService';
 
 const navigateMock = vi.hoisted(() => vi.fn());
 
@@ -36,7 +37,8 @@ const stateMock = vi.hoisted(() => ({
   genomeTotal: 0,
   genomes: [] as unknown[],
   isLoading: false,
-  reviews: [] as unknown[],
+  error: null as string | null,
+  reviews: [] as GeneReview[],
   reviewsLoading: false,
   reviewsTotal: 0,
 }));
@@ -60,6 +62,9 @@ vi.mock('@/stores/geneMarket', () => ({
   useEvolutionEvents: () => stateMock.evolutionEvents,
   useGeneMarketActions: () => actionsMock,
   useGeneMarketLoading: () => stateMock.isLoading,
+  useGeneMarketStore: {
+    getState: () => ({ error: stateMock.error }),
+  },
   useGeneReviews: () => stateMock.reviews,
   useGeneReviewsLoading: () => stateMock.reviewsLoading,
   useGeneReviewsTotal: () => stateMock.reviewsTotal,
@@ -100,6 +105,16 @@ const gene = (overrides: Partial<GeneResponse> = {}): GeneResponse => ({
   ...overrides,
 });
 
+const review = (overrides: Partial<GeneReview> = {}): GeneReview => ({
+  content: 'This helped the team ship faster.',
+  created_at: '2026-06-17T00:00:00Z',
+  gene_id: 'gene-1',
+  id: 'review-1',
+  rating: 5,
+  user_id: 'user-1',
+  ...overrides,
+});
+
 describe('Gene marketplace rating flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -111,6 +126,7 @@ describe('Gene marketplace rating flow', () => {
     stateMock.genomeTotal = 0;
     stateMock.genomes = [];
     stateMock.isLoading = false;
+    stateMock.error = null;
     stateMock.reviews = [];
     stateMock.reviewsLoading = false;
     stateMock.reviewsTotal = 0;
@@ -120,6 +136,8 @@ describe('Gene marketplace rating flow', () => {
     actionsMock.listGeneEvolutionEvents.mockResolvedValue(undefined);
     actionsMock.listGenes.mockResolvedValue(undefined);
     actionsMock.listGenomes.mockResolvedValue(undefined);
+    actionsMock.createGeneReview.mockResolvedValue(undefined);
+    actionsMock.deleteGeneReview.mockResolvedValue(undefined);
     actionsMock.rateGene.mockResolvedValue(undefined);
   });
 
@@ -149,6 +167,76 @@ describe('Gene marketplace rating flow', () => {
     expect(actionsMock.rateGene).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(actionsMock.getGene).toHaveBeenCalledWith('gene-1', { tenant_id: 'tenant-1' });
+    });
+  });
+
+  it('surfaces rating submission failures from the gene store', async () => {
+    const messageErrorSpy = vi.spyOn(message, 'error').mockImplementation(vi.fn());
+    stateMock.currentGene = gene();
+    stateMock.error = 'Rating API failed';
+    actionsMock.rateGene.mockRejectedValue(new Error('Network Error'));
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1?rate=1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'OK' }));
+
+    await waitFor(() => {
+      expect(messageErrorSpy).toHaveBeenCalledWith('Rating API failed');
+    });
+  });
+
+  it('surfaces review submission failures from the gene store', async () => {
+    const messageErrorSpy = vi.spyOn(message, 'error').mockImplementation(vi.fn());
+    stateMock.currentGene = gene();
+    stateMock.error = 'Review API failed';
+    actionsMock.createGeneReview.mockRejectedValue(new Error('Network Error'));
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'gene.writeReview' }));
+    fireEvent.change(screen.getByLabelText('gene.reviewContent'), {
+      target: { value: 'Useful and reliable.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await waitFor(() => {
+      expect(messageErrorSpy).toHaveBeenCalledWith('Review API failed');
+    });
+  });
+
+  it('surfaces review deletion failures from the gene store', async () => {
+    const messageErrorSpy = vi.spyOn(message, 'error').mockImplementation(vi.fn());
+    vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
+      void config.onOk?.();
+      return {
+        destroy: vi.fn(),
+        update: vi.fn(),
+      };
+    });
+    stateMock.currentGene = gene();
+    stateMock.error = 'Delete API failed';
+    stateMock.reviews = [review()];
+    stateMock.reviewsTotal = 1;
+    actionsMock.deleteGeneReview.mockRejectedValue(new Error('Network Error'));
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'gene.deleteReview' }));
+
+    await waitFor(() => {
+      expect(messageErrorSpy).toHaveBeenCalledWith('Delete API failed');
     });
   });
 });
