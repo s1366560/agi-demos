@@ -759,9 +759,13 @@ const commonTranslations: Record<string, string> = {
   'tenant.genes.description': 'Description',
   'tenant.genes.filters.categoryLabel': 'Filter genes by category',
   'tenant.genes.filters.visibilityLabel': 'Filter genes by visibility',
+  'tenant.genes.publishGenomeButton': 'Create Genome',
   'tenant.genes.publish.modalTitle': 'Create Gene Draft',
+  'tenant.genes.publish.genomeModalTitle': 'Create Genome Draft',
   'tenant.genes.publish.modalDescription':
     'Create a draft marketplace gene, review the generated detail page, then publish it when it is ready.',
+  'tenant.genes.publish.genomeModalDescription':
+    'Create a draft genome from existing gene slugs, review the bundle, then publish it when it is ready.',
   'tenant.genes.publish.name': 'Name',
   'tenant.genes.publish.nameRequired': 'Gene name is required',
   'tenant.genes.publish.namePlaceholder': 'Code review assistant',
@@ -777,9 +781,14 @@ const commonTranslations: Record<string, string> = {
   'tenant.genes.publish.visibility': 'Visibility',
   'tenant.genes.publish.tags': 'Tags',
   'tenant.genes.publish.tagsPlaceholder': 'review, quality, automation',
+  'tenant.genes.publish.geneSlugs': 'Included gene slugs',
+  'tenant.genes.publish.geneSlugsPlaceholder': 'code-review, test-writer',
   'tenant.genes.publish.createDraft': 'Create Draft',
+  'tenant.genes.publish.createGenomeDraft': 'Create Genome Draft',
   'tenant.genes.publish.createDraftSuccess': 'Gene draft created',
+  'tenant.genes.publish.createGenomeDraftSuccess': 'Genome draft created',
   'tenant.genes.publish.createDraftError': 'Failed to create gene draft',
+  'tenant.genes.publish.createGenomeDraftError': 'Failed to create genome draft',
 
   // Tenant Instance Channels
   'tenant.instances.channels.config.serverUrlPlaceholder': 'ws://localhost:8080',

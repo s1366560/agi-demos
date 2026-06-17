@@ -20,6 +20,7 @@ const paramsMock = vi.hoisted(() => ({
 const actionsMock = vi.hoisted(() => ({
   clearError: vi.fn(),
   createGene: vi.fn(),
+  createGenome: vi.fn(),
   createGeneReview: vi.fn(),
   deleteGeneReview: vi.fn(),
   fetchGeneReviews: vi.fn(),
@@ -187,6 +188,7 @@ describe('Gene marketplace rating flow', () => {
     actionsMock.listGenomes.mockResolvedValue(undefined);
     actionsMock.createGeneReview.mockResolvedValue(undefined);
     actionsMock.createGene.mockResolvedValue(gene({ id: 'gene-new' }));
+    actionsMock.createGenome.mockResolvedValue(genome({ id: 'genome-new' }));
     actionsMock.deleteGeneReview.mockResolvedValue(undefined);
     actionsMock.publishGene.mockResolvedValue(gene({ is_published: true }));
     actionsMock.publishGenome.mockResolvedValue(genome({ is_published: true }));
@@ -289,6 +291,54 @@ describe('Gene marketplace rating flow', () => {
       );
     });
     expect(navigateMock).toHaveBeenCalledWith('gene-new');
+  });
+
+  it('creates a draft genome from the marketplace genomes tab action', async () => {
+    stateMock.activeTab = 'genomes';
+    stateMock.genomes = [genome()];
+    stateMock.genomeTotal = 1;
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes']}>
+        <GeneMarket />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Genome' }));
+
+    expect((await screen.findAllByText('Create Genome Draft')).length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'Review Pack' },
+    });
+    fireEvent.change(screen.getByLabelText('Slug'), {
+      target: { value: 'review-pack' },
+    });
+    fireEvent.change(screen.getByLabelText('Short description'), {
+      target: { value: 'Review automation bundle' },
+    });
+    fireEvent.change(screen.getByLabelText('Description'), {
+      target: { value: 'Combines reviewer genes for tenant projects.' },
+    });
+    fireEvent.change(screen.getByLabelText('Included gene slugs'), {
+      target: { value: 'code-review, test-writer, code-review' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Genome Draft' }));
+
+    await waitFor(() => {
+      expect(actionsMock.createGenome).toHaveBeenCalledWith(
+        {
+          name: 'Review Pack',
+          slug: 'review-pack',
+          tenant_id: 'tenant-1',
+          visibility: 'public',
+          gene_slugs: ['code-review', 'test-writer'],
+          short_description: 'Review automation bundle',
+          description: 'Combines reviewer genes for tenant projects.',
+        },
+        { tenant_id: 'tenant-1' }
+      );
+    });
+    expect(navigateMock).toHaveBeenCalledWith('./genomes/genome-new');
   });
 
   it('opens the rating modal from the rate query parameter', async () => {

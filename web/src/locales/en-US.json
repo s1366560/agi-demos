@@ -3120,9 +3120,12 @@
       "title": "Gene Market",
       "subtitle": "Discover and install genes for your instances",
       "publishButton": "Publish Gene",
+      "publishGenomeButton": "Create Genome",
       "publish": {
         "modalTitle": "Create Gene Draft",
+        "genomeModalTitle": "Create Genome Draft",
         "modalDescription": "Create a draft marketplace gene, review the generated detail page, then publish it when it is ready.",
+        "genomeModalDescription": "Create a draft genome from existing gene slugs, review the bundle, then publish it when it is ready.",
         "name": "Name",
         "nameRequired": "Gene name is required",
         "namePlaceholder": "Code review assistant",
@@ -3138,9 +3141,14 @@
         "visibility": "Visibility",
         "tags": "Tags",
         "tagsPlaceholder": "review, quality, automation",
+        "geneSlugs": "Included gene slugs",
+        "geneSlugsPlaceholder": "code-review, test-writer",
         "createDraft": "Create Draft",
+        "createGenomeDraft": "Create Genome Draft",
         "createDraftSuccess": "Gene draft created",
-        "createDraftError": "Failed to create gene draft"
+        "createGenomeDraftSuccess": "Genome draft created",
+        "createDraftError": "Failed to create gene draft",
+        "createGenomeDraftError": "Failed to create genome draft"
       },
       "searchPlaceholder": "Search genes...",
       "loading": "Loading genes...",
