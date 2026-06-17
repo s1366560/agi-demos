@@ -756,8 +756,30 @@ const commonTranslations: Record<string, string> = {
 
   // Tenant Genes
   'tenant.genes.configOverridePlaceholder': '{"key": "value"}',
+  'tenant.genes.description': 'Description',
   'tenant.genes.filters.categoryLabel': 'Filter genes by category',
   'tenant.genes.filters.visibilityLabel': 'Filter genes by visibility',
+  'tenant.genes.publish.modalTitle': 'Create Gene Draft',
+  'tenant.genes.publish.modalDescription':
+    'Create a draft marketplace gene, review the generated detail page, then publish it when it is ready.',
+  'tenant.genes.publish.name': 'Name',
+  'tenant.genes.publish.nameRequired': 'Gene name is required',
+  'tenant.genes.publish.namePlaceholder': 'Code review assistant',
+  'tenant.genes.publish.slug': 'Slug',
+  'tenant.genes.publish.slugRequired': 'Gene slug is required',
+  'tenant.genes.publish.slugPlaceholder': 'code-review-assistant',
+  'tenant.genes.publish.category': 'Category',
+  'tenant.genes.publish.categoryPlaceholder': 'tool',
+  'tenant.genes.publish.version': 'Version',
+  'tenant.genes.publish.shortDescription': 'Short description',
+  'tenant.genes.publish.shortDescriptionPlaceholder': 'One-line summary',
+  'tenant.genes.publish.descriptionPlaceholder': 'Describe what this gene does and when to use it',
+  'tenant.genes.publish.visibility': 'Visibility',
+  'tenant.genes.publish.tags': 'Tags',
+  'tenant.genes.publish.tagsPlaceholder': 'review, quality, automation',
+  'tenant.genes.publish.createDraft': 'Create Draft',
+  'tenant.genes.publish.createDraftSuccess': 'Gene draft created',
+  'tenant.genes.publish.createDraftError': 'Failed to create gene draft',
 
   // Tenant Instance Channels
   'tenant.instances.channels.config.serverUrlPlaceholder': 'ws://localhost:8080',

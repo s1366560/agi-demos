@@ -19,6 +19,7 @@ const paramsMock = vi.hoisted(() => ({
 
 const actionsMock = vi.hoisted(() => ({
   clearError: vi.fn(),
+  createGene: vi.fn(),
   createGeneReview: vi.fn(),
   deleteGeneReview: vi.fn(),
   fetchGeneReviews: vi.fn(),
@@ -185,6 +186,7 @@ describe('Gene marketplace rating flow', () => {
     actionsMock.listGenes.mockResolvedValue(undefined);
     actionsMock.listGenomes.mockResolvedValue(undefined);
     actionsMock.createGeneReview.mockResolvedValue(undefined);
+    actionsMock.createGene.mockResolvedValue(gene({ id: 'gene-new' }));
     actionsMock.deleteGeneReview.mockResolvedValue(undefined);
     actionsMock.publishGene.mockResolvedValue(gene({ is_published: true }));
     actionsMock.publishGenome.mockResolvedValue(genome({ is_published: true }));
@@ -237,6 +239,56 @@ describe('Gene marketplace rating flow', () => {
       page_size: 20,
       tenant_id: 'tenant-1',
     });
+  });
+
+  it('creates a draft gene from the marketplace publish action', async () => {
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes']}>
+        <GeneMarket />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'tenant.genes.publishButton' }));
+
+    expect(await screen.findByText('Create Gene Draft')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'Code Review Assistant' },
+    });
+    fireEvent.change(screen.getByLabelText('Slug'), {
+      target: { value: 'code-review-assistant' },
+    });
+    fireEvent.change(screen.getByLabelText('Category'), {
+      target: { value: 'tool' },
+    });
+    fireEvent.change(screen.getByLabelText('Short description'), {
+      target: { value: 'Reviews pull requests' },
+    });
+    fireEvent.change(screen.getByLabelText('Description'), {
+      target: { value: 'Automates code review checks for tenant agents.' },
+    });
+    fireEvent.change(screen.getByLabelText('Tags'), {
+      target: { value: 'review, quality, review' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Draft' }));
+
+    await waitFor(() => {
+      expect(actionsMock.createGene).toHaveBeenCalledWith(
+        {
+          name: 'Code Review Assistant',
+          slug: 'code-review-assistant',
+          tenant_id: 'tenant-1',
+          category: 'tool',
+          version: '1.0.0',
+          short_description: 'Reviews pull requests',
+          description: 'Automates code review checks for tenant agents.',
+          visibility: 'public',
+          tags: ['review', 'quality'],
+          source: 'manual',
+        },
+        { tenant_id: 'tenant-1' }
+      );
+    });
+    expect(navigateMock).toHaveBeenCalledWith('gene-new');
   });
 
   it('opens the rating modal from the rate query parameter', async () => {

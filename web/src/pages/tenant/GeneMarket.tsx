@@ -10,6 +10,9 @@ import {
   Input,
   Select,
   Button,
+  Form,
+  Modal,
+  message,
   Tag,
   Space,
   Card,
@@ -32,6 +35,7 @@ import {
 import { useCurrentTenant } from '../../stores/tenant';
 
 import type {
+  GeneCreate,
   GeneListParams,
   GeneResponse,
   GenomeListParams,
@@ -41,6 +45,35 @@ import type {
 const { Search } = Input;
 const { Option } = Select;
 type PublishStatusFilter = 'all' | 'published' | 'draft';
+
+interface PublishGeneFormValues {
+  name: string;
+  slug: string;
+  category?: string;
+  version?: string;
+  short_description?: string;
+  description?: string;
+  visibility?: 'public' | 'org_private';
+  tags?: string;
+}
+
+const normalizeOptionalText = (value: string | undefined): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const splitTags = (value: string | undefined): string[] =>
+  Array.from(
+    new Set(
+      (value ?? '')
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+    )
+  );
+
+const isFormValidationError = (error: unknown): boolean =>
+  typeof error === 'object' && error !== null && 'errorFields' in error;
 
 export const GeneMarket: FC = () => {
   const { t } = useTranslation();
@@ -57,7 +90,8 @@ export const GeneMarket: FC = () => {
   const genomeTotal = useGenomeTotal();
   const activeTab = useActiveTab();
 
-  const { listGenes, listGenomes, setActiveTab, clearError, reset } = useGeneMarketActions();
+  const { listGenes, listGenomes, createGene, setActiveTab, clearError, reset } =
+    useGeneMarketActions();
 
   const [searchInput, setSearchInput] = useState('');
   const [geneSearch, setGeneSearch] = useState('');
@@ -69,6 +103,9 @@ export const GeneMarket: FC = () => {
   const [genePageSize, setGenePageSize] = useState(20);
   const [genomePage, setGenomePage] = useState(1);
   const [genomePageSize, setGenomePageSize] = useState(20);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
+  const [publishForm] = Form.useForm<PublishGeneFormValues>();
 
   const geneListParams = useMemo<GeneListParams>(() => {
     const params: GeneListParams = {
@@ -139,7 +176,55 @@ export const GeneMarket: FC = () => {
   };
 
   const handlePublishGene = () => {
-    void navigate('./publish');
+    publishForm.resetFields();
+    setIsPublishModalOpen(true);
+  };
+
+  const handleCreateGeneDraft = async () => {
+    if (!tenantId) {
+      return;
+    }
+    try {
+      const values = await publishForm.validateFields();
+      setIsPublishSubmitting(true);
+      const payload: GeneCreate = {
+        name: values.name.trim(),
+        slug: values.slug.trim(),
+        tenant_id: tenantId,
+        version: normalizeOptionalText(values.version) ?? '1.0.0',
+        visibility: values.visibility ?? 'public',
+        tags: splitTags(values.tags),
+        source: 'manual',
+      };
+      const category = normalizeOptionalText(values.category);
+      if (category) {
+        payload.category = category;
+      }
+      const shortDescription = normalizeOptionalText(values.short_description);
+      if (shortDescription) {
+        payload.short_description = shortDescription;
+      }
+      const description = normalizeOptionalText(values.description);
+      if (description) {
+        payload.description = description;
+      }
+      const created = await createGene(payload, { tenant_id: tenantId });
+      message.success(t('tenant.genes.publish.createDraftSuccess'));
+      setIsPublishModalOpen(false);
+      publishForm.resetFields();
+      void navigate(created.id);
+    } catch (error) {
+      if (isFormValidationError(error)) {
+        return;
+      }
+      if (error instanceof Error) {
+        message.error(error.message);
+        return;
+      }
+      message.error(t('tenant.genes.publish.createDraftError'));
+    } finally {
+      setIsPublishSubmitting(false);
+    }
   };
 
   const handleGeneSearch = useCallback((value: string) => {
@@ -346,7 +431,7 @@ export const GeneMarket: FC = () => {
           <h1 className="text-2xl font-semibold">{t('tenant.genes.title')}</h1>
           <p className="text-slate-500">{t('tenant.genes.subtitle')}</p>
         </div>
-        <Button type="primary" onClick={handlePublishGene}>
+        <Button type="primary" onClick={handlePublishGene} disabled={!tenantId}>
           {t('tenant.genes.publishButton')}
         </Button>
       </div>
@@ -456,6 +541,71 @@ export const GeneMarket: FC = () => {
           },
         ]}
       />
+
+      <Modal
+        title={t('tenant.genes.publish.modalTitle')}
+        open={isPublishModalOpen}
+        onOk={() => {
+          void handleCreateGeneDraft();
+        }}
+        onCancel={() => {
+          setIsPublishModalOpen(false);
+          publishForm.resetFields();
+        }}
+        okText={t('tenant.genes.publish.createDraft')}
+        confirmLoading={isPublishSubmitting}
+        destroyOnHidden
+      >
+        <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
+          {t('tenant.genes.publish.modalDescription')}
+        </p>
+        <Form
+          form={publishForm}
+          layout="vertical"
+          initialValues={{ version: '1.0.0', visibility: 'public' }}
+        >
+          <Form.Item
+            name="name"
+            label={t('tenant.genes.publish.name')}
+            rules={[{ required: true, message: t('tenant.genes.publish.nameRequired') }]}
+          >
+            <Input placeholder={t('tenant.genes.publish.namePlaceholder')} />
+          </Form.Item>
+          <Form.Item
+            name="slug"
+            label={t('tenant.genes.publish.slug')}
+            rules={[{ required: true, message: t('tenant.genes.publish.slugRequired') }]}
+          >
+            <Input placeholder={t('tenant.genes.publish.slugPlaceholder')} />
+          </Form.Item>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Form.Item name="category" label={t('tenant.genes.publish.category')}>
+              <Input placeholder={t('tenant.genes.publish.categoryPlaceholder')} />
+            </Form.Item>
+            <Form.Item name="version" label={t('tenant.genes.publish.version')}>
+              <Input placeholder="1.0.0" />
+            </Form.Item>
+          </div>
+          <Form.Item name="short_description" label={t('tenant.genes.publish.shortDescription')}>
+            <Input placeholder={t('tenant.genes.publish.shortDescriptionPlaceholder')} />
+          </Form.Item>
+          <Form.Item name="description" label={t('tenant.genes.description')}>
+            <Input.TextArea
+              rows={4}
+              placeholder={t('tenant.genes.publish.descriptionPlaceholder')}
+            />
+          </Form.Item>
+          <Form.Item name="visibility" label={t('tenant.genes.publish.visibility')}>
+            <Select>
+              <Option value="public">{t('tenant.genes.filters.visPublic')}</Option>
+              <Option value="org_private">{t('tenant.genes.filters.visPrivate')}</Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="tags" label={t('tenant.genes.publish.tags')}>
+            <Input placeholder={t('tenant.genes.publish.tagsPlaceholder')} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };
