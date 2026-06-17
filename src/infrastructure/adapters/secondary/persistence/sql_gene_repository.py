@@ -136,6 +136,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         offset: int = 0,
     ) -> list[Gene]:
         stmt = self._build_active_query(filters={"is_published": True})
+        stmt = self._apply_tenant_scope(stmt, None)
         if category is not None:
             stmt = stmt.where(GeneMarketModel.category == category)
         if query:
@@ -219,9 +220,9 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
 
     @override
     async def find_featured(self, limit: int = 20) -> list[Gene]:
-        stmt = self._apply_listing_order(
-            self._build_active_query(filters={"is_featured": True, "is_published": True})
-        ).limit(limit)
+        stmt = self._build_active_query(filters={"is_featured": True, "is_published": True})
+        stmt = self._apply_tenant_scope(stmt, None)
+        stmt = self._apply_listing_order(stmt).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
         )

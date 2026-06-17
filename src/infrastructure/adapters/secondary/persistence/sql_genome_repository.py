@@ -109,7 +109,9 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
     @override
     async def find_featured(self, limit: int = 20) -> list[Genome]:
         stmt = self._apply_listing_order(
-            self._build_active_query(filters={"is_featured": True, "is_published": True})
+            self._build_active_query(filters={"is_featured": True, "is_published": True}).where(
+                GenomeModel.tenant_id.is_(None)
+            )
         ).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))

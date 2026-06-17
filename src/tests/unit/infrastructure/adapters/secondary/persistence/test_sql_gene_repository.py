@@ -134,15 +134,11 @@ async def test_gene_repository_lists_and_counts_only_active_rows(
         search="Needle",
         is_published=True,
     )
-    search_results = await repo.search("Needle", category="target", limit=10, offset=0)
-    featured = await repo.find_featured(limit=10)
     deleted_detail = await repo.find_by_id("deleted-gene")
 
     assert {gene.id for gene in tenant_genes} == {"active-gene", "other-category-gene"}
     assert [gene.id for gene in filtered_genes] == ["active-gene"]
     assert filtered_total == 1
-    assert [gene.id for gene in search_results] == ["active-gene"]
-    assert [gene.id for gene in featured] == ["active-gene"]
     assert deleted_detail is None
 
 
@@ -182,6 +178,46 @@ async def test_gene_repository_defaults_to_global_scope_when_tenant_id_is_omitte
 
     assert [gene.id for gene in listed] == ["global-gene"]
     assert total == 1
+
+
+@pytest.mark.unit
+async def test_gene_repository_search_and_featured_default_to_global_scope(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    test_db.add_all(
+        [
+            _gene(
+                gene_id="tenant-featured-gene",
+                slug="tenant-featured-gene",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Needle Tenant Featured Gene",
+                is_featured=True,
+                created_at=created_at + timedelta(minutes=1),
+            ),
+            _gene(
+                gene_id="global-featured-gene",
+                slug="global-featured-gene",
+                tenant_id=None,
+                created_by=test_user.id,
+                name="Needle Global Featured Gene",
+                is_featured=True,
+                created_at=created_at,
+            ),
+        ]
+    )
+    await test_db.flush()
+
+    repo = SqlGeneRepository(test_db)
+
+    search_results = await repo.search("Needle", category="target", limit=10, offset=0)
+    featured = await repo.find_featured(limit=10)
+
+    assert [gene.id for gene in search_results] == ["global-featured-gene"]
+    assert [gene.id for gene in featured] == ["global-featured-gene"]
 
 
 @pytest.mark.unit
@@ -302,9 +338,6 @@ async def test_gene_repository_orders_listings_newest_first_with_id_tiebreaker(
         limit=2,
         offset=2,
     )
-    searched = await repo.search("Needle", category="target", limit=4, offset=0)
-    featured = await repo.find_featured(limit=4)
-
     assert [gene.id for gene in listed] == [
         "newest-gene",
         "tie-a-gene",
@@ -312,18 +345,6 @@ async def test_gene_repository_orders_listings_newest_first_with_id_tiebreaker(
         "older-gene",
     ]
     assert [gene.id for gene in second_page] == ["tie-b-gene", "older-gene"]
-    assert [gene.id for gene in searched] == [
-        "newest-gene",
-        "tie-a-gene",
-        "tie-b-gene",
-        "older-gene",
-    ]
-    assert [gene.id for gene in featured] == [
-        "newest-gene",
-        "tie-a-gene",
-        "tie-b-gene",
-        "older-gene",
-    ]
 
 
 @pytest.mark.unit
@@ -377,14 +398,50 @@ async def test_genome_repository_lists_and_counts_only_active_rows(
         tenant_id=test_project_db.tenant_id,
         is_published=True,
     )
-    featured = await repo.find_featured(limit=10)
     deleted_detail = await repo.find_by_id("deleted-genome")
 
     assert {genome.id for genome in tenant_genomes} == {"active-genome", "draft-genome"}
     assert [genome.id for genome in published_genomes] == ["active-genome"]
     assert published_total == 1
-    assert [genome.id for genome in featured] == ["active-genome"]
     assert deleted_detail is None
+
+
+@pytest.mark.unit
+async def test_genome_repository_featured_defaults_to_global_scope(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    test_db.add_all(
+        [
+            _genome(
+                genome_id="tenant-featured-genome",
+                slug="tenant-featured-genome",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Tenant Featured Genome",
+                is_featured=True,
+                created_at=created_at + timedelta(minutes=1),
+            ),
+            _genome(
+                genome_id="global-featured-genome",
+                slug="global-featured-genome",
+                tenant_id=None,
+                created_by=test_user.id,
+                name="Global Featured Genome",
+                is_featured=True,
+                created_at=created_at,
+            ),
+        ]
+    )
+    await test_db.flush()
+
+    repo = SqlGenomeRepository(test_db)
+
+    featured = await repo.find_featured(limit=10)
+
+    assert [genome.id for genome in featured] == ["global-featured-genome"]
 
 
 @pytest.mark.unit
@@ -450,8 +507,6 @@ async def test_genome_repository_orders_listings_newest_first_with_id_tiebreaker
         limit=2,
         offset=2,
     )
-    featured = await repo.find_featured(limit=4)
-
     assert [genome.id for genome in listed] == [
         "newest-genome",
         "tie-a-genome",
@@ -459,9 +514,3 @@ async def test_genome_repository_orders_listings_newest_first_with_id_tiebreaker
         "older-genome",
     ]
     assert [genome.id for genome in second_page] == ["tie-b-genome", "older-genome"]
-    assert [genome.id for genome in featured] == [
-        "newest-genome",
-        "tie-a-genome",
-        "tie-b-genome",
-        "older-genome",
-    ]
