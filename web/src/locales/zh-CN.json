@@ -5540,6 +5540,7 @@
       "changeProject": "切换项目",
       "currentProject": "当前项目",
       "loading": "正在初始化 Agent 工作空间...",
+      "projectsLoadFailed": "加载项目失败",
       "mode": {
         "single": "单 Agent",
         "shared": "共享",

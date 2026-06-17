@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Route, Routes, useLocation } from 'react-router-dom';
 
-import { render, screen, waitFor } from '../../utils';
+import { fireEvent, render, screen, waitFor } from '../../utils';
 
 import { AgentWorkspace } from '../../../pages/tenant/AgentWorkspace';
 import { WorkspaceBlackboardRedirect } from '../../../pages/project/WorkspaceBlackboardRedirect';
@@ -217,6 +217,28 @@ describe('workspace/agent workspace bridge', () => {
           externalProjectId: 'project-2',
         })
       );
+    });
+  });
+
+  it('shows a retryable error when tenant projects fail to load', async () => {
+    projectState.projects = [];
+    projectState.currentProject = null;
+    projectState.listProjects = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Tenant projects unavailable'))
+      .mockResolvedValueOnce(undefined);
+
+    render(<AgentWorkspace />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load projects');
+    expect(screen.getByRole('alert')).toHaveTextContent('Tenant projects unavailable');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => {
+      expect(projectState.listProjects).toHaveBeenCalledTimes(2);
     });
   });
 

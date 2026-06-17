@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { Empty as AntEmpty } from 'antd';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 
 import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
 
@@ -22,6 +23,7 @@ import { useAgentV3Store } from '../../stores/agentV3';
 import { useAuthStore } from '../../stores/auth';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
+import { getErrorMessage } from '../../types/common';
 
 import type { Project } from '../../types/memory';
 
@@ -99,6 +101,7 @@ export const AgentWorkspace: FC = () => {
   );
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const [projectLoadError, setProjectLoadError] = useState<string | null>(null);
   const queryProjectId = searchParams.get('projectId');
   const queryWorkspaceId = searchParams.get('workspaceId');
   const effectiveWorkspaceId = queryWorkspaceId || (routeConversationId ? null : lastWorkspaceId);
@@ -130,16 +133,35 @@ export const AgentWorkspace: FC = () => {
     void navigate('/tenant/projects/new');
   }, [navigate]);
 
+  const loadProjectsForTenant = useCallback(async () => {
+    if (!tenantId) return;
+
+    setProjectLoadError(null);
+    try {
+      await listProjects(tenantId);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setProjectLoadError(
+        message === 'An unknown error occurred'
+          ? t('agent.workspace.projectsLoadFailed', 'Failed to load projects')
+          : message
+      );
+    } finally {
+      setInitializing(false);
+    }
+  }, [tenantId, listProjects, t]);
+
+  const handleRetryProjectLoad = useCallback(() => {
+    setInitializing(true);
+    void loadProjectsForTenant();
+  }, [loadProjectsForTenant]);
+
   // Load projects on mount - optimized with removed function dependency
   useEffect(() => {
-    const loadProjects = async () => {
-      if (tenantId && projects.length === 0) {
-        await listProjects(tenantId);
-      }
-    };
-    void loadProjects();
-    // Only depend on tenantId - listProjects is stable from store
-  }, [tenantId, listProjects, projects.length]);
+    if (tenantId && projects.length === 0) {
+      void loadProjectsForTenant();
+    }
+  }, [tenantId, loadProjectsForTenant, projects.length]);
 
   // Initialize selected project after projects are loaded
   useEffect(() => {
@@ -232,6 +254,33 @@ export const AgentWorkspace: FC = () => {
           <div className="mt-2 text-slate-500 dark:text-slate-400">
             {t('agent.workspace.loading')}
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (projectLoadError && projects.length === 0 && !effectiveProjectId) {
+    return (
+      <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
+        <div
+          role="alert"
+          className="bg-white dark:bg-surface-dark rounded-xl border border-red-200 dark:border-red-900/60 shadow-sm p-8 max-w-lg text-center"
+        >
+          <AlertCircle size={32} className="mx-auto text-red-500 dark:text-red-400" />
+          <h2 className="mt-4 text-base font-semibold text-slate-900 dark:text-white">
+            {t('agent.workspace.projectsLoadFailed', 'Failed to load projects')}
+          </h2>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 break-words">
+            {projectLoadError}
+          </p>
+          <LazyButton
+            type="primary"
+            icon={<RefreshCw size={14} />}
+            className="mt-5"
+            onClick={handleRetryProjectLoad}
+          >
+            {t('common.retry', 'Retry')}
+          </LazyButton>
         </div>
       </div>
     );

@@ -5517,6 +5517,7 @@
       "changeProject": "Switch Project",
       "currentProject": "Current Project",
       "loading": "Initializing Agent workspace...",
+      "projectsLoadFailed": "Failed to load projects",
       "mode": {
         "single": "Single",
         "shared": "Shared",
