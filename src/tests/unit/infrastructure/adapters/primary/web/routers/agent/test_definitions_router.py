@@ -757,6 +757,41 @@ class TestDefinitionsRouterA2AConfig:
         assert exc_info.value.detail == "Invalid definition request"
 
     @pytest.mark.asyncio
+    async def test_update_definition_integrity_errors_are_sanitized(self):
+        registry = _make_registry()
+        db = _make_db()
+        existing = _make_agent()
+        registry.get_by_id = AsyncMock(return_value=existing)
+        registry.update = AsyncMock(
+            side_effect=IntegrityError("secret statement", "secret params", Exception("secret"))
+        )
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
+                return_value=_make_container(registry),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
+                AsyncMock(),
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await update_definition(
+                "agent-1",
+                UpdateDefinitionBody(name="secret-agent"),
+                request=MagicMock(),
+                current_user=SimpleNamespace(id="user-1"),
+                tenant_id="tenant-1",
+                db=db,
+            )
+
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail == "Definition already exists"
+        assert "secret-agent" not in str(exc_info.value.detail)
+        db.commit.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_update_definition_coerces_model_and_workspace_defaults(self):
         registry = _make_registry()
         db = _make_db()

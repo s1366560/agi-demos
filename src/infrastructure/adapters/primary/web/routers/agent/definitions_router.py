@@ -548,6 +548,11 @@ async def update_definition(
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=_("Invalid definition request")) from e
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=409,
+            detail=_("Definition already exists"),
+        ) from e
     except Exception as e:
         logger.error(
             "Error updating definition: %s",
