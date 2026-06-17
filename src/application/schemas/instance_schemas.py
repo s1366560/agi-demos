@@ -292,6 +292,16 @@ class InstanceMemberResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class InstanceMemberListResponse(BaseModel):
+    """Response model for paginated instance member list operations."""
+
+    members: list[InstanceMemberResponse] = Field(..., description="List of instance members")
+    total: int = Field(..., description="Total number of active instance members")
+    limit: int = Field(..., description="Maximum number of members returned")
+    offset: int = Field(..., description="Number of members skipped")
+    has_more: bool = Field(..., description="Whether more members are available")
+
+
 class InstanceMemberUpdate(BaseModel):
     """Request model for updating an instance member role."""
 

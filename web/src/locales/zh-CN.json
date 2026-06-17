@@ -2881,6 +2881,7 @@
         "totalMembers": "总成员数",
         "admins": "管理员",
         "viewers": "观察者",
+        "paginationTotal": "第 {{from}}-{{to}} 位，共 {{total}} 位成员",
         "noMembers": "未找到成员",
         "roleUpdated": "成员角色已更新",
         "removeSuccess": "成员已移除",

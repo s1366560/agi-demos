@@ -145,6 +145,14 @@ export interface InstanceMemberResponse {
   created_at: string;
 }
 
+export interface InstanceMemberListResponse {
+  members: InstanceMemberResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
 export interface InstanceConfigResponse {
   env_vars: Record<string, unknown>;
   advanced_config: Record<string, unknown>;
@@ -186,8 +194,8 @@ export const instanceService = {
   updateConfig: (id: string, data: InstanceConfigResponse) =>
     httpClient.put<InstanceConfigResponse>(`${BASE_URL}/${id}/config`, data),
 
-  listMembers: (id: string) =>
-    httpClient.get<InstanceMemberResponse[]>(`${BASE_URL}/${id}/members`),
+  listMembers: (id: string, params?: { limit?: number; offset?: number }) =>
+    httpClient.get<InstanceMemberListResponse>(`${BASE_URL}/${id}/members`, { params }),
 
   addMember: (id: string, data: InstanceMemberCreate) =>
     httpClient.post<InstanceMemberResponse>(`${BASE_URL}/${id}/members`, data),

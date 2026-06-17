@@ -2723,6 +2723,7 @@
         "totalMembers": "Total Members",
         "admins": "Admins",
         "viewers": "Viewers",
+        "paginationTotal": "{{from}}-{{to}} of {{total}} members",
         "noMembers": "No members found",
         "roleUpdated": "Member role updated",
         "removeSuccess": "Member removed",

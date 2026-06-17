@@ -17,8 +17,17 @@ class InstanceMemberRepository(ABC):
         """Find a member by ID."""
 
     @abstractmethod
-    async def find_by_instance(self, instance_id: str) -> list[InstanceMember]:
-        """List all members of an instance."""
+    async def find_by_instance(
+        self,
+        instance_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[InstanceMember]:
+        """List active members of an instance."""
+
+    @abstractmethod
+    async def count_by_instance(self, instance_id: str) -> int:
+        """Count active members of an instance."""
 
     @abstractmethod
     async def find_by_user_and_instance(

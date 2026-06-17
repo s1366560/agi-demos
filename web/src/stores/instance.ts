@@ -16,6 +16,7 @@ import type {
   InstanceCreate,
   InstanceUpdate,
   InstanceMemberResponse,
+  InstanceMemberListResponse,
   InstanceMemberCreate,
   InstanceMemberUpdate,
   InstanceConfigResponse,
@@ -50,6 +51,10 @@ interface InstanceState {
   instances: InstanceResponse[];
   currentInstance: InstanceResponse | null;
   members: InstanceMemberResponse[];
+  membersTotal: number;
+  membersLimit: number;
+  membersOffset: number;
+  membersHasMore: boolean;
   instanceConfig: InstanceConfigResponse | null;
 
   // Pagination
@@ -80,7 +85,10 @@ interface InstanceState {
   updateConfig: (id: string, data: InstanceConfigResponse) => Promise<InstanceConfigResponse>;
 
   // Actions - Members
-  listMembers: (id: string) => Promise<void>;
+  listMembers: (
+    id: string,
+    params?: { limit?: number; offset?: number }
+  ) => Promise<InstanceMemberListResponse>;
   addMember: (id: string, data: InstanceMemberCreate) => Promise<InstanceMemberResponse>;
   removeMember: (id: string, memberId: string) => Promise<void>;
   updateMemberRole: (
@@ -104,6 +112,10 @@ const initialState = {
   instances: [] as InstanceResponse[],
   currentInstance: null as InstanceResponse | null,
   members: [] as InstanceMemberResponse[],
+  membersTotal: 0,
+  membersLimit: 25,
+  membersOffset: 0,
+  membersHasMore: false,
   instanceConfig: null as InstanceConfigResponse | null,
   total: 0,
   page: 1,
@@ -279,11 +291,19 @@ export const useInstanceStore = create<InstanceState>()(
 
       // ========== Members ==========
 
-      listMembers: async (id: string) => {
+      listMembers: async (id: string, params = {}) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await instanceService.listMembers(id);
-          set({ members: response, isLoading: false });
+          const response = await instanceService.listMembers(id, params);
+          set({
+            members: response.members,
+            membersTotal: response.total,
+            membersLimit: response.limit,
+            membersOffset: response.offset,
+            membersHasMore: response.has_more,
+            isLoading: false,
+          });
+          return response;
         } catch (error: unknown) {
           set({
             error: getErrorMessage(error, 'Failed to list instance members'),
@@ -298,7 +318,11 @@ export const useInstanceStore = create<InstanceState>()(
         try {
           const response = await instanceService.addMember(id, data);
           const { members } = get();
-          set({ members: [...members, response], isSubmitting: false });
+          set({
+            members: [...members, response],
+            membersTotal: get().membersTotal + 1,
+            isSubmitting: false,
+          });
           return response;
         } catch (error: unknown) {
           set({ error: getErrorMessage(error, 'Failed to add member'), isSubmitting: false });
@@ -311,7 +335,11 @@ export const useInstanceStore = create<InstanceState>()(
         try {
           await instanceService.removeMember(id, memberId);
           const { members } = get();
-          set({ members: members.filter((m) => m.user_id !== memberId), isSubmitting: false });
+          set({
+            members: members.filter((m) => m.user_id !== memberId),
+            membersTotal: Math.max(0, get().membersTotal - 1),
+            isSubmitting: false,
+          });
         } catch (error: unknown) {
           set({ error: getErrorMessage(error, 'Failed to remove member'), isSubmitting: false });
           throw error;
@@ -374,6 +402,10 @@ export const useInstanceStore = create<InstanceState>()(
 export const useInstances = () => useInstanceStore((s) => s.instances);
 export const useCurrentInstance = () => useInstanceStore((s) => s.currentInstance);
 export const useInstanceMembers = () => useInstanceStore((s) => s.members);
+export const useInstanceMembersTotal = () => useInstanceStore((s) => s.membersTotal);
+export const useInstanceMembersLimit = () => useInstanceStore((s) => s.membersLimit);
+export const useInstanceMembersOffset = () => useInstanceStore((s) => s.membersOffset);
+export const useInstanceMembersHasMore = () => useInstanceStore((s) => s.membersHasMore);
 export const useInstanceConfig = () => useInstanceStore((s) => s.instanceConfig);
 export const useInstanceLoading = () => useInstanceStore((s) => s.isLoading);
 export const useInstanceSubmitting = () => useInstanceStore((s) => s.isSubmitting);

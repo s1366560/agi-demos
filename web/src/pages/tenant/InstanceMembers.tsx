@@ -18,6 +18,7 @@ import {
 
 import {
   useInstanceMembers,
+  useInstanceMembersTotal,
   useInstanceLoading,
   useInstanceSubmitting,
   useInstanceError,
@@ -28,6 +29,7 @@ import type { InstanceMemberResponse, UserSearchResult } from '../../services/in
 import type { ColumnsType } from 'antd/es/table';
 
 const { Search } = Input;
+const MEMBERS_PAGE_SIZE = 25;
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
@@ -42,6 +44,7 @@ export const InstanceMembers: React.FC = () => {
   const message = useLazyMessage();
 
   const members = useInstanceMembers();
+  const membersTotal = useInstanceMembersTotal();
   const isLoading = useInstanceLoading();
   const isSubmitting = useInstanceSubmitting();
   const error = useInstanceError();
@@ -49,6 +52,7 @@ export const InstanceMembers: React.FC = () => {
     useInstanceActions();
 
   const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [userSearchResults, setUserSearchResults] = useState<UserSearchResult[]>([]);
@@ -56,11 +60,20 @@ export const InstanceMembers: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState('user');
   const [isSearching, setIsSearching] = useState(false);
 
+  const loadMembersPage = useCallback(
+    (page: number) => {
+      if (!instanceId) return Promise.resolve();
+      return listMembers(instanceId, {
+        limit: MEMBERS_PAGE_SIZE,
+        offset: (page - 1) * MEMBERS_PAGE_SIZE,
+      });
+    },
+    [instanceId, listMembers]
+  );
+
   useEffect(() => {
-    if (instanceId) {
-      void listMembers(instanceId);
-    }
-  }, [instanceId, listMembers]);
+    void loadMembersPage(currentPage);
+  }, [currentPage, loadMembersPage]);
 
   useEffect(() => {
     return () => {
@@ -189,11 +202,18 @@ export const InstanceMembers: React.FC = () => {
       try {
         await removeMember(instanceId, member.user_id);
         message?.success(t('tenant.instances.members.removeSuccess'));
+        const nextTotal = Math.max(0, membersTotal - 1);
+        const nextPage = Math.min(
+          currentPage,
+          Math.max(1, Math.ceil(nextTotal / MEMBERS_PAGE_SIZE))
+        );
+        setCurrentPage(nextPage);
+        await loadMembersPage(nextPage);
       } catch (err) {
         console.error('Failed to remove member:', err);
       }
     },
-    [instanceId, removeMember, message, t]
+    [currentPage, instanceId, loadMembersPage, membersTotal, removeMember, message, t]
   );
 
   const handleAddMember = useCallback(async () => {
@@ -210,10 +230,12 @@ export const InstanceMembers: React.FC = () => {
       setSelectedRole('user');
       setUserSearchQuery('');
       setUserSearchResults([]);
+      setCurrentPage(1);
+      await loadMembersPage(1);
     } catch (err) {
       console.error('Failed to add member:', err);
     }
-  }, [instanceId, selectedUserId, selectedRole, addMember, message, t]);
+  }, [instanceId, selectedUserId, selectedRole, addMember, loadMembersPage, message, t]);
 
   if (!instanceId) return null;
 
@@ -247,7 +269,7 @@ export const InstanceMembers: React.FC = () => {
             </div>
             <div>
               <p className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
-                {members.length}
+                {membersTotal}
               </p>
               <p className="text-xs text-text-muted dark:text-text-muted">
                 {t('tenant.instances.members.totalMembers')}
@@ -321,7 +343,26 @@ export const InstanceMembers: React.FC = () => {
             columns={columns}
             dataSource={filteredMembers}
             rowKey="id"
-            pagination={false}
+            pagination={
+              search
+                ? false
+                : {
+                    current: currentPage,
+                    pageSize: MEMBERS_PAGE_SIZE,
+                    total: membersTotal,
+                    showSizeChanger: false,
+                    showTotal: (total, range) =>
+                      t('tenant.instances.members.paginationTotal', {
+                        from: range[0],
+                        to: range[1],
+                        total,
+                      }),
+                    onChange: (page) => {
+                      setCurrentPage(page);
+                    },
+                    disabled: isLoading,
+                  }
+            }
             scroll={{ x: 'max-content' }}
             className="max-w-full"
           />

@@ -35,6 +35,7 @@ from src.infrastructure.adapters.primary.web.routers.instances import (
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
     DeployRecordModel,
+    InstanceMemberModel,
     InstanceModel,
     Project,
     User,
@@ -103,6 +104,54 @@ class TestInstanceRouterAuditFields:
         assert deploy.triggered_by == test_user.id
 
 
+@pytest.mark.unit
+async def test_list_members_returns_paginated_active_members(
+    test_db: AsyncSession,
+    managed_instance: InstanceModel,
+) -> None:
+    users = [
+        User(
+            id=f"instance-member-user-{index}",
+            email=f"instance-member-{index}@example.com",
+            hashed_password="hash",
+            full_name=f"Instance Member {index}",
+        )
+        for index in range(4)
+    ]
+    now = datetime.now(UTC)
+    members = [
+        InstanceMemberModel(
+            id=f"instance-member-row-{index}",
+            instance_id=managed_instance.id,
+            user_id=users[index].id,
+            role="viewer",
+            created_at=now,
+            deleted_at=now if index == 3 else None,
+        )
+        for index in range(4)
+    ]
+    test_db.add_all([*users, *members])
+    await test_db.commit()
+
+    response = await list_members(
+        _request(),
+        managed_instance.id,
+        limit=2,
+        offset=0,
+        tenant_id=managed_instance.tenant_id,
+        db=test_db,
+    )
+
+    assert response.total == 3
+    assert response.limit == 2
+    assert response.offset == 0
+    assert response.has_more is True
+    assert [member.user_email for member in response.members] == [
+        "instance-member-0@example.com",
+        "instance-member-1@example.com",
+    ]
+
+
 class _FailingInstanceService:
     async def get_instance(self, _instance_id: str) -> Instance:
         return Instance(
@@ -142,7 +191,12 @@ class _FailingInstanceService:
     async def remove_member(self, **_kwargs: object) -> None:
         raise ValueError("User user-secret is not a member of instance instance-secret")
 
-    async def list_members(self, _instance_id: str) -> list[InstanceMember]:
+    async def list_members(
+        self,
+        _instance_id: str,
+        *_args: object,
+        **_kwargs: object,
+    ) -> tuple[list[InstanceMember], int]:
         raise ValueError("Instance instance-secret not found")
 
 

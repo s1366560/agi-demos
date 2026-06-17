@@ -13,6 +13,7 @@ from src.application.schemas.instance_schemas import (
     InstanceCreate,
     InstanceListResponse,
     InstanceMemberCreate,
+    InstanceMemberListResponse,
     InstanceMemberResponse,
     InstanceMemberUpdate,
     InstanceResponse,
@@ -752,20 +753,22 @@ async def remove_member(
 
 @router.get(
     "/{instance_id}/members",
-    response_model=list[InstanceMemberResponse],
+    response_model=InstanceMemberListResponse,
 )
 async def list_members(
     request: Request,
     instance_id: str,
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> list[InstanceMemberResponse]:
-    """List all members of an instance."""
+) -> InstanceMemberListResponse:
+    """List active members of an instance."""
     try:
         container = get_container_with_db(request, db)
         service = container.instance_service()
         await _get_owned_instance_or_404(service, instance_id, tenant_id)
-        members = await service.list_members(instance_id)
+        members, total = await service.list_members(instance_id, limit=limit, offset=offset)
 
         user_ids = [m.user_id for m in members]
         user_map: dict[str, UserModel] = {}
@@ -776,7 +779,7 @@ async def list_members(
             for u in user_result.scalars().all():
                 user_map[u.id] = u
 
-        return [
+        member_responses = [
             InstanceMemberResponse(
                 id=m.id,
                 instance_id=m.instance_id,
@@ -789,6 +792,13 @@ async def list_members(
             )
             for m in members
         ]
+        return InstanceMemberListResponse(
+            members=member_responses,
+            total=total,
+            limit=limit,
+            offset=offset,
+            has_more=offset + len(member_responses) < total,
+        )
     except ValueError as e:
         raise _instance_member_not_found_error() from e
     except HTTPException:

@@ -655,14 +655,21 @@ class InstanceService:
         )
         return member
 
-    async def list_members(self, instance_id: str) -> list[InstanceMember]:
-        """List all members of an instance.
+    async def list_members(
+        self,
+        instance_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[InstanceMember], int]:
+        """List active members of an instance.
 
         Args:
             instance_id: Target instance.
+            limit: Maximum members to return.
+            offset: Number of members to skip.
 
         Returns:
-            List of InstanceMember entities.
+            Page of InstanceMember entities and total active member count.
 
         Raises:
             ValueError: If instance does not exist.
@@ -671,4 +678,10 @@ class InstanceService:
         if not instance:
             raise ValueError(f"Instance {instance_id} not found")
 
-        return await self._instance_member_repo.find_by_instance(instance_id)
+        members = await self._instance_member_repo.find_by_instance(
+            instance_id,
+            limit=limit,
+            offset=offset,
+        )
+        total = await self._instance_member_repo.count_by_instance(instance_id)
+        return members, total
