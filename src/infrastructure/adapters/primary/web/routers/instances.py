@@ -31,6 +31,7 @@ from src.infrastructure.adapters.secondary.common.base_repository import refresh
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     User as UserModel,
+    UserTenant,
 )
 from src.infrastructure.i18n import gettext as _
 
@@ -640,13 +641,15 @@ async def search_users(
         container = get_container_with_db(request, db)
         service = container.instance_service()
         await _get_owned_instance_or_404(service, instance_id, tenant_id)
+        tenant_user_ids = select(UserTenant.user_id).where(UserTenant.tenant_id == tenant_id)
         query = select(UserModel).where(
             UserModel.is_active.is_(True),
+            UserModel.id.in_(tenant_user_ids),
         )
         if q:
             pattern = f"%{q}%"
             query = query.where(UserModel.email.ilike(pattern) | UserModel.full_name.ilike(pattern))
-        query = query.limit(limit)
+        query = query.order_by(UserModel.full_name.asc(), UserModel.email.asc()).limit(limit)
         result = await db.execute(refresh_select_statement(query))
         users = result.scalars().all()
         return [

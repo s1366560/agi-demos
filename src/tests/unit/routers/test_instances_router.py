@@ -30,6 +30,7 @@ from src.infrastructure.adapters.primary.web.routers.instances import (
     restart_instance,
     save_pending_config,
     scale_instance,
+    search_users,
     update_instance,
     update_member_role,
 )
@@ -38,7 +39,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     InstanceMemberModel,
     InstanceModel,
     Project,
+    Tenant,
     User,
+    UserTenant,
 )
 
 
@@ -149,6 +152,76 @@ async def test_list_members_returns_paginated_active_members(
     assert [member.user_email for member in response.members] == [
         "instance-member-0@example.com",
         "instance-member-1@example.com",
+    ]
+
+
+@pytest.mark.unit
+async def test_search_users_only_returns_current_tenant_members(
+    test_db: AsyncSession,
+    managed_instance: InstanceModel,
+    test_project_db: Project,
+) -> None:
+    same_tenant_user = User(
+        id="instance-search-same-tenant",
+        email="candidate-current@example.com",
+        hashed_password="hash",
+        full_name="Candidate Current",
+    )
+    inactive_same_tenant_user = User(
+        id="instance-search-inactive",
+        email="candidate-inactive@example.com",
+        hashed_password="hash",
+        full_name="Candidate Inactive",
+        is_active=False,
+    )
+    other_tenant_user = User(
+        id="instance-search-other-tenant",
+        email="candidate-other@example.com",
+        hashed_password="hash",
+        full_name="Candidate Other",
+    )
+    other_tenant = Tenant(
+        id="instance-search-other-tenant-id",
+        name="Other Tenant",
+        slug="instance-search-other-tenant",
+        owner_id=other_tenant_user.id,
+    )
+    test_db.add_all(
+        [
+            same_tenant_user,
+            inactive_same_tenant_user,
+            other_tenant_user,
+            other_tenant,
+            UserTenant(
+                id="instance-search-current-membership",
+                user_id=same_tenant_user.id,
+                tenant_id=test_project_db.tenant_id,
+            ),
+            UserTenant(
+                id="instance-search-inactive-membership",
+                user_id=inactive_same_tenant_user.id,
+                tenant_id=test_project_db.tenant_id,
+            ),
+            UserTenant(
+                id="instance-search-other-membership",
+                user_id=other_tenant_user.id,
+                tenant_id=other_tenant.id,
+            ),
+        ]
+    )
+    await test_db.commit()
+
+    results = await search_users(
+        _request(),
+        managed_instance.id,
+        q="candidate",
+        limit=20,
+        tenant_id=managed_instance.tenant_id,
+        db=test_db,
+    )
+
+    assert [(user.id, user.email) for user in results] == [
+        (same_tenant_user.id, same_tenant_user.email)
     ]
 
 
