@@ -53,6 +53,7 @@ export const InstanceSettings: React.FC = () => {
   const [description, setDescription] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const lastSyncedId = useRef<string | null>(null);
+  const detailRequestId = useRef(0);
 
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [llmProviderId, setLlmProviderId] = useState<string | undefined>(undefined);
@@ -62,24 +63,38 @@ export const InstanceSettings: React.FC = () => {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [llmConfigLoading, setLlmConfigLoading] = useState(false);
   const [llmConfigSaving, setLlmConfigSaving] = useState(false);
+  const providersRequestId = useRef(0);
+  const llmConfigRequestId = useRef(0);
+  const modelsRequestId = useRef(0);
 
   // Load instance detail and sync form state
   useEffect(() => {
-    if (instanceId) {
-      getInstance(instanceId)
-        .then((inst) => {
-          setCurrentInstance(inst);
-          if (lastSyncedId.current !== inst.id) {
-            lastSyncedId.current = inst.id;
-            setName(inst.name);
-            setDescription(inst.description ?? '');
-            setIsDirty(false);
-          }
-        })
-        .catch((err: unknown) => {
-          console.error('Failed to get instance details:', err);
-        });
+    if (!instanceId) {
+      detailRequestId.current += 1;
+      return;
     }
+
+    const requestId = ++detailRequestId.current;
+    getInstance(instanceId)
+      .then((inst) => {
+        if (detailRequestId.current !== requestId) return;
+
+        setCurrentInstance(inst);
+        if (lastSyncedId.current !== inst.id) {
+          lastSyncedId.current = inst.id;
+          setName(inst.name);
+          setDescription(inst.description ?? '');
+          setIsDirty(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (detailRequestId.current !== requestId) return;
+        console.error('Failed to get instance details:', err);
+      });
+
+    return () => {
+      detailRequestId.current += 1;
+    };
   }, [instanceId, getInstance, setCurrentInstance]);
 
   useEffect(() => {
@@ -96,50 +111,87 @@ export const InstanceSettings: React.FC = () => {
   }, [error, message, clearError]);
 
   useEffect(() => {
+    const requestId = ++providersRequestId.current;
     providerAPI
       .list({ include_inactive: false })
-      .then(setProviders)
+      .then((result) => {
+        if (providersRequestId.current !== requestId) return;
+        setProviders(result);
+      })
       .catch((err: unknown) => {
+        if (providersRequestId.current !== requestId) return;
         console.error('Failed to list providers:', err);
       });
+
+    return () => {
+      providersRequestId.current += 1;
+    };
   }, []);
 
   useEffect(() => {
-    if (!instanceId) return;
+    if (!instanceId) {
+      llmConfigRequestId.current += 1;
+      setLlmConfigLoading(false);
+      return;
+    }
+
+    const requestId = ++llmConfigRequestId.current;
     setLlmConfigLoading(true);
     instanceService
       .getLlmConfig(instanceId)
       .then((cfg) => {
+        if (llmConfigRequestId.current !== requestId) return;
+
         setLlmProviderId(cfg.provider_id ?? undefined);
         setLlmModelName(cfg.model_name ?? undefined);
         setHasApiKeyOverride(cfg.has_api_key_override);
         setLlmApiKeyOverride('');
       })
       .catch((err: unknown) => {
+        if (llmConfigRequestId.current !== requestId) return;
+
         console.error('Failed to get LLM config:', err);
         message?.error(t('tenant.instances.settings.llmConfigLoadError'));
       })
       .finally(() => {
+        if (llmConfigRequestId.current !== requestId) return;
         setLlmConfigLoading(false);
       });
+
+    return () => {
+      llmConfigRequestId.current += 1;
+    };
   }, [instanceId, message, t]);
 
   useEffect(() => {
     if (!llmProviderId) {
+      modelsRequestId.current += 1;
       setAvailableModels([]);
       return;
     }
     const selectedProvider = providers.find((p) => p.id === llmProviderId);
-    if (!selectedProvider) return;
+    if (!selectedProvider) {
+      modelsRequestId.current += 1;
+      setAvailableModels([]);
+      return;
+    }
+
+    const requestId = ++modelsRequestId.current;
     providerAPI
       .listModels(selectedProvider.provider_type)
       .then((res) => {
+        if (modelsRequestId.current !== requestId) return;
         setAvailableModels(res.models.chat);
       })
       .catch((err: unknown) => {
+        if (modelsRequestId.current !== requestId) return;
         console.error('Failed to list models:', err);
         setAvailableModels([]);
       });
+
+    return () => {
+      modelsRequestId.current += 1;
+    };
   }, [llmProviderId, providers]);
 
   const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -174,8 +226,8 @@ export const InstanceSettings: React.FC = () => {
     }
   }, [instanceId, deleteInstance, message, t, navigate]);
 
-  const handleLlmProviderChange = useCallback((value: string) => {
-    setLlmProviderId(value);
+  const handleLlmProviderChange = useCallback((value: string | null | undefined) => {
+    setLlmProviderId(value ?? undefined);
     setLlmModelName(undefined);
   }, []);
 
