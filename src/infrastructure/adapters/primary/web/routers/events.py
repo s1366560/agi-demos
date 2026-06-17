@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.event_log_service import EventLogService
 from src.configuration.features import require_feature
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
+    get_current_user,
     get_current_user_tenant,
 )
+from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 
 router = APIRouter(
     prefix="/api/v1/events", tags=["events"], dependencies=[require_feature("events")]
@@ -45,6 +49,23 @@ async def get_event_service(
     return EventLogService(SqlEventLogRepository(db))
 
 
+async def get_selected_event_tenant(
+    selected_tenant_id: str | None = Query(
+        None,
+        alias="tenant_id",
+        min_length=1,
+        description="Explicit tenant scope for multi-tenant callers.",
+    ),
+    fallback_tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    if selected_tenant_id is None:
+        return fallback_tenant_id
+    await require_tenant_access(db, cast(Any, current_user), selected_tenant_id)
+    return selected_tenant_id
+
+
 @router.get("", response_model=EventLogListResponse)
 async def list_events(
     event_type: str | None = Query(None),
@@ -52,7 +73,7 @@ async def list_events(
     date_to: datetime | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(get_selected_event_tenant),
     service: EventLogService = Depends(get_event_service),
 ) -> EventLogListResponse:
     items, total = await service.list_events(
@@ -84,7 +105,7 @@ async def list_events(
 
 @router.get("/types", response_model=list[str])
 async def list_event_types(
-    tenant_id: str = Depends(get_current_user_tenant),
+    tenant_id: str = Depends(get_selected_event_tenant),
     service: EventLogService = Depends(get_event_service),
 ) -> list[str]:
     return await service.get_event_types(tenant_id)

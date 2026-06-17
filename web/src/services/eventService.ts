@@ -17,17 +17,24 @@ export interface EventLogListResponse {
   page_size: number;
 }
 
+export interface EventLogListParams {
+  tenant_id?: string;
+  event_type?: string;
+  date_from?: string;
+  date_to?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface EventTypeListParams {
+  tenant_id?: string;
+}
+
 export const eventService = {
-  async listEvents(params: {
-    event_type?: string;
-    date_from?: string;
-    date_to?: string;
-    page?: number;
-    page_size?: number;
-  }): Promise<EventLogListResponse> {
+  async listEvents(params: EventLogListParams): Promise<EventLogListResponse> {
     return httpClient.get<EventLogListResponse>('/events', { params });
   },
-  async getEventTypes(): Promise<string[]> {
-    return httpClient.get<string[]>('/events/types');
+  async getEventTypes(params?: EventTypeListParams): Promise<string[]> {
+    return httpClient.get<string[]>('/events/types', { params });
   },
 };

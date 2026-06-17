@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
 import { Table, Select, DatePicker, Typography, Space, Tag } from 'antd';
 
@@ -11,6 +12,7 @@ const { RangePicker } = DatePicker;
 
 export const Events: React.FC = () => {
   const { t } = useTranslation();
+  const { tenantId } = useParams<{ tenantId?: string }>();
   const [data, setData] = useState<EventLog[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -23,18 +25,19 @@ export const Events: React.FC = () => {
 
   useEffect(() => {
     void eventService
-      .getEventTypes()
+      .getEventTypes(tenantId ? { tenant_id: tenantId } : undefined)
       .then(setTypes)
       .catch((err: unknown) => {
         console.error(err);
       });
-  }, []);
+  }, [tenantId]);
 
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
       try {
         const params: Parameters<typeof eventService.listEvents>[0] = { page, page_size: pageSize };
+        if (tenantId) params.tenant_id = tenantId;
         if (selectedType) params.event_type = selectedType;
         if (dateRange?.[0]) params.date_from = dateRange[0];
         if (dateRange?.[1]) params.date_to = dateRange[1];
@@ -48,7 +51,7 @@ export const Events: React.FC = () => {
       }
     };
     void fetchEvents();
-  }, [page, pageSize, selectedType, dateRange]);
+  }, [page, pageSize, selectedType, dateRange, tenantId]);
 
   const columns = [
     {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
 import {
   Table,
@@ -33,7 +34,9 @@ interface WebhookFormValues {
 
 export const Webhooks: React.FC = () => {
   const { t } = useTranslation();
+  const { tenantId } = useParams<{ tenantId?: string }>();
   const currentTenant = useCurrentTenant();
+  const selectedTenantId = tenantId ?? currentTenant?.id;
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [loading, setLoading] = useState(false);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
@@ -42,10 +45,10 @@ export const Webhooks: React.FC = () => {
   const [form] = Form.useForm<WebhookFormValues>();
 
   const fetchWebhooks = React.useCallback(async () => {
-    if (!currentTenant) return;
+    if (!selectedTenantId) return;
     setLoading(true);
     try {
-      const data = await webhookService.listWebhooks(currentTenant.id);
+      const data = await webhookService.listWebhooks(selectedTenantId);
       setWebhooks(data);
     } catch (err) {
       console.error(err);
@@ -53,7 +56,7 @@ export const Webhooks: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentTenant, t]);
+  }, [selectedTenantId, t]);
 
   useEffect(() => {
     void fetchWebhooks();
@@ -61,12 +64,12 @@ export const Webhooks: React.FC = () => {
 
   useEffect(() => {
     void eventService
-      .getEventTypes()
+      .getEventTypes(selectedTenantId ? { tenant_id: selectedTenantId } : undefined)
       .then(setEventTypes)
       .catch((err: unknown) => {
         console.error(err);
       });
-  }, []);
+  }, [selectedTenantId]);
 
   const handleDelete = async (id: string) => {
     try {
@@ -96,14 +99,14 @@ export const Webhooks: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!currentTenant) return;
+    if (!selectedTenantId) return;
     try {
       const values = await form.validateFields();
       if (editingWebhook) {
         await webhookService.updateWebhook(editingWebhook.id, values);
         message.success(t('webhooks.updateSuccess', 'Webhook updated'));
       } else {
-        await webhookService.createWebhook(currentTenant.id, values);
+        await webhookService.createWebhook(selectedTenantId, values);
         message.success(t('webhooks.createSuccess', 'Webhook created'));
       }
       setIsModalVisible(false);
