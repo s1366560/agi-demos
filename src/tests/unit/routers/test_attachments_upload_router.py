@@ -215,6 +215,52 @@ class TestAttachmentRouteAuthorization:
         assert [attachment.id for attachment in response.attachments] == [authorized.id]
 
     @pytest.mark.asyncio
+    async def test_list_attachments_uses_bulk_project_access_lookup(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test list filtering does not call the per-attachment access verifier."""
+        first = _make_attachment(
+            "attachment-visible-1",
+            project_id=test_project_db.id,
+            tenant_id=test_project_db.tenant_id,
+        )
+        second = _make_attachment(
+            "attachment-visible-2",
+            project_id=test_project_db.id,
+            tenant_id=test_project_db.tenant_id,
+        )
+        cross_project = _make_attachment(
+            "attachment-hidden-project-bulk",
+            project_id="project-without-membership",
+            tenant_id=test_project_db.tenant_id,
+        )
+
+        async def fail_per_attachment_verify(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("list_attachments should use a bulk project access lookup")
+
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.attachments_upload._verify_project_access",
+            fail_per_attachment_verify,
+        )
+        service = FakeAttachmentService([first, second, cross_project])
+
+        response = await list_attachments(
+            conversation_id="conversation-1",
+            status=None,
+            current_user=test_user,
+            tenant_id=test_project_db.tenant_id,
+            db=test_db,
+            attachment_service=service,
+        )
+
+        assert response.total == 2
+        assert [attachment.id for attachment in response.attachments] == [first.id, second.id]
+
+    @pytest.mark.asyncio
     async def test_upload_part_rejects_part_number_beyond_expected_total(
         self,
         test_db: AsyncSession,

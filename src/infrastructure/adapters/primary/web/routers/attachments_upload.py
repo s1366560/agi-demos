@@ -214,6 +214,30 @@ async def _verify_project_access(project_id: str, user: User, db: AsyncSession) 
         )
 
 
+async def _get_accessible_attachment_project_ids(
+    project_ids: set[str],
+    user: User,
+    db: AsyncSession,
+) -> set[str]:
+    """Return project IDs the current user can access for attachment listing."""
+    if user.is_superuser:
+        return project_ids
+    if not project_ids:
+        return set()
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserProject.project_id).where(
+                and_(
+                    UserProject.user_id == user.id,
+                    UserProject.project_id.in_(project_ids),
+                )
+            )
+        )
+    )
+    return set(result.scalars().all())
+
+
 async def _get_authorized_attachment(
     attachment_id: str,
     user: User,
@@ -420,14 +444,14 @@ async def abort_multipart_upload(
     Use this to cancel an in-progress multipart upload and clean up resources.
     """
     try:
-        await _get_authorized_attachment(
+        authorized_attachment = await _get_authorized_attachment(
             attachment_id=attachment_id,
             user=current_user,
             tenant_id=tenant_id,
             db=db,
             attachment_service=attachment_service,
         )
-        success = await attachment_service.abort_multipart_upload(attachment_id)
+        success = await attachment_service.abort_multipart_upload(authorized_attachment.id)
 
         if not success:
             raise HTTPException(status_code=404, detail=_("Attachment not found"))
@@ -504,15 +528,21 @@ async def list_attachments(
         conversation_id=conversation_id,
         status=status_enum,
     )
-    visible_attachments: list[Attachment] = []
-    for attachment in attachments:
-        if not current_user.is_superuser and attachment.tenant_id != tenant_id:
-            continue
-        try:
-            await _verify_project_access(attachment.project_id, current_user, db)
-        except HTTPException:
-            continue
-        visible_attachments.append(attachment)
+    tenant_visible_attachments = (
+        attachments
+        if current_user.is_superuser
+        else [attachment for attachment in attachments if attachment.tenant_id == tenant_id]
+    )
+    accessible_project_ids = await _get_accessible_attachment_project_ids(
+        {attachment.project_id for attachment in tenant_visible_attachments},
+        current_user,
+        db,
+    )
+    visible_attachments = [
+        attachment
+        for attachment in tenant_visible_attachments
+        if attachment.project_id in accessible_project_ids
+    ]
 
     return AttachmentListResponse(
         attachments=[_attachment_to_response(a) for a in visible_attachments],
@@ -553,14 +583,14 @@ async def download_attachment(
     """
     Download an attachment via presigned URL redirect.
     """
-    await _get_authorized_attachment(
+    authorized_attachment = await _get_authorized_attachment(
         attachment_id=attachment_id,
         user=current_user,
         tenant_id=tenant_id,
         db=db,
         attachment_service=attachment_service,
     )
-    url = await attachment_service.get_download_url(attachment_id)
+    url = await attachment_service.get_download_url(authorized_attachment.id)
 
     if not url:
         raise HTTPException(status_code=404, detail=_("Attachment not found or not ready"))
@@ -579,14 +609,14 @@ async def delete_attachment(
     """
     Delete an attachment.
     """
-    await _get_authorized_attachment(
+    authorized_attachment = await _get_authorized_attachment(
         attachment_id=attachment_id,
         user=current_user,
         tenant_id=tenant_id,
         db=db,
         attachment_service=attachment_service,
     )
-    success = await attachment_service.delete(attachment_id)
+    success = await attachment_service.delete(authorized_attachment.id)
 
     if not success:
         raise HTTPException(status_code=404, detail=_("Attachment not found"))
