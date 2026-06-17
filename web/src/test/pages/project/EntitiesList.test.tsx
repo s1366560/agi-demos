@@ -84,6 +84,21 @@ async function waitForFiltersReady(): Promise<void> {
   });
 }
 
+const createDeferred = <T,>() => {
+  let resolvePromise: (value: T | PromiseLike<T>) => void = () => {};
+  let rejectPromise: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+
+  return {
+    promise,
+    resolve: resolvePromise,
+    reject: rejectPromise,
+  };
+};
+
 describe('EntitiesList Compound Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -395,6 +410,162 @@ describe('EntitiesList Compound Component', () => {
 
       await waitForEntityGrid();
       expect(screen.getByTestId('entities-filters')).toBeInTheDocument();
+    });
+  });
+
+  describe('Async Request Guards', () => {
+    it('ignores stale entity and type responses after project changes', async () => {
+      const projectAEntityTypes = createDeferred<any>();
+      const projectAEntities = createDeferred<any>();
+      const projectBEntityTypes = createDeferred<any>();
+      const projectBEntities = createDeferred<any>();
+
+      vi.mocked(graphService.getEntityTypes).mockImplementation(({ project_id }: any) => {
+        if (project_id === 'project-a') return projectAEntityTypes.promise;
+        return projectBEntityTypes.promise;
+      });
+      vi.mocked(graphService.listEntities).mockImplementation(({ project_id }: any) => {
+        if (project_id === 'project-a') return projectAEntities.promise;
+        return projectBEntities.promise;
+      });
+
+      const { rerender } = render(<EntitiesList projectId="project-a" />);
+
+      await waitFor(() => {
+        expect(graphService.listEntities).toHaveBeenCalledWith(
+          expect.objectContaining({ project_id: 'project-a' })
+        );
+      });
+
+      rerender(<EntitiesList projectId="project-b" />);
+
+      await waitFor(() => {
+        expect(graphService.listEntities).toHaveBeenCalledWith(
+          expect.objectContaining({ project_id: 'project-b' })
+        );
+      });
+
+      projectBEntityTypes.resolve({
+        entity_types: [{ entity_type: 'CurrentType', count: 1 }],
+        total: 1,
+      });
+      projectBEntities.resolve({
+        items: [
+          {
+            uuid: 'current-entity',
+            name: 'Current Entity',
+            entity_type: 'CurrentType',
+            summary: 'Current summary',
+          },
+        ],
+        total: 1,
+        limit: 20,
+        offset: 0,
+        has_more: false,
+      });
+
+      expect(await screen.findByText('Current Entity')).toBeInTheDocument();
+
+      projectAEntityTypes.resolve({
+        entity_types: [{ entity_type: 'StaleType', count: 1 }],
+        total: 1,
+      });
+      projectAEntities.resolve({
+        items: [
+          {
+            uuid: 'stale-entity',
+            name: 'Stale Entity',
+            entity_type: 'StaleType',
+            summary: 'Stale summary',
+          },
+        ],
+        total: 1,
+        limit: 20,
+        offset: 0,
+        has_more: false,
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByText('Stale Entity')).not.toBeInTheDocument();
+        expect(screen.queryByText('StaleType')).not.toBeInTheDocument();
+        expect(screen.getByText('Current Entity')).toBeInTheDocument();
+      });
+    });
+
+    it('ignores stale relationship responses when selection changes', async () => {
+      const entity1Relationships = createDeferred<any>();
+      const entity2Relationships = createDeferred<any>();
+
+      vi.mocked(graphService.getEntityRelationships).mockImplementation((entityUuid: string) => {
+        if (entityUuid === '1') return entity1Relationships.promise;
+        return entity2Relationships.promise;
+      });
+
+      render(<EntitiesList projectId="test-project-1" />);
+
+      await waitForEntityGrid();
+      const firstEntityButton = screen.getByRole('button', { name: /Entity 1/ });
+
+      fireEvent.click(firstEntityButton);
+
+      await waitFor(() => {
+        expect(graphService.getEntityRelationships).toHaveBeenCalledWith('1', { limit: 50 });
+      });
+
+      const secondEntityButton = screen.getByRole('button', { name: /Entity 2/ });
+      fireEvent.click(secondEntityButton);
+
+      await waitFor(() => {
+        expect(graphService.getEntityRelationships).toHaveBeenCalledWith('2', { limit: 50 });
+      });
+
+      entity2Relationships.resolve({
+        relationships: [
+          {
+            edge_id: 'edge-current',
+            relation_type: 'Current relation',
+            direction: 'incoming',
+            fact: 'Current relationship fact',
+            score: 0.9,
+            created_at: undefined,
+            related_entity: {
+              uuid: 'related-current',
+              name: 'Current Related Entity',
+              entity_type: 'Person',
+              summary: '',
+            },
+          },
+        ],
+        total: 1,
+      });
+
+      expect(await screen.findByText('Current relation')).toBeInTheDocument();
+
+      entity1Relationships.resolve({
+        relationships: [
+          {
+            edge_id: 'edge-stale',
+            relation_type: 'Stale relation',
+            direction: 'outgoing',
+            fact: 'Stale relationship fact',
+            score: 0.7,
+            created_at: undefined,
+            related_entity: {
+              uuid: 'related-stale',
+              name: 'Stale Related Entity',
+              entity_type: 'Organization',
+              summary: '',
+            },
+          },
+        ],
+        total: 1,
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByText('Stale relation')).not.toBeInTheDocument();
+        expect(screen.queryByText('Stale relationship fact')).not.toBeInTheDocument();
+        expect(screen.getByText('Current relation')).toBeInTheDocument();
+      });
     });
   });
 

@@ -27,7 +27,7 @@
  * ```
  */
 
-import React, { useState, useEffect, useCallback, memo, Children, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, memo, Children, useMemo, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
@@ -270,22 +270,46 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
 
     // Debounced search value for filtering (300ms delay)
     const [searchQuery] = useDebounce(searchInput, 300);
+    const entityTypesRequestRef = useRef(0);
+    const entitiesRequestRef = useRef(0);
+    const relationshipsRequestRef = useRef(0);
+
+    useEffect(() => {
+      entityTypesRequestRef.current += 1;
+      entitiesRequestRef.current += 1;
+      relationshipsRequestRef.current += 1;
+      setSelectedEntity(null);
+      setRelationships([]);
+      return () => {
+        entityTypesRequestRef.current += 1;
+        entitiesRequestRef.current += 1;
+        relationshipsRequestRef.current += 1;
+      };
+    }, [tenantId, projectId]);
 
     // Load entity types
     const loadEntityTypes = useCallback(async () => {
+      const requestId = entityTypesRequestRef.current + 1;
+      entityTypesRequestRef.current = requestId;
       setLoadingTypes(true);
       try {
         const result = await graphService.getEntityTypes({ project_id: projectId });
+        if (entityTypesRequestRef.current !== requestId) return;
         setEntityTypes(result.entity_types);
       } catch (err) {
+        if (entityTypesRequestRef.current !== requestId) return;
         console.error('Failed to load entity types:', err);
       } finally {
-        setLoadingTypes(false);
+        if (entityTypesRequestRef.current === requestId) {
+          setLoadingTypes(false);
+        }
       }
     }, [projectId]);
 
     // Load entities
     const loadEntities = useCallback(async () => {
+      const requestId = entitiesRequestRef.current + 1;
+      entitiesRequestRef.current = requestId;
       setLoading(true);
       setError(null);
       try {
@@ -296,18 +320,24 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
           limit,
           offset: page * limit,
         });
+        if (entitiesRequestRef.current !== requestId) return;
         setEntities(result.items);
         setTotalCount(result.total);
       } catch (err) {
+        if (entitiesRequestRef.current !== requestId) return;
         console.error('Failed to load entities:', err);
         setError(t('project.graph.entities.error'));
       } finally {
-        setLoading(false);
+        if (entitiesRequestRef.current === requestId) {
+          setLoading(false);
+        }
       }
     }, [tenantId, projectId, entityTypeFilter, page, limit, t]);
 
     // Load relationships
     const loadRelationships = async (entityUuid: string) => {
+      const requestId = relationshipsRequestRef.current + 1;
+      relationshipsRequestRef.current = requestId;
       try {
         const result = await graphService.getEntityRelationships(entityUuid, { limit: 50 });
         const mappedRelationships: Relationship[] = result.relationships.map((rel, index) => ({
@@ -319,8 +349,10 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
           created_at: rel.created_at,
           related_entity: rel.related_entity,
         }));
+        if (relationshipsRequestRef.current !== requestId) return;
         setRelationships(mappedRelationships);
       } catch (err) {
+        if (relationshipsRequestRef.current !== requestId) return;
         console.error('Failed to load relationships:', err);
       }
     };
@@ -394,6 +426,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
 
     const handleEntityClick = (entity: Entity) => {
       setSelectedEntity(entity);
+      setRelationships([]);
       void loadRelationships(entity.uuid);
     };
 
