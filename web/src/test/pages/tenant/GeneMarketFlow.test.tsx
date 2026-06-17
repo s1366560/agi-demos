@@ -292,6 +292,46 @@ describe('Gene marketplace rating flow', () => {
     });
   });
 
+  it('paginates reviews without refetching gene detail or resetting state', async () => {
+    stateMock.currentGene = gene();
+    stateMock.reviews = [review()];
+    stateMock.reviewsTotal = 10;
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(actionsMock.getGene).toHaveBeenCalledWith('gene-1', { tenant_id: 'tenant-1' });
+      expect(actionsMock.listGeneEvolutionEvents).toHaveBeenCalledWith('gene-1', {
+        tenant_id: 'tenant-1',
+      });
+      expect(actionsMock.fetchGeneReviews).toHaveBeenCalledWith('gene-1', 1, 5, {
+        tenant_id: 'tenant-1',
+      });
+    });
+
+    actionsMock.getGene.mockClear();
+    actionsMock.listGeneEvolutionEvents.mockClear();
+    actionsMock.fetchGeneReviews.mockClear();
+    actionsMock.reset.mockClear();
+    actionsMock.clearError.mockClear();
+
+    fireEvent.click(screen.getByText('2'));
+
+    await waitFor(() => {
+      expect(actionsMock.fetchGeneReviews).toHaveBeenCalledWith('gene-1', 2, 5, {
+        tenant_id: 'tenant-1',
+      });
+    });
+    expect(actionsMock.getGene).not.toHaveBeenCalled();
+    expect(actionsMock.listGeneEvolutionEvents).not.toHaveBeenCalled();
+    expect(actionsMock.reset).not.toHaveBeenCalled();
+    expect(actionsMock.clearError).not.toHaveBeenCalled();
+  });
+
   it('publishes draft genes from the detail action bar', async () => {
     const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
     stateMock.currentGene = gene({ is_published: false });

@@ -108,27 +108,33 @@ export const GeneDetail: FC = () => {
   };
 
   useEffect(() => {
-    if (geneId && tenantId) {
-      const options = { tenant_id: tenantId };
-      getGene(geneId, options).catch(() => message.error(t('tenant.genes.fetchError')));
-      listGeneEvolutionEvents(geneId, options).catch(() => {});
-      fetchGeneReviews(geneId, reviewPage, reviewPageSize, options).catch(() => {});
+    if (!geneId || !tenantId) {
+      return;
     }
+
+    const options = { tenant_id: tenantId };
+    void Promise.all([
+      getGene(geneId, options).catch(() => {
+        message.error(t('tenant.genes.fetchError'));
+      }),
+      listGeneEvolutionEvents(geneId, options).catch(() => undefined),
+    ]);
+
     return () => {
       clearError();
       reset();
     };
-  }, [
-    geneId,
-    getGene,
-    listGeneEvolutionEvents,
-    fetchGeneReviews,
-    clearError,
-    reset,
-    t,
-    reviewPage,
-    tenantId,
-  ]);
+  }, [geneId, getGene, listGeneEvolutionEvents, clearError, reset, t, tenantId]);
+
+  useEffect(() => {
+    if (!geneId || !tenantId) {
+      return;
+    }
+
+    fetchGeneReviews(geneId, reviewPage, reviewPageSize, { tenant_id: tenantId }).catch(
+      () => undefined
+    );
+  }, [fetchGeneReviews, geneId, reviewPage, reviewPageSize, tenantId]);
 
   useEffect(() => {
     if (!shouldOpenInstallModal && !shouldOpenRateModal) {
@@ -187,7 +193,6 @@ export const GeneDetail: FC = () => {
         message.success(t('tenant.genes.rateSuccess'));
         setIsRateModalVisible(false);
         rateForm.resetFields();
-        void getGene(geneId, { tenant_id: tenantId });
       }
     } catch {
       showActionError(t('tenant.genes.rateError'));
