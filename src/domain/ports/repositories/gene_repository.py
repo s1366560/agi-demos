@@ -75,5 +75,9 @@ class GeneRepository(ABC):
         """List featured genes."""
 
     @abstractmethod
+    async def adjust_install_count(self, gene_id: str, delta: int) -> bool:
+        """Atomically adjust a gene's install count. Returns True if updated."""
+
+    @abstractmethod
     async def delete(self, entity_id: str) -> bool:
         """Delete a gene. Returns True if deleted, False if not found."""

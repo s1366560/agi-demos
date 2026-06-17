@@ -421,12 +421,29 @@ async def test_install_gene_reactivates_soft_deleted_instance_gene(
     )
 
     first_install = await service.install_gene("instance-reinstall", gene.id)
+    installed_gene = await service.get_gene(gene.id)
+    assert installed_gene is not None
+    assert installed_gene.install_count == 1
+
+    with pytest.raises(ValueError):
+        await service.install_gene("instance-reinstall", gene.id)
+    duplicate_rejected_gene = await service.get_gene(gene.id)
+    assert duplicate_rejected_gene is not None
+    assert duplicate_rejected_gene.install_count == 1
+
     await service.uninstall_gene(first_install.id)
+    uninstalled_gene = await service.get_gene(gene.id)
+    assert uninstalled_gene is not None
+    assert uninstalled_gene.install_count == 0
+
     second_install = await service.install_gene(
         "instance-reinstall",
         gene.id,
         config_snapshot={"mode": "strict"},
     )
+    reinstalled_gene = await service.get_gene(gene.id)
+    assert reinstalled_gene is not None
+    assert reinstalled_gene.install_count == 1
 
     assert second_install.id == first_install.id
     assert second_install.deleted_at is None

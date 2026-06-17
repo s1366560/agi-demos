@@ -705,6 +705,7 @@ class GeneService:
             )
 
         await self._instance_gene_repo.save(instance_gene)
+        _ = await self._gene_repo.adjust_install_count(gene_id, 1)
 
         event = EvolutionEvent(
             instance_id=instance_id,
@@ -737,10 +738,16 @@ class GeneService:
         if not instance_gene:
             raise ValueError(f"InstanceGene {instance_gene_id} not found")
 
+        was_installed = (
+            instance_gene.deleted_at is None
+            and instance_gene.status == InstanceGeneStatus.installed
+        )
         instance_gene.soft_delete()
         await self._instance_gene_repo.save(instance_gene)
 
         gene = await self._gene_repo.find_by_id(instance_gene.gene_id)
+        if gene is not None and was_installed:
+            _ = await self._gene_repo.adjust_install_count(instance_gene.gene_id, -1)
         gene_name = gene.name if gene else ""
         gene_slug = gene.slug if gene else None
 

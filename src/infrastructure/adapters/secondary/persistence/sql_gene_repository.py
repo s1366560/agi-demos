@@ -2,9 +2,11 @@
 
 import logging
 from collections.abc import Sequence
-from typing import Any, override
+from datetime import UTC, datetime
+from typing import Any, cast, override
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
@@ -228,6 +230,27 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         )
         db_genes = result.scalars().all()
         return [d for g in db_genes if (d := self._to_domain(g)) is not None]
+
+    @override
+    async def adjust_install_count(self, gene_id: str, delta: int) -> bool:
+        if not gene_id:
+            raise ValueError("ID cannot be empty")
+        if delta == 0:
+            return True
+
+        next_count = GeneMarketModel.install_count + delta
+        stmt = (
+            update(GeneMarketModel)
+            .where(GeneMarketModel.id == gene_id)
+            .where(GeneMarketModel.deleted_at.is_(None))
+            .values(
+                install_count=case((next_count < 0, 0), else_=next_count),
+                updated_at=datetime.now(UTC),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        result = cast(CursorResult[Any], await self._session.execute(stmt))
+        return result.rowcount > 0
 
     def _build_active_query(self, filters: dict[str, Any] | None = None) -> Select[Any]:
         stmt = select(GeneMarketModel).where(GeneMarketModel.deleted_at.is_(None))

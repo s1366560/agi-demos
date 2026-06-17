@@ -143,6 +143,40 @@ async def test_gene_repository_lists_and_counts_only_active_rows(
 
 
 @pytest.mark.unit
+async def test_gene_repository_adjusts_install_count_without_negative_values(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    gene = _gene(
+        gene_id="install-count-gene",
+        slug="install-count-gene",
+        tenant_id=test_project_db.tenant_id,
+        created_by=test_user.id,
+        name="Install Count Gene",
+    )
+    gene.install_count = 1
+    test_db.add(gene)
+    await test_db.flush()
+
+    repo = SqlGeneRepository(test_db)
+
+    incremented = await repo.adjust_install_count("install-count-gene", 2)
+    after_increment = await repo.find_by_id("install-count-gene")
+    decremented = await repo.adjust_install_count("install-count-gene", -10)
+    after_decrement = await repo.find_by_id("install-count-gene")
+    missing = await repo.adjust_install_count("missing-install-count-gene", 1)
+
+    assert incremented is True
+    assert after_increment is not None
+    assert after_increment.install_count == 3
+    assert decremented is True
+    assert after_decrement is not None
+    assert after_decrement.install_count == 0
+    assert missing is False
+
+
+@pytest.mark.unit
 async def test_gene_repository_defaults_to_global_scope_when_tenant_id_is_omitted(
     test_db: AsyncSession,
     test_project_db: Project,
