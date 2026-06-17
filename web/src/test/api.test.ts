@@ -374,7 +374,13 @@ describe('API Services', () => {
       expect(mockApiInstance.get).toHaveBeenCalledWith('/tasks/recent', {
         params: { entity_id: 'entity-1', entity_type: 'memory', limit: 25 },
       });
-      expect(result).toEqual(mockTasks);
+      expect(result).toEqual({
+        tasks: mockTasks,
+        total: mockTasks.length,
+        limit: 25,
+        offset: 0,
+        has_more: false,
+      });
     });
 
     it('getRecentTasks should normalize enveloped task responses', async () => {
@@ -385,7 +391,13 @@ describe('API Services', () => {
 
       const result = await taskAPI.getRecentTasks();
 
-      expect(result).toEqual(mockTasks);
+      expect(result).toEqual({
+        tasks: mockTasks,
+        total: 1,
+        limit: mockTasks.length,
+        offset: 0,
+        has_more: false,
+      });
     });
 
     it('retryPendingTasks should submit a bounded resume request', async () => {

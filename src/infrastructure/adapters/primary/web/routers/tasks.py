@@ -88,6 +88,14 @@ class TaskLogResponse(BaseModel):
     message: str | None = None
 
 
+class RecentTasksResponse(BaseModel):
+    tasks: list[TaskLogResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
 class QueueDepthPoint(BaseModel):
     timestamp: str
     depth: int
@@ -413,7 +421,7 @@ async def get_queue_depth(
     return points
 
 
-@router.get("/recent", response_model=list[TaskLogResponse])
+@router.get("/recent", response_model=RecentTasksResponse)
 async def get_recent_tasks(
     status: str | None = None,
     task_type: str | None = None,
@@ -428,33 +436,52 @@ async def get_recent_tasks(
     """Get recent tasks with filtering."""
     # For complex queries with multiple filters, use direct DB access
     # In a full refactoring, this would move to a use case with filter objects
-    query = select(DBTaskLog).order_by(desc(DBTaskLog.created_at), DBTaskLog.id.asc())
     scope_filter = _task_project_scope_filter(await _task_access_project_ids(db, current_user))
-    query = _apply_task_scope(query, scope_filter)
+    conditions: list[Any] = []
 
     if status and status != "All Statuses":
-        query = query.where(DBTaskLog.status == status.upper())
+        conditions.append(DBTaskLog.status == status.upper())
 
     if task_type and task_type != "All Types":
-        query = query.where(DBTaskLog.task_type == task_type)
+        conditions.append(DBTaskLog.task_type == task_type)
 
     if entity_id:
-        query = query.where(DBTaskLog.entity_id == entity_id)
+        conditions.append(DBTaskLog.entity_id == entity_id)
 
     if entity_type:
-        query = query.where(DBTaskLog.entity_type == entity_type)
+        conditions.append(DBTaskLog.entity_type == entity_type)
 
     if search:
-        query = query.where(
+        conditions.append(
             (DBTaskLog.id.ilike(f"%{search}%")) | (DBTaskLog.worker_id.ilike(f"%{search}%"))
         )
 
-    query = query.limit(limit).offset(offset)
+    total_query = _apply_task_scope(
+        select(func.count(DBTaskLog.id)).where(*conditions),
+        scope_filter,
+    )
+    total = await db.scalar(refresh_select_statement(total_query)) or 0
+
+    query = _apply_task_scope(
+        select(DBTaskLog)
+        .where(*conditions)
+        .order_by(desc(DBTaskLog.created_at), DBTaskLog.id.asc())
+        .limit(limit)
+        .offset(offset),
+        scope_filter,
+    )
 
     result = await db.execute(refresh_select_statement(query))
     db_tasks = result.scalars().all()
+    tasks = [task_to_response(_db_task_to_domain(task)) for task in db_tasks]
 
-    return [task_to_response(_db_task_to_domain(task)) for task in db_tasks]
+    return RecentTasksResponse(
+        tasks=tasks,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=offset + len(tasks) < total,
+    )
 
 
 @router.get("/status-breakdown")

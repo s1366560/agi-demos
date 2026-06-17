@@ -49,13 +49,46 @@ type RecentTasksApiResponse =
       tasks?: RecentTask[] | undefined;
       items?: RecentTask[] | undefined;
       results?: RecentTask[] | undefined;
+      total?: number | undefined;
+      limit?: number | undefined;
+      offset?: number | undefined;
+      has_more?: boolean | undefined;
     };
 
-const normalizeRecentTasksResponse = (response: RecentTasksApiResponse): RecentTask[] => {
+export interface RecentTasksResult {
+  tasks: RecentTask[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+const normalizeRecentTasksResponse = (
+  response: RecentTasksApiResponse,
+  params: { limit?: number | undefined; offset?: number | undefined } = {}
+): RecentTasksResult => {
   if (Array.isArray(response)) {
-    return response;
+    const limit = params.limit ?? response.length;
+    const offset = params.offset ?? 0;
+    return {
+      tasks: response,
+      total: response.length,
+      limit,
+      offset,
+      has_more: limit > 0 && response.length >= limit,
+    };
   }
-  return response.tasks ?? response.items ?? response.results ?? [];
+  const tasks = response.tasks ?? response.items ?? response.results ?? [];
+  const total = response.total ?? tasks.length;
+  const limit = response.limit ?? params.limit ?? tasks.length;
+  const offset = response.offset ?? params.offset ?? 0;
+  return {
+    tasks,
+    total,
+    limit,
+    offset,
+    has_more: response.has_more ?? offset + tasks.length < total,
+  };
 };
 
 // Token response from auth endpoint
@@ -355,9 +388,9 @@ export const taskAPI = {
       entity_type?: string | undefined;
       search?: string | undefined;
     } = {}
-  ): Promise<RecentTask[]> => {
+  ): Promise<RecentTasksResult> => {
     const response = await api.get<RecentTasksApiResponse>('/tasks/recent', { params });
-    return normalizeRecentTasksResponse(response);
+    return normalizeRecentTasksResponse(response, params);
   },
   getStatusBreakdown: async (): Promise<StatusBreakdown> => {
     return await api.get('/tasks/status-breakdown');

@@ -92,7 +92,7 @@ const commonTranslations: Record<string, string> = {
   'components.taskList.actions.stop': 'Stop',
   'components.taskList.messages.retryFailed': 'Failed to retry task. Please try again.',
   'components.taskList.messages.stopFailed': 'Failed to stop task. Please try again.',
-  'components.taskList.pagination.showing': 'Showing {{count}} tasks',
+  'components.taskList.pagination.showing': 'Showing {{count}} of {{total}} tasks',
   'components.taskList.columns.status': 'Status',
   'components.taskList.columns.type': 'Type',
   'components.taskList.columns.entity': 'Entity',

@@ -87,7 +87,10 @@ async def test_tasks_endpoints(authenticated_async_client, test_db: AsyncSession
         "/api/v1/tasks/recent",
     )
     assert recent_resp.status_code == status.HTTP_200_OK
-    assert isinstance(recent_resp.json(), list)
+    recent_payload = recent_resp.json()
+    assert isinstance(recent_payload["tasks"], list)
+    assert recent_payload["total"] >= len(recent_payload["tasks"])
+    assert {"limit", "offset", "has_more"} <= set(recent_payload)
 
 
 @pytest.mark.asyncio
@@ -195,7 +198,9 @@ async def test_recent_tasks_filters_to_current_user_projects(
         db=test_db,
     )
 
-    assert [task.id for task in response] == ["allowed-task"]
+    assert [task.id for task in response.tasks] == ["allowed-task"]
+    assert response.total == 1
+    assert response.has_more is False
 
 
 @pytest.mark.asyncio
@@ -233,8 +238,12 @@ async def test_recent_tasks_paginates_timestamp_ties_by_id(
         db=test_db,
     )
 
-    assert [task.id for task in first_page] == ["recent-tie-a", "recent-tie-b"]
-    assert [task.id for task in second_page] == ["recent-tie-c"]
+    assert [task.id for task in first_page.tasks] == ["recent-tie-a", "recent-tie-b"]
+    assert first_page.total == 3
+    assert first_page.has_more is True
+    assert [task.id for task in second_page.tasks] == ["recent-tie-c"]
+    assert second_page.total == 3
+    assert second_page.has_more is False
 
 
 @pytest.mark.asyncio

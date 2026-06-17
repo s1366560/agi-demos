@@ -8333,7 +8333,7 @@
         "stopFailed": "Failed to stop task. Please try again."
       },
       "pagination": {
-        "showing": "Showing {{count}} tasks"
+        "showing": "Showing {{count}} of {{total}} tasks"
       },
       "columns": {
         "status": "Status",

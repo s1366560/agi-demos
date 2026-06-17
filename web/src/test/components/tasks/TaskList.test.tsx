@@ -57,10 +57,22 @@ const mockTasks = [
   },
 ];
 
+const taskResponse = (
+  tasks = mockTasks,
+  overrides: Partial<Awaited<ReturnType<typeof taskAPI.getRecentTasks>>> = {}
+) => ({
+  tasks,
+  total: tasks.length,
+  limit: 50,
+  offset: 0,
+  has_more: false,
+  ...overrides,
+});
+
 describe('TaskList (Compound Components)', () => {
   beforeAll(() => {
     // Set up default mock for all tests
-    vi.spyOn(taskAPI, 'getRecentTasks').mockResolvedValue(mockTasks);
+    vi.spyOn(taskAPI, 'getRecentTasks').mockResolvedValue(taskResponse());
     vi.spyOn(taskAPI, 'retryTask').mockResolvedValue(undefined);
     vi.spyOn(taskAPI, 'stopTask').mockResolvedValue(undefined);
   });
@@ -71,7 +83,7 @@ describe('TaskList (Compound Components)', () => {
 
   describe('TaskList - Main Container', () => {
     it('should render empty state when no tasks', async () => {
-      vi.spyOn(taskAPI, 'getRecentTasks').mockResolvedValueOnce([]);
+      vi.spyOn(taskAPI, 'getRecentTasks').mockResolvedValueOnce(taskResponse([]));
 
       const { TaskList } = await import('../../../components/tasks/TaskList');
       render(<TaskList />);
@@ -209,16 +221,18 @@ describe('TaskList (Compound Components)', () => {
     });
 
     it('allows stale pending add_episode tasks to be restarted', async () => {
-      vi.spyOn(taskAPI, 'getRecentTasks').mockResolvedValueOnce([
-        {
-          id: 'task-pending-add-episode',
-          name: 'add_episode',
-          status: 'pending',
-          created_at: '2024-01-01T12:00:00Z',
-          entity_id: 'memory-1',
-          entity_type: 'episode',
-        },
-      ]);
+      vi.spyOn(taskAPI, 'getRecentTasks').mockResolvedValueOnce(
+        taskResponse([
+          {
+            id: 'task-pending-add-episode',
+            name: 'add_episode',
+            status: 'pending',
+            created_at: '2024-01-01T12:00:00Z',
+            entity_id: 'memory-1',
+            entity_type: 'episode',
+          },
+        ])
+      );
 
       const { TaskList } = await import('../../../components/tasks/TaskList');
       render(<TaskList />);
@@ -268,7 +282,7 @@ describe('TaskList (Compound Components)', () => {
       render(<TaskList />);
 
       await waitFor(() => {
-        expect(screen.getByText(/Showing \d+ tasks/i)).toBeInTheDocument();
+        expect(screen.getByText(/Showing \d+ of \d+ tasks/i)).toBeInTheDocument();
         expect(screen.getByText(/previous/i)).toBeInTheDocument();
         expect(screen.getByText(/next/i)).toBeInTheDocument();
       });
@@ -283,11 +297,31 @@ describe('TaskList (Compound Components)', () => {
         expect(prevButton).toBeDisabled();
       });
     });
+
+    it('uses backend has_more metadata to enable the next page', async () => {
+      vi.spyOn(taskAPI, 'getRecentTasks')
+        .mockResolvedValueOnce(taskResponse(mockTasks, { total: 4, has_more: true }))
+        .mockResolvedValueOnce(taskResponse([mockTasks[0]!], { total: 4, offset: 50 }));
+
+      const { TaskList } = await import('../../../components/tasks/TaskList');
+      render(<TaskList />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Showing 3 of 4 tasks/i)).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText(/next/i));
+
+      await waitFor(() => {
+        const lastParams = vi.mocked(taskAPI.getRecentTasks).mock.calls.at(-1)?.[0];
+        expect(lastParams).toMatchObject({ offset: 50, limit: 50 });
+      });
+    });
   });
 
   describe('TaskList.EmptyState', () => {
     it('should render empty state with search icon', async () => {
-      vi.spyOn(taskAPI, 'getRecentTasks').mockResolvedValueOnce([]);
+      vi.spyOn(taskAPI, 'getRecentTasks').mockResolvedValueOnce(taskResponse([]));
 
       const { TaskList } = await import('../../../components/tasks/TaskList');
       render(<TaskList />);

@@ -8356,7 +8356,7 @@
         "stopFailed": "停止任务失败，请稍后再试。"
       },
       "pagination": {
-        "showing": "显示 {{count}} 个任务"
+        "showing": "显示 {{count}} / {{total}} 个任务"
       },
       "columns": {
         "status": "状态",

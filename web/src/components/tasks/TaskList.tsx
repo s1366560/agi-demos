@@ -57,6 +57,8 @@ interface TaskListContextValue {
   offset: number;
   setOffset: (offset: number) => void;
   limit: number;
+  total: number;
+  hasMore: boolean;
   handleRefresh: () => void;
   handleRetry: (taskId: string) => Promise<void>;
   handleStop: (taskId: string) => Promise<void>;
@@ -243,7 +245,7 @@ interface PaginationProps {
 
 export const Pagination: React.FC<PaginationProps> = ({ children }) => {
   const { t } = useTranslation();
-  const { filteredTasks, offset, setOffset, limit, tasks } = useTaskListContext();
+  const { filteredTasks, offset, setOffset, limit, total, hasMore } = useTaskListContext();
 
   return (
     <>
@@ -252,7 +254,8 @@ export const Pagination: React.FC<PaginationProps> = ({ children }) => {
           <div className="text-sm text-slate-500 dark:text-slate-400">
             {t('components.taskList.pagination.showing', {
               count: filteredTasks.length,
-              defaultValue: 'Showing {{count}} tasks',
+              total,
+              defaultValue: 'Showing {{count}} of {{total}} tasks',
             })}
           </div>
           <div className="flex gap-2">
@@ -271,7 +274,7 @@ export const Pagination: React.FC<PaginationProps> = ({ children }) => {
               onClick={() => {
                 setOffset(offset + limit);
               }}
-              disabled={tasks.length < limit}
+              disabled={!hasMore}
               className="px-3 py-1 border border-slate-200 dark:border-slate-600 rounded bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 flex items-center gap-1"
             >
               {t('common.next', 'Next')} <ChevronRight className="size-4" />
@@ -318,6 +321,8 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -335,7 +340,7 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
         entity_id: entityId,
         entity_type: entityType,
       });
-      const tasks: Task[] = data.map((item) => ({
+      const tasks: Task[] = data.tasks.map((item) => ({
         id: item.id,
         task_type: item.task_type ?? item.name,
         name: item.name ?? item.task_type ?? item.id,
@@ -350,6 +355,8 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
         entity_type: item.entity_type,
       }));
       setTasks(tasks);
+      setTotal(data.total);
+      setHasMore(data.has_more);
       setLoading(false);
       setRefreshing(false);
     } catch (error) {
@@ -374,6 +381,16 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
     setRefreshing(true);
     void fetchTasks();
   };
+
+  const handleSearchQueryChange = useCallback((query: string) => {
+    setSearchQuery(query);
+    setOffset(0);
+  }, []);
+
+  const handleStatusFilterChange = useCallback((filter: string) => {
+    setStatusFilter(filter);
+    setOffset(0);
+  }, []);
 
   const handleRetry = async (taskId: string) => {
     try {
@@ -456,12 +473,14 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
     loading,
     refreshing,
     searchQuery,
-    setSearchQuery,
+    setSearchQuery: handleSearchQueryChange,
     statusFilter,
-    setStatusFilter,
+    setStatusFilter: handleStatusFilterChange,
     offset,
     setOffset,
     limit,
+    total,
+    hasMore,
     handleRefresh,
     handleRetry,
     handleStop,
