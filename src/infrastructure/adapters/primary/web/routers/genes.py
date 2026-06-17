@@ -6,6 +6,7 @@ This is separate from CyberGenes (workspace-scoped) -- this is tenant-scoped mar
 """
 
 import logging
+from collections.abc import Callable
 from typing import Any, Protocol, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -213,6 +214,13 @@ def _instance_gene_not_found_error() -> HTTPException:
     )
 
 
+def _instance_not_found_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=_("Instance not found"),
+    )
+
+
 def _invalid_evolution_event_request_error() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
@@ -358,6 +366,7 @@ async def _ensure_instance_tenant_access(
     *,
     instance_id: str,
     tenant_id: str,
+    not_found_error: Callable[[], HTTPException] = _instance_not_found_error,
 ) -> None:
     instance = await container.instance_service().get_instance(instance_id)
     if (
@@ -365,7 +374,7 @@ async def _ensure_instance_tenant_access(
         or instance.tenant_id != tenant_id
         or getattr(instance, "deleted_at", None) is not None
     ):
-        raise _evolution_event_not_found_error()
+        raise not_found_error()
 
 
 async def _ensure_gene_tenant_access(
@@ -404,6 +413,7 @@ async def _ensure_instance_gene_tenant_access(
         container,
         instance_id=instance_id,
         tenant_id=tenant_id,
+        not_found_error=_instance_gene_not_found_error,
     )
     instance_gene = await service.get_instance_gene(instance_gene_id)
     if (
@@ -1029,6 +1039,7 @@ async def list_evolution_events(
                 container,
                 instance_id=instance_id,
                 tenant_id=tenant_id,
+                not_found_error=_evolution_event_not_found_error,
             )
         if gene_id:
             await _ensure_gene_tenant_access(
@@ -1073,6 +1084,7 @@ async def create_evolution_event(
         container,
         instance_id=data.instance_id,
         tenant_id=tenant_id,
+        not_found_error=_evolution_event_not_found_error,
     )
     if data.gene_id:
         await _ensure_gene_tenant_access(
@@ -1122,6 +1134,7 @@ async def get_evolution_event(
         container,
         instance_id=event.instance_id,
         tenant_id=tenant_id,
+        not_found_error=_evolution_event_not_found_error,
     )
     return _evolution_event_response(event)
 

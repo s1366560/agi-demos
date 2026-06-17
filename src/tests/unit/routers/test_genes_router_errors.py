@@ -376,6 +376,21 @@ async def test_get_instance_gene_hides_deleted_instance_gene(
 
 
 @pytest.mark.unit
+async def test_get_instance_gene_hides_missing_instance_as_instance_gene_not_found() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.get_instance_gene(
+            request=SimpleNamespace(),
+            instance_id="missing-instance",
+            instance_gene_id="instance-gene-secret",
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Instance gene not found"
+
+
+@pytest.mark.unit
 async def test_list_instance_genes_enriches_gene_display_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -428,7 +443,7 @@ async def test_list_instance_genes_hides_deleted_instance() -> None:
         )
 
     assert exc_info.value.status_code == 404
-    assert exc_info.value.detail == "Evolution event not found"
+    assert exc_info.value.detail == "Instance not found"
 
 
 @pytest.mark.unit
