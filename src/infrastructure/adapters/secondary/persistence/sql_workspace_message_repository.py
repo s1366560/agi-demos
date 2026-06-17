@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.workspace.workspace_message import (
@@ -37,18 +37,35 @@ class SqlWorkspaceMessageRepository(
         )
         if before is not None:
             before_msg = await self._session.execute(
-                refresh_select_statement(self._refresh_statement(
-                    select(WorkspaceMessageModel.created_at).where(
-                        WorkspaceMessageModel.id == before
+                refresh_select_statement(
+                    self._refresh_statement(
+                        select(WorkspaceMessageModel.created_at).where(
+                            WorkspaceMessageModel.workspace_id == workspace_id,
+                            WorkspaceMessageModel.id == before,
+                        )
                     )
-                ))
+                )
             )
             before_ts = before_msg.scalar_one_or_none()
             if before_ts is not None:
-                query = query.where(WorkspaceMessageModel.created_at < before_ts)
+                query = query.where(
+                    or_(
+                        WorkspaceMessageModel.created_at < before_ts,
+                        and_(
+                            WorkspaceMessageModel.created_at == before_ts,
+                            WorkspaceMessageModel.id < before,
+                        ),
+                    )
+                )
 
-        query = query.order_by(WorkspaceMessageModel.created_at.asc()).offset(offset).limit(limit)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        query = (
+            query.order_by(WorkspaceMessageModel.created_at.asc(), WorkspaceMessageModel.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         rows = result.scalars().all()
         return [m for row in rows if (m := self._to_domain(row)) is not None]
 
@@ -61,11 +78,13 @@ class SqlWorkspaceMessageRepository(
         query = (
             select(WorkspaceMessageModel)
             .where(WorkspaceMessageModel.parent_message_id == parent_message_id)
-            .order_by(WorkspaceMessageModel.created_at.asc())
+            .order_by(WorkspaceMessageModel.created_at.asc(), WorkspaceMessageModel.id.asc())
             .offset(offset)
             .limit(limit)
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         rows = result.scalars().all()
         return [m for row in rows if (m := self._to_domain(row)) is not None]
 

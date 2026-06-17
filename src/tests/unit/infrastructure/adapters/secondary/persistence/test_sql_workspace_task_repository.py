@@ -30,7 +30,10 @@ def make_task(
     title: str = "Task title",
     status: WorkspaceTaskStatus = WorkspaceTaskStatus.TODO,
     priority: WorkspaceTaskPriority = WorkspaceTaskPriority.NONE,
+    created_at: datetime | None = None,
+    metadata: dict[str, object] | None = None,
 ) -> WorkspaceTask:
+    now = datetime.now(UTC)
     return WorkspaceTask(
         id=task_id,
         workspace_id=workspace_id,
@@ -41,9 +44,9 @@ def make_task(
         assignee_agent_id=None,
         status=status,
         priority=priority,
-        metadata={"priority": "medium"},
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+        metadata=metadata or {"priority": "medium"},
+        created_at=created_at or now,
+        updated_at=now,
     )
 
 
@@ -97,6 +100,36 @@ class TestSqlWorkspaceTaskRepository:
         )
         assert len(filtered) == 1
         assert filtered[0].id == "wt-b"
+
+    @pytest.mark.asyncio
+    async def test_workspace_task_lists_use_id_tie_breakers(
+        self, v2_workspace_task_repo: SqlWorkspaceTaskRepository
+    ) -> None:
+        created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        await v2_workspace_task_repo.save(
+            make_task(
+                "wt-b",
+                workspace_id="workspace-list",
+                created_at=created_at,
+                metadata={"root_goal_task_id": "root-1"},
+            )
+        )
+        await v2_workspace_task_repo.save(
+            make_task(
+                "wt-a",
+                workspace_id="workspace-list",
+                created_at=created_at,
+                metadata={"root_goal_task_id": "root-1"},
+            )
+        )
+
+        workspace_items = await v2_workspace_task_repo.find_by_workspace("workspace-list")
+        root_items = await v2_workspace_task_repo.find_by_root_goal_task_id(
+            "workspace-list", "root-1"
+        )
+
+        assert [item.id for item in workspace_items] == ["wt-a", "wt-b"]
+        assert [item.id for item in root_items] == ["wt-a", "wt-b"]
 
     @pytest.mark.asyncio
     async def test_save_updates_existing_task(

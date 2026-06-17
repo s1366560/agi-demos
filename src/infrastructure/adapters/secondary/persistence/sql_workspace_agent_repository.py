@@ -34,8 +34,14 @@ class SqlWorkspaceAgentRepository(
         query = select(WorkspaceAgentModel).where(WorkspaceAgentModel.workspace_id == workspace_id)
         if active_only:
             query = query.where(WorkspaceAgentModel.is_active.is_(True))
-        query = query.order_by(WorkspaceAgentModel.created_at.asc()).offset(offset).limit(limit)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        query = (
+            query.order_by(WorkspaceAgentModel.created_at.asc(), WorkspaceAgentModel.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         rows = result.scalars().all()
         return [a for row in rows if (a := self._to_domain(row)) is not None]
 
@@ -52,7 +58,9 @@ class SqlWorkspaceAgentRepository(
             )
             .limit(1)
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         row = result.scalar_one_or_none()
         return self._to_domain(row)
 
@@ -69,9 +77,11 @@ class SqlWorkspaceAgentRepository(
                 WorkspaceAgentModel.hex_q == hex_q,
                 WorkspaceAgentModel.hex_r == hex_r,
             )
-            .order_by(WorkspaceAgentModel.created_at.asc())
+            .order_by(WorkspaceAgentModel.created_at.asc(), WorkspaceAgentModel.id.asc())
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         rows = result.scalars().all()
         return [a for row in rows if (a := self._to_domain(row)) is not None]
 

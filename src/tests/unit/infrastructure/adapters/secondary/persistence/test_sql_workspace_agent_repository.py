@@ -27,7 +27,9 @@ def make_workspace_agent(
     is_active: bool = True,
     hex_q: int | None = None,
     hex_r: int | None = None,
+    created_at: datetime | None = None,
 ) -> WorkspaceAgent:
+    now = datetime.now(UTC)
     return WorkspaceAgent(
         id=relation_id,
         workspace_id=workspace_id,
@@ -38,8 +40,8 @@ def make_workspace_agent(
         is_active=is_active,
         hex_q=hex_q,
         hex_r=hex_r,
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+        created_at=created_at or now,
+        updated_at=now,
     )
 
 
@@ -122,6 +124,38 @@ class TestSqlWorkspaceAgentRepository:
         assert found is not None
         assert found.id == "wa-find"
         assert [agent.id for agent in occupied] == ["wa-find"]
+
+    @pytest.mark.asyncio
+    async def test_find_by_workspace_uses_id_tie_breaker(
+        self, v2_workspace_agent_repo: SqlWorkspaceAgentRepository
+    ) -> None:
+        created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        await v2_workspace_agent_repo.save(
+            make_workspace_agent(
+                "wa-b",
+                workspace_id="workspace-list",
+                agent_id="agent-2",
+                hex_q=4,
+                hex_r=-2,
+                created_at=created_at,
+            )
+        )
+        await v2_workspace_agent_repo.save(
+            make_workspace_agent(
+                "wa-a",
+                workspace_id="workspace-list",
+                agent_id="agent-1",
+                hex_q=4,
+                hex_r=-2,
+                created_at=created_at,
+            )
+        )
+
+        workspace_items = await v2_workspace_agent_repo.find_by_workspace("workspace-list")
+        hex_items = await v2_workspace_agent_repo.find_by_workspace_and_hex("workspace-list", 4, -2)
+
+        assert [item.id for item in workspace_items] == ["wa-a", "wa-b"]
+        assert [item.id for item in hex_items] == ["wa-a", "wa-b"]
 
     @pytest.mark.asyncio
     async def test_delete_relation(

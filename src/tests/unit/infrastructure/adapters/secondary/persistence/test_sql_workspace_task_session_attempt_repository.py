@@ -65,3 +65,5 @@ class TestSqlWorkspaceTaskSessionAttemptRepository:
         assert "agent_execution_events" in sql
         assert "max(agent_execution_events.created_at)" in sql
         assert "CASE" in sql
+        assert "workspace_task_session_attempts.created_at ASC" in sql
+        assert "workspace_task_session_attempts.id ASC" in sql

@@ -66,7 +66,10 @@ class SqlWorkspaceTaskSessionAttemptRepository(
                 WorkspaceTaskSessionAttemptModel.status.in_([status.value for status in statuses])
             )
         stmt = (
-            stmt.order_by(WorkspaceTaskSessionAttemptModel.attempt_number.desc())
+            stmt.order_by(
+                WorkspaceTaskSessionAttemptModel.attempt_number.desc(),
+                WorkspaceTaskSessionAttemptModel.id.asc(),
+            )
             .offset(offset)
             .limit(limit)
         )
@@ -91,7 +94,10 @@ class SqlWorkspaceTaskSessionAttemptRepository(
                     ]
                 )
             )
-            .order_by(WorkspaceTaskSessionAttemptModel.attempt_number.desc())
+            .order_by(
+                WorkspaceTaskSessionAttemptModel.attempt_number.desc(),
+                WorkspaceTaskSessionAttemptModel.id.asc(),
+            )
             .limit(1)
         )
         result = await self._session.execute(
@@ -157,7 +163,11 @@ class SqlWorkspaceTaskSessionAttemptRepository(
         )
         if workspace_id:
             stmt = stmt.where(WorkspaceTaskSessionAttemptModel.workspace_id == workspace_id)
-        stmt = stmt.order_by(last_activity.asc()).limit(limit)
+        stmt = stmt.order_by(
+            last_activity.asc(),
+            WorkspaceTaskSessionAttemptModel.created_at.asc(),
+            WorkspaceTaskSessionAttemptModel.id.asc(),
+        ).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
         )
