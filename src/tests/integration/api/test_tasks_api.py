@@ -199,6 +199,45 @@ async def test_recent_tasks_filters_to_current_user_projects(
 
 
 @pytest.mark.asyncio
+async def test_recent_tasks_paginates_timestamp_ties_by_id(
+    test_db: AsyncSession,
+    test_project_db,
+    test_user,
+):
+    created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    test_db.add_all(
+        [
+            DBTaskLog(
+                id=task_id,
+                group_id=test_project_db.id,
+                task_type="add_episode",
+                status="PENDING",
+                payload={"project_id": test_project_db.id},
+                created_at=created_at,
+            )
+            for task_id in ("recent-tie-b", "recent-tie-a", "recent-tie-c")
+        ]
+    )
+    await test_db.commit()
+
+    first_page = await tasks_router.get_recent_tasks(
+        limit=2,
+        offset=0,
+        current_user=test_user,
+        db=test_db,
+    )
+    second_page = await tasks_router.get_recent_tasks(
+        limit=2,
+        offset=2,
+        current_user=test_user,
+        db=test_db,
+    )
+
+    assert [task.id for task in first_page] == ["recent-tie-a", "recent-tie-b"]
+    assert [task.id for task in second_page] == ["recent-tie-c"]
+
+
+@pytest.mark.asyncio
 async def test_get_task_status_rejects_unowned_project_task(
     test_db: AsyncSession,
     test_project_db,

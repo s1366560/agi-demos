@@ -176,6 +176,26 @@ def task_to_response(task: TaskLog) -> TaskLogResponse:
     )
 
 
+def _db_task_to_domain(task: DBTaskLog) -> TaskLog:
+    return TaskLog(
+        id=task.id,
+        group_id=task.group_id,
+        task_type=task.task_type,
+        status=TaskLogStatus(task.status),
+        payload=task.payload,
+        entity_id=task.entity_id,
+        entity_type=task.entity_type,
+        parent_task_id=task.parent_task_id,
+        worker_id=task.worker_id,
+        retry_count=task.retry_count,
+        error_message=task.error_message,
+        created_at=task.created_at,
+        started_at=task.started_at,
+        completed_at=task.completed_at,
+        stopped_at=task.stopped_at,
+    )
+
+
 def _is_superuser(current_user: Any) -> bool:
     return bool(getattr(current_user, "is_superuser", False))
 
@@ -408,7 +428,7 @@ async def get_recent_tasks(
     """Get recent tasks with filtering."""
     # For complex queries with multiple filters, use direct DB access
     # In a full refactoring, this would move to a use case with filter objects
-    query = select(DBTaskLog).order_by(desc(DBTaskLog.created_at))
+    query = select(DBTaskLog).order_by(desc(DBTaskLog.created_at), DBTaskLog.id.asc())
     scope_filter = _task_project_scope_filter(await _task_access_project_ids(db, current_user))
     query = _apply_task_scope(query, scope_filter)
 
@@ -434,38 +454,7 @@ async def get_recent_tasks(
     result = await db.execute(refresh_select_statement(query))
     db_tasks = result.scalars().all()
 
-    # Convert to domain models for consistency
-    response: list[TaskLogResponse] = []
-    for t in db_tasks:
-        duration_str = "-"
-        if t.started_at and t.completed_at:
-            ms = int((t.completed_at - t.started_at).total_seconds() * 1000)
-            if ms < 1000:
-                duration_str = f"{ms}ms"
-            else:
-                duration_str = f"{ms / 1000:.1f}s"
-        elif t.status == "FAILED" and t.started_at and t.completed_at:
-            ms = int((t.completed_at - t.started_at).total_seconds() * 1000)
-            duration_str = f"{ms / 1000:.1f}s"
-
-        response.append(
-            TaskLogResponse(
-                id=t.id,
-                name=t.task_type,
-                status=t.status.lower().capitalize(),
-                created_at=t.created_at,
-                started_at=t.started_at,
-                completed_at=t.completed_at,
-                error=t.error_message,
-                worker_id=t.worker_id or "-",
-                retries=t.retry_count,
-                duration=duration_str,
-                entity_id=t.entity_id,
-                entity_type=t.entity_type,
-            )
-        )
-
-    return response
+    return [task_to_response(_db_task_to_domain(task)) for task in db_tasks]
 
 
 @router.get("/status-breakdown")
