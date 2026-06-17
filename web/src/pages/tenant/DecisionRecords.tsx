@@ -5,7 +5,13 @@ import { useTranslation } from 'react-i18next';
 import { Input, Modal, Select } from 'antd';
 import { RefreshCw, Search as SearchIcon } from 'lucide-react';
 
-import { useLazyMessage, LazyEmpty, LazySpin, LazyDrawer } from '@/components/ui/lazyAntd';
+import {
+  useLazyMessage,
+  LazyEmpty,
+  LazySpin,
+  LazyDrawer,
+  LazyAlert,
+} from '@/components/ui/lazyAntd';
 
 import { useTenantStore } from '../../stores/tenant';
 import {
@@ -19,6 +25,11 @@ import type { DecisionRecord } from '../../services/trustService';
 
 const { Search } = Input;
 const { Option } = Select;
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
 
 export const DecisionRecords: React.FC = () => {
   const { t } = useTranslation();
@@ -35,6 +46,7 @@ export const DecisionRecords: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState('');
 
   const [selectedRecord, setSelectedRecord] = useState<DecisionRecord | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
   const [resolvingRecord, setResolvingRecord] = useState<DecisionRecord | null>(null);
@@ -50,10 +62,19 @@ export const DecisionRecords: React.FC = () => {
     return params;
   }, [workspaceFilter, agentFilter, typeFilter]);
 
-  useEffect(() => {
+  const loadDecisions = useCallback(async () => {
     if (!tenantId) return;
-    fetchDecisions(tenantId, buildParams()).catch(() => {});
+    try {
+      await fetchDecisions(tenantId, buildParams());
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(getErrorMessage(error));
+    }
   }, [tenantId, fetchDecisions, buildParams]);
+
+  useEffect(() => {
+    void loadDecisions();
+  }, [loadDecisions]);
 
   useEffect(() => {
     if (error) {
@@ -63,9 +84,8 @@ export const DecisionRecords: React.FC = () => {
   }, [error, message, clearError]);
 
   const handleRefresh = useCallback(() => {
-    if (!tenantId) return;
-    fetchDecisions(tenantId, buildParams()).catch(() => {});
-  }, [tenantId, fetchDecisions, buildParams]);
+    void loadDecisions();
+  }, [loadDecisions]);
 
   const handleResolveSubmit = async () => {
     if (!tenantId || !resolvingRecord) return;
@@ -198,11 +218,30 @@ export const DecisionRecords: React.FC = () => {
         </div>
       </div>
 
+      {loadError && (
+        <LazyAlert
+          type="error"
+          showIcon
+          message={t('tenant.decisionRecords.loadError')}
+          description={loadError}
+          action={
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={isLoading}
+              className="inline-flex items-center justify-center rounded-md border border-red-300 px-3 py-1 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
+            >
+              {t('common.retry')}
+            </button>
+          }
+        />
+      )}
+
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
           <LazySpin size="large" />
         </div>
-      ) : decisions.length === 0 ? (
+      ) : loadError && decisions.length === 0 ? null : decisions.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <LazyEmpty description={t('tenant.decisionRecords.empty')} />
         </div>

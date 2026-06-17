@@ -1792,6 +1792,7 @@
       "subtitle": "查看智能体审批请求和历史决策。",
       "refresh": "刷新决策记录",
       "empty": "没有找到决策记录",
+      "loadError": "决策记录加载失败",
       "filters": {
         "workspaceId": "按工作空间 ID 过滤",
         "agentId": "按智能体 ID 过滤",
@@ -1852,6 +1853,7 @@
       "subtitle": "管理工作空间中智能体的自动执行权限。",
       "refresh": "刷新信任策略",
       "empty": "没有找到信任策略",
+      "loadError": "信任策略加载失败",
       "actions": {
         "createPolicy": "创建策略",
         "viewDetails": "查看详情"

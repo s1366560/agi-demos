@@ -59,6 +59,7 @@ export const useTrustStore = create<TrustState>()(
           set({ policies: response.items, isLoading: false });
         } catch (error) {
           set({ error: getErrorMessage(error), isLoading: false });
+          throw error;
         }
       },
 
@@ -69,6 +70,7 @@ export const useTrustStore = create<TrustState>()(
           set({ decisions: response.items, isLoading: false });
         } catch (error) {
           set({ error: getErrorMessage(error), isLoading: false });
+          throw error;
         }
       },
 

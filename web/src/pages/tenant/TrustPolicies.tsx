@@ -11,6 +11,7 @@ import {
   LazySpin,
   LazyDrawer,
   LazyModal,
+  LazyAlert,
 } from '@/components/ui/lazyAntd';
 
 import { useTenantStore } from '../../stores/tenant';
@@ -26,6 +27,11 @@ import type { TrustPolicy, TrustPolicyCreate } from '../../services/trustService
 const { Search } = Input;
 const { Option } = Select;
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 export const TrustPolicies: React.FC = () => {
   const { t } = useTranslation();
   const message = useLazyMessage();
@@ -38,6 +44,7 @@ export const TrustPolicies: React.FC = () => {
 
   const [workspaceFilter, setWorkspaceFilter] = useState('');
   const [agentFilter, setAgentFilter] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [selectedPolicy, setSelectedPolicy] = useState<TrustPolicy | null>(null);
 
@@ -53,12 +60,19 @@ export const TrustPolicies: React.FC = () => {
     return params;
   }, [workspaceFilter, agentFilter]);
 
-  useEffect(() => {
+  const loadPolicies = useCallback(async () => {
     if (!tenantId) return;
-    fetchPolicies(tenantId, buildParams()).catch(() => {
-      // handled by store
-    });
+    try {
+      await fetchPolicies(tenantId, buildParams());
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(getErrorMessage(error));
+    }
   }, [tenantId, fetchPolicies, buildParams]);
+
+  useEffect(() => {
+    void loadPolicies();
+  }, [loadPolicies]);
 
   useEffect(() => {
     if (error) {
@@ -68,11 +82,8 @@ export const TrustPolicies: React.FC = () => {
   }, [error, message, clearError]);
 
   const handleRefresh = useCallback(() => {
-    if (!tenantId) return;
-    fetchPolicies(tenantId, buildParams()).catch(() => {
-      // handled by store
-    });
-  }, [tenantId, fetchPolicies, buildParams]);
+    void loadPolicies();
+  }, [loadPolicies]);
 
   const handleCreateSubmit = async (values: TrustPolicyCreate) => {
     if (!tenantId) return;
@@ -180,12 +191,31 @@ export const TrustPolicies: React.FC = () => {
         </div>
       </div>
 
+      {loadError && (
+        <LazyAlert
+          type="error"
+          showIcon
+          message={t('tenant.trustPolicies.loadError')}
+          description={loadError}
+          action={
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={isLoading}
+              className="inline-flex items-center justify-center rounded-md border border-red-300 px-3 py-1 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
+            >
+              {t('common.retry')}
+            </button>
+          }
+        />
+      )}
+
       {/* Table */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
           <LazySpin size="large" />
         </div>
-      ) : policies.length === 0 ? (
+      ) : loadError && policies.length === 0 ? null : policies.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <LazyEmpty description={t('tenant.trustPolicies.empty')} />
         </div>
