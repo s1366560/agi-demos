@@ -54,6 +54,7 @@ def mock_provider_service():
     service = AsyncMock()
     service.create_provider = AsyncMock()
     service.list_providers = AsyncMock(return_value=[])
+    service.get_provider_responses = AsyncMock(return_value=[])
     service.get_provider_response = AsyncMock()
     service.update_provider = AsyncMock()
     service.delete_provider = AsyncMock(return_value=True)
@@ -242,6 +243,7 @@ class TestLLMProvidersRouterList:
         response = llm_client.get("/api/v1/llm-providers/")
 
         assert response.status_code == status.HTTP_200_OK
+        mock_provider_service.get_provider_responses.assert_called_once_with([])
         assert isinstance(response.json(), list)
 
     @pytest.mark.asyncio
@@ -254,15 +256,16 @@ class TestLLMProvidersRouterList:
         mock_provider_service.list_providers.return_value = [mock_provider]
 
         # Use actual Pydantic model
-        mock_provider_service.get_provider_response.return_value = create_provider_response(
-            provider_id=provider_id,
-            name="test-provider",
-        )
+        mock_provider_service.get_provider_responses.return_value = [
+            create_provider_response(provider_id=provider_id, name="test-provider")
+        ]
 
         response = llm_client.get("/api/v1/llm-providers/")
 
         assert response.status_code == status.HTTP_200_OK
         mock_provider_service.list_providers.assert_called_once()
+        mock_provider_service.get_provider_responses.assert_called_once_with([mock_provider])
+        mock_provider_service.get_provider_response.assert_not_called()
         data = response.json()
         assert len(data) == 1
         assert data[0]["name"] == "test-provider"

@@ -14,8 +14,11 @@ from pydantic import ValidationError
 from src.application.services.provider_service import ProviderService
 from src.domain.llm_providers.models import (
     OperationType,
+    ProviderConfig,
     ProviderConfigCreate,
     ProviderConfigUpdate,
+    ProviderHealth,
+    ProviderStatus,
     ProviderType,
 )
 
@@ -197,6 +200,42 @@ class TestProviderService:
         result = await service.update_provider(provider_id, config)
 
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_provider_responses_reuses_loaded_provider_configs(self, service):
+        """List responses should not re-fetch provider rows one by one."""
+        now = datetime.now(UTC)
+        provider_id = uuid4()
+        provider = ProviderConfig(
+            id=provider_id,
+            name="test-provider",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted-key",
+            llm_model="gpt-4o",
+            created_at=now,
+            updated_at=now,
+        )
+        service.repository.get_latest_health.return_value = ProviderHealth(
+            provider_id=provider_id,
+            status=ProviderStatus.HEALTHY,
+            last_check=now,
+            response_time_ms=125,
+        )
+
+        with (
+            patch.object(service, "_mask_api_key", return_value="sk-test...cdef") as mask_api_key,
+            patch.object(service, "_get_resilience_status", return_value=None),
+        ):
+            responses = await service.get_provider_responses([provider])
+
+        assert len(responses) == 1
+        assert responses[0].id == provider_id
+        assert responses[0].name == "test-provider"
+        assert responses[0].api_key_masked == "sk-test...cdef"
+        assert responses[0].health_status == ProviderStatus.HEALTHY
+        service.repository.get_by_id.assert_not_called()
+        service.repository.get_latest_health.assert_awaited_once_with(provider_id)
+        mask_api_key.assert_called_once_with("encrypted-key")
 
     @pytest.mark.asyncio
     async def test_delete_provider_success(self, service):

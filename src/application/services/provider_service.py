@@ -128,8 +128,19 @@ class ProviderService:
         if not provider:
             return None
 
+        return await self._provider_to_response(provider)
+
+    async def get_provider_responses(
+        self,
+        providers: list[ProviderConfig],
+    ) -> list[ProviderConfigResponse]:
+        """Build API responses from already loaded provider configs."""
+        return [await self._provider_to_response(provider) for provider in providers]
+
+    async def _provider_to_response(self, provider: ProviderConfig) -> ProviderConfigResponse:
+        """Build an API response without reloading the provider row."""
         # Get latest health status
-        health = await self.repository.get_latest_health(provider_id)
+        health = await self.repository.get_latest_health(provider.id)
 
         # Mask API key (show only last 4 characters)
         api_key_masked = self._mask_api_key(provider.api_key_encrypted)

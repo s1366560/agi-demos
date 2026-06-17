@@ -190,7 +190,7 @@ async def list_providers(
         include_inactive = False
 
     providers = await service.list_providers(include_inactive=include_inactive)
-    return [r for p in providers if (r := await service.get_provider_response(p.id)) is not None]
+    return await service.get_provider_responses(providers)
 
 
 # Static routes must be defined before dynamic /{provider_id} route
