@@ -63,7 +63,11 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
         offset: int = 0,
     ) -> list[Genome]:
         filters = self._filters(tenant_id=tenant_id, is_published=is_published)
-        stmt = self._build_active_query(filters=filters).offset(offset).limit(limit)
+        stmt = (
+            self._apply_listing_order(self._build_active_query(filters=filters))
+            .offset(offset)
+            .limit(limit)
+        )
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
         )
@@ -92,9 +96,9 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
 
     @override
     async def find_featured(self, limit: int = 20) -> list[Genome]:
-        stmt = self._build_active_query(filters={"is_featured": True, "is_published": True}).limit(
-            limit
-        )
+        stmt = self._apply_listing_order(
+            self._build_active_query(filters={"is_featured": True, "is_published": True})
+        ).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
         )
@@ -106,6 +110,10 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
         if filters:
             stmt = self._apply_filters(stmt, **filters)
         return stmt
+
+    @staticmethod
+    def _apply_listing_order(stmt: Select[Any]) -> Select[Any]:
+        return stmt.order_by(GenomeModel.created_at.desc(), GenomeModel.id.asc())
 
     @override
     def _to_domain(self, db_model: GenomeModel | None) -> Genome | None:

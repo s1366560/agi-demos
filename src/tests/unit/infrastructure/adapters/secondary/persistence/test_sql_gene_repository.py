@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,9 +29,10 @@ def _gene(
     category: str = "target",
     is_featured: bool = False,
     is_published: bool = True,
+    created_at: datetime | None = None,
     deleted_at: datetime | None = None,
 ) -> GeneMarketModel:
-    return GeneMarketModel(
+    model = GeneMarketModel(
         id=gene_id,
         name=name,
         slug=slug,
@@ -44,6 +45,9 @@ def _gene(
         is_published=is_published,
         deleted_at=deleted_at,
     )
+    if created_at is not None:
+        model.created_at = created_at
+    return model
 
 
 def _genome(
@@ -55,9 +59,10 @@ def _genome(
     name: str,
     is_featured: bool = False,
     is_published: bool = True,
+    created_at: datetime | None = None,
     deleted_at: datetime | None = None,
 ) -> GenomeModel:
-    return GenomeModel(
+    model = GenomeModel(
         id=genome_id,
         name=name,
         slug=slug,
@@ -69,6 +74,9 @@ def _genome(
         is_published=is_published,
         deleted_at=deleted_at,
     )
+    if created_at is not None:
+        model.created_at = created_at
+    return model
 
 
 @pytest.mark.unit
@@ -139,6 +147,97 @@ async def test_gene_repository_lists_and_counts_only_active_rows(
 
 
 @pytest.mark.unit
+async def test_gene_repository_orders_listings_newest_first_with_id_tiebreaker(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    test_db.add_all(
+        [
+            _gene(
+                gene_id="tie-b-gene",
+                slug="tie-b-gene",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Needle Tie B Gene",
+                is_featured=True,
+                created_at=created_at + timedelta(minutes=1),
+            ),
+            _gene(
+                gene_id="older-gene",
+                slug="older-gene",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Needle Older Gene",
+                is_featured=True,
+                created_at=created_at,
+            ),
+            _gene(
+                gene_id="newest-gene",
+                slug="newest-gene",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Needle Newest Gene",
+                is_featured=True,
+                created_at=created_at + timedelta(minutes=2),
+            ),
+            _gene(
+                gene_id="tie-a-gene",
+                slug="tie-a-gene",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Needle Tie A Gene",
+                is_featured=True,
+                created_at=created_at + timedelta(minutes=1),
+            ),
+        ]
+    )
+    await test_db.flush()
+
+    repo = SqlGeneRepository(test_db)
+
+    listed = await repo.find_by_filters(
+        tenant_id=test_project_db.tenant_id,
+        category="target",
+        search="Needle",
+        is_published=True,
+        limit=4,
+        offset=0,
+    )
+    second_page = await repo.find_by_filters(
+        tenant_id=test_project_db.tenant_id,
+        category="target",
+        search="Needle",
+        is_published=True,
+        limit=2,
+        offset=2,
+    )
+    searched = await repo.search("Needle", category="target", limit=4, offset=0)
+    featured = await repo.find_featured(limit=4)
+
+    assert [gene.id for gene in listed] == [
+        "newest-gene",
+        "tie-a-gene",
+        "tie-b-gene",
+        "older-gene",
+    ]
+    assert [gene.id for gene in second_page] == ["tie-b-gene", "older-gene"]
+    assert [gene.id for gene in searched] == [
+        "newest-gene",
+        "tie-a-gene",
+        "tie-b-gene",
+        "older-gene",
+    ]
+    assert [gene.id for gene in featured] == [
+        "newest-gene",
+        "tie-a-gene",
+        "tie-b-gene",
+        "older-gene",
+    ]
+
+
+@pytest.mark.unit
 async def test_genome_repository_lists_and_counts_only_active_rows(
     test_db: AsyncSession,
     test_project_db: Project,
@@ -197,3 +296,83 @@ async def test_genome_repository_lists_and_counts_only_active_rows(
     assert published_total == 1
     assert [genome.id for genome in featured] == ["active-genome"]
     assert deleted_detail is None
+
+
+@pytest.mark.unit
+async def test_genome_repository_orders_listings_newest_first_with_id_tiebreaker(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    test_db.add_all(
+        [
+            _genome(
+                genome_id="tie-b-genome",
+                slug="tie-b-genome",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Tie B Genome",
+                is_featured=True,
+                created_at=created_at + timedelta(minutes=1),
+            ),
+            _genome(
+                genome_id="older-genome",
+                slug="older-genome",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Older Genome",
+                is_featured=True,
+                created_at=created_at,
+            ),
+            _genome(
+                genome_id="newest-genome",
+                slug="newest-genome",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Newest Genome",
+                is_featured=True,
+                created_at=created_at + timedelta(minutes=2),
+            ),
+            _genome(
+                genome_id="tie-a-genome",
+                slug="tie-a-genome",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Tie A Genome",
+                is_featured=True,
+                created_at=created_at + timedelta(minutes=1),
+            ),
+        ]
+    )
+    await test_db.flush()
+
+    repo = SqlGenomeRepository(test_db)
+
+    listed = await repo.find_by_filters(
+        tenant_id=test_project_db.tenant_id,
+        is_published=True,
+        limit=4,
+        offset=0,
+    )
+    second_page = await repo.find_by_filters(
+        tenant_id=test_project_db.tenant_id,
+        is_published=True,
+        limit=2,
+        offset=2,
+    )
+    featured = await repo.find_featured(limit=4)
+
+    assert [genome.id for genome in listed] == [
+        "newest-genome",
+        "tie-a-genome",
+        "tie-b-genome",
+        "older-genome",
+    ]
+    assert [genome.id for genome in second_page] == ["tie-b-genome", "older-genome"]
+    assert [genome.id for genome in featured] == [
+        "newest-genome",
+        "tie-a-genome",
+        "tie-b-genome",
+        "older-genome",
+    ]

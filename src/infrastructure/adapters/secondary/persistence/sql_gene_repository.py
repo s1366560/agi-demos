@@ -74,6 +74,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         stmt = self._build_active_query(filters=filters)
         stmt = self._apply_search_filter(stmt, search)
         stmt = self._apply_exclude_installed_filter(stmt, exclude_installed_instance_id)
+        stmt = self._apply_listing_order(stmt)
         stmt = stmt.offset(offset).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
@@ -128,7 +129,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
                     GeneMarketModel.description.ilike(pattern),
                 )
             )
-        stmt = stmt.offset(offset).limit(limit)
+        stmt = self._apply_listing_order(stmt).offset(offset).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
         )
@@ -185,11 +186,15 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         )
         return stmt.where(~installed_gene_exists)
 
+    @staticmethod
+    def _apply_listing_order(stmt: Select[Any]) -> Select[Any]:
+        return stmt.order_by(GeneMarketModel.created_at.desc(), GeneMarketModel.id.asc())
+
     @override
     async def find_featured(self, limit: int = 20) -> list[Gene]:
-        stmt = self._build_active_query(filters={"is_featured": True, "is_published": True}).limit(
-            limit
-        )
+        stmt = self._apply_listing_order(
+            self._build_active_query(filters={"is_featured": True, "is_published": True})
+        ).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
         )
