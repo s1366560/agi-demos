@@ -3,7 +3,12 @@
 from datetime import UTC, datetime
 
 import pytest
+from fastapi import HTTPException
 
+from src.infrastructure.adapters.primary.web.routers.support import (
+    create_support_ticket,
+    list_support_tickets,
+)
 from src.infrastructure.adapters.secondary.persistence.models import SupportTicket
 
 
@@ -42,15 +47,33 @@ class TestCreateSupportTicket:
         assert data["priority"] == "medium"
 
     @pytest.mark.asyncio
-    async def test_create_ticket_with_tenant(self, test_db, client, test_user):
+    async def test_create_ticket_with_tenant(self, test_db, client, test_user, test_project_db):
         """Test creating ticket with tenant_id."""
-        ticket_data = {"subject": "Tenant Issue", "message": "Test", "tenant_id": "tenant_123"}
+        ticket_data = {
+            "subject": "Tenant Issue",
+            "message": "Test",
+            "tenant_id": test_project_db.tenant_id,
+        }
 
         response = client.post("/support/tickets", json=ticket_data)
 
         assert response.status_code == 200
         data = response.json()
         assert "id" in data
+
+    @pytest.mark.asyncio
+    async def test_create_ticket_rejects_tenant_without_membership(self, test_db, test_user):
+        """Test creating ticket cannot target a tenant the user does not belong to."""
+        ticket_data = {
+            "subject": "Foreign Tenant Issue",
+            "message": "Test",
+            "tenant_id": "tenant_without_membership",
+        }
+
+        with pytest.raises(HTTPException) as exc_info:
+            await create_support_ticket(ticket_data, current_user=test_user, db=test_db)
+
+        assert exc_info.value.status_code == 403
 
     @pytest.mark.asyncio
     async def test_create_ticket_all_priorities(self, test_db, client, test_user):
@@ -150,12 +173,13 @@ class TestListSupportTickets:
         assert "ticket_filter_closed" not in ticket_ids
 
     @pytest.mark.asyncio
-    async def test_list_tickets_filter_by_tenant(self, test_db, client, test_user):
+    async def test_list_tickets_filter_by_tenant(self, test_db, client, test_user, test_project_db):
         """Test filtering tickets by tenant."""
+        tenant_id = test_project_db.tenant_id
         ticket1 = SupportTicket(
             id="ticket_tenant_1",
             user_id=test_user.id,
-            tenant_id="tenant_123",
+            tenant_id=tenant_id,
             subject="Tenant 1",
             message="Test",
             priority="medium",
@@ -174,13 +198,27 @@ class TestListSupportTickets:
         test_db.add(ticket2)
         await test_db.commit()
 
-        response = client.get("/support/tickets?tenant_id=tenant_123")
+        response = client.get(f"/support/tickets?tenant_id={tenant_id}")
 
         assert response.status_code == 200
         data = response.json()
         ticket_ids = [t["id"] for t in data["tickets"]]
         assert "ticket_tenant_1" in ticket_ids
         assert "ticket_tenant_2" not in ticket_ids
+
+    @pytest.mark.asyncio
+    async def test_list_tickets_rejects_tenant_without_membership(self, test_db, test_user):
+        """Test list request cannot filter by a tenant the user does not belong to."""
+        with pytest.raises(HTTPException) as exc_info:
+            await list_support_tickets(
+                tenant_id="tenant_without_membership",
+                limit=25,
+                offset=0,
+                current_user=test_user,
+                db=test_db,
+            )
+
+        assert exc_info.value.status_code == 403
 
     @pytest.mark.asyncio
     async def test_list_tickets_ordering(self, test_db, client, test_user):
@@ -211,9 +249,11 @@ class TestListSupportTickets:
             assert "created_at" in ticket
 
     @pytest.mark.asyncio
-    async def test_list_tickets_defaults_to_bounded_page_size(self, test_db, client, test_user):
+    async def test_list_tickets_defaults_to_bounded_page_size(
+        self, test_db, client, test_user, test_project_db
+    ):
         """Test that listing tickets uses a bounded default page size."""
-        tenant_id = "tenant_support_paged_default"
+        tenant_id = test_project_db.tenant_id
         for i in range(30):
             ticket = SupportTicket(
                 id=f"ticket_paged_default_{i}",
@@ -240,9 +280,11 @@ class TestListSupportTickets:
         assert data["has_more"] is True
 
     @pytest.mark.asyncio
-    async def test_list_tickets_supports_limit_and_offset(self, test_db, client, test_user):
+    async def test_list_tickets_supports_limit_and_offset(
+        self, test_db, client, test_user, test_project_db
+    ):
         """Test paging support ticket results."""
-        tenant_id = "tenant_support_paged_offset"
+        tenant_id = test_project_db.tenant_id
         for i in range(5):
             ticket = SupportTicket(
                 id=f"ticket_paged_offset_{i}",

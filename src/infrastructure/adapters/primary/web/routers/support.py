@@ -4,17 +4,38 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import SupportTicket, User
+from src.infrastructure.adapters.secondary.persistence.models import SupportTicket, User, UserTenant
 from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/support", tags=["support"])
+
+
+async def _require_support_tenant_access(
+    db: AsyncSession,
+    current_user: User,
+    tenant_id: str | None,
+) -> None:
+    """Allow tenant-scoped ticket actions only for members of that tenant."""
+    if tenant_id is None or current_user.is_superuser:
+        return
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserTenant.id).where(
+                UserTenant.user_id == current_user.id,
+                UserTenant.tenant_id == tenant_id,
+            )
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied"))
 
 
 @router.post("/tickets")
@@ -25,10 +46,14 @@ async def create_support_ticket(
 ) -> dict[str, Any]:
     """Create a new support ticket."""
 
+    tenant_id_raw = ticket_data.get("tenant_id")
+    tenant_id = tenant_id_raw if isinstance(tenant_id_raw, str) else None
+    await _require_support_tenant_access(db, current_user, tenant_id)
+
     ticket_id = str(uuid4())
     ticket = SupportTicket(
         id=ticket_id,
-        tenant_id=ticket_data.get("tenant_id"),
+        tenant_id=tenant_id,
         user_id=current_user.id,
         subject=ticket_data.get("subject"),
         message=ticket_data.get("message"),
@@ -65,6 +90,7 @@ async def list_support_tickets(
     filters = [SupportTicket.user_id == current_user.id]
 
     if tenant_id:
+        await _require_support_tenant_access(db, current_user, tenant_id)
         filters.append(SupportTicket.tenant_id == tenant_id)
 
     if status:
