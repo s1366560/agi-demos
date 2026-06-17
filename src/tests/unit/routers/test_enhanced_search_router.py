@@ -14,7 +14,7 @@ from src.infrastructure.adapters.primary.web.routers.enhanced_search import (
     search_temporal,
     search_with_facets,
 )
-from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.infrastructure.adapters.secondary.persistence.models import Project, Tenant, User
 
 
 def _neo4j_result(records: list[dict]) -> Mock:
@@ -300,6 +300,75 @@ class TestEnhancedSearchRouter:
             project_id=test_project_db.id,
             limit=10,
         )
+
+    @pytest.mark.asyncio
+    async def test_advanced_search_with_tenant_fans_out_to_tenant_projects_for_superuser(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        test_user.is_superuser = True
+        second_project = Project(
+            id="tenant-search-project-2",
+            tenant_id=test_project_db.tenant_id,
+            name="Tenant Search Project 2",
+            description="Tenant search project",
+            owner_id=test_user.id,
+            memory_rules={},
+            graph_config={},
+        )
+        other_tenant = Tenant(
+            id="search-other-tenant",
+            name="Search Other Tenant",
+            slug="search-other-tenant",
+            owner_id=test_user.id,
+        )
+        other_project = Project(
+            id="other-tenant-search-project",
+            tenant_id=other_tenant.id,
+            name="Other Tenant Search Project",
+            description="Other tenant project",
+            owner_id=test_user.id,
+            memory_rules={},
+            graph_config={},
+        )
+        test_db.add_all([second_project, other_tenant, other_project])
+        await test_db.commit()
+
+        async def search_by_project(
+            *,
+            query: str,
+            project_id: str | None,
+            limit: int,
+        ) -> list[dict[str, str]]:
+            assert query == "entity"
+            assert limit == 10
+            assert project_id in {test_project_db.id, second_project.id}
+            return [{"type": "entity", "uuid": f"entity-{project_id}", "name": project_id}]
+
+        graph_service = Mock()
+        graph_service.search = AsyncMock(side_effect=search_by_project)
+
+        response = await search_advanced(
+            query="entity",
+            strategy="COMBINED_HYBRID_SEARCH_RRF",
+            focal_node_uuid=None,
+            reranker=None,
+            limit=10,
+            tenant_id=test_project_db.tenant_id,
+            project_id=None,
+            since=None,
+            current_user=test_user,
+            db=test_db,
+            graph_service=graph_service,
+        )
+
+        searched_project_ids = {
+            call.kwargs["project_id"] for call in graph_service.search.await_args_list
+        }
+        assert searched_project_ids == {test_project_db.id, second_project.id}
+        assert response["total"] == 2
 
     @pytest.mark.asyncio
     async def test_memory_search_does_not_treat_tenant_id_as_project_id(

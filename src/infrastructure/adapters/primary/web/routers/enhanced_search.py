@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.ports.services.graph_service_port import GraphServicePort
@@ -21,8 +22,9 @@ from src.infrastructure.adapters.primary.web.routers.graph import (
     _graph_project_scope,
     _sanitize_graph_value,
 )
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.models import Project, User
 from src.infrastructure.graph.neo4j_client import Neo4jClient
 from src.infrastructure.i18n import gettext as _
 
@@ -41,22 +43,72 @@ hybrid_router = APIRouter(prefix="/api/v1/hybrid", tags=["hybrid-search"])
 async def _search_graph_service_for_scope(
     graph_service: GraphServicePort,
     query: str,
+    tenant_id: str | None,
     project_id: str | None,
     limit: int,
     current_user: User,
     db: AsyncSession,
 ) -> list[Any]:
-    is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
-
-    if is_superuser or project_id:
+    if project_id:
+        _ = await _graph_project_scope(project_id, current_user, db, tenant_id=tenant_id)
         return await graph_service.search(query=query, project_id=project_id, limit=limit)
 
-    if not allowed_project_ids:
+    if tenant_id:
+        allowed_project_ids = await _tenant_search_project_ids(tenant_id, current_user, db)
+        return await _search_graph_service_projects(
+            graph_service,
+            query=query,
+            project_ids=allowed_project_ids,
+            limit=limit,
+        )
+
+    is_superuser, allowed_project_ids = await _graph_project_scope(None, current_user, db)
+    if is_superuser:
+        return await graph_service.search(query=query, project_id=None, limit=limit)
+
+    return await _search_graph_service_projects(
+        graph_service,
+        query=query,
+        project_ids=allowed_project_ids,
+        limit=limit,
+    )
+
+
+async def _tenant_search_project_ids(
+    tenant_id: str,
+    current_user: User,
+    db: AsyncSession,
+) -> list[str]:
+    if getattr(current_user, "is_superuser", False):
+        result = await db.execute(
+            refresh_select_statement(
+                select(Project.id).where(Project.tenant_id == tenant_id).order_by(Project.id.asc())
+            )
+        )
+        return [str(project_id) for project_id in result.scalars().all()]
+
+    _is_superuser, allowed_project_ids = await _graph_project_scope(
+        None,
+        current_user,
+        db,
+        tenant_id=tenant_id,
+    )
+    return allowed_project_ids
+
+
+async def _search_graph_service_projects(
+    graph_service: GraphServicePort,
+    *,
+    query: str,
+    project_ids: list[str],
+    limit: int,
+) -> list[Any]:
+    if not project_ids:
         return []
 
     results: list[Any] = []
     seen_keys: set[tuple[str, str]] = set()
-    for allowed_project_id in allowed_project_ids:
+    for allowed_project_id in project_ids:
         project_results = await graph_service.search(
             query=query,
             project_id=allowed_project_id,
@@ -169,6 +221,7 @@ async def search_advanced(
         results = await _search_graph_service_for_scope(
             graph_service,
             query=query,
+            tenant_id=tenant_id,
             project_id=project_id,
             limit=limit,
             current_user=current_user,
@@ -739,6 +792,7 @@ async def memory_search(
         results = await _search_graph_service_for_scope(
             graph_service,
             query=query,
+            tenant_id=None,
             project_id=project_id,
             limit=limit,
             current_user=current_user,
