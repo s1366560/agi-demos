@@ -481,6 +481,58 @@ class TestDataExportRouter:
         assert response["deleted"] == 5
 
     @pytest.mark.asyncio
+    async def test_cleanup_data_rejects_non_positive_body_days(
+        self,
+        test_db: AsyncSession,
+        test_user: User,
+    ):
+        """Body overrides cannot bypass the positive older_than_days constraint."""
+        graphiti_client = Mock()
+        graphiti_client.driver = Mock()
+        graphiti_client.driver.execute_query = AsyncMock()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await cleanup_data(
+                dry_run=True,
+                older_than_days=30,
+                tenant_id=None,
+                project_id=None,
+                body={"older_than_days": 0},
+                current_user=test_user,
+                db=test_db,
+                graphiti_client=graphiti_client,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        graphiti_client.driver.execute_query.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_data_rejects_invalid_body_dry_run(
+        self,
+        test_db: AsyncSession,
+        test_user: User,
+    ):
+        """Body overrides must use a parseable dry_run boolean."""
+        graphiti_client = Mock()
+        graphiti_client.driver = Mock()
+        graphiti_client.driver.execute_query = AsyncMock()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await cleanup_data(
+                dry_run=True,
+                older_than_days=30,
+                tenant_id=None,
+                project_id=None,
+                body={"dry_run": "maybe"},
+                current_user=test_user,
+                db=test_db,
+                graphiti_client=graphiti_client,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        graphiti_client.driver.execute_query.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_cleanup_data_failure_returns_sanitized_error(self, client, mock_graphiti_client):
         """Cleanup failures do not expose internal exception text."""
         mock_graphiti_client.driver = Mock()

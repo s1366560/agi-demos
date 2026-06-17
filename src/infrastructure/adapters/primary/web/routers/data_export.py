@@ -1,7 +1,7 @@
 """Data export and management API routes."""
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -37,9 +37,9 @@ def _records(result: Any) -> Sequence[Any]:
     try:
         recs = getattr(result, "records", None)
         if isinstance(recs, (list, tuple)):
-            return recs
+            return cast(Sequence[Any], recs)
         if isinstance(result, (list, tuple)):
-            return result
+            return cast(Sequence[Any], result)
         return []
     except Exception:
         return []
@@ -55,19 +55,23 @@ def _first_value(recs: Any, key: str) -> Any:
 def _extract_value(r0: Any, key: str) -> Any:
     """Extract a value from a record by key."""
     if isinstance(r0, dict):
-        return r0.get(key, 0)
+        return cast(dict[str, Any], r0).get(key, 0)
     if hasattr(r0, "__getitem__"):
         try:
             return r0[key]
         except Exception:
             pass
-    if hasattr(r0, "get"):
+    getter = getattr(r0, "get", None)
+    if callable(getter):
         try:
-            return r0.get(key, 0)
+            typed_getter = cast(Callable[[str, Any], Any], getter)
+            return typed_getter(key, 0)
         except Exception:
             return 0
-    if isinstance(r0, (list, tuple)) and len(r0) > 0:
-        return r0[0]
+    if isinstance(r0, (list, tuple)):
+        seq = cast(Sequence[Any], r0)
+        if seq:
+            return seq[0]
     return 0
 
 
@@ -202,6 +206,54 @@ def _scoped_episode_query(prefix: str, project_id: str | None, tenant_id: str | 
     {scope}
     {prefix}
     """
+
+
+def _cleanup_body_value(body: dict[str, Any] | None, key: str, fallback: Any) -> Any:
+    if body is not None and key in body:
+        return body[key]
+    return fallback
+
+
+def _normalize_cleanup_dry_run(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off"}:
+            return False
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=_("Invalid dry_run value"),
+    )
+
+
+def _normalize_cleanup_days(value: Any) -> int:
+    if value is None:
+        return 90
+    if isinstance(value, bool):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_("older_than_days must be a positive integer"),
+        )
+    if isinstance(value, int):
+        days = value
+    elif isinstance(value, str) and value.strip().isdecimal():
+        days = int(value.strip())
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_("older_than_days must be a positive integer"),
+        )
+    if days < 1:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_("older_than_days must be a positive integer"),
+        )
+    return days
 
 
 async def _append_relationship_export(
@@ -448,17 +500,14 @@ async def cleanup_data(
     entities and relationships. Use with caution!
     """
     try:
-        # Allow body to override query defaults
-        effective_dry_run = body.get("dry_run") if body and "dry_run" in body else dry_run
-        if effective_dry_run is None:
-            effective_dry_run = True
-        effective_days = (
-            body.get("older_than_days") if body and "older_than_days" in body else older_than_days
+        effective_dry_run = _normalize_cleanup_dry_run(
+            _cleanup_body_value(body, "dry_run", dry_run)
         )
-        if effective_days is None:
-            effective_days = 90
-        effective_tenant = body.get("tenant_id") if body and "tenant_id" in body else tenant_id
-        effective_project = body.get("project_id") if body and "project_id" in body else project_id
+        effective_days = _normalize_cleanup_days(
+            _cleanup_body_value(body, "older_than_days", older_than_days)
+        )
+        effective_tenant = _cleanup_body_value(body, "tenant_id", tenant_id)
+        effective_project = _cleanup_body_value(body, "project_id", project_id)
         effective_tenant, effective_project = await _resolve_graph_export_scope(
             effective_tenant,
             effective_project,
