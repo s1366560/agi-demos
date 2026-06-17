@@ -48,6 +48,29 @@ describe('WorkspaceCreate', () => {
     };
   });
 
+  it('does not create a workspace from a stale project outside the active tenant', async () => {
+    projectState.projects = [{ id: 'project-stale', name: 'Stale Project', tenant_id: 'tenant-2' }];
+    projectState.currentProject = {
+      id: 'project-stale',
+      name: 'Stale Project',
+      tenant_id: 'tenant-2',
+    };
+
+    render(
+      <Routes>
+        <Route path="/tenant/:tenantId/workspaces/new" element={<WorkspaceCreate />} />
+      </Routes>,
+      { route: '/tenant/tenant-1/workspaces/new' }
+    );
+
+    expect(await screen.findByText('Pick a tenant and project')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1');
+    });
+    expect(screen.queryByRole('button', { name: /Create Workspace/i })).not.toBeInTheDocument();
+    expect(workspaceState.actions.createWorkspace).not.toHaveBeenCalled();
+  });
+
   it('creates programming workspaces without source control or Drone setup', async () => {
     render(
       <Routes>

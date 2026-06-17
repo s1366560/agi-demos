@@ -52,7 +52,13 @@ export function WorkspaceCreate() {
   const { createWorkspace } = useWorkspaceActions();
 
   const tenantId = params.tenantId ?? currentTenant?.id ?? null;
-  const projectId = params.projectId ?? currentProject?.id ?? projects[0]?.id ?? null;
+  const tenantCurrentProject =
+    tenantId && currentProject?.tenant_id === tenantId ? currentProject : null;
+  const tenantProjects = useMemo(
+    () => (tenantId ? projects.filter((project) => project.tenant_id === tenantId) : []),
+    [projects, tenantId]
+  );
+  const projectId = params.projectId ?? tenantCurrentProject?.id ?? tenantProjects[0]?.id ?? null;
   const listPath =
     tenantId && projectId
       ? `/tenant/${tenantId}/project/${projectId}/workspaces`
@@ -156,11 +162,11 @@ export function WorkspaceCreate() {
   );
 
   useEffect(() => {
-    if (!tenantId || params.projectId || currentProject || projects.length > 0) return;
+    if (!tenantId || params.projectId || tenantCurrentProject || tenantProjects.length > 0) return;
     void listProjects(tenantId).catch(() => {
       // Keep the empty-state guidance visible when project loading fails.
     });
-  }, [tenantId, params.projectId, currentProject, projects.length, listProjects]);
+  }, [tenantId, params.projectId, tenantCurrentProject, tenantProjects.length, listProjects]);
 
   const trimmedDescription = description.trim();
   const normalizedCodeRoot = normaliseSandboxCodeRoot(sandboxCodeRoot);
