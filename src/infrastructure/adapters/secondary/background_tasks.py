@@ -41,6 +41,9 @@ class BackgroundTask:
         self.message = "Task queued"
         self.result: Any | None = None
         self.error: str | None = None
+        self.owner_user_id: str | None = None
+        self.project_id: str | None = None
+        self.metadata: dict[str, Any] = {}
         self._task: asyncio.Task[None] | None = None
 
     async def run(self) -> None:
@@ -87,6 +90,7 @@ class BackgroundTask:
             "message": self.message,
             "result": self.result,
             "error": self.error,
+            "project_id": self.project_id,
         }
 
 

@@ -35,6 +35,33 @@ _STATUS_MAP = {
 }
 
 
+def _metadata_string(value: object) -> str | None:
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _workflow_tracking_metadata(
+    input_data: dict[str, Any],
+    metadata: dict[str, str] | None,
+) -> tuple[str | None, str | None, dict[str, Any]]:
+    task_metadata: dict[str, Any] = dict(metadata or {})
+    for key in ("project_id", "group_id", "task_group_id", "user_id", "owner_user_id", "task_id"):
+        value = input_data.get(key)
+        if key not in task_metadata and value is not None:
+            task_metadata[key] = str(value)
+
+    owner_user_id = _metadata_string(
+        task_metadata.get("owner_user_id") or task_metadata.get("user_id")
+    )
+    project_id = _metadata_string(
+        task_metadata.get("project_id")
+        or task_metadata.get("group_id")
+        or task_metadata.get("task_group_id")
+    )
+    return owner_user_id, project_id, task_metadata
+
+
 class AsyncioWorkflowEngine(WorkflowEnginePort):
     """In-process asyncio workflow engine.
 
@@ -81,8 +108,14 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
                 )
                 return None
 
+        owner_user_id, project_id, task_metadata = _workflow_tracking_metadata(input_data, metadata)
         bg_task = self._manager.create_task(workflow_name, _execute)
+        original_task_id = bg_task.task_id
         bg_task.task_id = workflow_id
+        bg_task.owner_user_id = owner_user_id
+        bg_task.project_id = project_id
+        bg_task.metadata = task_metadata
+        _ = self._manager.tasks.pop(original_task_id, None)
         self._manager.tasks[workflow_id] = bg_task
         bg_task._task = asyncio.create_task(bg_task.run())
 
