@@ -6376,6 +6376,7 @@
       "entities": "实体",
       "members": "成员",
       "trending": "热门",
+      "statsLoadFailed": "加载项目统计失败",
       "trendingLoadFailed": "加载热门实体失败",
       "tellMeAboutEntity": "介绍一下 {{entityName}}",
       "recentSkills": "最近使用",

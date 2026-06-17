@@ -17,19 +17,37 @@ interface ProjectContextCardProps {
 export const ProjectContextCard = memo<ProjectContextCardProps>(({ projectId }) => {
   const { t } = useTranslation();
   const [stats, setStats] = useState<ProjectStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setError(null);
     projectStatsService
       .getStats(projectId)
       .then((data) => {
         if (!cancelled) setStats(data);
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const msg =
+            err instanceof Error
+              ? err.message
+              : t('agent.projectContext.statsLoadFailed', {
+                  defaultValue: 'Failed to load project stats',
+                });
+          setError(msg);
+          console.error('ProjectContextCard: fetch failed', err);
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, t]);
+
+  if (error) {
+    return <div className="text-xs text-red-500 dark:text-red-400 px-3 py-2">{error}</div>;
+  }
 
   if (!stats) return null;
 

@@ -6353,6 +6353,7 @@
       "entities": "Entities",
       "members": "Members",
       "trending": "Trending",
+      "statsLoadFailed": "Failed to load project stats",
       "trendingLoadFailed": "Failed to load trending entities",
       "tellMeAboutEntity": "Tell me about {{entityName}}",
       "recentSkills": "Recently Used",
