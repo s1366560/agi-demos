@@ -2435,8 +2435,12 @@ async def push_message_to_channel(
         )
     )
     config_row = config.scalar_one_or_none()
-    if config_row:
-        await verify_project_access(config_row.project_id, user, db)
+    if not config_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("No channel configuration found for this conversation"),
+        )
+    await verify_project_access(config_row.project_id, user, db)
 
     from src.application.services.channels.channel_message_router import (
         get_channel_message_router,

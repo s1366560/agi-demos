@@ -21,6 +21,7 @@ from src.infrastructure.adapters.primary.web.routers.channels import (
     ChannelConfigResponse,
     ChannelConfigUpdate,
     PluginConfigUpdateRequest,
+    PushMessageRequest,
     create_config,
     enable_tenant_plugin,
     get_project_channel_plugin_schema,
@@ -32,6 +33,7 @@ from src.infrastructure.adapters.primary.web.routers.channels import (
     list_project_channel_plugin_catalog,
     list_tenant_channel_plugin_catalog,
     list_tenant_plugins,
+    push_message_to_channel,
     reload_project_plugins,
     reload_tenant_plugins,
     router,
@@ -44,6 +46,7 @@ from src.infrastructure.adapters.primary.web.routers.channels import (
 )
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
+    ChannelSessionBindingModel,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
 
@@ -1904,3 +1907,48 @@ class TestConfigConnectionTest:
             "Connection health check failed for feishu",
         )
         mock_db_session.commit.assert_awaited_once()
+
+
+class TestPushMessageToChannel:
+    """Push endpoint should fail closed before sending outbound messages."""
+
+    @pytest.mark.asyncio
+    async def test_push_rejects_binding_without_channel_config(self, mock_db_session):
+        """A stale binding must not bypass project authorization."""
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        binding = ChannelSessionBindingModel(
+            id="binding-1",
+            project_id="project-1",
+            channel_config_id="missing-config",
+            conversation_id="conversation-1",
+            channel_type="feishu",
+            chat_id="chat-1",
+            chat_type="group",
+            session_key="project:project-1:channel:feishu:config:missing-config:group:chat-1",
+        )
+        binding_result = MagicMock()
+        binding_result.scalar_one_or_none.return_value = binding
+        missing_config_result = MagicMock()
+        missing_config_result.scalar_one_or_none.return_value = None
+        mock_db_session.execute = AsyncMock(side_effect=[binding_result, missing_config_result])
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
+                new=AsyncMock(),
+            ) as verify_access,
+            patch(
+                "src.application.services.channels.channel_message_router.get_channel_message_router"
+            ) as get_router,
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await push_message_to_channel(
+                conversation_id="conversation-1",
+                body=PushMessageRequest(content="hello"),
+                user=current_user,
+                db=mock_db_session,
+            )
+
+        assert exc_info.value.status_code == 404
+        verify_access.assert_not_awaited()
+        get_router.assert_not_called()
