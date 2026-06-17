@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import HTTPException, status
 
-from src.application.schemas.cluster_schemas import ClusterUpdate
+from src.application.schemas.cluster_schemas import ClusterCreate, ClusterUpdate
 from src.infrastructure.adapters.primary.web.routers import clusters as router
 
 
@@ -43,6 +43,20 @@ def failing_container(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _Container())
 
 
+@pytest.fixture(autouse=True)
+def allow_cluster_admin(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def require_access(
+        db: object,
+        user: object,
+        tenant_id: str,
+        *,
+        require_admin: bool = False,
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(router, "require_tenant_access", require_access)
+
+
 @pytest.fixture
 def db() -> SimpleNamespace:
     return SimpleNamespace(commit=AsyncMock())
@@ -67,6 +81,7 @@ def db() -> SimpleNamespace:
                 "cluster_id": "cluster-secret",
                 "data": ClusterUpdate(name="Updated"),
                 "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
@@ -75,6 +90,7 @@ def db() -> SimpleNamespace:
                 "request": SimpleNamespace(),
                 "cluster_id": "cluster-secret",
                 "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
@@ -100,6 +116,7 @@ def db() -> SimpleNamespace:
                     used_memory_gb=2,
                 ),
                 "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
     ],
@@ -115,6 +132,80 @@ async def test_cluster_routes_sanitize_not_found_errors(
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
     assert exc_info.value.detail == "Cluster not found"
     assert "secret" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("call_name", "call_args"),
+    [
+        (
+            "create_cluster",
+            {
+                "request": SimpleNamespace(),
+                "data": ClusterCreate(name="Cluster"),
+                "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
+            },
+        ),
+        (
+            "update_cluster",
+            {
+                "request": SimpleNamespace(),
+                "cluster_id": "cluster-secret",
+                "data": ClusterUpdate(name="Updated"),
+                "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
+            },
+        ),
+        (
+            "delete_cluster",
+            {
+                "request": SimpleNamespace(),
+                "cluster_id": "cluster-secret",
+                "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
+            },
+        ),
+        (
+            "update_health_status",
+            {
+                "request": SimpleNamespace(),
+                "cluster_id": "cluster-secret",
+                "data": router.HealthStatusUpdate(
+                    health_status="unreachable",
+                    total_nodes=1,
+                    active_nodes=0,
+                    total_cpu=8,
+                    used_cpu=1,
+                    total_memory_gb=16,
+                    used_memory_gb=2,
+                ),
+                "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
+            },
+        ),
+    ],
+)
+async def test_cluster_write_routes_require_admin_before_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+    call_name: str,
+    call_args: dict[str, object],
+    db: SimpleNamespace,
+) -> None:
+    async def deny_admin(
+        *_args: object,
+        **_kwargs: object,
+    ) -> None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    monkeypatch.setattr(router, "require_tenant_access", deny_admin)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await getattr(router, call_name)(**call_args, db=db)
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    assert exc_info.value.detail == "Admin access required"
+    db.commit.assert_not_awaited()
 
 
 @pytest.mark.unit

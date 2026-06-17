@@ -1,6 +1,7 @@
 """Cluster Management API endpoints."""
 
 import logging
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -20,6 +21,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
 )
+from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.i18n import gettext as _
@@ -42,7 +44,7 @@ router = APIRouter(prefix="/api/v1/clusters", tags=["Clusters"])
 
 def _health_config(provider_config: dict[str, object]) -> dict[str, object]:
     health = provider_config.get("health")
-    return dict(health) if isinstance(health, dict) else {}
+    return dict(cast(dict[str, object], health)) if isinstance(health, dict) else {}
 
 
 def _as_float(value: object) -> float | None:
@@ -75,6 +77,19 @@ def _cluster_not_found_error() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=_("Cluster not found"),
+    )
+
+
+async def _require_cluster_admin(
+    db: AsyncSession,
+    current_user: DBUser,
+    tenant_id: str,
+) -> None:
+    await require_tenant_access(
+        db,
+        cast(Any, current_user),
+        tenant_id,
+        require_admin=True,
     )
 
 
@@ -133,6 +148,8 @@ async def create_cluster(
 ) -> ClusterResponse:
     """Create a new cluster."""
     try:
+        await _require_cluster_admin(db, current_user, tenant_id)
+
         container = get_container_with_db(request, db)
         service = container.cluster_service()
         result = await service.create_cluster(
@@ -213,10 +230,13 @@ async def update_cluster(
     request: Request,
     data: ClusterUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ClusterResponse:
     """Update a cluster."""
     try:
+        await _require_cluster_admin(db, current_user, tenant_id)
+
         container = get_container_with_db(request, db)
         service = container.cluster_service()
         result = await service.update_cluster(
@@ -248,10 +268,13 @@ async def delete_cluster(
     cluster_id: str,
     request: Request,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a cluster."""
     try:
+        await _require_cluster_admin(db, current_user, tenant_id)
+
         container = get_container_with_db(request, db)
         service = container.cluster_service()
         await service.delete_cluster(cluster_id, tenant_id=tenant_id)
@@ -299,10 +322,13 @@ async def update_health_status(
     request: Request,
     data: HealthStatusUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ClusterResponse:
     """Update cluster health status."""
     try:
+        await _require_cluster_admin(db, current_user, tenant_id)
+
         container = get_container_with_db(request, db)
         service = container.cluster_service()
         result = await service.update_health_status(
