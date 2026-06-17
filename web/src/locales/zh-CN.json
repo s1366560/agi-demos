@@ -8411,6 +8411,8 @@
         "searchPlaceholder": "搜索应用...",
         "noSearchResults": "没有匹配的应用",
         "empty": "暂无可用 MCP 应用",
+        "loadFailed": "加载 MCP 应用失败",
+        "retryLoad": "重试加载应用",
         "pinned": "已固定",
         "openApps": "打开 MCP 应用",
         "pinApp": "固定应用",

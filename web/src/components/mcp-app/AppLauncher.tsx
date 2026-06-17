@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge, Empty, Input, Popover, Spin } from 'antd';
-import { AppWindow, ExternalLink, Pin, RefreshCw, Search } from 'lucide-react';
+import { AlertCircle, AppWindow, ExternalLink, Pin, RefreshCw, Search } from 'lucide-react';
 
 import { useCanvasStore, usePinnedCanvasTabs } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
@@ -24,10 +24,15 @@ import { LazyTooltip } from '@/components/ui/lazyAntd';
 
 import type { MCPApp } from '@/types/mcpApp';
 
-export const AppLauncher: FC = () => {
+interface AppLauncherProps {
+  variant?: 'header' | 'status';
+}
+
+export const AppLauncher: FC<AppLauncherProps> = ({ variant = 'header' }) => {
   const { t } = useTranslation();
   const apps = useMCPAppStore((s) => s.apps);
   const loading = useMCPAppStore((s) => s.loading);
+  const error = useMCPAppStore((s) => s.error);
   const fetchApps = useMCPAppStore((s) => s.fetchApps);
   const currentProject = useProjectStore((s) => s.currentProject);
   const pinnedTabs = usePinnedCanvasTabs();
@@ -128,6 +133,7 @@ export const AppLauncher: FC = () => {
   }, [currentProject, fetchApps]);
 
   const totalReady = Object.values(apps).filter((a) => a.status === 'ready').length;
+  const isStatusVariant = variant === 'status';
 
   const content = (
     <div className="w-80 max-h-96 overflow-hidden flex flex-col">
@@ -165,13 +171,42 @@ export const AppLauncher: FC = () => {
         </div>
       )}
 
+      {error && (
+        <div className="px-3 pb-2">
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+          >
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium">
+                {t('components.mcpApp.launcher.loadFailed', 'Failed to load MCP apps')}
+              </div>
+              <div className="break-words text-2xs text-red-600 dark:text-red-300/80">{error}</div>
+            </div>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="rounded p-1 text-red-500 transition-colors hover:bg-red-100 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60 dark:hover:bg-red-900/50 dark:hover:text-red-200"
+              aria-label={t('components.mcpApp.launcher.retryLoad', 'Retry loading apps')}
+              title={t('components.mcpApp.launcher.retryLoad', 'Retry loading apps')}
+            >
+              <RefreshCw
+                size={12}
+                className={loading ? 'animate-spin motion-reduce:animate-none' : ''}
+              />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* App List */}
       <div className="overflow-y-auto flex-1 px-1 pb-2">
         {loading && appList.length === 0 ? (
           <div className="flex items-center justify-center py-8">
             <Spin size="small" />
           </div>
-        ) : appList.length === 0 ? (
+        ) : error && appList.length === 0 ? null : appList.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={
@@ -233,7 +268,7 @@ export const AppLauncher: FC = () => {
     <Popover
       content={content}
       trigger="click"
-      placement="bottomRight"
+      placement={isStatusVariant ? 'topRight' : 'bottomRight'}
       open={open}
       onOpenChange={setOpen}
       classNames={{ root: 'app-launcher-popover' }}
@@ -241,9 +276,14 @@ export const AppLauncher: FC = () => {
       <LazyTooltip title={t('components.mcpApp.launcher.openApps', 'Open MCP Apps')}>
         <button
           type="button"
-          className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 text-slate-600 dark:text-slate-400 relative"
+          aria-label={t('components.mcpApp.launcher.openApps', 'Open MCP Apps')}
+          className={
+            isStatusVariant
+              ? 'relative flex items-center gap-1 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50'
+              : 'relative p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 text-slate-600 dark:text-slate-400'
+          }
         >
-          <AppWindow className="w-5 h-5" />
+          <AppWindow className={isStatusVariant ? 'w-3.5 h-3.5' : 'w-5 h-5'} />
           {totalReady > 0 && (
             <Badge
               count={totalReady}

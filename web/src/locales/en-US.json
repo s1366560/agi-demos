@@ -8388,6 +8388,8 @@
         "searchPlaceholder": "Search apps...",
         "noSearchResults": "No apps match your search",
         "empty": "No MCP apps available",
+        "loadFailed": "Failed to load MCP apps",
+        "retryLoad": "Retry loading apps",
         "pinned": "Pinned",
         "openApps": "Open MCP Apps",
         "pinApp": "Pin app",

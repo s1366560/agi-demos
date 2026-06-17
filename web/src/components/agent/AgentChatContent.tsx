@@ -56,6 +56,7 @@ import { useSandboxAgentHandlers } from '@/hooks/useSandboxDetection';
 
 import { DEFAULT_GENERAL_AGENT_ID } from '@/constants/agent';
 
+import { AppLauncher } from '@/components/mcp-app/AppLauncher';
 import { useLazyNotification } from '@/components/ui/lazyAntd';
 
 // Import design components
@@ -1050,6 +1051,7 @@ ${content}`;
                 )}
               </div>
             )}
+            <AppLauncher variant="status" />
             <LayoutModeSelector hasWorkspace={!!effectiveWorkspaceId} />
           </div>
         </div>
