@@ -6,6 +6,8 @@ import { Link } from 'react-router-dom';
 import {
   Brain,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   LayoutGrid,
   List,
   MoreVertical,
@@ -20,6 +22,7 @@ import {
 import { confirmAction } from '@/utils/confirmAction';
 import { formatDateOnly } from '@/utils/date';
 
+import { useDebounce } from '../../hooks/useDebounce';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
@@ -69,32 +72,49 @@ const createFormatTime = (t: TFunction) => {
 type ProjectListProps = Record<string, never>;
 type VisibilityFilter = 'all' | 'public' | 'private';
 
+const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
+
 // Use memo to prevent unnecessary re-renders (rerender-memo)
 const ProjectListInner: React.FC<ProjectListProps> = () => {
   const { t } = useTranslation();
   const { currentTenant } = useTenantStore();
-  const { listProjects, deleteProject, projects, isLoading } = useProjectStore();
+  const { listProjects, deleteProject, projects, isLoading, total, ownerIds } = useProjectStore();
   const [search, setSearch] = useState('');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>('all');
   const [ownerFilter, setOwnerFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const debouncedSearch = useDebounce(search, 300);
+
+  const projectQueryParams = React.useMemo(() => {
+    const trimmedSearch = debouncedSearch.trim();
+    return {
+      page,
+      page_size: pageSize,
+      search: trimmedSearch || undefined,
+      visibility: visibilityFilter,
+      owner_id: ownerFilter === 'all' ? undefined : ownerFilter,
+    };
+  }, [debouncedSearch, ownerFilter, page, pageSize, visibilityFilter]);
 
   useEffect(() => {
     if (currentTenant) {
-      void listProjects(currentTenant.id, { search });
+      void listProjects(currentTenant.id, projectQueryParams);
     }
-  }, [currentTenant, search, listProjects]);
+  }, [currentTenant, listProjects, projectQueryParams]);
 
   // Create formatTime function using translation hook
   const formatTime = createFormatTime(t);
 
   const ownerOptions = React.useMemo(
     () =>
-      Array.from(new Set(projects.map((project) => project.owner_id)))
+      Array.from(new Set([...ownerIds, ...projects.map((project) => project.owner_id)]))
         .filter(Boolean)
         .sort(),
-    [projects]
+    [ownerIds, projects]
   );
 
   const filteredProjects = React.useMemo(
@@ -109,11 +129,24 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
     [ownerFilter, projects, visibilityFilter]
   );
 
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const rangeStart = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const rangeEnd = Math.min(total, safePage * pageSize);
+  const hasPreviousPage = safePage > 1;
+  const hasNextPage = safePage < totalPages;
+
+  const handlePageSizeChange = (nextPageSize: number) => {
+    setPageSize(nextPageSize);
+    setPage(1);
+  };
+
   const handleDelete = async (projectId: string) => {
     if (!currentTenant) return;
     if (await confirmAction({ title: t('tenant.projects.deleteConfirm'), danger: true })) {
       try {
         await deleteProject(currentTenant.id, projectId);
+        await listProjects(currentTenant.id, projectQueryParams);
         setActiveMenu(null);
       } catch (error) {
         console.error('Failed to delete project:', error);
@@ -156,6 +189,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
+              setPage(1);
             }}
             className="block w-full pl-10 pr-3 py-2.5 border-none rounded-lg bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-primary/20 focus:bg-white dark:focus:bg-slate-700 transition-[color,background-color,border-color,box-shadow,opacity,transform] outline-none"
             placeholder={t('tenant.projects.searchPlaceholder')}
@@ -175,6 +209,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
               value={visibilityFilter}
               onChange={(event) => {
                 setVisibilityFilter(event.target.value as VisibilityFilter);
+                setPage(1);
               }}
               className="appearance-none rounded-lg border border-primary/20 bg-primary/10 py-1.5 pl-3 pr-8 text-sm font-medium text-primary transition-colors hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
@@ -196,6 +231,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
               value={ownerFilter}
               onChange={(event) => {
                 setOwnerFilter(event.target.value);
+                setPage(1);
               }}
               className="appearance-none rounded-lg border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
             >
@@ -526,6 +562,70 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && total > 0 && (
+        <div
+          className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-surface-dark sm:flex-row sm:items-center sm:justify-between"
+          aria-label={t('common.pagination.label', { defaultValue: 'Pagination' })}
+        >
+          <div className="text-sm text-slate-500 dark:text-slate-400">
+            {t('tenant.projects.pagination.summary', {
+              defaultValue: '{{start}}-{{end}} of {{total}} projects',
+              start: rangeStart,
+              end: rangeEnd,
+              total,
+            })}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span>{t('tenant.projects.pagination.rowsPerPage')}</span>
+              <select
+                aria-label={t('tenant.projects.pagination.rowsPerPage')}
+                value={pageSize}
+                onChange={(event) => {
+                  handlePageSizeChange(Number(event.target.value));
+                }}
+                className="h-8 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+              >
+                {PAGE_SIZE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              aria-label={t('tenant.projects.pagination.previousPage')}
+              disabled={!hasPreviousPage}
+              onClick={() => {
+                setPage((currentPage) => Math.max(1, currentPage - 1));
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              <ChevronLeft size={16} aria-hidden="true" />
+            </button>
+            <span className="min-w-20 text-center text-sm text-slate-600 dark:text-slate-300">
+              {t('common.pagination.page_info', {
+                defaultValue: 'Page {{page}} of {{total}}',
+                page: safePage,
+                total: totalPages,
+              })}
+            </span>
+            <button
+              type="button"
+              aria-label={t('tenant.projects.pagination.nextPage')}
+              disabled={!hasNextPage}
+              onClick={() => {
+                setPage((currentPage) => Math.min(totalPages, currentPage + 1));
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
           </div>
         </div>
       )}

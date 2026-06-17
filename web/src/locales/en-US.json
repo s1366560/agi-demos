@@ -3754,6 +3754,12 @@
         "project": "Project",
         "status": "Status"
       },
+      "pagination": {
+        "summary": "{{start}}-{{end}} of {{total}} projects",
+        "rowsPerPage": "Rows",
+        "previousPage": "Previous page",
+        "nextPage": "Next page"
+      },
       "newProjectCard": {
         "title": "Create New Project",
         "subtitle": "Set up a new memory environment"

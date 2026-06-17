@@ -40,6 +40,7 @@ interface ProjectState {
   total: number;
   page: number;
   pageSize: number;
+  ownerIds: string[];
 
   // Actions
   listProjects: (
@@ -48,6 +49,8 @@ interface ProjectState {
       page?: number | undefined;
       page_size?: number | undefined;
       search?: string | undefined;
+      visibility?: 'all' | 'public' | 'private' | undefined;
+      owner_id?: string | undefined;
     }
   ) => Promise<void>;
   createProject: (tenantId: string, data: ProjectCreate) => Promise<void>;
@@ -78,6 +81,7 @@ export const useProjectStore = create<ProjectState>()(
       total: 0,
       page: 1,
       pageSize: 20,
+      ownerIds: [],
 
       /**
        * List projects for a tenant
@@ -100,6 +104,7 @@ export const useProjectStore = create<ProjectState>()(
             total: response.total,
             page: response.page,
             pageSize: response.page_size,
+            ownerIds: response.owner_ids ?? [],
             isLoading: false,
           });
         } catch (error: unknown) {
@@ -294,6 +299,13 @@ export const useProjectPage = () => useProjectStore((state) => state.page);
  * const pageSize = useProjectPageSize();
  */
 export const useProjectPageSize = () => useProjectStore((state) => state.pageSize);
+
+/**
+ * Get owner IDs available for the current project list query
+ *
+ * @returns Array of owner IDs
+ */
+export const useProjectOwnerIds = () => useProjectStore((state) => state.ownerIds);
 
 // Loading and error selectors
 

@@ -72,7 +72,7 @@ def _verify_project_structure(project: dict) -> None:
     assert project["graph_config"]["community_detection"] is True
 
 
-async def _verify_list_projects(ac, tenant_id: str) -> None:
+async def _verify_list_projects(ac, tenant_id: str, owner_id: str) -> None:
     """Verify projects can be listed for the tenant."""
     print("\n3. Listing Projects...")
     response = await ac.get(f"/api/v1/projects/?tenant_id={tenant_id}")
@@ -80,6 +80,22 @@ async def _verify_list_projects(ac, tenant_id: str) -> None:
     projects_list = response.json()["projects"]
     assert len(projects_list) >= 1
     print(f"✅ Listed {len(projects_list)} projects")
+
+    filtered_response = await ac.get(
+        "/api/v1/projects/",
+        params={
+            "tenant_id": tenant_id,
+            "search": "Test Project",
+            "visibility": "private",
+            "owner_id": owner_id,
+        },
+    )
+    assert filtered_response.status_code == 200
+    filtered_payload = filtered_response.json()
+    assert filtered_payload["total"] >= 1
+    assert owner_id in filtered_payload["owner_ids"]
+    assert all(project["owner_id"] == owner_id for project in filtered_payload["projects"])
+    assert all(project["is_public"] is False for project in filtered_payload["projects"])
 
 
 async def _verify_get_project(ac, project_id: str) -> None:
@@ -126,7 +142,7 @@ async def test_project_flow(authenticated_async_client, test_user):
     _verify_project_structure(project)
     project_id = project["id"]
 
-    await _verify_list_projects(AC, tenant_id)
+    await _verify_list_projects(AC, tenant_id, test_user.id)
     await _verify_get_project(AC, project_id)
     await _update_and_verify_project(AC, project_id)
     await _delete_and_verify_project(AC, project_id)

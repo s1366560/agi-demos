@@ -216,6 +216,7 @@ export interface ProjectListResponse {
   total: number;
   page: number;
   page_size: number;
+  owner_ids?: string[] | undefined;
 }
 
 export interface UserProfile {

@@ -991,6 +991,12 @@
         "project": "项目",
         "status": "状态"
       },
+      "pagination": {
+        "summary": "第 {{start}}-{{end}} 个，共 {{total}} 个项目",
+        "rowsPerPage": "每页行数",
+        "previousPage": "上一页",
+        "nextPage": "下一页"
+      },
       "newProjectCard": {
         "title": "创建新项目",
         "subtitle": "设置新的记忆环境"

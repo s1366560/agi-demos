@@ -295,6 +295,10 @@ class ProjectListResponse(BaseModel):
     total: int = Field(..., description="Total number of projects")
     page: int = Field(..., description="Current page number")
     page_size: int = Field(..., description="Page size")
+    owner_ids: list[str] = Field(
+        default_factory=list,
+        description="Project owner IDs available for the current tenant/search/visibility filters",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -315,6 +319,7 @@ class ProjectListResponse(BaseModel):
                 "total": 1,
                 "page": 1,
                 "page_size": 20,
+                "owner_ids": ["user_123"],
             }
         }
     )

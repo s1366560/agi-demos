@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -223,6 +223,10 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
     search: str | None = Query(None, description="Search query"),
+    visibility: Literal["all", "public", "private"] = Query(
+        "all", description="Filter by project visibility"
+    ),
+    owner_id: str | None = Query(None, description="Filter by owner ID"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     graphiti_client: Any = Depends(get_graphiti_client),
@@ -237,31 +241,41 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
     if not project_ids:
         return ProjectListResponse(projects=[], total=0, page=page, page_size=page_size)
 
-    # Build query
-    query = select(Project).where(Project.id.in_(project_ids))
-
+    base_conditions: list[Any] = [Project.id.in_(project_ids)]
     if tenant_id:
-        query = query.where(Project.tenant_id == tenant_id)
-
-    if search:
-        query = query.where(
+        base_conditions.append(Project.tenant_id == tenant_id)
+    search_value = search.strip() if search else ""
+    if search_value:
+        search_pattern = f"%{search_value}%"
+        base_conditions.append(
             or_(
-                Project.name.ilike(f"%{search}%"),
-                Project.description.ilike(f"%{search}%"),
+                Project.id.ilike(search_pattern),
+                Project.name.ilike(search_pattern),
+                Project.description.ilike(search_pattern),
+                Project.owner_id.ilike(search_pattern),
             )
         )
+    if visibility == "public":
+        base_conditions.append(Project.is_public.is_(True))
+    elif visibility == "private":
+        base_conditions.append(Project.is_public.is_(False))
+
+    owner_ids_result = await db.execute(
+        refresh_select_statement(
+            select(Project.owner_id).where(*base_conditions).distinct().order_by(Project.owner_id)
+        )
+    )
+    owner_ids = [row[0] for row in owner_ids_result.fetchall() if row[0]]
+
+    query_conditions = [*base_conditions]
+    if owner_id:
+        query_conditions.append(Project.owner_id == owner_id)
+
+    # Build query
+    query = select(Project).where(*query_conditions)
 
     # Get total count
-    count_query = select(func.count(Project.id)).where(Project.id.in_(project_ids))
-    if tenant_id:
-        count_query = count_query.where(Project.tenant_id == tenant_id)
-    if search:
-        count_query = count_query.where(
-            or_(
-                Project.name.ilike(f"%{search}%"),
-                Project.description.ilike(f"%{search}%"),
-            )
-        )
+    count_query = select(func.count(Project.id)).where(*query_conditions)
     total_result = await db.execute(refresh_select_statement(count_query))
     total = total_result.scalar()
 
@@ -369,6 +383,7 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
         total=total or 0,
         page=page,
         page_size=page_size,
+        owner_ids=owner_ids,
     )
 
 
