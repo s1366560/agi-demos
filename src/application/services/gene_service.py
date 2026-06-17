@@ -813,9 +813,10 @@ class GeneService:
         if existing:
             existing.rating = rating
             existing.comment = comment
-            await self._gene_rating_repo.save_gene_rating(existing)
+            saved_rating = await self._gene_rating_repo.save_gene_rating(existing)
+            await self._refresh_gene_average_rating(gene)
             logger.info(f"Updated rating for gene {gene_id} by user {user_id}")
-            return existing
+            return saved_rating
 
         gene_rating = GeneRating(
             gene_id=gene_id,
@@ -823,9 +824,10 @@ class GeneService:
             rating=rating,
             comment=comment,
         )
-        await self._gene_rating_repo.save_gene_rating(gene_rating)
+        saved_rating = await self._gene_rating_repo.save_gene_rating(gene_rating)
+        await self._refresh_gene_average_rating(gene)
         logger.info(f"Created rating for gene {gene_id} by user {user_id}")
-        return gene_rating
+        return saved_rating
 
     async def rate_genome(
         self,
@@ -860,9 +862,10 @@ class GeneService:
         if existing:
             existing.rating = rating
             existing.comment = comment
-            await self._gene_rating_repo.save_genome_rating(existing)
+            saved_rating = await self._gene_rating_repo.save_genome_rating(existing)
+            await self._refresh_genome_average_rating(genome)
             logger.info(f"Updated rating for genome {genome_id} by user {user_id}")
-            return existing
+            return saved_rating
 
         genome_rating = GenomeRating(
             genome_id=genome_id,
@@ -870,9 +873,20 @@ class GeneService:
             rating=rating,
             comment=comment,
         )
-        await self._gene_rating_repo.save_genome_rating(genome_rating)
+        saved_rating = await self._gene_rating_repo.save_genome_rating(genome_rating)
+        await self._refresh_genome_average_rating(genome)
         logger.info(f"Created rating for genome {genome_id} by user {user_id}")
-        return genome_rating
+        return saved_rating
+
+    async def _refresh_gene_average_rating(self, gene: Gene) -> None:
+        gene.avg_rating = await self._gene_rating_repo.get_gene_average_rating(gene.id)
+        gene.updated_at = datetime.now(UTC)
+        _ = await self._gene_repo.save(gene)
+
+    async def _refresh_genome_average_rating(self, genome: Genome) -> None:
+        genome.avg_rating = await self._gene_rating_repo.get_genome_average_rating(genome.id)
+        genome.updated_at = datetime.now(UTC)
+        _ = await self._genome_repo.save(genome)
 
     async def list_gene_ratings(
         self,

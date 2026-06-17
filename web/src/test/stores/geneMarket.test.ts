@@ -9,10 +9,14 @@ vi.mock('@/services/geneMarketService', () => ({
   geneMarketService: {
     createGeneReview: vi.fn(),
     deleteGeneReview: vi.fn(),
+    getGene: vi.fn(),
     getGeneReviews: vi.fn(),
+    getGenome: vi.fn(),
     listGenes: vi.fn(),
     publishGene: vi.fn(),
     publishGenome: vi.fn(),
+    rateGene: vi.fn(),
+    rateGenome: vi.fn(),
     unpublishGene: vi.fn(),
     unpublishGenome: vi.fn(),
   },
@@ -158,6 +162,60 @@ describe('gene market store', () => {
     });
     expect(useGeneMarketStore.getState().genomes[0]?.is_published).toBe(false);
     expect(useGeneMarketStore.getState().currentGenome?.is_published).toBe(false);
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+  });
+
+  it('refreshes gene list and current gene after rating', async () => {
+    const staleGene = gene({ avg_rating: 2 });
+    const refreshedGene = gene({ avg_rating: 4.5 });
+    useGeneMarketStore.setState({
+      genes: [staleGene],
+      currentGene: staleGene,
+    });
+    vi.mocked(geneMarketService.rateGene).mockResolvedValue({ id: 'rating-1' } as any);
+    vi.mocked(geneMarketService.getGene).mockResolvedValue(refreshedGene);
+
+    await useGeneMarketStore
+      .getState()
+      .rateGene('gene-1', { rating: 5, comment: 'Helpful' }, { tenant_id: 'tenant-2' });
+
+    expect(geneMarketService.rateGene).toHaveBeenCalledWith(
+      'gene-1',
+      { rating: 5, comment: 'Helpful' },
+      { tenant_id: 'tenant-2' }
+    );
+    expect(geneMarketService.getGene).toHaveBeenCalledWith('gene-1', {
+      tenant_id: 'tenant-2',
+    });
+    expect(useGeneMarketStore.getState().genes[0]?.avg_rating).toBe(4.5);
+    expect(useGeneMarketStore.getState().currentGene?.avg_rating).toBe(4.5);
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+  });
+
+  it('refreshes genome list and current genome after rating', async () => {
+    const staleGenome = genome({ avg_rating: 1 });
+    const refreshedGenome = genome({ avg_rating: 3.5 });
+    useGeneMarketStore.setState({
+      genomes: [staleGenome],
+      currentGenome: staleGenome,
+    });
+    vi.mocked(geneMarketService.rateGenome).mockResolvedValue({ id: 'rating-1' } as any);
+    vi.mocked(geneMarketService.getGenome).mockResolvedValue(refreshedGenome);
+
+    await useGeneMarketStore
+      .getState()
+      .rateGenome('genome-1', { rating: 4, comment: 'Solid' }, { tenant_id: 'tenant-2' });
+
+    expect(geneMarketService.rateGenome).toHaveBeenCalledWith(
+      'genome-1',
+      { rating: 4, comment: 'Solid' },
+      { tenant_id: 'tenant-2' }
+    );
+    expect(geneMarketService.getGenome).toHaveBeenCalledWith('genome-1', {
+      tenant_id: 'tenant-2',
+    });
+    expect(useGeneMarketStore.getState().genomes[0]?.avg_rating).toBe(3.5);
+    expect(useGeneMarketStore.getState().currentGenome?.avg_rating).toBe(3.5);
     expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
   });
 

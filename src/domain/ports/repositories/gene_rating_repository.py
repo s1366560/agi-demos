@@ -23,6 +23,10 @@ class GeneRatingRepository(ABC):
         """Find a specific user's rating for a gene."""
 
     @abstractmethod
+    async def get_gene_average_rating(self, gene_id: str) -> float:
+        """Return the average rating for a gene, or 0.0 when it has no ratings."""
+
+    @abstractmethod
     async def save_genome_rating(self, rating: GenomeRating) -> GenomeRating:
         """Save a genome rating (create or update). Returns the saved rating."""
 
@@ -35,3 +39,7 @@ class GeneRatingRepository(ABC):
     @abstractmethod
     async def find_user_genome_rating(self, genome_id: str, user_id: str) -> GenomeRating | None:
         """Find a specific user's rating for a genome."""
+
+    @abstractmethod
+    async def get_genome_average_rating(self, genome_id: str) -> float:
+        """Return the average rating for a genome, or 0.0 when it has no ratings."""

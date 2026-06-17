@@ -603,7 +603,13 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         set({ isSubmitting: true, error: null });
         try {
           await geneMarketService.rateGene(geneId, data, options);
-          set({ isSubmitting: false });
+          const response = await geneMarketService.getGene(geneId, options);
+          const { genes, currentGene } = get();
+          set({
+            genes: genes.map((gene) => (gene.id === geneId ? response : gene)),
+            currentGene: currentGene?.id === geneId ? response : currentGene,
+            isSubmitting: false,
+          });
         } catch (error: unknown) {
           set({ error: getErrorMessage(error, 'Failed to rate gene'), isSubmitting: false });
           throw error;
@@ -618,7 +624,13 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         set({ isSubmitting: true, error: null });
         try {
           await geneMarketService.rateGenome(genomeId, data, options);
-          set({ isSubmitting: false });
+          const response = await geneMarketService.getGenome(genomeId, options);
+          const { genomes, currentGenome } = get();
+          set({
+            genomes: genomes.map((genome) => (genome.id === genomeId ? response : genome)),
+            currentGenome: currentGenome?.id === genomeId ? response : currentGenome,
+            isSubmitting: false,
+          });
         } catch (error: unknown) {
           set({ error: getErrorMessage(error, 'Failed to rate genome'), isSubmitting: false });
           throw error;

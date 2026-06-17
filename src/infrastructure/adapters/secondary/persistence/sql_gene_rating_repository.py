@@ -7,7 +7,7 @@ separate ORM models (GeneRatingModel and GenomeRatingModel).
 import logging
 from typing import override
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.gene.instance_gene import GeneRating, GenomeRating
@@ -79,6 +79,13 @@ class SqlGeneRatingRepository(GeneRatingRepository):
         return self._gene_rating_to_domain(db_rating)
 
     @override
+    async def get_gene_average_rating(self, gene_id: str) -> float:
+        query = select(func.avg(GeneRatingModel.rating)).where(GeneRatingModel.gene_id == gene_id)
+        result = await self._session.execute(refresh_select_statement(query))
+        average = result.scalar()
+        return float(average) if average is not None else 0.0
+
+    @override
     async def save_genome_rating(self, rating: GenomeRating) -> GenomeRating:
         query = select(GenomeRatingModel).where(GenomeRatingModel.id == rating.id).limit(1)
         result = await self._session.execute(refresh_select_statement(query))
@@ -127,6 +134,15 @@ class SqlGeneRatingRepository(GeneRatingRepository):
         if db_rating is None:
             return None
         return self._genome_rating_to_domain(db_rating)
+
+    @override
+    async def get_genome_average_rating(self, genome_id: str) -> float:
+        query = select(func.avg(GenomeRatingModel.rating)).where(
+            GenomeRatingModel.genome_id == genome_id
+        )
+        result = await self._session.execute(refresh_select_statement(query))
+        average = result.scalar()
+        return float(average) if average is not None else 0.0
 
     @staticmethod
     def _gene_rating_to_domain(db_rating: GeneRatingModel) -> GeneRating:
