@@ -1,4 +1,4 @@
-import type { FC, ReactNode } from 'react';
+import type { CSSProperties, FC, ReactNode } from 'react';
 import { useCallback } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -23,6 +23,10 @@ export interface SplitPaneLayoutProps {
   className?: string;
   statusBar: ReactNode;
 }
+
+type SplitPaneStyle = CSSProperties & {
+  '--split-pane-min-width'?: string;
+};
 
 export const SplitPaneLayout: FC<SplitPaneLayoutProps> = ({
   leftContent,
@@ -94,6 +98,14 @@ export const SplitPaneLayout: FC<SplitPaneLayoutProps> = ({
 
   const leftPercent = `${String(splitRatio * 100)}%`;
   const rightPercent = `${String((1 - splitRatio) * 100)}%`;
+  const leftPaneStyle: SplitPaneStyle = {
+    width: leftPercent,
+    '--split-pane-min-width': leftMinWidth ?? '0px',
+  };
+  const rightPaneStyle: SplitPaneStyle = {
+    width: rightPercent,
+    '--split-pane-min-width': rightMinWidth ?? '0px',
+  };
 
   const handleBgHover = {
     purple: 'hover:bg-purple-500/20 active:bg-purple-500/30',
@@ -114,8 +126,8 @@ export const SplitPaneLayout: FC<SplitPaneLayoutProps> = ({
       <div className="flex-1 flex min-h-0 overflow-hidden mobile-stack">
         {/* Left: Chat */}
         <div
-          className="h-full overflow-hidden flex flex-col mobile-full"
-          style={{ width: leftPercent, minWidth: leftMinWidth }}
+          className="split-pane-panel h-full overflow-hidden flex flex-col mobile-full"
+          style={leftPaneStyle}
         >
           {leftContent}
         </div>
@@ -139,8 +151,8 @@ export const SplitPaneLayout: FC<SplitPaneLayoutProps> = ({
 
         {/* Right Panel */}
         <div
-          className={`h-full overflow-hidden border-l border-border-light/60 dark:border-border-dark/50 mobile-full ${rightClassName}`}
-          style={{ width: rightPercent, minWidth: rightMinWidth }}
+          className={`split-pane-panel split-pane-right h-full overflow-hidden border-l border-border-light/60 dark:border-border-dark/50 mobile-full ${rightClassName}`}
+          style={rightPaneStyle}
         >
           {rightContent}
         </div>

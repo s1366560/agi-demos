@@ -1514,17 +1514,30 @@ textarea.ant-input,
 }
 
 /* Mobile layout: stack split views vertically */
+.split-pane-panel {
+  min-width: var(--split-pane-min-width, 0);
+}
+
 @media (max-width: 768px) {
   .mobile-stack {
     flex-direction: column !important;
+    overflow-x: hidden;
   }
 
   .mobile-full {
     width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0;
+    flex: 1 1 0;
   }
 
   .mobile-hidden {
     display: none !important;
+  }
+
+  .split-pane-right {
+    border-left-width: 0 !important;
+    border-top-width: 1px;
   }
 }
 
