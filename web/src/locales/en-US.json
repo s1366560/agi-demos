@@ -5155,6 +5155,8 @@
       "edit": "Edit",
       "history": "History",
       "runNow": "Run Now",
+      "paginationTotal": "Showing {{start}}-{{end}} of {{total}} tasks",
+      "runPaginationTotal": "Showing {{start}}-{{end}} of {{total}} runs",
       "scheduleCron": "Cron",
       "scheduleEvery": "Every",
       "scheduleAt": "At",

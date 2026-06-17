@@ -1,12 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CronJobs } from '../../../pages/project/CronJobs';
-import type { CronJobResponse } from '../../../types/cron';
-import { render, screen } from '../../utils';
+import type { CronJobResponse, CronJobRunResponse } from '../../../types/cron';
+import { fireEvent, render, screen } from '../../utils';
 
 const cronState = vi.hoisted(() => ({
   jobs: [] as CronJobResponse[],
-  runs: [],
+  runs: [] as CronJobRunResponse[],
+  total: 0,
+  runsTotal: 0,
+  filters: {
+    search: '',
+    include_disabled: true,
+    page: 1,
+    pageSize: 20,
+  },
   loading: false,
   submitting: false,
   actions: {
@@ -17,12 +25,16 @@ const cronState = vi.hoisted(() => ({
     toggleJob: vi.fn().mockResolvedValue(undefined),
     triggerRun: vi.fn().mockResolvedValue(undefined),
     fetchRuns: vi.fn().mockResolvedValue(undefined),
+    setFilters: vi.fn(),
   },
 }));
 
 vi.mock('../../../stores/cron', () => ({
   useCronJobs: () => cronState.jobs,
   useCronJobRuns: () => cronState.runs,
+  useCronTotal: () => cronState.total,
+  useCronRunsTotal: () => cronState.runsTotal,
+  useCronFilters: () => cronState.filters,
   useCronLoading: () => cronState.loading,
   useCronSubmitting: () => cronState.submitting,
   useCronActions: () => cronState.actions,
@@ -56,10 +68,33 @@ const buildJob = (overrides: Partial<CronJobResponse> = {}): CronJobResponse => 
   ...overrides,
 });
 
+const buildRun = (overrides: Partial<CronJobRunResponse> = {}): CronJobRunResponse => ({
+  id: 'run-1',
+  job_id: 'job-1',
+  project_id: 'project-1',
+  status: 'success',
+  trigger_type: 'scheduled',
+  started_at: '2026-01-01T00:00:00Z',
+  finished_at: '2026-01-01T00:00:01Z',
+  duration_ms: 1000,
+  error_message: null,
+  result_summary: {},
+  conversation_id: null,
+  ...overrides,
+});
+
 describe('CronJobs', () => {
   beforeEach(() => {
     cronState.jobs = [buildJob(), buildJob({ id: 'job-2', name: 'EvoMap Node Monitor' })];
     cronState.runs = [];
+    cronState.total = cronState.jobs.length;
+    cronState.runsTotal = 0;
+    cronState.filters = {
+      search: '',
+      include_disabled: true,
+      page: 1,
+      pageSize: 20,
+    };
     cronState.loading = false;
     cronState.submitting = false;
     vi.clearAllMocks();
@@ -80,5 +115,29 @@ describe('CronJobs', () => {
       screen.getByRole('switch', { name: 'Toggle Evolver Heartbeat + Task Earner' })
     ).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Toggle EvoMap Node Monitor' })).toBeInTheDocument();
+  });
+
+  it('uses server job totals to render pagination for full current pages', () => {
+    cronState.jobs = Array.from({ length: 20 }, (_, index) =>
+      buildJob({ id: `job-${index + 1}`, name: `Scheduled Task ${index + 1}` })
+    );
+    cronState.total = 25;
+
+    const { container } = render(<CronJobs />);
+
+    expect(container.querySelector('.ant-pagination')).toBeInTheDocument();
+    expect(screen.getByText('Showing 1-20 of 25 tasks')).toBeInTheDocument();
+  });
+
+  it('uses server run totals to render run history pagination', () => {
+    cronState.runs = Array.from({ length: 10 }, (_, index) =>
+      buildRun({ id: `run-${index + 1}` })
+    );
+    cronState.runsTotal = 23;
+
+    render(<CronJobs />);
+    fireEvent.click(screen.getAllByText('History')[0]);
+
+    expect(screen.getByText('Showing 1-10 of 23 runs')).toBeInTheDocument();
   });
 });

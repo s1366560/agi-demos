@@ -1408,6 +1408,8 @@ const commonTranslations: Record<string, string> = {
   'project.cronJobs.edit': 'Edit',
   'project.cronJobs.history': 'History',
   'project.cronJobs.runNow': 'Run Now',
+  'project.cronJobs.paginationTotal': 'Showing {{start}}-{{end}} of {{total}} tasks',
+  'project.cronJobs.runPaginationTotal': 'Showing {{start}}-{{end}} of {{total}} runs',
   'project.cronJobs.scheduleEvery': 'Every',
   'project.schema.mappings.empty_cells.title': 'Empty Cells',
   'project.schema.mappings.empty_cells.desc': 'Hide mappings with no edges',

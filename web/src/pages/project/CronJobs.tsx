@@ -22,25 +22,51 @@ import {
   useCronSubmitting,
   useCronActions,
   useCronJobRuns,
+  useCronTotal,
+  useCronRunsTotal,
+  useCronFilters,
 } from '@/stores/cron';
 
 import { CronJobForm } from '@/components/cron/CronJobForm';
 
-import type { CronJobResponse, CronJobCreate, CronJobUpdate, CronRunStatus } from '@/types/cron';
+import type {
+  CronJobResponse,
+  CronJobCreate,
+  CronJobUpdate,
+  CronRunStatus,
+  CronJobRunResponse,
+} from '@/types/cron';
+
+import type { TableProps } from 'antd/es/table';
+
+const RUNS_PAGE_SIZE = 10;
 
 export const CronJobs: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const { t } = useTranslation();
   const jobs = useCronJobs();
   const runs = useCronJobRuns();
+  const total = useCronTotal();
+  const runsTotal = useCronRunsTotal();
+  const filters = useCronFilters();
   const loading = useCronLoading();
   const submitting = useCronSubmitting();
-  const { fetchJobs, createJob, updateJob, deleteJob, toggleJob, triggerRun, fetchRuns } =
-    useCronActions();
+  const {
+    fetchJobs,
+    createJob,
+    updateJob,
+    deleteJob,
+    toggleJob,
+    triggerRun,
+    fetchRuns,
+    setFilters,
+  } = useCronActions();
 
   const [formOpen, setFormOpen] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJobResponse | null>(null);
+  const [runsJobId, setRunsJobId] = useState<string | null>(null);
+  const [runsPage, setRunsPage] = useState(1);
 
   useEffect(() => {
     if (projectId) {
@@ -59,8 +85,10 @@ export const CronJobs: React.FC = () => {
   };
 
   const handleViewRuns = (jobId: string) => {
+    setRunsJobId(jobId);
+    setRunsPage(1);
     if (projectId) {
-      void fetchRuns(projectId, jobId);
+      void fetchRuns(projectId, jobId, RUNS_PAGE_SIZE, 0);
     }
     setRunsOpen(true);
   };
@@ -100,9 +128,8 @@ export const CronJobs: React.FC = () => {
     try {
       await triggerRun(projectId, jobId);
       message.success(t('project.cronJobs.triggerSuccess'));
-      // Refresh runs if drawer is open
-      if (runsOpen) {
-        void fetchRuns(projectId, jobId);
+      if (runsOpen && runsJobId === jobId) {
+        void fetchRuns(projectId, jobId, RUNS_PAGE_SIZE, (runsPage - 1) * RUNS_PAGE_SIZE);
       }
     } catch (_err) {
       message.error(t('project.cronJobs.triggerFailed'));
@@ -116,6 +143,25 @@ export const CronJobs: React.FC = () => {
       message.success(t('project.cronJobs.deleteSuccess'));
     } catch (_err) {
       message.error(t('project.cronJobs.deleteFailed'));
+    }
+  };
+
+  const handleJobsTableChange: TableProps<CronJobResponse>['onChange'] = (pagination) => {
+    const nextPage = pagination.current ?? filters.page;
+    const nextPageSize = pagination.pageSize ?? filters.pageSize;
+
+    setFilters({ page: nextPage, pageSize: nextPageSize });
+    if (projectId) {
+      void fetchJobs(projectId);
+    }
+  };
+
+  const handleRunsTableChange: TableProps<CronJobRunResponse>['onChange'] = (pagination) => {
+    const nextPage = pagination.current ?? runsPage;
+
+    setRunsPage(nextPage);
+    if (projectId && runsJobId) {
+      void fetchRuns(projectId, runsJobId, RUNS_PAGE_SIZE, (nextPage - 1) * RUNS_PAGE_SIZE);
     }
   };
 
@@ -271,8 +317,36 @@ export const CronJobs: React.FC = () => {
     },
   ];
 
-  const jobsPagination = jobs.length > 20 ? { pageSize: 20, showSizeChanger: false } : false;
-  const runsPagination = runs.length > 10 ? { pageSize: 10, showSizeChanger: false } : false;
+  const jobsPagination =
+    total > filters.pageSize
+      ? {
+          current: filters.page,
+          pageSize: filters.pageSize,
+          total,
+          showSizeChanger: false,
+          showTotal: (paginationTotal: number, range: [number, number]) =>
+            t('project.cronJobs.paginationTotal', {
+              start: range[0],
+              end: range[1],
+              total: paginationTotal,
+            }),
+        }
+      : false;
+  const runsPagination =
+    runsTotal > RUNS_PAGE_SIZE
+      ? {
+          current: runsPage,
+          pageSize: RUNS_PAGE_SIZE,
+          total: runsTotal,
+          showSizeChanger: false,
+          showTotal: (paginationTotal: number, range: [number, number]) =>
+            t('project.cronJobs.runPaginationTotal', {
+              start: range[0],
+              end: range[1],
+              total: paginationTotal,
+            }),
+        }
+      : false;
 
   return (
     <div className="p-4 sm:p-6">
@@ -295,6 +369,7 @@ export const CronJobs: React.FC = () => {
           rowKey="id"
           loading={loading && !submitting}
           pagination={jobsPagination}
+          onChange={handleJobsTableChange}
           scroll={{ x: 900 }}
         />
       </div>
@@ -316,6 +391,12 @@ export const CronJobs: React.FC = () => {
           setRunsOpen(false);
         }}
         open={runsOpen}
+        afterOpenChange={(open) => {
+          if (!open) {
+            setRunsJobId(null);
+            setRunsPage(1);
+          }
+        }}
       >
         <Table
           dataSource={runs}
@@ -323,6 +404,7 @@ export const CronJobs: React.FC = () => {
           rowKey="id"
           loading={loading}
           pagination={runsPagination}
+          onChange={handleRunsTableChange}
           scroll={{ x: 760 }}
         />
       </Drawer>

@@ -5178,6 +5178,8 @@
       "edit": "编辑",
       "history": "历史",
       "runNow": "立即运行",
+      "paginationTotal": "显示第 {{start}}-{{end}} 个，共 {{total}} 个任务",
+      "runPaginationTotal": "显示第 {{start}}-{{end}} 条，共 {{total}} 条运行记录",
       "scheduleCron": "Cron",
       "scheduleEvery": "每隔",
       "scheduleAt": "在",

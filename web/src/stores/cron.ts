@@ -259,6 +259,7 @@ export const useCronJobs = () => useCronStore((state) => state.jobs);
 export const useSelectedCronJob = () => useCronStore((state) => state.selectedJob);
 export const useCronJobRuns = () => useCronStore((state) => state.runs);
 export const useCronTotal = () => useCronStore((state) => state.total);
+export const useCronRunsTotal = () => useCronStore((state) => state.runsTotal);
 export const useCronLoading = () => useCronStore((state) => state.isLoading);
 export const useCronSubmitting = () => useCronStore((state) => state.isSubmitting);
 export const useCronError = () => useCronStore((state) => state.error);
