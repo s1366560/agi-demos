@@ -1,8 +1,9 @@
 """Memory sharing API endpoints."""
 
 import logging
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -46,6 +47,14 @@ async def _check_project_admin_access(db: AsyncSession, user_id: str, project_id
         ))
     )
     return result.scalar_one_or_none() is not None
+
+
+def _share_can_view(permissions: object) -> bool:
+    """Return True only for an explicit public view grant."""
+    if not isinstance(permissions, Mapping):
+        return False
+    permissions_map = cast(Mapping[str, object], permissions)
+    return permissions_map.get("view") is True
 
 
 @router.post("/memories/{memory_id}/shares", status_code=status.HTTP_201_CREATED)
@@ -241,6 +250,9 @@ async def get_shared_memory(
         if exp < datetime.now(UTC):
             raise HTTPException(status_code=403, detail=_("Share link has expired"))
 
+    if not _share_can_view(share.permissions):
+        raise HTTPException(status_code=403, detail=_("Share link does not allow viewing"))
+
     # Get memory
     memory_result = await db.execute(refresh_select_statement(select(Memory).where(Memory.id == share.memory_id)))
     memory = memory_result.scalar_one_or_none()
@@ -252,7 +264,7 @@ async def get_shared_memory(
     share.access_count += 1
     await db.commit()
 
-    logger.info(f"Shared memory {share.memory_id} accessed via token {share_token}")
+    logger.info("Shared memory %s accessed via share %s", share.memory_id, share.id)
 
     # Return memory with share info
     return {

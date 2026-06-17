@@ -12,6 +12,7 @@ logger = logging.getLogger("src.infrastructure.adapters.primary.web.api_access")
 
 _REQUEST_ID_HEADER = "X-Request-ID"
 _NO_ROUTE = "-"
+_ROUTES_WITH_SENSITIVE_PATH_VALUES = frozenset({"/api/v1/shared/{share_token}"})
 
 
 def _client_host(request: Request) -> str:
@@ -23,6 +24,13 @@ def _route_template(request: Request) -> str:
     route = request.scope.get("route")
     route_path = getattr(route, "path", None)
     return route_path if isinstance(route_path, str) else _NO_ROUTE
+
+
+def _log_path(request: Request) -> str:
+    route_template = _route_template(request)
+    if route_template in _ROUTES_WITH_SENSITIVE_PATH_VALUES:
+        return route_template
+    return request.url.path
 
 
 def _request_id(request: Request) -> str:
@@ -69,7 +77,7 @@ def install_api_access_log_middleware(app: FastAPI) -> None:
                     "client_ip": _client_host(request),
                     "duration_ms": duration_ms,
                     "method": request.method,
-                    "path": request.url.path,
+                    "path": _log_path(request),
                     "request_id": request_id,
                     "route": _route_template(request),
                     "status_code": status_code,
@@ -87,7 +95,7 @@ def install_api_access_log_middleware(app: FastAPI) -> None:
                         "client_ip": _client_host(request),
                         "duration_ms": duration_ms,
                         "method": request.method,
-                        "path": request.url.path,
+                        "path": _log_path(request),
                         "request_id": request_id,
                         "route": _route_template(request),
                         "status_code": status_code,

@@ -22,6 +22,10 @@ def _app() -> FastAPI:
     async def fail() -> None:
         raise RuntimeError("boom")
 
+    @app.get("/api/v1/shared/{share_token}")
+    async def get_shared(share_token: str) -> dict[str, str]:
+        return {"share_token": share_token}
+
     return app
 
 
@@ -81,3 +85,23 @@ def test_api_access_log_emits_500_record_when_handler_raises(
     assert payload["route"] == "/api/v1/fail"
     assert payload["status_code"] == 500
     assert isinstance(payload["request_id"], str)
+
+
+@pytest.mark.unit
+def test_api_access_log_redacts_shared_token_path(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client = TestClient(_app())
+
+    with caplog.at_level(
+        logging.INFO,
+        logger="src.infrastructure.adapters.primary.web.api_access",
+    ):
+        response = client.get("/api/v1/shared/secret-share-token")
+
+    assert response.status_code == 200
+    [record] = [record for record in caplog.records if record.name.endswith(".api_access")]
+    payload = _api_log_payload(record)
+    assert payload["path"] == "/api/v1/shared/{share_token}"
+    assert payload["route"] == "/api/v1/shared/{share_token}"
+    assert "secret-share-token" not in record.message

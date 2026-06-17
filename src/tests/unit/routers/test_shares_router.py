@@ -1,5 +1,6 @@
 """Unit tests for memory sharing API endpoints."""
 
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -344,6 +345,71 @@ class TestGetSharedMemory:
         # Refresh from database
         await test_db.refresh(test_memory_share)
         assert test_memory_share.access_count == initial_count + 1
+
+    @pytest.mark.asyncio
+    async def test_get_shared_memory_denies_without_view_permission(
+        self, test_db, client, test_memory_with_project, test_user
+    ):
+        """Shared links must explicitly grant view access before returning content."""
+        share = MemoryShare(
+            id=str(uuid.uuid4()),
+            memory_id=test_memory_with_project.id,
+            share_token="deny_view_token",
+            shared_by=test_user.id,
+            permissions={"view": False, "edit": True},
+            access_count=0,
+        )
+        test_db.add(share)
+        await test_db.commit()
+
+        response = client.get("/api/v1/shared/deny_view_token")
+
+        assert response.status_code == 403
+        assert "does not allow viewing" in response.json()["detail"]
+        await test_db.refresh(share)
+        assert share.access_count == 0
+
+    @pytest.mark.asyncio
+    async def test_get_shared_memory_denies_empty_permissions(
+        self, test_db, client, test_memory_with_project, test_user
+    ):
+        """Missing permission grants fail closed for public token reads."""
+        share = MemoryShare(
+            id=str(uuid.uuid4()),
+            memory_id=test_memory_with_project.id,
+            share_token="empty_permissions_token",
+            shared_by=test_user.id,
+            permissions={},
+            access_count=0,
+        )
+        test_db.add(share)
+        await test_db.commit()
+
+        response = client.get("/api/v1/shared/empty_permissions_token")
+
+        assert response.status_code == 403
+        assert "does not allow viewing" in response.json()["detail"]
+        await test_db.refresh(share)
+        assert share.access_count == 0
+
+    @pytest.mark.asyncio
+    async def test_get_shared_memory_log_excludes_share_token(
+        self, client, test_memory_share, caplog
+    ):
+        """Access logs should not expose bearer-equivalent share tokens."""
+        logger_name = "src.infrastructure.adapters.primary.web.routers.shares"
+        caplog.set_level(logging.INFO, logger=logger_name)
+
+        response = client.get(f"/api/v1/shared/{test_memory_share.share_token}")
+
+        assert response.status_code == 200
+        app_logs = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name.startswith("src.infrastructure.adapters.primary.web")
+        )
+        assert test_memory_share.share_token not in app_logs
+        assert test_memory_share.id in app_logs
 
     @pytest.mark.asyncio
     async def test_get_shared_memory_token_not_found(self, client):
