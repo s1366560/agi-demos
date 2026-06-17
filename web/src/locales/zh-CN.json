@@ -7883,8 +7883,11 @@
     "create": "创建Webhook",
     "edit": "编辑Webhook",
     "fetchError": "获取Webhook失败",
+    "eventTypesError": "Webhook事件类型加载失败",
     "createSuccess": "Webhook创建成功",
+    "createError": "Webhook创建失败",
     "updateSuccess": "Webhook更新成功",
+    "updateError": "Webhook更新失败",
     "deleteConfirm": "确定要删除此Webhook吗？",
     "deleteSuccess": "Webhook删除成功",
     "deleteError": "删除Webhook失败"

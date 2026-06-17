@@ -846,6 +846,12 @@ const commonTranslations: Record<string, string> = {
   'events.loadError': 'Failed to load events.',
   'events.typesLoadError': 'Failed to load event types.',
 
+  // Tenant Webhooks
+  'webhooks.fetchError': 'Failed to fetch webhooks',
+  'webhooks.eventTypesError': 'Failed to load webhook event types',
+  'webhooks.createError': 'Failed to create webhook',
+  'webhooks.updateError': 'Failed to update webhook',
+
   // Tenant MCP Servers
   'tenant.mcpServers.title': 'MCP Servers',
   'tenant.mcpServers.subtitle': 'Manage Model Context Protocol server integrations',

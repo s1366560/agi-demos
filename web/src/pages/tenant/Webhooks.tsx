@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
 import {
+  Alert,
   Table,
   Button,
   Space,
@@ -32,6 +33,12 @@ interface WebhookFormValues {
   is_active: boolean;
 }
 
+const isFormValidationError = (error: unknown): error is { errorFields: unknown[] } =>
+  typeof error === 'object' &&
+  error !== null &&
+  'errorFields' in error &&
+  Array.isArray((error as { errorFields?: unknown }).errorFields);
+
 export const Webhooks: React.FC = () => {
   const { t } = useTranslation();
   const { tenantId } = useParams<{ tenantId?: string }>();
@@ -39,7 +46,9 @@ export const Webhooks: React.FC = () => {
   const selectedTenantId = tenantId ?? currentTenant?.id;
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
+  const [eventTypesError, setEventTypesError] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null);
   const [form] = Form.useForm<WebhookFormValues>();
@@ -47,12 +56,16 @@ export const Webhooks: React.FC = () => {
   const fetchWebhooks = React.useCallback(async () => {
     if (!selectedTenantId) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await webhookService.listWebhooks(selectedTenantId);
       setWebhooks(data);
     } catch (err) {
       console.error(err);
-      message.error(t('webhooks.fetchError', 'Failed to fetch webhooks'));
+      const errorMessage = t('webhooks.fetchError', 'Failed to fetch webhooks');
+      setWebhooks([]);
+      setLoadError(errorMessage);
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -63,13 +76,18 @@ export const Webhooks: React.FC = () => {
   }, [fetchWebhooks]);
 
   useEffect(() => {
+    setEventTypesError(null);
     void eventService
       .getEventTypes(selectedTenantId ? { tenant_id: selectedTenantId } : undefined)
-      .then(setEventTypes)
+      .then((types) => {
+        setEventTypes(types);
+      })
       .catch((err: unknown) => {
         console.error(err);
+        setEventTypes([]);
+        setEventTypesError(t('webhooks.eventTypesError', 'Failed to load webhook event types'));
       });
-  }, [selectedTenantId]);
+  }, [selectedTenantId, t]);
 
   const handleDelete = async (id: string) => {
     try {
@@ -112,7 +130,13 @@ export const Webhooks: React.FC = () => {
       setIsModalVisible(false);
       void fetchWebhooks();
     } catch (err) {
+      if (isFormValidationError(err)) return;
       console.error(err);
+      message.error(
+        editingWebhook
+          ? t('webhooks.updateError', 'Failed to update webhook')
+          : t('webhooks.createError', 'Failed to create webhook')
+      );
     }
   };
 
@@ -188,6 +212,13 @@ export const Webhooks: React.FC = () => {
           {t('webhooks.create', 'Create Webhook')}
         </Button>
       </div>
+
+      {eventTypesError ? (
+        <Alert title={eventTypesError} type="warning" showIcon style={{ marginBottom: 16 }} />
+      ) : null}
+      {loadError ? (
+        <Alert title={loadError} type="error" showIcon style={{ marginBottom: 16 }} />
+      ) : null}
 
       <Table
         rowKey="id"
