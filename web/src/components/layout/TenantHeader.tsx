@@ -187,9 +187,26 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
   const currentWorkspace = useCurrentWorkspace();
   const workspaces = useWorkspaces();
   const isProjectScopedPath = location.pathname.includes('/project/');
-  const effectiveProjectId = projectId ?? (isProjectScopedPath ? currentProject?.id : undefined);
+  const tenantCurrentProject =
+    currentProject?.tenant_id === normalizedTenantId ? currentProject : null;
+  const effectiveProjectId =
+    projectId ?? (isProjectScopedPath ? tenantCurrentProject?.id : undefined);
   const projectBasePath = effectiveProjectId ? `${basePath}/project/${effectiveProjectId}` : null;
-  const preferredWorkspaceId = currentWorkspace?.id ?? workspaces[0]?.id ?? null;
+  const tenantProjectWorkspaces = useMemo(
+    () =>
+      workspaces.filter(
+        (workspace) =>
+          workspace.tenant_id === normalizedTenantId &&
+          (!effectiveProjectId || workspace.project_id === effectiveProjectId)
+      ),
+    [effectiveProjectId, normalizedTenantId, workspaces]
+  );
+  const tenantCurrentWorkspace =
+    currentWorkspace?.tenant_id === normalizedTenantId &&
+    (!effectiveProjectId || currentWorkspace.project_id === effectiveProjectId)
+      ? currentWorkspace
+      : null;
+  const preferredWorkspaceId = tenantCurrentWorkspace?.id ?? tenantProjectWorkspaces[0]?.id ?? null;
   const contextualNavItems = useMemo(
     () =>
       getContextualTopNavItems({

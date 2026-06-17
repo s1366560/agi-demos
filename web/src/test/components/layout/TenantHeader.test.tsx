@@ -25,8 +25,10 @@ const tenantState = {
   setCurrentTenant,
 };
 
-const projectState = {
-  currentProject: { id: 'project-1', name: 'Project One' },
+const projectState: {
+  currentProject: { id: string; name: string; tenant_id: string } | null;
+} = {
+  currentProject: { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' },
 };
 
 vi.mock('react-i18next', () => ({
@@ -78,8 +80,8 @@ vi.mock('@/stores/tenant', () => ({
 }));
 
 vi.mock('@/stores/workspace', () => ({
-  useCurrentWorkspace: () => ({ id: 'ws-current' }),
-  useWorkspaces: () => [{ id: 'ws-current' }],
+  useCurrentWorkspace: () => ({ id: 'ws-current', tenant_id: 'tenant-1', project_id: 'project-1' }),
+  useWorkspaces: () => [{ id: 'ws-current', tenant_id: 'tenant-1', project_id: 'project-1' }],
 }));
 
 vi.mock('@/stores/notification', () => ({
@@ -113,7 +115,7 @@ describe('TenantHeader', () => {
       { id: 'tenant-1', name: 'Tenant One' },
       { id: 'tenant-2', name: 'Tenant Two' },
     ];
-    projectState.currentProject = { id: 'project-1', name: 'Project One' };
+    projectState.currentProject = { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' };
   });
 
   it('renders tenant-level navigation from derived tenant config', () => {
@@ -224,6 +226,30 @@ describe('TenantHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
 
     expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/project/project-1/advanced-search');
+  });
+
+  it('does not derive project navigation from another tenant project', () => {
+    projectState.currentProject = {
+      id: 'project-2',
+      name: 'Project Two',
+      tenant_id: 'tenant-2',
+    };
+
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />,
+      { route: '/tenant/tenant-1/project/project-1/settings' }
+    );
+
+    expect(screen.queryByRole('link', { name: 'Memories' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/projects');
   });
 
   it('opens the notification dropdown from the header action', () => {
