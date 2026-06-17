@@ -42,6 +42,22 @@ const client = axios.create({
  */
 const NO_AUTH_ENDPOINTS = ['/auth/token', '/auth/register', '/public'];
 
+const normalizeApiPath = (url: string): string => {
+  const pathname = new URL(url || '/', 'http://memstack.local').pathname;
+  if (pathname === API_BASE_URL) {
+    return '/';
+  }
+  if (pathname.startsWith(`${API_BASE_URL}/`)) {
+    return pathname.slice(API_BASE_URL.length);
+  }
+  return pathname;
+};
+
+export const isNoAuthEndpoint = (url: string): boolean => {
+  const path = normalizeApiPath(url);
+  return NO_AUTH_ENDPOINTS.some((endpoint) => path === endpoint || path.startsWith(`${endpoint}/`));
+};
+
 /**
  * Request interceptor to inject auth token
  */
@@ -56,11 +72,8 @@ client.interceptors.request.use(
 
     // Check if this is a public endpoint that doesn't require auth
     const url = config.url || '';
-    const isNoAuthEndpoint = NO_AUTH_ENDPOINTS.some(
-      (endpoint) => url.endsWith(endpoint) || url.startsWith(endpoint)
-    );
 
-    if (isNoAuthEndpoint) {
+    if (isNoAuthEndpoint(url)) {
       // Public endpoint - proceed without token check
       return config;
     }

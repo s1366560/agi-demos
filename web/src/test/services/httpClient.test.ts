@@ -45,7 +45,7 @@ vi.mock('../../services/client/ApiError', () => ({
   parseAxiosError: vi.fn((error: unknown) => error),
 }));
 
-import { httpClient } from '../../services/client/httpClient';
+import { httpClient, isNoAuthEndpoint } from '../../services/client/httpClient';
 import { getAuthToken } from '@/utils/tokenResolver';
 
 capturedRequestInterceptor = mockAxiosInstance.interceptors.request.use.mock.calls[0]?.[0] ?? null;
@@ -101,6 +101,27 @@ describe('httpClient', () => {
         const config = { url: '/auth/token', headers: {} as Record<string, string> };
         const result = capturedRequestInterceptor(config);
         expect((result as typeof config).headers.Authorization).toBeUndefined();
+      }
+    });
+
+    it('should match no-auth endpoints only on exact or path segment boundaries', () => {
+      expect(isNoAuthEndpoint('/auth/token')).toBe(true);
+      expect(isNoAuthEndpoint('/api/v1/auth/token?grant=password')).toBe(true);
+      expect(isNoAuthEndpoint('/public')).toBe(true);
+      expect(isNoAuthEndpoint('/public/assets/logo.png')).toBe(true);
+      expect(isNoAuthEndpoint('/publicly-visible')).toBe(false);
+      expect(isNoAuthEndpoint('/public-resource')).toBe(false);
+      expect(isNoAuthEndpoint('/auth/tokenized')).toBe(false);
+    });
+
+    it('should require auth for paths that only share a public prefix', async () => {
+      vi.mocked(getAuthToken).mockReturnValueOnce(null);
+      expect(capturedRequestInterceptor).toBeDefined();
+      if (capturedRequestInterceptor) {
+        const config = { url: '/public-resource', headers: {} as Record<string, string> };
+        const result = capturedRequestInterceptor(config);
+        expect(result).toBeInstanceOf(Promise);
+        await expect(result).rejects.toThrow('No authentication token');
       }
     });
 
