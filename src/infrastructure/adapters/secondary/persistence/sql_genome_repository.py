@@ -1,14 +1,19 @@
 """SQLAlchemy implementation of GenomeRepository using BaseRepository."""
 
 import logging
-from typing import override
+from typing import Any, override
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from src.domain.model.gene.enums import ContentVisibility
 from src.domain.model.gene.gene import Genome
 from src.domain.ports.repositories.genome_repository import GenomeRepository
-from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
+from src.infrastructure.adapters.secondary.common.base_repository import (
+    BaseRepository,
+    refresh_select_statement,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     GenomeModel,
 )
@@ -25,6 +30,20 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
         super().__init__(session)
 
     @override
+    async def find_by_id(self, entity_id: str) -> Genome | None:
+        if not entity_id:
+            raise ValueError("ID cannot be empty")
+        stmt = (
+            select(GenomeModel)
+            .where(GenomeModel.id == entity_id)
+            .where(GenomeModel.deleted_at.is_(None))
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
+        return self._to_domain(result.scalar_one_or_none())
+
+    @override
     async def find_by_slug(self, slug: str) -> Genome | None:
         return await self.find_one(slug=slug)
 
@@ -32,7 +51,7 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
     async def find_by_tenant(
         self, tenant_id: str, limit: int = 50, offset: int = 0
     ) -> list[Genome]:
-        return await self.list_all(limit=limit, offset=offset, tenant_id=tenant_id)
+        return await self.find_by_filters(tenant_id=tenant_id, limit=limit, offset=offset)
 
     @override
     async def find_by_filters(
@@ -44,7 +63,12 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
         offset: int = 0,
     ) -> list[Genome]:
         filters = self._filters(tenant_id=tenant_id, is_published=is_published)
-        return await self.list_all(limit=limit, offset=offset, **filters)
+        stmt = self._build_active_query(filters=filters).offset(offset).limit(limit)
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
+        db_genomes = result.scalars().all()
+        return [d for genome in db_genomes if (d := self._to_domain(genome)) is not None]
 
     @override
     async def count_by_filters(
@@ -54,7 +78,10 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
         is_published: bool | None = None,
     ) -> int:
         filters = self._filters(tenant_id=tenant_id, is_published=is_published)
-        return await self.count(**filters)
+        stmt = select(func.count()).select_from(GenomeModel).where(GenomeModel.deleted_at.is_(None))
+        stmt = self._apply_filters(stmt, **filters)
+        result = await self._session.execute(refresh_select_statement(stmt))
+        return result.scalar() or 0
 
     @staticmethod
     def _filters(*, tenant_id: str, is_published: bool | None = None) -> dict[str, object]:
@@ -65,7 +92,20 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
 
     @override
     async def find_featured(self, limit: int = 20) -> list[Genome]:
-        return await self.list_all(limit=limit, is_featured=True, is_published=True)
+        stmt = self._build_active_query(filters={"is_featured": True, "is_published": True}).limit(
+            limit
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
+        db_genomes = result.scalars().all()
+        return [d for genome in db_genomes if (d := self._to_domain(genome)) is not None]
+
+    def _build_active_query(self, filters: dict[str, Any] | None = None) -> Select[Any]:
+        stmt = select(GenomeModel).where(GenomeModel.deleted_at.is_(None))
+        if filters:
+            stmt = self._apply_filters(stmt, **filters)
+        return stmt
 
     @override
     def _to_domain(self, db_model: GenomeModel | None) -> Genome | None:

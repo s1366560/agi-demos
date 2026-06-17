@@ -30,12 +30,26 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         super().__init__(session)
 
     @override
+    async def find_by_id(self, entity_id: str) -> Gene | None:
+        if not entity_id:
+            raise ValueError("ID cannot be empty")
+        stmt = (
+            select(GeneMarketModel)
+            .where(GeneMarketModel.id == entity_id)
+            .where(GeneMarketModel.deleted_at.is_(None))
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
+        return self._to_domain(result.scalar_one_or_none())
+
+    @override
     async def find_by_slug(self, slug: str) -> Gene | None:
         return await self.find_one(slug=slug)
 
     @override
     async def find_by_tenant(self, tenant_id: str, limit: int = 50, offset: int = 0) -> list[Gene]:
-        return await self.list_all(limit=limit, offset=offset, tenant_id=tenant_id)
+        return await self.find_by_filters(tenant_id=tenant_id, limit=limit, offset=offset)
 
     @override
     async def find_by_filters(
@@ -55,7 +69,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
             visibility=visibility,
             is_published=is_published,
         )
-        stmt = self._build_query(filters=filters)
+        stmt = self._build_active_query(filters=filters)
         stmt = self._apply_search_filter(stmt, search)
         stmt = stmt.offset(offset).limit(limit)
         result = await self._session.execute(
@@ -80,7 +94,11 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
             visibility=visibility,
             is_published=is_published,
         )
-        stmt = select(func.count()).select_from(GeneMarketModel)
+        stmt = (
+            select(func.count())
+            .select_from(GeneMarketModel)
+            .where(GeneMarketModel.deleted_at.is_(None))
+        )
         stmt = self._apply_filters(stmt, **filters)
         stmt = self._apply_search_filter(stmt, search)
         result = await self._session.execute(refresh_select_statement(stmt))
@@ -94,7 +112,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         limit: int = 50,
         offset: int = 0,
     ) -> list[Gene]:
-        stmt = self._build_query(filters={"is_published": True})
+        stmt = self._build_active_query(filters={"is_published": True})
         if category is not None:
             stmt = stmt.where(GeneMarketModel.category == category)
         if query:
@@ -148,7 +166,20 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
 
     @override
     async def find_featured(self, limit: int = 20) -> list[Gene]:
-        return await self.list_all(limit=limit, is_featured=True, is_published=True)
+        stmt = self._build_active_query(filters={"is_featured": True, "is_published": True}).limit(
+            limit
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
+        db_genes = result.scalars().all()
+        return [d for g in db_genes if (d := self._to_domain(g)) is not None]
+
+    def _build_active_query(self, filters: dict[str, Any] | None = None) -> Select[Any]:
+        stmt = select(GeneMarketModel).where(GeneMarketModel.deleted_at.is_(None))
+        if filters:
+            stmt = self._apply_filters(stmt, **filters)
+        return stmt
 
     @override
     def _to_domain(self, db_model: GeneMarketModel | None) -> Gene | None:
