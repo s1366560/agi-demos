@@ -8,6 +8,7 @@ with the original implementation while leveraging the BaseRepository.
 """
 
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,25 @@ from src.infrastructure.adapters.secondary.persistence.models import Project as 
 from src.infrastructure.adapters.secondary.persistence.sql_project_repository import (
     SqlProjectRepository,
 )
+
+
+class _ScalarRows:
+    def all(self) -> list[Any]:
+        return []
+
+
+class _FetchResult:
+    def scalars(self) -> _ScalarRows:
+        return _ScalarRows()
+
+
+class _RecordingSession:
+    def __init__(self) -> None:
+        self.statements: list[Any] = []
+
+    async def execute(self, statement: Any) -> _FetchResult:
+        self.statements.append(statement)
+        return _FetchResult()
 
 
 @pytest.fixture
@@ -252,6 +272,20 @@ class TestSqlProjectRepositoryList:
     """Tests for listing projects."""
 
     @pytest.mark.asyncio
+    async def test_list_queries_declare_deterministic_order_by(self) -> None:
+        session = _RecordingSession()
+        repo = SqlProjectRepository(cast(AsyncSession, session))
+
+        await repo.find_by_tenant("tenant-1")
+        await repo.find_by_owner("owner-1")
+        await repo.find_public_projects()
+        await repo.list_active_projects()
+        await repo.list_all(tenant_id="tenant-1")
+
+        order_fragment = "ORDER BY projects.created_at DESC, projects.id ASC"
+        assert all(order_fragment in str(statement) for statement in session.statements)
+
+    @pytest.mark.asyncio
     async def test_find_by_tenant(self, v2_project_repo: SqlProjectRepository):
         """Test listing projects by tenant."""
         # Create projects for different tenants
@@ -323,6 +357,39 @@ class TestSqlProjectRepositoryList:
         # Get remaining
         page3 = await v2_project_repo.find_by_tenant("tenant-page", limit=2, offset=4)
         assert len(page3) == 1
+
+    @pytest.mark.asyncio
+    async def test_find_by_tenant_paginates_newest_first_with_id_tie_breaker(
+        self, v2_project_repo: SqlProjectRepository
+    ):
+        """Test tenant pagination has stable newest-first ordering."""
+        same_created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        newer_created_at = datetime(2026, 1, 2, tzinfo=UTC)
+        for project_id, created_at in [
+            ("proj-order-b", same_created_at),
+            ("proj-order-a", same_created_at),
+            ("proj-order-new", newer_created_at),
+        ]:
+            project = Project(
+                id=project_id,
+                tenant_id="tenant-order",
+                name=project_id,
+                owner_id="user-1",
+                description="desc",
+                member_ids=[],
+                memory_rules={},
+                graph_config={},
+                is_public=False,
+                created_at=created_at,
+                updated_at=created_at,
+            )
+            await v2_project_repo.save(project)
+
+        page1 = await v2_project_repo.find_by_tenant("tenant-order", limit=2, offset=0)
+        page2 = await v2_project_repo.find_by_tenant("tenant-order", limit=2, offset=2)
+
+        assert [project.id for project in page1] == ["proj-order-new", "proj-order-a"]
+        assert [project.id for project in page2] == ["proj-order-b"]
 
     @pytest.mark.asyncio
     async def test_find_by_owner(self, v2_project_repo: SqlProjectRepository):

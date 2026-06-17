@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from src.application.schemas.tenant import (
     TenantCreate,
@@ -30,6 +31,11 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1/tenants", tags=["tenants"])
+
+
+def _order_tenant_list_query(query: Select[Any]) -> Select[Any]:
+    """Return tenants newest-first with a stable ID tie-breaker."""
+    return query.order_by(Tenant.created_at.desc(), Tenant.id.asc())
 
 
 def _coerce_history_day(value: object) -> date:
@@ -196,7 +202,7 @@ async def list_tenants(
     total = total_result.scalar()
 
     # Get paginated results
-    query = query.offset((page - 1) * page_size).limit(page_size)
+    query = _order_tenant_list_query(query).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(refresh_select_statement(query))
     tenants = result.scalars().all()
 

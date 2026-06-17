@@ -3,6 +3,7 @@ Tests for V2 SqlTenantRepository using BaseRepository.
 """
 
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +13,25 @@ from src.infrastructure.adapters.secondary.persistence.models import User as DBU
 from src.infrastructure.adapters.secondary.persistence.sql_tenant_repository import (
     SqlTenantRepository,
 )
+
+
+class _ScalarRows:
+    def all(self) -> list[Any]:
+        return []
+
+
+class _FetchResult:
+    def scalars(self) -> _ScalarRows:
+        return _ScalarRows()
+
+
+class _RecordingSession:
+    def __init__(self) -> None:
+        self.statements: list[Any] = []
+
+    async def execute(self, statement: Any) -> _FetchResult:
+        self.statements.append(statement)
+        return _FetchResult()
 
 
 @pytest.fixture
@@ -143,6 +163,17 @@ class TestSqlTenantRepositoryList:
     """Tests for listing tenants."""
 
     @pytest.mark.asyncio
+    async def test_list_queries_declare_deterministic_order_by(self) -> None:
+        session = _RecordingSession()
+        repo = SqlTenantRepository(cast(AsyncSession, session))
+
+        await repo.list_all()
+        await repo.find_by_owner("user-owner-1")
+
+        order_fragment = "ORDER BY tenants.created_at DESC, tenants.id ASC"
+        assert all(order_fragment in str(statement) for statement in session.statements)
+
+    @pytest.mark.asyncio
     async def test_list_all(self, v2_tenant_repo: SqlTenantRepository):
         """Test listing all tenants."""
         # Create multiple tenants
@@ -183,6 +214,34 @@ class TestSqlTenantRepositoryList:
         # Get second page
         page2 = await v2_tenant_repo.list_all(limit=2, offset=2)
         assert len(page2) == 2
+
+    @pytest.mark.asyncio
+    async def test_list_all_paginates_newest_first_with_id_tie_breaker(
+        self, v2_tenant_repo: SqlTenantRepository
+    ):
+        """Test tenant pagination has stable newest-first ordering."""
+        same_created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        newer_created_at = datetime(2026, 1, 2, tzinfo=UTC)
+        for tenant_id, created_at in [
+            ("tenant-order-b", same_created_at),
+            ("tenant-order-a", same_created_at),
+            ("tenant-order-new", newer_created_at),
+        ]:
+            tenant = Tenant(
+                id=tenant_id,
+                name=tenant_id,
+                owner_id="user-owner-1",
+                description="Ordered tenant",
+                created_at=created_at,
+                updated_at=created_at,
+            )
+            await v2_tenant_repo.save(tenant)
+
+        page1 = await v2_tenant_repo.list_all(limit=2, offset=0)
+        page2 = await v2_tenant_repo.list_all(limit=2, offset=2)
+
+        assert [tenant.id for tenant in page1] == ["tenant-order-new", "tenant-order-a"]
+        assert [tenant.id for tenant in page2] == ["tenant-order-b"]
 
     @pytest.mark.asyncio
     async def test_find_by_owner(self, v2_tenant_repo: SqlTenantRepository):

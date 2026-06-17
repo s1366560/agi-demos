@@ -15,8 +15,10 @@ Migration Benefits:
 """
 
 import logging
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from src.domain.model.project.project import Project
 from src.domain.ports.repositories.project_repository import ProjectRepository
@@ -63,12 +65,27 @@ class SqlProjectRepository(BaseRepository[Project, DBProject], ProjectRepository
 
     async def find_public_projects(self, limit: int = 50, offset: int = 0) -> list[Project]:
         """List all public projects."""
-        # Build query with is_public filter
-        query = self._build_query(
-            filters={"is_public": True}, order_by="created_at", order_desc=False
-        )
-        query = query.offset(offset).limit(limit)
+        query = self._stable_list_query({"is_public": True}, limit=limit, offset=offset)
 
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
+        db_projects = result.scalars().all()
+        return [d for p in db_projects if (d := self._to_domain(p)) is not None]
+
+    async def list_all(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        **filters: object,
+    ) -> list[Project]:
+        """List projects with deterministic pagination order."""
+        if limit < 0:
+            raise ValueError("Limit must be non-negative")
+        if limit == 0:
+            return []
+
+        query = self._stable_list_query(filters, limit=limit, offset=offset)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(query))
         )
@@ -78,6 +95,21 @@ class SqlProjectRepository(BaseRepository[Project, DBProject], ProjectRepository
     async def list_active_projects(self, limit: int = 1000, offset: int = 0) -> list[Project]:
         """List every project across all tenants (no soft-delete column today)."""
         return await self.list_all(limit=limit, offset=offset)
+
+    def _stable_list_query(
+        self,
+        filters: dict[str, object],
+        *,
+        limit: int,
+        offset: int,
+    ) -> Select[Any]:
+        """Build a newest-first query with an ID tie-breaker for stable pages."""
+        query = self._build_query(filters=filters)
+        return (
+            query.order_by(DBProject.created_at.desc(), DBProject.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
 
     # === Conversion methods ===
 

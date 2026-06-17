@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, delete, func, inspect, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql import Select
 
 from src.application.schemas.project import (
     ProjectCreate,
@@ -49,6 +50,11 @@ logger = logging.getLogger(__name__)
 class AddProjectMemberRequest(BaseModel):
     user_id: str
     role: str | None = "member"
+
+
+def _order_project_list_query(query: Select[Any]) -> Select[Any]:
+    """Return projects newest-first with a stable ID tie-breaker."""
+    return query.order_by(Project.created_at.desc(), Project.id.asc())
 
 
 async def _delete_rows_referencing(
@@ -90,9 +96,7 @@ async def _delete_project_dependents(db: AsyncSession, project_id: str) -> None:
 
     if Message.__tablename__ in existing_tables:
         _result = await db.execute(
-            update(Message)
-            .where(Message.reply_to_id.in_(message_ids))
-            .values(reply_to_id=None)
+            update(Message).where(Message.reply_to_id.in_(message_ids)).values(reply_to_id=None)
         )
         await _delete_rows_referencing(
             db,
@@ -102,7 +106,9 @@ async def _delete_project_dependents(db: AsyncSession, project_id: str) -> None:
             skip_tables={"messages"},
             existing_tables=existing_tables,
         )
-        _result = await db.execute(delete(Message).where(Message.conversation_id.in_(conversation_ids)))
+        _result = await db.execute(
+            delete(Message).where(Message.conversation_id.in_(conversation_ids))
+        )
 
     if Conversation.__tablename__ in existing_tables:
         _result = await db.execute(
@@ -123,7 +129,9 @@ async def _delete_project_dependents(db: AsyncSession, project_id: str) -> None:
             skip_tables={"conversations", "messages"},
             existing_tables=existing_tables,
         )
-        _result = await db.execute(delete(Conversation).where(Conversation.project_id == project_id))
+        _result = await db.execute(
+            delete(Conversation).where(Conversation.project_id == project_id)
+        )
 
     await _delete_rows_referencing(
         db,
@@ -134,7 +142,9 @@ async def _delete_project_dependents(db: AsyncSession, project_id: str) -> None:
         existing_tables=existing_tables,
     )
     if WorkspaceModel.__tablename__ in existing_tables:
-        _result = await db.execute(delete(WorkspaceModel).where(WorkspaceModel.project_id == project_id))
+        _result = await db.execute(
+            delete(WorkspaceModel).where(WorkspaceModel.project_id == project_id)
+        )
 
     await _delete_rows_referencing(
         db,
@@ -160,13 +170,15 @@ async def create_project(
 
         # Check if user has access to tenant
         user_tenant_result = await db.execute(
-            refresh_select_statement(select(UserTenant).where(
-                and_(
-                    UserTenant.user_id == current_user.id,
-                    UserTenant.tenant_id == project_data.tenant_id,
-                    UserTenant.role.in_(["owner", "admin"]),
+            refresh_select_statement(
+                select(UserTenant).where(
+                    and_(
+                        UserTenant.user_id == current_user.id,
+                        UserTenant.tenant_id == project_data.tenant_id,
+                        UserTenant.role.in_(["owner", "admin"]),
+                    )
                 )
-            ))
+            )
         )
         if not user_tenant_result.scalar_one_or_none():
             logger.warning(
@@ -205,7 +217,9 @@ async def create_project(
 
         # Refresh project with relationships for Pydantic model
         result = await db.execute(
-            refresh_select_statement(select(Project).options(selectinload(Project.users)).where(Project.id == project.id))
+            refresh_select_statement(
+                select(Project).options(selectinload(Project.users)).where(Project.id == project.id)
+            )
         )
         project = result.scalar_one()
 
@@ -234,7 +248,9 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
     """List projects for the current user."""
     # Get project IDs user has access to
     user_projects_result = await db.execute(
-        refresh_select_statement(select(UserProject.project_id).where(UserProject.user_id == current_user.id))
+        refresh_select_statement(
+            select(UserProject.project_id).where(UserProject.user_id == current_user.id)
+        )
     )
     project_ids = [row[0] for row in user_projects_result.fetchall()]
 
@@ -281,7 +297,10 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
 
     # Get paginated results
     query = (
-        query.offset((page - 1) * page_size).limit(page_size).options(selectinload(Project.users))
+        _order_project_list_query(query)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .options(selectinload(Project.users))
     )
     result = await db.execute(refresh_select_statement(query))
     projects = result.scalars().all()
@@ -293,14 +312,16 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
 
         # Memory stats
         memory_stats_result = await db.execute(
-            refresh_select_statement(select(
-                Memory.project_id,
-                func.count(Memory.id).label("count"),
-                func.sum(func.length(Memory.content)).label("size"),
-                func.max(Memory.created_at).label("last_created"),
+            refresh_select_statement(
+                select(
+                    Memory.project_id,
+                    func.count(Memory.id).label("count"),
+                    func.sum(func.length(Memory.content)).label("size"),
+                    func.max(Memory.created_at).label("last_created"),
+                )
+                .where(Memory.project_id.in_(project_ids_in_page))
+                .group_by(Memory.project_id)
             )
-            .where(Memory.project_id.in_(project_ids_in_page))
-            .group_by(Memory.project_id))
         )
         memory_stats: dict[str, dict[str, Any]] = {
             row.project_id: {
@@ -313,12 +334,14 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
 
         # Member stats
         member_stats_result = await db.execute(
-            refresh_select_statement(select(
-                UserProject.project_id,
-                func.count(UserProject.user_id).label("count"),
+            refresh_select_statement(
+                select(
+                    UserProject.project_id,
+                    func.count(UserProject.user_id).label("count"),
+                )
+                .where(UserProject.project_id.in_(project_ids_in_page))
+                .group_by(UserProject.project_id)
             )
-            .where(UserProject.project_id.in_(project_ids_in_page))
-            .group_by(UserProject.project_id))
         )
         member_stats: dict[str, int] = {
             row.project_id: int(row._mapping["count"]) for row in member_stats_result.fetchall()
@@ -346,9 +369,7 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
                         if hasattr(record, "get"):
                             pid = record.get("project_id")
                             if pid is not None:
-                                node_stats[str(pid)] = int(
-                                    record.get("cnt", 0)
-                                )
+                                node_stats[str(pid)] = int(record.get("cnt", 0))
             except Exception as exc:
                 logger.warning("Failed to fetch bulk graph stats: %s", exc)
 
@@ -362,7 +383,11 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
             last_active = project.updated_at
             last_created = m_stats.get("last_created")
             if last_created:
-                last_created_dt = datetime.fromisoformat(str(last_created)) if isinstance(last_created, str) else last_created
+                last_created_dt = (
+                    datetime.fromisoformat(str(last_created))
+                    if isinstance(last_created, str)
+                    else last_created
+                )
                 if not last_active or last_created_dt > last_active:
                     last_active = last_created_dt
 
@@ -397,9 +422,11 @@ async def get_project(
     # Use project_id directly as string (preserves original format from database)
     # Check if user has access to project
     user_project_result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            and_(UserProject.user_id == current_user.id, UserProject.project_id == project_id)
-        ))
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(UserProject.user_id == current_user.id, UserProject.project_id == project_id)
+            )
+        )
     )
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
@@ -408,7 +435,9 @@ async def get_project(
 
     # Get project
     result = await db.execute(
-        refresh_select_statement(select(Project).options(selectinload(Project.users)).where(Project.id == project_id))
+        refresh_select_statement(
+            select(Project).options(selectinload(Project.users)).where(Project.id == project_id)
+        )
     )
     project = result.scalar_one_or_none()
     if not project:
@@ -427,13 +456,15 @@ async def update_project(
     """Update project."""
     # Check if user is owner or admin
     user_project_result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            and_(
-                UserProject.user_id == current_user.id,
-                UserProject.project_id == project_id,
-                UserProject.role.in_(["owner", "admin"]),
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == project_id,
+                    UserProject.role.in_(["owner", "admin"]),
+                )
             )
-        ))
+        )
     )
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
@@ -442,7 +473,9 @@ async def update_project(
         )
 
     # Get project
-    result = await db.execute(refresh_select_statement(select(Project).where(Project.id == project_id)))
+    result = await db.execute(
+        refresh_select_statement(select(Project).where(Project.id == project_id))
+    )
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
@@ -463,7 +496,9 @@ async def update_project(
 
     # Refresh with relationships
     result = await db.execute(
-        refresh_select_statement(select(Project).options(selectinload(Project.users)).where(Project.id == project.id))
+        refresh_select_statement(
+            select(Project).options(selectinload(Project.users)).where(Project.id == project.id)
+        )
     )
     project = result.scalar_one()
 
@@ -480,13 +515,15 @@ async def delete_project(
     # Use project_id directly
     # Check if user is owner
     user_project_result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            and_(
-                UserProject.user_id == current_user.id,
-                UserProject.project_id == project_id,
-                UserProject.role == "owner",
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == project_id,
+                    UserProject.role == "owner",
+                )
             )
-        ))
+        )
     )
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
@@ -494,7 +531,9 @@ async def delete_project(
         )
 
     # Get project
-    result = await db.execute(refresh_select_statement(select(Project).where(Project.id == project_id)))
+    result = await db.execute(
+        refresh_select_statement(select(Project).where(Project.id == project_id))
+    )
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
@@ -520,13 +559,15 @@ async def add_project_member(
 
     # Check if current user is owner or admin
     user_project_result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            and_(
-                UserProject.user_id == current_user.id,
-                UserProject.project_id == project_id,
-                UserProject.role.in_(["owner", "admin"]),
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == project_id,
+                    UserProject.role.in_(["owner", "admin"]),
+                )
             )
-        ))
+        )
     )
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
@@ -535,21 +576,27 @@ async def add_project_member(
         )
 
     # Check if project exists
-    project_result = await db.execute(refresh_select_statement(select(Project).where(Project.id == project_id)))
+    project_result = await db.execute(
+        refresh_select_statement(select(Project).where(Project.id == project_id))
+    )
     project = project_result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
 
     # Check if user exists
-    user_result = await db.execute(refresh_select_statement(select(User).where(User.id == body.user_id)))
+    user_result = await db.execute(
+        refresh_select_statement(select(User).where(User.id == body.user_id))
+    )
     if not user_result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("User not found"))
 
     # Check if user is already member
     existing_result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            and_(UserProject.user_id == body.user_id, UserProject.project_id == project_id)
-        ))
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(UserProject.user_id == body.user_id, UserProject.project_id == project_id)
+            )
+        )
     )
     if existing_result.scalar_one_or_none():
         raise HTTPException(
@@ -584,13 +631,15 @@ async def update_project_member(
 
     # Check if current user is owner or admin
     user_project_result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            and_(
-                UserProject.user_id == current_user.id,
-                UserProject.project_id == project_id,
-                UserProject.role.in_(["owner", "admin"]),
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == project_id,
+                    UserProject.role.in_(["owner", "admin"]),
+                )
             )
-        ))
+        )
     )
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
@@ -600,9 +649,11 @@ async def update_project_member(
 
     # Check if user is a member
     result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            and_(UserProject.user_id == user_id, UserProject.project_id == project_id)
-        ))
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(UserProject.user_id == user_id, UserProject.project_id == project_id)
+            )
+        )
     )
     user_project = result.scalar_one_or_none()
     if not user_project:
@@ -637,13 +688,15 @@ async def remove_project_member(
     # Use project_id directly
     # Check if current user is owner or admin
     user_project_result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            and_(
-                UserProject.user_id == current_user.id,
-                UserProject.project_id == project_id,
-                UserProject.role.in_(["owner", "admin"]),
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == project_id,
+                    UserProject.role.in_(["owner", "admin"]),
+                )
             )
-        ))
+        )
     )
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
@@ -658,9 +711,11 @@ async def remove_project_member(
 
     # Remove user-project relationship
     result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            and_(UserProject.user_id == user_id, UserProject.project_id == project_id)
-        ))
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(UserProject.user_id == user_id, UserProject.project_id == project_id)
+            )
+        )
     )
     user_project = result.scalar_one_or_none()
     if not user_project:
@@ -681,7 +736,9 @@ async def list_project_members(
     """List project members."""
     # Use project_id directly
     # Existence check first
-    project_result = await db.execute(refresh_select_statement(select(Project).where(Project.id == project_id)))
+    project_result = await db.execute(
+        refresh_select_statement(select(Project).where(Project.id == project_id))
+    )
     project = project_result.scalar_one_or_none()
     if not project:
         # If obviously invalid uuid format, return 422 per contract expectations
@@ -693,9 +750,11 @@ async def list_project_members(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
     # Check if user has access to project
     user_project_result = await db.execute(
-        refresh_select_statement(select(UserProject).where(
-            and_(UserProject.user_id == current_user.id, UserProject.project_id == project_id)
-        ))
+        refresh_select_statement(
+            select(UserProject).where(
+                and_(UserProject.user_id == current_user.id, UserProject.project_id == project_id)
+            )
+        )
     )
     if not user_project_result.scalar_one_or_none():
         raise HTTPException(
@@ -704,9 +763,11 @@ async def list_project_members(
 
     # Get all members
     result = await db.execute(
-        refresh_select_statement(select(UserProject, User)
-        .join(User, UserProject.user_id == User.id)
-        .where(UserProject.project_id == project_id))
+        refresh_select_statement(
+            select(UserProject, User)
+            .join(User, UserProject.user_id == User.id)
+            .where(UserProject.project_id == project_id)
+        )
     )
     members = []
     for user_project, user in result.fetchall():
@@ -766,11 +827,13 @@ def _format_relative_time(created_at: datetime) -> str:
 async def _build_recent_activity(db: AsyncSession, project_id: str) -> list[dict[str, Any]]:
     """Build recent activity list from memories."""
     recent_memories_result = await db.execute(
-        refresh_select_statement(select(Memory, User)
-        .join(User, Memory.author_id == User.id)
-        .where(Memory.project_id == project_id)
-        .order_by(Memory.created_at.desc())
-        .limit(5))
+        refresh_select_statement(
+            select(Memory, User)
+            .join(User, Memory.author_id == User.id)
+            .where(Memory.project_id == project_id)
+            .order_by(Memory.created_at.desc())
+            .limit(5)
+        )
     )
     activities = []
     for memory, user in recent_memories_result.fetchall():
@@ -798,9 +861,13 @@ async def get_project_stats(
     try:
         # Check if user has access to project
         user_project_result = await db.execute(
-            refresh_select_statement(select(UserProject).where(
-                and_(UserProject.user_id == current_user.id, UserProject.project_id == project_id)
-            ))
+            refresh_select_statement(
+                select(UserProject).where(
+                    and_(
+                        UserProject.user_id == current_user.id, UserProject.project_id == project_id
+                    )
+                )
+            )
         )
         if not user_project_result.scalar_one_or_none():
             raise HTTPException(
@@ -808,17 +875,21 @@ async def get_project_stats(
             )
 
         # Get project
-        project_result = await db.execute(refresh_select_statement(select(Project).where(Project.id == project_id)))
+        project_result = await db.execute(
+            refresh_select_statement(select(Project).where(Project.id == project_id))
+        )
         project = project_result.scalar_one_or_none()
         if not project:
             raise HTTPException(status_code=404, detail=_("Project not found"))
 
         # Get memory stats
         memory_stats_result = await db.execute(
-            refresh_select_statement(select(
-                func.count(Memory.id).label("count"),
-                func.sum(func.length(Memory.content)).label("size"),
-            ).where(Memory.project_id == project_id))
+            refresh_select_statement(
+                select(
+                    func.count(Memory.id).label("count"),
+                    func.sum(func.length(Memory.content)).label("size"),
+                ).where(Memory.project_id == project_id)
+            )
         )
         memory_stats = memory_stats_result.one()
         memory_count = int(getattr(memory_stats, "count", 0) or 0)
@@ -826,7 +897,9 @@ async def get_project_stats(
 
         # Get member count
         member_count_result = await db.execute(
-            refresh_select_statement(select(func.count(UserProject.id)).where(UserProject.project_id == project_id))
+            refresh_select_statement(
+                select(func.count(UserProject.id)).where(UserProject.project_id == project_id)
+            )
         )
         member_count = member_count_result.scalar()
 
@@ -845,9 +918,11 @@ async def get_project_stats(
 
         # Get conversation count
         conversation_count_result = await db.execute(
-            refresh_select_statement(select(func.count())
-            .select_from(Conversation)
-            .where(Conversation.project_id == project_id))
+            refresh_select_statement(
+                select(func.count())
+                .select_from(Conversation)
+                .where(Conversation.project_id == project_id)
+            )
         )
         conversation_count = conversation_count_result.scalar() or 0
 
@@ -904,12 +979,14 @@ async def get_trending_entities(
     try:
         # Verify project access
         access = await db.execute(
-            refresh_select_statement(select(UserProject).where(
-                and_(
-                    UserProject.user_id == current_user.id,
-                    UserProject.project_id == project_id,
+            refresh_select_statement(
+                select(UserProject).where(
+                    and_(
+                        UserProject.user_id == current_user.id,
+                        UserProject.project_id == project_id,
+                    )
                 )
-            ))
+            )
         )
         if not access.scalar_one_or_none():
             raise HTTPException(status_code=403, detail=_("Access denied"))
@@ -977,12 +1054,14 @@ async def get_recent_skills(
     try:
         # Verify project access
         access = await db.execute(
-            refresh_select_statement(select(UserProject).where(
-                and_(
-                    UserProject.user_id == current_user.id,
-                    UserProject.project_id == project_id,
+            refresh_select_statement(
+                select(UserProject).where(
+                    and_(
+                        UserProject.user_id == current_user.id,
+                        UserProject.project_id == project_id,
+                    )
                 )
-            ))
+            )
         )
         if not access.scalar_one_or_none():
             raise HTTPException(status_code=403, detail=_("Access denied"))
@@ -990,19 +1069,21 @@ async def get_recent_skills(
         skills: list[RecentSkillItem] = []
         try:
             result = await db.execute(
-                refresh_select_statement(select(
-                    ToolExecutionRecord.tool_name,
-                    func.max(ToolExecutionRecord.started_at).label("last_used"),
-                    func.count(ToolExecutionRecord.id).label("usage_count"),
+                refresh_select_statement(
+                    select(
+                        ToolExecutionRecord.tool_name,
+                        func.max(ToolExecutionRecord.started_at).label("last_used"),
+                        func.count(ToolExecutionRecord.id).label("usage_count"),
+                    )
+                    .join(
+                        Conversation,
+                        ToolExecutionRecord.conversation_id == Conversation.id,
+                    )
+                    .where(Conversation.project_id == project_id)
+                    .group_by(ToolExecutionRecord.tool_name)
+                    .order_by(func.max(ToolExecutionRecord.started_at).desc())
+                    .limit(limit)
                 )
-                .join(
-                    Conversation,
-                    ToolExecutionRecord.conversation_id == Conversation.id,
-                )
-                .where(Conversation.project_id == project_id)
-                .group_by(ToolExecutionRecord.tool_name)
-                .order_by(func.max(ToolExecutionRecord.started_at).desc())
-                .limit(limit))
             )
             for row in result.fetchall():
                 skills.append(

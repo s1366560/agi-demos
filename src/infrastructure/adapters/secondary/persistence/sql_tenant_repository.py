@@ -4,9 +4,11 @@ V2 SQLAlchemy implementation of TenantRepository using BaseRepository.
 
 import logging
 import re
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from src.domain.model.tenant.tenant import Tenant
 from src.domain.ports.repositories.tenant_repository import TenantRepository
@@ -41,21 +43,47 @@ class SqlTenantRepository(BaseRepository[Tenant, DBTenant], TenantRepository):
 
     async def find_by_owner(self, owner_id: str, limit: int = 50, offset: int = 0) -> list[Tenant]:
         """List all tenants owned by a user."""
-        query = select(DBTenant).where(DBTenant.owner_id == owner_id).offset(offset).limit(limit)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        query = self._stable_list_query(limit=limit, offset=offset).where(
+            DBTenant.owner_id == owner_id
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_tenants = result.scalars().all()
         return [d for t in db_tenants if (d := self._to_domain(t)) is not None]
 
     async def find_by_name(self, name: str) -> Tenant | None:
         """Find a tenant by name."""
         query = select(DBTenant).where(DBTenant.name == name)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_tenant = result.scalar_one_or_none()
         return self._to_domain(db_tenant)
 
     async def list_all(self, limit: int = 50, offset: int = 0, **filters: object) -> list[Tenant]:
         """List all tenants with pagination."""
-        return await super().list_all(limit=limit, offset=offset, **filters)
+        if limit < 0:
+            raise ValueError("Limit must be non-negative")
+        if limit == 0:
+            return []
+
+        query = self._stable_list_query(limit=limit, offset=offset)
+        query = self._apply_filters(query, **filters)
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
+        db_tenants = result.scalars().all()
+        return [d for t in db_tenants if (d := self._to_domain(t)) is not None]
+
+    def _stable_list_query(self, *, limit: int, offset: int) -> Select[Any]:
+        """Build a newest-first query with an ID tie-breaker for stable pages."""
+        return (
+            select(DBTenant)
+            .order_by(DBTenant.created_at.desc(), DBTenant.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
 
     async def delete(self, tenant_id: str) -> bool:
         """Delete a tenant."""
