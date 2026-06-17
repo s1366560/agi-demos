@@ -22,6 +22,7 @@ const actionsMock = vi.hoisted(() => ({
   createGeneReview: vi.fn(),
   deleteGeneReview: vi.fn(),
   fetchGeneReviews: vi.fn(),
+  fetchGenomeGenes: vi.fn(),
   getGene: vi.fn(),
   getGenome: vi.fn(),
   installGene: vi.fn(),
@@ -43,6 +44,8 @@ const stateMock = vi.hoisted(() => ({
   activeTab: 'genes' as 'genes' | 'genomes',
   currentGene: null as GeneResponse | null,
   currentGenome: null as GenomeResponse | null,
+  currentGenomeGenes: [] as GeneResponse[],
+  currentGenomeGenesLoading: false,
   evolutionEvents: [] as unknown[],
   geneTotal: 0,
   genes: [] as GeneResponse[],
@@ -72,6 +75,8 @@ vi.mock('@/stores/geneMarket', () => ({
   useActiveTab: () => stateMock.activeTab,
   useCurrentGene: () => stateMock.currentGene,
   useCurrentGenome: () => stateMock.currentGenome,
+  useCurrentGenomeGenes: () => stateMock.currentGenomeGenes,
+  useCurrentGenomeGenesLoading: () => stateMock.currentGenomeGenesLoading,
   useEvolutionEvents: () => stateMock.evolutionEvents,
   useGeneMarketError: () => stateMock.error,
   useGeneMarketActions: () => actionsMock,
@@ -159,6 +164,8 @@ describe('Gene marketplace rating flow', () => {
     stateMock.activeTab = 'genes';
     stateMock.currentGene = null;
     stateMock.currentGenome = null;
+    stateMock.currentGenomeGenes = [gene()];
+    stateMock.currentGenomeGenesLoading = false;
     stateMock.evolutionEvents = [];
     stateMock.geneTotal = 1;
     stateMock.genes = [gene()];
@@ -171,6 +178,7 @@ describe('Gene marketplace rating flow', () => {
     stateMock.reviewsTotal = 0;
 
     actionsMock.fetchGeneReviews.mockResolvedValue(undefined);
+    actionsMock.fetchGenomeGenes.mockResolvedValue([gene()]);
     actionsMock.getGene.mockResolvedValue(gene());
     actionsMock.getGenome.mockResolvedValue(genome());
     actionsMock.listGeneEvolutionEvents.mockResolvedValue(undefined);
@@ -319,11 +327,30 @@ describe('Gene marketplace rating flow', () => {
         tenant_id: 'tenant-1',
       });
     });
-    expect(actionsMock.listGenes).toHaveBeenCalledWith({
+    expect(actionsMock.fetchGenomeGenes).toHaveBeenCalledWith(['code-review'], {
       tenant_id: 'tenant-1',
-      slugs: ['code-review'],
-      page_size: 1,
     });
     expect(messageSuccessSpy).toHaveBeenCalledWith('Genome unpublished successfully');
+  });
+
+  it('shows unavailable genome gene references without using the marketplace gene list', async () => {
+    stateMock.currentGenome = genome({ gene_slugs: ['test-writer', 'code-review'] });
+    stateMock.currentGenomeGenes = [gene({ slug: 'code-review', name: 'Code Review' })];
+    stateMock.genes = [gene({ slug: 'market-only', name: 'Marketplace Only' })];
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/genomes/genome-1']}>
+        <GenomeDetail />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Some referenced genes are unavailable')).toBeInTheDocument();
+    expect(screen.getByText('test-writer')).toBeInTheDocument();
+    expect(screen.getByText('Code Review')).toBeInTheDocument();
+    expect(screen.queryByText('Marketplace Only')).not.toBeInTheDocument();
+    expect(actionsMock.fetchGenomeGenes).toHaveBeenCalledWith(['test-writer', 'code-review'], {
+      tenant_id: 'tenant-1',
+    });
+    expect(actionsMock.listGenes).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -20,7 +20,8 @@ import { ArchiveX, ArrowLeft, UploadCloud } from 'lucide-react';
 
 import {
   useCurrentGenome,
-  useGenes,
+  useCurrentGenomeGenes,
+  useCurrentGenomeGenesLoading,
   useGeneMarketLoading,
   useGeneMarketError,
   useGeneMarketActions,
@@ -40,11 +41,18 @@ export const GenomeDetail: React.FC = () => {
   const tenantId = routeTenantId ?? currentTenant?.id ?? null;
 
   const genome = useCurrentGenome();
-  const genes = useGenes();
+  const genomeGenes = useCurrentGenomeGenes();
+  const genomeGenesLoading = useCurrentGenomeGenesLoading();
   const loading = useGeneMarketLoading();
   const error = useGeneMarketError();
-  const { getGenome, listGenes, clearError, setCurrentGenome, publishGenome, unpublishGenome } =
-    useGeneMarketActions();
+  const {
+    getGenome,
+    fetchGenomeGenes,
+    clearError,
+    setCurrentGenome,
+    publishGenome,
+    unpublishGenome,
+  } = useGeneMarketActions();
   const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
 
   useEffect(() => {
@@ -59,17 +67,19 @@ export const GenomeDetail: React.FC = () => {
   }, [genomeId, getGenome, setCurrentGenome, clearError, tenantId]);
 
   useEffect(() => {
-    if (!genome || !tenantId || genome.gene_slugs.length === 0) {
+    if (!genome || !tenantId) {
       return;
     }
-    void listGenes({
-      tenant_id: tenantId,
-      slugs: genome.gene_slugs,
-      page_size: Math.min(Math.max(genome.gene_slugs.length, 1), 100),
-    }).catch(() => {});
-  }, [genome, listGenes, tenantId]);
+    void fetchGenomeGenes(genome.gene_slugs, { tenant_id: tenantId }).catch(() => {});
+  }, [fetchGenomeGenes, genome, tenantId]);
 
-  const genomeGenes = genes.filter((g) => genome?.gene_slugs.includes(g.slug));
+  const missingGeneSlugs = useMemo(() => {
+    if (!genome) {
+      return [];
+    }
+    const availableSlugs = new Set(genomeGenes.map((gene) => gene.slug));
+    return genome.gene_slugs.filter((slug) => !availableSlugs.has(slug));
+  }, [genome, genomeGenes]);
 
   const handlePublishToggle = async () => {
     if (!genomeId || !tenantId || !genome) {
@@ -203,22 +213,57 @@ export const GenomeDetail: React.FC = () => {
         title={t('tenant.genomeDetail.genesTitle', 'Included Genes')}
         className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
       >
-        {genomeGenes.length === 0 ? (
+        {genome.gene_slugs.length === 0 ? (
           <Empty description={t('tenant.genomeDetail.noGenes', 'No genes in this genome')} />
+        ) : genomeGenesLoading ? (
+          <div className="flex items-center justify-center gap-2 py-6" role="status">
+            <Spin size="small" />
+            <Text type="secondary">
+              {t('tenant.genomeDetail.loadingGenes', 'Loading included genes')}
+            </Text>
+          </div>
         ) : (
-          <div role="list" className="divide-y divide-slate-200 dark:divide-slate-800">
-            {genomeGenes.map((gene) => (
-              <div key={gene.id} role="listitem" className="py-3 first:pt-0 last:pb-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Text strong>{gene.name}</Text>
-                  <Tag>{gene.version}</Tag>
-                  {gene.category && <Tag color="blue">{gene.category}</Tag>}
-                </div>
-                <Text type="secondary" className="mt-1 block text-sm">
-                  {gene.description || '-'}
-                </Text>
+          <div className="flex flex-col gap-4">
+            {missingGeneSlugs.length > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                title={t(
+                  'tenant.genomeDetail.missingGenesTitle',
+                  'Some referenced genes are unavailable'
+                )}
+                description={
+                  <Space size={[4, 4]} wrap>
+                    {missingGeneSlugs.map((slug) => (
+                      <Tag key={slug}>{slug}</Tag>
+                    ))}
+                  </Space>
+                }
+              />
+            )}
+            {genomeGenes.length === 0 ? (
+              <Empty
+                description={t(
+                  'tenant.genomeDetail.noAvailableGenes',
+                  'No included genes are available'
+                )}
+              />
+            ) : (
+              <div role="list" className="divide-y divide-slate-200 dark:divide-slate-800">
+                {genomeGenes.map((gene) => (
+                  <div key={gene.id} role="listitem" className="py-3 first:pt-0 last:pb-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Text strong>{gene.name}</Text>
+                      <Tag>{gene.version}</Tag>
+                      {gene.category && <Tag color="blue">{gene.category}</Tag>}
+                    </div>
+                    <Text type="secondary" className="mt-1 block text-sm">
+                      {gene.description || '-'}
+                    </Text>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
       </Card>

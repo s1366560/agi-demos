@@ -10,6 +10,7 @@ vi.mock('@/services/geneMarketService', () => ({
     createGeneReview: vi.fn(),
     deleteGeneReview: vi.fn(),
     getGeneReviews: vi.fn(),
+    listGenes: vi.fn(),
     publishGene: vi.fn(),
     publishGenome: vi.fn(),
     unpublishGene: vi.fn(),
@@ -158,5 +159,52 @@ describe('gene market store', () => {
     expect(useGeneMarketStore.getState().genomes[0]?.is_published).toBe(false);
     expect(useGeneMarketStore.getState().currentGenome?.is_published).toBe(false);
     expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+  });
+
+  it('fetches detail-scoped genome genes without replacing marketplace list state', async () => {
+    const marketplaceGene = gene({ id: 'market-gene', slug: 'market-gene' });
+    const slugWindow = [
+      'gene-2',
+      'gene-0',
+      ...Array.from({ length: 98 }, (_, index) => `missing-${String(index)}`),
+      'gene-100',
+    ];
+    useGeneMarketStore.setState({
+      genes: [marketplaceGene],
+      geneTotal: 42,
+    });
+    vi.mocked(geneMarketService.listGenes).mockImplementation(async (params) => {
+      if (params?.slugs?.includes('gene-100')) {
+        return { genes: [gene({ id: 'gene-100', slug: 'gene-100' })], total: 1 };
+      }
+      return {
+        genes: [gene({ id: 'gene-0', slug: 'gene-0' }), gene({ id: 'gene-2', slug: 'gene-2' })],
+        total: 2,
+      };
+    });
+
+    const result = await useGeneMarketStore
+      .getState()
+      .fetchGenomeGenes(slugWindow, { tenant_id: 'tenant-2' });
+
+    expect(geneMarketService.listGenes).toHaveBeenNthCalledWith(1, {
+      tenant_id: 'tenant-2',
+      slugs: slugWindow.slice(0, 100),
+      page_size: 100,
+    });
+    expect(geneMarketService.listGenes).toHaveBeenNthCalledWith(2, {
+      tenant_id: 'tenant-2',
+      slugs: ['gene-100'],
+      page_size: 1,
+    });
+    expect(result.map((item) => item.slug)).toEqual(['gene-2', 'gene-0', 'gene-100']);
+    expect(useGeneMarketStore.getState().currentGenomeGenes.map((item) => item.slug)).toEqual([
+      'gene-2',
+      'gene-0',
+      'gene-100',
+    ]);
+    expect(useGeneMarketStore.getState().genes).toEqual([marketplaceGene]);
+    expect(useGeneMarketStore.getState().geneTotal).toBe(42);
+    expect(useGeneMarketStore.getState().currentGenomeGenesLoading).toBe(false);
   });
 });

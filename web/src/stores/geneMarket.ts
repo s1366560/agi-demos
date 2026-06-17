@@ -44,6 +44,19 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+const GENE_SLUG_LOOKUP_BATCH_SIZE = 100;
+
+const normalizeSlugs = (slugs: string[]): string[] =>
+  Array.from(new Set(slugs.map((slug) => slug.trim()).filter(Boolean)));
+
+const orderGenesBySlugs = (genes: GeneResponse[], slugs: string[]): GeneResponse[] => {
+  const genesBySlug = new Map(genes.map((gene) => [gene.slug, gene]));
+  return slugs.flatMap((slug) => {
+    const gene = genesBySlug.get(slug);
+    return gene ? [gene] : [];
+  });
+};
+
 // ============================================================================
 // STATE INTERFACE
 // ============================================================================
@@ -53,6 +66,7 @@ interface GeneMarketState {
   currentGene: GeneResponse | null;
   genomes: GenomeResponse[];
   currentGenome: GenomeResponse | null;
+  currentGenomeGenes: GeneResponse[];
   installedGenes: InstanceGeneResponse[];
   evolutionEvents: EvolutionEventResponse[];
   evolutionTotal: number;
@@ -62,6 +76,7 @@ interface GeneMarketState {
   pageSize: number;
   isLoading: boolean;
   isSubmitting: boolean;
+  currentGenomeGenesLoading: boolean;
   error: string | null;
   activeTab: 'genes' | 'genomes';
   reviews: GeneReview[];
@@ -84,6 +99,7 @@ interface GeneMarketState {
   // Actions - Genome CRUD
   listGenomes: (params?: GenomeListParams) => Promise<void>;
   getGenome: (id: string, options?: TenantScopedOptions) => Promise<GenomeResponse>;
+  fetchGenomeGenes: (slugs: string[], options?: TenantScopedOptions) => Promise<GeneResponse[]>;
   createGenome: (data: GenomeCreate, options?: TenantScopedOptions) => Promise<GenomeResponse>;
   updateGenome: (
     id: string,
@@ -160,6 +176,7 @@ type GeneMarketDataState = Pick<
   | 'currentGene'
   | 'genomes'
   | 'currentGenome'
+  | 'currentGenomeGenes'
   | 'installedGenes'
   | 'evolutionEvents'
   | 'evolutionTotal'
@@ -169,6 +186,7 @@ type GeneMarketDataState = Pick<
   | 'pageSize'
   | 'isLoading'
   | 'isSubmitting'
+  | 'currentGenomeGenesLoading'
   | 'error'
   | 'activeTab'
   | 'reviews'
@@ -185,6 +203,7 @@ const initialState: GeneMarketDataState = {
   currentGene: null as GeneResponse | null,
   genomes: [] as GenomeResponse[],
   currentGenome: null as GenomeResponse | null,
+  currentGenomeGenes: [] as GeneResponse[],
   installedGenes: [] as InstanceGeneResponse[],
   evolutionEvents: [] as EvolutionEventResponse[],
   evolutionTotal: 0,
@@ -194,6 +213,7 @@ const initialState: GeneMarketDataState = {
   pageSize: 20,
   isLoading: false,
   isSubmitting: false,
+  currentGenomeGenesLoading: false,
   error: null as string | null,
   activeTab: 'genes' as const,
   reviews: [] as GeneReview[],
@@ -349,6 +369,46 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           return response;
         } catch (error: unknown) {
           set({ error: getErrorMessage(error, 'Failed to get genome'), isLoading: false });
+          throw error;
+        }
+      },
+
+      fetchGenomeGenes: async (slugs: string[], options?: TenantScopedOptions) => {
+        const normalizedSlugs = normalizeSlugs(slugs);
+        if (normalizedSlugs.length === 0) {
+          set({ currentGenomeGenes: [], currentGenomeGenesLoading: false });
+          return [];
+        }
+
+        set({ currentGenomeGenesLoading: true, error: null });
+        try {
+          const responses = await Promise.all(
+            Array.from(
+              { length: Math.ceil(normalizedSlugs.length / GENE_SLUG_LOOKUP_BATCH_SIZE) },
+              (_, index) => {
+                const chunk = normalizedSlugs.slice(
+                  index * GENE_SLUG_LOOKUP_BATCH_SIZE,
+                  (index + 1) * GENE_SLUG_LOOKUP_BATCH_SIZE
+                );
+                return geneMarketService.listGenes({
+                  ...(options?.tenant_id ? { tenant_id: options.tenant_id } : {}),
+                  slugs: chunk,
+                  page_size: chunk.length,
+                });
+              }
+            )
+          );
+          const orderedGenes = orderGenesBySlugs(
+            responses.flatMap((response) => response.genes),
+            normalizedSlugs
+          );
+          set({ currentGenomeGenes: orderedGenes, currentGenomeGenesLoading: false });
+          return orderedGenes;
+        } catch (error: unknown) {
+          set({
+            error: getErrorMessage(error, 'Failed to fetch genome genes'),
+            currentGenomeGenesLoading: false,
+          });
           throw error;
         }
       },
@@ -648,7 +708,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       },
 
       setCurrentGenome: (genome: GenomeResponse | null) => {
-        set({ currentGenome: genome });
+        set({
+          currentGenome: genome,
+          ...(genome ? {} : { currentGenomeGenes: [], currentGenomeGenesLoading: false }),
+        });
       },
 
       clearError: () => {
@@ -677,6 +740,9 @@ export const useGeneReviewsTotal = () => useGeneMarketStore((s) => s.reviewsTota
 export const useGeneReviewsLoading = () => useGeneMarketStore((s) => s.reviewsLoading);
 export const useGenomes = () => useGeneMarketStore((s) => s.genomes);
 export const useCurrentGenome = () => useGeneMarketStore((s) => s.currentGenome);
+export const useCurrentGenomeGenes = () => useGeneMarketStore((s) => s.currentGenomeGenes);
+export const useCurrentGenomeGenesLoading = () =>
+  useGeneMarketStore((s) => s.currentGenomeGenesLoading);
 export const useInstalledGenes = () => useGeneMarketStore((s) => s.installedGenes);
 export const useEvolutionEvents = () => useGeneMarketStore((s) => s.evolutionEvents);
 export const useEvolutionTotal = () => useGeneMarketStore((s) => s.evolutionTotal);
@@ -698,6 +764,7 @@ export const useGeneMarketActions = () =>
       unpublishGene: s.unpublishGene,
       listGenomes: s.listGenomes,
       getGenome: s.getGenome,
+      fetchGenomeGenes: s.fetchGenomeGenes,
       createGenome: s.createGenome,
       updateGenome: s.updateGenome,
       deleteGenome: s.deleteGenome,
