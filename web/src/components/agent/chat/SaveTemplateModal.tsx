@@ -2,7 +2,7 @@
  * SaveTemplateModal - Save a message as a reusable prompt template
  */
 
-import { useState, memo } from 'react';
+import { useState, memo, useEffect, useId } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -16,8 +16,25 @@ interface SaveTemplateModalProps {
 export const SaveTemplateModal = memo<SaveTemplateModalProps>(
   ({ content, visible, onClose, onSave }) => {
     const { t } = useTranslation();
+    const titleId = useId();
+    const nameInputId = useId();
+    const categoryInputId = useId();
+    const previewId = useId();
     const [title, setTitle] = useState('');
     const [category, setCategory] = useState('general');
+
+    useEffect(() => {
+      if (!visible) return undefined;
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          onClose();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }, [visible, onClose]);
 
     if (!visible) return null;
 
@@ -31,11 +48,21 @@ export const SaveTemplateModal = memo<SaveTemplateModalProps>(
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50">
-        <div className="w-96 rounded-lg border border-slate-200 bg-slate-50 p-6 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-          <h3 className="text-lg font-semibold mb-4">
+        <div
+          className="w-96 rounded-lg border border-slate-200 bg-slate-50 p-6 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={previewId}
+        >
+          <h3 id={titleId} className="text-lg font-semibold mb-4">
             {t('agent.templates.saveTitle', 'Save as Template')}
           </h3>
+          <label htmlFor={nameInputId} className="sr-only">
+            {t('agent.templates.titlePlaceholder', 'Template name')}
+          </label>
           <input
+            id={nameInputId}
             value={title}
             onChange={(e) => {
               setTitle(e.target.value);
@@ -44,7 +71,11 @@ export const SaveTemplateModal = memo<SaveTemplateModalProps>(
             className="mb-3 w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-800 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
             autoFocus
           />
+          <label htmlFor={categoryInputId} className="sr-only">
+            {t('agent.templates.category', 'Category')}
+          </label>
           <select
+            id={categoryInputId}
             value={category}
             onChange={(e) => {
               setCategory(e.target.value);
@@ -56,7 +87,10 @@ export const SaveTemplateModal = memo<SaveTemplateModalProps>(
             <option value="code">{t('agent.templates.coding', 'Coding')}</option>
             <option value="writing">{t('agent.templates.writing', 'Writing')}</option>
           </select>
-          <pre className="text-xs bg-slate-100 dark:bg-slate-700 p-2 rounded mb-4 max-h-32 overflow-auto whitespace-pre-wrap text-slate-600 dark:text-slate-300">
+          <pre
+            id={previewId}
+            className="text-xs bg-slate-100 dark:bg-slate-700 p-2 rounded mb-4 max-h-32 overflow-auto whitespace-pre-wrap text-slate-600 dark:text-slate-300"
+          >
             {content.slice(0, 200)}
             {content.length > 200 ? '...' : ''}
           </pre>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -24,6 +24,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
   projectId,
 }) => {
   const { t } = useTranslation();
+  const titleId = useId();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -39,6 +40,19 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
       setTags(memory.tags);
     }
   }, [memory]);
+
+  useEffect(() => {
+    if (!isOpen || isSaving) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, isSaving, onClose]);
 
   const handleAddTag = () => {
     if (newTag && !tags.includes(newTag)) {
@@ -103,12 +117,17 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
-      <div className="mx-4 flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-900">
+      <div
+        className="mx-4 flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-lg dark:bg-slate-900"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-2">
-            <Save className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            <Save className="h-5 w-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+            <h2 id={titleId} className="text-lg font-semibold text-gray-900 dark:text-white">
               {t('memory.edit.title')}
             </h2>
           </div>
@@ -119,7 +138,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
             disabled={isSaving}
             aria-label={t('memory.detail.closeAria')}
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
@@ -159,6 +178,7 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
               required
               disabled={isSaving}
               aria-required="true"
+              autoFocus
             />
           </div>
 
@@ -268,7 +288,9 @@ export const EditMemoryModal: React.FC<EditMemoryModalProps> = ({
             className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             disabled={isSaving}
           >
-            {isSaving && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />}
+            {isSaving && (
+              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+            )}
             {isSaving ? t('memory.edit.saving') : t('memory.edit.save')}
           </button>
         </div>

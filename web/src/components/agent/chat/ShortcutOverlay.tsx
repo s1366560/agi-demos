@@ -5,7 +5,7 @@
  * in a clean modal overlay with categorized sections.
  */
 
-import { memo, useEffect, useCallback, useState, useRef } from 'react';
+import { memo, useEffect, useCallback, useId, useState, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -23,6 +23,8 @@ interface ShortcutSection {
 
 export const ShortcutOverlay = memo(() => {
   const { t } = useTranslation();
+  const titleId = useId();
+  const footerId = useId();
   const [visible, setVisible] = useState(false);
   const isMac = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac');
   const mod = isMac ? 'Cmd' : 'Ctrl';
@@ -134,6 +136,10 @@ export const ShortcutOverlay = memo(() => {
     >
       <div
         className="mx-4 w-full max-w-lg overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={footerId}
         onClick={(e) => {
           e.stopPropagation();
         }}
@@ -141,8 +147,8 @@ export const ShortcutOverlay = memo(() => {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700">
           <div className="flex items-center gap-2.5">
-            <Keyboard size={20} className="text-primary" />
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+            <Keyboard size={20} className="text-primary" aria-hidden="true" />
+            <h2 id={titleId} className="text-lg font-semibold text-slate-900 dark:text-slate-100">
               {t('agent.shortcuts.title', 'Keyboard Shortcuts')}
             </h2>
           </div>
@@ -195,7 +201,7 @@ export const ShortcutOverlay = memo(() => {
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
-          <p className="text-xs text-slate-400 dark:text-slate-500 text-center">
+          <p id={footerId} className="text-xs text-slate-400 dark:text-slate-500 text-center">
             {t('agent.shortcuts.footer', 'Press {{key}} to toggle this overlay', {
               key: `${mod}+/`,
             })}

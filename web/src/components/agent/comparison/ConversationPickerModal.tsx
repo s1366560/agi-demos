@@ -4,7 +4,7 @@
  * Shows a searchable list of conversations (excluding the current one)
  * so the user can pick which conversation to compare with.
  */
-import { memo, useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { memo, useState, useMemo, useCallback, useEffect, useId, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -43,6 +43,7 @@ export const ConversationPickerModal = memo(
     onClose,
   }: ConversationPickerModalProps) => {
     const { t } = useTranslation();
+    const titleId = useId();
     const [search, setSearch] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -87,10 +88,15 @@ export const ConversationPickerModal = memo(
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50">
-        <div className="mx-4 w-full max-w-md overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+        <div
+          className="mx-4 w-full max-w-md overflow-hidden rounded-lg border border-slate-200 bg-slate-50 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+        >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200/60 dark:border-slate-700/50">
-            <h3 className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            <h3 id={titleId} className="text-sm font-medium text-slate-700 dark:text-slate-200">
               {t('comparison.selectConversation', 'Select conversation to compare')}
             </h3>
             <button
@@ -99,7 +105,7 @@ export const ConversationPickerModal = memo(
               aria-label={t('common.close', 'Close')}
               className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             >
-              <X size={16} />
+              <X size={16} aria-hidden="true" />
             </button>
           </div>
 
@@ -109,6 +115,7 @@ export const ConversationPickerModal = memo(
               <Search
                 size={14}
                 className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+                aria-hidden="true"
               />
               <input
                 ref={inputRef}
@@ -119,6 +126,7 @@ export const ConversationPickerModal = memo(
                 }}
                 placeholder={t('comparison.search', 'Search conversations...')}
                 className="w-full rounded-md border border-slate-200 bg-slate-100 py-1.5 pl-8 pr-3 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary/50 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200"
+                aria-label={t('comparison.search', 'Search conversations...')}
               />
             </div>
           </div>
@@ -140,7 +148,11 @@ export const ConversationPickerModal = memo(
                   className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-b border-slate-100 dark:border-slate-700/30 last:border-b-0"
                 >
                   <div className="flex items-start gap-2.5">
-                    <MessageSquare size={14} className="mt-0.5 flex-shrink-0 text-slate-400" />
+                    <MessageSquare
+                      size={14}
+                      className="mt-0.5 flex-shrink-0 text-slate-400"
+                      aria-hidden="true"
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
                         {conv.title}
