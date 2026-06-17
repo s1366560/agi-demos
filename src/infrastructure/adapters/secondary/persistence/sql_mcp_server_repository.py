@@ -82,7 +82,9 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
             .where(DBMCPServer.id == server_id)
             .execution_options(populate_existing=True)
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_server = result.scalar_one_or_none()
 
         return self._to_domain(db_server) if db_server else None
@@ -95,7 +97,9 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         )
 
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(query.execution_options(populate_existing=True)))
+            refresh_select_statement(
+                self._refresh_statement(query.execution_options(populate_existing=True))
+            )
         )
         db_server = result.scalar_one_or_none()
         return self._to_domain(db_server) if db_server else None
@@ -104,19 +108,25 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         self,
         project_id: str,
         enabled_only: bool = False,
+        tenant_id: str | None = None,
     ) -> list[MCPServer]:
         """List all MCP servers for a project."""
         query = select(DBMCPServer).where(DBMCPServer.project_id == project_id)
+
+        if tenant_id is not None:
+            query = query.where(DBMCPServer.tenant_id == tenant_id)
 
         if enabled_only:
             query = query.where(DBMCPServer.enabled.is_(True))
 
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                query.order_by(DBMCPServer.created_at.desc()).execution_options(
-                    populate_existing=True
+            refresh_select_statement(
+                self._refresh_statement(
+                    query.order_by(
+                        DBMCPServer.created_at.desc(), DBMCPServer.id.desc()
+                    ).execution_options(populate_existing=True)
                 )
-            ))
+            )
         )
         db_servers = result.scalars().all()
 
@@ -134,11 +144,13 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
             query = query.where(DBMCPServer.enabled.is_(True))
 
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                query.order_by(DBMCPServer.created_at.desc()).execution_options(
-                    populate_existing=True
+            refresh_select_statement(
+                self._refresh_statement(
+                    query.order_by(
+                        DBMCPServer.created_at.desc(), DBMCPServer.id.desc()
+                    ).execution_options(populate_existing=True)
                 )
-            ))
+            )
         )
         db_servers = result.scalars().all()
 
@@ -155,11 +167,13 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
     ) -> bool:
         """Update an MCP server configuration."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBMCPServer)
-                .where(DBMCPServer.id == server_id)
-                .execution_options(populate_existing=True)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBMCPServer)
+                    .where(DBMCPServer.id == server_id)
+                    .execution_options(populate_existing=True)
+                )
+            )
         )
         db_server = result.scalar_one_or_none()
 
@@ -193,11 +207,13 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
     ) -> bool:
         """Update the discovered tools for an MCP server."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBMCPServer)
-                .where(DBMCPServer.id == server_id)
-                .execution_options(populate_existing=True)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBMCPServer)
+                    .where(DBMCPServer.id == server_id)
+                    .execution_options(populate_existing=True)
+                )
+            )
         )
         db_server = result.scalar_one_or_none()
 
@@ -223,11 +239,13 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
     ) -> bool:
         """Update runtime status/metadata for MCP server lifecycle tracking."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(
-                select(DBMCPServer)
-                .where(DBMCPServer.id == server_id)
-                .execution_options(populate_existing=True)
-            ))
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBMCPServer)
+                    .where(DBMCPServer.id == server_id)
+                    .execution_options(populate_existing=True)
+                )
+            )
         )
         db_server = result.scalar_one_or_none()
 
@@ -247,7 +265,9 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
     async def delete(self, server_id: str) -> bool:
         """Delete an MCP server."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(delete(DBMCPServer).where(DBMCPServer.id == server_id)))
+            refresh_select_statement(
+                self._refresh_statement(delete(DBMCPServer).where(DBMCPServer.id == server_id))
+            )
         )
 
         if cast(CursorResult[Any], result).rowcount == 0:
@@ -264,7 +284,11 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
     ) -> list[MCPServer]:
         """Get all enabled MCP servers, optionally filtered by project."""
         if project_id:
-            return await self.list_by_project(project_id, enabled_only=True)
+            return await self.list_by_project(
+                project_id,
+                enabled_only=True,
+                tenant_id=tenant_id,
+            )
         return await self.list_by_tenant(tenant_id, enabled_only=True)
 
     # === Conversion methods ===

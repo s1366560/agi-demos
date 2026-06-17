@@ -79,6 +79,7 @@ class MCPServerRepositoryPort(ABC):
         self,
         project_id: str,
         enabled_only: bool = False,
+        tenant_id: str | None = None,
     ) -> list["MCPServer"]:
         """
         List all MCP servers for a project.
@@ -86,6 +87,7 @@ class MCPServerRepositoryPort(ABC):
         Args:
             project_id: Project ID
             enabled_only: If True, only return enabled servers
+            tenant_id: Optional tenant guard for multi-tenant callers
 
         Returns:
             List of MCPServer entities

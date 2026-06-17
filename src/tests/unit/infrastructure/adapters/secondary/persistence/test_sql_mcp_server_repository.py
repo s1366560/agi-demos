@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.infrastructure.adapters.secondary.persistence.models import (
+    MCPServer as DBMCPServer,
     Project as DBProject,
     Tenant as DBTenant,
 )
@@ -241,6 +242,93 @@ class TestSqlMCPServerRepositoryList:
         servers = await v2_mcp_repo.list_by_project(PROJECT_ID)
         assert len(servers) == 2
 
+    @pytest.mark.asyncio
+    async def test_list_by_project_can_guard_tenant(
+        self,
+        v2_mcp_repo: SqlMCPServerRepository,
+        db_session: AsyncSession,
+    ):
+        """Tenant-scoped project lists must not expose a foreign project's servers."""
+        other_tenant = DBTenant(
+            id="tenant-other",
+            name="Other Tenant",
+            slug="other-tenant",
+            owner_id="user-owner-2",
+            description="A different tenant",
+        )
+        other_project = DBProject(
+            id="project-other",
+            tenant_id=other_tenant.id,
+            name="Other Project",
+            description="A different project",
+            owner_id="user-owner-2",
+        )
+        db_session.add_all([other_tenant, other_project])
+        await db_session.flush()
+        await v2_mcp_repo.create(
+            tenant_id=other_tenant.id,
+            project_id=other_project.id,
+            name="Foreign Server",
+            description="Should not be visible to tenant-test-1",
+            server_type="stdio",
+            transport_config={},
+            enabled=True,
+        )
+
+        guarded_servers = await v2_mcp_repo.list_by_project(
+            other_project.id,
+            enabled_only=True,
+            tenant_id=TENANT_ID,
+        )
+
+        assert guarded_servers == []
+
+    @pytest.mark.asyncio
+    async def test_list_by_tenant_uses_id_tie_breaker(
+        self,
+        v2_mcp_repo: SqlMCPServerRepository,
+        db_session: AsyncSession,
+    ):
+        """Rows with identical timestamps should still have deterministic order."""
+        created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        db_session.add_all(
+            [
+                DBMCPServer(
+                    id="mcp-b",
+                    tenant_id=TENANT_ID,
+                    project_id=PROJECT_ID,
+                    name="Server B",
+                    description="B",
+                    server_type="stdio",
+                    transport_config={},
+                    enabled=True,
+                    runtime_status="pending_start",
+                    runtime_metadata={},
+                    discovered_tools=[],
+                    created_at=created_at,
+                ),
+                DBMCPServer(
+                    id="mcp-a",
+                    tenant_id=TENANT_ID,
+                    project_id=PROJECT_ID,
+                    name="Server A",
+                    description="A",
+                    server_type="stdio",
+                    transport_config={},
+                    enabled=True,
+                    runtime_status="pending_start",
+                    runtime_metadata={},
+                    discovered_tools=[],
+                    created_at=created_at,
+                ),
+            ]
+        )
+        await db_session.flush()
+
+        servers = await v2_mcp_repo.list_by_tenant(TENANT_ID)
+
+        assert [server.id for server in servers[:2]] == ["mcp-b", "mcp-a"]
+
 
 class TestSqlMCPServerRepositoryUpdate:
     """Tests for updating MCP servers."""
@@ -406,3 +494,43 @@ class TestSqlMCPServerRepositoryGetEnabledServers:
         servers = await v2_mcp_repo.get_enabled_servers(TENANT_ID, project_id=PROJECT_ID)
         assert len(servers) == 1
         assert servers[0].name == "Project Enabled"
+
+    @pytest.mark.asyncio
+    async def test_get_enabled_servers_by_project_applies_tenant_guard(
+        self,
+        v2_mcp_repo: SqlMCPServerRepository,
+        db_session: AsyncSession,
+    ):
+        """A tenant must not see tools from another tenant by guessing project_id."""
+        other_tenant = DBTenant(
+            id="tenant-foreign",
+            name="Foreign Tenant",
+            slug="foreign-tenant",
+            owner_id="user-owner-3",
+            description="A foreign tenant",
+        )
+        other_project = DBProject(
+            id="project-foreign",
+            tenant_id=other_tenant.id,
+            name="Foreign Project",
+            description="A foreign project",
+            owner_id="user-owner-3",
+        )
+        db_session.add_all([other_tenant, other_project])
+        await db_session.flush()
+        await v2_mcp_repo.create(
+            tenant_id=other_tenant.id,
+            project_id=other_project.id,
+            name="Foreign Enabled",
+            description="A foreign enabled server",
+            server_type="stdio",
+            transport_config={},
+            enabled=True,
+        )
+
+        servers = await v2_mcp_repo.get_enabled_servers(
+            TENANT_ID,
+            project_id=other_project.id,
+        )
+
+        assert servers == []
