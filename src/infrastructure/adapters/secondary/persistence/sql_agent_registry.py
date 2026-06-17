@@ -79,6 +79,22 @@ def _filter_builtin_agents(
     return filtered
 
 
+def _exclude_builtin_name_collisions(
+    query: Select[Any],
+    builtin_agents: Sequence[Agent],
+) -> Select[Any]:
+    """Exclude legacy DB rows whose names are now owned by built-in agents."""
+    if not builtin_agents:
+        return query
+
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        AgentDefinitionModel,
+    )
+
+    builtin_names = [agent.name.casefold() for agent in builtin_agents]
+    return query.where(func.lower(AgentDefinitionModel.name).not_in(builtin_names))
+
+
 def _exclude_legacy_workspace_scoped_auto_team(
     query: Select[Any],
 ) -> Select[Any]:
@@ -371,6 +387,7 @@ class SqlAgentRegistryRepository(
             enabled=effective_enabled,
             search=search,
         )
+        query = _exclude_builtin_name_collisions(query, builtin_agents)
         builtin_slice = builtin_agents[offset : offset + limit]
         builtin_count = len(builtin_slice)
 
@@ -434,8 +451,6 @@ class SqlAgentRegistryRepository(
                 )
             )
 
-        query = _apply_agent_list_order(query, sort)
-
         resolved_tenant_id = tenant_id or BUILTIN_AGENT_NAMESPACE
         builtin_agents = _filter_builtin_agents(
             list_builtin_agents(
@@ -445,6 +460,8 @@ class SqlAgentRegistryRepository(
             enabled=effective_enabled,
             search=search,
         )
+        query = _exclude_builtin_name_collisions(query, builtin_agents)
+        query = _apply_agent_list_order(query, sort)
 
         if limit is None:
             db_limit: int | None = None
@@ -551,15 +568,15 @@ class SqlAgentRegistryRepository(
                 )
             )
 
-        result = await self._session.execute(refresh_select_statement(query))
-        builtin_count = len(
-            _filter_builtin_agents(
-                list_builtin_agents(tenant_id=tenant_id),
-                enabled=effective_enabled,
-                search=search,
-            )
+        builtin_agents = _filter_builtin_agents(
+            list_builtin_agents(tenant_id=tenant_id),
+            enabled=effective_enabled,
+            search=search,
         )
-        return int(result.scalar() or 0) + builtin_count
+        query = _exclude_builtin_name_collisions(query, builtin_agents)
+
+        result = await self._session.execute(refresh_select_statement(query))
+        return int(result.scalar() or 0) + len(builtin_agents)
 
     async def count_by_project(
         self,
@@ -605,18 +622,18 @@ class SqlAgentRegistryRepository(
                 )
             )
 
-        result = await self._session.execute(refresh_select_statement(query))
-        builtin_count = len(
-            _filter_builtin_agents(
-                list_builtin_agents(
-                    tenant_id=tenant_id or BUILTIN_AGENT_NAMESPACE,
-                    project_id=project_id,
-                ),
-                enabled=effective_enabled,
-                search=search,
-            )
+        builtin_agents = _filter_builtin_agents(
+            list_builtin_agents(
+                tenant_id=tenant_id or BUILTIN_AGENT_NAMESPACE,
+                project_id=project_id,
+            ),
+            enabled=effective_enabled,
+            search=search,
         )
-        return int(result.scalar() or 0) + builtin_count
+        query = _exclude_builtin_name_collisions(query, builtin_agents)
+
+        result = await self._session.execute(refresh_select_statement(query))
+        return int(result.scalar() or 0) + len(builtin_agents)
 
     def _to_domain(self, db_agent: object) -> Agent | None:
         if db_agent is None:

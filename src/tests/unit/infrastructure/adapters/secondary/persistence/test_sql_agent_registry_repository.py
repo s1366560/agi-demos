@@ -156,6 +156,79 @@ class TestSqlAgentRegistryRepository:
         assert count == 2 + len(list_builtin_agents(tenant_id="tenant-1"))
 
     @pytest.mark.asyncio
+    async def test_count_by_tenant_matches_list_when_builtin_name_collides(
+        self,
+        db_session: AsyncSession,
+        test_tenant_db,
+    ) -> None:
+        db_session.add_all(
+            [
+                _agent_model(
+                    agent_id="legacy-tenant-sisyphus",
+                    tenant_id=test_tenant_db.id,
+                    project_id=None,
+                    name="sisyphus",
+                ),
+                _agent_model(
+                    agent_id="tenant-custom-agent",
+                    tenant_id=test_tenant_db.id,
+                    project_id=None,
+                    name="tenant-custom-agent",
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        repo = SqlAgentRegistryRepository(db_session)
+
+        agents = await repo.list_by_tenant(test_tenant_db.id)
+        count = await repo.count_by_tenant(test_tenant_db.id)
+        names = {agent.name for agent in agents}
+        ids = {agent.id for agent in agents}
+
+        assert count == len(agents)
+        assert "sisyphus" in names
+        assert "tenant-custom-agent" in names
+        assert "legacy-tenant-sisyphus" not in ids
+
+    @pytest.mark.asyncio
+    async def test_count_by_project_matches_list_when_builtin_name_collides(
+        self,
+        db_session: AsyncSession,
+        test_tenant_db,
+        test_project_db,
+    ) -> None:
+        db_session.add_all(
+            [
+                _agent_model(
+                    agent_id="legacy-project-sisyphus",
+                    tenant_id=test_tenant_db.id,
+                    project_id=test_project_db.id,
+                    name="sisyphus",
+                ),
+                _agent_model(
+                    agent_id="project-custom-agent",
+                    tenant_id=test_tenant_db.id,
+                    project_id=test_project_db.id,
+                    name="project-custom-agent",
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        repo = SqlAgentRegistryRepository(db_session)
+
+        agents = await repo.list_by_project(test_project_db.id, tenant_id=test_tenant_db.id)
+        count = await repo.count_by_project(test_project_db.id, tenant_id=test_tenant_db.id)
+        names = {agent.name for agent in agents}
+        ids = {agent.id for agent in agents}
+
+        assert count == len(agents)
+        assert "sisyphus" in names
+        assert "project-custom-agent" in names
+        assert "legacy-project-sisyphus" not in ids
+
+    @pytest.mark.asyncio
     async def test_list_by_tenant_filters_project_scope_before_database_pagination(
         self,
         db_session: AsyncSession,
