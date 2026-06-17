@@ -527,7 +527,17 @@ async def search_temporal(
         if scope_empty:
             return _empty_temporal_response(since, until)
 
-        params: dict[str, Any] = {"query": query, "limit": limit, **scope_params}
+        params: dict[str, Any] = {"limit": limit, **scope_params}
+        query_text = query.strip()
+        if query_text:
+            conditions.append(
+                "("
+                + "toLower(coalesce(e.content, '') + ' ' + "
+                + "coalesce(e.name, '') + ' ' + "
+                + "coalesce(e.summary, '')) CONTAINS toLower($query)"
+                + ")"
+            )
+            params["query"] = query_text
 
         if parsed_since:
             conditions.append("e.created_at >= datetime($since)")
@@ -616,10 +626,24 @@ async def search_with_facets(
             return _empty_faceted_response(limit, offset)
 
         params: dict[str, Any] = {"limit": limit, "offset": offset, **scope_params}
+        query_text = query.strip()
+        if query_text:
+            conditions.append(
+                "("
+                + "toLower(coalesce(e.name, '') + ' ' + "
+                + "coalesce(e.summary, '') + ' ' + "
+                + "coalesce(e.entity_type, '')) CONTAINS toLower($query)"
+                + ")"
+            )
+            params["query"] = query_text
 
         if entity_types:
             conditions.append("e.entity_type IN $entity_types")
             params["entity_types"] = entity_types
+
+        if tags:
+            conditions.append("any(tag IN $tags WHERE tag IN coalesce(e.tags, []))")
+            params["tags"] = tags
 
         if parsed_since:
             conditions.append("e.created_at >= datetime($since)")

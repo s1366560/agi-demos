@@ -336,6 +336,37 @@ class TestEnhancedSearchRouter:
         assert kwargs["tenant_id"] == test_project_db.tenant_id
 
     @pytest.mark.asyncio
+    async def test_temporal_search_applies_query_text_filter(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+
+        response = await search_temporal(
+            query="  onboarding  ",
+            since=None,
+            until=None,
+            limit=50,
+            tenant_id=None,
+            project_id=test_project_db.id,
+            current_user=test_user,
+            db=test_db,
+            neo4j_client=neo4j_client,
+        )
+
+        assert response["total"] == 0
+        query = neo4j_client.execute_query.await_args.args[0]
+        kwargs = neo4j_client.execute_query.await_args.kwargs
+        assert "coalesce(e.content, '')" in query
+        assert "coalesce(e.name, '')" in query
+        assert "coalesce(e.summary, '')" in query
+        assert "CONTAINS toLower($query)" in query
+        assert kwargs["query"] == "onboarding"
+
+    @pytest.mark.asyncio
     async def test_faceted_search_without_project_is_scoped_to_user_projects(
         self,
         test_db: AsyncSession,
@@ -398,6 +429,42 @@ class TestEnhancedSearchRouter:
         assert kwargs["project_ids"] == [test_project_db.id]
         assert other_project.id not in kwargs["project_ids"]
         assert kwargs["tenant_id"] == test_project_db.tenant_id
+
+    @pytest.mark.asyncio
+    async def test_faceted_search_applies_query_and_tag_filters(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+
+        response = await search_with_facets(
+            query="  platform  ",
+            entity_types=["Concept"],
+            tags=["architecture", "performance"],
+            since=None,
+            limit=50,
+            offset=0,
+            tenant_id=None,
+            project_id=test_project_db.id,
+            current_user=test_user,
+            db=test_db,
+            neo4j_client=neo4j_client,
+        )
+
+        assert response["total"] == 0
+        query = neo4j_client.execute_query.await_args.args[0]
+        kwargs = neo4j_client.execute_query.await_args.kwargs
+        assert "coalesce(e.name, '')" in query
+        assert "coalesce(e.summary, '')" in query
+        assert "coalesce(e.entity_type, '')" in query
+        assert "CONTAINS toLower($query)" in query
+        assert "any(tag IN $tags WHERE tag IN coalesce(e.tags, []))" in query
+        assert kwargs["query"] == "platform"
+        assert kwargs["entity_types"] == ["Concept"]
+        assert kwargs["tags"] == ["architecture", "performance"]
 
     @pytest.mark.asyncio
     async def test_advanced_search_without_project_fans_out_to_user_projects(
