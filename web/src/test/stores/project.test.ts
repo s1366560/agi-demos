@@ -24,6 +24,7 @@ describe('ProjectStore', () => {
       total: 0,
       page: 1,
       pageSize: 20,
+      ownerIds: [],
     });
   });
 
@@ -111,5 +112,54 @@ describe('ProjectStore', () => {
     const project = { id: '1', name: 'Project 1' } as any;
     useProjectStore.getState().setCurrentProject(project);
     expect(useProjectStore.getState().currentProject).toEqual(project);
+  });
+
+  it('clearProjects should reset tenant-scoped state', () => {
+    useProjectStore.setState({
+      projects: [{ id: '1', name: 'Project 1' } as any],
+      currentProject: { id: '1', name: 'Project 1' } as any,
+      isLoading: true,
+      error: 'failed',
+      total: 1,
+      page: 3,
+      pageSize: 50,
+      ownerIds: ['owner-1'],
+    });
+
+    useProjectStore.getState().clearProjects();
+
+    expect(useProjectStore.getState()).toMatchObject({
+      projects: [],
+      currentProject: null,
+      isLoading: false,
+      error: null,
+      total: 0,
+      page: 1,
+      pageSize: 20,
+      ownerIds: [],
+    });
+  });
+
+  it('clearProjects should ignore stale list responses', async () => {
+    let resolveList: (value: any) => void = () => {};
+    const listRequest = new Promise((resolve) => {
+      resolveList = resolve;
+    });
+    (projectAPI.list as any).mockReturnValue(listRequest);
+
+    const listProjects = useProjectStore.getState().listProjects('tenant-1');
+    useProjectStore.getState().clearProjects();
+
+    resolveList({
+      projects: [{ id: 'old', name: 'Old Tenant Project' }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      owner_ids: ['owner-1'],
+    });
+    await listProjects;
+
+    expect(useProjectStore.getState().projects).toEqual([]);
+    expect(useProjectStore.getState().ownerIds).toEqual([]);
   });
 });

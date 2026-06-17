@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { MemoryRouter } from 'react-router-dom';
-
 import { TenantLayout } from '../../layouts/TenantLayout';
 import { screen, render, waitFor, act } from '../utils';
 
@@ -30,9 +28,18 @@ let mockProjectState: any = {
   projects: [],
   setCurrentProject: vi.fn(),
   getProject: vi.fn(),
+  clearProjects: vi.fn(),
 };
 
 let mockRouteParams: Record<string, string | undefined> = { tenantId: 't1' };
+const mockRouteParamListeners = new Set<() => void>();
+
+function setMockRouteParams(params: Record<string, string | undefined>) {
+  mockRouteParams = params;
+  mockRouteParamListeners.forEach((listener) => {
+    listener();
+  });
+}
 
 const createDeferred = <T,>() => {
   let resolvePromise: (value: T | PromiseLike<T>) => void = () => {};
@@ -164,9 +171,20 @@ vi.mock('@/pages/tenant/TenantCreate', () => ({
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
+  const React = await vi.importActual<typeof import('react')>('react');
   return {
     ...actual,
-    useParams: vi.fn(() => mockRouteParams),
+    useParams: () =>
+      React.useSyncExternalStore(
+        (listener) => {
+          mockRouteParamListeners.add(listener);
+          return () => {
+            mockRouteParamListeners.delete(listener);
+          };
+        },
+        () => mockRouteParams,
+        () => mockRouteParams
+      ),
     useLocation: () => ({ pathname: '/tenant/t1/overview' }),
     Outlet: () => <div data-testid="outlet">Page Content</div>,
   };
@@ -203,8 +221,12 @@ describe('TenantLayout', () => {
         mockProjectState.currentProject = project;
       }),
       getProject: vi.fn(),
+      clearProjects: vi.fn(() => {
+        mockProjectState.currentProject = null;
+        mockProjectState.projects = [];
+      }),
     };
-    mockRouteParams = { tenantId: 't1' };
+    setMockRouteParams({ tenantId: 't1' });
   });
 
   it('renders layout elements', async () => {
@@ -265,23 +287,20 @@ describe('TenantLayout', () => {
   it('ignores stale project fetches after route project changes', async () => {
     const oldProject = createDeferred<{ id: string; name: string }>();
     const newProject = createDeferred<{ id: string; name: string }>();
-    mockRouteParams = { tenantId: 't1', projectId: 'old-project' };
+    setMockRouteParams({ tenantId: 't1', projectId: 'old-project' });
     mockProjectState.getProject.mockImplementation((_tenantId: string, projectId: string) =>
       projectId === 'old-project' ? oldProject.promise : newProject.promise
     );
 
-    const { rerender } = render(<TenantLayout />);
+    render(<TenantLayout />);
 
     await waitFor(() => {
       expect(mockProjectState.getProject).toHaveBeenCalledWith('t1', 'old-project');
     });
 
-    mockRouteParams = { tenantId: 't1', projectId: 'new-project' };
-    rerender(
-      <MemoryRouter>
-        <TenantLayout key="new-project" />
-      </MemoryRouter>
-    );
+    await act(async () => {
+      setMockRouteParams({ tenantId: 't1', projectId: 'new-project' });
+    });
 
     await waitFor(() => {
       expect(mockProjectState.getProject).toHaveBeenCalledWith('t1', 'new-project');
@@ -312,5 +331,28 @@ describe('TenantLayout', () => {
         name: 'New Project',
       });
     });
+  });
+
+  it('clears project state when tenant scope changes', async () => {
+    mockProjectState.projects = [{ id: 'project-1', name: 'Old Tenant Project' }];
+    mockProjectState.currentProject = { id: 'project-1', name: 'Old Tenant Project' };
+
+    render(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(screen.getByText('MemStack')).toBeInTheDocument();
+    });
+    expect(mockProjectState.clearProjects).not.toHaveBeenCalled();
+
+    await act(async () => {
+      mockTenantState.currentTenant = { id: 't2', name: 'Second Tenant' };
+      setMockRouteParams({ tenantId: 't2' });
+    });
+
+    await waitFor(() => {
+      expect(mockProjectState.clearProjects).toHaveBeenCalledTimes(1);
+    });
+    expect(mockProjectState.projects).toEqual([]);
+    expect(mockProjectState.currentProject).toBeNull();
   });
 });

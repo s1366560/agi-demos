@@ -58,6 +58,7 @@ interface ProjectState {
   deleteProject: (tenantId: string, projectId: string) => Promise<void>;
   setCurrentProject: (project: Project | null) => void;
   getProject: (tenantId: string, projectId: string) => Promise<Project>;
+  clearProjects: () => void;
   clearError: () => void;
 }
 
@@ -214,6 +215,26 @@ export const useProjectStore = create<ProjectState>()(
       },
 
       /**
+       * Clear tenant-scoped project state and invalidate in-flight list requests.
+       *
+       * @example
+       * clearProjects();
+       */
+      clearProjects: () => {
+        latestListProjectsRequest += 1;
+        set({
+          projects: [],
+          currentProject: null,
+          isLoading: false,
+          error: null,
+          total: 0,
+          page: 1,
+          pageSize: 20,
+          ownerIds: [],
+        });
+      },
+
+      /**
        * Fetch a single project by ID
        *
        * @param tenantId - Tenant ID
@@ -345,6 +366,7 @@ export const useProjectActions = () =>
       deleteProject: state.deleteProject,
       setCurrentProject: state.setCurrentProject,
       getProject: state.getProject,
+      clearProjects: state.clearProjects,
       clearError: state.clearError,
     }))
   );

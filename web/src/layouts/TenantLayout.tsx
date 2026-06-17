@@ -17,7 +17,7 @@
  * - Workspace switcher
  */
 
-import React, { useEffect, useState, useCallback, memo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useCallback, memo, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -68,6 +68,7 @@ export const TenantLayout: React.FC = memo(() => {
   const listTenants = useTenantStore((state) => state.listTenants);
 
   const currentProject = useProjectStore((state) => state.currentProject);
+  const clearProjects = useProjectStore((state) => state.clearProjects);
 
   // Auth store
   const logout = useAuthStore((state) => state.logout);
@@ -78,6 +79,8 @@ export const TenantLayout: React.FC = memo(() => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const projectSyncRequestRef = useRef(0);
+  const tenantProjectScopeRef = useRef<string | null | undefined>(undefined);
+  const tenantProjectScope = tenantId ?? currentTenant?.id ?? null;
 
   const handleLogout = useCallback(() => {
     logout();
@@ -188,6 +191,19 @@ export const TenantLayout: React.FC = memo(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void initializeTenantAndProject();
   }, [initializeTenantAndProject]);
+
+  useLayoutEffect(() => {
+    const previousTenantProjectScope = tenantProjectScopeRef.current;
+    tenantProjectScopeRef.current = tenantProjectScope;
+
+    if (
+      previousTenantProjectScope !== undefined &&
+      previousTenantProjectScope !== tenantProjectScope
+    ) {
+      projectSyncRequestRef.current += 1;
+      clearProjects();
+    }
+  }, [tenantProjectScope, clearProjects]);
 
   // Sync project ID from URL with store
   useEffect(() => {
