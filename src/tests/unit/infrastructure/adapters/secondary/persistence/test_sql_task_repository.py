@@ -165,6 +165,46 @@ class TestSqlTaskRepositoryFind:
         assert len(tasks) == 3
 
     @pytest.mark.asyncio
+    async def test_find_by_group_orders_by_created_at_desc_then_id(
+        self, v2_task_repo: SqlTaskRepository
+    ):
+        """Test group listings keep stable pagination order."""
+        newer_created_at = datetime(2026, 1, 2, tzinfo=UTC)
+        older_created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        for task_id, created_at in (
+            ("task-group-tie-b", newer_created_at),
+            ("task-group-old", older_created_at),
+            ("task-group-tie-a", newer_created_at),
+        ):
+            await v2_task_repo.save(
+                TaskLog(
+                    id=task_id,
+                    group_id="group-stable",
+                    task_type="test_task",
+                    status="PENDING",
+                    payload={},
+                    entity_id=None,
+                    entity_type=None,
+                    parent_task_id=None,
+                    worker_id=None,
+                    retry_count=0,
+                    error_message=None,
+                    created_at=created_at,
+                    started_at=None,
+                    completed_at=None,
+                    stopped_at=None,
+                )
+            )
+
+        tasks = await v2_task_repo.find_by_group("group-stable")
+
+        assert [task.id for task in tasks] == [
+            "task-group-tie-a",
+            "task-group-tie-b",
+            "task-group-old",
+        ]
+
+    @pytest.mark.asyncio
     async def test_list_recent(self, v2_task_repo: SqlTaskRepository):
         """Test listing recent tasks."""
         for i in range(5):
@@ -189,6 +229,39 @@ class TestSqlTaskRepositoryFind:
 
         tasks = await v2_task_repo.list_recent(limit=3)
         assert len(tasks) == 3
+
+    @pytest.mark.asyncio
+    async def test_list_recent_orders_same_timestamp_by_id(self, v2_task_repo: SqlTaskRepository):
+        """Test recent listings keep stable order for timestamp ties."""
+        created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        for task_id in ("task-recent-tie-b", "task-recent-tie-a", "task-recent-tie-c"):
+            await v2_task_repo.save(
+                TaskLog(
+                    id=task_id,
+                    group_id="group-recent-stable",
+                    task_type="test_task",
+                    status="PENDING",
+                    payload={},
+                    entity_id=None,
+                    entity_type=None,
+                    parent_task_id=None,
+                    worker_id=None,
+                    retry_count=0,
+                    error_message=None,
+                    created_at=created_at,
+                    started_at=None,
+                    completed_at=None,
+                    stopped_at=None,
+                )
+            )
+
+        tasks = await v2_task_repo.list_recent(limit=3)
+
+        assert [task.id for task in tasks] == [
+            "task-recent-tie-a",
+            "task-recent-tie-b",
+            "task-recent-tie-c",
+        ]
 
     @pytest.mark.asyncio
     async def test_list_by_status(self, v2_task_repo: SqlTaskRepository):
@@ -216,6 +289,47 @@ class TestSqlTaskRepositoryFind:
         pending_tasks = await v2_task_repo.list_by_status("PENDING")
         assert len(pending_tasks) == 1
         assert pending_tasks[0].status == "PENDING"
+
+    @pytest.mark.asyncio
+    async def test_list_by_status_orders_by_created_at_desc_then_id(
+        self, v2_task_repo: SqlTaskRepository
+    ):
+        """Test status listings keep stable pagination order."""
+        newer_created_at = datetime(2026, 1, 2, tzinfo=UTC)
+        older_created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        for task_id, created_at, status in (
+            ("task-status-tie-b", newer_created_at, "PENDING"),
+            ("task-status-ignored", newer_created_at, "COMPLETED"),
+            ("task-status-old", older_created_at, "PENDING"),
+            ("task-status-tie-a", newer_created_at, "PENDING"),
+        ):
+            await v2_task_repo.save(
+                TaskLog(
+                    id=task_id,
+                    group_id="group-status-stable",
+                    task_type="test_task",
+                    status=status,
+                    payload={},
+                    entity_id=None,
+                    entity_type=None,
+                    parent_task_id=None,
+                    worker_id=None,
+                    retry_count=0,
+                    error_message=None,
+                    created_at=created_at,
+                    started_at=None,
+                    completed_at=None,
+                    stopped_at=None,
+                )
+            )
+
+        tasks = await v2_task_repo.list_by_status("PENDING")
+
+        assert [task.id for task in tasks] == [
+            "task-status-tie-a",
+            "task-status-tie-b",
+            "task-status-old",
+        ]
 
 
 class TestSqlTaskRepositoryDelete:

@@ -29,7 +29,9 @@ class SqlTaskRepository(BaseRepository[TaskLog, DBTaskLog], TaskRepository):
     async def save(self, task: TaskLog) -> TaskLog:
         """Save a task log (create or update)."""
         result = await self._session.execute(
-            refresh_select_statement(self._refresh_statement(select(DBTaskLog).where(DBTaskLog.id == task.id)))
+            refresh_select_statement(
+                self._refresh_statement(select(DBTaskLog).where(DBTaskLog.id == task.id))
+            )
         )
         db_task = result.scalar_one_or_none()
 
@@ -57,23 +59,39 @@ class SqlTaskRepository(BaseRepository[TaskLog, DBTaskLog], TaskRepository):
     async def find_by_group(self, group_id: str, limit: int = 50, offset: int = 0) -> list[TaskLog]:
         """List all tasks in a group."""
         query = select(DBTaskLog).where(DBTaskLog.group_id == group_id)
-        query = query.offset(offset).limit(limit)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        query = (
+            query.order_by(DBTaskLog.created_at.desc(), DBTaskLog.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_tasks = result.scalars().all()
         return [d for t in db_tasks if (d := self._to_domain(t)) is not None]
 
     async def list_recent(self, limit: int = 100) -> list[TaskLog]:
         """List recent tasks across all groups."""
-        query = select(DBTaskLog).order_by(DBTaskLog.created_at.desc()).limit(limit)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        query = (
+            select(DBTaskLog).order_by(DBTaskLog.created_at.desc(), DBTaskLog.id.asc()).limit(limit)
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_tasks = result.scalars().all()
         return [d for t in db_tasks if (d := self._to_domain(t)) is not None]
 
     async def list_by_status(self, status: str, limit: int = 50, offset: int = 0) -> list[TaskLog]:
         """List tasks by status."""
         query = select(DBTaskLog).where(DBTaskLog.status == status)
-        query = query.offset(offset).limit(limit)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        query = (
+            query.order_by(DBTaskLog.created_at.desc(), DBTaskLog.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_tasks = result.scalars().all()
         return [d for t in db_tasks if (d := self._to_domain(t)) is not None]
 
