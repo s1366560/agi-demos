@@ -18,6 +18,7 @@ def mock_project_repo():
     repo.save = AsyncMock()
     repo.find_by_id = AsyncMock()
     repo.find_by_tenant = AsyncMock()
+    repo.find_by_tenant_and_owner = AsyncMock()
     repo.find_by_owner = AsyncMock()
     repo.delete = AsyncMock()
     return repo
@@ -130,16 +131,25 @@ async def test_list_projects_filtered_by_owner(project_service, mock_project_rep
     mock_projects = [
         Mock(id="project-1", name="Project 1", owner_id="user-1"),
         Mock(id="project-2", name="Project 2", owner_id="user-1"),
-        Mock(id="project-3", name="Project 3", owner_id="user-2"),
     ]
-    mock_project_repo.find_by_tenant.return_value = mock_projects
+    mock_project_repo.find_by_tenant_and_owner.return_value = mock_projects
 
     # List projects for specific owner
-    result = await project_service.list_projects(tenant_id="tenant-123", owner_id="user-1")
+    result = await project_service.list_projects(
+        tenant_id="tenant-123",
+        owner_id="user-1",
+        limit=2,
+        offset=4,
+    )
 
-    # Should only return user-1's projects
-    assert len(result) == 2
-    assert all(p.owner_id == "user-1" for p in result)
+    mock_project_repo.find_by_tenant_and_owner.assert_called_once_with(
+        "tenant-123",
+        "user-1",
+        limit=2,
+        offset=4,
+    )
+    mock_project_repo.find_by_tenant.assert_not_called()
+    assert result == mock_projects
 
 
 @pytest.mark.asyncio

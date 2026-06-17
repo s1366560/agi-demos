@@ -96,11 +96,12 @@ class ProjectService:
             List of projects
         """
         if owner_id:
-            # Filter by owner within tenant
-            all_projects = await self._project_repo.find_by_tenant(
-                tenant_id, limit=limit * 2, offset=offset
+            return await self._project_repo.find_by_tenant_and_owner(
+                tenant_id,
+                owner_id,
+                limit=limit,
+                offset=offset,
             )
-            return [p for p in all_projects if p.owner_id == owner_id][:limit]
         else:
             # Return all tenant projects
             return await self._project_repo.find_by_tenant(tenant_id, limit=limit, offset=offset)

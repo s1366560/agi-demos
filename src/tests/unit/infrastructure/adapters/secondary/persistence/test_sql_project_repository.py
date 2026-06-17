@@ -277,6 +277,7 @@ class TestSqlProjectRepositoryList:
         repo = SqlProjectRepository(cast(AsyncSession, session))
 
         await repo.find_by_tenant("tenant-1")
+        await repo.find_by_tenant_and_owner("tenant-1", "owner-1")
         await repo.find_by_owner("owner-1")
         await repo.find_public_projects()
         await repo.list_active_projects()
@@ -390,6 +391,47 @@ class TestSqlProjectRepositoryList:
 
         assert [project.id for project in page1] == ["proj-order-new", "proj-order-a"]
         assert [project.id for project in page2] == ["proj-order-b"]
+
+    @pytest.mark.asyncio
+    async def test_find_by_tenant_and_owner_filters_before_pagination(
+        self, v2_project_repo: SqlProjectRepository
+    ):
+        """Test owner filtering is applied by the database before offset pagination."""
+        same_created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        rows = [
+            ("proj-tenant-owner-b", "tenant-owner", "owner-target"),
+            ("proj-tenant-owner-other-tenant", "tenant-other", "owner-target"),
+            ("proj-tenant-owner-other-owner", "tenant-owner", "owner-other"),
+            ("proj-tenant-owner-a", "tenant-owner", "owner-target"),
+            ("proj-tenant-owner-c", "tenant-owner", "owner-target"),
+        ]
+        for project_id, tenant_id, owner_id in rows:
+            project = Project(
+                id=project_id,
+                tenant_id=tenant_id,
+                name=project_id,
+                owner_id=owner_id,
+                description="desc",
+                member_ids=[],
+                memory_rules={},
+                graph_config={},
+                is_public=False,
+                created_at=same_created_at,
+                updated_at=same_created_at,
+            )
+            await v2_project_repo.save(project)
+
+        projects = await v2_project_repo.find_by_tenant_and_owner(
+            "tenant-owner",
+            "owner-target",
+            limit=2,
+            offset=1,
+        )
+
+        assert [project.id for project in projects] == [
+            "proj-tenant-owner-b",
+            "proj-tenant-owner-c",
+        ]
 
     @pytest.mark.asyncio
     async def test_find_by_owner(self, v2_project_repo: SqlProjectRepository):

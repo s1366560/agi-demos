@@ -59,6 +59,17 @@ class SqlProjectRepository(BaseRepository[Project, DBProject], ProjectRepository
         """List all projects in a tenant."""
         return await self.list_all(limit=limit, offset=offset, tenant_id=tenant_id)
 
+    async def find_by_tenant_and_owner(
+        self, tenant_id: str, owner_id: str, limit: int = 50, offset: int = 0
+    ) -> list[Project]:
+        """List all projects in a tenant owned by a user."""
+        return await self.list_all(
+            limit=limit,
+            offset=offset,
+            tenant_id=tenant_id,
+            owner_id=owner_id,
+        )
+
     async def find_by_owner(self, owner_id: str, limit: int = 50, offset: int = 0) -> list[Project]:
         """List all projects owned by a user."""
         return await self.list_all(limit=limit, offset=offset, owner_id=owner_id)
