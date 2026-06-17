@@ -518,29 +518,30 @@ class WorkspaceMentionRouter:
         ):
             return
 
-        for mentioned_user_id in message.mentions:
-            async with self._db_session_factory() as db:
-                agent_repo = self._agent_repo_factory(db)
-                agents = await agent_repo.find_by_workspace(workspace_id, active_only=True)
-                agent_by_id: dict[str, WorkspaceAgent] = {a.agent_id: a for a in agents}
-                target_agent = agent_by_id.get(mentioned_user_id)
+        async with self._db_session_factory() as db:
+            agent_repo = self._agent_repo_factory(db)
+            agents = await agent_repo.find_by_workspace(workspace_id, active_only=True)
+        agent_by_id: dict[str, WorkspaceAgent] = {a.agent_id: a for a in agents}
 
-                if target_agent:
-                    try:
-                        await self._handle_single_mention(
-                            workspace_id=workspace_id,
-                            agent=target_agent,
-                            message=message,
-                            user_id=user_id,
-                            event_publisher=event_publisher,
-                            chain_depth=chain_depth,
-                        )
-                    except Exception:
-                        logger.exception(
-                            "Failed to route mention to agent %s for agent response in workspace %s",
-                            target_agent.agent_id,
-                            workspace_id,
-                        )
+        for mentioned_user_id in message.mentions:
+            target_agent = agent_by_id.get(mentioned_user_id)
+            if not target_agent:
+                continue
+            try:
+                await self._handle_single_mention(
+                    workspace_id=workspace_id,
+                    agent=target_agent,
+                    message=message,
+                    user_id=user_id,
+                    event_publisher=event_publisher,
+                    chain_depth=chain_depth,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to route mention to agent %s for agent response in workspace %s",
+                    target_agent.agent_id,
+                    workspace_id,
+                )
 
     async def _handle_single_mention(
         self,

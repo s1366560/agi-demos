@@ -489,6 +489,31 @@ class TestMultipleAgentMentions:
         assert captured["project_id"] == "project-chain"
         assert all(call.args != ("ws-1",) for call in conversation_repo.find_by_id.await_args_list)
 
+    async def test_agent_chain_fetches_roster_once_for_multiple_mentions(self) -> None:
+        agent1 = _make_agent("agent-1", "Bot1")
+        agent2 = _make_agent("agent-2", "Bot2")
+        router, mocks = _build_router(agents=[agent1, agent2])
+        handle_single = AsyncMock()
+        router._handle_single_mention = handle_single  # type: ignore[method-assign]
+        msg = _make_message(mentions=["agent-1", "missing", "agent-2"])
+
+        await router._route_agent_mentions(
+            workspace_id="ws-1",
+            message=msg,
+            chain_depth=1,
+            user_id="user-1",
+        )
+
+        mocks["agent_repo"].find_by_workspace.assert_awaited_once_with(
+            "ws-1",
+            active_only=True,
+        )
+        assert handle_single.await_count == 2
+        assert [call.kwargs["agent"].agent_id for call in handle_single.await_args_list] == [
+            "agent-1",
+            "agent-2",
+        ]
+
     @patch(
         "src.configuration.factories.create_llm_client",
         new_callable=AsyncMock,
