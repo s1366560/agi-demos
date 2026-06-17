@@ -10,6 +10,7 @@ from typing import Any, Protocol, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.gene_schemas import (
@@ -37,8 +38,9 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user_tenant,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
+from src.infrastructure.adapters.secondary.persistence.models import GeneMarketModel, User as DBUser
 from src.infrastructure.i18n import gettext as _
 
 
@@ -114,6 +116,9 @@ class InstanceGeneResponse(BaseModel):
     usage_count: int = 0
     installed_at: str | None = None
     created_at: str
+    gene_name: str | None = None
+    gene_description: str | None = None
+    gene_category: str | None = None
 
 
 class InstanceGeneListResponse(BaseModel):
@@ -279,6 +284,66 @@ def _evolution_event_response(event: EvolutionEvent) -> EvolutionEventResponse:
         payload=payload,
         status=_optional_str(details.get("status")) or "completed",
         created_at=event.created_at.isoformat(),
+    )
+
+
+_GeneMetadata = dict[str, str | None]
+
+
+async def _get_gene_metadata_by_id(
+    db: AsyncSession,
+    gene_ids: set[str],
+    *,
+    tenant_id: str,
+) -> dict[str, _GeneMetadata]:
+    """Return display metadata for installed genes without per-row lookups."""
+    if not gene_ids:
+        return {}
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(
+                GeneMarketModel.id,
+                GeneMarketModel.name,
+                GeneMarketModel.description,
+                GeneMarketModel.category,
+            )
+            .where(GeneMarketModel.id.in_(gene_ids))
+            .where(GeneMarketModel.tenant_id == tenant_id)
+            .where(GeneMarketModel.deleted_at.is_(None))
+        )
+    )
+    return {
+        gene_id: {
+            "name": name,
+            "description": description,
+            "category": category,
+        }
+        for gene_id, name, description, category in result.all()
+    }
+
+
+def _instance_gene_response(
+    instance_gene: _InstanceScopedEntity,
+    *,
+    gene_metadata: _GeneMetadata | None = None,
+) -> InstanceGeneResponse:
+    return InstanceGeneResponse(
+        id=instance_gene.id,
+        instance_id=instance_gene.instance_id,
+        gene_id=instance_gene.gene_id,
+        genome_id=instance_gene.genome_id,
+        status=instance_gene.status.value,
+        installed_version=instance_gene.installed_version,
+        config_snapshot=instance_gene.config_snapshot,
+        usage_count=instance_gene.usage_count,
+        installed_at=(
+            instance_gene.installed_at.isoformat() if instance_gene.installed_at else None
+        ),
+        created_at=instance_gene.created_at.isoformat(),
+        gene_name=gene_metadata.get("name") if gene_metadata else None,
+        gene_description=gene_metadata.get("description") if gene_metadata else None,
+        gene_category=gene_metadata.get("category") if gene_metadata else None,
     )
 
 
@@ -677,20 +742,7 @@ async def install_gene(
             config_snapshot=data.config,
         )
         await db.commit()
-        return InstanceGeneResponse(
-            id=instance_gene.id,
-            instance_id=instance_gene.instance_id,
-            gene_id=instance_gene.gene_id,
-            genome_id=instance_gene.genome_id,
-            status=instance_gene.status.value,
-            installed_version=instance_gene.installed_version,
-            config_snapshot=instance_gene.config_snapshot,
-            usage_count=instance_gene.usage_count,
-            installed_at=(
-                instance_gene.installed_at.isoformat() if instance_gene.installed_at else None
-            ),
-            created_at=instance_gene.created_at.isoformat(),
-        )
+        return _instance_gene_response(instance_gene)
     except ValueError as e:
         raise _invalid_gene_request_error() from e
 
@@ -739,18 +791,15 @@ async def list_instance_genes(
     service = container.gene_service()
     await _ensure_instance_tenant_access(container, instance_id=instance_id, tenant_id=tenant_id)
     instance_genes = await service.list_instance_genes(instance_id)
+    gene_metadata_by_id = await _get_gene_metadata_by_id(
+        db,
+        {ig.gene_id for ig in instance_genes},
+        tenant_id=tenant_id,
+    )
     items = [
-        InstanceGeneResponse(
-            id=ig.id,
-            instance_id=ig.instance_id,
-            gene_id=ig.gene_id,
-            genome_id=ig.genome_id,
-            status=ig.status.value,
-            installed_version=ig.installed_version,
-            config_snapshot=ig.config_snapshot,
-            usage_count=ig.usage_count,
-            installed_at=(ig.installed_at.isoformat() if ig.installed_at else None),
-            created_at=ig.created_at.isoformat(),
+        _instance_gene_response(
+            ig,
+            gene_metadata=gene_metadata_by_id.get(ig.gene_id),
         )
         for ig in instance_genes
     ]
@@ -778,17 +827,14 @@ async def get_instance_gene(
         instance_gene_id=instance_gene_id,
         tenant_id=tenant_id,
     )
-    return InstanceGeneResponse(
-        id=ig.id,
-        instance_id=ig.instance_id,
-        gene_id=ig.gene_id,
-        genome_id=ig.genome_id,
-        status=ig.status.value,
-        installed_version=ig.installed_version,
-        config_snapshot=ig.config_snapshot,
-        usage_count=ig.usage_count,
-        installed_at=(ig.installed_at.isoformat() if ig.installed_at else None),
-        created_at=ig.created_at.isoformat(),
+    gene_metadata_by_id = await _get_gene_metadata_by_id(
+        db,
+        {ig.gene_id},
+        tenant_id=tenant_id,
+    )
+    return _instance_gene_response(
+        ig,
+        gene_metadata=gene_metadata_by_id.get(ig.gene_id),
     )
 
 

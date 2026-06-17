@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import HTTPException
@@ -13,7 +15,7 @@ from src.application.schemas.gene_schemas import (
     GeneUpdate,
     GenomeCreate,
 )
-from src.domain.model.gene.enums import EvolutionEventType
+from src.domain.model.gene.enums import EvolutionEventType, InstanceGeneStatus
 from src.infrastructure.adapters.primary.web.routers import genes
 
 
@@ -69,6 +71,29 @@ class _Container:
 
     def instance_service(self) -> _InstanceService:
         return _InstanceService()
+
+
+class _InstanceGeneListService(_FailingGeneService):
+    async def list_instance_genes(self, instance_id: str) -> list[SimpleNamespace]:
+        return [
+            SimpleNamespace(
+                id="instance-gene-1",
+                instance_id=instance_id,
+                gene_id="gene-1",
+                genome_id=None,
+                status=InstanceGeneStatus.installed,
+                installed_version="1.2.3",
+                config_snapshot={"mode": "strict"},
+                usage_count=7,
+                installed_at=datetime(2026, 1, 1, tzinfo=UTC),
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            )
+        ]
+
+
+class _InstanceGeneListContainer(_Container):
+    def gene_service(self) -> _InstanceGeneListService:
+        return _InstanceGeneListService()
 
 
 class _EvolutionAccessGeneService(_FailingGeneService):
@@ -227,6 +252,37 @@ async def test_get_instance_gene_sanitizes_missing_instance_gene_id() -> None:
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Instance gene not found"
+
+
+@pytest.mark.unit
+async def test_list_instance_genes_enriches_gene_display_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _InstanceGeneListContainer(),
+    )
+    metadata_result = Mock()
+    metadata_result.all.return_value = [
+        ("gene-1", "Code Review", "Reviews code changes", "tool"),
+    ]
+    db = SimpleNamespace(execute=AsyncMock(return_value=metadata_result))
+
+    response = await genes.list_instance_genes(
+        request=SimpleNamespace(),
+        instance_id="instance-1",
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    assert response.total == 1
+    item = response.items[0]
+    assert item.gene_id == "gene-1"
+    assert item.gene_name == "Code Review"
+    assert item.gene_description == "Reviews code changes"
+    assert item.gene_category == "tool"
+    db.execute.assert_awaited_once()
 
 
 @pytest.mark.unit
