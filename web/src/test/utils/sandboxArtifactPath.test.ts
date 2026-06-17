@@ -18,6 +18,7 @@ vi.mock('@/stores/agent/timelineStore', () => ({
 
 import { artifactService } from '@/services/artifactService';
 import { useSandboxStore } from '@/stores/sandbox';
+import { useProjectStore } from '@/stores/project';
 import { useTimelineStore } from '@/stores/agent/timelineStore';
 import type { Artifact } from '@/types/agent';
 
@@ -43,7 +44,10 @@ const makeArtifact = (overrides: Partial<Artifact>): Artifact => ({
 });
 
 beforeEach(() => {
+  window.history.pushState({}, '', '/');
+  localStorage.clear();
   vi.mocked(artifactService.list).mockReset();
+  vi.mocked(useProjectStore.getState).mockReturnValue({ currentProject: null } as never);
   vi.mocked(useTimelineStore.getState).mockReturnValue({
     timeline: [],
     agentTimeline: [],
@@ -60,9 +64,7 @@ describe('normalizeSandboxPath', () => {
   });
 
   it('leaves absolute sandbox paths unchanged', () => {
-    expect(normalizeSandboxPath('/workspace/output/chart.png')).toBe(
-      '/workspace/output/chart.png'
-    );
+    expect(normalizeSandboxPath('/workspace/output/chart.png')).toBe('/workspace/output/chart.png');
   });
 });
 
@@ -83,7 +85,10 @@ describe('pathMatchesArtifact', () => {
   });
 
   it('does not match unrelated paths', () => {
-    const artifact = makeArtifact({ sourcePath: '/workspace/output/other.png', filename: 'other.png' });
+    const artifact = makeArtifact({
+      sourcePath: '/workspace/output/other.png',
+      filename: 'other.png',
+    });
     expect(pathMatchesArtifact('/workspace/output/chart.png', artifact)).toBe(false);
   });
 });
@@ -136,6 +141,42 @@ describe('findArtifactForSandboxPath', () => {
     expect(result).toBeUndefined();
     expect(artifactService.list).not.toHaveBeenCalled();
   });
+
+  it('prefers the current tenant project key over legacy and other-tenant keys', async () => {
+    const artifact = makeArtifact({
+      id: 'remote-tenant',
+      sourcePath: '/workspace/output/chart.png',
+    });
+    vi.mocked(useSandboxStore.getState).mockReturnValue({
+      activeProjectId: null,
+      artifacts: new Map<string, Artifact>(),
+    } as never);
+    localStorage.setItem('agent:lastProjectId', 'legacy-project');
+    localStorage.setItem('agent:tenant-1:lastProjectId', 'tenant-project');
+    localStorage.setItem('agent:tenant-2:lastProjectId', 'other-tenant-project');
+    window.history.pushState({}, '', '/tenant/tenant-1/agent-workspace');
+    vi.mocked(artifactService.list).mockResolvedValue({ artifacts: [artifact], total: 1 });
+
+    const result = await findArtifactForSandboxPath('/workspace/output/chart.png');
+
+    expect(result?.id).toBe('remote-tenant');
+    expect(artifactService.list).toHaveBeenCalledWith('tenant-project', { limit: 500 });
+  });
+
+  it('does not use unrelated tenant project keys on tenant routes', async () => {
+    vi.mocked(useSandboxStore.getState).mockReturnValue({
+      activeProjectId: null,
+      artifacts: new Map<string, Artifact>(),
+    } as never);
+    localStorage.setItem('agent:lastProjectId', 'legacy-project');
+    localStorage.setItem('agent:tenant-2:lastProjectId', 'other-tenant-project');
+    window.history.pushState({}, '', '/tenant/tenant-1/agent-workspace');
+
+    const result = await findArtifactForSandboxPath('/workspace/output/chart.png');
+
+    expect(result).toBeUndefined();
+    expect(artifactService.list).not.toHaveBeenCalled();
+  });
 });
 
 describe('resolveSandboxArtifactUrl', () => {
@@ -171,9 +212,7 @@ describe('resolveSandboxArtifactUrl', () => {
       agentTimeline: [
         {
           type: 'artifacts_batch',
-          artifacts: [
-            { filename: 'chart.png', url: 'https://files.example.com/chart.png' },
-          ],
+          artifacts: [{ filename: 'chart.png', url: 'https://files.example.com/chart.png' }],
         },
       ],
     } as never);

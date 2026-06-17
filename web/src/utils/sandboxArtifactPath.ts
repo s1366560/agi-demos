@@ -42,10 +42,16 @@ export function pathMatchesArtifact(path: string, artifact: Artifact): boolean {
 function getPersistedProjectId(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    // Global key written by the chat sidebar, plus tenant-scoped variants
-    // (`agent:<tenant>:lastProjectId`) written by the agent workspace.
-    const direct = window.localStorage.getItem('agent:lastProjectId');
-    if (direct) return direct;
+    const tenantId = getTenantIdFromPath();
+    if (tenantId) {
+      const scoped = window.localStorage.getItem(`agent:${tenantId}:lastProjectId`);
+      if (scoped) return scoped;
+      return null;
+    }
+
+    const legacy = window.localStorage.getItem('agent:lastProjectId');
+    if (legacy) return legacy;
+
     for (let i = 0; i < window.localStorage.length; i += 1) {
       const key = window.localStorage.key(i);
       if (key && key.endsWith(':lastProjectId')) {
@@ -57,6 +63,16 @@ function getPersistedProjectId(): string | null {
     // Ignore storage access errors (private mode, disabled storage, etc.).
   }
   return null;
+}
+
+function getTenantIdFromPath(): string | null {
+  const match = /^\/tenant\/([^/?#]+)/.exec(window.location.pathname);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
 }
 
 /**

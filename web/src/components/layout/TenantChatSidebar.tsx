@@ -88,6 +88,24 @@ const SIDEBAR_MAX_WIDTH = 400;
 const SIDEBAR_DEFAULT_WIDTH = 256;
 const SIDEBAR_COLLAPSED_WIDTH = 80;
 const COLLAPSE_THRESHOLD = 120; // Width below which sidebar collapses
+const LEGACY_LAST_PROJECT_ID_KEY = 'agent:lastProjectId';
+
+function lastProjectIdStorageKey(tenantId: string | undefined): string | null {
+  return tenantId ? `agent:${tenantId}:lastProjectId` : null;
+}
+
+function persistLastProjectId(tenantId: string | undefined, projectId: string): void {
+  const storageKey = lastProjectIdStorageKey(tenantId);
+  if (!storageKey) {
+    return;
+  }
+  try {
+    localStorage.setItem(storageKey, projectId);
+    localStorage.removeItem(LEGACY_LAST_PROJECT_ID_KEY);
+  } catch {
+    // Storage may be unavailable in private mode or restricted browser contexts.
+  }
+}
 
 function readMetadataString(
   metadata: Record<string, unknown> | undefined,
@@ -510,6 +528,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const [isDragging, setIsDragging] = useState(false);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const loadedProjectIdRef = useRef<string | null>(null);
+  const loadedSidebarWorkspaceSurfaceRef = useRef<string | null>(null);
 
   // Use controlled or internal state
   const collapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
@@ -552,23 +572,30 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   );
 
   const { projects, currentProject, listProjects, setCurrentProject } = useProjectStore();
+  const preferredWorkspaceId = currentWorkspace?.id ?? workspaces[0]?.id ?? null;
+  const normalizedTenantId = tenantId?.trim() ?? '';
+  const resolvedTenantId = normalizedTenantId || undefined;
+  const tenantScopedProjects = useMemo(
+    () =>
+      resolvedTenantId
+        ? projects.filter((project) => project.tenant_id === resolvedTenantId)
+        : projects,
+    [projects, resolvedTenantId]
+  );
   const uniqueProjects = useMemo(() => {
     const seenProjectIds = new Set<string>();
-    return projects.filter((project) => {
+    return tenantScopedProjects.filter((project) => {
       if (seenProjectIds.has(project.id)) {
         return false;
       }
       seenProjectIds.add(project.id);
       return true;
     });
-  }, [projects]);
+  }, [tenantScopedProjects]);
   const projectById = useMemo(
     () => new Map(uniqueProjects.map((project) => [project.id, project])),
     [uniqueProjects]
   );
-  const preferredWorkspaceId = currentWorkspace?.id ?? workspaces[0]?.id ?? null;
-  const normalizedTenantId = tenantId?.trim() ?? '';
-  const resolvedTenantId = normalizedTenantId || undefined;
   const tenantBasePath = normalizedTenantId ? `/tenant/${normalizedTenantId}` : '/tenant';
   const queryProjectId = useMemo(
     () => new URLSearchParams(location.search).get('projectId'),
@@ -620,6 +647,12 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     ]
   );
 
+  useEffect(() => {
+    setSelectedProjectId(null);
+    loadedProjectIdRef.current = null;
+    loadedSidebarWorkspaceSurfaceRef.current = null;
+  }, [resolvedTenantId]);
+
   // Sync ref with state when not dragging
   useEffect(() => {
     if (!isDragging) {
@@ -640,24 +673,24 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   useEffect(() => {
     if (queryProjectId && selectedProjectId !== queryProjectId) {
       setSelectedProjectId(queryProjectId);
-      localStorage.setItem('agent:lastProjectId', queryProjectId);
+      persistLastProjectId(resolvedTenantId, queryProjectId);
       const project = projectById.get(queryProjectId);
       if (project) {
         setCurrentProject(project);
       }
     } else if (!selectedProjectId && uniqueProjects.length > 0) {
-      const project = currentProject
-        ? (projectById.get(currentProject.id) ?? currentProject)
-        : uniqueProjects[0];
+      const project =
+        (currentProject ? projectById.get(currentProject.id) : undefined) ?? uniqueProjects[0];
       if (!project) return;
       setSelectedProjectId(project.id);
       setCurrentProject(project);
-      localStorage.setItem('agent:lastProjectId', project.id);
+      persistLastProjectId(resolvedTenantId, project.id);
     }
   }, [
     currentProject,
     projectById,
     queryProjectId,
+    resolvedTenantId,
     selectedProjectId,
     setCurrentProject,
     uniqueProjects,
@@ -666,7 +699,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   // Load conversations when selected project changes
   // NOTE: Use ref pattern to avoid dependency on loadConversations function
   // which gets recreated on every store update, causing infinite loops
-  const loadedProjectIdRef = useRef<string | null>(null);
   const loadConversationsRef = useRef(loadConversations);
   loadConversationsRef.current = loadConversations;
 
@@ -683,7 +715,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     // ONLY depend on selectedProjectId, NOT loadConversations
   }, [selectedProjectId]);
 
-  const loadedSidebarWorkspaceSurfaceRef = useRef<string | null>(null);
   useEffect(() => {
     if (!tenantId || !selectedProjectId || !workspaceIdFromQuery) {
       return;
@@ -966,7 +997,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const handleProjectChange = useCallback(
     (projectId: string) => {
       setSelectedProjectId(projectId);
-      localStorage.setItem('agent:lastProjectId', projectId);
+      persistLastProjectId(resolvedTenantId, projectId);
       const project = projectById.get(projectId);
       if (project) {
         setCurrentProject(project);
@@ -974,7 +1005,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       // NOTE: loadConversations is called by useEffect when selectedProjectId changes
       // Do NOT call it here to avoid duplicate requests
     },
-    [projectById, setCurrentProject]
+    [projectById, resolvedTenantId, setCurrentProject]
   );
 
   // Get current width for render

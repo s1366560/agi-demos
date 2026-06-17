@@ -1,7 +1,8 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 
+import { render as rtlRender } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
 
@@ -36,8 +37,8 @@ const conversationsState = {
 };
 
 const projectState = {
-  projects: [{ id: 'project-1', name: 'Project One' }],
-  currentProject: { id: 'project-1', name: 'Project One' },
+  projects: [{ id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' }],
+  currentProject: { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' },
   listProjects: vi.fn(),
   setCurrentProject: vi.fn(),
 };
@@ -184,10 +185,10 @@ describe('TenantChatSidebar', () => {
     conversationsState.conversationsLoading = false;
     conversationsState.hasMoreConversations = false;
     projectState.projects = [
-      { id: 'project-1', name: 'Project One' },
-      { id: 'project-2', name: 'Project Two' },
+      { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' },
+      { id: 'project-2', name: 'Project Two', tenant_id: 'tenant-1' },
     ];
-    projectState.currentProject = { id: 'project-1', name: 'Project One' };
+    projectState.currentProject = { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' };
   });
 
   it('shows tenant-context functional nav in the mobile drawer', () => {
@@ -248,10 +249,14 @@ describe('TenantChatSidebar', () => {
 
   it('deduplicates project switcher options by project id', () => {
     projectState.projects = [
-      { id: 'Project Aurora', name: 'Project Aurora' },
-      { id: 'Project Aurora', name: 'Project Aurora' },
+      { id: 'Project Aurora', name: 'Project Aurora', tenant_id: 'tenant-1' },
+      { id: 'Project Aurora', name: 'Project Aurora', tenant_id: 'tenant-1' },
     ];
-    projectState.currentProject = { id: 'Project Aurora', name: 'Project Aurora' };
+    projectState.currentProject = {
+      id: 'Project Aurora',
+      name: 'Project Aurora',
+      tenant_id: 'tenant-1',
+    };
 
     render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
       route: '/tenant/tenant-1/agent-workspace',
@@ -320,7 +325,63 @@ describe('TenantChatSidebar', () => {
     expect(projectState.setCurrentProject).toHaveBeenCalledWith({
       id: 'project-2',
       name: 'Project Two',
+      tenant_id: 'tenant-1',
     });
+  });
+
+  it('persists project selection under the active tenant scope', async () => {
+    localStorage.setItem('agent:lastProjectId', 'legacy-project');
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    const projectSwitcher = await screen.findByRole('combobox', { name: 'Project switcher' });
+    await waitFor(() => {
+      expect(projectSwitcher).toHaveValue('project-1');
+    });
+
+    fireEvent.change(projectSwitcher, { target: { value: 'project-2' } });
+
+    expect(localStorage.getItem('agent:tenant-1:lastProjectId')).toBe('project-2');
+    expect(localStorage.getItem('agent:lastProjectId')).toBeNull();
+  });
+
+  it('resets selected project when the tenant scope changes', async () => {
+    projectState.projects = [
+      { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' },
+      { id: 'project-2', name: 'Project Two', tenant_id: 'tenant-2' },
+    ];
+    projectState.currentProject = { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' };
+
+    const { rerender } = rtlRender(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/agent-workspace']}>
+        <TenantChatSidebar tenantId="tenant-1" mobile />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(agentState.loadConversations).toHaveBeenCalledWith('project-1');
+    });
+    agentState.loadConversations.mockClear();
+
+    rerender(
+      <MemoryRouter initialEntries={['/tenant/tenant-2/agent-workspace']}>
+        <TenantChatSidebar tenantId="tenant-2" mobile />
+      </MemoryRouter>
+    );
+
+    const projectSwitcher = await screen.findByRole('combobox', { name: 'Project switcher' });
+    await waitFor(() => {
+      expect(projectSwitcher).toHaveValue('project-2');
+      expect(agentState.loadConversations).toHaveBeenCalledWith('project-2');
+    });
+    expect(projectState.setCurrentProject).toHaveBeenLastCalledWith({
+      id: 'project-2',
+      name: 'Project Two',
+      tenant_id: 'tenant-2',
+    });
+    expect(localStorage.getItem('agent:tenant-2:lastProjectId')).toBe('project-2');
   });
 
   it('does not carry workspace context when creating a new conversation', async () => {
