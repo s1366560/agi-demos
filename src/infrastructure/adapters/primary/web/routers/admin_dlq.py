@@ -8,13 +8,13 @@ Provides administrative endpoints for managing the Dead Letter Queue:
 """
 
 import logging
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
-from src.domain.model.auth.user import User
 from src.domain.ports.services.dead_letter_queue_port import (
     DeadLetterMessage,
     DeadLetterQueuePort,
@@ -24,6 +24,7 @@ from src.domain.ports.services.dead_letter_queue_port import (
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
@@ -145,6 +146,8 @@ class CleanupResponse(BaseModel):
 # Dependencies
 # =============================================================================
 
+_ADMIN_ROLE_NAMES = frozenset({"admin", "system_admin", "super_admin"})
+
 
 async def get_dlq(request: Request) -> DeadLetterQueuePort:
     """Get the DLQ port from DI container."""
@@ -164,9 +167,25 @@ async def get_dlq(request: Request) -> DeadLetterQueuePort:
         ) from None
 
 
+def _user_has_admin_access(current_user: User) -> bool:
+    """Return whether the authenticated user has global admin-level access."""
+    if bool(getattr(current_user, "is_superuser", False)):
+        return True
+
+    legacy_role = getattr(current_user, "role", None)
+    if isinstance(legacy_role, str) and legacy_role in _ADMIN_ROLE_NAMES:
+        return True
+
+    user_roles = cast(Iterable[Any], getattr(current_user, "roles", []) or [])
+    return any(
+        getattr(getattr(user_role, "role", None), "name", None) in _ADMIN_ROLE_NAMES
+        for user_role in user_roles
+    )
+
+
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """Require admin role for endpoint access."""
-    if current_user.role != "admin":  # type: ignore[attr-defined]
+    if not _user_has_admin_access(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Admin access required"),
