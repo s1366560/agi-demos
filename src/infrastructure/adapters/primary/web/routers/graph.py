@@ -798,7 +798,12 @@ async def get_subgraph(
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
         project_id = params.project_id
-        is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+        is_superuser, allowed_project_ids = await _graph_project_scope(
+            project_id,
+            current_user,
+            db,
+            tenant_id=params.tenant_id,
+        )
         if not is_superuser and not allowed_project_ids:
             return _empty_graph_elements()
 
@@ -807,7 +812,12 @@ async def get_subgraph(
         WHERE n.uuid IN $node_uuids
         AND (
             ($project_id IS NOT NULL AND n.project_id = $project_id) OR
-            ($project_id IS NULL AND ($is_superuser OR n.project_id IN $project_ids))
+            (
+                $project_id IS NULL
+                AND $is_superuser
+                AND ($tenant_id IS NULL OR n.tenant_id = $tenant_id)
+            ) OR
+            ($project_id IS NULL AND NOT $is_superuser AND n.project_id IN $project_ids)
         )
 
         WITH n
@@ -819,7 +829,12 @@ async def get_subgraph(
             WHERE ('Entity' IN labels(m) OR 'Episodic' IN labels(m) OR 'Community' IN labels(m))
             AND (
                 ($project_id IS NOT NULL AND m.project_id = $project_id) OR
-                ($project_id IS NULL AND ($is_superuser OR m.project_id IN $project_ids))
+                (
+                    $project_id IS NULL
+                    AND $is_superuser
+                    AND ($tenant_id IS NULL OR m.tenant_id = $tenant_id)
+                ) OR
+                ($project_id IS NULL AND NOT $is_superuser AND m.project_id IN $project_ids)
             )
             RETURN
                 elementId(n) as source_id, labels(n) as source_labels, properties(n) as source_props,
@@ -841,6 +856,7 @@ async def get_subgraph(
             node_uuids=params.node_uuids,
             project_id=project_id,
             project_ids=allowed_project_ids,
+            tenant_id=params.tenant_id,
             is_superuser=is_superuser,
             limit=params.limit,
         )

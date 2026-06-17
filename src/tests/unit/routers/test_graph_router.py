@@ -19,11 +19,48 @@ from src.infrastructure.adapters.primary.web.routers.graph import (
     list_entities,
     rebuild_communities,
 )
-from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Project,
+    Tenant,
+    User,
+    UserProject,
+)
 
 
 def _neo4j_result(records: list[dict]) -> Mock:
     return Mock(records=records)
+
+
+async def _add_other_tenant_project(
+    test_db: AsyncSession,
+    test_user: User,
+    suffix: str,
+) -> Project:
+    other_tenant = Tenant(
+        id=f"graph-other-tenant-{suffix}",
+        name=f"Graph Other Tenant {suffix}",
+        slug=f"graph-other-tenant-{suffix}",
+        owner_id=test_user.id,
+    )
+    other_project = Project(
+        id=f"graph-other-tenant-project-{suffix}",
+        tenant_id=other_tenant.id,
+        name=f"Graph Other Tenant Project {suffix}",
+        description="Other tenant project",
+        owner_id=test_user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    membership = UserProject(
+        id=f"graph-other-tenant-membership-{suffix}",
+        user_id=test_user.id,
+        project_id=other_project.id,
+        role="owner",
+        permissions={},
+    )
+    test_db.add_all([other_tenant, other_project, membership])
+    await test_db.commit()
+    return other_project
 
 
 @pytest.mark.unit
@@ -166,6 +203,91 @@ class TestGraphRouter:
         assert response == {"elements": {"nodes": [], "edges": []}}
         query_kwargs = neo4j_client.execute_query.await_args.kwargs
         assert query_kwargs["project_ids"] == [test_project_db.id]
+
+    @pytest.mark.asyncio
+    async def test_get_subgraph_with_tenant_filters_allowed_project_ids(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        other_project = await _add_other_tenant_project(test_db, test_user, "subgraph")
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+
+        response = await get_subgraph(
+            SubgraphRequest(
+                node_uuids=["entity-1"],
+                tenant_id=test_project_db.tenant_id,
+                include_neighbors=False,
+            ),
+            current_user=test_user,
+            db=test_db,
+            neo4j_client=neo4j_client,
+        )
+
+        assert response == {"elements": {"nodes": [], "edges": []}}
+        query = neo4j_client.execute_query.await_args.args[0]
+        query_kwargs = neo4j_client.execute_query.await_args.kwargs
+        assert "$tenant_id IS NULL OR n.tenant_id = $tenant_id" in query
+        assert query_kwargs["project_ids"] == [test_project_db.id]
+        assert other_project.id not in query_kwargs["project_ids"]
+        assert query_kwargs["tenant_id"] == test_project_db.tenant_id
+
+    @pytest.mark.asyncio
+    async def test_get_subgraph_superuser_tenant_filter_applies_to_neighbors(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        test_user.is_superuser = True
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+
+        response = await get_subgraph(
+            SubgraphRequest(
+                node_uuids=["entity-1"],
+                tenant_id=test_project_db.tenant_id,
+                include_neighbors=True,
+            ),
+            current_user=test_user,
+            db=test_db,
+            neo4j_client=neo4j_client,
+        )
+
+        assert response == {"elements": {"nodes": [], "edges": []}}
+        query = neo4j_client.execute_query.await_args.args[0]
+        query_kwargs = neo4j_client.execute_query.await_args.kwargs
+        assert "n.tenant_id = $tenant_id" in query
+        assert "m.tenant_id = $tenant_id" in query
+        assert query_kwargs["tenant_id"] == test_project_db.tenant_id
+        assert query_kwargs["is_superuser"] is True
+
+    @pytest.mark.asyncio
+    async def test_get_subgraph_rejects_project_tenant_mismatch(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_subgraph(
+                SubgraphRequest(
+                    node_uuids=["entity-1"],
+                    tenant_id="not-the-project-tenant",
+                    project_id=test_project_db.id,
+                ),
+                current_user=test_user,
+                db=test_db,
+                neo4j_client=neo4j_client,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        neo4j_client.execute_query.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_get_entity_relationships_filters_related_entities_by_project(
