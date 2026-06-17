@@ -8,7 +8,12 @@ import { GeneDetail } from '@/pages/tenant/GeneDetail';
 import { GeneMarket } from '@/pages/tenant/GeneMarket';
 import { GenomeDetail } from '@/pages/tenant/GenomeDetail';
 
-import type { GeneResponse, GeneReview, GenomeResponse } from '@/services/geneMarketService';
+import type {
+  EvolutionEventResponse,
+  GeneResponse,
+  GeneReview,
+  GenomeResponse,
+} from '@/services/geneMarketService';
 
 const navigateMock = vi.hoisted(() => vi.fn());
 const paramsMock = vi.hoisted(() => ({
@@ -48,7 +53,7 @@ const stateMock = vi.hoisted(() => ({
   currentGenome: null as GenomeResponse | null,
   currentGenomeGenes: [] as GeneResponse[],
   currentGenomeGenesLoading: false,
-  evolutionEvents: [] as unknown[],
+  evolutionEvents: [] as EvolutionEventResponse[],
   geneTotal: 0,
   genes: [] as GeneResponse[],
   genomeTotal: 0,
@@ -133,6 +138,26 @@ const review = (overrides: Partial<GeneReview> = {}): GeneReview => ({
   id: 'review-1',
   rating: 5,
   user_id: 'user-1',
+  ...overrides,
+});
+
+const evolutionEvent = (
+  overrides: Partial<EvolutionEventResponse> = {}
+): EvolutionEventResponse => ({
+  created_at: '2026-06-17T00:00:00Z',
+  details: {},
+  event_type: 'learned',
+  from_version: null,
+  gene_id: 'gene-1',
+  gene_name: 'Code Review',
+  gene_slug: 'code-review',
+  genome_id: null,
+  id: 'event-1',
+  instance_id: 'instance-1',
+  payload: {},
+  status: 'completed',
+  to_version: null,
+  trigger: null,
   ...overrides,
 });
 
@@ -542,6 +567,23 @@ describe('Gene marketplace rating flow', () => {
     expect(actionsMock.listGeneEvolutionEvents).not.toHaveBeenCalled();
     expect(actionsMock.reset).not.toHaveBeenCalled();
     expect(actionsMock.clearError).not.toHaveBeenCalled();
+  });
+
+  it('renders gene evolution events with backend event labels', async () => {
+    stateMock.currentGene = gene();
+    stateMock.evolutionEvents = [
+      evolutionEvent({ event_type: 'learned', gene_name: 'Learned review gene' }),
+    ];
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Learned')).toBeInTheDocument();
+    expect(screen.getByText('Learned review gene')).toBeInTheDocument();
+    expect(screen.queryByText(/^learned$/)).not.toBeInTheDocument();
   });
 
   it('publishes draft genes from the detail action bar', async () => {

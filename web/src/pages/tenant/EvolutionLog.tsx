@@ -151,7 +151,7 @@ export const EvolutionLog: React.FC = () => {
             <Timeline
               items={evolutionEvents.map((evt) => ({
                 color: getEventColor(evt.event_type),
-                children: (
+                content: (
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
                       <Tag color={getEventColor(evt.event_type)}>

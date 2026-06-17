@@ -3419,9 +3419,15 @@
       "title": "演化日志",
       "filterByType": "按类型筛选",
       "types": {
+        "learned": "已学习",
+        "forgot": "已遗忘",
         "installed": "已安装",
         "uninstalled": "已卸载",
         "upgraded": "已升级",
+        "created_variant": "已创建变体",
+        "installed_genome": "已安装基因组",
+        "uninstalled_genome": "已卸载基因组",
+        "simplified": "已简化",
         "downgraded": "已降级",
         "configChanged": "配置变更",
         "error": "错误"

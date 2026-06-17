@@ -47,7 +47,23 @@ import {
 } from '../../stores/geneMarket';
 import { useCurrentTenant } from '../../stores/tenant';
 
+import type { EvolutionEventType } from '../../services/geneMarketService';
+
 const { Title, Text, Paragraph } = Typography;
+
+const EVENT_TYPE_COLORS: Record<EvolutionEventType, string> = {
+  learned: 'green',
+  forgot: 'red',
+  upgraded: 'blue',
+  created_variant: 'purple',
+  installed_genome: 'cyan',
+  uninstalled_genome: 'orange',
+  simplified: 'geekblue',
+};
+
+const isEvolutionEventType = (type: string): type is EvolutionEventType => {
+  return Object.prototype.hasOwnProperty.call(EVENT_TYPE_COLORS, type);
+};
 
 interface InstallFormValues {
   instance_id: string;
@@ -271,20 +287,11 @@ export const GeneDetail: FC = () => {
   };
 
   const getEventColor = (type: string) => {
-    switch (type) {
-      case 'installed':
-        return 'green';
-      case 'uninstalled':
-        return 'red';
-      case 'upgraded':
-        return 'blue';
-      case 'configured':
-        return 'orange';
-      case 'rollback':
-        return 'purple';
-      default:
-        return 'gray';
-    }
+    return isEvolutionEventType(type) ? EVENT_TYPE_COLORS[type] : 'default';
+  };
+
+  const getEventTypeLabel = (type: string) => {
+    return t(`tenant.evolution.types.${type}`, type);
   };
 
   if (isLoading && !currentGene) {
@@ -466,15 +473,19 @@ export const GeneDetail: FC = () => {
           <Timeline
             items={evolutionEvents.map((event) => ({
               color: getEventColor(event.event_type),
-              children: (
+              content: (
                 <div className="flex flex-col gap-1 mb-4">
                   <div className="flex items-center gap-2">
-                    <Tag color={getEventColor(event.event_type)}>{event.event_type}</Tag>
+                    <Tag color={getEventColor(event.event_type)}>
+                      {getEventTypeLabel(event.event_type)}
+                    </Tag>
                     <Text type="secondary" className="text-xs">
                       {new Date(event.created_at).toLocaleString()}
                     </Text>
                   </div>
-                  <Text strong>{event.event_type}</Text>
+                  {(event.gene_name || event.gene_slug) && (
+                    <Text strong>{event.gene_name || event.gene_slug}</Text>
+                  )}
                   {(event.from_version || event.to_version) && (
                     <div className="text-xs font-mono bg-slate-50 dark:bg-slate-900 p-2 rounded mt-2 border border-slate-200 dark:border-slate-800">
                       <div className="text-slate-500">

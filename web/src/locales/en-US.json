@@ -3255,9 +3255,15 @@
       "title": "Evolution Log",
       "filterByType": "Filter by type",
       "types": {
+        "learned": "Learned",
+        "forgot": "Forgotten",
         "installed": "Installed",
         "uninstalled": "Uninstalled",
         "upgraded": "Upgraded",
+        "created_variant": "Variant created",
+        "installed_genome": "Genome installed",
+        "uninstalled_genome": "Genome uninstalled",
+        "simplified": "Simplified",
         "downgraded": "Downgraded",
         "configChanged": "Config Changed",
         "error": "Error"
