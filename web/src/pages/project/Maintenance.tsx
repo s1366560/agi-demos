@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -28,6 +28,38 @@ export const Maintenance: React.FC = () => {
   const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<'info' | 'error'>('info');
+  const activeProjectIdRef = useRef<string | undefined>(projectId);
+  activeProjectIdRef.current = projectId;
+
+  const isActiveProject = useCallback(
+    (requestProjectId: string) => activeProjectIdRef.current === requestProjectId,
+    []
+  );
+
+  const refreshMaintenanceStatus = useCallback(
+    async (requestProjectId: string) => {
+      try {
+        const nextStatus = await graphService.getMaintenanceStatus(requestProjectId);
+        if (isActiveProject(requestProjectId)) {
+          setMaintenanceStatus(nextStatus);
+        }
+      } catch (error) {
+        if (isActiveProject(requestProjectId)) {
+          console.error(error);
+        }
+      }
+    },
+    [isActiveProject]
+  );
+
+  useEffect(() => {
+    setRefreshLoading(false);
+    setDedupProcessing(false);
+    setCleanProcessing(false);
+    setRebuildLoading(false);
+    setEmbeddingLoading(false);
+    setMessage(null);
+  }, [projectId]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -41,6 +73,9 @@ export const Maintenance: React.FC = () => {
     };
 
     setInitialLoadError(null);
+    setStats(null);
+    setEmbeddingStatus(null);
+    setMaintenanceStatus(null);
     void graphService
       .getGraphStats(tenantId, projectId)
       .then((nextStats) => {
@@ -66,10 +101,13 @@ export const Maintenance: React.FC = () => {
   }, [tenantId, projectId, t]);
 
   const handleRefresh = async () => {
-    if (!projectId) return;
+    const requestProjectId = projectId;
+    if (!requestProjectId) return;
     setRefreshLoading(true);
     try {
-      const res = await graphService.incrementalRefresh({ project_id: projectId });
+      const res = await graphService.incrementalRefresh({ project_id: requestProjectId });
+      if (!isActiveProject(requestProjectId)) return;
+
       // Handle both numeric and string responses for episodes_to_process
       const episodesValue: unknown = res.episodes_to_process;
       const count = typeof episodesValue === 'number' ? episodesValue : 0;
@@ -81,22 +119,32 @@ export const Maintenance: React.FC = () => {
       }
       setMessageType('info');
     } catch (e) {
+      if (!isActiveProject(requestProjectId)) return;
       console.error(e);
       setMessage(t('project.maintenance.messages.refresh_failed'));
       setMessageType('error');
     } finally {
-      setRefreshLoading(false);
+      if (isActiveProject(requestProjectId)) {
+        setRefreshLoading(false);
+      }
     }
   };
 
   const handleDedupCheck = async () => {
-    if (!projectId) return;
+    const requestProjectId = projectId;
+    if (!requestProjectId) return;
     try {
-      const res = await graphService.deduplicateEntities({ dry_run: true, project_id: projectId });
+      const res = await graphService.deduplicateEntities({
+        dry_run: true,
+        project_id: requestProjectId,
+      });
+      if (!isActiveProject(requestProjectId)) return;
+
       const count = res.duplicates_found ?? 0;
       setMessage(t('project.maintenance.messages.duplicates_found', { count }));
       setMessageType('info');
     } catch (e) {
+      if (!isActiveProject(requestProjectId)) return;
       console.error(e);
       setMessage(t('project.maintenance.messages.dedup_failed'));
       setMessageType('error');
@@ -104,10 +152,16 @@ export const Maintenance: React.FC = () => {
   };
 
   const handleDedupMerge = async () => {
-    if (!projectId) return;
+    const requestProjectId = projectId;
+    if (!requestProjectId) return;
     setDedupProcessing(true);
     try {
-      const res = await graphService.deduplicateEntities({ dry_run: false, project_id: projectId });
+      const res = await graphService.deduplicateEntities({
+        dry_run: false,
+        project_id: requestProjectId,
+      });
+      if (!isActiveProject(requestProjectId)) return;
+
       if (res.task_id) {
         setMessage(t('project.maintenance.messages.dedup_started', { taskId: res.task_id }));
       } else if (res.message) {
@@ -116,27 +170,34 @@ export const Maintenance: React.FC = () => {
         setMessage(t('project.maintenance.messages.merge_complete'));
       }
       setMessageType('info');
-      void graphService
-        .getMaintenanceStatus(projectId)
-        .then(setMaintenanceStatus)
-        .catch(console.error);
+      void refreshMaintenanceStatus(requestProjectId);
     } catch (e) {
+      if (!isActiveProject(requestProjectId)) return;
       console.error(e);
       setMessage(t('project.maintenance.messages.dedup_merge_failed'));
       setMessageType('error');
     } finally {
-      setDedupProcessing(false);
+      if (isActiveProject(requestProjectId)) {
+        setDedupProcessing(false);
+      }
     }
   };
 
   const handleCleanCheck = async () => {
-    if (!projectId) return;
+    const requestProjectId = projectId;
+    if (!requestProjectId) return;
     try {
-      const res = await graphService.invalidateStaleEdges({ dry_run: true, project_id: projectId });
+      const res = await graphService.invalidateStaleEdges({
+        dry_run: true,
+        project_id: requestProjectId,
+      });
+      if (!isActiveProject(requestProjectId)) return;
+
       const count = res.stale_edges_found ?? 0;
       setMessage(t('project.maintenance.messages.stale_edges_found', { count }));
       setMessageType('info');
     } catch (e) {
+      if (!isActiveProject(requestProjectId)) return;
       console.error(e);
       setMessage(t('project.maintenance.messages.clean_failed'));
       setMessageType('error');
@@ -144,34 +205,40 @@ export const Maintenance: React.FC = () => {
   };
 
   const handleClean = async () => {
-    if (!projectId) return;
+    const requestProjectId = projectId;
+    if (!requestProjectId) return;
     setCleanProcessing(true);
     try {
       const res = await graphService.invalidateStaleEdges({
         dry_run: false,
-        project_id: projectId,
+        project_id: requestProjectId,
       });
+      if (!isActiveProject(requestProjectId)) return;
+
       const count = res.deleted ?? 0;
       setMessage(t('project.maintenance.messages.stale_edges_deleted', { count }));
       setMessageType('info');
-      void graphService
-        .getMaintenanceStatus(projectId)
-        .then(setMaintenanceStatus)
-        .catch(console.error);
+      void refreshMaintenanceStatus(requestProjectId);
     } catch (e) {
+      if (!isActiveProject(requestProjectId)) return;
       console.error(e);
       setMessage(t('project.maintenance.messages.clean_failed'));
       setMessageType('error');
     } finally {
-      setCleanProcessing(false);
+      if (isActiveProject(requestProjectId)) {
+        setCleanProcessing(false);
+      }
     }
   };
 
   const handleRebuild = async () => {
-    if (!projectId) return;
+    const requestProjectId = projectId;
+    if (!requestProjectId) return;
     setRebuildLoading(true);
     try {
-      const res = await graphService.rebuildCommunities(true, projectId);
+      const res = await graphService.rebuildCommunities(true, requestProjectId);
+      if (!isActiveProject(requestProjectId)) return;
+
       if (res.task_id) {
         setMessage(t('project.maintenance.messages.rebuild_started', { taskId: res.task_id }));
       } else {
@@ -184,18 +251,27 @@ export const Maintenance: React.FC = () => {
       }
       setMessageType('info');
     } catch (e) {
+      if (!isActiveProject(requestProjectId)) return;
       console.error(e);
       setMessage(t('project.maintenance.messages.rebuild_failed'));
       setMessageType('error');
     } finally {
-      setRebuildLoading(false);
+      if (isActiveProject(requestProjectId)) {
+        setRebuildLoading(false);
+      }
     }
   };
 
   const handleExport = async () => {
-    if (!projectId) return;
+    const requestProjectId = projectId;
+    if (!requestProjectId) return;
     try {
-      const data = await graphService.exportData({ tenant_id: tenantId, project_id: projectId });
+      const data = await graphService.exportData({
+        tenant_id: tenantId,
+        project_id: requestProjectId,
+      });
+      if (!isActiveProject(requestProjectId)) return;
+
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -208,6 +284,7 @@ export const Maintenance: React.FC = () => {
       setMessage(t('project.maintenance.messages.export_success'));
       setMessageType('info');
     } catch (e) {
+      if (!isActiveProject(requestProjectId)) return;
       console.error(e);
       setMessage(t('project.maintenance.messages.export_failed'));
       setMessageType('error');
@@ -215,21 +292,29 @@ export const Maintenance: React.FC = () => {
   };
 
   const handleRebuildEmbeddings = async () => {
-    if (!projectId) return;
+    const requestProjectId = projectId;
+    if (!requestProjectId) return;
     setEmbeddingLoading(true);
     try {
-      const res = await graphService.rebuildEmbeddings(projectId);
+      const res = await graphService.rebuildEmbeddings(requestProjectId);
+      if (!isActiveProject(requestProjectId)) return;
+
       setMessage(t('project.maintenance.messages.embedding_rebuilt', { count: res.result.nodes }));
       setMessageType('info');
       // Refresh embedding status after rebuild
-      const newStatus = await graphService.getEmbeddingStatus(projectId);
-      setEmbeddingStatus(newStatus);
+      const newStatus = await graphService.getEmbeddingStatus(requestProjectId);
+      if (isActiveProject(requestProjectId)) {
+        setEmbeddingStatus(newStatus);
+      }
     } catch (e) {
+      if (!isActiveProject(requestProjectId)) return;
       console.error(e);
       setMessage(t('project.maintenance.messages.embedding_failed'));
       setMessageType('error');
     } finally {
-      setEmbeddingLoading(false);
+      if (isActiveProject(requestProjectId)) {
+        setEmbeddingLoading(false);
+      }
     }
   };
 

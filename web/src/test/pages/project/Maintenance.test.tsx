@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Maintenance } from '../../../pages/project/Maintenance';
@@ -44,6 +44,16 @@ vi.mock('react-router-dom', async () => {
 
 // Mock fetch for direct API calls in Maintenance component
 globalThis.fetch = vi.fn();
+
+function deferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => {};
+  let reject: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, reject, resolve };
+}
 
 describe('Maintenance', () => {
   beforeEach(() => {
@@ -133,6 +143,65 @@ describe('Maintenance', () => {
       });
       expect(screen.getByText('Deduplication started (Task ID: dedup-task-1)')).toBeInTheDocument();
     });
+  });
+
+  it('ignores stale maintenance status refreshes after project changes', async () => {
+    const staleStatus = deferred<{
+      recommendations: Array<{ type: string; priority: string; message: string }>;
+    }>();
+    (graphService.getMaintenanceStatus as any)
+      .mockResolvedValueOnce({ recommendations: [] })
+      .mockReturnValueOnce(staleStatus.promise)
+      .mockResolvedValueOnce({
+        recommendations: [
+          {
+            type: 'project_two',
+            priority: 'high',
+            message: 'Project two recommendation',
+          },
+        ],
+      });
+    (graphService.deduplicateEntities as any).mockResolvedValueOnce({
+      dry_run: false,
+      task_id: 'dedup-task-1',
+    });
+
+    const view = render(<Maintenance />);
+
+    await waitFor(() => {
+      expect(graphService.getMaintenanceStatus).toHaveBeenCalledWith('p1');
+    });
+
+    fireEvent.click(screen.getByText('Merge Duplicates'));
+
+    await waitFor(() => {
+      expect(graphService.deduplicateEntities).toHaveBeenCalledWith({
+        dry_run: false,
+        project_id: 'p1',
+      });
+      expect(graphService.getMaintenanceStatus).toHaveBeenCalledTimes(2);
+    });
+
+    (useParams as any).mockReturnValue({ projectId: 'p2' });
+    view.rerender(<Maintenance />);
+
+    expect(await screen.findByText('Project two recommendation')).toBeInTheDocument();
+
+    await act(async () => {
+      staleStatus.resolve({
+        recommendations: [
+          {
+            type: 'stale_project_one',
+            priority: 'high',
+            message: 'Stale project one recommendation',
+          },
+        ],
+      });
+      await staleStatus.promise;
+    });
+
+    expect(screen.getByText('Project two recommendation')).toBeInTheDocument();
+    expect(screen.queryByText('Stale project one recommendation')).not.toBeInTheDocument();
   });
 
   it('checks stale edges through the maintenance API', async () => {
