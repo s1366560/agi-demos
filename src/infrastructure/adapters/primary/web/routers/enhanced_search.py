@@ -147,8 +147,14 @@ async def _graph_project_filter(
     project_id: str | None,
     current_user: User,
     db: AsyncSession,
+    tenant_id: str | None = None,
 ) -> tuple[list[str], dict[str, Any], bool]:
-    is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+    is_superuser, allowed_project_ids = await _graph_project_scope(
+        project_id,
+        current_user,
+        db,
+        tenant_id=tenant_id,
+    )
     if not is_superuser and not allowed_project_ids:
         return [], {}, True
 
@@ -312,11 +318,21 @@ async def search_by_graph_traversal(
         start_project_id = start_result.records[0]["props"].get("project_id")
         effective_project_id = project_id or start_project_id
         if project_id:
-            await _ensure_graph_project_access(project_id, current_user, db)
+            _scope_result = await _graph_project_scope(
+                project_id,
+                current_user,
+                db,
+                tenant_id=tenant_id,
+            )
             if start_project_id != project_id:
                 return {"results": [], "total": 0, "search_type": "graph_traversal"}
         else:
-            await _ensure_graph_project_access(effective_project_id, current_user, db)
+            _scope_result = await _graph_project_scope(
+                effective_project_id,
+                current_user,
+                db,
+                tenant_id=tenant_id,
+            )
 
         query = f"""
         MATCH path = (start:Entity {{uuid: $uuid}})-[*1..{max_depth}]-(related)
@@ -506,7 +522,7 @@ async def search_temporal(
 
         # Build temporal filter
         conditions, scope_params, scope_empty = await _graph_project_filter(
-            "e", project_id, current_user, db
+            "e", project_id, current_user, db, tenant_id=tenant_id
         )
         if scope_empty:
             return _empty_temporal_response(since, until)
@@ -594,7 +610,7 @@ async def search_with_facets(
 
         # Build filters
         conditions, scope_params, scope_empty = await _graph_project_filter(
-            "e", project_id, current_user, db
+            "e", project_id, current_user, db, tenant_id=tenant_id
         )
         if scope_empty:
             return _empty_faceted_response(limit, offset)
