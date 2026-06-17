@@ -1,11 +1,11 @@
-import { Route, Routes } from 'react-router-dom';
+import { Link, Route, Routes } from 'react-router-dom';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WebhookCreatedSecretModal, Webhooks } from '../../../pages/tenant/Webhooks';
 import { eventService } from '../../../services/eventService';
 import { webhookService, type Webhook } from '../../../services/webhookService';
-import { fireEvent, render, screen, waitFor } from '../../utils';
+import { act, fireEvent, render, screen, waitFor } from '../../utils';
 
 vi.mock('../../../services/eventService', () => ({
   eventService: {
@@ -28,6 +28,14 @@ vi.mock('../../../stores/tenant', () => ({
     name: 'Store Tenant',
   }),
 }));
+
+const createDeferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+};
 
 describe('Webhooks', () => {
   const webhook: Webhook = {
@@ -135,5 +143,68 @@ describe('Webhooks', () => {
       await screen.findByText('Signing secrets are shown only once when a webhook is created.')
     ).toBeInTheDocument();
     expect(screen.queryByDisplayValue('whsec_should_not_render')).not.toBeInTheDocument();
+  });
+
+  it('ignores stale webhook loads after tenant route changes', async () => {
+    const oldTenantLoad = createDeferred<Webhook[]>();
+    const newTenantLoad = createDeferred<Webhook[]>();
+    vi.mocked(webhookService.listWebhooks).mockImplementation((tenantId) => {
+      if (tenantId === 'tenant-old') return oldTenantLoad.promise;
+      if (tenantId === 'tenant-new') return newTenantLoad.promise;
+      return Promise.resolve([]);
+    });
+
+    render(
+      <Routes>
+        <Route
+          path="/tenant/:tenantId/webhooks"
+          element={
+            <>
+              <Link to="/tenant/tenant-new/webhooks">Switch tenant</Link>
+              <Webhooks />
+            </>
+          }
+        />
+      </Routes>,
+      { route: '/tenant/tenant-old/webhooks' }
+    );
+
+    await waitFor(() => {
+      expect(webhookService.listWebhooks).toHaveBeenCalledWith('tenant-old');
+    });
+
+    fireEvent.click(screen.getByRole('link', { name: 'Switch tenant' }));
+
+    await waitFor(() => {
+      expect(webhookService.listWebhooks).toHaveBeenCalledWith('tenant-new');
+    });
+
+    await act(async () => {
+      newTenantLoad.resolve([
+        {
+          ...webhook,
+          id: 'webhook-new',
+          tenant_id: 'tenant-new',
+          name: 'New tenant hook',
+        },
+      ]);
+    });
+    expect(await screen.findByText('New tenant hook')).toBeInTheDocument();
+
+    await act(async () => {
+      oldTenantLoad.resolve([
+        {
+          ...webhook,
+          id: 'webhook-old',
+          tenant_id: 'tenant-old',
+          name: 'Old tenant hook',
+        },
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Old tenant hook')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('New tenant hook')).toBeInTheDocument();
   });
 });

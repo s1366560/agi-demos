@@ -100,22 +100,44 @@ export const Webhooks: React.FC = () => {
   const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null);
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
   const [form] = Form.useForm<WebhookFormValues>();
+  const selectedTenantIdRef = React.useRef(selectedTenantId);
+  const webhooksRequestIdRef = React.useRef(0);
+  const eventTypesRequestIdRef = React.useRef(0);
+
+  useEffect(() => {
+    selectedTenantIdRef.current = selectedTenantId;
+  }, [selectedTenantId]);
 
   const fetchWebhooks = React.useCallback(async () => {
-    if (!selectedTenantId) return;
+    if (!selectedTenantId) {
+      setLoading(false);
+      setLoadError(null);
+      setWebhooks([]);
+      return;
+    }
+    const requestId = webhooksRequestIdRef.current + 1;
+    webhooksRequestIdRef.current = requestId;
+    const requestTenantId = selectedTenantId;
+    const isCurrentRequest = () =>
+      webhooksRequestIdRef.current === requestId && selectedTenantIdRef.current === requestTenantId;
+
     setLoading(true);
     setLoadError(null);
     try {
-      const data = await webhookService.listWebhooks(selectedTenantId);
+      const data = await webhookService.listWebhooks(requestTenantId);
+      if (!isCurrentRequest()) return;
       setWebhooks(data);
     } catch (err) {
+      if (!isCurrentRequest()) return;
       console.error(err);
       const errorMessage = t('webhooks.fetchError', 'Failed to fetch webhooks');
       setWebhooks([]);
       setLoadError(errorMessage);
       message.error(errorMessage);
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) {
+        setLoading(false);
+      }
     }
   }, [selectedTenantId, t]);
 
@@ -125,16 +147,27 @@ export const Webhooks: React.FC = () => {
 
   useEffect(() => {
     setCreatedSecret(null);
+    setEditingWebhook(null);
+    setIsModalVisible(false);
   }, [selectedTenantId]);
 
   useEffect(() => {
+    const requestId = eventTypesRequestIdRef.current + 1;
+    eventTypesRequestIdRef.current = requestId;
+    const requestTenantId = selectedTenantId;
+    const isCurrentRequest = () =>
+      eventTypesRequestIdRef.current === requestId &&
+      selectedTenantIdRef.current === requestTenantId;
+
     setEventTypesError(null);
     void eventService
-      .getEventTypes(selectedTenantId ? { tenant_id: selectedTenantId } : undefined)
+      .getEventTypes(requestTenantId ? { tenant_id: requestTenantId } : undefined)
       .then((types) => {
+        if (!isCurrentRequest()) return;
         setEventTypes(types);
       })
       .catch((err: unknown) => {
+        if (!isCurrentRequest()) return;
         console.error(err);
         setEventTypes([]);
         setEventTypesError(t('webhooks.eventTypesError', 'Failed to load webhook event types'));
@@ -170,13 +203,17 @@ export const Webhooks: React.FC = () => {
 
   const handleSave = async () => {
     if (!selectedTenantId) return;
+    const requestTenantId = selectedTenantId;
+    const isCurrentTenant = () => selectedTenantIdRef.current === requestTenantId;
     try {
       const values = await form.validateFields();
       if (editingWebhook) {
         await webhookService.updateWebhook(editingWebhook.id, values);
+        if (!isCurrentTenant()) return;
         message.success(t('webhooks.updateSuccess', 'Webhook updated'));
       } else {
-        const createdWebhook = await webhookService.createWebhook(selectedTenantId, values);
+        const createdWebhook = await webhookService.createWebhook(requestTenantId, values);
+        if (!isCurrentTenant()) return;
         setCreatedSecret(createdWebhook.secret ?? null);
         message.success(t('webhooks.createSuccess', 'Webhook created'));
       }
