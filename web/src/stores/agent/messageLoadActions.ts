@@ -71,6 +71,7 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
 
   return {
     loadMessages: async (conversationId: string, projectId: string): Promise<void> => {
+      const isStillActive = () => get().activeConversationId === conversationId;
       // Get last known time from localStorage for recovery
       const lastKnownTimeUs = parseInt(
         localStorage.getItem(`agent_time_us_${conversationId}`) || '0',
@@ -84,6 +85,10 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
 
       // Try to load from IndexedDB first
       const cachedState = await loadConversationState(conversationId);
+      if (!isStillActive()) {
+        logger.debug('Conversation changed during cached history load, ignoring result');
+        return;
+      }
 
       // Only replace timeline/messages if current state is empty
       const currentTimeline = useTimelineStore.getState().agentTimeline;
@@ -142,7 +147,9 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
               }),
             // Restore context status indicator on conversation switch / page refresh
             (async () => {
-              await useContextStore.getState().fetchContextStatus(conversationId, projectId);
+              await useContextStore
+                .getState()
+                .fetchContextStatus(conversationId, projectId, isStillActive);
             })().catch((_err: unknown) => {
               logger.warn(`[AgentV3] fetchContextStatus failed:`, _err);
               return null;
@@ -166,6 +173,11 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
               return null;
             }),
           ]);
+
+        if (!isStillActive()) {
+          logger.debug('Conversation changed during load, ignoring result');
+          return;
+        }
 
         // Update plan mode from API response
         if (planModeResult !== null) {
@@ -191,11 +203,6 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
           if (!currentOverride) {
             get().setLlmModelOverride(conversationId, persistedOverride);
           }
-        }
-
-        if (get().activeConversationId !== conversationId) {
-          logger.debug('Conversation changed during load, ignoring result');
-          return;
         }
 
         // DEBUG: Log full timeline analysis for diagnosing missing/disordered messages
@@ -359,6 +366,10 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
           if (!agentService.isConnected()) {
             logger.debug(`[AgentV3] Connecting WebSocket...`);
             await agentService.connect();
+            if (!isStillActive()) {
+              logger.debug('Conversation changed during WebSocket connect, skipping subscribe');
+              return;
+            }
           }
 
           // Bind timeline buffer deps for this conversation

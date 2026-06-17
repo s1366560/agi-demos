@@ -67,7 +67,11 @@ interface ContextState {
   handleContextStatus: (data: Record<string, unknown>) => void;
   handleContextCompressed: (data: Record<string, unknown>) => void;
   handleCostUpdate: (data: Record<string, unknown>) => void;
-  fetchContextStatus: (conversationId: string, projectId: string) => Promise<void>;
+  fetchContextStatus: (
+    conversationId: string,
+    projectId: string,
+    shouldApply?: () => boolean
+  ) => Promise<void>;
   setDetailExpanded: (expanded: boolean) => void;
   reset: () => void;
 }
@@ -192,8 +196,11 @@ export const useContextStore = create<ContextState>()(
         });
       },
 
-      fetchContextStatus: async (conversationId, projectId) => {
+      fetchContextStatus: async (conversationId, projectId, shouldApply) => {
         const data = await agentService.getContextStatus(conversationId, projectId);
+        if (shouldApply && !shouldApply()) {
+          return;
+        }
 
         const prev = get().status;
         set({

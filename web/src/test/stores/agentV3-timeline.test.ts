@@ -75,6 +75,14 @@ function getTimeline() {
   return useTimelineStore.getState().agentTimeline;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 describe('agentV3 Store - Timeline Field', () => {
   beforeEach(() => {
     useAgentV3Store.setState({
@@ -205,6 +213,65 @@ describe('agentV3 Store - Timeline Field', () => {
       });
 
       expect(getTimeline()).toEqual([]);
+    });
+
+    it('ignores cached history when active conversation changes before hydration finishes', async () => {
+      const { result } = renderHook(() => useAgentV3Store());
+      const staleTimeline: TimelineEvent[] = [
+        {
+          id: 'stale-1',
+          type: 'user_message',
+          eventTimeUs: Date.now() * 1000,
+          eventCounter: 1,
+          timestamp: Date.now(),
+          content: 'Stale cached message',
+          role: 'user',
+        } as TimelineEvent,
+      ];
+      const currentTimeline: TimelineEvent[] = [
+        {
+          id: 'current-1',
+          type: 'user_message',
+          eventTimeUs: Date.now() * 1000 + 1,
+          eventCounter: 1,
+          timestamp: Date.now(),
+          content: 'Current conversation message',
+          role: 'user',
+        } as TimelineEvent,
+      ];
+      const cachedStateRequest = deferred<ReturnType<typeof createDefaultConversationState>>();
+      const conversationDb = await import('../../utils/conversationDB');
+      vi.mocked(conversationDb.loadConversationState).mockReturnValueOnce(
+        cachedStateRequest.promise as any
+      );
+      const agentServiceMock = vi.mocked(
+        (await import('../../services/agentService')).agentService
+      );
+
+      act(() => {
+        useAgentV3Store.setState({ activeConversationId: 'conv-a' });
+      });
+      const loadPromise = result.current.loadMessages('conv-a', 'proj-123');
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      act(() => {
+        useAgentV3Store.setState({ activeConversationId: 'conv-b' });
+        useTimelineStore.getState().setAgentTimeline(currentTimeline);
+      });
+
+      cachedStateRequest.resolve({
+        ...createDefaultConversationState(),
+        timeline: staleTimeline,
+      });
+      await act(async () => {
+        await loadPromise;
+      });
+
+      expect(getTimeline()).toEqual(currentTimeline);
+      expect(agentServiceMock.getConversationMessages).not.toHaveBeenCalled();
     });
 
     it('keeps a fresh blank conversation interactive while history hydrates', async () => {
