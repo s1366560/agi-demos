@@ -14,6 +14,14 @@ class EmptyAppService:
     async def list_apps(self, _project_id: str, *, include_disabled: bool = False) -> list[Any]:
         return []
 
+    async def get_app(self, _app_id: str) -> None:
+        return None
+
+
+class ExistingAppService:
+    async def get_app(self, _app_id: str) -> SimpleNamespace:
+        return SimpleNamespace(id="app-1", project_id="project-1", tenant_id="tenant-1")
+
 
 class FailingMCPManager:
     async def call_tool(self, **_kwargs: Any) -> Any:
@@ -69,6 +77,7 @@ async def test_proxy_resource_read_sanitizes_mcp_errors(
             ),
             db=SimpleNamespace(),
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
@@ -105,6 +114,7 @@ async def test_proxy_resource_read_sanitizes_missing_resource_after_retry(
             ),
             db=SimpleNamespace(),
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
@@ -129,6 +139,7 @@ async def test_proxy_resource_read_sanitizes_missing_server_name(
             ),
             db=SimpleNamespace(),
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
@@ -172,6 +183,7 @@ async def test_proxy_resource_list_sanitizes_mcp_errors(
             body=apps_router.MCPResourceListRequest(project_id="project-1"),
             db=SimpleNamespace(),
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
@@ -184,6 +196,7 @@ async def test_proxy_resource_list_sanitizes_mcp_errors(
 async def test_delete_mcp_app_sanitizes_missing_app(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(apps_router, "_get_mcp_app_service", lambda _request, _db: EmptyAppService())
     monkeypatch.setattr(apps_router, "_get_mcp_runtime_service", AsyncMock(return_value=FailingRuntime()))
     db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
 
@@ -193,6 +206,7 @@ async def test_delete_mcp_app_sanitizes_missing_app(
             app_id="app-secret",
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
@@ -206,6 +220,8 @@ async def test_delete_mcp_app_sanitizes_missing_app(
 async def test_refresh_mcp_app_resource_sanitizes_permission_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(apps_router, "_get_mcp_app_service", lambda _request, _db: ExistingAppService())
+    monkeypatch.setattr(apps_router, "ensure_project_access", _allow_project_access)
     monkeypatch.setattr(apps_router, "_get_mcp_runtime_service", AsyncMock(return_value=FailingRuntime()))
     db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
 
@@ -215,6 +231,7 @@ async def test_refresh_mcp_app_resource_sanitizes_permission_error(
             app_id="app-secret",
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN

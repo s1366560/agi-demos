@@ -6,6 +6,7 @@ MCP servers are project-scoped and run inside project sandbox containers.
 
 import logging
 import time
+from collections.abc import Collection
 from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -14,10 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.mcp_runtime_service import MCPRuntimeService
 from src.domain.model.mcp.server import MCPServer
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
+    get_current_user_tenant,
+)
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import MCPLifecycleEvent
+from src.infrastructure.adapters.secondary.persistence.models import MCPLifecycleEvent, User
 from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
     SqlMCPServerRepository,
 )
@@ -32,7 +36,7 @@ from .schemas import (
     MCPServerTestResult,
     MCPServerUpdate,
 )
-from .utils import ensure_project_access
+from .utils import MCP_PROJECT_WRITE_ROLES, ensure_project_access, list_accessible_project_ids
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +87,7 @@ async def create_mcp_server(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> Any:
     """
     Create a new MCP server configuration.
@@ -90,6 +95,13 @@ async def create_mcp_server(
     The server is bound to the project specified by project_id.
     Auto-discovers tools after creation so they are immediately available.
     """
+    await ensure_project_access(
+        db,
+        server_data.project_id,
+        tenant_id,
+        current_user.id,
+        MCP_PROJECT_WRITE_ROLES,
+    )
     try:
         runtime = await _get_runtime_service(request, db)
         server = await runtime.create_server(
@@ -107,7 +119,7 @@ async def create_mcp_server(
             invalidate_mcp_tools_cache,
         )
 
-        invalidate_mcp_tools_cache(tenant_id)
+        _cache_generation = invalidate_mcp_tools_cache(tenant_id)
         return MCPServerResponse.model_validate(server)
 
     except PermissionError as e:
@@ -128,6 +140,7 @@ async def list_mcp_servers(
     enabled_only: bool = Query(False, description="Only return enabled servers"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> list[Any]:
     """
     List MCP servers. If project_id is provided, returns servers for that project only.
@@ -136,16 +149,20 @@ async def list_mcp_servers(
     repository = SqlMCPServerRepository(db)
 
     if project_id:
-        await ensure_project_access(db, project_id, tenant_id)
+        await ensure_project_access(db, project_id, tenant_id, current_user.id)
         servers = await repository.list_by_project(
             project_id=project_id,
             enabled_only=enabled_only,
         )
     else:
+        accessible_project_ids = await list_accessible_project_ids(db, tenant_id, current_user.id)
+        if not accessible_project_ids:
+            return []
         servers = await repository.list_by_tenant(
             tenant_id=tenant_id,
             enabled_only=enabled_only,
         )
+        servers = [server for server in servers if server.project_id in accessible_project_ids]
 
     return [MCPServerResponse.model_validate(server) for server in servers]
 
@@ -155,19 +172,12 @@ async def get_mcp_server(
     server_id: str,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> Any:
     """
     Get a specific MCP server by ID.
     """
-    repository = SqlMCPServerRepository(db)
-
-    server = await repository.get_by_id(server_id)
-
-    if not server:
-        raise _mcp_server_not_found_error()
-
-    if server.tenant_id != tenant_id:
-        raise _mcp_access_denied_error()
+    server = await _get_mcp_server_for_tenant(db, server_id, tenant_id, current_user.id)
 
     return MCPServerResponse.model_validate(server)
 
@@ -179,12 +189,20 @@ async def update_mcp_server(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> Any:
     """
     Update an MCP server configuration.
 
     When enabled status changes, starts/stops the server in its project sandbox.
     """
+    _checked_server = await _get_mcp_server_for_tenant(
+        db,
+        server_id,
+        tenant_id,
+        current_user.id,
+        MCP_PROJECT_WRITE_ROLES,
+    )
     try:
         runtime = await _get_runtime_service(request, db)
         server = await runtime.update_server(
@@ -202,7 +220,7 @@ async def update_mcp_server(
             invalidate_mcp_tools_cache,
         )
 
-        invalidate_mcp_tools_cache(tenant_id)
+        _cache_generation = invalidate_mcp_tools_cache(tenant_id)
         return MCPServerResponse.model_validate(server)
 
     except ValueError as e:
@@ -226,20 +244,20 @@ async def delete_mcp_server(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> None:
     """
     Delete an MCP server.
 
     Stops the server in its project sandbox if enabled before deletion.
     """
-    repository = SqlMCPServerRepository(db)
-
-    server = await repository.get_by_id(server_id)
-    if not server:
-        raise _mcp_server_not_found_error()
-
-    if server.tenant_id != tenant_id:
-        raise _mcp_access_denied_error()
+    _checked_server = await _get_mcp_server_for_tenant(
+        db,
+        server_id,
+        tenant_id,
+        current_user.id,
+        MCP_PROJECT_WRITE_ROLES,
+    )
 
     try:
         runtime = await _get_runtime_service(request, db)
@@ -249,7 +267,7 @@ async def delete_mcp_server(
             invalidate_mcp_tools_cache,
         )
 
-        invalidate_mcp_tools_cache(tenant_id)
+        _cache_generation = invalidate_mcp_tools_cache(tenant_id)
         # NOTE: MCPToolFactory.remove_adapter() was removed -- it was a bug
         # (calling instance method on class). Cache invalidation above is sufficient.
         await db.commit()
@@ -275,12 +293,20 @@ async def sync_mcp_server_tools(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> Any:
     """
     Sync tools from an MCP server.
 
     Uses the server's stored project_id to determine sandbox context.
     """
+    _checked_server = await _get_mcp_server_for_tenant(
+        db,
+        server_id,
+        tenant_id,
+        current_user.id,
+        MCP_PROJECT_WRITE_ROLES,
+    )
     try:
         runtime = await _get_runtime_service(request, db)
         server = await runtime.sync_server(server_id, tenant_id)
@@ -290,7 +316,7 @@ async def sync_mcp_server_tools(
             invalidate_mcp_tools_cache,
         )
 
-        invalidate_mcp_tools_cache(tenant_id)
+        _cache_generation = invalidate_mcp_tools_cache(tenant_id)
         return MCPServerResponse.model_validate(server)
 
     except ValueError as e:
@@ -317,12 +343,20 @@ async def test_mcp_server_connection(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> MCPServerTestResult:
     """
     Test connection to an MCP server.
 
     Uses the server's stored project_id to determine sandbox context.
     """
+    _checked_server = await _get_mcp_server_for_tenant(
+        db,
+        server_id,
+        tenant_id,
+        current_user.id,
+        MCP_PROJECT_WRITE_ROLES,
+    )
     try:
         start_time = time.time()
         runtime = await _get_runtime_service(request, db)
@@ -369,8 +403,16 @@ async def reconcile_mcp_project(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> MCPReconcileResultResponse:
     """Reconcile enabled MCP servers with current sandbox runtime."""
+    await ensure_project_access(
+        db,
+        project_id,
+        tenant_id,
+        current_user.id,
+        MCP_PROJECT_WRITE_ROLES,
+    )
     try:
         runtime = await _get_runtime_service(request, db)
         result = await runtime.reconcile_project(project_id, tenant_id)
@@ -431,6 +473,7 @@ async def get_mcp_health_summary(
     project_id: str | None = Query(None, description="Filter by project ID"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> MCPHealthSummary:
     """Get aggregated health summary for all MCP servers."""
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
@@ -440,10 +483,21 @@ async def get_mcp_health_summary(
     repository = SqlMCPServerRepository(db)
 
     if project_id:
-        await ensure_project_access(db, project_id, tenant_id)
+        await ensure_project_access(db, project_id, tenant_id, current_user.id)
         servers = await repository.list_by_project(project_id)
     else:
+        accessible_project_ids = await list_accessible_project_ids(db, tenant_id, current_user.id)
+        if not accessible_project_ids:
+            return MCPHealthSummary(
+                total=0,
+                healthy=0,
+                degraded=0,
+                error=0,
+                disabled=0,
+                servers=[],
+            )
         servers = await repository.list_by_tenant(tenant_id)
+        servers = [server for server in servers if server.project_id in accessible_project_ids]
 
     statuses = [_compute_server_health(s) for s in servers]
 
@@ -462,18 +516,11 @@ async def get_mcp_server_health(
     server_id: str,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> MCPServerHealthStatus:
     """Get health status for a single MCP server (lightweight, no connection test)."""
-    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SqlMCPServerRepository,
-    )
 
-    repository = SqlMCPServerRepository(db)
-    server = await repository.get_by_id(server_id)
-    if not server:
-        raise _mcp_server_not_found_error()
-    if server.tenant_id != tenant_id:
-        raise _mcp_access_denied_error()
+    server = await _get_mcp_server_for_tenant(db, server_id, tenant_id, current_user.id)
 
     return _compute_server_health(server)
 
@@ -489,8 +536,15 @@ async def list_mcp_server_prompts(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, list[dict[str, Any]]]:
     """List prompts exposed by an MCP server."""
+    _checked_server = await _get_mcp_server_for_tenant(
+        db,
+        server_id,
+        tenant_id,
+        current_user.id,
+    )
     try:
         runtime = await _get_runtime_service(request, db)
         prompts = await runtime.list_server_prompts(server_id, tenant_id)
@@ -507,6 +561,7 @@ async def set_mcp_server_log_level(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Set the logging level for an MCP server."""
     body = await request.json()
@@ -517,6 +572,13 @@ async def set_mcp_server_log_level(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=_("Invalid MCP logging level"),
         )
+    _checked_server = await _get_mcp_server_for_tenant(
+        db,
+        server_id,
+        tenant_id,
+        current_user.id,
+        MCP_PROJECT_WRITE_ROLES,
+    )
 
     try:
         runtime = await _get_runtime_service(request, db)
@@ -541,9 +603,10 @@ async def list_mcp_server_logs(
     limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, list[dict[str, Any]]]:
     """List recent persisted lifecycle log messages for an MCP server."""
-    server = await _get_mcp_server_for_tenant(db, server_id, tenant_id)
+    server = await _get_mcp_server_for_tenant(db, server_id, tenant_id, current_user.id)
     result = await db.execute(
         refresh_select_statement(
             select(MCPLifecycleEvent)
@@ -563,6 +626,8 @@ async def _get_mcp_server_for_tenant(
     db: AsyncSession,
     server_id: str,
     tenant_id: str,
+    user_id: str | None = None,
+    required_roles: Collection[str] | None = None,
 ) -> MCPServer:
     repository = SqlMCPServerRepository(db)
     server = await repository.get_by_id(server_id)
@@ -570,6 +635,16 @@ async def _get_mcp_server_for_tenant(
         raise _mcp_server_not_found_error()
     if server.tenant_id != tenant_id:
         raise _mcp_access_denied_error()
+    if user_id is not None:
+        if not server.project_id:
+            raise _mcp_access_denied_error()
+        await ensure_project_access(
+            db,
+            server.project_id,
+            tenant_id,
+            user_id,
+            required_roles,
+        )
     return server
 
 

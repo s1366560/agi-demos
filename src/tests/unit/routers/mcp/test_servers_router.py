@@ -84,7 +84,7 @@ class _MCPServerRepository:
         pass
 
     async def get_by_id(self, _server_id: str) -> object:
-        return SimpleNamespace(id="srv-1", tenant_id="tenant-1")
+        return SimpleNamespace(id="srv-1", tenant_id="tenant-1", project_id="project-1")
 
 
 class _MissingMCPServerRepository:
@@ -100,12 +100,16 @@ class _ForeignMCPServerRepository:
         pass
 
     async def get_by_id(self, _server_id: str) -> object:
-        return SimpleNamespace(id="srv-1", tenant_id="other-tenant")
+        return SimpleNamespace(id="srv-1", tenant_id="other-tenant", project_id="project-1")
 
 
 class _JsonRequest:
     async def json(self) -> dict[str, str]:
         return {"level": "debug"}
+
+
+async def _allow_project_access(*_args: object, **_kwargs: object) -> None:
+    return None
 
 
 @pytest.fixture
@@ -120,6 +124,8 @@ def failing_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
         "_get_runtime_service",
         AsyncMock(return_value=_FailingMCPRuntime()),
     )
+    monkeypatch.setattr(servers_router, "SqlMCPServerRepository", _MCPServerRepository)
+    monkeypatch.setattr(servers_router, "ensure_project_access", _allow_project_access)
 
 
 @pytest.mark.unit
@@ -135,6 +141,7 @@ async def test_create_mcp_server_sanitizes_internal_errors(db: SimpleNamespace) 
             request=SimpleNamespace(),
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 400
@@ -152,6 +159,7 @@ async def test_update_mcp_server_sanitizes_internal_errors(db: SimpleNamespace) 
             request=SimpleNamespace(),
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 400
@@ -173,6 +181,7 @@ async def test_delete_mcp_server_sanitizes_internal_errors(
             request=SimpleNamespace(),
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 400
@@ -189,6 +198,7 @@ async def test_sync_mcp_server_tools_sanitizes_internal_errors(db: SimpleNamespa
             request=SimpleNamespace(),
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 400
@@ -206,6 +216,7 @@ async def test_test_mcp_server_connection_sanitizes_internal_errors(
         request=SimpleNamespace(),
         db=db,
         tenant_id="tenant-1",
+        current_user=SimpleNamespace(id="user-1"),
     )
 
     assert result.success is False
@@ -237,6 +248,7 @@ async def test_create_mcp_server_sanitizes_permission_errors(
             request=SimpleNamespace(),
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 403
@@ -257,6 +269,7 @@ async def test_get_mcp_server_missing_id_is_sanitized(
             server_id="srv-secret",
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 404
@@ -276,6 +289,7 @@ async def test_get_mcp_server_foreign_tenant_is_sanitized(
             server_id="srv-1",
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 403
@@ -300,6 +314,7 @@ async def test_update_mcp_server_sanitizes_value_errors(
             request=SimpleNamespace(),
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 404
@@ -325,6 +340,7 @@ async def test_sync_mcp_server_tools_sanitizes_non_not_found_value_errors(
             request=SimpleNamespace(),
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 400
@@ -350,6 +366,7 @@ async def test_test_mcp_server_connection_sanitizes_value_errors(
             request=SimpleNamespace(),
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 404
@@ -375,6 +392,7 @@ async def test_reconcile_mcp_project_sanitizes_permission_errors(
             request=SimpleNamespace(),
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 403
@@ -389,7 +407,8 @@ async def test_get_mcp_server_health_missing_id_is_sanitized(
     db: SimpleNamespace,
 ) -> None:
     monkeypatch.setattr(
-        "src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository.SqlMCPServerRepository",
+        servers_router,
+        "SqlMCPServerRepository",
         _MissingMCPServerRepository,
     )
 
@@ -398,6 +417,7 @@ async def test_get_mcp_server_health_missing_id_is_sanitized(
             server_id="srv-secret",
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 404
@@ -422,6 +442,7 @@ async def test_list_mcp_server_prompts_sanitizes_value_errors(
             request=SimpleNamespace(),
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 404
@@ -446,6 +467,7 @@ async def test_set_mcp_server_log_level_sanitizes_value_errors(
             request=_JsonRequest(),
             db=db,
             tenant_id="tenant-1",
+            current_user=SimpleNamespace(id="user-1"),
         )
 
     assert exc_info.value.status_code == 404

@@ -9,8 +9,12 @@ from typing import cast
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
+    get_current_user_tenant,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User
 
 from . import apps, servers, tools
 from .schemas import (
@@ -40,12 +44,17 @@ async def create_mcp_server_root(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> MCPServerResponse:
     """Create MCP server (root path alias)."""
     return cast(
         MCPServerResponse,
         await servers.create_mcp_server(
-            server_data=server_data, request=request, db=db, tenant_id=tenant_id
+            server_data=server_data,
+            request=request,
+            db=db,
+            tenant_id=tenant_id,
+            current_user=current_user,
         ),
     )
 
@@ -56,10 +65,15 @@ async def list_mcp_servers_root(
     enabled_only: bool = Query(False, description="Only return enabled servers"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> list[MCPServerResponse]:
     """List MCP servers (root path alias)."""
     return await servers.list_mcp_servers(
-        project_id=project_id, enabled_only=enabled_only, db=db, tenant_id=tenant_id
+        project_id=project_id,
+        enabled_only=enabled_only,
+        db=db,
+        tenant_id=tenant_id,
+        current_user=current_user,
     )
 
 

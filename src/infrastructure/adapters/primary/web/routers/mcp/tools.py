@@ -10,8 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.mcp_runtime_service import MCPRuntimeService
-from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
+    get_current_user_tenant,
+)
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import User
 from src.infrastructure.i18n import gettext as _
 
 from .schemas import (
@@ -20,6 +24,7 @@ from .schemas import (
     MCPToolListResponse,
     MCPToolResponse,
 )
+from .utils import MCP_PROJECT_WRITE_ROLES, ensure_project_access, list_accessible_project_ids
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +38,7 @@ async def list_all_mcp_tools(
     per_page: int = Query(50, ge=1, le=200, description="Items per page"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> MCPToolListResponse:
     """
     List all MCP tools from all enabled servers, optionally filtered by project.
@@ -44,7 +50,18 @@ async def list_all_mcp_tools(
 
     repository = SqlMCPServerRepository(db)
 
-    servers = await repository.get_enabled_servers(tenant_id, project_id=project_id)
+    if project_id:
+        await ensure_project_access(db, project_id, tenant_id, current_user.id)
+        servers = await repository.get_enabled_servers(tenant_id, project_id=project_id)
+    else:
+        accessible_project_ids = await list_accessible_project_ids(db, tenant_id, current_user.id)
+        if not accessible_project_ids:
+            return MCPToolListResponse(items=[], total=0, page=page, per_page=per_page, total_pages=1)
+        servers = [
+            server
+            for server in await repository.get_enabled_servers(tenant_id)
+            if server.project_id in accessible_project_ids
+        ]
 
     # Early-exit optimization: stop iterating servers once we have enough
     # tools to satisfy the requested page. Full DB-level pagination of JSON
@@ -88,6 +105,7 @@ async def call_mcp_tool(
     request_data: MCPToolCallRequest,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: User = Depends(get_current_user),
 ) -> MCPToolCallResponse:
     """
     Call a tool on an MCP server.
@@ -114,6 +132,18 @@ async def call_mcp_tool(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Access denied"),
         )
+    if not server.project_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_("Access denied"),
+        )
+    await ensure_project_access(
+        db,
+        server.project_id,
+        tenant_id,
+        current_user.id,
+        MCP_PROJECT_WRITE_ROLES,
+    )
 
     if not server.enabled:
         raise HTTPException(
