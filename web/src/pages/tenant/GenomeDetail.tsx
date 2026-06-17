@@ -1,10 +1,22 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { Alert, Button, Card, Descriptions, Empty, Rate, Spin, Tag, Typography } from 'antd';
-import { ArrowLeft } from 'lucide-react';
+import {
+  Alert,
+  Button,
+  Card,
+  Descriptions,
+  Empty,
+  message,
+  Rate,
+  Space,
+  Spin,
+  Tag,
+  Typography,
+} from 'antd';
+import { ArchiveX, ArrowLeft, UploadCloud } from 'lucide-react';
 
 import {
   useCurrentGenome,
@@ -31,7 +43,9 @@ export const GenomeDetail: React.FC = () => {
   const genes = useGenes();
   const loading = useGeneMarketLoading();
   const error = useGeneMarketError();
-  const { getGenome, listGenes, clearError, setCurrentGenome } = useGeneMarketActions();
+  const { getGenome, listGenes, clearError, setCurrentGenome, publishGenome, unpublishGenome } =
+    useGeneMarketActions();
+  const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
 
   useEffect(() => {
     if (genomeId && tenantId) {
@@ -46,6 +60,33 @@ export const GenomeDetail: React.FC = () => {
   }, [genomeId, getGenome, listGenes, setCurrentGenome, clearError, tenantId]);
 
   const genomeGenes = genes.filter((g) => genome?.gene_slugs.includes(g.slug));
+
+  const handlePublishToggle = async () => {
+    if (!genomeId || !tenantId || !genome) {
+      return;
+    }
+    setIsPublishSubmitting(true);
+    try {
+      if (genome.is_published) {
+        await unpublishGenome(genomeId, { tenant_id: tenantId });
+        message.success(
+          t('tenant.genomeDetail.unpublishSuccess', 'Genome unpublished successfully')
+        );
+      } else {
+        await publishGenome(genomeId, { tenant_id: tenantId });
+        message.success(t('tenant.genomeDetail.publishSuccess', 'Genome published successfully'));
+      }
+    } catch {
+      message.error(
+        error ??
+          (genome.is_published
+            ? t('tenant.genomeDetail.unpublishError', 'Failed to unpublish genome')
+            : t('tenant.genomeDetail.publishError', 'Failed to publish genome'))
+      );
+    } finally {
+      setIsPublishSubmitting(false);
+    }
+  };
 
   if (loading && !genome) {
     return (
@@ -69,19 +110,48 @@ export const GenomeDetail: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            icon={<ArrowLeft size={16} />}
+            onClick={() => {
+              void navigate(-1);
+            }}
+          >
+            {t('common.back', 'Back')}
+          </Button>
+          <Title level={3} className="!mb-0">
+            {genome.name}
+          </Title>
+          <Space size={[4, 4]} wrap>
+            <Tag color={genome.is_published ? 'green' : 'default'}>
+              {genome.is_published
+                ? t('tenant.genes.statusPublished', 'Published')
+                : t('tenant.genes.statusDraft', 'Draft')}
+            </Tag>
+            <Tag color={genome.visibility === 'public' ? 'green' : 'default'}>
+              {genome.visibility}
+            </Tag>
+          </Space>
+        </div>
         <Button
-          icon={<ArrowLeft size={16} />}
           onClick={() => {
-            void navigate(-1);
+            void handlePublishToggle();
           }}
+          loading={isPublishSubmitting}
+          danger={genome.is_published}
+          icon={
+            genome.is_published ? (
+              <ArchiveX className="w-4 h-4" />
+            ) : (
+              <UploadCloud className="w-4 h-4" />
+            )
+          }
         >
-          {t('common.back', 'Back')}
+          {genome.is_published
+            ? t('tenant.genes.unpublishAction', 'Unpublish')
+            : t('tenant.genes.publishAction', 'Publish')}
         </Button>
-        <Title level={3} className="!mb-0">
-          {genome.name}
-        </Title>
-        <Tag color={genome.visibility === 'public' ? 'green' : 'default'}>{genome.visibility}</Tag>
       </div>
 
       {error && <Alert type="error" title={error} closable={{ onClose: clearError }} />}
@@ -96,6 +166,14 @@ export const GenomeDetail: React.FC = () => {
           <Descriptions.Item label={t('tenant.genomeDetail.fields.visibility', 'Visibility')}>
             {genome.visibility}
           </Descriptions.Item>
+          <Descriptions.Item label={t('tenant.genomeDetail.fields.status', 'Status')}>
+            {genome.is_published
+              ? t('tenant.genes.statusPublished', 'Published')
+              : t('tenant.genes.statusDraft', 'Draft')}
+          </Descriptions.Item>
+          <Descriptions.Item label={t('tenant.genomeDetail.fields.createdAt', 'Created At')}>
+            {new Date(genome.created_at).toLocaleString()}
+          </Descriptions.Item>
           <Descriptions.Item
             label={t('tenant.genomeDetail.fields.description', 'Description')}
             span={2}
@@ -107,9 +185,6 @@ export const GenomeDetail: React.FC = () => {
             <Text type="secondary" className="ml-2">
               ({genome.avg_rating?.toFixed(1) ?? '-'})
             </Text>
-          </Descriptions.Item>
-          <Descriptions.Item label={t('tenant.genomeDetail.fields.createdAt', 'Created At')}>
-            {new Date(genome.created_at).toLocaleString()}
           </Descriptions.Item>
         </Descriptions>
       </Card>

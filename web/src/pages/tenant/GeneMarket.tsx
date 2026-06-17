@@ -27,6 +27,7 @@ import type {
 
 const { Search } = Input;
 const { Option } = Select;
+type PublishStatusFilter = 'all' | 'published' | 'draft';
 
 export const GeneMarket: FC = () => {
   const { t } = useTranslation();
@@ -48,6 +49,8 @@ export const GeneMarket: FC = () => {
   const [geneSearch, setGeneSearch] = useState('');
   const [geneCategory, setGeneCategory] = useState('all');
   const [geneVisibility, setGeneVisibility] = useState('all');
+  const [genePublishStatus, setGenePublishStatus] = useState<PublishStatusFilter>('all');
+  const [genomePublishStatus, setGenomePublishStatus] = useState<PublishStatusFilter>('all');
   const [genePage, setGenePage] = useState(1);
   const [genePageSize, setGenePageSize] = useState(20);
   const [genomePage, setGenomePage] = useState(1);
@@ -70,17 +73,31 @@ export const GeneMarket: FC = () => {
     if (geneVisibility !== 'all') {
       params.visibility = geneVisibility;
     }
+    if (genePublishStatus !== 'all') {
+      params.is_published = genePublishStatus === 'published';
+    }
     return params;
-  }, [geneCategory, genePage, genePageSize, geneSearch, geneVisibility, tenantId]);
+  }, [
+    geneCategory,
+    genePage,
+    genePageSize,
+    genePublishStatus,
+    geneSearch,
+    geneVisibility,
+    tenantId,
+  ]);
 
-  const genomeListParams = useMemo<GenomeListParams>(
-    () => ({
+  const genomeListParams = useMemo<GenomeListParams>(() => {
+    const params: GenomeListParams = {
       page: genomePage,
       page_size: genomePageSize,
       tenant_id: tenantId,
-    }),
-    [genomePage, genomePageSize, tenantId]
-  );
+    };
+    if (genomePublishStatus !== 'all') {
+      params.is_published = genomePublishStatus === 'published';
+    }
+    return params;
+  }, [genomePage, genomePageSize, genomePublishStatus, tenantId]);
 
   useEffect(() => {
     if (!tenantId) {
@@ -127,6 +144,19 @@ export const GeneMarket: FC = () => {
     setGenomePageSize(pageSize);
   }, []);
 
+  const handleStatusChange = useCallback(
+    (value: PublishStatusFilter) => {
+      if (activeTab === 'genes') {
+        setGenePublishStatus(value);
+        setGenePage(1);
+        return;
+      }
+      setGenomePublishStatus(value);
+      setGenomePage(1);
+    },
+    [activeTab]
+  );
+
   const renderStars = (rating: number | null | undefined, count: number = 0) => {
     const val = rating ?? 0;
     return (
@@ -147,6 +177,14 @@ export const GeneMarket: FC = () => {
     };
     return <Tag color={colors[visibility] || 'default'}>{visibility}</Tag>;
   };
+
+  const getPublishStatusBadge = (isPublished: boolean) => (
+    <Tag color={isPublished ? 'green' : 'default'}>
+      {isPublished
+        ? t('tenant.genes.statusPublished', 'Published')
+        : t('tenant.genes.statusDraft', 'Draft')}
+    </Tag>
+  );
 
   const renderGenesGrid = () => (
     <div className="flex flex-col gap-6">
@@ -184,9 +222,12 @@ export const GeneMarket: FC = () => {
                 </Button>,
               ]}
             >
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="text-lg font-semibold truncate">{gene.name}</h3>
-                {getVisibilityBadge(gene.visibility)}
+              <div className="flex justify-between items-start gap-2 mb-2">
+                <h3 className="min-w-0 flex-1 text-lg font-semibold truncate">{gene.name}</h3>
+                <Space size={[4, 4]} wrap className="justify-end">
+                  {getPublishStatusBadge(gene.is_published)}
+                  {getVisibilityBadge(gene.visibility)}
+                </Space>
               </div>
 
               <div className="mb-2">
@@ -246,9 +287,12 @@ export const GeneMarket: FC = () => {
                 void navigate(`./genomes/${genome.id}`);
               }}
             >
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="text-lg font-semibold truncate">{genome.name}</h3>
-                {getVisibilityBadge(genome.visibility)}
+              <div className="flex justify-between items-start gap-2 mb-2">
+                <h3 className="min-w-0 flex-1 text-lg font-semibold truncate">{genome.name}</h3>
+                <Space size={[4, 4]} wrap className="justify-end">
+                  {getPublishStatusBadge(genome.is_published)}
+                  {getVisibilityBadge(genome.visibility)}
+                </Space>
               </div>
 
               <p className="text-slate-600 dark:text-slate-400 text-sm mb-4 line-clamp-2 min-h-10">
@@ -295,54 +339,70 @@ export const GeneMarket: FC = () => {
       </div>
 
       <div className="flex flex-col gap-4 bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0 flex-1">
-          <Search
-            aria-label={t('tenant.genes.searchPlaceholder')}
-            placeholder={t('tenant.genes.searchPlaceholder')}
-            allowClear
-            value={searchInput}
-            onChange={(event) => {
-              setSearchInput(event.target.value);
-              if (event.target.value === '') {
-                handleGeneSearch('');
+        {activeTab === 'genes' && (
+          <div className="min-w-0 flex-1">
+            <Search
+              aria-label={t('tenant.genes.searchPlaceholder')}
+              placeholder={t('tenant.genes.searchPlaceholder')}
+              allowClear
+              value={searchInput}
+              onChange={(event) => {
+                setSearchInput(event.target.value);
+                if (event.target.value === '') {
+                  handleGeneSearch('');
+                }
+              }}
+              onSearch={handleGeneSearch}
+              enterButton={
+                <>
+                  <span className="sr-only">{t('common.search', 'Search')}</span>
+                  <SearchIcon size={16} aria-hidden="true" />
+                </>
               }
-            }}
-            onSearch={handleGeneSearch}
-            enterButton={
-              <>
-                <span className="sr-only">{t('common.search', 'Search')}</span>
-                <SearchIcon size={16} aria-hidden="true" />
-              </>
-            }
-            className="w-full max-w-md"
-          />
-        </div>
+              className="w-full max-w-md"
+            />
+          </div>
+        )}
         <Space wrap className="w-full lg:w-auto">
+          {activeTab === 'genes' && (
+            <>
+              <Select
+                aria-label={t('tenant.genes.filters.categoryLabel')}
+                value={geneCategory}
+                onChange={(value) => {
+                  setGeneCategory(value);
+                  setGenePage(1);
+                }}
+                className="w-full sm:w-36"
+              >
+                <Option value="all">{t('tenant.genes.filters.allCategories')}</Option>
+                <Option value="ai">{t('tenant.genes.filters.catAi')}</Option>
+                <Option value="tool">{t('tenant.genes.filters.catTool')}</Option>
+              </Select>
+              <Select
+                aria-label={t('tenant.genes.filters.visibilityLabel')}
+                value={geneVisibility}
+                onChange={(value) => {
+                  setGeneVisibility(value);
+                  setGenePage(1);
+                }}
+                className="w-full sm:w-36"
+              >
+                <Option value="all">{t('tenant.genes.filters.allVisibility')}</Option>
+                <Option value="public">{t('tenant.genes.filters.visPublic')}</Option>
+                <Option value="org_private">{t('tenant.genes.filters.visPrivate')}</Option>
+              </Select>
+            </>
+          )}
           <Select
-            aria-label={t('tenant.genes.filters.categoryLabel')}
-            value={geneCategory}
-            onChange={(value) => {
-              setGeneCategory(value);
-              setGenePage(1);
-            }}
-            className="w-full sm:w-36"
+            aria-label={t('tenant.genes.filters.statusLabel', 'Filter by publish status')}
+            value={activeTab === 'genes' ? genePublishStatus : genomePublishStatus}
+            onChange={handleStatusChange}
+            className="w-full sm:w-40"
           >
-            <Option value="all">{t('tenant.genes.filters.allCategories')}</Option>
-            <Option value="ai">{t('tenant.genes.filters.catAi')}</Option>
-            <Option value="tool">{t('tenant.genes.filters.catTool')}</Option>
-          </Select>
-          <Select
-            aria-label={t('tenant.genes.filters.visibilityLabel')}
-            value={geneVisibility}
-            onChange={(value) => {
-              setGeneVisibility(value);
-              setGenePage(1);
-            }}
-            className="w-full sm:w-36"
-          >
-            <Option value="all">{t('tenant.genes.filters.allVisibility')}</Option>
-            <Option value="public">{t('tenant.genes.filters.visPublic')}</Option>
-            <Option value="org_private">{t('tenant.genes.filters.visPrivate')}</Option>
+            <Option value="all">{t('tenant.genes.filters.allStatus', 'All Status')}</Option>
+            <Option value="published">{t('tenant.genes.statusPublished', 'Published')}</Option>
+            <Option value="draft">{t('tenant.genes.statusDraft', 'Draft')}</Option>
           </Select>
         </Space>
       </div>

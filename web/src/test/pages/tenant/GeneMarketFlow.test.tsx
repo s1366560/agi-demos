@@ -6,10 +6,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GeneDetail } from '@/pages/tenant/GeneDetail';
 import { GeneMarket } from '@/pages/tenant/GeneMarket';
+import { GenomeDetail } from '@/pages/tenant/GenomeDetail';
 
-import type { GeneResponse, GeneReview } from '@/services/geneMarketService';
+import type { GeneResponse, GeneReview, GenomeResponse } from '@/services/geneMarketService';
 
 const navigateMock = vi.hoisted(() => vi.fn());
+const paramsMock = vi.hoisted(() => ({
+  geneId: 'gene-1',
+  genomeId: 'genome-1',
+  tenantId: 'tenant-1',
+}));
 
 const actionsMock = vi.hoisted(() => ({
   clearError: vi.fn(),
@@ -17,25 +23,31 @@ const actionsMock = vi.hoisted(() => ({
   deleteGeneReview: vi.fn(),
   fetchGeneReviews: vi.fn(),
   getGene: vi.fn(),
+  getGenome: vi.fn(),
   installGene: vi.fn(),
   listGeneEvolutionEvents: vi.fn(),
   listGenes: vi.fn(),
   listGenomes: vi.fn(),
+  publishGene: vi.fn(),
+  publishGenome: vi.fn(),
   rateGene: vi.fn(),
   reset: vi.fn(),
   setActiveTab: vi.fn(),
   setCurrentGene: vi.fn(),
   setCurrentGenome: vi.fn(),
+  unpublishGene: vi.fn(),
+  unpublishGenome: vi.fn(),
 }));
 
 const stateMock = vi.hoisted(() => ({
   activeTab: 'genes' as 'genes' | 'genomes',
   currentGene: null as GeneResponse | null,
+  currentGenome: null as GenomeResponse | null,
   evolutionEvents: [] as unknown[],
   geneTotal: 0,
   genes: [] as GeneResponse[],
   genomeTotal: 0,
-  genomes: [] as unknown[],
+  genomes: [] as GenomeResponse[],
   isLoading: false,
   error: null as string | null,
   reviews: [] as GeneReview[],
@@ -48,7 +60,7 @@ vi.mock('react-router-dom', async () => {
   return {
     ...actual,
     useNavigate: () => navigateMock,
-    useParams: () => ({ tenantId: 'tenant-1', geneId: 'gene-1' }),
+    useParams: () => paramsMock,
   };
 });
 
@@ -59,7 +71,9 @@ vi.mock('@/stores/tenant', () => ({
 vi.mock('@/stores/geneMarket', () => ({
   useActiveTab: () => stateMock.activeTab,
   useCurrentGene: () => stateMock.currentGene,
+  useCurrentGenome: () => stateMock.currentGenome,
   useEvolutionEvents: () => stateMock.evolutionEvents,
+  useGeneMarketError: () => stateMock.error,
   useGeneMarketActions: () => actionsMock,
   useGeneMarketLoading: () => stateMock.isLoading,
   useGeneMarketStore: {
@@ -115,11 +129,36 @@ const review = (overrides: Partial<GeneReview> = {}): GeneReview => ({
   ...overrides,
 });
 
+const genome = (overrides: Partial<GenomeResponse> = {}): GenomeResponse => ({
+  avg_rating: 4,
+  config_override: {},
+  created_at: '2026-06-17T00:00:00Z',
+  created_by: 'user-1',
+  description: 'Review workflow bundle',
+  gene_slugs: ['code-review'],
+  icon: null,
+  id: 'genome-1',
+  install_count: 3,
+  is_featured: false,
+  is_published: true,
+  name: 'Review Pack',
+  short_description: 'Review workflow',
+  slug: 'review-pack',
+  tenant_id: 'tenant-1',
+  updated_at: null,
+  visibility: 'public',
+  ...overrides,
+});
+
 describe('Gene marketplace rating flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    paramsMock.geneId = 'gene-1';
+    paramsMock.genomeId = 'genome-1';
+    paramsMock.tenantId = 'tenant-1';
     stateMock.activeTab = 'genes';
     stateMock.currentGene = null;
+    stateMock.currentGenome = null;
     stateMock.evolutionEvents = [];
     stateMock.geneTotal = 1;
     stateMock.genes = [gene()];
@@ -133,12 +172,17 @@ describe('Gene marketplace rating flow', () => {
 
     actionsMock.fetchGeneReviews.mockResolvedValue(undefined);
     actionsMock.getGene.mockResolvedValue(gene());
+    actionsMock.getGenome.mockResolvedValue(genome());
     actionsMock.listGeneEvolutionEvents.mockResolvedValue(undefined);
     actionsMock.listGenes.mockResolvedValue(undefined);
     actionsMock.listGenomes.mockResolvedValue(undefined);
     actionsMock.createGeneReview.mockResolvedValue(undefined);
     actionsMock.deleteGeneReview.mockResolvedValue(undefined);
+    actionsMock.publishGene.mockResolvedValue(gene({ is_published: true }));
+    actionsMock.publishGenome.mockResolvedValue(genome({ is_published: true }));
     actionsMock.rateGene.mockResolvedValue(undefined);
+    actionsMock.unpublishGene.mockResolvedValue(gene({ is_published: false }));
+    actionsMock.unpublishGenome.mockResolvedValue(genome({ is_published: false }));
   });
 
   it('routes card rating to the detail rating dialog instead of submitting a default rating', async () => {
@@ -238,5 +282,43 @@ describe('Gene marketplace rating flow', () => {
     await waitFor(() => {
       expect(messageErrorSpy).toHaveBeenCalledWith('Delete API failed');
     });
+  });
+
+  it('publishes draft genes from the detail action bar', async () => {
+    const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
+    stateMock.currentGene = gene({ is_published: false });
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Publish' }));
+
+    await waitFor(() => {
+      expect(actionsMock.publishGene).toHaveBeenCalledWith('gene-1', { tenant_id: 'tenant-1' });
+    });
+    expect(messageSuccessSpy).toHaveBeenCalledWith('Gene published successfully');
+  });
+
+  it('unpublishes published genomes from the detail action bar', async () => {
+    const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
+    stateMock.currentGenome = genome({ is_published: true });
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/genomes/genome-1']}>
+        <GenomeDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Unpublish' }));
+
+    await waitFor(() => {
+      expect(actionsMock.unpublishGenome).toHaveBeenCalledWith('genome-1', {
+        tenant_id: 'tenant-1',
+      });
+    });
+    expect(messageSuccessSpy).toHaveBeenCalledWith('Genome unpublished successfully');
   });
 });

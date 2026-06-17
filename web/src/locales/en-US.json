@@ -3129,6 +3129,14 @@
       "back": "Back to Market",
       "rateAction": "Rate",
       "installAction": "Install",
+      "publishAction": "Publish",
+      "unpublishAction": "Unpublish",
+      "publishSuccess": "Gene published successfully",
+      "unpublishSuccess": "Gene unpublished successfully",
+      "publishError": "Failed to publish gene",
+      "unpublishError": "Failed to unpublish gene",
+      "statusPublished": "Published",
+      "statusDraft": "Draft",
       "downloads": "Downloads",
       "averageRating": "Average Rating",
       "tags": "Tags",
@@ -3159,7 +3167,9 @@
         "catTool": "Tool",
         "allVisibility": "All Visibility",
         "visPublic": "Public",
-        "visPrivate": "Private"
+        "visPrivate": "Private",
+        "statusLabel": "Filter by publish status",
+        "allStatus": "All Status"
       },
       "tabs": {
         "genes": "Genes",
@@ -3226,13 +3236,18 @@
       "fields": {
         "id": "Genome ID",
         "visibility": "Visibility",
+        "status": "Status",
         "description": "Description",
         "rating": "Rating",
         "createdAt": "Created At"
       },
       "genesTitle": "Included Genes",
       "noGenes": "No genes in this genome",
-      "configTitle": "Configuration"
+      "configTitle": "Configuration",
+      "publishSuccess": "Genome published successfully",
+      "unpublishSuccess": "Genome unpublished successfully",
+      "publishError": "Failed to publish genome",
+      "unpublishError": "Failed to unpublish genome"
     },
     "templateDetail": {
       "notFound": "Template not found",

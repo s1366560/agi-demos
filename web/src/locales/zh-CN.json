@@ -3293,6 +3293,14 @@
       "back": "返回市场",
       "rateAction": "评分",
       "installAction": "安装",
+      "publishAction": "发布",
+      "unpublishAction": "下架",
+      "publishSuccess": "基因发布成功",
+      "unpublishSuccess": "基因已下架",
+      "publishError": "发布基因失败",
+      "unpublishError": "下架基因失败",
+      "statusPublished": "已发布",
+      "statusDraft": "草稿",
       "downloads": "下载量",
       "averageRating": "平均评分",
       "tags": "标签",
@@ -3323,7 +3331,9 @@
         "catTool": "工具",
         "allVisibility": "所有可见性",
         "visPublic": "公开",
-        "visPrivate": "私有"
+        "visPrivate": "私有",
+        "statusLabel": "按发布状态筛选",
+        "allStatus": "所有状态"
       },
       "tabs": {
         "genes": "基因",
@@ -3390,13 +3400,18 @@
       "fields": {
         "id": "基因组 ID",
         "visibility": "可见性",
+        "status": "状态",
         "description": "描述",
         "rating": "评分",
         "createdAt": "创建时间"
       },
       "genesTitle": "包含的基因",
       "noGenes": "该基因组暂无基因",
-      "configTitle": "配置"
+      "configTitle": "配置",
+      "publishSuccess": "基因组发布成功",
+      "unpublishSuccess": "基因组已下架",
+      "publishError": "发布基因组失败",
+      "unpublishError": "下架基因组失败"
     },
     "templateDetail": {
       "notFound": "未找到模板",

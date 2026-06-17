@@ -23,7 +23,17 @@ import {
   Pagination,
   Collapse,
 } from 'antd';
-import { Download, Star, Tag as TagIcon, ArrowLeft, GitCommit, User, Trash2 } from 'lucide-react';
+import {
+  ArchiveX,
+  ArrowLeft,
+  Download,
+  GitCommit,
+  Star,
+  Tag as TagIcon,
+  UploadCloud,
+  User,
+  Trash2,
+} from 'lucide-react';
 
 import {
   useCurrentGene,
@@ -80,10 +90,13 @@ export const GeneDetail: FC = () => {
     fetchGeneReviews,
     createGeneReview,
     deleteGeneReview,
+    publishGene,
+    unpublishGene,
   } = useGeneMarketActions();
 
   const [isInstallModalVisible, setIsInstallModalVisible] = useState(shouldOpenInstallModal);
   const [isRateModalVisible, setIsRateModalVisible] = useState(shouldOpenRateModal);
+  const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
   const [installForm] = Form.useForm<InstallFormValues>();
   const [rateForm] = Form.useForm<RateFormValues>();
   const [isReviewModalVisible, setIsReviewModalVisible] = useState(false);
@@ -202,6 +215,30 @@ export const GeneDetail: FC = () => {
     }
   };
 
+  const handlePublishToggle = async () => {
+    if (!geneId || !tenantId || !currentGene) {
+      return;
+    }
+    setIsPublishSubmitting(true);
+    try {
+      if (currentGene.is_published) {
+        await unpublishGene(geneId, { tenant_id: tenantId });
+        message.success(t('tenant.genes.unpublishSuccess', 'Gene unpublished successfully'));
+      } else {
+        await publishGene(geneId, { tenant_id: tenantId });
+        message.success(t('tenant.genes.publishSuccess', 'Gene published successfully'));
+      }
+    } catch {
+      showActionError(
+        currentGene.is_published
+          ? t('tenant.genes.unpublishError', 'Failed to unpublish gene')
+          : t('tenant.genes.publishError', 'Failed to publish gene')
+      );
+    } finally {
+      setIsPublishSubmitting(false);
+    }
+  };
+
   const handleDeleteReview = (reviewId: string) => {
     Modal.confirm({
       title: t('gene.deleteReview'),
@@ -282,6 +319,11 @@ export const GeneDetail: FC = () => {
             </Title>
             <Badge count={`v${currentGene.version}`} style={{ backgroundColor: '#108ee9' }} />
             {currentGene.category && <Tag color="purple">{currentGene.category}</Tag>}
+            <Tag color={currentGene.is_published ? 'green' : 'default'}>
+              {currentGene.is_published
+                ? t('tenant.genes.statusPublished', 'Published')
+                : t('tenant.genes.statusDraft', 'Draft')}
+            </Tag>
             <Tag color={currentGene.visibility === 'public' ? 'green' : 'default'}>
               {currentGene.visibility}
             </Tag>
@@ -289,6 +331,24 @@ export const GeneDetail: FC = () => {
         </Space>
 
         <Space>
+          <Button
+            onClick={() => {
+              void handlePublishToggle();
+            }}
+            loading={isPublishSubmitting}
+            danger={currentGene.is_published}
+            icon={
+              currentGene.is_published ? (
+                <ArchiveX className="w-4 h-4" />
+              ) : (
+                <UploadCloud className="w-4 h-4" />
+              )
+            }
+          >
+            {currentGene.is_published
+              ? t('tenant.genes.unpublishAction', 'Unpublish')
+              : t('tenant.genes.publishAction', 'Publish')}
+          </Button>
           <Button
             onClick={() => {
               setIsRateModalVisible(true);

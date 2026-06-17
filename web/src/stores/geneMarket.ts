@@ -78,6 +78,8 @@ interface GeneMarketState {
     options?: TenantScopedOptions
   ) => Promise<GeneResponse>;
   deleteGene: (id: string, options?: TenantScopedOptions) => Promise<void>;
+  publishGene: (id: string, options?: TenantScopedOptions) => Promise<GeneResponse>;
+  unpublishGene: (id: string, options?: TenantScopedOptions) => Promise<GeneResponse>;
 
   // Actions - Genome CRUD
   listGenomes: (params?: GenomeListParams) => Promise<void>;
@@ -89,6 +91,8 @@ interface GeneMarketState {
     options?: TenantScopedOptions
   ) => Promise<GenomeResponse>;
   deleteGenome: (id: string, options?: TenantScopedOptions) => Promise<void>;
+  publishGenome: (id: string, options?: TenantScopedOptions) => Promise<GenomeResponse>;
+  unpublishGenome: (id: string, options?: TenantScopedOptions) => Promise<GenomeResponse>;
 
   // Actions - Install
   installGene: (
@@ -286,6 +290,40 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
+      publishGene: async (id: string, options?: TenantScopedOptions) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const response = await geneMarketService.publishGene(id, options);
+          const { genes, currentGene } = get();
+          set({
+            genes: genes.map((g) => (g.id === id ? response : g)),
+            currentGene: currentGene?.id === id ? response : currentGene,
+            isSubmitting: false,
+          });
+          return response;
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error, 'Failed to publish gene'), isSubmitting: false });
+          throw error;
+        }
+      },
+
+      unpublishGene: async (id: string, options?: TenantScopedOptions) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const response = await geneMarketService.unpublishGene(id, options);
+          const { genes, currentGene } = get();
+          set({
+            genes: genes.map((g) => (g.id === id ? response : g)),
+            currentGene: currentGene?.id === id ? response : currentGene,
+            isSubmitting: false,
+          });
+          return response;
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error, 'Failed to unpublish gene'), isSubmitting: false });
+          throw error;
+        }
+      },
+
       // ========== Genome CRUD ==========
 
       listGenomes: async (params = {}) => {
@@ -362,6 +400,43 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           });
         } catch (error: unknown) {
           set({ error: getErrorMessage(error, 'Failed to delete genome'), isSubmitting: false });
+          throw error;
+        }
+      },
+
+      publishGenome: async (id: string, options?: TenantScopedOptions) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const response = await geneMarketService.publishGenome(id, options);
+          const { genomes, currentGenome } = get();
+          set({
+            genomes: genomes.map((g) => (g.id === id ? response : g)),
+            currentGenome: currentGenome?.id === id ? response : currentGenome,
+            isSubmitting: false,
+          });
+          return response;
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error, 'Failed to publish genome'), isSubmitting: false });
+          throw error;
+        }
+      },
+
+      unpublishGenome: async (id: string, options?: TenantScopedOptions) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const response = await geneMarketService.unpublishGenome(id, options);
+          const { genomes, currentGenome } = get();
+          set({
+            genomes: genomes.map((g) => (g.id === id ? response : g)),
+            currentGenome: currentGenome?.id === id ? response : currentGenome,
+            isSubmitting: false,
+          });
+          return response;
+        } catch (error: unknown) {
+          set({
+            error: getErrorMessage(error, 'Failed to unpublish genome'),
+            isSubmitting: false,
+          });
           throw error;
         }
       },
@@ -619,11 +694,15 @@ export const useGeneMarketActions = () =>
       createGene: s.createGene,
       updateGene: s.updateGene,
       deleteGene: s.deleteGene,
+      publishGene: s.publishGene,
+      unpublishGene: s.unpublishGene,
       listGenomes: s.listGenomes,
       getGenome: s.getGenome,
       createGenome: s.createGenome,
       updateGenome: s.updateGenome,
       deleteGenome: s.deleteGenome,
+      publishGenome: s.publishGenome,
+      unpublishGenome: s.unpublishGenome,
       installGene: s.installGene,
       uninstallGene: s.uninstallGene,
       listInstalledGenes: s.listInstalledGenes,
