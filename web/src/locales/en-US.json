@@ -4427,6 +4427,7 @@
         "empty": "No tickets found",
         "empty_desc": "Create a ticket to get help",
         "close": "Close Ticket",
+        "pagination_summary": "Showing {{start}}-{{end}} of {{total}} tickets",
         "status": {
           "open": "Open",
           "in_progress": "In Progress",

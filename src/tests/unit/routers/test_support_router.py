@@ -92,6 +92,10 @@ class TestListSupportTickets:
         data = response.json()
         assert "tickets" in data
         assert len(data["tickets"]) >= 3
+        assert "total" in data
+        assert data["limit"] == 25
+        assert data["offset"] == 0
+        assert "has_more" in data
 
     @pytest.mark.asyncio
     async def test_list_tickets_empty(self, test_db, client):
@@ -102,6 +106,16 @@ class TestListSupportTickets:
         assert response.status_code == 200
         data = response.json()
         assert "tickets" in data
+
+    @pytest.mark.asyncio
+    async def test_list_tickets_api_v1_alias(self, test_db, client):
+        """Test listing tickets through the frontend API prefix."""
+        response = client.get("/api/v1/support/tickets")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "tickets" in data
+        assert data["limit"] == 25
 
     @pytest.mark.asyncio
     async def test_list_tickets_filter_by_status(self, test_db, client, test_user):
@@ -195,6 +209,74 @@ class TestListSupportTickets:
             assert "id" in ticket
             assert "subject" in ticket
             assert "created_at" in ticket
+
+    @pytest.mark.asyncio
+    async def test_list_tickets_defaults_to_bounded_page_size(self, test_db, client, test_user):
+        """Test that listing tickets uses a bounded default page size."""
+        tenant_id = "tenant_support_paged_default"
+        for i in range(30):
+            ticket = SupportTicket(
+                id=f"ticket_paged_default_{i}",
+                user_id=test_user.id,
+                tenant_id=tenant_id,
+                subject=f"Ticket {i}",
+                message="Test",
+                priority="medium",
+                status="open",
+                created_at=datetime(2026, 1, 1, 0, i, tzinfo=UTC),
+                updated_at=datetime(2026, 1, 1, 0, i, tzinfo=UTC),
+            )
+            test_db.add(ticket)
+        await test_db.commit()
+
+        response = client.get(f"/support/tickets?tenant_id={tenant_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["tickets"]) == 25
+        assert data["total"] == 30
+        assert data["limit"] == 25
+        assert data["offset"] == 0
+        assert data["has_more"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_tickets_supports_limit_and_offset(self, test_db, client, test_user):
+        """Test paging support ticket results."""
+        tenant_id = "tenant_support_paged_offset"
+        for i in range(5):
+            ticket = SupportTicket(
+                id=f"ticket_paged_offset_{i}",
+                user_id=test_user.id,
+                tenant_id=tenant_id,
+                subject=f"Ticket {i}",
+                message="Test",
+                priority="medium",
+                status="open",
+                created_at=datetime(2026, 1, 1, 0, i, tzinfo=UTC),
+                updated_at=datetime(2026, 1, 1, 0, i, tzinfo=UTC),
+            )
+            test_db.add(ticket)
+        await test_db.commit()
+
+        response = client.get(f"/support/tickets?tenant_id={tenant_id}&limit=2&offset=2")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [ticket["id"] for ticket in data["tickets"]] == [
+            "ticket_paged_offset_2",
+            "ticket_paged_offset_1",
+        ]
+        assert data["total"] == 5
+        assert data["limit"] == 2
+        assert data["offset"] == 2
+        assert data["has_more"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_tickets_rejects_unbounded_limit(self, test_db, client):
+        """Test list request rejects limits above the bounded maximum."""
+        response = client.get("/support/tickets?limit=101")
+
+        assert response.status_code == 422
 
 
 class TestGetSupportTicket:

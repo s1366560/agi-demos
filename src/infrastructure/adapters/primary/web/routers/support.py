@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
@@ -55,20 +55,33 @@ async def create_support_ticket(
 async def list_support_tickets(
     tenant_id: str | None = None,
     status: str | None = None,
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """List support tickets for the current user."""
 
-    query = select(SupportTicket).where(SupportTicket.user_id == current_user.id)
+    filters = [SupportTicket.user_id == current_user.id]
 
     if tenant_id:
-        query = query.where(SupportTicket.tenant_id == tenant_id)
+        filters.append(SupportTicket.tenant_id == tenant_id)
 
     if status:
-        query = query.where(SupportTicket.status == status)
+        filters.append(SupportTicket.status == status)
 
-    query = query.order_by(SupportTicket.created_at.desc())
+    total_result = await db.execute(
+        refresh_select_statement(select(func.count()).select_from(SupportTicket).where(*filters))
+    )
+    total = int(total_result.scalar_one())
+
+    query = (
+        select(SupportTicket)
+        .where(*filters)
+        .order_by(SupportTicket.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
 
     result = await db.execute(refresh_select_statement(query))
     tickets = result.scalars().all()
@@ -87,7 +100,11 @@ async def list_support_tickets(
                 "resolved_at": ticket.resolved_at.isoformat() if ticket.resolved_at else None,
             }
             for ticket in tickets
-        ]
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(tickets) < total,
     }
 
 
@@ -100,9 +117,11 @@ async def get_support_ticket(
     """Get a specific support ticket."""
 
     result = await db.execute(
-        refresh_select_statement(select(SupportTicket).where(
-            SupportTicket.id == ticket_id, SupportTicket.user_id == current_user.id
-        ))
+        refresh_select_statement(
+            select(SupportTicket).where(
+                SupportTicket.id == ticket_id, SupportTicket.user_id == current_user.id
+            )
+        )
     )
     ticket = result.scalar_one_or_none()
 
@@ -132,9 +151,11 @@ async def update_support_ticket(
     """Update a support ticket."""
 
     result = await db.execute(
-        refresh_select_statement(select(SupportTicket).where(
-            SupportTicket.id == ticket_id, SupportTicket.user_id == current_user.id
-        ))
+        refresh_select_statement(
+            select(SupportTicket).where(
+                SupportTicket.id == ticket_id, SupportTicket.user_id == current_user.id
+            )
+        )
     )
     ticket = result.scalar_one_or_none()
 
@@ -173,9 +194,11 @@ async def close_support_ticket(
     """Close a support ticket."""
 
     result = await db.execute(
-        refresh_select_statement(select(SupportTicket).where(
-            SupportTicket.id == ticket_id, SupportTicket.user_id == current_user.id
-        ))
+        refresh_select_statement(
+            select(SupportTicket).where(
+                SupportTicket.id == ticket_id, SupportTicket.user_id == current_user.id
+            )
+        )
     )
     ticket = result.scalar_one_or_none()
 

@@ -4438,6 +4438,7 @@
         "empty": "暂无工单",
         "empty_desc": "创建工单以获取帮助",
         "close": "关闭工单",
+        "pagination_summary": "显示第 {{start}}-{{end}} 条，共 {{total}} 条工单",
         "status": {
           "open": "待处理",
           "in_progress": "处理中",

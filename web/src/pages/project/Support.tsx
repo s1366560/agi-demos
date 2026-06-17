@@ -11,6 +11,8 @@ import {
   BookOpen,
   HelpCircle,
   Plus,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 import { formatDateTime } from '@/utils/date';
@@ -43,10 +45,23 @@ interface SupportTicketResponse {
   resolved_at: string | null;
 }
 
+interface SupportTicketsResponse {
+  tickets: SupportTicketResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+const TICKETS_PAGE_SIZE = 25;
+
 export const Support: React.FC = () => {
   const { t } = useTranslation();
   const { currentTenant } = useTenantStore();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalTickets, setTotalTickets] = useState(0);
+  const [hasMoreTickets, setHasMoreTickets] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showNewTicket, setShowNewTicket] = useState(false);
@@ -56,26 +71,44 @@ export const Support: React.FC = () => {
   const [ticketMessage, setTicketMessage] = useState('');
   const [priority, setPriority] = useState('medium');
 
-  const loadTickets = useCallback(async () => {
-    if (!currentTenant) return;
+  const loadTickets = useCallback(
+    async (pageToLoad: number) => {
+      if (!currentTenant) {
+        setTickets([]);
+        setTotalTickets(0);
+        setHasMoreTickets(false);
+        setIsLoading(false);
+        return;
+      }
 
-    setIsLoading(true);
-    try {
-      const response = await api.get('/support/tickets', {
-        params: { tenant_id: currentTenant.id },
-      });
-      const data = response as { data: { tickets: SupportTicketResponse[] } };
-      setTickets(data.data.tickets as SupportTicket[]);
-    } catch (error) {
-      console.error('Failed to load support tickets:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentTenant]);
+      setIsLoading(true);
+      try {
+        const data = await api.get<SupportTicketsResponse>('/support/tickets', {
+          params: {
+            tenant_id: currentTenant.id,
+            limit: TICKETS_PAGE_SIZE,
+            offset: pageToLoad * TICKETS_PAGE_SIZE,
+          },
+        });
+        setTickets(data.tickets as SupportTicket[]);
+        setTotalTickets(data.total);
+        setHasMoreTickets(data.has_more);
+      } catch (error) {
+        console.error('Failed to load support tickets:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [currentTenant]
+  );
 
   useEffect(() => {
-    void loadTickets();
-  }, [loadTickets]);
+    void loadTickets(currentPage);
+  }, [currentPage, loadTickets]);
+
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [currentTenant?.id]);
 
   const handleSubmitTicket = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,8 +133,8 @@ export const Support: React.FC = () => {
       setPriority('medium');
       setShowNewTicket(false);
 
-      // Reload tickets
-      await loadTickets();
+      setCurrentPage(0);
+      await loadTickets(0);
 
       message.success(t('project.support.messages.submit_success'));
     } catch (error) {
@@ -117,7 +150,7 @@ export const Support: React.FC = () => {
 
     try {
       await api.post(`/support/tickets/${ticketId}/close`);
-      await loadTickets();
+      await loadTickets(currentPage);
     } catch (error) {
       console.error('Failed to close ticket:', error);
       message.error(t('project.support.messages.close_fail'));
@@ -173,6 +206,10 @@ export const Support: React.FC = () => {
     };
     return priorityMap[priority] || priority;
   };
+
+  const totalPages = Math.max(1, Math.ceil(totalTickets / TICKETS_PAGE_SIZE));
+  const pageStart = totalTickets === 0 ? 0 : currentPage * TICKETS_PAGE_SIZE + 1;
+  const pageEnd = Math.min(totalTickets, (currentPage + 1) * TICKETS_PAGE_SIZE);
 
   return (
     <div className="p-8">
@@ -384,6 +421,48 @@ export const Support: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-4">
+            {totalTickets > TICKETS_PAGE_SIZE && (
+              <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {t('project.support.tickets.pagination_summary', {
+                    start: pageStart,
+                    end: pageEnd,
+                    total: totalTickets,
+                  })}
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentPage((page) => Math.max(0, page - 1));
+                    }}
+                    disabled={currentPage === 0 || isLoading}
+                    className="inline-flex h-9 items-center gap-1 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-gray-300 dark:hover:bg-slate-800"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    {t('common.actions.previous')}
+                  </button>
+                  <span className="min-w-24 text-center text-sm text-gray-500 dark:text-gray-400">
+                    {t('common.pagination.page_info', {
+                      page: currentPage + 1,
+                      total: totalPages,
+                    })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCurrentPage((page) => page + 1);
+                    }}
+                    disabled={!hasMoreTickets || isLoading}
+                    className="inline-flex h-9 items-center gap-1 rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-gray-300 dark:hover:bg-slate-800"
+                  >
+                    {t('common.actions.next')}
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {tickets.map((ticket) => (
               <div
                 key={ticket.id}

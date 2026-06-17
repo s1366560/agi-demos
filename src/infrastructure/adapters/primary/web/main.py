@@ -714,6 +714,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(background_tasks.router)
     app.include_router(billing.router)
     app.include_router(notifications.router)
+    app.include_router(support.router, prefix="/api/v1")
     app.include_router(support.router)
     app.include_router(blackboard.router)
 
