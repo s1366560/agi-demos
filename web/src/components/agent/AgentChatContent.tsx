@@ -67,6 +67,7 @@ import {
 } from '../../utils/exportConversation';
 import { WorkspaceStatusBar } from '../workspace/WorkspaceStatusBar';
 
+import { deriveAgentChatTenantId } from './agentChatScope';
 import { ChatSearch } from './chat/ChatSearch';
 import { OnboardingTour } from './chat/OnboardingTour';
 import { subscribeToAgentChatSearchRequests } from './chat/searchEvents';
@@ -328,10 +329,13 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       };
     }, [projectId, setProjectId, setConnectionStatus, subscribeSSE, unsubscribeSSE, setSandboxId]);
 
-    // Get tenant ID from current project
+    // Route tenant is authoritative; currentProject can lag during tenant/project transitions.
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentTenant = useTenantStore((state) => state.currentTenant);
-    const tenantId = currentProject?.tenant_id || currentTenant?.id || '';
+    const tenantId = deriveAgentChatTenantId({
+      routeTenantId: currentTenant?.id,
+      projectTenantId: currentProject?.tenant_id,
+    });
 
     // Note: HITL is now rendered inline in the message timeline via InlineHITLCard.
     // The useUnifiedHITL hook and modal rendering have been removed.
