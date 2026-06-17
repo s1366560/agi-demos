@@ -50,16 +50,26 @@ vi.mock('@/services/instanceService', () => ({
 vi.mock('@/components/ui/lazyAntd', () => ({
   LazyButton: ({
     children,
+    danger,
     disabled,
     icon,
     onClick,
+    size,
   }: {
     children?: ReactNode;
+    danger?: boolean;
     disabled?: boolean;
     icon?: ReactNode;
     onClick?: () => void;
+    size?: string;
   }) => (
-    <button disabled={disabled} onClick={onClick} type="button">
+    <button
+      data-danger={danger}
+      data-size={size}
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
       {icon}
       {children}
     </button>
@@ -326,5 +336,72 @@ describe('InstanceSettings', () => {
 
     expect(screen.getByText('gemini-current')).toBeInTheDocument();
     expect(screen.queryByText('gpt-stale')).not.toBeInTheDocument();
+  });
+
+  it('preserves an existing API key override when the override field is empty', async () => {
+    mockInstanceService.getLlmConfig.mockResolvedValue(
+      llmConfig({
+        has_api_key_override: true,
+        model_name: 'gpt-4.1',
+        provider_id: 'provider-openai',
+      })
+    );
+    mockInstanceService.updateLlmConfig.mockResolvedValue(
+      llmConfig({
+        has_api_key_override: true,
+        model_name: 'gpt-4.1',
+        provider_id: 'provider-openai',
+      })
+    );
+
+    render(<InstanceSettings />);
+
+    expect(await screen.findByText('tenant.instances.settings.llmApiKeySet')).toBeInTheDocument();
+
+    const saveButtons = screen.getAllByRole('button', { name: /save|common\.save/i });
+    fireEvent.click(saveButtons[saveButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(mockInstanceService.updateLlmConfig).toHaveBeenCalled();
+    });
+    const payload = mockInstanceService.updateLlmConfig.mock.calls[0][1];
+    expect(payload).toEqual({
+      model_name: 'gpt-4.1',
+      provider_id: 'provider-openai',
+    });
+    expect(payload).not.toHaveProperty('api_key_override');
+  });
+
+  it('clears an existing API key override only through the explicit clear action', async () => {
+    mockInstanceService.getLlmConfig.mockResolvedValue(
+      llmConfig({
+        has_api_key_override: true,
+        model_name: 'gpt-4.1',
+        provider_id: 'provider-openai',
+      })
+    );
+    mockInstanceService.updateLlmConfig.mockResolvedValue(
+      llmConfig({
+        has_api_key_override: false,
+        model_name: 'gpt-4.1',
+        provider_id: 'provider-openai',
+      })
+    );
+
+    render(<InstanceSettings />);
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'tenant.instances.settings.llmApiKeyClearOverride',
+      })
+    );
+
+    await waitFor(() => {
+      expect(mockInstanceService.updateLlmConfig).toHaveBeenCalledWith('instance-old', {
+        api_key_override: null,
+        model_name: 'gpt-4.1',
+        provider_id: 'provider-openai',
+      });
+    });
   });
 });

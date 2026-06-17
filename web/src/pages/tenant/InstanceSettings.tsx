@@ -231,26 +231,42 @@ export const InstanceSettings: React.FC = () => {
     setLlmModelName(undefined);
   }, []);
 
+  const saveLlmConfig = useCallback(
+    async (apiKeyOverride: string | null | undefined) => {
+      if (!instanceId) return;
+      setLlmConfigSaving(true);
+      try {
+        const payload: InstanceLlmConfigUpdate = {
+          provider_id: llmProviderId ?? null,
+          model_name: llmModelName ?? null,
+        };
+        if (apiKeyOverride !== undefined) {
+          payload.api_key_override = apiKeyOverride;
+        }
+        const result = await instanceService.updateLlmConfig(instanceId, payload);
+        setHasApiKeyOverride(result.has_api_key_override);
+        setLlmApiKeyOverride('');
+        message?.success(t('tenant.instances.settings.llmConfigUpdateSuccess'));
+      } catch (err) {
+        console.error('Failed to update LLM config:', err);
+        message?.error(t('common.error'));
+      } finally {
+        setLlmConfigSaving(false);
+      }
+    },
+    [instanceId, llmProviderId, llmModelName, message, t]
+  );
+
   const handleLlmConfigSave = useCallback(async () => {
     if (!instanceId) return;
-    setLlmConfigSaving(true);
-    try {
-      const payload: InstanceLlmConfigUpdate = {
-        provider_id: llmProviderId ?? null,
-        model_name: llmModelName ?? null,
-        api_key_override: llmApiKeyOverride || null,
-      };
-      const result = await instanceService.updateLlmConfig(instanceId, payload);
-      setHasApiKeyOverride(result.has_api_key_override);
-      setLlmApiKeyOverride('');
-      message?.success(t('tenant.instances.settings.llmConfigUpdateSuccess'));
-    } catch (err) {
-      console.error('Failed to update LLM config:', err);
-      message?.error(t('common.error'));
-    } finally {
-      setLlmConfigSaving(false);
-    }
-  }, [instanceId, llmProviderId, llmModelName, llmApiKeyOverride, message, t]);
+    const nextOverride = llmApiKeyOverride.trim();
+    await saveLlmConfig(nextOverride ? nextOverride : undefined);
+  }, [instanceId, llmApiKeyOverride, saveLlmConfig]);
+
+  const handleClearLlmApiKeyOverride = useCallback(async () => {
+    if (!instanceId || !hasApiKeyOverride) return;
+    await saveLlmConfig(null);
+  }, [hasApiKeyOverride, instanceId, saveLlmConfig]);
 
   if (isLoading && !detail) {
     return (
@@ -395,15 +411,31 @@ export const InstanceSettings: React.FC = () => {
                 onChange={(e) => {
                   setLlmApiKeyOverride(e.target.value);
                 }}
-                placeholder={t('tenant.instances.settings.llmApiKeyOverridePlaceholder')}
+                placeholder={
+                  hasApiKeyOverride
+                    ? t('tenant.instances.settings.llmApiKeyOverridePlaceholderExisting')
+                    : t('tenant.instances.settings.llmApiKeyOverridePlaceholder')
+                }
               />
               <p className="text-xs text-text-muted mt-1">
-                {t('tenant.instances.settings.llmApiKeyOverrideHint')}
+                {hasApiKeyOverride
+                  ? t('tenant.instances.settings.llmApiKeyOverrideHintExisting')
+                  : t('tenant.instances.settings.llmApiKeyOverrideHint')}
               </p>
               {hasApiKeyOverride && (
-                <p className="text-xs text-success-dark dark:text-success-light mt-1">
-                  {t('tenant.instances.settings.llmApiKeySet')}
-                </p>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="m-0 text-xs text-success-dark dark:text-success-light">
+                    {t('tenant.instances.settings.llmApiKeySet')}
+                  </p>
+                  <LazyButton
+                    danger
+                    size="small"
+                    onClick={handleClearLlmApiKeyOverride}
+                    disabled={llmConfigSaving}
+                  >
+                    {t('tenant.instances.settings.llmApiKeyClearOverride')}
+                  </LazyButton>
+                </div>
               )}
             </div>
 

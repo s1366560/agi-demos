@@ -2927,8 +2927,11 @@
         "llmModelPlaceholder": "选择模型",
         "llmApiKeyOverride": "API Key 覆盖",
         "llmApiKeyOverridePlaceholder": "留空则使用默认提供商密钥",
+        "llmApiKeyOverridePlaceholderExisting": "留空则保留当前覆盖密钥",
         "llmApiKeyOverrideHint": "仅为此实例覆盖提供商 API 密钥",
+        "llmApiKeyOverrideHintExisting": "输入新密钥以替换当前覆盖密钥，或显式清除它。",
         "llmApiKeySet": "已设置 API Key 覆盖",
+        "llmApiKeyClearOverride": "清除覆盖",
         "llmConfigUpdateSuccess": "LLM 配置更新成功",
         "llmConfigLoadError": "加载 LLM 配置失败"
       },

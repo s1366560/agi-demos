@@ -2763,8 +2763,11 @@
         "llmModelPlaceholder": "Select a model",
         "llmApiKeyOverride": "API Key Override",
         "llmApiKeyOverridePlaceholder": "Leave empty to use default provider key",
+        "llmApiKeyOverridePlaceholderExisting": "Leave empty to keep the current override",
         "llmApiKeyOverrideHint": "Override the provider API key for this instance only",
+        "llmApiKeyOverrideHintExisting": "Enter a new key to replace the current override, or clear it explicitly.",
         "llmApiKeySet": "API key override is set",
+        "llmApiKeyClearOverride": "Clear override",
         "llmConfigUpdateSuccess": "LLM configuration updated successfully",
         "llmConfigLoadError": "Failed to load LLM configuration"
       },
