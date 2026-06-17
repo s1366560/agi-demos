@@ -176,7 +176,7 @@ class SandboxTokenService:
         # Check if token exists in store
         token_data = self._tokens.get(token)
         if not token_data:
-            logger.warning(f"Token not found in store: {token[:20]}...")
+            logger.warning("Token not found in store")
             return TokenValidationResult(valid=False, error="Invalid or expired token")
 
         # Check expiration
@@ -216,9 +216,9 @@ class SandboxTokenService:
         Returns:
             True if token was revoked, False if not found
         """
-        if token in self._tokens:
-            del self._tokens[token]
-            logger.info(f"Revoked sandbox token: {token[:20]}...")
+        token_data = self._tokens.pop(token, None)
+        if token_data is not None:
+            logger.info("Revoked sandbox token for project=%s", token_data.get("project_id"))
             return True
         return False
 
