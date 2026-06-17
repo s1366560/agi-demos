@@ -256,10 +256,14 @@ async def test_rebuild_communities_workflow_updates_task(
     )
     test_db.add(task)
     await test_db.commit()
+    entity_records = [
+        {"uuid": f"entity-{index}", "name": f"Entity {index}", "entity_type": "Person"}
+        for index in range(1001)
+    ]
     neo4j_client = FakeNeo4jClient(
         [
             [],
-            [{"uuid": "entity-1", "name": "Ada", "entity_type": "Person"}],
+            entity_records,
         ]
     )
     community_updater = SimpleNamespace(
@@ -277,11 +281,15 @@ async def test_rebuild_communities_workflow_updates_task(
 
     await test_db.refresh(task)
     assert result["communities"] == 1
-    assert result["entities"] == 1
+    assert result["entities"] == len(entity_records)
     assert task.status == "COMPLETED"
     assert task.progress == 100
     assert task.message == "Community rebuild complete"
     community_updater.update_communities_for_entities.assert_awaited_once()
+    entity_query = str(neo4j_client.calls[1]["query"])
+    assert "LIMIT 1000" not in entity_query
+    updater_kwargs = community_updater.update_communities_for_entities.await_args.kwargs
+    assert len(updater_kwargs["entities"]) == len(entity_records)
 
 
 @pytest.mark.unit

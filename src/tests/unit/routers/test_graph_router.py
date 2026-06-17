@@ -325,6 +325,44 @@ class TestGraphRouter:
         assert "LIMIT $limit" in page_query
 
     @pytest.mark.asyncio
+    async def test_rebuild_communities_sync_processes_all_project_entities(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        entity_records = [
+            {"uuid": f"entity-{index}", "name": f"Entity {index}", "entity_type": "Person"}
+            for index in range(1001)
+        ]
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock(
+            side_effect=[
+                _neo4j_result([]),
+                _neo4j_result(entity_records),
+            ]
+        )
+        community_updater = Mock()
+        community_updater.update_communities_for_entities = AsyncMock(return_value=[object()])
+        graph_service = Mock(community_updater=community_updater)
+
+        response = await rebuild_communities(
+            background=False,
+            project_id=test_project_db.id,
+            current_user=test_user,
+            db=test_db,
+            neo4j_client=neo4j_client,
+            workflow_engine=Mock(),
+            graph_service=graph_service,
+        )
+
+        assert response["entities_processed"] == len(entity_records)
+        entity_query = neo4j_client.execute_query.await_args_list[1].args[0]
+        assert "LIMIT 1000" not in entity_query
+        updater_kwargs = community_updater.update_communities_for_entities.await_args.kwargs
+        assert len(updater_kwargs["entities"]) == len(entity_records)
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("endpoint_name", "expected_detail"),
         [

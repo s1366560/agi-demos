@@ -184,7 +184,6 @@ async def _rebuild_communities_for_project(
         MATCH (e:Entity)
         WHERE e.project_id = $project_id
         RETURN e.uuid as uuid, e.name as name, e.entity_type as entity_type
-        LIMIT 1000
         """,
         project_id=project_id,
     )
