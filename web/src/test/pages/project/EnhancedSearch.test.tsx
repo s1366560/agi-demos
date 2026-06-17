@@ -9,6 +9,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { EnhancedSearch } from '../../../pages/project/EnhancedSearch';
 
+const { mockUseParams, mockUseProjectStore } = vi.hoisted(() => ({
+  mockUseParams: vi.fn(() => ({ tenantId: 'tenant-1', projectId: 'test-project-1' })),
+  mockUseProjectStore: vi.fn(() => ({
+    currentProject: { tenant_id: 'tenant-1' },
+  })),
+}));
+
 // Mock the dependencies
 vi.mock('../../../services/graphService', () => ({
   graphService: {
@@ -21,7 +28,7 @@ vi.mock('../../../services/graphService', () => ({
 }));
 
 vi.mock('react-router-dom', () => ({
-  useParams: vi.fn(() => ({ projectId: 'test-project-1' })),
+  useParams: mockUseParams,
 }));
 
 vi.mock('react-i18next', () => ({
@@ -31,13 +38,15 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('../../../stores/project', () => ({
-  useProjectStore: vi.fn(() => ({
-    currentProject: { tenant_id: 'tenant-1' },
-  })),
+  useProjectStore: mockUseProjectStore,
 }));
 
 vi.mock('@/components/graph/CytoscapeGraph', () => ({
-  CytoscapeGraph: () => <div data-testid="cytoscape-graph">Graph</div>,
+  CytoscapeGraph: ({ projectId, tenantId }: { projectId?: string; tenantId?: string }) => (
+    <div data-testid="cytoscape-graph" data-project-id={projectId} data-tenant-id={tenantId}>
+      Graph
+    </div>
+  ),
 }));
 
 vi.mock('../../../pages/project/search', () => ({
@@ -65,6 +74,10 @@ vi.mock('../../../pages/project/search', () => ({
 describe('EnhancedSearch Compound Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseParams.mockReturnValue({ tenantId: 'tenant-1', projectId: 'test-project-1' });
+    mockUseProjectStore.mockReturnValue({
+      currentProject: { tenant_id: 'tenant-1' },
+    });
   });
 
   describe('Root Component', () => {
@@ -221,6 +234,26 @@ describe('EnhancedSearch Compound Component', () => {
       );
 
       expect(screen.getByTestId('cytoscape-graph').closest('section')).toHaveClass('min-w-0');
+    });
+
+    it('passes the route tenant to graph when current project state lags', () => {
+      mockUseParams.mockReturnValue({
+        tenantId: 'route-tenant',
+        projectId: 'route-project',
+      });
+      mockUseProjectStore.mockReturnValue({
+        currentProject: { tenant_id: 'stale-tenant' },
+      });
+
+      render(
+        <EnhancedSearch>
+          <EnhancedSearch.Graph />
+        </EnhancedSearch>
+      );
+
+      const graph = screen.getByTestId('cytoscape-graph');
+      expect(graph).toHaveAttribute('data-project-id', 'route-project');
+      expect(graph).toHaveAttribute('data-tenant-id', 'route-tenant');
     });
 
     it('should not render graph when excluded', () => {

@@ -250,11 +250,11 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
     defaultConfigOpen = true,
   }) => {
     const { t } = useTranslation();
-    const { projectId: routeProjectId } = useParams();
+    const { projectId: routeProjectId, tenantId: routeTenantId } = useParams();
     const { currentProject } = useProjectStore();
 
     const projectId = propProjectId || routeProjectId;
-    const tenantId = propTenantId || currentProject?.tenant_id;
+    const tenantId = propTenantId || routeTenantId || currentProject?.tenant_id;
 
     // Parse children to detect sub-components
     const childrenArray = Children.toArray(children);
