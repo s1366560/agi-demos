@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -71,10 +71,15 @@ export const InstanceGenes: React.FC = () => {
   const [isGenesLoading, setIsGenesLoading] = useState(false);
   const [availableGenesError, setAvailableGenesError] = useState<string | null>(null);
   const [selectedGeneId, setSelectedGeneId] = useState<string | null>(null);
+  const instanceGenesRequestId = useRef(0);
+  const availableGenesRequestId = useRef(0);
 
   const fetchInstanceGenes = useCallback(
     async (page: number) => {
       if (!tenantId || !instanceId) return;
+      const requestId = instanceGenesRequestId.current + 1;
+      instanceGenesRequestId.current = requestId;
+      const isLatestRequest = () => instanceGenesRequestId.current === requestId;
       setIsLoading(true);
       try {
         const response = await geneMarketService.listInstanceGenes(instanceId, {
@@ -83,16 +88,20 @@ export const InstanceGenes: React.FC = () => {
           offset: (page - 1) * INSTANCE_GENES_PAGE_SIZE,
           search: debouncedSearch || undefined,
         });
+        if (!isLatestRequest()) return;
         setInstanceGenes(response.items);
         setInstanceGenesTotal(response.total);
         setInstanceGenesActiveTotal(response.active_total);
         setInstanceGenesUsageTotal(response.usage_total);
         setCurrentPage(page);
       } catch (err) {
+        if (!isLatestRequest()) return;
         console.error('Failed to fetch instance genes:', err);
         messageApi?.error(t('tenant.instances.genes.fetchError'));
       } finally {
-        setIsLoading(false);
+        if (isLatestRequest()) {
+          setIsLoading(false);
+        }
       }
     },
     [debouncedSearch, instanceId, messageApi, t, tenantId]
@@ -101,6 +110,9 @@ export const InstanceGenes: React.FC = () => {
   const fetchAvailableGenes = useCallback(
     async (page: number) => {
       if (!tenantId || !instanceId) return;
+      const requestId = availableGenesRequestId.current + 1;
+      availableGenesRequestId.current = requestId;
+      const isLatestRequest = () => availableGenesRequestId.current === requestId;
       setIsGenesLoading(true);
       setAvailableGenesError(null);
       try {
@@ -112,17 +124,21 @@ export const InstanceGenes: React.FC = () => {
           exclude_installed_instance_id: instanceId,
           search: debouncedAvailableGeneSearch || undefined,
         });
+        if (!isLatestRequest()) return;
         setAvailableGenes(response.genes);
         setAvailableGenesTotal(response.total);
         setAvailableGenesPage(response.page);
       } catch (err) {
+        if (!isLatestRequest()) return;
         console.error('Failed to fetch available genes:', err);
         setAvailableGenes([]);
         setAvailableGenesTotal(0);
         setAvailableGenesError(t('tenant.instances.genes.availableGenesError'));
         messageApi?.error(t('tenant.instances.genes.availableGenesError'));
       } finally {
-        setIsGenesLoading(false);
+        if (isLatestRequest()) {
+          setIsGenesLoading(false);
+        }
       }
     },
     [debouncedAvailableGeneSearch, instanceId, messageApi, t, tenantId]
