@@ -113,6 +113,51 @@ class _InstanceGeneListContainer(_Container):
         return _InstanceGeneListService()
 
 
+class _GeneListService(_FailingGeneService):
+    async def list_genes_with_total(self, **kwargs: object) -> tuple[list[SimpleNamespace], int]:
+        assert kwargs["tenant_id"] == "tenant-1"
+        assert kwargs["slugs"] == ["code-review", "test-writer"]
+        return (
+            [
+                SimpleNamespace(
+                    id="gene-1",
+                    name="Code Review",
+                    slug="code-review",
+                    tenant_id="tenant-1",
+                    description="Reviews code",
+                    short_description="Review code",
+                    category="tool",
+                    tags=[],
+                    source="manual",
+                    source_ref=None,
+                    icon=None,
+                    version="1.0.0",
+                    manifest={},
+                    dependencies=[],
+                    synergies=[],
+                    parent_gene_id=None,
+                    visibility="public",
+                    install_count=0,
+                    avg_rating=None,
+                    effectiveness_score=None,
+                    is_featured=False,
+                    review_status=None,
+                    is_published=True,
+                    created_by="user-1",
+                    created_by_instance_id=None,
+                    created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    updated_at=None,
+                )
+            ],
+            1,
+        )
+
+
+class _GeneListContainer(_Container):
+    def gene_service(self) -> _GeneListService:
+        return _GeneListService()
+
+
 class _EvolutionAccessGeneService(_FailingGeneService):
     async def get_gene(self, gene_id: str, *_args: object, **_kwargs: object) -> object | None:
         if gene_id == "missing-gene":
@@ -281,6 +326,34 @@ async def test_get_gene_hides_foreign_gene(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Gene not found"
+
+
+@pytest.mark.unit
+async def test_list_genes_splits_comma_separated_slug_filter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _GeneListContainer(),
+    )
+
+    response = await genes.list_genes(
+        request=SimpleNamespace(),
+        page=1,
+        page_size=20,
+        category=None,
+        search=None,
+        slugs=" code-review, test-writer,, ",
+        visibility=None,
+        is_published=None,
+        exclude_installed_instance_id=None,
+        tenant_id="tenant-1",
+        db=SimpleNamespace(),
+    )
+
+    assert response.total == 1
+    assert response.genes[0].slug == "code-review"
 
 
 @pytest.mark.unit

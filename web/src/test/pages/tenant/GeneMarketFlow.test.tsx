@@ -319,6 +319,11 @@ describe('Gene marketplace rating flow', () => {
         tenant_id: 'tenant-1',
       });
     });
+    expect(actionsMock.listGenes).toHaveBeenCalledWith({
+      tenant_id: 'tenant-1',
+      slugs: ['code-review'],
+      page_size: 1,
+    });
     expect(messageSuccessSpy).toHaveBeenCalledWith('Genome unpublished successfully');
   });
 });

@@ -51,13 +51,23 @@ export const GenomeDetail: React.FC = () => {
     if (genomeId && tenantId) {
       const options = { tenant_id: tenantId };
       getGenome(genomeId, options).catch(() => {});
-      listGenes(options).catch(() => {});
     }
     return () => {
       setCurrentGenome(null);
       clearError();
     };
-  }, [genomeId, getGenome, listGenes, setCurrentGenome, clearError, tenantId]);
+  }, [genomeId, getGenome, setCurrentGenome, clearError, tenantId]);
+
+  useEffect(() => {
+    if (!genome || !tenantId || genome.gene_slugs.length === 0) {
+      return;
+    }
+    void listGenes({
+      tenant_id: tenantId,
+      slugs: genome.gene_slugs,
+      page_size: Math.min(Math.max(genome.gene_slugs.length, 1), 100),
+    }).catch(() => {});
+  }, [genome, listGenes, tenantId]);
 
   const genomeGenes = genes.filter((g) => genome?.gene_slugs.includes(g.slug));
 

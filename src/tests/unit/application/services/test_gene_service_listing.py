@@ -123,6 +123,45 @@ async def test_list_genes_with_total_filters_by_search_and_visibility(
 
 
 @pytest.mark.unit
+async def test_list_genes_with_total_filters_by_exact_slugs_before_pagination(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+
+    first = await service.create_gene(
+        name="First Included Gene",
+        slug=_slug("included-gene"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    second = await service.create_gene(
+        name="Second Included Gene",
+        slug=_slug("included-gene"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    await service.create_gene(
+        name="Other Gene",
+        slug=_slug("other-gene"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+
+    genes, total = await service.list_genes_with_total(
+        tenant_id=test_project_db.tenant_id,
+        slugs=[first.slug, second.slug],
+        limit=1,
+        offset=0,
+    )
+
+    assert total == 2
+    assert len(genes) == 1
+    assert genes[0].slug in {first.slug, second.slug}
+
+
+@pytest.mark.unit
 async def test_list_genes_with_total_excludes_installed_instance_genes_before_pagination(
     test_db: AsyncSession,
     test_project_db: Project,

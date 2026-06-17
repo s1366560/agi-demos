@@ -1,6 +1,7 @@
 """SQLAlchemy implementation of GeneRepository using BaseRepository."""
 
 import logging
+from collections.abc import Sequence
 from typing import Any, override
 
 from sqlalchemy import func, or_, select
@@ -71,6 +72,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         tenant_id: str | None = None,
         category: str | None = None,
         search: str | None = None,
+        slugs: list[str] | None = None,
         visibility: str | None = None,
         is_published: bool | None = None,
         exclude_installed_instance_id: str | None = None,
@@ -85,6 +87,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         )
         stmt = self._build_active_query(filters=filters)
         stmt = self._apply_search_filter(stmt, search)
+        stmt = self._apply_slug_filter(stmt, slugs)
         stmt = self._apply_exclude_installed_filter(stmt, exclude_installed_instance_id)
         stmt = self._apply_listing_order(stmt)
         stmt = stmt.offset(offset).limit(limit)
@@ -101,6 +104,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         tenant_id: str | None = None,
         category: str | None = None,
         search: str | None = None,
+        slugs: list[str] | None = None,
         visibility: str | None = None,
         is_published: bool | None = None,
         exclude_installed_instance_id: str | None = None,
@@ -118,6 +122,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         )
         stmt = self._apply_filters(stmt, **filters)
         stmt = self._apply_search_filter(stmt, search)
+        stmt = self._apply_slug_filter(stmt, slugs)
         stmt = self._apply_exclude_installed_filter(stmt, exclude_installed_instance_id)
         result = await self._session.execute(refresh_select_statement(stmt))
         return result.scalar() or 0
@@ -181,6 +186,13 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
                 GeneMarketModel.short_description.ilike(pattern),
             )
         )
+
+    @staticmethod
+    def _apply_slug_filter(stmt: Select[Any], slugs: Sequence[str] | None) -> Select[Any]:
+        normalized_slugs = [slug.strip() for slug in slugs or [] if slug.strip()]
+        if not normalized_slugs:
+            return stmt
+        return stmt.where(GeneMarketModel.slug.in_(normalized_slugs))
 
     @staticmethod
     def _apply_exclude_installed_filter(

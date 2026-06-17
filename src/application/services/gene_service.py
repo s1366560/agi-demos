@@ -153,6 +153,7 @@ class GeneService:
         tenant_id: str | None = None,
         category: str | None = None,
         search: str | None = None,
+        slugs: list[str] | None = None,
         visibility: str | None = None,
         is_published: bool | None = None,
         exclude_installed_instance_id: str | None = None,
@@ -164,6 +165,7 @@ class GeneService:
             tenant_id=tenant_id,
             category=category,
             search=search,
+            slugs=slugs,
             visibility=visibility,
             is_published=is_published,
             exclude_installed_instance_id=exclude_installed_instance_id,
@@ -177,6 +179,7 @@ class GeneService:
         tenant_id: str | None = None,
         category: str | None = None,
         search: str | None = None,
+        slugs: list[str] | None = None,
         visibility: str | None = None,
         is_published: bool | None = None,
         exclude_installed_instance_id: str | None = None,
@@ -190,6 +193,7 @@ class GeneService:
             tenant_id: Filter by tenant.
             category: Filter by category.
             search: Search by name, slug, description, or short description.
+            slugs: Exact slug allow-list.
             visibility: Filter by visibility.
             is_published: Filter by published status.
             exclude_installed_instance_id: Exclude genes active on this instance.
@@ -206,6 +210,7 @@ class GeneService:
             tenant_id=tenant_id,
             category=category,
             search=search,
+            slugs=slugs,
             visibility=visibility,
             is_published=effective_is_published,
             exclude_installed_instance_id=exclude_installed_instance_id,
@@ -216,6 +221,7 @@ class GeneService:
             tenant_id=tenant_id,
             category=category,
             search=search,
+            slugs=slugs,
             visibility=visibility,
             is_published=effective_is_published,
             exclude_installed_instance_id=exclude_installed_instance_id,

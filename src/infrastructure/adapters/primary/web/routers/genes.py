@@ -193,6 +193,13 @@ def _invalid_gene_request_error() -> HTTPException:
     )
 
 
+def _split_slug_query(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    slugs = [slug.strip() for slug in value.split(",") if slug.strip()]
+    return slugs or None
+
+
 def _gene_not_found_error() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -479,6 +486,7 @@ async def list_genes(
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
     category: str | None = Query(None, description="Filter by category"),
     search: str | None = Query(None, description="Search by name, slug, or description"),
+    slugs: str | None = Query(None, description="Comma-separated exact slug filter"),
     visibility: str | None = Query(None, description="Filter by visibility"),
     is_published: bool | None = Query(None, description="Filter by published status"),
     exclude_installed_instance_id: str | None = Query(
@@ -502,6 +510,7 @@ async def list_genes(
         tenant_id=tenant_id,
         category=category,
         search=search,
+        slugs=_split_slug_query(slugs),
         visibility=visibility,
         is_published=is_published,
         exclude_installed_instance_id=exclude_installed_instance_id,

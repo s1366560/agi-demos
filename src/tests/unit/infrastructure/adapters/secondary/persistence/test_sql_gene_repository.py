@@ -147,6 +147,57 @@ async def test_gene_repository_lists_and_counts_only_active_rows(
 
 
 @pytest.mark.unit
+async def test_gene_repository_filters_and_counts_by_exact_slugs_before_pagination(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    test_db.add_all(
+        [
+            _gene(
+                gene_id="matching-one",
+                slug="matching-one",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Matching One",
+            ),
+            _gene(
+                gene_id="matching-two",
+                slug="matching-two",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Matching Two",
+            ),
+            _gene(
+                gene_id="other-gene",
+                slug="other-gene",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Other Gene",
+            ),
+        ]
+    )
+    await test_db.flush()
+
+    repo = SqlGeneRepository(test_db)
+
+    page = await repo.find_by_filters(
+        tenant_id=test_project_db.tenant_id,
+        slugs=["matching-one", "matching-two"],
+        limit=1,
+        offset=0,
+    )
+    total = await repo.count_by_filters(
+        tenant_id=test_project_db.tenant_id,
+        slugs=["matching-one", "matching-two"],
+    )
+
+    assert total == 2
+    assert len(page) == 1
+    assert page[0].slug in {"matching-one", "matching-two"}
+
+
+@pytest.mark.unit
 async def test_gene_repository_orders_listings_newest_first_with_id_tiebreaker(
     test_db: AsyncSession,
     test_project_db: Project,

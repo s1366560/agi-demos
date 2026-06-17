@@ -276,11 +276,22 @@ export interface GeneListParams {
   page_size?: number;
   category?: string;
   search?: string | undefined;
+  slugs?: string[];
   visibility?: string;
   is_published?: boolean;
   exclude_installed_instance_id?: string | undefined;
   tenant_id?: string | null | undefined;
 }
+
+const geneListParams = (params?: GeneListParams) => {
+  if (!params?.slugs?.length) {
+    return params;
+  }
+  return {
+    ...params,
+    slugs: params.slugs.join(','),
+  };
+};
 
 export interface GenomeListParams {
   page?: number;
@@ -317,7 +328,7 @@ export interface GeneReviewListResponse {
 
 export const geneMarketService = {
   listGenes: (params?: GeneListParams) =>
-    httpClient.get<GeneListResponse>(`${BASE_URL}/`, { params }),
+    httpClient.get<GeneListResponse>(`${BASE_URL}/`, { params: geneListParams(params) }),
 
   createGene: (data: GeneCreate, options?: TenantScopedOptions) =>
     postWithTenant<GeneResponse>(`${BASE_URL}/`, data, options),
