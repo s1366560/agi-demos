@@ -6,8 +6,7 @@ Tests:
 3. Delete memory uses correct graphiti cleanup method
 """
 
-from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -15,7 +14,7 @@ from httpx import AsyncClient
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.adapters.secondary.persistence.models import Memory, MemoryChunk
+from src.infrastructure.adapters.secondary.persistence.models import Memory, MemoryChunk, TaskLog
 
 
 @pytest.mark.asyncio
@@ -39,27 +38,10 @@ class TestMemoryWorkflowNew:
         # Reset mock calls
         mock_workflow_engine.start_workflow.reset_mock()
 
-        # Mock async_session_factory to avoid hitting real PostgreSQL.
-        # _submit_reprocessing_workflow opens a separate session for TaskLog.
-        mock_task_session = MagicMock()
-        mock_task_session.add = MagicMock()
-
-        @asynccontextmanager
-        async def _fake_factory():
-            mock_begin = MagicMock()
-            mock_begin.__aenter__ = AsyncMock(return_value=None)
-            mock_begin.__aexit__ = AsyncMock(return_value=False)
-            mock_task_session.begin = MagicMock(return_value=mock_begin)
-            yield mock_task_session
-
-        with patch(
-            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
-            _fake_factory,
-        ):
-            # Act
-            response = await async_client.patch(
-                f"/api/v1/memories/{test_memory_db.id}", json=update_data
-            )
+        # Act
+        response = await async_client.patch(
+            f"/api/v1/memories/{test_memory_db.id}", json=update_data
+        )
 
         # Assert
         assert response.status_code == 200
@@ -69,6 +51,39 @@ class TestMemoryWorkflowNew:
         assert mock_workflow_engine.start_workflow.called
         assert data["processing_status"] == "PENDING"
         assert data["task_id"] is not None
+
+    async def test_update_memory_marks_task_failed_when_workflow_start_fails(
+        self,
+        async_client: AsyncClient,
+        test_memory_db: "Memory",
+        mock_workflow_engine: AsyncMock,
+        db: AsyncSession,
+    ):
+        """Test update reprocessing does not leave orphaned pending task logs."""
+        update_data = {
+            "title": "Updated Title with failed workflow",
+            "content": "Updated content with failed workflow",
+            "version": test_memory_db.version,
+        }
+        mock_workflow_engine.start_workflow.reset_mock()
+        mock_workflow_engine.start_workflow.side_effect = RuntimeError("temporal unavailable")
+
+        try:
+            response = await async_client.patch(
+                f"/api/v1/memories/{test_memory_db.id}", json=update_data
+            )
+        finally:
+            mock_workflow_engine.start_workflow.side_effect = None
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["processing_status"] == "FAILED"
+        assert data["task_id"] is not None
+
+        task_result = await db.execute(select(TaskLog).where(TaskLog.id == data["task_id"]))
+        task_log = task_result.scalar_one()
+        assert task_log.status == "FAILED"
+        assert "temporal unavailable" in (task_log.error_message or "")
 
     async def test_update_memory_no_reprocess_on_metadata_change(
         self,
@@ -116,25 +131,8 @@ class TestMemoryWorkflowNew:
         # Reset mock calls
         mock_workflow_engine.start_workflow.reset_mock()
 
-        # Mock async_session_factory to avoid hitting real PostgreSQL.
-        # reprocess_memory opens a separate session for TaskLog.
-        mock_task_session = MagicMock()
-        mock_task_session.add = MagicMock()
-
-        @asynccontextmanager
-        async def _fake_factory():
-            mock_begin = MagicMock()
-            mock_begin.__aenter__ = AsyncMock(return_value=None)
-            mock_begin.__aexit__ = AsyncMock(return_value=False)
-            mock_task_session.begin = MagicMock(return_value=mock_begin)
-            yield mock_task_session
-
-        with patch(
-            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
-            _fake_factory,
-        ):
-            # Act
-            response = await async_client.post(f"/api/v1/memories/{test_memory_db.id}/reprocess")
+        # Act
+        response = await async_client.post(f"/api/v1/memories/{test_memory_db.id}/reprocess")
 
         # Assert
         assert response.status_code == 200
@@ -144,6 +142,40 @@ class TestMemoryWorkflowNew:
         assert mock_workflow_engine.start_workflow.called
         assert data["processing_status"] == "PENDING"
         assert data["task_id"] is not None
+
+    async def test_reprocess_memory_marks_task_failed_when_workflow_start_fails(
+        self,
+        async_client: AsyncClient,
+        test_memory_db: "Memory",
+        mock_workflow_engine: AsyncMock,
+        db: AsyncSession,
+    ):
+        """Test manual reprocess failure records a failed task instead of pending orphan."""
+        await db.execute(
+            update(Memory)
+            .where(Memory.id == test_memory_db.id)
+            .values(processing_status="COMPLETED")
+        )
+        await db.commit()
+
+        mock_workflow_engine.start_workflow.reset_mock()
+        mock_workflow_engine.start_workflow.side_effect = RuntimeError("temporal unavailable")
+        try:
+            response = await async_client.post(f"/api/v1/memories/{test_memory_db.id}/reprocess")
+        finally:
+            mock_workflow_engine.start_workflow.side_effect = None
+
+        assert response.status_code == 500
+
+        await db.refresh(test_memory_db)
+        memory = test_memory_db
+        assert memory.processing_status == "FAILED"
+        assert memory.task_id is not None
+
+        task_result = await db.execute(select(TaskLog).where(TaskLog.id == memory.task_id))
+        task_log = task_result.scalar_one()
+        assert task_log.status == "FAILED"
+        assert "temporal unavailable" in (task_log.error_message or "")
 
     async def test_delete_memory_uses_memory_id_graph_cleanup(
         self,

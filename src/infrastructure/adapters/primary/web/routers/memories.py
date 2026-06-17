@@ -28,6 +28,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Memory,
     MemoryShare,
     Project,
+    TaskLog,
     User,
     UserProject,
     UserTenant,
@@ -35,6 +36,132 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
+
+
+def _add_memory_reprocessing_task(
+    *,
+    db: AsyncSession,
+    memory: Any,
+    project: Project,
+    current_user: User,
+    source_description: str,
+    workflow_id: str | None = None,
+) -> tuple[str, str, dict[str, Any]]:
+    """Stage a memory reprocessing task in the caller's active DB transaction."""
+    task_id = str(uuid4())
+    task_payload = {
+        "group_id": memory.project_id,
+        "name": memory.title or str(memory.id),
+        "content": memory.content,
+        "source_description": source_description,
+        "episode_type": memory.content_type,
+        "entity_types": None,
+        "uuid": memory.id,
+        "tenant_id": project.tenant_id,
+        "project_id": memory.project_id,
+        "user_id": str(current_user.id),
+        "memory_id": memory.id,
+    }
+
+    db.add(
+        TaskLog(
+            id=task_id,
+            group_id=memory.project_id,
+            task_type="add_episode",
+            status="PENDING",
+            payload=task_payload,
+            entity_type="episode",
+            created_at=datetime.now(UTC),
+        )
+    )
+    task_payload["task_id"] = task_id
+    memory.processing_status = "PENDING"
+    memory.task_id = task_id
+    return task_id, workflow_id or f"episode-update-{memory.id}-{task_id[:8]}", task_payload
+
+
+async def _mark_memory_reprocessing_task_failed(
+    *,
+    db: AsyncSession,
+    memory: Any,
+    task_id: str,
+    error: Exception,
+) -> None:
+    """Persist failed workflow-start state for both the memory and task log."""
+    memory.processing_status = "FAILED"
+    task_result = await db.execute(
+        refresh_select_statement(select(TaskLog).where(TaskLog.id == task_id))
+    )
+    task_log = task_result.scalar_one_or_none()
+    if task_log is not None:
+        task_log.status = "FAILED"
+        task_log.error_message = str(error)
+        task_log.completed_at = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(memory)
+
+
+async def _start_memory_reprocessing_workflow(
+    *,
+    memory: Any,
+    db: AsyncSession,
+    workflow_engine: WorkflowEnginePort,
+    task_id: str,
+    workflow_id: str,
+    task_payload: dict[str, Any],
+) -> bool:
+    """Start a persisted reprocessing workflow, marking DB state failed on start errors."""
+    try:
+        _ = await workflow_engine.start_workflow(
+            workflow_name="episode_processing",
+            workflow_id=workflow_id,
+            input_data=task_payload,
+            task_queue="default",
+        )
+    except Exception as exc:
+        await _mark_memory_reprocessing_task_failed(
+            db=db,
+            memory=memory,
+            task_id=task_id,
+            error=exc,
+        )
+        logger.error(
+            "Failed to start memory reprocessing workflow for memory %s task %s: %s",
+            memory.id,
+            task_id,
+            exc,
+            exc_info=True,
+        )
+        return False
+    return True
+
+
+async def _start_staged_memory_reprocessing_task(
+    *,
+    memory: Any,
+    db: AsyncSession,
+    workflow_engine: WorkflowEnginePort,
+    reprocessing_task: tuple[str, str, dict[str, Any]] | None,
+) -> None:
+    """Start a previously committed memory reprocessing task if one was staged."""
+    if reprocessing_task is None:
+        return
+
+    task_id, workflow_id, task_payload = reprocessing_task
+    workflow_started = await _start_memory_reprocessing_workflow(
+        memory=memory,
+        db=db,
+        workflow_engine=workflow_engine,
+        task_id=task_id,
+        workflow_id=workflow_id,
+        task_payload=task_payload,
+    )
+    if workflow_started:
+        logger.info(
+            "Memory %s content updated, triggered reprocessing task %s",
+            memory.id,
+            task_id,
+        )
 
 
 async def _background_index_memory(
@@ -589,9 +716,6 @@ async def create_memory(
                 memory_id=memory.id,
             )
 
-            # Submit to Temporal workflow for processing
-            from src.infrastructure.adapters.secondary.persistence.models import TaskLog
-
             task_id = str(uuid4())
             task_payload = {
                 "group_id": project_id,
@@ -917,55 +1041,31 @@ async def reprocess_memory(
         if not project:
             raise HTTPException(status_code=404, detail=_("Project not found"))
 
-        # Submit to Temporal workflow for processing
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.models import TaskLog
-
-        task_id = str(uuid4())
-        task_payload = {
-            "group_id": memory.project_id,
-            "name": memory.title or str(memory.id),
-            "content": memory.content,
-            "source_description": "User input (reprocess)",
-            "episode_type": memory.content_type,
-            "entity_types": None,
-            "uuid": memory.id,
-            "tenant_id": project.tenant_id,
-            "project_id": memory.project_id,
-            "user_id": str(current_user.id),
-            "memory_id": memory.id,
-        }
-
-        # Create TaskLog record
-        async with async_session_factory() as task_session, task_session.begin():
-            task_log = TaskLog(
-                id=task_id,
-                group_id=memory.project_id,
-                task_type="add_episode",
-                status="PENDING",
-                payload=task_payload,
-                entity_type="episode",
-                created_at=datetime.now(UTC),
-            )
-            task_session.add(task_log)
-
-        task_payload["task_id"] = task_id
-
-        # Start Temporal workflow
-        workflow_id = f"episode-reprocess-{memory.id}"
-        await workflow_engine.start_workflow(
-            workflow_name="episode_processing",
-            workflow_id=workflow_id,
-            input_data=task_payload,
-            task_queue="default",
+        task_id, workflow_id, task_payload = _add_memory_reprocessing_task(
+            db=db,
+            memory=memory,
+            project=project,
+            current_user=current_user,
+            source_description="User input (reprocess)",
+            workflow_id=f"episode-reprocess-{memory.id}",
         )
 
-        memory.processing_status = "PENDING"
-        memory.task_id = task_id
         await db.commit()
         await db.refresh(memory)
+
+        workflow_started = await _start_memory_reprocessing_workflow(
+            memory=memory,
+            db=db,
+            workflow_engine=workflow_engine,
+            task_id=task_id,
+            workflow_id=workflow_id,
+            task_payload=task_payload,
+        )
+        if not workflow_started:
+            raise HTTPException(
+                status_code=500,
+                detail=_("Failed to queue memory for reprocessing. Please try again."),
+            )
 
         logger.info(f"Memory {memory.id} re-queued for processing. Task: {task_id}")
         return MemoryResponse.from_orm(memory)
@@ -1007,14 +1107,13 @@ async def _check_memory_edit_permission(memory: Any, current_user: User, db: Asy
         raise HTTPException(status_code=403, detail=_("Permission denied"))
 
 
-async def _submit_reprocessing_workflow(
+async def _stage_reprocessing_workflow(
     memory: Any,
     current_user: User,
     db: AsyncSession,
-    workflow_engine: WorkflowEnginePort,
     graph_service: GraphServicePort | None = None,
-) -> None:
-    """Submit memory for reprocessing via Temporal workflow."""
+) -> tuple[str, str, dict[str, Any]] | None:
+    """Stage memory reprocessing in the caller's transaction."""
     try:
         if graph_service is not None:
             try:
@@ -1035,63 +1134,29 @@ async def _submit_reprocessing_workflow(
         if not project:
             logger.error(f"Project {memory.project_id} not found for memory {memory.id}")
             memory.processing_status = "FAILED"
-            return
+            return None
 
-        # Submit to Temporal workflow for processing
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
+        reprocessing_task = _add_memory_reprocessing_task(
+            db=db,
+            memory=memory,
+            project=project,
+            current_user=current_user,
+            source_description="User input (update)",
         )
-        from src.infrastructure.adapters.secondary.persistence.models import TaskLog
-
-        task_id = str(uuid4())
-        task_payload = {
-            "group_id": memory.project_id,
-            "name": memory.title or str(memory.id),
-            "content": memory.content,
-            "source_description": "User input (update)",
-            "episode_type": memory.content_type,
-            "entity_types": None,
-            "uuid": memory.id,
-            "tenant_id": project.tenant_id,
-            "project_id": memory.project_id,
-            "user_id": str(current_user.id),
-            "memory_id": memory.id,
-        }
-
-        # Create TaskLog record
-        async with async_session_factory() as task_session, task_session.begin():
-            task_log = TaskLog(
-                id=task_id,
-                group_id=memory.project_id,
-                task_type="add_episode",
-                status="PENDING",
-                payload=task_payload,
-                entity_type="episode",
-                created_at=datetime.now(UTC),
-            )
-            task_session.add(task_log)
-
-        task_payload["task_id"] = task_id
-
-        # Start Temporal workflow
-        workflow_id = f"episode-update-{memory.id}-{task_id[:8]}"
-        await workflow_engine.start_workflow(
-            workflow_name="episode_processing",
-            workflow_id=workflow_id,
-            input_data=task_payload,
-            task_queue="default",
+        logger.info(
+            "Memory %s content updated, staged reprocessing task %s",
+            memory.id,
+            reprocessing_task[0],
         )
-        memory.processing_status = "PENDING"
-        memory.task_id = task_id
-        logger.info(f"Memory {memory.id} content updated, triggered reprocessing task {task_id}")
+        return reprocessing_task
     except Exception as e:
         memory.processing_status = "FAILED"
-        memory.processing_error = f"Reprocessing failed: {e!s}"
         logger.error(
             f"Failed to trigger reprocessing for memory {memory.id}: {e}. "
             "Content was updated but knowledge graph won't reflect changes.",
             exc_info=True,
         )
+        return None
 
 
 @router.patch("/memories/{memory_id}", response_model=MemoryResponse)
@@ -1152,18 +1217,25 @@ async def update_memory(
     memory.version += 1
 
     # 6. Reprocess if needed
+    reprocessing_task: tuple[str, str, dict[str, Any]] | None = None
     if should_reprocess:
-        await _submit_reprocessing_workflow(
+        reprocessing_task = await _stage_reprocessing_workflow(
             memory,
             current_user,
             db,
-            workflow_engine,
             graph_service,
         )
 
     # 7. Save to database
     await db.commit()
     await db.refresh(memory)
+
+    await _start_staged_memory_reprocessing_task(
+        memory=memory,
+        db=db,
+        workflow_engine=workflow_engine,
+        reprocessing_task=reprocessing_task,
+    )
 
     should_sync_chunks = (
         memory.content != original_content or dict(memory.meta or {}) != original_meta
