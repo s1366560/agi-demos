@@ -75,6 +75,7 @@ class _InstanceScopedEntity(Protocol):
     usage_count: int
     installed_at: Any
     created_at: Any
+    deleted_at: Any
 
 
 class _GeneLookupService(Protocol):
@@ -359,7 +360,11 @@ async def _ensure_instance_tenant_access(
     tenant_id: str,
 ) -> None:
     instance = await container.instance_service().get_instance(instance_id)
-    if instance is None or instance.tenant_id != tenant_id:
+    if (
+        instance is None
+        or instance.tenant_id != tenant_id
+        or getattr(instance, "deleted_at", None) is not None
+    ):
         raise _evolution_event_not_found_error()
 
 
@@ -401,7 +406,11 @@ async def _ensure_instance_gene_tenant_access(
         tenant_id=tenant_id,
     )
     instance_gene = await service.get_instance_gene(instance_gene_id)
-    if instance_gene is None or instance_gene.instance_id != instance_id:
+    if (
+        instance_gene is None
+        or instance_gene.instance_id != instance_id
+        or getattr(instance_gene, "deleted_at", None) is not None
+    ):
         raise _instance_gene_not_found_error()
     return instance_gene
 
@@ -799,7 +808,12 @@ async def list_instance_genes(
     container = get_container_with_db(request, db)
     service = container.gene_service()
     await _ensure_instance_tenant_access(container, instance_id=instance_id, tenant_id=tenant_id)
-    instance_genes, total, active_total, usage_total = await service.list_instance_genes_with_summary(
+    (
+        instance_genes,
+        total,
+        active_total,
+        usage_total,
+    ) = await service.list_instance_genes_with_summary(
         instance_id,
         limit=limit,
         offset=offset,

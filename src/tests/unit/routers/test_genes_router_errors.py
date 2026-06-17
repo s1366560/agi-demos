@@ -61,8 +61,9 @@ class _InstanceService:
     async def get_instance(self, instance_id: str) -> object | None:
         if instance_id == "missing-instance":
             return None
+        deleted_at = datetime(2026, 1, 2, tzinfo=UTC) if instance_id == "deleted-instance" else None
         tenant_id = "tenant-2" if instance_id == "foreign-instance" else "tenant-1"
-        return SimpleNamespace(id=instance_id, tenant_id=tenant_id)
+        return SimpleNamespace(id=instance_id, tenant_id=tenant_id, deleted_at=deleted_at)
 
 
 class _Container:
@@ -82,20 +83,25 @@ class _InstanceGeneListService(_FailingGeneService):
     ) -> tuple[list[SimpleNamespace], int, int, int]:
         assert limit == 25
         assert offset == 0
-        return [
-            SimpleNamespace(
-                id="instance-gene-1",
-                instance_id=instance_id,
-                gene_id="gene-1",
-                genome_id=None,
-                status=InstanceGeneStatus.installed,
-                installed_version="1.2.3",
-                config_snapshot={"mode": "strict"},
-                usage_count=7,
-                installed_at=datetime(2026, 1, 1, tzinfo=UTC),
-                created_at=datetime(2026, 1, 1, tzinfo=UTC),
-            )
-        ], 3, 2, 17
+        return (
+            [
+                SimpleNamespace(
+                    id="instance-gene-1",
+                    instance_id=instance_id,
+                    gene_id="gene-1",
+                    genome_id=None,
+                    status=InstanceGeneStatus.installed,
+                    installed_version="1.2.3",
+                    config_snapshot={"mode": "strict"},
+                    usage_count=7,
+                    installed_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                )
+            ],
+            3,
+            2,
+            17,
+        )
 
 
 class _InstanceGeneListContainer(_Container):
@@ -118,6 +124,20 @@ class _EvolutionAccessGeneService(_FailingGeneService):
 class _EvolutionAccessContainer(_Container):
     def gene_service(self) -> _EvolutionAccessGeneService:
         return _EvolutionAccessGeneService()
+
+
+class _DeletedInstanceGeneService(_FailingGeneService):
+    async def get_instance_gene(self, *_args: object, **_kwargs: object) -> object | None:
+        return SimpleNamespace(
+            id="instance-gene-deleted",
+            instance_id="instance-1",
+            deleted_at=datetime(2026, 1, 2, tzinfo=UTC),
+        )
+
+
+class _DeletedInstanceGeneContainer(_Container):
+    def gene_service(self) -> _DeletedInstanceGeneService:
+        return _DeletedInstanceGeneService()
 
 
 class _ReviewFailingGeneService(_FailingGeneService):
@@ -329,6 +349,29 @@ async def test_get_instance_gene_sanitizes_missing_instance_gene_id() -> None:
 
 
 @pytest.mark.unit
+async def test_get_instance_gene_hides_deleted_instance_gene(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _DeletedInstanceGeneContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.get_instance_gene(
+            request=SimpleNamespace(),
+            instance_id="instance-1",
+            instance_gene_id="instance-gene-deleted",
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Instance gene not found"
+
+
+@pytest.mark.unit
 async def test_list_instance_genes_enriches_gene_display_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -364,6 +407,22 @@ async def test_list_instance_genes_enriches_gene_display_metadata(
     assert item.gene_description == "Reviews code changes"
     assert item.gene_category == "tool"
     db.execute.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_list_instance_genes_hides_deleted_instance() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.list_instance_genes(
+            request=SimpleNamespace(),
+            instance_id="deleted-instance",
+            limit=25,
+            offset=0,
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Evolution event not found"
 
 
 @pytest.mark.unit
