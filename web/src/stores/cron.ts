@@ -18,6 +18,10 @@ import type {
   CronJobRunResponse,
 } from '../types/cron';
 
+let latestFetchJobsRequest = 0;
+let latestFetchJobRequest = 0;
+let latestFetchRunsRequest = 0;
+
 // ============================================================================
 // STATE INTERFACE
 // ============================================================================
@@ -100,6 +104,8 @@ export const useCronStore = create<CronState>()(
       ...initialState,
 
       fetchJobs: async (projectId: string) => {
+        const requestId = latestFetchJobsRequest + 1;
+        latestFetchJobsRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const { filters } = get();
@@ -109,12 +115,14 @@ export const useCronStore = create<CronState>()(
             limit: filters.pageSize,
             offset,
           });
+          if (requestId !== latestFetchJobsRequest) return;
           set({
             jobs: response.items,
             total: response.total,
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (requestId !== latestFetchJobsRequest) throw error;
           const errorMessage = getErrorMessage(error);
           set({ error: `${errorMessage} (Failed to list cron jobs)`, isLoading: false });
           throw error;
@@ -122,12 +130,16 @@ export const useCronStore = create<CronState>()(
       },
 
       fetchJob: async (projectId: string, jobId: string) => {
+        const requestId = latestFetchJobRequest + 1;
+        latestFetchJobRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const job = await cronAPI.get(projectId, jobId);
+          if (requestId !== latestFetchJobRequest) return job;
           set({ selectedJob: job, isLoading: false });
           return job;
         } catch (error: unknown) {
+          if (requestId !== latestFetchJobRequest) throw error;
           const errorMessage = getErrorMessage(error);
           set({ error: `${errorMessage} (Failed to fetch cron job)`, isLoading: false });
           throw error;
@@ -218,15 +230,19 @@ export const useCronStore = create<CronState>()(
       },
 
       fetchRuns: async (projectId: string, jobId: string, limit = 20, offset = 0) => {
+        const requestId = latestFetchRunsRequest + 1;
+        latestFetchRunsRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await cronAPI.listRuns(projectId, jobId, { limit, offset });
+          if (requestId !== latestFetchRunsRequest) return;
           set({
             runs: response.items,
             runsTotal: response.total,
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (requestId !== latestFetchRunsRequest) throw error;
           const errorMessage = getErrorMessage(error);
           set({ error: `${errorMessage} (Failed to fetch run history)`, isLoading: false });
           throw error;
@@ -240,6 +256,9 @@ export const useCronStore = create<CronState>()(
       },
 
       reset: () => {
+        latestFetchJobsRequest += 1;
+        latestFetchJobRequest += 1;
+        latestFetchRunsRequest += 1;
         set(initialState);
       },
 
