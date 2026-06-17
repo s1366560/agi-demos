@@ -406,6 +406,32 @@ describe('Gene marketplace rating flow', () => {
     expect(messageSuccessSpy).toHaveBeenCalledWith('Genome unpublished successfully');
   });
 
+  it('does not refetch genome genes when only genome metadata changes', async () => {
+    stateMock.currentGenome = genome({ is_published: false, gene_slugs: ['code-review'] });
+
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/genomes/genome-1']}>
+        <GenomeDetail />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(actionsMock.fetchGenomeGenes).toHaveBeenCalledWith(['code-review'], {
+        tenant_id: 'tenant-1',
+      });
+    });
+    actionsMock.fetchGenomeGenes.mockClear();
+
+    stateMock.currentGenome = genome({ is_published: true, gene_slugs: ['code-review'] });
+    rerender(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/genomes/genome-1']}>
+        <GenomeDetail />
+      </MemoryRouter>
+    );
+
+    expect(actionsMock.fetchGenomeGenes).not.toHaveBeenCalled();
+  });
+
   it('shows unavailable genome gene references without using the marketplace gene list', async () => {
     stateMock.currentGenome = genome({ gene_slugs: ['test-writer', 'code-review'] });
     stateMock.currentGenomeGenes = [gene({ slug: 'code-review', name: 'Code Review' })];

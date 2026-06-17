@@ -54,6 +54,13 @@ export const GenomeDetail: React.FC = () => {
     unpublishGenome,
   } = useGeneMarketActions();
   const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
+  const genomeGeneSlugKey = genome ? genome.gene_slugs.join('\n') : null;
+  const genomeGeneSlugs = useMemo(() => {
+    if (genomeGeneSlugKey === null || genomeGeneSlugKey === '') {
+      return [];
+    }
+    return genomeGeneSlugKey.split('\n');
+  }, [genomeGeneSlugKey]);
 
   useEffect(() => {
     if (genomeId && tenantId) {
@@ -67,19 +74,19 @@ export const GenomeDetail: React.FC = () => {
   }, [genomeId, getGenome, setCurrentGenome, clearError, tenantId]);
 
   useEffect(() => {
-    if (!genome || !tenantId) {
+    if (genomeGeneSlugKey === null || !tenantId) {
       return;
     }
-    void fetchGenomeGenes(genome.gene_slugs, { tenant_id: tenantId }).catch(() => {});
-  }, [fetchGenomeGenes, genome, tenantId]);
+    void fetchGenomeGenes(genomeGeneSlugs, { tenant_id: tenantId }).catch(() => {});
+  }, [fetchGenomeGenes, genomeGeneSlugKey, genomeGeneSlugs, tenantId]);
 
   const missingGeneSlugs = useMemo(() => {
-    if (!genome) {
+    if (genomeGeneSlugKey === null) {
       return [];
     }
     const availableSlugs = new Set(genomeGenes.map((gene) => gene.slug));
-    return genome.gene_slugs.filter((slug) => !availableSlugs.has(slug));
-  }, [genome, genomeGenes]);
+    return genomeGeneSlugs.filter((slug) => !availableSlugs.has(slug));
+  }, [genomeGeneSlugKey, genomeGeneSlugs, genomeGenes]);
 
   const handlePublishToggle = async () => {
     if (!genomeId || !tenantId || !genome) {
@@ -213,7 +220,7 @@ export const GenomeDetail: React.FC = () => {
         title={t('tenant.genomeDetail.genesTitle', 'Included Genes')}
         className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
       >
-        {genome.gene_slugs.length === 0 ? (
+        {genomeGeneSlugs.length === 0 ? (
           <Empty description={t('tenant.genomeDetail.noGenes', 'No genes in this genome')} />
         ) : genomeGenesLoading ? (
           <div className="flex items-center justify-center gap-2 py-6" role="status">
