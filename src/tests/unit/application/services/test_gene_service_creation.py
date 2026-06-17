@@ -39,6 +39,32 @@ async def test_create_gene_rejects_duplicate_slug(
 
 
 @pytest.mark.unit
+async def test_create_gene_allows_duplicate_slug_in_different_tenant(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    slug = _slug("shared-gene")
+
+    first = await service.create_gene(
+        name="First Tenant Gene",
+        slug=slug,
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    second = await service.create_gene(
+        name="Second Tenant Gene",
+        slug=slug,
+        created_by=test_user.id,
+        tenant_id="other-tenant",
+    )
+
+    assert first.slug == second.slug
+    assert first.tenant_id != second.tenant_id
+
+
+@pytest.mark.unit
 async def test_create_gene_persists_source_metadata(
     test_db: AsyncSession,
     test_project_db: Project,
@@ -114,6 +140,33 @@ async def test_update_gene_rejects_duplicate_slug(
 
 
 @pytest.mark.unit
+async def test_update_gene_allows_duplicate_slug_in_different_tenant(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    slug = _slug("shared-update-gene")
+    await service.create_gene(
+        name="Existing Gene",
+        slug=slug,
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    gene = await service.create_gene(
+        name="Editable Other Tenant Gene",
+        slug=_slug("editable-other-gene"),
+        created_by=test_user.id,
+        tenant_id="other-tenant",
+    )
+
+    updated = await service.update_gene(gene.id, slug=slug)
+
+    assert updated.slug == slug
+    assert updated.tenant_id == "other-tenant"
+
+
+@pytest.mark.unit
 async def test_create_genome_rejects_duplicate_slug(
     test_db: AsyncSession,
     test_project_db: Project,
@@ -136,6 +189,32 @@ async def test_create_genome_rejects_duplicate_slug(
             created_by=test_user.id,
             tenant_id=test_project_db.tenant_id,
         )
+
+
+@pytest.mark.unit
+async def test_create_genome_allows_duplicate_slug_in_different_tenant(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    slug = _slug("shared-genome")
+
+    first = await service.create_genome(
+        name="First Tenant Genome",
+        slug=slug,
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    second = await service.create_genome(
+        name="Second Tenant Genome",
+        slug=slug,
+        created_by=test_user.id,
+        tenant_id="other-tenant",
+    )
+
+    assert first.slug == second.slug
+    assert first.tenant_id != second.tenant_id
 
 
 @pytest.mark.unit
@@ -181,3 +260,30 @@ async def test_update_genome_rejects_duplicate_slug(
 
     with pytest.raises(ValueError, match="Genome slug already exists"):
         await service.update_genome(genome.id, slug=slug)
+
+
+@pytest.mark.unit
+async def test_update_genome_allows_duplicate_slug_in_different_tenant(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    slug = _slug("shared-update-genome")
+    await service.create_genome(
+        name="Existing Genome",
+        slug=slug,
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    genome = await service.create_genome(
+        name="Editable Other Tenant Genome",
+        slug=_slug("editable-other-genome"),
+        created_by=test_user.id,
+        tenant_id="other-tenant",
+    )
+
+    updated = await service.update_genome(genome.id, slug=slug)
+
+    assert updated.slug == slug
+    assert updated.tenant_id == "other-tenant"

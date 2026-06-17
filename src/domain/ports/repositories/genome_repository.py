@@ -17,8 +17,8 @@ class GenomeRepository(ABC):
         """Find a genome by ID."""
 
     @abstractmethod
-    async def find_by_slug(self, slug: str) -> Genome | None:
-        """Find a genome by slug."""
+    async def find_by_slug(self, slug: str, tenant_id: str | None = None) -> Genome | None:
+        """Find a genome by slug within a tenant scope."""
 
     @abstractmethod
     async def find_by_tenant(

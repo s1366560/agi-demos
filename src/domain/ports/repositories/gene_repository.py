@@ -17,8 +17,8 @@ class GeneRepository(ABC):
         """Find a gene by ID."""
 
     @abstractmethod
-    async def find_by_slug(self, slug: str) -> Gene | None:
-        """Find a gene by slug."""
+    async def find_by_slug(self, slug: str, tenant_id: str | None = None) -> Gene | None:
+        """Find a gene by slug within a tenant scope."""
 
     @abstractmethod
     async def find_by_tenant(self, tenant_id: str, limit: int = 50, offset: int = 0) -> list[Gene]:

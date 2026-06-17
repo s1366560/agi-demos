@@ -108,7 +108,7 @@ class GeneService:
         Returns:
             The created Gene entity.
         """
-        existing_gene = await self._gene_repo.find_by_slug(slug)
+        existing_gene = await self._gene_repo.find_by_slug(slug, tenant_id=tenant_id)
         if existing_gene is not None:
             raise ValueError("Gene slug already exists")
 
@@ -267,7 +267,7 @@ class GeneService:
             if key == "slug":
                 if not isinstance(value, str) or not value:
                     raise ValueError("Gene slug cannot be empty")
-                existing_gene = await self._gene_repo.find_by_slug(value)
+                existing_gene = await self._gene_repo.find_by_slug(value, tenant_id=gene.tenant_id)
                 if existing_gene is not None and existing_gene.id != gene_id:
                     raise ValueError("Gene slug already exists")
             if key == "visibility":
@@ -384,7 +384,7 @@ class GeneService:
         Returns:
             The created Genome entity.
         """
-        existing_genome = await self._genome_repo.find_by_slug(slug)
+        existing_genome = await self._genome_repo.find_by_slug(slug, tenant_id=tenant_id)
         if existing_genome is not None:
             raise ValueError("Genome slug already exists")
 
@@ -505,7 +505,9 @@ class GeneService:
             if key == "slug":
                 if not isinstance(value, str) or not value:
                     raise ValueError("Genome slug cannot be empty")
-                existing_genome = await self._genome_repo.find_by_slug(value)
+                existing_genome = await self._genome_repo.find_by_slug(
+                    value, tenant_id=genome.tenant_id
+                )
                 if existing_genome is not None and existing_genome.id != genome_id:
                     raise ValueError("Genome slug already exists")
             if key == "visibility":

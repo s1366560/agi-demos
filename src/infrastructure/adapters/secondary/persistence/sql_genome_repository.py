@@ -44,8 +44,20 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
         return self._to_domain(result.scalar_one_or_none())
 
     @override
-    async def find_by_slug(self, slug: str) -> Genome | None:
-        return await self.find_one(slug=slug)
+    async def find_by_slug(self, slug: str, tenant_id: str | None = None) -> Genome | None:
+        stmt = (
+            select(GenomeModel)
+            .where(GenomeModel.slug == slug)
+            .where(GenomeModel.deleted_at.is_(None))
+        )
+        if tenant_id is None:
+            stmt = stmt.where(GenomeModel.tenant_id.is_(None))
+        else:
+            stmt = stmt.where(GenomeModel.tenant_id == tenant_id)
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
+        return self._to_domain(result.scalar_one_or_none())
 
     @override
     async def find_by_tenant(

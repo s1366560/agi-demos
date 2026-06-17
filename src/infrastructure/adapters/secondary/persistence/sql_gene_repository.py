@@ -45,8 +45,20 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         return self._to_domain(result.scalar_one_or_none())
 
     @override
-    async def find_by_slug(self, slug: str) -> Gene | None:
-        return await self.find_one(slug=slug)
+    async def find_by_slug(self, slug: str, tenant_id: str | None = None) -> Gene | None:
+        stmt = (
+            select(GeneMarketModel)
+            .where(GeneMarketModel.slug == slug)
+            .where(GeneMarketModel.deleted_at.is_(None))
+        )
+        if tenant_id is None:
+            stmt = stmt.where(GeneMarketModel.tenant_id.is_(None))
+        else:
+            stmt = stmt.where(GeneMarketModel.tenant_id == tenant_id)
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
+        return self._to_domain(result.scalar_one_or_none())
 
     @override
     async def find_by_tenant(self, tenant_id: str, limit: int = 50, offset: int = 0) -> list[Gene]:

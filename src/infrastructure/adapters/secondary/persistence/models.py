@@ -2686,10 +2686,27 @@ class GeneMarketModel(Base):
     """Gene listing in the marketplace."""
 
     __tablename__ = "gene_market"
+    __table_args__ = (
+        Index(
+            "uq_gene_market_global_slug",
+            "slug",
+            unique=True,
+            postgresql_where=text("tenant_id IS NULL"),
+            sqlite_where=text("tenant_id IS NULL"),
+        ),
+        Index(
+            "uq_gene_market_tenant_slug",
+            "tenant_id",
+            "slug",
+            unique=True,
+            postgresql_where=text("tenant_id IS NOT NULL"),
+            sqlite_where=text("tenant_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False)
     tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     short_description: Mapped[str | None] = mapped_column(String(300), nullable=True)
@@ -2721,10 +2738,27 @@ class GenomeModel(Base):
     """Curated gene bundle (genome)."""
 
     __tablename__ = "genomes"
+    __table_args__ = (
+        Index(
+            "uq_genomes_global_slug",
+            "slug",
+            unique=True,
+            postgresql_where=text("tenant_id IS NULL"),
+            sqlite_where=text("tenant_id IS NULL"),
+        ),
+        Index(
+            "uq_genomes_tenant_slug",
+            "tenant_id",
+            "slug",
+            unique=True,
+            postgresql_where=text("tenant_id IS NOT NULL"),
+            sqlite_where=text("tenant_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False)
     tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     short_description: Mapped[str | None] = mapped_column(String(300), nullable=True)
