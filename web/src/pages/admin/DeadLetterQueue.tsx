@@ -105,6 +105,11 @@ const formatAge = (seconds: number): string => {
   return `${String(Math.round(seconds / 86400))}d`;
 };
 
+const getDistributionPercent = (count: number, total: number): number => {
+  if (total <= 0) return 0;
+  return Math.round((count / total) * 100);
+};
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -192,8 +197,7 @@ const DeadLetterQueue: React.FC = () => {
       const result = await dlqService.retryMessages(selectedRowKeys as string[]);
       message.success(
         t('admin.deadLetterQueue.messages.retryBatchResult', {
-          success: result.success_count,
-          failure: result.failure_count,
+          count: result.success_count,
         })
       );
       handleRefresh();
@@ -224,8 +228,7 @@ const DeadLetterQueue: React.FC = () => {
         const result = await dlqService.discardMessages(messagesForDiscard, discardReason);
         message.success(
           t('admin.deadLetterQueue.messages.discardBatchResult', {
-            success: result.success_count,
-            failure: result.failure_count,
+            count: result.success_count,
           })
         );
       }
@@ -402,6 +405,9 @@ const DeadLetterQueue: React.FC = () => {
   // Get unique values for filters
   const eventTypes = stats ? Object.keys(stats.event_type_counts) : [];
   const errorTypes = stats ? Object.keys(stats.error_type_counts) : [];
+  const errorTypeTotal = stats
+    ? Object.values(stats.error_type_counts).reduce((total, count) => total + count, 0)
+    : 0;
 
   return (
     <div style={{ padding: 24 }}>
@@ -524,7 +530,7 @@ const DeadLetterQueue: React.FC = () => {
                   <Space style={{ width: '100%' }}>
                     <Tag color="red">{type.split('.').pop()}</Tag>
                     <Progress
-                      percent={Math.round((count / stats.pending_count) * 100)}
+                      percent={getDistributionPercent(count, errorTypeTotal)}
                       size="small"
                       format={() => count}
                       style={{ flex: 1 }}

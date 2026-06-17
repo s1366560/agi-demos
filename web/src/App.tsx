@@ -248,6 +248,7 @@ const TemplateDetail = lazy(() =>
 
 // Admin pages
 const PoolDashboard = lazy(() => import('./pages/admin/PoolDashboard'));
+const DeadLetterQueue = lazy(() => import('./pages/admin/DeadLetterQueue'));
 
 // Project pages
 const ProjectOverview = lazy(() =>
@@ -972,6 +973,14 @@ function App() {
                 }
               />
               <Route
+                path="dead-letter-queue"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <DeadLetterQueue />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="trust-policies"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -1538,6 +1547,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <AuditLogs />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/dead-letter-queue"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <DeadLetterQueue />
                   </Suspense>
                 }
               />

@@ -320,6 +320,7 @@
     "genes": "Gene Market",
     "instanceTemplates": "Instance Templates",
     "auditLogs": "Audit Logs",
+    "deadLetterQueue": "Dead Letter Queue",
     "orgSettings": "Organization Settings",
     "blackboard": "Blackboard",
     "tenant": "Tenant"

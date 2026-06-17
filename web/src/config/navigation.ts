@@ -574,6 +574,16 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/audit-logs'),
   },
   {
+    id: 'dead-letter-queue',
+    label: 'nav.deadLetterQueue',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'top-nav',
+    relativePath: '/dead-letter-queue',
+    buildPath: (context) =>
+      getCanonicalTenantDestinationPath(context.tenantId, '/dead-letter-queue'),
+  },
+  {
     id: 'agent-definitions',
     label: 'nav.agentDefinitions',
     routeFamily: 'tenant',

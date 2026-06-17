@@ -179,6 +179,22 @@ describe('TenantHeader', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/projects');
   });
 
+  it('exposes the dead letter queue in contextual navigation', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Dead Letter Queue' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-1/dead-letter-queue');
+  });
+
   it('routes tenant-level search to the project discovery view', () => {
     render(
       <TenantHeader

@@ -70,6 +70,7 @@ const TENANT_NAV_FALLBACK_LABELS: Record<string, string> = {
   'agent-workspace': 'Agent Workspace',
   'agent-configuration': 'Agent Configuration',
   'audit-logs': 'Audit Logs',
+  'dead-letter-queue': 'Dead Letter Queue',
   evolution: 'Evolution',
   overview: 'Overview',
   plugins: 'Plugins',

@@ -287,6 +287,7 @@ export const TenantLayout: React.FC = memo(() => {
     'clusters',
     'genes',
     'audit-logs',
+    'dead-letter-queue',
     'trust-policies',
     'decision-records',
     'deploy',

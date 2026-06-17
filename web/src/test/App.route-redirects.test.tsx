@@ -108,9 +108,13 @@ describe('App route redirects', () => {
 
     expect(appSource.indexOf('path=":tenantId/subagents"')).toBeGreaterThan(-1);
     expect(appSource.indexOf('path=":tenantId/agent-definitions"')).toBeGreaterThan(-1);
+    expect(appSource.indexOf('path=":tenantId/dead-letter-queue"')).toBeGreaterThan(-1);
     expect(legacyConversationIndex).toBeGreaterThan(-1);
     expect(appSource.indexOf('path=":tenantId/subagents"')).toBeLessThan(legacyConversationIndex);
     expect(appSource.indexOf('path=":tenantId/agent-definitions"')).toBeLessThan(
+      legacyConversationIndex
+    );
+    expect(appSource.indexOf('path=":tenantId/dead-letter-queue"')).toBeLessThan(
       legacyConversationIndex
     );
   });

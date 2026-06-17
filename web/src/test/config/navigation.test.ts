@@ -162,6 +162,9 @@ describe('Navigation Configuration', () => {
       expect(tenantItems.find((item) => item.id === 'tasks')?.path).toBe(
         '/tenant/tenant-123/tasks'
       );
+      expect(tenantItems.find((item) => item.id === 'dead-letter-queue')?.path).toBe(
+        '/tenant/tenant-123/dead-letter-queue'
+      );
       expect(tenantItems.find((item) => item.id === 'agent-workspace')?.path).toBe(
         '/tenant/tenant-123/agent-workspace'
       );

@@ -320,6 +320,7 @@
     "genes": "基因市场",
     "instanceTemplates": "实例模板",
     "auditLogs": "审计日志",
+    "deadLetterQueue": "死信队列",
     "orgSettings": "组织设置",
     "blackboard": "中央黑板",
     "tenant": "组织"
