@@ -4378,6 +4378,7 @@
       "messages": {
         "refreshed": "Refreshed {{count}} episodes",
         "refreshed_text": "Refreshed {{text}}",
+        "initial_load_failed": "Failed to load maintenance data",
         "refresh_failed": "Failed to refresh graph",
         "duplicates_found": "Found {{count}} potential duplicates",
         "dedup_failed": "Failed to check duplicate entities",

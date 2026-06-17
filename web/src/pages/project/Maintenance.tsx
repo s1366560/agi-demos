@@ -25,19 +25,45 @@ export const Maintenance: React.FC = () => {
   const [embeddingLoading, setEmbeddingLoading] = useState(false);
   const [embeddingStatus, setEmbeddingStatus] = useState<EmbeddingStatus | null>(null);
   const [maintenanceStatus, setMaintenanceStatus] = useState<MaintenanceStatus | null>(null);
+  const [initialLoadError, setInitialLoadError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<'info' | 'error'>('info');
 
   useEffect(() => {
-    if (projectId) {
-      void graphService.getGraphStats(tenantId, projectId).then(setStats).catch(console.error);
-      void graphService.getEmbeddingStatus(projectId).then(setEmbeddingStatus).catch(console.error);
-      void graphService
-        .getMaintenanceStatus(projectId)
-        .then(setMaintenanceStatus)
-        .catch(console.error);
-    }
-  }, [tenantId, projectId]);
+    if (!projectId) return;
+
+    let isCurrent = true;
+    const reportInitialLoadError = (error: unknown) => {
+      console.error(error);
+      if (isCurrent) {
+        setInitialLoadError(t('project.maintenance.messages.initial_load_failed'));
+      }
+    };
+
+    setInitialLoadError(null);
+    void graphService
+      .getGraphStats(tenantId, projectId)
+      .then((nextStats) => {
+        if (isCurrent) setStats(nextStats);
+      })
+      .catch(reportInitialLoadError);
+    void graphService
+      .getEmbeddingStatus(projectId)
+      .then((nextStatus) => {
+        if (isCurrent) setEmbeddingStatus(nextStatus);
+      })
+      .catch(reportInitialLoadError);
+    void graphService
+      .getMaintenanceStatus(projectId)
+      .then((nextStatus) => {
+        if (isCurrent) setMaintenanceStatus(nextStatus);
+      })
+      .catch(reportInitialLoadError);
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [tenantId, projectId, t]);
 
   const handleRefresh = async () => {
     if (!projectId) return;
@@ -217,6 +243,14 @@ export const Maintenance: React.FC = () => {
         <p className="text-slate-500 dark:text-slate-400 mt-1">
           {t('project.maintenance.subtitle')}
         </p>
+        {initialLoadError && (
+          <div
+            role="alert"
+            className="mt-4 rounded-lg bg-red-50 p-4 text-red-700 dark:bg-red-900/20 dark:text-red-300"
+          >
+            {initialLoadError}
+          </div>
+        )}
         {message && (
           <div
             role={messageType === 'error' ? 'alert' : 'status'}

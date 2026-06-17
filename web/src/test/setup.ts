@@ -1516,6 +1516,7 @@ const commonTranslations: Record<string, string> = {
   'project.maintenance.warning.title': 'Warning',
   'project.maintenance.warning.desc': 'Some operations may take time to complete',
   'project.maintenance.messages.refreshed': 'Successfully refreshed {{count}} episodes',
+  'project.maintenance.messages.initial_load_failed': 'Failed to load maintenance data',
   'project.maintenance.messages.duplicates_found': 'Found {{count}} duplicate entities',
   'project.maintenance.messages.dedup_started': 'Deduplication started (Task ID: {{taskId}})',
   'project.maintenance.messages.dedup_merge_failed': 'Failed to merge duplicate entities',

@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Maintenance } from '../../../pages/project/Maintenance';
 import { graphService } from '../../../services/graphService';
@@ -56,6 +56,10 @@ describe('Maintenance', () => {
     });
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('renders graph statistics', async () => {
     render(<Maintenance />);
 
@@ -66,6 +70,15 @@ describe('Maintenance', () => {
       expect(screen.getByText('50')).toBeInTheDocument(); // Episodes
       expect(screen.getByText('5')).toBeInTheDocument(); // Communities
     });
+  });
+
+  it('shows a visible error when initial maintenance data fails to load', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    (graphService.getGraphStats as any).mockRejectedValueOnce(new Error('stats down'));
+
+    render(<Maintenance />);
+
+    expect(await screen.findByText('Failed to load maintenance data')).toBeInTheDocument();
   });
 
   it('handles incremental refresh', async () => {

@@ -4389,6 +4389,7 @@
       "messages": {
         "refreshed": "已刷新 {{count}} 个 Episodes",
         "refreshed_text": "已刷新 {{text}}",
+        "initial_load_failed": "维护数据加载失败",
         "refresh_failed": "刷新图谱失败",
         "duplicates_found": "发现 {{count}} 个潜在重复项",
         "dedup_failed": "检查重复实体失败",
