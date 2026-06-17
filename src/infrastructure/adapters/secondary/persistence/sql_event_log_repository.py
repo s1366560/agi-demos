@@ -64,16 +64,20 @@ class SqlEventLogRepository(BaseRepository[EventLog, TenantEventLogModel]):
 
         # Count
         count_stmt = select(func.count()).select_from(base_stmt.subquery())
-        count_result = await self._session.execute(refresh_select_statement(self._refresh_statement(count_stmt)))
+        count_result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(count_stmt))
+        )
         total = count_result.scalar_one()
 
         # Fetch
         stmt = (
-            base_stmt.order_by(TenantEventLogModel.created_at.desc())
+            base_stmt.order_by(TenantEventLogModel.created_at.desc(), TenantEventLogModel.id.asc())
             .limit(page_size)
             .offset(offset)
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(stmt)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
         items = [d for row in result.scalars().all() if (d := self._to_domain(row)) is not None]
 
         return items, total
@@ -85,5 +89,7 @@ class SqlEventLogRepository(BaseRepository[EventLog, TenantEventLogModel]):
             .distinct()
             .order_by(TenantEventLogModel.event_type)
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(stmt)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(stmt))
+        )
         return [row[0] for row in result.all()]
