@@ -150,24 +150,44 @@ export const PlaybookLibrary: FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const lastSequenceRef = useRef<string | undefined>(undefined);
+  const activeProjectIdRef = useRef<string | undefined>(projectId);
+  const sequenceProjectIdRef = useRef<string | undefined>(projectId);
   const refreshTimerRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    activeProjectIdRef.current = projectId;
+    if (sequenceProjectIdRef.current !== projectId) {
+      sequenceProjectIdRef.current = projectId;
+      lastSequenceRef.current = undefined;
+    }
+    return () => {
+      if (activeProjectIdRef.current === projectId) {
+        activeProjectIdRef.current = undefined;
+      }
+    };
+  }, [projectId]);
 
   const load = useCallback(
     async (silent?: boolean) => {
       if (projectId === undefined) return;
+      const requestedProjectId = projectId;
       if (silent !== true) setLoading(true);
       setError(null);
       try {
         const [pbs, vds] = await Promise.all([
-          playbookService.listPlaybooks(projectId, LIMIT),
-          playbookService.listReflectionVerdicts(projectId, LIMIT),
+          playbookService.listPlaybooks(requestedProjectId, LIMIT),
+          playbookService.listReflectionVerdicts(requestedProjectId, LIMIT),
         ]);
+        if (activeProjectIdRef.current !== requestedProjectId) return;
         setPlaybooks(pbs);
         setVerdicts(vds);
       } catch (err) {
+        if (activeProjectIdRef.current !== requestedProjectId) return;
         setError(err instanceof Error ? err.message : String(err));
       } finally {
-        if (silent !== true) setLoading(false);
+        if (activeProjectIdRef.current === requestedProjectId && silent !== true) {
+          setLoading(false);
+        }
       }
     },
     [projectId]
