@@ -11,6 +11,7 @@ import pytest
 from src.infrastructure.adapters.secondary.persistence.models import CronJobModel
 from src.infrastructure.adapters.secondary.persistence.sql_cron_job_repository import (
     SqlCronJobRepository,
+    SqlCronJobRunRepository,
 )
 
 pytestmark = pytest.mark.unit
@@ -19,15 +20,15 @@ NOW = datetime(2026, 4, 27, 10, 0, tzinfo=UTC)
 
 
 class FakeScalarResult:
-    def __init__(self, rows: list[CronJobModel]) -> None:
+    def __init__(self, rows: list[Any]) -> None:
         self._rows = rows
 
-    def all(self) -> list[CronJobModel]:
+    def all(self) -> list[Any]:
         return self._rows
 
 
 class FakeResult:
-    def __init__(self, rows: list[CronJobModel]) -> None:
+    def __init__(self, rows: list[Any]) -> None:
         self._rows = rows
 
     def scalars(self) -> FakeScalarResult:
@@ -35,10 +36,12 @@ class FakeResult:
 
 
 class FakeSession:
-    def __init__(self, rows: list[CronJobModel]) -> None:
+    def __init__(self, rows: list[Any]) -> None:
         self._rows = rows
+        self.statements: list[Any] = []
 
-    async def execute(self, _statement: Any) -> FakeResult:
+    async def execute(self, statement: Any) -> FakeResult:
+        self.statements.append(statement)
         return FakeResult(self._rows)
 
 
@@ -106,3 +109,26 @@ async def test_find_by_project_skips_invalid_persisted_schedule(
 
     assert [job.id for job in jobs] == ["valid-job"]
     assert "Skipping invalid cron job invalid-job during project listing" in caplog.text
+
+
+async def test_cron_job_listing_queries_declare_deterministic_order_by() -> None:
+    session = FakeSession([])
+    repo = SqlCronJobRepository(session)
+
+    await repo.find_by_project("project-1")
+    await repo.find_due_jobs(now=NOW)
+
+    assert "ORDER BY cron_jobs.created_at DESC, cron_jobs.id ASC" in str(session.statements[0])
+    assert "ORDER BY cron_jobs.created_at ASC, cron_jobs.id ASC" in str(session.statements[1])
+
+
+async def test_cron_job_run_listing_queries_declare_deterministic_order_by() -> None:
+    session = FakeSession([])
+    repo = SqlCronJobRunRepository(session)
+
+    await repo.find_by_job("job-1")
+    await repo.find_by_project("project-1")
+
+    order_fragment = "ORDER BY cron_job_runs.started_at DESC, cron_job_runs.id ASC"
+    assert order_fragment in str(session.statements[0])
+    assert order_fragment in str(session.statements[1])

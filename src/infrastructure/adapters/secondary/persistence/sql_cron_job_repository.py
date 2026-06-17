@@ -66,7 +66,7 @@ class SqlCronJobRepository(BaseRepository[CronJob, CronJobModel], CronJobReposit
         stmt = select(CronJobModel).where(CronJobModel.project_id == project_id)
         if not include_disabled:
             stmt = stmt.where(CronJobModel.enabled.is_(True))
-        stmt = stmt.order_by(CronJobModel.created_at.desc())
+        stmt = stmt.order_by(CronJobModel.created_at.desc(), CronJobModel.id.asc())
         stmt = stmt.offset(offset).limit(limit)
 
         result = await self._session.execute(
@@ -105,7 +105,7 @@ class SqlCronJobRepository(BaseRepository[CronJob, CronJobModel], CronJobReposit
         stmt = (
             select(CronJobModel)
             .where(CronJobModel.enabled.is_(True))
-            .order_by(CronJobModel.created_at.asc())
+            .order_by(CronJobModel.created_at.asc(), CronJobModel.id.asc())
         )
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
@@ -225,7 +225,7 @@ class SqlCronJobRunRepository(BaseRepository[CronJobRun, CronJobRunModel], CronJ
         stmt = select(CronJobRunModel).where(CronJobRunModel.job_id == job_id)
         if statuses:
             stmt = stmt.where(CronJobRunModel.status.in_([s.value for s in statuses]))
-        stmt = stmt.order_by(CronJobRunModel.started_at.desc())
+        stmt = stmt.order_by(CronJobRunModel.started_at.desc(), CronJobRunModel.id.asc())
         stmt = stmt.offset(offset).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
@@ -244,7 +244,7 @@ class SqlCronJobRunRepository(BaseRepository[CronJobRun, CronJobRunModel], CronJ
         stmt = select(CronJobRunModel).where(CronJobRunModel.project_id == project_id)
         if statuses:
             stmt = stmt.where(CronJobRunModel.status.in_([s.value for s in statuses]))
-        stmt = stmt.order_by(CronJobRunModel.started_at.desc())
+        stmt = stmt.order_by(CronJobRunModel.started_at.desc(), CronJobRunModel.id.asc())
         stmt = stmt.offset(offset).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
