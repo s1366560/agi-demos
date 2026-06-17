@@ -587,11 +587,10 @@ class AttachmentService:
 
         content_md5 = hashlib.md5(content).hexdigest()
 
-        # Log source file info
         logger.info(
-            f"[AttachmentService] prepare_for_sandbox: "
-            f"filename={attachment.filename}, size={len(content)}, "
-            f"md5={content_md5}, header={content[:16].hex() if len(content) >= 16 else content.hex()}"
+            "[AttachmentService] prepare_for_sandbox: filename=%s, size=%s",
+            attachment.filename,
+            len(content),
         )
 
         return {
