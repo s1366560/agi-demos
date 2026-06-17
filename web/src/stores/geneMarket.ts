@@ -58,11 +58,20 @@ const orderGenesBySlugs = (genes: GeneResponse[], slugs: string[]): GeneResponse
 };
 
 type DetailRequestScope = 'currentGene' | 'currentGenome' | 'currentGenomeGenes';
+type ListRequestScope = 'genes' | 'genomes' | 'installedGenes' | 'reviews' | 'evolutionEvents';
 
 const detailRequestVersions: Record<DetailRequestScope, number> = {
   currentGene: 0,
   currentGenome: 0,
   currentGenomeGenes: 0,
+};
+
+const listRequestVersions: Record<ListRequestScope, number> = {
+  genes: 0,
+  genomes: 0,
+  installedGenes: 0,
+  reviews: 0,
+  evolutionEvents: 0,
 };
 
 const nextDetailRequestVersion = (scope: DetailRequestScope): number => {
@@ -73,9 +82,23 @@ const nextDetailRequestVersion = (scope: DetailRequestScope): number => {
 const isLatestDetailRequest = (scope: DetailRequestScope, version: number): boolean =>
   detailRequestVersions[scope] === version;
 
+const nextListRequestVersion = (scope: ListRequestScope): number => {
+  listRequestVersions[scope] += 1;
+  return listRequestVersions[scope];
+};
+
+const isLatestListRequest = (scope: ListRequestScope, version: number): boolean =>
+  listRequestVersions[scope] === version;
+
 const invalidateDetailRequests = (...scopes: DetailRequestScope[]): void => {
   scopes.forEach((scope) => {
     detailRequestVersions[scope] += 1;
+  });
+};
+
+const invalidateListRequests = (...scopes: ListRequestScope[]): void => {
+  scopes.forEach((scope) => {
+    listRequestVersions[scope] += 1;
   });
 };
 
@@ -255,16 +278,21 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       // ========== Gene CRUD ==========
 
       listGenes: async (params = {}) => {
+        const requestVersion = nextListRequestVersion('genes');
         set({ isLoading: true, error: null });
         try {
           const response = await geneMarketService.listGenes(params);
-          set({
-            genes: response.genes,
-            geneTotal: response.total,
-            isLoading: false,
-          });
+          if (isLatestListRequest('genes', requestVersion)) {
+            set({
+              genes: response.genes,
+              geneTotal: response.total,
+              isLoading: false,
+            });
+          }
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to list genes'), isLoading: false });
+          if (isLatestListRequest('genes', requestVersion)) {
+            set({ error: getErrorMessage(error, 'Failed to list genes'), isLoading: false });
+          }
           throw error;
         }
       },
@@ -374,16 +402,21 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       // ========== Genome CRUD ==========
 
       listGenomes: async (params = {}) => {
+        const requestVersion = nextListRequestVersion('genomes');
         set({ isLoading: true, error: null });
         try {
           const response = await geneMarketService.listGenomes(params);
-          set({
-            genomes: response.genomes,
-            genomeTotal: response.total,
-            isLoading: false,
-          });
+          if (isLatestListRequest('genomes', requestVersion)) {
+            set({
+              genomes: response.genomes,
+              genomeTotal: response.total,
+              isLoading: false,
+            });
+          }
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to list genomes'), isLoading: false });
+          if (isLatestListRequest('genomes', requestVersion)) {
+            set({ error: getErrorMessage(error, 'Failed to list genomes'), isLoading: false });
+          }
           throw error;
         }
       },
@@ -578,15 +611,20 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       },
 
       listInstalledGenes: async (instanceId: string, options?: TenantScopedOptions) => {
+        const requestVersion = nextListRequestVersion('installedGenes');
         set({ isLoading: true, error: null });
         try {
           const response = await geneMarketService.listInstanceGenes(instanceId, options);
-          set({ installedGenes: response.items, isLoading: false });
+          if (isLatestListRequest('installedGenes', requestVersion)) {
+            set({ installedGenes: response.items, isLoading: false });
+          }
         } catch (error: unknown) {
-          set({
-            error: getErrorMessage(error, 'Failed to list installed genes'),
-            isLoading: false,
-          });
+          if (isLatestListRequest('installedGenes', requestVersion)) {
+            set({
+              error: getErrorMessage(error, 'Failed to list installed genes'),
+              isLoading: false,
+            });
+          }
           throw error;
         }
       },
@@ -599,12 +637,20 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         pageSize = 10,
         options?: TenantScopedOptions
       ) => {
+        const requestVersion = nextListRequestVersion('reviews');
         set({ reviewsLoading: true, error: null });
         try {
           const response = await geneMarketService.getGeneReviews(geneId, page, pageSize, options);
-          set({ reviews: response.items, reviewsTotal: response.total, reviewsLoading: false });
+          if (isLatestListRequest('reviews', requestVersion)) {
+            set({ reviews: response.items, reviewsTotal: response.total, reviewsLoading: false });
+          }
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to fetch reviews'), reviewsLoading: false });
+          if (isLatestListRequest('reviews', requestVersion)) {
+            set({
+              error: getErrorMessage(error, 'Failed to fetch reviews'),
+              reviewsLoading: false,
+            });
+          }
         }
       },
 
@@ -679,37 +725,47 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       // ========== Evolution ==========
 
       listEvolutionEvents: async (instanceId: string, params = {}) => {
+        const requestVersion = nextListRequestVersion('evolutionEvents');
         set({ isLoading: true, error: null });
         try {
           const response = await geneMarketService.listEvolutionEvents(instanceId, params);
-          set({
-            evolutionEvents: response.events,
-            evolutionTotal: response.total,
-            isLoading: false,
-          });
+          if (isLatestListRequest('evolutionEvents', requestVersion)) {
+            set({
+              evolutionEvents: response.events,
+              evolutionTotal: response.total,
+              isLoading: false,
+            });
+          }
         } catch (error: unknown) {
-          set({
-            error: getErrorMessage(error, 'Failed to list evolution events'),
-            isLoading: false,
-          });
+          if (isLatestListRequest('evolutionEvents', requestVersion)) {
+            set({
+              error: getErrorMessage(error, 'Failed to list evolution events'),
+              isLoading: false,
+            });
+          }
           throw error;
         }
       },
 
       listGeneEvolutionEvents: async (geneId: string, params = {}) => {
+        const requestVersion = nextListRequestVersion('evolutionEvents');
         set({ isLoading: true, error: null });
         try {
           const response = await geneMarketService.listGeneEvolutionEvents(geneId, params);
-          set({
-            evolutionEvents: response.events,
-            evolutionTotal: response.total,
-            isLoading: false,
-          });
+          if (isLatestListRequest('evolutionEvents', requestVersion)) {
+            set({
+              evolutionEvents: response.events,
+              evolutionTotal: response.total,
+              isLoading: false,
+            });
+          }
         } catch (error: unknown) {
-          set({
-            error: getErrorMessage(error, 'Failed to list evolution events'),
-            isLoading: false,
-          });
+          if (isLatestListRequest('evolutionEvents', requestVersion)) {
+            set({
+              error: getErrorMessage(error, 'Failed to list evolution events'),
+              isLoading: false,
+            });
+          }
           throw error;
         }
       },
@@ -775,6 +831,7 @@ export const useGeneMarketStore = create<GeneMarketState>()(
 
       reset: () => {
         invalidateDetailRequests('currentGene', 'currentGenome', 'currentGenomeGenes');
+        invalidateListRequests('genes', 'genomes', 'installedGenes', 'reviews', 'evolutionEvents');
         set(initialState);
       },
     }),

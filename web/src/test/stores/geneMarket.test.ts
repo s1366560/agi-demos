@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { geneMarketService } from '@/services/geneMarketService';
 import { useGeneMarketStore } from '@/stores/geneMarket';
 
-import type { GeneListResponse, GeneResponse, GenomeResponse } from '@/services/geneMarketService';
+import type {
+  GeneListResponse,
+  GeneResponse,
+  GenomeListResponse,
+  GenomeResponse,
+} from '@/services/geneMarketService';
 
 vi.mock('@/services/geneMarketService', () => ({
   geneMarketService: {
@@ -13,6 +18,7 @@ vi.mock('@/services/geneMarketService', () => ({
     getGeneReviews: vi.fn(),
     getGenome: vi.fn(),
     listGenes: vi.fn(),
+    listGenomes: vi.fn(),
     publishGene: vi.fn(),
     publishGenome: vi.fn(),
     rateGene: vi.fn(),
@@ -79,6 +85,13 @@ const geneListResponse = (genes: GeneResponse[]): GeneListResponse => ({
   total: genes.length,
   page: 1,
   page_size: genes.length,
+});
+
+const genomeListResponse = (genomes: GenomeResponse[]): GenomeListResponse => ({
+  genomes,
+  total: genomes.length,
+  page: 1,
+  page_size: genomes.length,
 });
 
 const deferred = <T>() => {
@@ -199,6 +212,64 @@ describe('gene market store', () => {
     staleRequest.resolve(gene({ id: 'gene-1', slug: 'code-review', name: 'Code Review' }));
     await expect(staleResult).resolves.toMatchObject({ id: 'gene-1' });
     expect(useGeneMarketStore.getState().currentGene?.id).toBe('gene-2');
+    expect(useGeneMarketStore.getState().isLoading).toBe(false);
+  });
+
+  it('ignores stale gene list responses after a newer list request starts', async () => {
+    const staleRequest = deferred<GeneListResponse>();
+    const latestRequest = deferred<GeneListResponse>();
+    vi.mocked(geneMarketService.listGenes)
+      .mockReturnValueOnce(staleRequest.promise)
+      .mockReturnValueOnce(latestRequest.promise);
+
+    const staleResult = useGeneMarketStore
+      .getState()
+      .listGenes({ tenant_id: 'tenant-1', search: 'old' });
+    const latestResult = useGeneMarketStore
+      .getState()
+      .listGenes({ tenant_id: 'tenant-2', search: 'new' });
+
+    latestRequest.resolve(
+      geneListResponse([gene({ id: 'gene-2', tenant_id: 'tenant-2', slug: 'latest' })])
+    );
+    await expect(latestResult).resolves.toBeUndefined();
+    expect(useGeneMarketStore.getState().genes.map((item) => item.id)).toEqual(['gene-2']);
+    expect(useGeneMarketStore.getState().geneTotal).toBe(1);
+
+    staleRequest.resolve(
+      geneListResponse([gene({ id: 'gene-1', tenant_id: 'tenant-1', slug: 'stale' })])
+    );
+    await expect(staleResult).resolves.toBeUndefined();
+    expect(useGeneMarketStore.getState().genes.map((item) => item.id)).toEqual(['gene-2']);
+    expect(useGeneMarketStore.getState().isLoading).toBe(false);
+  });
+
+  it('ignores stale genome list responses after a newer list request starts', async () => {
+    const staleRequest = deferred<GenomeListResponse>();
+    const latestRequest = deferred<GenomeListResponse>();
+    vi.mocked(geneMarketService.listGenomes)
+      .mockReturnValueOnce(staleRequest.promise)
+      .mockReturnValueOnce(latestRequest.promise);
+
+    const staleResult = useGeneMarketStore
+      .getState()
+      .listGenomes({ tenant_id: 'tenant-1', is_published: false });
+    const latestResult = useGeneMarketStore
+      .getState()
+      .listGenomes({ tenant_id: 'tenant-2', is_published: true });
+
+    latestRequest.resolve(
+      genomeListResponse([genome({ id: 'genome-2', tenant_id: 'tenant-2', slug: 'latest-pack' })])
+    );
+    await expect(latestResult).resolves.toBeUndefined();
+    expect(useGeneMarketStore.getState().genomes.map((item) => item.id)).toEqual(['genome-2']);
+    expect(useGeneMarketStore.getState().genomeTotal).toBe(1);
+
+    staleRequest.resolve(
+      genomeListResponse([genome({ id: 'genome-1', tenant_id: 'tenant-1', slug: 'stale-pack' })])
+    );
+    await expect(staleResult).resolves.toBeUndefined();
+    expect(useGeneMarketStore.getState().genomes.map((item) => item.id)).toEqual(['genome-2']);
     expect(useGeneMarketStore.getState().isLoading).toBe(false);
   });
 
