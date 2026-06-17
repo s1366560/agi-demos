@@ -10,7 +10,43 @@ from src.infrastructure.adapters.primary.web.routers.recall import (
     ShortTermRecallQuery,
     short_term_recall,
 )
-from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Project,
+    Tenant,
+    User,
+    UserProject,
+)
+
+
+async def _add_other_tenant_project(
+    test_db: AsyncSession,
+    test_user: User,
+) -> Project:
+    other_tenant = Tenant(
+        id="recall-other-tenant",
+        name="Recall Other Tenant",
+        slug="recall-other-tenant",
+        owner_id=test_user.id,
+    )
+    other_project = Project(
+        id="recall-other-tenant-project",
+        tenant_id=other_tenant.id,
+        name="Recall Other Tenant Project",
+        description="Other tenant project",
+        owner_id=test_user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    membership = UserProject(
+        id="recall-other-tenant-membership",
+        user_id=test_user.id,
+        project_id=other_project.id,
+        role="owner",
+        permissions={},
+    )
+    test_db.add_all([other_tenant, other_project, membership])
+    await test_db.commit()
+    return other_project
 
 
 @pytest.mark.unit
@@ -89,6 +125,65 @@ class TestRecallRouter:
         assert "e.tenant_id = $tenant_id" in query
         assert kwargs["project_id"] == test_project_db.id
         assert kwargs["tenant_id"] == test_project_db.tenant_id
+
+    @pytest.mark.asyncio
+    async def test_short_term_recall_with_tenant_filters_allowed_project_ids(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        other_project = await _add_other_tenant_project(test_db, test_user)
+        graphiti_client = Mock()
+        graphiti_client.driver = Mock()
+        graphiti_client.driver.execute_query = AsyncMock(return_value=Mock(records=[]))
+
+        response = await short_term_recall(
+            ShortTermRecallQuery(
+                window_minutes=60,
+                limit=10,
+                tenant_id=test_project_db.tenant_id,
+            ),
+            current_user=test_user,
+            db=test_db,
+            graphiti_client=graphiti_client,
+        )
+
+        assert response.total == 0
+        query = graphiti_client.driver.execute_query.await_args.args[0]
+        kwargs = graphiti_client.driver.execute_query.await_args.kwargs
+        assert "e.project_id IN $project_ids" in query
+        assert "e.tenant_id = $tenant_id" in query
+        assert kwargs["project_ids"] == [test_project_db.id]
+        assert other_project.id not in kwargs["project_ids"]
+        assert kwargs["tenant_id"] == test_project_db.tenant_id
+
+    @pytest.mark.asyncio
+    async def test_short_term_recall_rejects_project_tenant_mismatch(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        graphiti_client = Mock()
+        graphiti_client.driver = Mock()
+        graphiti_client.driver.execute_query = AsyncMock()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await short_term_recall(
+                ShortTermRecallQuery(
+                    window_minutes=60,
+                    limit=10,
+                    tenant_id="not-the-project-tenant",
+                    project_id=test_project_db.id,
+                ),
+                current_user=test_user,
+                db=test_db,
+                graphiti_client=graphiti_client,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        graphiti_client.driver.execute_query.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_short_term_recall_sanitizes_internal_errors(

@@ -62,8 +62,10 @@ async def short_term_recall(
     """
     try:
         logger.info(
-            f"Short-term recall by user {current_user.id}: "
-            f"window={payload.window_minutes}m project={payload.project_id}"
+            "Short-term recall by user %s: window=%sm project=%s",
+            current_user.id,
+            payload.window_minutes,
+            payload.project_id,
         )
 
         # Calculate time window
@@ -77,7 +79,10 @@ async def short_term_recall(
         }
 
         is_superuser, allowed_project_ids = await _graph_project_scope(
-            payload.project_id, current_user, db
+            payload.project_id,
+            current_user,
+            db,
+            tenant_id=payload.tenant_id,
         )
         if not is_superuser and not allowed_project_ids:
             return ShortTermRecallResponse(
