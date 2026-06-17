@@ -7874,7 +7874,9 @@
     "date": "Date",
     "filterByType": "Filter by type",
     "filterByDateRange": "Filter by date range",
-    "noEvents": "No events found"
+    "noEvents": "No events found",
+    "loadError": "Failed to load events.",
+    "typesLoadError": "Failed to load event types."
   },
   "device": {
     "title": "Connect a device",

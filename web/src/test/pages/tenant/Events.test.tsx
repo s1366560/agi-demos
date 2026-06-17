@@ -1,10 +1,10 @@
 import { Route, Routes } from 'react-router-dom';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Events } from '../../../pages/tenant/Events';
 import { eventService } from '../../../services/eventService';
-import { render, waitFor } from '../../utils';
+import { render, screen, waitFor } from '../../utils';
 
 vi.mock('../../../services/eventService', () => ({
   eventService: {
@@ -25,6 +25,10 @@ describe('Events', () => {
     });
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('scopes event queries to the tenant route parameter', async () => {
     render(
       <Routes>
@@ -43,5 +47,33 @@ describe('Events', () => {
         page_size: 20,
       });
     });
+  });
+
+  it('shows a visible error when event loading fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(eventService.listEvents).mockRejectedValueOnce(new Error('network down'));
+
+    render(
+      <Routes>
+        <Route path="/tenant/:tenantId/events" element={<Events />} />
+      </Routes>,
+      { route: '/tenant/tenant-selected/events' }
+    );
+
+    expect(await screen.findByText('Failed to load events.')).toBeInTheDocument();
+  });
+
+  it('shows a non-blocking warning when event type loading fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(eventService.getEventTypes).mockRejectedValueOnce(new Error('types down'));
+
+    render(
+      <Routes>
+        <Route path="/tenant/:tenantId/events" element={<Events />} />
+      </Routes>,
+      { route: '/tenant/tenant-selected/events' }
+    );
+
+    expect(await screen.findByText('Failed to load event types.')).toBeInTheDocument();
   });
 });

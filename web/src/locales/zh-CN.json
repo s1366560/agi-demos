@@ -7897,7 +7897,9 @@
     "date": "时间",
     "filterByType": "按类型过滤",
     "filterByDateRange": "按日期范围筛选",
-    "noEvents": "暂无事件"
+    "noEvents": "暂无事件",
+    "loadError": "事件加载失败。",
+    "typesLoadError": "事件类型加载失败。"
   },
   "device": {
     "title": "连接设备",

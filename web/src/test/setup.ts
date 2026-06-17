@@ -843,6 +843,8 @@ const commonTranslations: Record<string, string> = {
 
   // Tenant Events
   'events.filterByDateRange': 'Filter by date range',
+  'events.loadError': 'Failed to load events.',
+  'events.typesLoadError': 'Failed to load event types.',
 
   // Tenant MCP Servers
   'tenant.mcpServers.title': 'MCP Servers',

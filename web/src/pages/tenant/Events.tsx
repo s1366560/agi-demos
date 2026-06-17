@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import { Table, Select, DatePicker, Typography, Space, Tag } from 'antd';
+import { Alert, DatePicker, Select, Space, Table, Tag, Typography } from 'antd';
 
 import { eventService, EventLog } from '@/services/eventService';
 
@@ -17,6 +17,8 @@ export const Events: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [types, setTypes] = useState<string[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [typesError, setTypesError] = useState<string | null>(null);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -24,17 +26,33 @@ export const Events: React.FC = () => {
   const [dateRange, setDateRange] = useState<[string, string] | undefined>();
 
   useEffect(() => {
+    let isCurrent = true;
+    setTypesError(null);
+
     void eventService
       .getEventTypes(tenantId ? { tenant_id: tenantId } : undefined)
-      .then(setTypes)
+      .then((eventTypes) => {
+        if (!isCurrent) return;
+        setTypes(eventTypes);
+      })
       .catch((err: unknown) => {
         console.error(err);
+        if (!isCurrent) return;
+        setTypes([]);
+        setTypesError(t('events.typesLoadError'));
       });
-  }, [tenantId]);
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [tenantId, t]);
 
   useEffect(() => {
+    let isCurrent = true;
+
     const fetchEvents = async () => {
       setLoading(true);
+      setLoadError(null);
       try {
         const params: Parameters<typeof eventService.listEvents>[0] = { page, page_size: pageSize };
         if (tenantId) params.tenant_id = tenantId;
@@ -42,16 +60,27 @@ export const Events: React.FC = () => {
         if (dateRange?.[0]) params.date_from = dateRange[0];
         if (dateRange?.[1]) params.date_to = dateRange[1];
         const res = await eventService.listEvents(params);
+        if (!isCurrent) return;
         setData(res.items);
         setTotal(res.total);
       } catch (err) {
         console.error(err);
+        if (!isCurrent) return;
+        setData([]);
+        setTotal(0);
+        setLoadError(t('events.loadError'));
       } finally {
-        setLoading(false);
+        if (isCurrent) {
+          setLoading(false);
+        }
       }
     };
     void fetchEvents();
-  }, [page, pageSize, selectedType, dateRange, tenantId]);
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [page, pageSize, selectedType, dateRange, tenantId, t]);
 
   const columns = [
     {
@@ -108,6 +137,13 @@ export const Events: React.FC = () => {
           }}
         />
       </Space>
+
+      {typesError ? (
+        <Alert title={typesError} type="warning" showIcon style={{ marginBottom: 16 }} />
+      ) : null}
+      {loadError ? (
+        <Alert title={loadError} type="error" showIcon style={{ marginBottom: 16 }} />
+      ) : null}
 
       <Table
         rowKey="id"
