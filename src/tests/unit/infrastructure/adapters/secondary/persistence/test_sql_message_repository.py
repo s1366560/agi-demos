@@ -237,6 +237,32 @@ class TestSqlMessageRepositoryList:
         assert messages[1].id == "msg-ordered-2"
 
     @pytest.mark.asyncio
+    async def test_list_by_conversation_orders_same_timestamp_by_id(
+        self, v2_message_repo: SqlMessageRepository
+    ):
+        """Test stable ordering when messages share the same timestamp."""
+        created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        for message_id in ("msg-tie-b", "msg-tie-a", "msg-tie-c"):
+            await v2_message_repo.save(
+                Message(
+                    id=message_id,
+                    conversation_id="conv-test-1",
+                    role=MessageRole.USER,
+                    content=message_id,
+                    message_type=MessageType.TEXT,
+                    created_at=created_at,
+                )
+            )
+
+        messages = await v2_message_repo.list_by_conversation("conv-test-1")
+
+        assert [message.id for message in messages] == [
+            "msg-tie-a",
+            "msg-tie-b",
+            "msg-tie-c",
+        ]
+
+    @pytest.mark.asyncio
     async def test_list_by_conversation_with_pagination(
         self, v2_message_repo: SqlMessageRepository
     ):
@@ -279,6 +305,37 @@ class TestSqlMessageRepositoryList:
         # List recent by project
         messages = await v2_message_repo.list_recent_by_project("proj-test-1", limit=10)
         assert len(messages) >= 3
+
+    @pytest.mark.asyncio
+    async def test_list_recent_by_project_orders_same_timestamp_by_id(
+        self, v2_message_repo: SqlMessageRepository
+    ):
+        """Test recent project messages keep deterministic order for timestamp ties."""
+        newer_created_at = datetime(2026, 1, 2, tzinfo=UTC)
+        older_created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        for message_id, created_at in (
+            ("msg-recent-tie-b", newer_created_at),
+            ("msg-recent-old", older_created_at),
+            ("msg-recent-tie-a", newer_created_at),
+        ):
+            await v2_message_repo.save(
+                Message(
+                    id=message_id,
+                    conversation_id="conv-test-1",
+                    role=MessageRole.USER,
+                    content=message_id,
+                    message_type=MessageType.TEXT,
+                    created_at=created_at,
+                )
+            )
+
+        messages = await v2_message_repo.list_recent_by_project("proj-test-1", limit=10)
+
+        assert [message.id for message in messages] == [
+            "msg-recent-tie-a",
+            "msg-recent-tie-b",
+            "msg-recent-old",
+        ]
 
 
 class TestSqlMessageRepositoryCount:

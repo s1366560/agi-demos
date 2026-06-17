@@ -129,7 +129,7 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
                 self._refresh_statement(
                     select(DBMessage)
                     .where(DBMessage.conversation_id == conversation_id)
-                    .order_by(DBMessage.created_at.asc())
+                    .order_by(DBMessage.created_at.asc(), DBMessage.id.asc())
                     .offset(offset)
                     .limit(limit)
                 )
@@ -150,7 +150,7 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
                     select(DBMessage)
                     .join(DBMessage.conversation)
                     .where(DBConversation.project_id == project_id)
-                    .order_by(DBMessage.created_at.desc())
+                    .order_by(DBMessage.created_at.desc(), DBMessage.id.asc())
                     .limit(limit)
                 )
             )
