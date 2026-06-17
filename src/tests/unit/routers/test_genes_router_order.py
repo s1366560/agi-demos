@@ -25,6 +25,7 @@ def _matched_endpoint_name(path: str, method: str) -> str | None:
     ("path", "method", "endpoint_name"),
     [
         ("/api/v1/genes/genomes", "GET", "list_genomes"),
+        ("/api/v1/genes/genomes/genome_123/unpublish", "POST", "unpublish_genome"),
         ("/api/v1/genes/evolution", "GET", "list_evolution_events"),
         ("/api/v1/genes/gene_123", "GET", "get_gene"),
     ],

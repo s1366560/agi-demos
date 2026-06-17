@@ -748,6 +748,28 @@ async def publish_genome(
         raise _genome_not_found_error() from e
 
 
+@router.post(
+    "/genomes/{genome_id}/unpublish",
+    response_model=GenomeResponse,
+)
+async def unpublish_genome(
+    request: Request,
+    genome_id: str,
+    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    db: AsyncSession = Depends(get_db),
+) -> GenomeResponse:
+    """Remove a genome from the marketplace."""
+    try:
+        container = get_container_with_db(request, db)
+        service = container.gene_service()
+        await _ensure_genome_tenant_access(service, genome_id=genome_id, tenant_id=tenant_id)
+        genome = await service.unpublish_genome(genome_id)
+        await db.commit()
+        return GenomeResponse.model_validate(genome, from_attributes=True)
+    except ValueError as e:
+        raise _genome_not_found_error() from e
+
+
 # ---------------------------------------------------------------------------
 # Gene Installation (instance-scoped)
 # ---------------------------------------------------------------------------

@@ -331,6 +331,12 @@ export const geneMarketService = {
   deleteGene: (id: string, options?: TenantScopedOptions) =>
     deleteWithTenant(`${BASE_URL}/${id}`, options),
 
+  publishGene: (id: string, options?: TenantScopedOptions) =>
+    postWithTenant<GeneResponse>(`${BASE_URL}/${id}/publish`, {}, options),
+
+  unpublishGene: (id: string, options?: TenantScopedOptions) =>
+    postWithTenant<GeneResponse>(`${BASE_URL}/${id}/unpublish`, {}, options),
+
   listGenomes: (params?: GenomeListParams) =>
     httpClient.get<GenomeListResponse>(`${BASE_URL}/genomes`, { params }),
 
@@ -345,6 +351,12 @@ export const geneMarketService = {
 
   deleteGenome: (id: string, options?: TenantScopedOptions) =>
     deleteWithTenant(`${BASE_URL}/genomes/${id}`, options),
+
+  publishGenome: (id: string, options?: TenantScopedOptions) =>
+    postWithTenant<GenomeResponse>(`${BASE_URL}/genomes/${id}/publish`, {}, options),
+
+  unpublishGenome: (id: string, options?: TenantScopedOptions) =>
+    postWithTenant<GenomeResponse>(`${BASE_URL}/genomes/${id}/unpublish`, {}, options),
 
   installGene: (instanceId: string, data: GeneInstallRequest, options?: TenantScopedOptions) =>
     postWithTenant<InstanceGeneResponse>(

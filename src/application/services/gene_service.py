@@ -562,6 +562,30 @@ class GeneService:
         logger.info(f"Published genome {genome_id}")
         return genome
 
+    async def unpublish_genome(self, genome_id: str) -> Genome:
+        """
+        Remove a genome from the marketplace.
+
+        Args:
+            genome_id: Genome ID.
+
+        Returns:
+            Updated Genome entity.
+
+        Raises:
+            ValueError: If genome not found.
+        """
+        genome = await self._genome_repo.find_by_id(genome_id)
+        if not genome:
+            raise ValueError(f"Genome {genome_id} not found")
+
+        genome.is_published = False
+        genome.updated_at = datetime.now(UTC)
+
+        await self._genome_repo.save(genome)
+        logger.info(f"Unpublished genome {genome_id}")
+        return genome
+
     # ------------------------------------------------------------------
     # Install / Uninstall
     # ------------------------------------------------------------------

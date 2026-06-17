@@ -104,6 +104,36 @@ describe('geneMarketService', () => {
     );
   });
 
+  it('publishes and unpublishes genes with tenant query params', async () => {
+    mockHttpClient.post.mockResolvedValue({ id: 'gene-1' });
+
+    await geneMarketService.publishGene('gene-1', { tenant_id: 'tenant-2' });
+    await geneMarketService.unpublishGene('gene-1', { tenant_id: 'tenant-2' });
+
+    expect(mockHttpClient.post).toHaveBeenNthCalledWith(
+      1,
+      '/genes/gene-1/publish',
+      {},
+      { params: { tenant_id: 'tenant-2' } }
+    );
+    expect(mockHttpClient.post).toHaveBeenNthCalledWith(
+      2,
+      '/genes/gene-1/unpublish',
+      {},
+      { params: { tenant_id: 'tenant-2' } }
+    );
+  });
+
+  it('publishes and unpublishes genomes', async () => {
+    mockHttpClient.post.mockResolvedValue({ id: 'genome-1' });
+
+    await geneMarketService.publishGenome('genome-1');
+    await geneMarketService.unpublishGenome('genome-1');
+
+    expect(mockHttpClient.post).toHaveBeenNthCalledWith(1, '/genes/genomes/genome-1/publish', {});
+    expect(mockHttpClient.post).toHaveBeenNthCalledWith(2, '/genes/genomes/genome-1/unpublish', {});
+  });
+
   it('lists gene evolution events with a gene_id query parameter', async () => {
     mockHttpClient.get.mockResolvedValue({ events: [], total: 0, page: 1, page_size: 20 });
 

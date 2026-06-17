@@ -314,6 +314,20 @@ async def test_get_genome_sanitizes_missing_genome_id() -> None:
 
 
 @pytest.mark.unit
+async def test_unpublish_genome_sanitizes_missing_genome_id() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.unpublish_genome(
+            request=SimpleNamespace(),
+            genome_id="genome-secret",
+            tenant_id="tenant-1",
+            db=SimpleNamespace(commit=None),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Genome not found"
+
+
+@pytest.mark.unit
 async def test_update_genome_reports_validation_errors_as_bad_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

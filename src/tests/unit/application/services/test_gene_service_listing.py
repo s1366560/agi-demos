@@ -203,6 +203,44 @@ async def test_list_genomes_with_total_filters_before_pagination(
 
 
 @pytest.mark.unit
+async def test_unpublish_genome_removes_it_from_published_results(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    genome = await service.create_genome(
+        name="Publish Toggle Genome",
+        slug=_slug("publish-toggle-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+
+    published = await service.publish_genome(genome.id)
+    assert published.is_published is True
+
+    unpublished = await service.unpublish_genome(genome.id)
+    published_genomes, published_total = await service.list_genomes_with_total(
+        tenant_id=test_project_db.tenant_id,
+        is_published=True,
+        limit=10,
+        offset=0,
+    )
+    unpublished_genomes, unpublished_total = await service.list_genomes_with_total(
+        tenant_id=test_project_db.tenant_id,
+        is_published=False,
+        limit=10,
+        offset=0,
+    )
+
+    assert unpublished.is_published is False
+    assert genome.id not in {item.id for item in published_genomes}
+    assert published_total == 0
+    assert genome.id in {item.id for item in unpublished_genomes}
+    assert unpublished_total == 1
+
+
+@pytest.mark.unit
 async def test_list_evolution_events_with_total_filters_before_pagination(
     test_db: AsyncSession,
 ) -> None:
