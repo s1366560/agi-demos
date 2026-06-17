@@ -9,11 +9,11 @@ logger = logging.getLogger(__name__)
 
 
 async def initialize_database_schema() -> None:
-    """Initialize database schema and default credentials."""
+    """Initialize database schema and development auth bootstrap data."""
     logger.info("Initializing database schema...")
     await initialize_database()
     logger.info("Database schema initialized")
 
-    logger.info("Initializing default credentials...")
+    logger.info("Initializing auth bootstrap data...")
     await initialize_default_credentials()
-    logger.info("Default credentials initialized")
+    logger.info("Auth bootstrap data initialized")

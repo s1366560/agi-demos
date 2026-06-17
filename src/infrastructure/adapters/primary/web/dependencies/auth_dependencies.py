@@ -139,7 +139,9 @@ async def get_api_key_from_header_or_query(
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=_("Missing API key. Please provide an API key in the Authorization header or 'token' query parameter."),
+        detail=_(
+            "Missing API key. Please provide an API key in the Authorization header or 'token' query parameter."
+        ),
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -692,13 +694,11 @@ async def _init_admin_user(
         )
         assert user is not None
         db.add(UserRole(id=str(uuid4()), user_id=user.id, role_id=admin_role.id))
-        plain_key, _ = await create_api_key(
+        _ = await create_api_key(
             db, user_id=user.id, name="Default API Key", permissions=["read", "write", "admin"]
         )
-        logger.info(f"Default Admin API Key created: {plain_key}")
-        logger.info(f"Default Admin ID: {user.id}")
-        logger.info(f"Default Admin Email: {user.email}")
-        logger.info("Default Admin Password: adminpassword")
+        logger.info("Default admin API key created for user_id=%s; value=<redacted>", user.id)
+        logger.info("Default admin bootstrap user created: id=%s email=%s", user.id, user.email)
 
         if not default_tenant:
             default_tenant = await _ensure_tenant_exists(
@@ -734,16 +734,18 @@ async def _init_normal_user(
         )
         assert normal_user is not None
         db.add(UserRole(id=str(uuid4()), user_id=normal_user.id, role_id=user_role.id))
-        plain_user_key, _ = await create_api_key(
+        _ = await create_api_key(
             db,
             user_id=normal_user.id,
             name="Default User Key",
             permissions=["read", "write"],
         )
-        logger.info(f"Default User API Key created: {plain_user_key}")
-        logger.info(f"Default User ID: {normal_user.id}")
-        logger.info(f"Default User Email: {normal_user.email}")
-        logger.info("Default User Password: userpassword")
+        logger.info("Default user API key created for user_id=%s; value=<redacted>", normal_user.id)
+        logger.info(
+            "Default user bootstrap account created: id=%s email=%s",
+            normal_user.id,
+            normal_user.email,
+        )
 
         user_tenant = await _ensure_tenant_exists(
             db, "User Tenant", "user-tenant", "Default tenant for user", normal_user.id
@@ -777,7 +779,7 @@ async def _init_normal_user(
 
 
 async def initialize_default_credentials() -> None:
-    """Initialize default user and API key for development."""
+    """Initialize development auth bootstrap users and API keys."""
     async with async_session_factory() as db:
         try:
             # 1. Initialize Permissions
@@ -800,5 +802,5 @@ async def initialize_default_credentials() -> None:
 
             await db.commit()
 
-        except Exception as e:
-            logger.exception(f"Error initializing default credentials: {e}")
+        except Exception:
+            logger.exception("Error initializing auth bootstrap data")
