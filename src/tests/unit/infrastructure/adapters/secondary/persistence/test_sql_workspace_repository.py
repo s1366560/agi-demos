@@ -1,6 +1,7 @@
 """Tests for SqlWorkspaceRepository."""
 
 from datetime import UTC, datetime
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,25 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.adapters.secondary.persistence.sql_workspace_repository import (
     SqlWorkspaceRepository,
 )
+
+
+class _ScalarRows:
+    def all(self) -> list[Any]:
+        return []
+
+
+class _FetchResult:
+    def scalars(self) -> _ScalarRows:
+        return _ScalarRows()
+
+
+class _RecordingSession:
+    def __init__(self) -> None:
+        self.statements: list[Any] = []
+
+    async def execute(self, statement: Any) -> _FetchResult:
+        self.statements.append(statement)
+        return _FetchResult()
 
 
 @pytest.fixture
@@ -46,6 +66,18 @@ def make_workspace(
 
 class TestSqlWorkspaceRepository:
     """Tests for workspace repository CRUD and queries."""
+
+    @pytest.mark.asyncio
+    async def test_list_queries_declare_deterministic_order_by(self) -> None:
+        session = _RecordingSession()
+        repo = SqlWorkspaceRepository(cast(AsyncSession, session))
+
+        await repo.find_by_project("tenant-1", "project-1")
+        await repo.find_visible_by_project_for_user("tenant-1", "project-1", "user-1")
+
+        order_fragment = "ORDER BY workspaces.created_at DESC, workspaces.id ASC"
+        assert order_fragment in str(session.statements[0])
+        assert order_fragment in str(session.statements[1])
 
     @pytest.mark.asyncio
     async def test_save_and_find_by_id(self, v2_workspace_repo: SqlWorkspaceRepository) -> None:
