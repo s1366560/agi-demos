@@ -150,6 +150,40 @@ def _graph_node_label(props: dict[str, Any], labels: list[str]) -> str:
     return next((label for label in labels if label != "Node"), labels[0] if labels else "Entity")
 
 
+def _graph_visualization_scope(
+    tenant_id: str | None,
+    project_id: str | None,
+    is_superuser: bool,
+    allowed_project_ids: list[str],
+) -> tuple[str, str, dict[str, Any]]:
+    node_conditions = [
+        "('Entity' IN labels(n) OR 'Episodic' IN labels(n) OR 'Community' IN labels(n))"
+    ]
+    target_conditions = [
+        "('Entity' IN labels(m) OR 'Episodic' IN labels(m) OR 'Community' IN labels(m))"
+    ]
+    params: dict[str, Any] = {}
+
+    if project_id:
+        node_conditions.append("n.project_id = $project_id")
+        target_conditions.append("m.project_id = $project_id")
+        params["project_id"] = project_id
+    elif tenant_id and is_superuser:
+        node_conditions.append("n.tenant_id = $tenant_id")
+        target_conditions.append("m.tenant_id = $tenant_id")
+        params["tenant_id"] = tenant_id
+    elif not is_superuser:
+        node_conditions.append("n.project_id IN $project_ids")
+        target_conditions.append("m.project_id IN $project_ids")
+        params["project_ids"] = allowed_project_ids
+
+    return (
+        "WHERE " + " AND ".join(node_conditions),
+        "WHERE " + " AND ".join(target_conditions),
+        params,
+    )
+
+
 # --- Schemas ---
 
 
@@ -639,8 +673,10 @@ async def get_entity_relationships(
 
 @router.get("/memory/graph")
 async def get_graph(
+    tenant_id: str | None = None,
     project_id: str | None = None,
     limit: int = 100,
+    since: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
@@ -649,25 +685,38 @@ async def get_graph(
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-        is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+        is_superuser, allowed_project_ids = await _graph_project_scope(
+            project_id, current_user, db, tenant_id=tenant_id
+        )
         if not is_superuser and not allowed_project_ids:
             return _empty_graph_elements()
 
-        query = """
-        MATCH (n)
-        WHERE ('Entity' IN labels(n) OR 'Episodic' IN labels(n) OR 'Community' IN labels(n))
-        AND (
-            ($project_id IS NOT NULL AND n.project_id = $project_id) OR
-            ($project_id IS NULL AND ($is_superuser OR n.project_id IN $project_ids))
+        node_where, target_where, scope_params = _graph_visualization_scope(
+            tenant_id,
+            project_id,
+            is_superuser,
+            allowed_project_ids,
         )
+        params: dict[str, Any] = {"limit": limit, "since": since, **scope_params}
+
+        query = f"""
+        MATCH (n)
+        {node_where}
 
         OPTIONAL MATCH (n)-[r]->(m)
-        WHERE ('Entity' IN labels(m) OR 'Episodic' IN labels(m) OR 'Community' IN labels(m))
-        AND (
-            ($project_id IS NOT NULL AND m.project_id = $project_id) OR
-            ($project_id IS NULL AND ($is_superuser OR m.project_id IN $project_ids))
-        )
+        {target_where}
 
+        WITH n, r, m
+        WHERE $since IS NULL
+            OR coalesce(toString(n.updated_at), toString(n.created_at), "") >= $since
+            OR (
+                m IS NOT NULL
+                AND coalesce(toString(m.updated_at), toString(m.created_at), "") >= $since
+            )
+            OR (
+                r IS NOT NULL
+                AND coalesce(toString(r.updated_at), toString(r.created_at), "") >= $since
+            )
         RETURN
             elementId(n) as source_id, labels(n) as source_labels, properties(n) as source_props,
             elementId(r) as edge_id, type(r) as edge_type, properties(r) as edge_props,
@@ -675,13 +724,7 @@ async def get_graph(
         LIMIT $limit
         """
 
-        result = await neo4j_client.execute_query(
-            query,
-            project_id=project_id,
-            project_ids=allowed_project_ids,
-            is_superuser=is_superuser,
-            limit=limit,
-        )
+        result = await neo4j_client.execute_query(query, **params)
 
         nodes_map = {}
         edges_list = []

@@ -166,7 +166,6 @@ class TestGraphRouter:
         assert response == {"elements": {"nodes": [], "edges": []}}
         query_kwargs = neo4j_client.execute_query.await_args.kwargs
         assert query_kwargs["project_ids"] == [test_project_db.id]
-        assert query_kwargs["is_superuser"] is False
 
     @pytest.mark.asyncio
     async def test_get_entity_relationships_filters_related_entities_by_project(

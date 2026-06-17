@@ -82,6 +82,42 @@ async def test_get_graph_serializes_neo4j_datetime_properties() -> None:
     assert "fact_embedding" not in response["elements"]["edges"][0]["data"]
 
 
+async def test_get_graph_filters_by_tenant_for_superuser_scope() -> None:
+    client = FakeNeo4jClient([])
+
+    response = await get_graph(
+        tenant_id="tenant-1",
+        project_id=None,
+        current_user=SimpleNamespace(is_superuser=True),
+        neo4j_client=client,
+    )
+
+    assert response == {"elements": {"nodes": [], "edges": []}}
+    query = client.calls[0]["query"]
+    assert "n.tenant_id = $tenant_id" in query
+    assert "m.tenant_id = $tenant_id" in query
+    assert client.calls[0]["params"]["tenant_id"] == "tenant-1"
+
+
+async def test_get_graph_filters_rows_by_since_timestamp() -> None:
+    client = FakeNeo4jClient([])
+
+    response = await get_graph(
+        project_id="project-1",
+        since="2026-05-16T04:58:00+00:00",
+        current_user=SimpleNamespace(is_superuser=True),
+        neo4j_client=client,
+    )
+
+    assert response == {"elements": {"nodes": [], "edges": []}}
+    query = client.calls[0]["query"]
+    assert "$since IS NULL" in query
+    assert "toString(n.updated_at)" in query
+    assert "toString(m.updated_at)" in query
+    assert "toString(r.updated_at)" in query
+    assert client.calls[0]["params"]["since"] == "2026-05-16T04:58:00+00:00"
+
+
 async def test_get_subgraph_serializes_node_and_edge_neo4j_datetime_properties() -> None:
     client = FakeNeo4jClient(
         [
