@@ -4,13 +4,26 @@ import type { FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { Tabs, Input, Select, Button, Tag, Space, Card, Rate, Empty, Pagination } from 'antd';
+import {
+  Alert,
+  Tabs,
+  Input,
+  Select,
+  Button,
+  Tag,
+  Space,
+  Card,
+  Rate,
+  Empty,
+  Pagination,
+} from 'antd';
 import { Download, Search as SearchIcon } from 'lucide-react';
 
 import {
   useGenes,
   useGenomes,
   useGeneMarketLoading,
+  useGeneMarketError,
   useGeneTotal,
   useGenomeTotal,
   useActiveTab,
@@ -39,6 +52,7 @@ export const GeneMarket: FC = () => {
   const genes = useGenes();
   const genomes = useGenomes();
   const loading = useGeneMarketLoading();
+  const error = useGeneMarketError();
   const geneTotal = useGeneTotal();
   const genomeTotal = useGenomeTotal();
   const activeTab = useActiveTab();
@@ -99,20 +113,19 @@ export const GeneMarket: FC = () => {
     return params;
   }, [genomePage, genomePageSize, genomePublishStatus, tenantId]);
 
-  useEffect(() => {
+  const loadActiveTab = useCallback(() => {
     if (!tenantId) {
-      return;
+      return Promise.resolve();
     }
     if (activeTab === 'genes') {
-      void listGenes(geneListParams).catch((error: unknown) => {
-        console.error('Failed to list genes:', error);
-      });
-    } else {
-      void listGenomes(genomeListParams).catch((error: unknown) => {
-        console.error('Failed to list genomes:', error);
-      });
+      return listGenes(geneListParams);
     }
+    return listGenomes(genomeListParams);
   }, [activeTab, geneListParams, genomeListParams, listGenes, listGenomes, tenantId]);
+
+  useEffect(() => {
+    void loadActiveTab().catch(() => undefined);
+  }, [loadActiveTab]);
 
   useEffect(() => {
     return () => {
@@ -406,6 +419,26 @@ export const GeneMarket: FC = () => {
           </Select>
         </Space>
       </div>
+
+      {error && (
+        <Alert
+          type="error"
+          showIcon
+          title={t('tenant.genes.listErrorTitle', 'Could not load marketplace data')}
+          description={error}
+          closable={{ onClose: clearError }}
+          action={
+            <Button
+              size="small"
+              onClick={() => {
+                void loadActiveTab().catch(() => undefined);
+              }}
+            >
+              {t('common.retry', 'Retry')}
+            </Button>
+          }
+        />
+      )}
 
       <Tabs
         activeKey={activeTab}

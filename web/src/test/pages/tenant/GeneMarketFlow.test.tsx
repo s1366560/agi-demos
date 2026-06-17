@@ -206,6 +206,39 @@ describe('Gene marketplace rating flow', () => {
     expect(navigateMock).toHaveBeenCalledWith('gene-1?rate=1');
   });
 
+  it('shows list failures as a retryable marketplace error', async () => {
+    stateMock.genes = [];
+    stateMock.geneTotal = 0;
+    stateMock.error = 'Failed to list genes';
+
+    render(
+      <MemoryRouter>
+        <GeneMarket />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(actionsMock.listGenes).toHaveBeenCalledWith({
+        page: 1,
+        page_size: 20,
+        tenant_id: 'tenant-1',
+      });
+    });
+    expect(screen.getByText('Could not load marketplace data')).toBeInTheDocument();
+    expect(screen.getByText('Failed to list genes')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => {
+      expect(actionsMock.listGenes).toHaveBeenCalledTimes(2);
+    });
+    expect(actionsMock.listGenes).toHaveBeenLastCalledWith({
+      page: 1,
+      page_size: 20,
+      tenant_id: 'tenant-1',
+    });
+  });
+
   it('opens the rating modal from the rate query parameter', async () => {
     stateMock.currentGene = gene();
 
