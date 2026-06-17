@@ -17,7 +17,7 @@
  * - Responsive design
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { Outlet, useParams, useNavigate, Link, useLocation } from 'react-router-dom';
@@ -54,21 +54,34 @@ export const AgentLayout: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { projectBasePath } = useProjectBasePath();
   const topTabs = useMemo(() => getAgentConfig().tabs, []);
+  const projectSyncRequestRef = useRef(0);
 
   // Sync project data
   useEffect(() => {
     if (projectId && (!currentProject || currentProject.id !== projectId)) {
+      const requestId = projectSyncRequestRef.current + 1;
+      projectSyncRequestRef.current = requestId;
+      const applyProject = (project: (typeof projects)[number]) => {
+        if (projectSyncRequestRef.current === requestId) {
+          setCurrentProject(project);
+        }
+      };
+      const reportError = (error: unknown) => {
+        if (projectSyncRequestRef.current === requestId) {
+          console.error(error);
+        }
+      };
       const project = projects.find((p) => p.id === projectId);
       if (project) {
-        setCurrentProject(project);
+        applyProject(project);
       } else if (currentTenant) {
-        getProject(currentTenant.id, projectId)
-          .then((p) => {
-            setCurrentProject(p);
-          })
-          .catch(console.error);
+        getProject(currentTenant.id, projectId).then(applyProject).catch(reportError);
       }
+      return () => {
+        projectSyncRequestRef.current += 1;
+      };
     }
+    return undefined;
   }, [projectId, currentProject, projects, currentTenant, setCurrentProject, getProject]);
 
   // Determine active top tab based on current path

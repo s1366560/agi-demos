@@ -1,29 +1,35 @@
-import { Route, Routes, MemoryRouter } from 'react-router-dom';
+import { Route, Routes, MemoryRouter, useNavigate } from 'react-router-dom';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { OPEN_AGENT_CHAT_SEARCH_EVENT } from '@/components/agent/chat/searchEvents';
 import { AgentLayout } from '@/layouts/AgentLayout';
 
+const mockProjectStoreState = vi.hoisted(() => ({
+  currentProject: { id: 'proj-123', name: 'Test Project' } as any,
+  projects: [] as any[],
+  setCurrentProject: vi.fn(),
+  getProject: vi.fn(),
+}));
+
+const mockTenantStoreState = vi.hoisted(() => ({
+  currentTenant: { id: 'tenant-123', name: 'Test Tenant' },
+}));
+
 vi.mock('@/stores/project', () => {
-  const state = {
-    currentProject: { id: 'proj-123', name: 'Test Project' },
-    projects: [],
-    setCurrentProject: vi.fn(),
-    getProject: vi.fn(),
-  };
-  const hook = ((selector?: any) => (selector ? selector(state) : state)) as any;
-  hook.getState = () => state;
+  const hook = ((selector?: any) =>
+    selector ? selector(mockProjectStoreState) : mockProjectStoreState) as any;
+  hook.getState = () => mockProjectStoreState;
   hook.setState = vi.fn();
   hook.subscribe = vi.fn();
   return { useProjectStore: hook };
 });
 
 vi.mock('@/stores/tenant', () => {
-  const state = { currentTenant: { id: 'tenant-123', name: 'Test Tenant' } };
-  const hook = ((selector?: any) => (selector ? selector(state) : state)) as any;
-  hook.getState = () => state;
+  const hook = ((selector?: any) =>
+    selector ? selector(mockTenantStoreState) : mockTenantStoreState) as any;
+  hook.getState = () => mockTenantStoreState;
   hook.setState = vi.fn();
   hook.subscribe = vi.fn();
   return { useTenantStore: hook };
@@ -67,9 +73,43 @@ function renderWithRouter(
   return render(<MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>);
 }
 
+const createDeferred = <T,>() => {
+  let resolvePromise: (value: T | PromiseLike<T>) => void = () => {};
+  let rejectPromise: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+
+  return {
+    promise,
+    resolve: resolvePromise,
+    reject: rejectPromise,
+  };
+};
+
+const ProjectRouteSwitcher = () => {
+  const navigate = useNavigate();
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigate('/tenant/tenant-123/project/new-project/agent');
+      }}
+    >
+      Switch project
+    </button>
+  );
+};
+
 describe('AgentLayout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockProjectStoreState.currentProject = { id: 'proj-123', name: 'Test Project' };
+    mockProjectStoreState.projects = [];
+    mockProjectStoreState.getProject.mockResolvedValue({ id: 'proj-123', name: 'Test Project' });
+    mockTenantStoreState.currentTenant = { id: 'tenant-123', name: 'Test Tenant' };
   });
 
   afterEach(() => {
@@ -141,12 +181,8 @@ describe('AgentLayout', () => {
       expect(
         screen.getByRole('button', { name: /search current conversation/i })
       ).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', { name: /view execution history/i })
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', { name: /view workflow patterns/i })
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /view execution history/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /view workflow patterns/i })).toBeInTheDocument();
     });
 
     it('dispatches a chat search request from the header search action', () => {
@@ -169,6 +205,58 @@ describe('AgentLayout', () => {
       expect(dispatchSpy).toHaveBeenCalledWith(
         expect.objectContaining({ type: OPEN_AGENT_CHAT_SEARCH_EVENT })
       );
+    });
+
+    it('ignores stale project fetches after the agent route project changes', async () => {
+      mockProjectStoreState.currentProject = null;
+      mockProjectStoreState.projects = [];
+      const staleProject = createDeferred<any>();
+      const currentProject = createDeferred<any>();
+      mockProjectStoreState.getProject.mockImplementation((_tenantId: string, projectId: string) =>
+        projectId === 'old-project' ? staleProject.promise : currentProject.promise
+      );
+
+      renderWithRouter(
+        <>
+          <ProjectRouteSwitcher />
+          <Routes>
+            <Route path="/tenant/:tenantId/project/:projectId/agent" element={<AgentLayout />}>
+              <Route path="" element={<div>Content</div>} />
+            </Route>
+          </Routes>
+        </>,
+        ['/tenant/tenant-123/project/old-project/agent']
+      );
+
+      await waitFor(() => {
+        expect(mockProjectStoreState.getProject).toHaveBeenCalledWith('tenant-123', 'old-project');
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Switch project' }));
+
+      await waitFor(() => {
+        expect(mockProjectStoreState.getProject).toHaveBeenCalledWith('tenant-123', 'new-project');
+      });
+
+      currentProject.resolve({ id: 'new-project', name: 'Current Project' });
+      await currentProject.promise;
+
+      await waitFor(() => {
+        expect(mockProjectStoreState.setCurrentProject).toHaveBeenCalledWith({
+          id: 'new-project',
+          name: 'Current Project',
+        });
+      });
+
+      staleProject.resolve({ id: 'old-project', name: 'Stale Project' });
+      await staleProject.promise;
+      await Promise.resolve();
+
+      expect(mockProjectStoreState.setCurrentProject).toHaveBeenCalledTimes(1);
+      expect(mockProjectStoreState.setCurrentProject).not.toHaveBeenCalledWith({
+        id: 'old-project',
+        name: 'Stale Project',
+      });
     });
   });
 
