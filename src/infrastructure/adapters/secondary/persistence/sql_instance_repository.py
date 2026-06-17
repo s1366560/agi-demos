@@ -3,12 +3,16 @@
 import logging
 from typing import override
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.instance.enums import InstanceStatus, ServiceType
 from src.domain.model.instance.instance import Instance
 from src.domain.ports.repositories.instance_repository import InstanceRepository
-from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
+from src.infrastructure.adapters.secondary.common.base_repository import (
+    BaseRepository,
+    refresh_select_statement,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     InstanceModel,
 )
@@ -28,7 +32,22 @@ class SqlInstanceRepository(BaseRepository[Instance, InstanceModel], InstanceRep
     async def find_by_tenant(
         self, tenant_id: str, limit: int = 50, offset: int = 0
     ) -> list[Instance]:
-        return await self.list_all(limit=limit, offset=offset, tenant_id=tenant_id)
+        query = (
+            select(InstanceModel)
+            .where(InstanceModel.tenant_id == tenant_id)
+            .where(InstanceModel.deleted_at.is_(None))
+            .order_by(InstanceModel.created_at.desc(), InstanceModel.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        db_models = result.scalars().all()
+        return [
+            domain
+            for db_model in db_models
+            if db_model is not None
+            if (domain := self._to_domain(db_model)) is not None
+        ]
 
     @override
     async def find_by_slug(self, tenant_id: str, slug: str) -> Instance | None:
@@ -36,15 +55,48 @@ class SqlInstanceRepository(BaseRepository[Instance, InstanceModel], InstanceRep
 
     @override
     async def find_by_workspace(self, workspace_id: str) -> list[Instance]:
-        return await self.list_all(workspace_id=workspace_id)
+        query = (
+            select(InstanceModel)
+            .where(InstanceModel.workspace_id == workspace_id)
+            .where(InstanceModel.deleted_at.is_(None))
+            .order_by(InstanceModel.created_at.desc(), InstanceModel.id.asc())
+        )
+        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        db_models = result.scalars().all()
+        return [
+            domain
+            for db_model in db_models
+            if db_model is not None
+            if (domain := self._to_domain(db_model)) is not None
+        ]
 
     @override
     async def find_by_cluster(self, cluster_id: str) -> list[Instance]:
-        return await self.list_all(cluster_id=cluster_id)
+        query = (
+            select(InstanceModel)
+            .where(InstanceModel.cluster_id == cluster_id)
+            .where(InstanceModel.deleted_at.is_(None))
+            .order_by(InstanceModel.created_at.desc(), InstanceModel.id.asc())
+        )
+        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        db_models = result.scalars().all()
+        return [
+            domain
+            for db_model in db_models
+            if db_model is not None
+            if (domain := self._to_domain(db_model)) is not None
+        ]
 
     @override
     async def count_by_tenant(self, tenant_id: str) -> int:
-        return await self.count(tenant_id=tenant_id)
+        query = (
+            select(func.count())
+            .select_from(InstanceModel)
+            .where(InstanceModel.tenant_id == tenant_id)
+            .where(InstanceModel.deleted_at.is_(None))
+        )
+        result = await self._session.execute(refresh_select_statement(query))
+        return result.scalar() or 0
 
     @override
     def _to_domain(self, db_model: InstanceModel | None) -> Instance | None:
