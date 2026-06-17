@@ -464,6 +464,17 @@ def _to_member_response(
     )
 
 
+async def _get_user_email_map(db: AsyncSession, user_ids: set[str]) -> dict[str, str]:
+    """Return user emails for a workspace member batch."""
+    if not user_ids:
+        return {}
+
+    result = await db.execute(
+        refresh_select_statement(select(User.id, User.email).where(User.id.in_(user_ids)))
+    )
+    return {user_id: email for user_id, email in result.all()}
+
+
 def _to_agent_response(agent: WorkspaceAgent) -> WorkspaceAgentResponse:
     return WorkspaceAgentResponse(
         id=agent.id,
@@ -653,17 +664,7 @@ async def list_workspace_members(
             limit=limit,
             offset=offset,
         )
-        # Batch-resolve user emails
-        from src.infrastructure.adapters.secondary.persistence.sql_user_repository import (
-            SqlUserRepository,
-        )
-
-        user_repo = SqlUserRepository(db)
-        email_map: dict[str, str] = {}
-        for member in members:
-            user = await user_repo.find_by_id(member.user_id)
-            if user:
-                email_map[member.user_id] = user.email
+        email_map = await _get_user_email_map(db, {member.user_id for member in members})
         return [
             _to_member_response(member, user_email=email_map.get(member.user_id))
             for member in members

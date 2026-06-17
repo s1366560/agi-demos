@@ -349,6 +349,49 @@ class TestWorkspacesRouter:
         mock_workspace_service.add_member.assert_not_awaited()
         workspaces_client.mock_db.rollback.assert_awaited_once()  # type: ignore[attr-defined]
 
+    def test_list_members_batch_resolves_user_email(
+        self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
+    ) -> None:
+        mock_workspace_service.list_members.return_value = [
+            _make_member("user-2"),
+            _make_member("user-3", role=WorkspaceRole.VIEWER),
+        ]
+        user_email_result = Mock()
+        user_email_result.all.return_value = [
+            ("user-2", "editor@example.com"),
+            ("user-3", "viewer@example.com"),
+        ]
+        workspaces_client.mock_db.execute.return_value = user_email_result  # type: ignore[attr-defined]
+
+        response = workspaces_client.get(
+            "/api/v1/tenants/tenant-1/projects/project-1/workspaces/ws-1/members"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == [
+            {
+                "id": "wm-user-2",
+                "workspace_id": "ws-1",
+                "user_id": "user-2",
+                "user_email": "editor@example.com",
+                "role": "editor",
+                "invited_by": "user-1",
+                "created_at": response.json()[0]["created_at"],
+                "updated_at": response.json()[0]["updated_at"],
+            },
+            {
+                "id": "wm-user-3",
+                "workspace_id": "ws-1",
+                "user_id": "user-3",
+                "user_email": "viewer@example.com",
+                "role": "viewer",
+                "invited_by": "user-1",
+                "created_at": response.json()[1]["created_at"],
+                "updated_at": response.json()[1]["updated_at"],
+            },
+        ]
+        assert workspaces_client.mock_db.execute.await_count == 1  # type: ignore[attr-defined]
+
     def test_list_agents_success(
         self, workspaces_client: TestClient, mock_workspace_service: AsyncMock
     ) -> None:

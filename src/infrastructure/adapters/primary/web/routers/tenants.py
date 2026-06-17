@@ -753,26 +753,26 @@ async def get_tenant_analytics(
     )
     projects = projects_result.scalars().all()
 
+    project_ids = [project.id for project in projects]
+    project_memory_stats = await _get_project_memory_stats(db, project_ids)
+
     # Calculate per-project storage
-    project_storage = []
+    project_storage: list[dict[str, Any]] = []
     for project in projects:
-        # Sum memory content lengths as proxy for storage
-        storage_result = await db.execute(
-            refresh_select_statement(
-                select(func.sum(func.length(Memory.content))).where(Memory.project_id == project.id)
-            )
+        memory_stats = project_memory_stats.get(
+            project.id,
+            {"storage_bytes": 0, "memory_count": 0},
         )
-        storage_bytes = storage_result.scalar() or 0
         project_storage.append(
             {
                 "name": project.name,
-                "storage_bytes": storage_bytes,
-                "memory_count": await _get_memory_count(db, project.id),
+                "storage_bytes": memory_stats["storage_bytes"],
+                "memory_count": memory_stats["memory_count"],
             }
         )
 
     # Get memory growth by day
-    memory_growth = await _get_memory_growth_by_day(db, [p.id for p in projects], days)
+    memory_growth = await _get_memory_growth_by_day(db, project_ids, days)
 
     # Summary stats
     total_memories = sum(int(p.get("memory_count", 0)) for p in project_storage)
@@ -790,14 +790,31 @@ async def get_tenant_analytics(
     }
 
 
-async def _get_memory_count(db: AsyncSession, project_id: str) -> int:
-    """Get memory count for a project."""
+async def _get_project_memory_stats(
+    db: AsyncSession, project_ids: list[str]
+) -> dict[str, dict[str, int]]:
+    """Get memory storage and count totals keyed by project."""
+    if not project_ids:
+        return {}
+
     result = await db.execute(
         refresh_select_statement(
-            select(func.count()).select_from(Memory).where(Memory.project_id == project_id)
+            select(
+                Memory.project_id,
+                func.coalesce(func.sum(func.length(Memory.content)), 0).label("storage_bytes"),
+                func.count(Memory.id).label("memory_count"),
+            )
+            .where(Memory.project_id.in_(project_ids))
+            .group_by(Memory.project_id)
         )
     )
-    return result.scalar() or 0
+    return {
+        project_id: {
+            "storage_bytes": int(storage_bytes or 0),
+            "memory_count": int(memory_count or 0),
+        }
+        for project_id, storage_bytes, memory_count in result.all()
+    }
 
 
 async def _get_memory_growth_by_day(
@@ -824,9 +841,10 @@ async def _get_memory_growth_by_day(
     )
 
     # Format for chart
-    growth_data = []
+    growth_data: list[dict[str, Any]] = []
     for row in result:
-        date_str = row.date.strftime("%b %d") if row.date else ""
+        memory_day = _coerce_history_day(row.date) if row.date else None
+        date_str = memory_day.strftime("%b %d") if memory_day else ""
         growth_data.append({"date": date_str, "count": row.count})
 
     return growth_data
