@@ -9,6 +9,7 @@ const commonTranslations: Record<string, string> = {
   'common.cancel': 'Cancel',
   'common.delete': 'Delete',
   'common.close': 'Close',
+  'common.done': 'Done',
   'common.edit': 'Edit',
   'common.create': 'Create',
   'common.search': 'Search',
@@ -935,6 +936,14 @@ const commonTranslations: Record<string, string> = {
   // Tenant Webhooks
   'webhooks.fetchError': 'Failed to fetch webhooks',
   'webhooks.eventTypesError': 'Failed to load webhook event types',
+  'webhooks.createdSecretTitle': 'Webhook signing secret',
+  'webhooks.secretHidden': 'Signing secrets are shown only once when a webhook is created.',
+  'webhooks.secretOneTimeTitle': 'Copy this secret now',
+  'webhooks.secretOneTimeDescription':
+    'For security, this value will not be shown again after you close this dialog.',
+  'webhooks.copySecret': 'Copy secret',
+  'webhooks.secretCopied': 'Secret copied',
+  'webhooks.secretCopyError': 'Failed to copy secret',
   'webhooks.createError': 'Failed to create webhook',
   'webhooks.updateError': 'Failed to update webhook',
 

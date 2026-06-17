@@ -2,10 +2,10 @@ import { Route, Routes } from 'react-router-dom';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Webhooks } from '../../../pages/tenant/Webhooks';
+import { WebhookCreatedSecretModal, Webhooks } from '../../../pages/tenant/Webhooks';
 import { eventService } from '../../../services/eventService';
-import { webhookService } from '../../../services/webhookService';
-import { render, screen, waitFor } from '../../utils';
+import { webhookService, type Webhook } from '../../../services/webhookService';
+import { fireEvent, render, screen, waitFor } from '../../utils';
 
 vi.mock('../../../services/eventService', () => ({
   eventService: {
@@ -30,10 +30,26 @@ vi.mock('../../../stores/tenant', () => ({
 }));
 
 describe('Webhooks', () => {
+  const webhook: Webhook = {
+    id: 'webhook-1',
+    tenant_id: 'tenant-selected',
+    name: 'Deploy',
+    url: 'https://example.com/hook',
+    secret: null,
+    events: ['gene.installed'],
+    is_active: true,
+    created_at: '2026-06-17T00:00:00Z',
+    updated_at: '2026-06-17T00:00:00Z',
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(eventService.getEventTypes).mockResolvedValue(['gene.installed']);
     vi.mocked(webhookService.listWebhooks).mockResolvedValue([]);
+    vi.mocked(webhookService.createWebhook).mockResolvedValue({
+      ...webhook,
+      secret: 'whsec_created',
+    });
   });
 
   afterEach(() => {
@@ -82,5 +98,42 @@ describe('Webhooks', () => {
     );
 
     expect(await screen.findByText('Failed to load webhook event types')).toBeInTheDocument();
+  });
+
+  it('renders the generated secret in a one-time modal', async () => {
+    const onClose = vi.fn();
+    const onCopy = vi.fn();
+
+    render(<WebhookCreatedSecretModal secret="whsec_created" onClose={onClose} onCopy={onCopy} />);
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Webhook signing secret' })
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue('whsec_created')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy secret' }));
+    expect(onCopy).toHaveBeenCalledOnce();
+  });
+
+  it('does not render stored secrets in the edit dialog', async () => {
+    vi.mocked(webhookService.listWebhooks).mockResolvedValue([
+      {
+        ...webhook,
+        secret: 'whsec_should_not_render',
+      },
+    ]);
+
+    render(
+      <Routes>
+        <Route path="/tenant/:tenantId/webhooks" element={<Webhooks />} />
+      </Routes>,
+      { route: '/tenant/tenant-selected/webhooks' }
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    expect(
+      await screen.findByText('Signing secrets are shown only once when a webhook is created.')
+    ).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('whsec_should_not_render')).not.toBeInTheDocument();
   });
 });

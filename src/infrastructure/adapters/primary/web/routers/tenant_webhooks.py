@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.user import User
+from src.domain.model.tenant.webhook import Webhook
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.primary.web.routers.agent.utils import get_container_with_db
@@ -41,6 +41,20 @@ class WebhookResponse(BaseModel):
     is_active: bool
     created_at: datetime | None
     updated_at: datetime | None
+
+
+def _to_webhook_response(webhook: Webhook, *, include_secret: bool) -> WebhookResponse:
+    return WebhookResponse(
+        id=webhook.id,
+        tenant_id=webhook.tenant_id,
+        name=webhook.name,
+        url=webhook.url,
+        secret=webhook.secret if include_secret else None,
+        events=list(webhook.events),
+        is_active=webhook.is_active,
+        created_at=webhook.created_at,
+        updated_at=webhook.updated_at,
+    )
 
 
 async def _require_webhook_tenant_admin(
@@ -79,7 +93,7 @@ async def create_webhook(
         is_active=body.is_active,
     )
     await db.commit()
-    return cast(WebhookResponse, webhook)
+    return _to_webhook_response(webhook, include_secret=True)
 
 
 @router.get("/{tenant_id}", response_model=list[WebhookResponse])
@@ -93,7 +107,8 @@ async def list_webhooks(
     container = get_container_with_db(request, db)
     service = container.webhook_service()
 
-    return cast(list[WebhookResponse], await service.list_webhooks(tenant_id))
+    webhooks = await service.list_webhooks(tenant_id)
+    return [_to_webhook_response(webhook, include_secret=False) for webhook in webhooks]
 
 
 @router.put("/{webhook_id}", response_model=WebhookResponse)
@@ -117,7 +132,7 @@ async def update_webhook(
             is_active=body.is_active,
         )
         await db.commit()
-        return cast(WebhookResponse, webhook)
+        return _to_webhook_response(webhook, include_secret=False)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

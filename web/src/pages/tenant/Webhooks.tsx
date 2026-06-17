@@ -18,6 +18,7 @@ import {
   Switch,
   message,
 } from 'antd';
+import { Copy } from 'lucide-react';
 
 import { useCurrentTenant } from '@/stores/tenant';
 
@@ -39,6 +40,52 @@ const isFormValidationError = (error: unknown): error is { errorFields: unknown[
   'errorFields' in error &&
   Array.isArray((error as { errorFields?: unknown }).errorFields);
 
+interface WebhookCreatedSecretModalProps {
+  secret: string | null;
+  onClose: () => void;
+  onCopy: () => void;
+}
+
+export const WebhookCreatedSecretModal: React.FC<WebhookCreatedSecretModalProps> = ({
+  secret,
+  onClose,
+  onCopy,
+}) => {
+  const { t } = useTranslation();
+
+  return (
+    <Modal
+      title={t('webhooks.createdSecretTitle', 'Webhook signing secret')}
+      open={Boolean(secret)}
+      okText={t('common.done', 'Done')}
+      cancelButtonProps={{ style: { display: 'none' } }}
+      onOk={onClose}
+      onCancel={onClose}
+      destroyOnHidden
+    >
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+        <Alert
+          type="warning"
+          showIcon
+          title={t('webhooks.secretOneTimeTitle', 'Copy this secret now')}
+          description={t(
+            'webhooks.secretOneTimeDescription',
+            'For security, this value will not be shown again after you close this dialog.'
+          )}
+        />
+        <Space.Compact style={{ width: '100%' }}>
+          <Input.Password value={secret ?? ''} readOnly />
+          <Button
+            icon={<Copy size={14} />}
+            aria-label={t('webhooks.copySecret', 'Copy secret')}
+            onClick={onCopy}
+          />
+        </Space.Compact>
+      </Space>
+    </Modal>
+  );
+};
+
 export const Webhooks: React.FC = () => {
   const { t } = useTranslation();
   const { tenantId } = useParams<{ tenantId?: string }>();
@@ -51,6 +98,7 @@ export const Webhooks: React.FC = () => {
   const [eventTypesError, setEventTypesError] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null);
+  const [createdSecret, setCreatedSecret] = useState<string | null>(null);
   const [form] = Form.useForm<WebhookFormValues>();
 
   const fetchWebhooks = React.useCallback(async () => {
@@ -74,6 +122,10 @@ export const Webhooks: React.FC = () => {
   useEffect(() => {
     void fetchWebhooks();
   }, [fetchWebhooks]);
+
+  useEffect(() => {
+    setCreatedSecret(null);
+  }, [selectedTenantId]);
 
   useEffect(() => {
     setEventTypesError(null);
@@ -124,7 +176,8 @@ export const Webhooks: React.FC = () => {
         await webhookService.updateWebhook(editingWebhook.id, values);
         message.success(t('webhooks.updateSuccess', 'Webhook updated'));
       } else {
-        await webhookService.createWebhook(selectedTenantId, values);
+        const createdWebhook = await webhookService.createWebhook(selectedTenantId, values);
+        setCreatedSecret(createdWebhook.secret ?? null);
         message.success(t('webhooks.createSuccess', 'Webhook created'));
       }
       setIsModalVisible(false);
@@ -137,6 +190,17 @@ export const Webhooks: React.FC = () => {
           ? t('webhooks.updateError', 'Failed to update webhook')
           : t('webhooks.createError', 'Failed to create webhook')
       );
+    }
+  };
+
+  const handleCopyCreatedSecret = async () => {
+    if (!createdSecret) return;
+    try {
+      await navigator.clipboard.writeText(createdSecret);
+      message.success(t('webhooks.secretCopied', 'Secret copied'));
+    } catch (err) {
+      console.error(err);
+      message.error(t('webhooks.secretCopyError', 'Failed to copy secret'));
     }
   };
 
@@ -284,13 +348,28 @@ export const Webhooks: React.FC = () => {
           >
             <Switch />
           </Form.Item>
-          {editingWebhook?.secret && (
-            <Form.Item label={t('webhooks.secret', 'Secret')}>
-              <Input.Password value={editingWebhook.secret} readOnly />
-            </Form.Item>
-          )}
+          {editingWebhook ? (
+            <Alert
+              type="info"
+              showIcon
+              title={t(
+                'webhooks.secretHidden',
+                'Signing secrets are shown only once when a webhook is created.'
+              )}
+            />
+          ) : null}
         </Form>
       </Modal>
+
+      <WebhookCreatedSecretModal
+        secret={createdSecret}
+        onClose={() => {
+          setCreatedSecret(null);
+        }}
+        onCopy={() => {
+          void handleCopyCreatedSecret();
+        }}
+      />
     </div>
   );
 };
