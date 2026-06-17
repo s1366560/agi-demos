@@ -23,6 +23,11 @@ import type {
   UserSearchResult,
 } from '../services/instanceService';
 
+let latestListInstancesRequest = 0;
+let latestGetInstanceRequest = 0;
+let latestGetConfigRequest = 0;
+let latestListMembersRequest = 0;
+
 // ============================================================================
 // ERROR HELPER
 // ============================================================================
@@ -137,11 +142,14 @@ export const useInstanceStore = create<InstanceState>()(
       // ========== Instance CRUD ==========
 
       listInstances: async (params = {}) => {
+        const requestId = latestListInstancesRequest + 1;
+        latestListInstancesRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await instanceService.list(
             params as { page?: number; page_size?: number; status?: string; search?: string }
           );
+          if (requestId !== latestListInstancesRequest) return;
           set({
             instances: response.instances,
             total: response.total,
@@ -150,18 +158,23 @@ export const useInstanceStore = create<InstanceState>()(
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (requestId !== latestListInstancesRequest) throw error;
           set({ error: getErrorMessage(error, 'Failed to list instances'), isLoading: false });
           throw error;
         }
       },
 
       getInstance: async (id: string) => {
+        const requestId = latestGetInstanceRequest + 1;
+        latestGetInstanceRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await instanceService.getById(id);
+          if (requestId !== latestGetInstanceRequest) return response;
           set({ currentInstance: response, isLoading: false });
           return response;
         } catch (error: unknown) {
+          if (requestId !== latestGetInstanceRequest) throw error;
           set({ error: getErrorMessage(error, 'Failed to get instance'), isLoading: false });
           throw error;
         }
@@ -260,12 +273,16 @@ export const useInstanceStore = create<InstanceState>()(
       // ========== Config ==========
 
       getConfig: async (id: string) => {
+        const requestId = latestGetConfigRequest + 1;
+        latestGetConfigRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await instanceService.getConfig(id);
+          if (requestId !== latestGetConfigRequest) return response;
           set({ instanceConfig: response, isLoading: false });
           return response;
         } catch (error: unknown) {
+          if (requestId !== latestGetConfigRequest) throw error;
           set({
             error: getErrorMessage(error, 'Failed to get instance config'),
             isLoading: false,
@@ -292,9 +309,12 @@ export const useInstanceStore = create<InstanceState>()(
       // ========== Members ==========
 
       listMembers: async (id: string, params = {}) => {
+        const requestId = latestListMembersRequest + 1;
+        latestListMembersRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await instanceService.listMembers(id, params);
+          if (requestId !== latestListMembersRequest) return response;
           set({
             members: response.members,
             membersTotal: response.total,
@@ -305,6 +325,7 @@ export const useInstanceStore = create<InstanceState>()(
           });
           return response;
         } catch (error: unknown) {
+          if (requestId !== latestListMembersRequest) throw error;
           set({
             error: getErrorMessage(error, 'Failed to list instance members'),
             isLoading: false,
@@ -385,6 +406,10 @@ export const useInstanceStore = create<InstanceState>()(
       },
 
       reset: () => {
+        latestListInstancesRequest += 1;
+        latestGetInstanceRequest += 1;
+        latestGetConfigRequest += 1;
+        latestListMembersRequest += 1;
         set(initialState);
       },
     }),
