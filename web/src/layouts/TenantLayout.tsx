@@ -17,7 +17,7 @@
  * - Workspace switcher
  */
 
-import React, { useEffect, useState, useCallback, memo } from 'react';
+import React, { useEffect, useState, useCallback, memo, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
@@ -77,6 +77,7 @@ export const TenantLayout: React.FC = memo(() => {
   const [noTenants, setNoTenants] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const projectSyncRequestRef = useRef(0);
 
   const handleLogout = useCallback(() => {
     logout();
@@ -190,21 +191,44 @@ export const TenantLayout: React.FC = memo(() => {
 
   // Sync project ID from URL with store
   useEffect(() => {
-    if (projectId && currentTenant && (!currentProject || currentProject.id !== projectId)) {
+    const requestId = projectSyncRequestRef.current + 1;
+    projectSyncRequestRef.current = requestId;
+    const requestProjectId = projectId ?? null;
+    const isCurrentProjectRequest = () => projectSyncRequestRef.current === requestId;
+
+    if (
+      requestProjectId &&
+      currentTenant &&
+      (!currentProject || currentProject.id !== requestProjectId)
+    ) {
       const { projects, setCurrentProject, getProject } = useProjectStore.getState();
-      const project = projects.find((p) => p.id === projectId);
+      const project = projects.find((p) => p.id === requestProjectId);
       if (project) {
-        setCurrentProject(project);
+        if (isCurrentProjectRequest()) {
+          setCurrentProject(project);
+        }
       } else {
-        getProject(currentTenant.id, projectId)
+        getProject(currentTenant.id, requestProjectId)
           .then((p) => {
-            setCurrentProject(p);
+            if (isCurrentProjectRequest()) {
+              setCurrentProject(p);
+            }
           })
-          .catch(console.error);
+          .catch((error: unknown) => {
+            if (isCurrentProjectRequest()) {
+              console.error(error);
+            }
+          });
       }
-    } else if (!projectId && currentProject) {
+    } else if (!requestProjectId && currentProject) {
       useProjectStore.getState().setCurrentProject(null);
     }
+
+    return () => {
+      if (projectSyncRequestRef.current === requestId) {
+        projectSyncRequestRef.current += 1;
+      }
+    };
   }, [projectId, currentTenant, currentProject]);
 
   // No tenants state - welcome screen
