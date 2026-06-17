@@ -27,5 +27,9 @@ class ClusterRepository(ABC):
         """Find a cluster by tenant and name."""
 
     @abstractmethod
+    async def count_by_tenant(self, tenant_id: str) -> int:
+        """Count active clusters in a tenant."""
+
+    @abstractmethod
     async def delete(self, entity_id: str) -> bool:
         """Delete a cluster. Returns True if deleted, False if not found."""

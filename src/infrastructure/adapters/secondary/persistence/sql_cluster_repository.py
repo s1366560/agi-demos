@@ -3,12 +3,16 @@
 import logging
 from typing import override
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.cluster.cluster import Cluster
 from src.domain.model.cluster.enums import ClusterProvider, ClusterStatus
 from src.domain.ports.repositories.cluster_repository import ClusterRepository
-from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
+from src.infrastructure.adapters.secondary.common.base_repository import (
+    BaseRepository,
+    refresh_select_statement,
+)
 from src.infrastructure.adapters.secondary.persistence.models import (
     ClusterModel,
 )
@@ -25,14 +29,67 @@ class SqlClusterRepository(BaseRepository[Cluster, ClusterModel], ClusterReposit
         super().__init__(session)
 
     @override
+    async def find_by_id(self, entity_id: str) -> Cluster | None:
+        if not entity_id:
+            raise ValueError("ID cannot be empty")
+        query = (
+            select(ClusterModel)
+            .where(ClusterModel.id == entity_id)
+            .where(ClusterModel.deleted_at.is_(None))
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
+        return self._to_domain(result.scalar_one_or_none())
+
+    @override
     async def find_by_tenant(
         self, tenant_id: str, limit: int = 50, offset: int = 0
     ) -> list[Cluster]:
-        return await self.list_all(limit=limit, offset=offset, tenant_id=tenant_id)
+        query = (
+            select(ClusterModel)
+            .where(
+                ClusterModel.tenant_id == tenant_id,
+                ClusterModel.deleted_at.is_(None),
+            )
+            .order_by(ClusterModel.created_at.desc(), ClusterModel.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
+        db_models = result.scalars().all()
+        return [d for model in db_models if (d := self._to_domain(model)) is not None]
 
     @override
     async def find_by_name(self, tenant_id: str, name: str) -> Cluster | None:
-        return await self.find_one(tenant_id=tenant_id, name=name)
+        query = (
+            select(ClusterModel)
+            .where(
+                ClusterModel.tenant_id == tenant_id,
+                ClusterModel.name == name,
+                ClusterModel.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
+        return self._to_domain(result.scalar_one_or_none())
+
+    @override
+    async def count_by_tenant(self, tenant_id: str) -> int:
+        query = (
+            select(func.count())
+            .select_from(ClusterModel)
+            .where(
+                ClusterModel.tenant_id == tenant_id,
+                ClusterModel.deleted_at.is_(None),
+            )
+        )
+        result = await self._session.execute(refresh_select_statement(query))
+        return result.scalar() or 0
 
     @override
     def _to_domain(self, db_model: ClusterModel | None) -> Cluster | None:

@@ -46,7 +46,7 @@ interface ClusterState {
   error: string | null;
 
   // Actions - Cluster CRUD
-  listClusters: (params?: Record<string, unknown>) => Promise<void>;
+  listClusters: (params?: { page?: number; page_size?: number }) => Promise<void>;
   getCluster: (id: string) => Promise<ClusterResponse>;
   createCluster: (data: ClusterCreate) => Promise<ClusterResponse>;
   updateCluster: (id: string, data: ClusterUpdate) => Promise<ClusterResponse>;
@@ -89,10 +89,16 @@ export const useClusterStore = create<ClusterState>()(
       listClusters: async (params = {}) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await clusterService.list(params);
+          const { page, pageSize } = get();
+          const response = await clusterService.list({
+            page: params.page ?? page,
+            page_size: params.page_size ?? pageSize,
+          });
           set({
             clusters: response.clusters,
             total: response.total,
+            page: response.page,
+            pageSize: response.page_size,
             isLoading: false,
           });
         } catch (error: unknown) {
@@ -209,6 +215,8 @@ export const useClusterLoading = () => useClusterStore((s) => s.isLoading);
 export const useClusterSubmitting = () => useClusterStore((s) => s.isSubmitting);
 export const useClusterError = () => useClusterStore((s) => s.error);
 export const useClusterTotal = () => useClusterStore((s) => s.total);
+export const useClusterPage = () => useClusterStore((s) => s.page);
+export const useClusterPageSize = () => useClusterStore((s) => s.pageSize);
 
 export const useClusterActions = () =>
   useClusterStore(

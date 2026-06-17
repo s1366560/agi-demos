@@ -100,6 +100,21 @@ class ClusterService:
         """
         return await self._cluster_repo.find_by_tenant(tenant_id, limit=limit, offset=offset)
 
+    async def list_clusters_with_total(
+        self,
+        tenant_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[Cluster], int]:
+        """List active clusters for a tenant and return the full matching count."""
+        clusters = await self._cluster_repo.find_by_tenant(
+            tenant_id,
+            limit=limit,
+            offset=offset,
+        )
+        total = await self._cluster_repo.count_by_tenant(tenant_id)
+        return clusters, total
+
     async def update_cluster(
         self,
         cluster_id: str,

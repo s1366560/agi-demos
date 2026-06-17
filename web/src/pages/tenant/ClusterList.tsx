@@ -29,6 +29,8 @@ import {
   useClusterSubmitting,
   useClusterError,
   useClusterTotal,
+  useClusterPage,
+  useClusterPageSize,
   useClusterActions,
 } from '../../stores/cluster';
 
@@ -66,6 +68,8 @@ export const ClusterList: FC = () => {
   const submitting = useClusterSubmitting();
   const error = useClusterError();
   const total = useClusterTotal();
+  const page = useClusterPage();
+  const pageSize = useClusterPageSize();
   const {
     listClusters,
     createCluster,
@@ -282,7 +286,15 @@ export const ClusterList: FC = () => {
         rowKey="id"
         loading={loading}
         scroll={{ x: 'max-content' }}
-        pagination={{ total: clusters.length, pageSize: 10 }}
+        pagination={{
+          current: page,
+          pageSize,
+          total,
+          showSizeChanger: true,
+          onChange: (nextPage, nextPageSize) => {
+            void listClusters({ page: nextPage, page_size: nextPageSize });
+          },
+        }}
       />
 
       <Modal

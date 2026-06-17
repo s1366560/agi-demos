@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -11,6 +12,11 @@ from src.infrastructure.adapters.primary.web.routers import clusters as router
 
 
 class _FailingClusterService:
+    async def list_clusters_with_total(
+        self, *_args: object, **_kwargs: object
+    ) -> tuple[list[object], int]:
+        return [], 0
+
     async def get_cluster(self, *_args: object, **_kwargs: object) -> object | None:
         return None
 
@@ -109,3 +115,52 @@ async def test_cluster_routes_sanitize_not_found_errors(
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
     assert exc_info.value.detail == "Cluster not found"
     assert "secret" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+async def test_list_clusters_returns_full_total(
+    monkeypatch: pytest.MonkeyPatch,
+    db: SimpleNamespace,
+) -> None:
+    page_cluster = SimpleNamespace(
+        id="cluster-page-1",
+        name="Cluster Page 1",
+        tenant_id="tenant-1",
+        compute_provider="docker",
+        proxy_endpoint=None,
+        provider_config={},
+        credentials_encrypted=None,
+        status="disconnected",
+        health_status=None,
+        last_health_check=None,
+        created_by="user-1",
+        created_at=datetime.now(UTC),
+        updated_at=None,
+    )
+
+    class ClusterService:
+        async def list_clusters_with_total(
+            self,
+            *_args: object,
+            **_kwargs: object,
+        ) -> tuple[list[object], int]:
+            return [page_cluster], 21
+
+    class Container:
+        def cluster_service(self) -> ClusterService:
+            return ClusterService()
+
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: Container())
+
+    response = await router.list_clusters(
+        request=SimpleNamespace(),
+        tenant_id="tenant-1",
+        db=db,
+        page=2,
+        page_size=1,
+    )
+
+    assert len(response.clusters) == 1
+    assert response.total == 21
+    assert response.page == 2
+    assert response.page_size == 1

@@ -166,7 +166,7 @@ async def list_clusters(
         container = get_container_with_db(request, db)
         service = container.cluster_service()
         offset = (page - 1) * page_size
-        clusters = await service.list_clusters(
+        clusters, total = await service.list_clusters_with_total(
             tenant_id=tenant_id,
             limit=page_size,
             offset=offset,
@@ -174,7 +174,7 @@ async def list_clusters(
         items = [ClusterResponse.model_validate(c, from_attributes=True) for c in clusters]
         return ClusterListResponse(
             clusters=items,
-            total=len(items),
+            total=total,
             page=page,
             page_size=page_size,
         )
