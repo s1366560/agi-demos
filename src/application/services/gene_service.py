@@ -7,7 +7,7 @@ ratings, and evolution event tracking.
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from src.domain.model.gene.enums import (
     ContentVisibility,
@@ -394,6 +394,11 @@ class GeneService:
         if existing_genome is not None:
             raise ValueError("Genome slug already exists")
 
+        validated_gene_slugs = await self._validate_genome_gene_slugs(
+            gene_slugs,
+            tenant_id=tenant_id,
+        )
+
         genome = Genome(
             name=name,
             slug=slug,
@@ -402,7 +407,7 @@ class GeneService:
             description=description,
             short_description=short_description,
             icon=icon,
-            gene_slugs=gene_slugs or [],
+            gene_slugs=validated_gene_slugs,
             config_override=config_override or {},
             visibility=ContentVisibility(visibility),
         )
@@ -410,6 +415,44 @@ class GeneService:
         await self._genome_repo.save(genome)
         logger.info(f"Created genome {genome.id} (slug={slug})")
         return genome
+
+    async def _validate_genome_gene_slugs(
+        self,
+        gene_slugs: object,
+        *,
+        tenant_id: str | None,
+    ) -> list[str]:
+        if gene_slugs is None:
+            return []
+        if not isinstance(gene_slugs, list):
+            raise ValueError("Genome gene slugs must be a list")
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for slug in cast(list[object], gene_slugs):
+            if not isinstance(slug, str):
+                raise ValueError("Genome gene slugs must be strings")
+            normalized_slug = slug.strip()
+            if not normalized_slug or normalized_slug in seen:
+                continue
+            seen.add(normalized_slug)
+            normalized.append(normalized_slug)
+
+        if not normalized:
+            return []
+
+        genes = await self._gene_repo.find_by_filters(
+            tenant_id=tenant_id,
+            slugs=normalized,
+            limit=len(normalized),
+            offset=0,
+        )
+        found_slugs = {gene.slug for gene in genes}
+        missing_slugs = [slug for slug in normalized if slug not in found_slugs]
+        if missing_slugs:
+            raise ValueError("Genome gene slugs not found")
+
+        return normalized
 
     async def get_genome(self, genome_id: str) -> Genome | None:
         """
@@ -516,8 +559,10 @@ class GeneService:
                 )
                 if existing_genome is not None and existing_genome.id != genome_id:
                     raise ValueError("Genome slug already exists")
-            if key == "visibility":
+            elif key == "visibility":
                 value = ContentVisibility(value)
+            elif key == "gene_slugs":
+                value = await self._validate_genome_gene_slugs(value, tenant_id=genome.tenant_id)
             setattr(genome, key, value)
 
         genome.updated_at = datetime.now(UTC)

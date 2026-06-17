@@ -218,6 +218,55 @@ async def test_create_genome_allows_duplicate_slug_in_different_tenant(
 
 
 @pytest.mark.unit
+async def test_create_genome_normalizes_gene_slugs(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    gene = await service.create_gene(
+        name="Genome Gene",
+        slug=_slug("genome-gene"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+
+    genome = await service.create_genome(
+        name="Normalized Genome",
+        slug=_slug("normalized-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        gene_slugs=[f" {gene.slug} ", gene.slug, ""],
+    )
+
+    assert genome.gene_slugs == [gene.slug]
+
+
+@pytest.mark.unit
+async def test_create_genome_rejects_missing_or_foreign_gene_slugs(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    foreign_gene = await service.create_gene(
+        name="Foreign Gene",
+        slug=_slug("foreign-gene"),
+        created_by=test_user.id,
+        tenant_id="other-tenant",
+    )
+
+    with pytest.raises(ValueError, match="Genome gene slugs not found"):
+        await service.create_genome(
+            name="Invalid Genome",
+            slug=_slug("invalid-genome"),
+            created_by=test_user.id,
+            tenant_id=test_project_db.tenant_id,
+            gene_slugs=[foreign_gene.slug, _slug("missing-gene")],
+        )
+
+
+@pytest.mark.unit
 async def test_update_genome_applies_slug(
     test_db: AsyncSession,
     test_project_db: Project,
@@ -287,3 +336,27 @@ async def test_update_genome_allows_duplicate_slug_in_different_tenant(
 
     assert updated.slug == slug
     assert updated.tenant_id == "other-tenant"
+
+
+@pytest.mark.unit
+async def test_update_genome_rejects_missing_or_foreign_gene_slugs(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    genome = await service.create_genome(
+        name="Editable Genome",
+        slug=_slug("editable-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    foreign_gene = await service.create_gene(
+        name="Foreign Gene",
+        slug=_slug("foreign-gene"),
+        created_by=test_user.id,
+        tenant_id="other-tenant",
+    )
+
+    with pytest.raises(ValueError, match="Genome gene slugs not found"):
+        await service.update_genome(genome.id, gene_slugs=[foreign_gene.slug])
