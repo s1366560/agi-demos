@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -154,6 +154,43 @@ export const PluginHub: React.FC = () => {
   const [pluginConfigModalVisible, setPluginConfigModalVisible] = useState(false);
   const [configuringPlugin, setConfiguringPlugin] = useState<RuntimePlugin | null>(null);
 
+  const activeTenantIdRef = useRef<string | null>(tenantId);
+  const activeProjectIdRef = useRef<string | null>(selectedProjectId);
+  const pluginRuntimeRequestRef = useRef(0);
+  const channelConfigsRequestRef = useRef(0);
+  const channelSchemaRequestRef = useRef(0);
+  const pluginConfigRequestRef = useRef(0);
+
+  activeTenantIdRef.current = tenantId;
+  activeProjectIdRef.current = selectedProjectId;
+
+  const isPluginRuntimeRequestCurrent = useCallback(
+    (requestId: number, requestTenantId: string) =>
+      pluginRuntimeRequestRef.current === requestId &&
+      activeTenantIdRef.current === requestTenantId,
+    []
+  );
+
+  const isChannelConfigsRequestCurrent = useCallback(
+    (requestId: number, requestProjectId: string) =>
+      channelConfigsRequestRef.current === requestId &&
+      activeProjectIdRef.current === requestProjectId,
+    []
+  );
+
+  const isChannelSchemaRequestCurrent = useCallback(
+    (requestId: number, requestTenantId: string) =>
+      channelSchemaRequestRef.current === requestId &&
+      activeTenantIdRef.current === requestTenantId,
+    []
+  );
+
+  const isPluginConfigRequestCurrent = useCallback(
+    (requestId: number, requestTenantId: string) =>
+      pluginConfigRequestRef.current === requestId && activeTenantIdRef.current === requestTenantId,
+    []
+  );
+
   const recordPluginAction = useCallback(
     (response: PluginActionResponse, fallbackAction: string) => {
       const details = response.details || null;
@@ -183,6 +220,35 @@ export const PluginHub: React.FC = () => {
   }, [listProjects, tenantId, t]);
 
   useEffect(() => {
+    pluginRuntimeRequestRef.current += 1;
+    channelConfigsRequestRef.current += 1;
+    channelSchemaRequestRef.current += 1;
+    pluginConfigRequestRef.current += 1;
+
+    setPlugins([]);
+    setPluginDiagnostics([]);
+    setChannelPluginCatalog([]);
+    setChannelConfigs([]);
+    setChannelSchemas({});
+    setPluginConfigSchemas({});
+    setLastPluginActionDetails(null);
+    setPluginActionTimeline([]);
+    setPluginsLoading(false);
+    setConfigsLoading(false);
+    setSchemaLoading(false);
+    setPluginConfigLoading(false);
+    setPluginConfigModalVisible(false);
+    setConfiguringPlugin(null);
+    pluginConfigForm.resetFields();
+  }, [pluginConfigForm, tenantId]);
+
+  useEffect(() => {
+    channelConfigsRequestRef.current += 1;
+    setChannelConfigs([]);
+    setConfigsLoading(false);
+  }, [selectedProjectId]);
+
+  useEffect(() => {
     if (projects.length === 0) {
       setSelectedProjectId(null);
       return;
@@ -202,64 +268,88 @@ export const PluginHub: React.FC = () => {
   }, [projectIdFromQuery, projects]);
 
   const loadPluginRuntime = useCallback(async () => {
-    if (!tenantId) return;
+    const requestTenantId = tenantId;
+    const requestId = ++pluginRuntimeRequestRef.current;
+    if (!requestTenantId || activeTenantIdRef.current !== requestTenantId) return;
 
     setPluginsLoading(true);
     try {
       const [pluginRes, catalogRes] = await Promise.all([
-        channelService.listTenantPlugins(tenantId),
-        channelService.listTenantChannelPluginCatalog(tenantId),
+        channelService.listTenantPlugins(requestTenantId),
+        channelService.listTenantChannelPluginCatalog(requestTenantId),
       ]);
+      if (!isPluginRuntimeRequestCurrent(requestId, requestTenantId)) return;
       setPlugins(pluginRes.items);
       setPluginDiagnostics(pluginRes.diagnostics);
       setChannelPluginCatalog(catalogRes.items);
     } catch (error) {
+      if (!isPluginRuntimeRequestCurrent(requestId, requestTenantId)) return;
       message.error(
         error instanceof Error ? error.message : t('tenant.pluginHub.messages.loadPluginsFailed')
       );
     } finally {
-      setPluginsLoading(false);
+      if (isPluginRuntimeRequestCurrent(requestId, requestTenantId)) {
+        setPluginsLoading(false);
+      }
     }
-  }, [tenantId, t]);
+  }, [isPluginRuntimeRequestCurrent, tenantId, t]);
 
   const loadChannelConfigs = useCallback(async () => {
-    if (!selectedProjectId) {
+    const requestProjectId = selectedProjectId;
+    const requestId = ++channelConfigsRequestRef.current;
+    if (!requestProjectId) {
       setChannelConfigs([]);
       return;
     }
+    if (activeProjectIdRef.current !== requestProjectId) return;
+
     setConfigsLoading(true);
     try {
-      const items = await channelService.listConfigs(selectedProjectId);
+      const items = await channelService.listConfigs(requestProjectId);
+      if (!isChannelConfigsRequestCurrent(requestId, requestProjectId)) return;
       setChannelConfigs(items);
     } catch (error) {
+      if (!isChannelConfigsRequestCurrent(requestId, requestProjectId)) return;
       message.error(
         error instanceof Error ? error.message : t('tenant.pluginHub.channelsList.loadFailed')
       );
     } finally {
-      setConfigsLoading(false);
+      if (isChannelConfigsRequestCurrent(requestId, requestProjectId)) {
+        setConfigsLoading(false);
+      }
     }
-  }, [selectedProjectId, t]);
+  }, [isChannelConfigsRequestCurrent, selectedProjectId, t]);
 
   const loadChannelSchema = useCallback(
     async (channelType: string) => {
-      if (!tenantId || !channelType) return;
+      const requestTenantId = tenantId;
+      const requestId = ++channelSchemaRequestRef.current;
+      if (!requestTenantId || !channelType) return;
+      if (activeTenantIdRef.current !== requestTenantId) return;
       if (channelSchemas[channelType]) return;
       const catalogEntry = channelPluginCatalog.find((item) => item.channel_type === channelType);
       if (!catalogEntry?.schema_supported) return;
 
       setSchemaLoading(true);
       try {
-        const schema = await channelService.getTenantChannelPluginSchema(tenantId, channelType);
+        const schema = await channelService.getTenantChannelPluginSchema(
+          requestTenantId,
+          channelType
+        );
+        if (!isChannelSchemaRequestCurrent(requestId, requestTenantId)) return;
         setChannelSchemas((prev) => ({ ...prev, [channelType]: schema }));
       } catch (error) {
+        if (!isChannelSchemaRequestCurrent(requestId, requestTenantId)) return;
         message.error(
           error instanceof Error ? error.message : t('tenant.pluginHub.messages.loadSchemaFailed')
         );
       } finally {
-        setSchemaLoading(false);
+        if (isChannelSchemaRequestCurrent(requestId, requestTenantId)) {
+          setSchemaLoading(false);
+        }
       }
     },
-    [channelPluginCatalog, channelSchemas, tenantId, t]
+    [channelPluginCatalog, channelSchemas, isChannelSchemaRequestCurrent, tenantId, t]
   );
 
   useEffect(() => {
@@ -461,16 +551,21 @@ export const PluginHub: React.FC = () => {
 
   const handleConfigurePlugin = useCallback(
     async (plugin: RuntimePlugin) => {
-      if (!tenantId || !plugin.schema_supported) return;
+      const requestTenantId = tenantId;
+      const requestId = ++pluginConfigRequestRef.current;
+      if (!requestTenantId || !plugin.schema_supported) return;
+      if (activeTenantIdRef.current !== requestTenantId) return;
+
       setConfiguringPlugin(plugin);
       setPluginConfigModalVisible(true);
       setPluginConfigLoading(true);
       pluginConfigForm.resetFields();
       try {
         const [schema, configRecord] = await Promise.all([
-          channelService.getTenantPluginConfigSchema(tenantId, plugin.name),
-          channelService.getTenantPluginConfig(tenantId, plugin.name),
+          channelService.getTenantPluginConfigSchema(requestTenantId, plugin.name),
+          channelService.getTenantPluginConfig(requestTenantId, plugin.name),
         ]);
+        if (!isPluginConfigRequestCurrent(requestId, requestTenantId)) return;
         setPluginConfigSchemas((prev) => ({ ...prev, [plugin.name]: schema }));
         pluginConfigForm.setFieldsValue({
           config: {
@@ -479,16 +574,19 @@ export const PluginHub: React.FC = () => {
           },
         });
       } catch (error) {
+        if (!isPluginConfigRequestCurrent(requestId, requestTenantId)) return;
         message.error(
           error instanceof Error ? error.message : t('tenant.pluginHub.messages.loadSchemaFailed')
         );
         setPluginConfigModalVisible(false);
         setConfiguringPlugin(null);
       } finally {
-        setPluginConfigLoading(false);
+        if (isPluginConfigRequestCurrent(requestId, requestTenantId)) {
+          setPluginConfigLoading(false);
+        }
       }
     },
-    [pluginConfigForm, tenantId, t]
+    [isPluginConfigRequestCurrent, pluginConfigForm, tenantId, t]
   );
 
   const handleSavePluginConfig = useCallback(async () => {
@@ -1363,8 +1461,10 @@ export const PluginHub: React.FC = () => {
           name: configuringPlugin?.name || '',
         })}
         onCancel={() => {
+          pluginConfigRequestRef.current += 1;
           setPluginConfigModalVisible(false);
           setConfiguringPlugin(null);
+          setPluginConfigLoading(false);
           pluginConfigForm.resetFields();
         }}
         onOk={() => {
