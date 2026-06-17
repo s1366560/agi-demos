@@ -18,6 +18,7 @@ from src.application.schemas.gene_schemas import (
 )
 from src.application.schemas.instance_template_schemas import InstanceTemplateCreate
 from src.configuration.di_container import DIContainer
+from src.infrastructure.adapters.primary.web.routers import instance_templates
 from src.infrastructure.adapters.primary.web.routers.clusters import create_cluster
 from src.infrastructure.adapters.primary.web.routers.genes import (
     create_gene,
@@ -64,10 +65,16 @@ class TestMarketplaceAuditFields:
     @pytest.mark.asyncio
     async def test_create_template_records_authenticated_user(
         self,
+        monkeypatch: pytest.MonkeyPatch,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ) -> None:
+        async def allow_access(*_args: object, **_kwargs: object) -> None:
+            return None
+
+        monkeypatch.setattr(instance_templates, "require_tenant_access", allow_access)
+
         response = await create_template(
             _request(),
             InstanceTemplateCreate(name="Audit Template", slug=_slug("template")),

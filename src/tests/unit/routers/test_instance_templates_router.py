@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -70,6 +71,20 @@ def failing_container(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(router, "get_container_with_db", lambda *_args: _Container())
 
 
+@pytest.fixture(autouse=True)
+def allow_template_admin(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def require_access(
+        db: object,
+        user: object,
+        tenant_id: str,
+        *,
+        require_admin: bool = False,
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(router, "require_tenant_access", require_access)
+
+
 @pytest.fixture
 def db() -> SimpleNamespace:
     return SimpleNamespace(commit=AsyncMock())
@@ -100,6 +115,109 @@ async def test_create_template_sanitizes_validation_errors(
 
 
 @pytest.mark.unit
+async def test_create_template_requires_tenant_admin_before_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+    db: SimpleNamespace,
+    user: SimpleNamespace,
+) -> None:
+    async def deny_admin(
+        *_args: object,
+        **_kwargs: object,
+    ) -> None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    monkeypatch.setattr(router, "require_tenant_access", deny_admin)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.create_template(
+            request=SimpleNamespace(),
+            data=InstanceTemplateCreate(name="Template", slug="template"),
+            tenant_id="tenant-1",
+            current_user=user,
+            db=db,
+        )
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    assert exc_info.value.detail == "Admin access required"
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_create_template_rejects_payload_tenant_mismatch(
+    db: SimpleNamespace,
+    user: SimpleNamespace,
+) -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await router.create_template(
+            request=SimpleNamespace(),
+            data=InstanceTemplateCreate(
+                name="Template",
+                slug="template",
+                tenant_id="tenant-2",
+            ),
+            tenant_id="tenant-1",
+            current_user=user,
+            db=db,
+        )
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    assert exc_info.value.detail == "Access denied"
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_create_template_uses_authenticated_tenant_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    db: SimpleNamespace,
+    user: SimpleNamespace,
+) -> None:
+    class Service:
+        def __init__(self) -> None:
+            self.create_template = AsyncMock(
+                return_value=SimpleNamespace(
+                    id="tmpl-1",
+                    name="Template",
+                    slug="template",
+                    tenant_id="tenant-1",
+                    description=None,
+                    icon=None,
+                    image_version=None,
+                    default_config={},
+                    is_published=False,
+                    is_featured=False,
+                    install_count=0,
+                    created_by="user-1",
+                    created_at=datetime.now(UTC),
+                    updated_at=None,
+                )
+            )
+
+    service = Service()
+
+    class Container:
+        def instance_template_service(self) -> Service:
+            return service
+
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: Container())
+
+    response = await router.create_template(
+        request=SimpleNamespace(),
+        data=InstanceTemplateCreate(
+            name="Template",
+            slug="template",
+            tenant_id="tenant-1",
+        ),
+        tenant_id="tenant-1",
+        current_user=user,
+        db=db,
+    )
+
+    assert response.tenant_id == "tenant-1"
+    service.create_template.assert_awaited_once()
+    assert service.create_template.await_args.kwargs["tenant_id"] == "tenant-1"
+
+
+@pytest.mark.unit
 async def test_list_templates_sanitizes_validation_errors(db: SimpleNamespace) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await router.list_templates(
@@ -127,6 +245,7 @@ async def test_list_templates_sanitizes_validation_errors(db: SimpleNamespace) -
                 "template_id": "tmpl-secret",
                 "data": InstanceTemplateUpdate(name="Updated"),
                 "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
@@ -135,6 +254,7 @@ async def test_list_templates_sanitizes_validation_errors(db: SimpleNamespace) -
                 "request": SimpleNamespace(),
                 "template_id": "tmpl-secret",
                 "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
@@ -143,6 +263,7 @@ async def test_list_templates_sanitizes_validation_errors(db: SimpleNamespace) -
                 "request": SimpleNamespace(),
                 "template_id": "tmpl-secret",
                 "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
@@ -151,6 +272,7 @@ async def test_list_templates_sanitizes_validation_errors(db: SimpleNamespace) -
                 "request": SimpleNamespace(),
                 "template_id": "tmpl-secret",
                 "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
@@ -163,6 +285,7 @@ async def test_list_templates_sanitizes_validation_errors(db: SimpleNamespace) -
                     item_slug="gene-a",
                 ),
                 "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
         (
@@ -172,6 +295,7 @@ async def test_list_templates_sanitizes_validation_errors(db: SimpleNamespace) -
                 "template_id": "tmpl-secret",
                 "item_id": "item-secret",
                 "tenant_id": "tenant-1",
+                "current_user": SimpleNamespace(id="user-1"),
             },
         ),
     ],
@@ -266,6 +390,7 @@ async def test_remove_template_item_passes_route_template_scope(
         template_id="tmpl-owned",
         item_id="item-owned",
         tenant_id="tenant-1",
+        current_user=SimpleNamespace(id="user-1"),
         db=db,
     )
 

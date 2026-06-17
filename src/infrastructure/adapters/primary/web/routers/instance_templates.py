@@ -5,7 +5,7 @@ for creating instances with predefined settings and gene compositions.
 """
 
 import logging
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -25,6 +25,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
 )
+from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.i18n import gettext as _
@@ -78,6 +79,31 @@ def _template_value_error_to_http(error: ValueError) -> HTTPException:
     )
 
 
+def _access_denied_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=_("Access denied"),
+    )
+
+
+async def _require_template_admin(
+    db: AsyncSession,
+    current_user: DBUser,
+    tenant_id: str,
+) -> None:
+    await require_tenant_access(
+        db,
+        cast(Any, current_user),
+        tenant_id,
+        require_admin=True,
+    )
+
+
+def _ensure_request_tenant_matches(payload_tenant_id: str | None, tenant_id: str) -> None:
+    if payload_tenant_id is not None and payload_tenant_id != tenant_id:
+        raise _access_denied_error()
+
+
 async def _get_tenant_template_or_404(
     service: _TemplateReader,
     template_id: str,
@@ -111,6 +137,9 @@ async def create_template(
 ) -> InstanceTemplateResponse:
     """Create a new instance template."""
     try:
+        await _require_template_admin(db, current_user, tenant_id)
+        _ensure_request_tenant_matches(data.tenant_id, tenant_id)
+
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
@@ -118,7 +147,7 @@ async def create_template(
             name=data.name,
             slug=data.slug,
             created_by=current_user.id,
-            tenant_id=data.tenant_id or tenant_id,
+            tenant_id=tenant_id,
             description=data.description,
             icon=data.icon,
             image_version=data.image_version,
@@ -203,10 +232,13 @@ async def update_template(
     template_id: str,
     data: InstanceTemplateUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceTemplateResponse:
     """Update an existing instance template."""
     try:
+        await _require_template_admin(db, current_user, tenant_id)
+
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
@@ -240,10 +272,13 @@ async def delete_template(
     request: Request,
     template_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete an instance template."""
     try:
+        await _require_template_admin(db, current_user, tenant_id)
+
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
@@ -272,10 +307,13 @@ async def publish_template(
     request: Request,
     template_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceTemplateResponse:
     """Publish a template to the marketplace."""
     try:
+        await _require_template_admin(db, current_user, tenant_id)
+
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
@@ -300,10 +338,13 @@ async def unpublish_template(
     request: Request,
     template_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceTemplateResponse:
     """Unpublish a template from the marketplace."""
     try:
+        await _require_template_admin(db, current_user, tenant_id)
+
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
@@ -340,6 +381,8 @@ async def clone_template(
 ) -> InstanceTemplateResponse:
     """Clone an existing template with a new name."""
     try:
+        await _require_template_admin(db, current_user, tenant_id)
+
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
@@ -392,10 +435,13 @@ async def add_template_item(
     template_id: str,
     data: TemplateItemCreate,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TemplateItemResponse:
     """Add an item to a template."""
     try:
+        await _require_template_admin(db, current_user, tenant_id)
+
         from src.domain.model.instance_template.enums import (
             TemplateItemType,
         )
@@ -435,10 +481,13 @@ async def remove_template_item(
     template_id: str,
     item_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Remove an item from a template."""
     try:
+        await _require_template_admin(db, current_user, tenant_id)
+
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
