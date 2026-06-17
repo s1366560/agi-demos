@@ -18,6 +18,14 @@ describe('gene market store', () => {
     vi.mocked(geneMarketService.getGeneReviews).mockResolvedValue({ items: [], total: 0 });
   });
 
+  it('initializes review state after reset', () => {
+    const state = useGeneMarketStore.getState();
+
+    expect(state.reviews).toEqual([]);
+    expect(state.reviewsTotal).toBe(0);
+    expect(state.reviewsLoading).toBe(false);
+  });
+
   it('refreshes selected-tenant reviews after creating a gene review', async () => {
     vi.mocked(geneMarketService.createGeneReview).mockResolvedValue({ id: 'review-1' } as any);
 

@@ -150,11 +150,33 @@ interface GeneMarketState {
   reset: () => void;
 }
 
+type GeneMarketDataState = Pick<
+  GeneMarketState,
+  | 'genes'
+  | 'currentGene'
+  | 'genomes'
+  | 'currentGenome'
+  | 'installedGenes'
+  | 'evolutionEvents'
+  | 'evolutionTotal'
+  | 'geneTotal'
+  | 'genomeTotal'
+  | 'page'
+  | 'pageSize'
+  | 'isLoading'
+  | 'isSubmitting'
+  | 'error'
+  | 'activeTab'
+  | 'reviews'
+  | 'reviewsTotal'
+  | 'reviewsLoading'
+>;
+
 // ============================================================================
 // INITIAL STATE
 // ============================================================================
 
-const initialState = {
+const initialState: GeneMarketDataState = {
   genes: [] as GeneResponse[],
   currentGene: null as GeneResponse | null,
   genomes: [] as GenomeResponse[],
@@ -170,6 +192,9 @@ const initialState = {
   isSubmitting: false,
   error: null as string | null,
   activeTab: 'genes' as const,
+  reviews: [] as GeneReview[],
+  reviewsTotal: 0,
+  reviewsLoading: false,
 };
 
 // ============================================================================
