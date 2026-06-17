@@ -220,6 +220,26 @@ describe('workspace/agent workspace bridge', () => {
     });
   });
 
+  it('ignores stale stored project context from another tenant', async () => {
+    projectState.projects = [{ id: 'project-stale', tenant_id: 'tenant-2', name: 'Stale Project' }];
+    projectState.currentProject = {
+      id: 'project-stale',
+      tenant_id: 'tenant-2',
+      name: 'Stale Project',
+    };
+    localStorageMock.values.set('agent:tenant-1:lastProjectId', 'project-stale');
+
+    render(<AgentWorkspace />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    await waitFor(() => {
+      expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1');
+    });
+    expect(await screen.findByText('agent.workspace.noProjects')).toBeInTheDocument();
+    expect(agentChatContentProps).not.toHaveBeenCalled();
+  });
+
   it('shows a retryable error when tenant projects fail to load', async () => {
     projectState.projects = [];
     projectState.currentProject = null;

@@ -83,6 +83,12 @@ export const AgentWorkspace: FC = () => {
     () => urlTenantId || currentTenant?.id || user?.tenant_id,
     [urlTenantId, currentTenant?.id, user?.tenant_id]
   );
+  const tenantCurrentProject =
+    tenantId && currentProject?.tenant_id === tenantId ? currentProject : null;
+  const tenantProjects = useMemo(
+    () => (tenantId ? projects.filter((project) => project.tenant_id === tenantId) : []),
+    [projects, tenantId]
+  );
 
   // Tenant-scoped storage keys. Falls back to "global" when the tenant id
   // is not yet known so the hook receives a stable key.
@@ -104,6 +110,12 @@ export const AgentWorkspace: FC = () => {
   const [projectLoadError, setProjectLoadError] = useState<string | null>(null);
   const queryProjectId = searchParams.get('projectId');
   const queryWorkspaceId = searchParams.get('workspaceId');
+  const activeSelectedProjectId =
+    selectedProjectId &&
+    (selectedProjectId === queryProjectId ||
+      tenantProjects.some((project) => project.id === selectedProjectId))
+      ? selectedProjectId
+      : null;
   const effectiveWorkspaceId = queryWorkspaceId || (routeConversationId ? null : lastWorkspaceId);
   useEffect(() => {
     if (queryWorkspaceId) {
@@ -158,10 +170,10 @@ export const AgentWorkspace: FC = () => {
 
   // Load projects on mount - optimized with removed function dependency
   useEffect(() => {
-    if (tenantId && projects.length === 0) {
+    if (tenantId && tenantProjects.length === 0) {
       void loadProjectsForTenant();
     }
-  }, [tenantId, loadProjectsForTenant, projects.length]);
+  }, [tenantId, loadProjectsForTenant, tenantProjects.length]);
 
   // Initialize selected project after projects are loaded
   useEffect(() => {
@@ -176,8 +188,8 @@ export const AgentWorkspace: FC = () => {
 
         if (
           tenantId &&
-          currentProject?.id !== queryProjectId &&
-          !projects.find((p: Project) => p.id === queryProjectId)
+          tenantCurrentProject?.id !== queryProjectId &&
+          !tenantProjects.find((p: Project) => p.id === queryProjectId)
         ) {
           try {
             const project = await getProject(tenantId, queryProjectId);
@@ -187,19 +199,19 @@ export const AgentWorkspace: FC = () => {
             console.warn('AgentWorkspace: failed to load project from URL', error);
           }
         }
-      } else if (lastProjectId && projects.find((p: Project) => p.id === lastProjectId)) {
+      } else if (lastProjectId && tenantProjects.find((p: Project) => p.id === lastProjectId)) {
         // Try to restore last selected project from localStorage (now using cached hook)
         if (isCancelled()) return;
         setSelectedProjectId(lastProjectId);
-      } else if (currentProject) {
+      } else if (tenantCurrentProject) {
         if (isCancelled()) return;
-        setSelectedProjectId(currentProject.id);
-      } else if (projects.length > 0) {
+        setSelectedProjectId(tenantCurrentProject.id);
+      } else if (tenantProjects.length > 0) {
         if (isCancelled()) return;
-        setSelectedProjectId(projects[0]?.id ?? null);
+        setSelectedProjectId(tenantProjects[0]?.id ?? null);
       }
 
-      if (!isCancelled() && (projects.length > 0 || queryProjectId)) {
+      if (!isCancelled() && (tenantProjects.length > 0 || queryProjectId)) {
         setInitializing(false);
       }
     };
@@ -208,8 +220,8 @@ export const AgentWorkspace: FC = () => {
       cancellation.current = true;
     };
   }, [
-    projects,
-    currentProject,
+    tenantProjects,
+    tenantCurrentProject,
     lastProjectId,
     queryProjectId,
     tenantId,
@@ -219,31 +231,37 @@ export const AgentWorkspace: FC = () => {
 
   // Load conversations when project changes
   useEffect(() => {
-    if (!selectedProjectId) {
+    if (!activeSelectedProjectId) {
       return;
     }
     // Defect #15: cancel any in-flight conversation list request when the
     // user switches projects so a slow response can't overwrite the newer
     // project's list.
     const controller = new AbortController();
-    void loadConversations(selectedProjectId, controller.signal);
+    void loadConversations(activeSelectedProjectId, controller.signal);
     // Persist selection using cached hook
-    setLastProjectId(selectedProjectId);
+    setLastProjectId(activeSelectedProjectId);
     // Update global current project for consistency
-    const project = projects.find((p: Project) => p.id === selectedProjectId);
+    const project = tenantProjects.find((p: Project) => p.id === activeSelectedProjectId);
     if (project) {
       setCurrentProject(project);
     }
     return () => {
       controller.abort();
     };
-  }, [selectedProjectId, loadConversations, projects, setCurrentProject, setLastProjectId]);
+  }, [
+    activeSelectedProjectId,
+    loadConversations,
+    tenantProjects,
+    setCurrentProject,
+    setLastProjectId,
+  ]);
 
   const effectiveProjectId =
     queryProjectId ||
-    selectedProjectId ||
-    currentProject?.id ||
-    (projects.length > 0 ? (projects[0]?.id ?? null) : null);
+    activeSelectedProjectId ||
+    tenantCurrentProject?.id ||
+    (tenantProjects.length > 0 ? (tenantProjects[0]?.id ?? null) : null);
 
   // Show loading while initializing projects
   if (initializing) {
@@ -259,7 +277,7 @@ export const AgentWorkspace: FC = () => {
     );
   }
 
-  if (projectLoadError && projects.length === 0 && !effectiveProjectId) {
+  if (projectLoadError && tenantProjects.length === 0 && !effectiveProjectId) {
     return (
       <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
         <div
@@ -286,7 +304,7 @@ export const AgentWorkspace: FC = () => {
     );
   }
 
-  if (projects.length === 0 && !effectiveProjectId) {
+  if (tenantProjects.length === 0 && !effectiveProjectId) {
     return (
       <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
         <div className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-12 max-w-lg">
