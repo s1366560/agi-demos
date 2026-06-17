@@ -42,8 +42,7 @@ export const GeneMarket: FC = () => {
   const genomeTotal = useGenomeTotal();
   const activeTab = useActiveTab();
 
-  const { listGenes, listGenomes, setActiveTab, rateGene, clearError, reset } =
-    useGeneMarketActions();
+  const { listGenes, listGenomes, setActiveTab, clearError, reset } = useGeneMarketActions();
 
   const [searchInput, setSearchInput] = useState('');
   const [geneSearch, setGeneSearch] = useState('');
@@ -178,16 +177,7 @@ export const GeneMarket: FC = () => {
                   type="link"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!tenantId) {
-                      return;
-                    }
-                    void rateGene(
-                      gene.id,
-                      { rating: 5, comment: '' },
-                      { tenant_id: tenantId }
-                    ).catch((error: unknown) => {
-                      console.error('Failed to rate gene:', error);
-                    });
+                    void navigate(`${gene.id}?rate=1`);
                   }}
                 >
                   {t('tenant.genes.actions.rate')}

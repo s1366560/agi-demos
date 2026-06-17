@@ -58,6 +58,7 @@ export const GeneDetail: FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const shouldOpenInstallModal = searchParams.get('install') === '1';
+  const shouldOpenRateModal = searchParams.get('rate') === '1';
   const { t } = useTranslation();
   const currentTenant = useCurrentTenant();
   const tenantId = routeTenantId ?? currentTenant?.id ?? null;
@@ -81,7 +82,7 @@ export const GeneDetail: FC = () => {
   } = useGeneMarketActions();
 
   const [isInstallModalVisible, setIsInstallModalVisible] = useState(shouldOpenInstallModal);
-  const [isRateModalVisible, setIsRateModalVisible] = useState(false);
+  const [isRateModalVisible, setIsRateModalVisible] = useState(shouldOpenRateModal);
   const [installForm] = Form.useForm<InstallFormValues>();
   const [rateForm] = Form.useForm<RateFormValues>();
   const [isReviewModalVisible, setIsReviewModalVisible] = useState(false);
@@ -113,13 +114,18 @@ export const GeneDetail: FC = () => {
   ]);
 
   useEffect(() => {
-    if (!shouldOpenInstallModal) {
+    if (!shouldOpenInstallModal && !shouldOpenRateModal) {
       return;
     }
     const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('install');
+    if (shouldOpenInstallModal) {
+      nextParams.delete('install');
+    }
+    if (shouldOpenRateModal) {
+      nextParams.delete('rate');
+    }
     setSearchParams(nextParams, { replace: true });
-  }, [searchParams, setSearchParams, shouldOpenInstallModal]);
+  }, [searchParams, setSearchParams, shouldOpenInstallModal, shouldOpenRateModal]);
 
   const handleInstallSubmit = async () => {
     try {
