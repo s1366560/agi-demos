@@ -11,7 +11,8 @@ import { Drawer, Form, Input, Select, Switch, message, Alert, Button } from 'ant
 import { useShallow } from 'zustand/react/shallow';
 
 import { useMCPStore } from '@/stores/mcp';
-import { useProjectStore } from '@/stores/project';
+
+import { useMcpProjectScope } from './useMcpProjectScope';
 
 import type { MCPServerResponse, MCPServerCreate, MCPServerType } from '@/types/agent';
 
@@ -73,9 +74,7 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
       isSubmitting: s.isSubmitting,
     }))
   );
-  const { projects, currentProject } = useProjectStore(
-    useShallow((s) => ({ projects: s.projects, currentProject: s.currentProject }))
-  );
+  const { projects, projectId } = useMcpProjectScope();
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -97,12 +96,12 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
       form.setFieldsValue({
         server_type: 'stdio',
         enabled: true,
-        project_id: currentProject?.id,
+        project_id: projectId,
       });
       setJsonConfig(JSON.stringify(DEFAULT_TRANSPORT_CONFIGS.stdio, null, 2));
       setJsonError(null);
     }
-  }, [open, server, form, currentProject?.id]);
+  }, [open, server, form, projectId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleServerTypeChange = useCallback((type: MCPServerType) => {

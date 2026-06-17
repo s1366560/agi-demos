@@ -11,11 +11,11 @@ import { Alert, Input, Select, Spin, Tag } from 'antd';
 import { ChevronDown, ChevronRight, MessageSquare, Search, Server } from 'lucide-react';
 
 import { useMCPStore } from '@/stores/mcp';
-import { useProjectStore } from '@/stores/project';
 
 import { mcpAPI } from '@/services/mcpService';
 
 import { CARD_STYLES } from './styles';
+import { useMcpProjectScope } from './useMcpProjectScope';
 
 const { Search: AntSearch } = Input;
 
@@ -47,14 +47,12 @@ export const McpPromptsTabV2: React.FC = () => {
 
   const servers = useMCPStore((s) => s.servers);
   const listServers = useMCPStore((s) => s.listServers);
-  const currentProject = useProjectStore((s) => s.currentProject);
+  const { projectId } = useMcpProjectScope();
 
   // Ensure servers are loaded
   useEffect(() => {
-    if (servers.length === 0 && currentProject?.id) {
-      void listServers({ project_id: currentProject.id });
-    }
-  }, [servers.length, currentProject?.id, listServers]);
+    void listServers(projectId ? { project_id: projectId } : {});
+  }, [projectId, listServers]);
 
   // Fetch prompts from all enabled servers
   useEffect(() => {

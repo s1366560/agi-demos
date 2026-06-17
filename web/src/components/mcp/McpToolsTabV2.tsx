@@ -11,10 +11,10 @@ import { Input, Select, Spin } from 'antd';
 import { Search, Server, Wrench } from 'lucide-react';
 
 import { useMCPStore } from '@/stores/mcp';
-import { useProjectStore } from '@/stores/project';
 
 import { McpToolItemV2 } from './McpToolItemV2';
 import { CARD_STYLES } from './styles';
+import { useMcpProjectScope } from './useMcpProjectScope';
 
 import type { ToolWithServer } from './McpToolItemV2';
 
@@ -29,14 +29,12 @@ export const McpToolsTabV2: React.FC = () => {
   const servers = useMCPStore((s) => s.servers);
   const isLoading = useMCPStore((s) => s.isLoading);
   const listServers = useMCPStore((s) => s.listServers);
-  const currentProject = useProjectStore((s) => s.currentProject);
+  const { projectId } = useMcpProjectScope();
 
   // Ensure servers are loaded
   useEffect(() => {
-    if (servers.length === 0 && currentProject?.id) {
-      void listServers({ project_id: currentProject.id });
-    }
-  }, [servers.length, currentProject?.id, listServers]);
+    void listServers(projectId ? { project_id: projectId } : {});
+  }, [projectId, listServers]);
 
   const allTools = useMemo<ToolWithServer[]>(
     () =>

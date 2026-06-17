@@ -3,7 +3,7 @@
  * Redesigned with elegant filters, search, and server card grid
  */
 
-import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -12,7 +12,6 @@ import { Plus, RefreshCw, Search, Filter, Server, AlertCircle } from 'lucide-rea
 
 import { useMCPStore } from '@/stores/mcp';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
-import { useProjectStore } from '@/stores/project';
 
 import { mcpAPI } from '@/services/mcpService';
 
@@ -21,6 +20,7 @@ import { McpServerDrawer } from './McpServerDrawer';
 import { McpToolsDrawer } from './McpToolsDrawer';
 import { CARD_STYLES, BUTTON_STYLES } from './styles';
 import { getRuntimeStatus } from './types';
+import { useMcpProjectScope } from './useMcpProjectScope';
 
 import type { MCPServerResponse } from '@/types/agent';
 
@@ -58,19 +58,12 @@ export const McpServerTabV2: React.FC = () => {
   const apps = useMCPAppStore((s) => s.apps);
   const fetchApps = useMCPAppStore((s) => s.fetchApps);
 
-  const currentProject = useProjectStore((s) => s.currentProject);
-  const hasLoadedRef = useRef(false);
+  const { projectId } = useMcpProjectScope();
 
   useEffect(() => {
-    if (currentProject?.id) {
-      void listServers({ project_id: currentProject.id });
-      void fetchApps(currentProject.id);
-    } else if (!hasLoadedRef.current) {
-      hasLoadedRef.current = true;
-      void listServers();
-      void fetchApps();
-    }
-  }, [listServers, fetchApps, currentProject?.id]);
+    void listServers(projectId ? { project_id: projectId } : {});
+    void fetchApps(projectId);
+  }, [listServers, fetchApps, projectId]);
 
   const filteredServers = useMemo(() => {
     return servers.filter((server) => {
@@ -136,9 +129,8 @@ export const McpServerTabV2: React.FC = () => {
   const handleDrawerSuccess = useCallback(() => {
     setDrawerOpen(false);
     setEditingServer(null);
-    const projectId = currentProject?.id;
     void listServers(projectId ? { project_id: projectId } : {});
-  }, [listServers, currentProject?.id]);
+  }, [listServers, projectId]);
 
   const handleToggle = useCallback(
     async (server: MCPServerResponse, enabled: boolean) => {
@@ -202,24 +194,20 @@ export const McpServerTabV2: React.FC = () => {
   );
 
   const handleRefresh = useCallback(() => {
-    const projectId = currentProject?.id;
     void listServers(projectId ? { project_id: projectId } : {});
     void fetchApps(projectId);
-  }, [listServers, fetchApps, currentProject?.id]);
+  }, [listServers, fetchApps, projectId]);
 
   const handleReconcile = useCallback(async () => {
-    if (!currentProject?.id) {
+    if (!projectId) {
       message.warning(t('mcp.servers.selectProjectFirst'));
       return;
     }
 
     setIsReconciling(true);
     try {
-      const result = await mcpAPI.reconcileProject(currentProject.id);
-      await Promise.all([
-        listServers({ project_id: currentProject.id }),
-        fetchApps(currentProject.id),
-      ]);
+      const result = await mcpAPI.reconcileProject(projectId);
+      await Promise.all([listServers({ project_id: projectId }), fetchApps(projectId)]);
       message.success(
         t('mcp.servers.reconcileSuccess', {
           restored: result.restored,
@@ -232,7 +220,7 @@ export const McpServerTabV2: React.FC = () => {
     } finally {
       setIsReconciling(false);
     }
-  }, [currentProject?.id, listServers, fetchApps, t]);
+  }, [projectId, listServers, fetchApps, t]);
 
   // Error count
   const errorCount = useMemo(
@@ -357,7 +345,7 @@ export const McpServerTabV2: React.FC = () => {
                 onClick={() => {
                   void handleReconcile();
                 }}
-                disabled={isReconciling || !currentProject?.id}
+                disabled={isReconciling || !projectId}
                 className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 disabled:opacity-50 transition-[color,background-color,border-color,box-shadow,opacity,transform] duration-200`}
               >
                 <RefreshCw

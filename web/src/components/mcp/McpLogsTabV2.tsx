@@ -11,11 +11,11 @@ import { Alert, Button, Empty, Select, Spin, Tag } from 'antd';
 import { RefreshCw, Server, ScrollText } from 'lucide-react';
 
 import { useMCPStore } from '@/stores/mcp';
-import { useProjectStore } from '@/stores/project';
 
 import { mcpAPI } from '@/services/mcpService';
 
 import { CARD_STYLES } from './styles';
+import { useMcpProjectScope } from './useMcpProjectScope';
 
 interface LogEntry {
   level: string;
@@ -67,14 +67,19 @@ export const McpLogsTabV2: React.FC = () => {
 
   const servers = useMCPStore((s) => s.servers);
   const listServers = useMCPStore((s) => s.listServers);
-  const currentProject = useProjectStore((s) => s.currentProject);
+  const { projectId } = useMcpProjectScope();
 
   // Ensure servers are loaded
   useEffect(() => {
-    if (servers.length === 0 && currentProject?.id) {
-      void listServers({ project_id: currentProject.id });
+    void listServers(projectId ? { project_id: projectId } : {});
+  }, [projectId, listServers]);
+
+  useEffect(() => {
+    if (selectedServer && !servers.some((server) => server.id === selectedServer)) {
+      setSelectedServer('');
+      setLogs([]);
     }
-  }, [servers.length, currentProject?.id, listServers]);
+  }, [selectedServer, servers]);
 
   // Auto-select first enabled server
   useEffect(() => {

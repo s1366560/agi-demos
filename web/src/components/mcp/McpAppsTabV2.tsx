@@ -13,12 +13,12 @@ import { LayoutGrid, RefreshCw, Search } from 'lucide-react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
-import { useProjectStore } from '@/stores/project';
 
 import { mcpAppAPI } from '@/services/mcpAppService';
 
 import { McpAppCardV2 } from './McpAppCardV2';
 import { CARD_STYLES, BUTTON_STYLES } from './styles';
+import { useMcpProjectScope } from './useMcpProjectScope';
 
 import type { MCPApp, MCPAppStatus } from '@/types/mcpApp';
 
@@ -28,15 +28,15 @@ export const McpAppsTabV2: React.FC = () => {
   const loading = useMCPAppStore((s) => s.loading);
   const fetchApps = useMCPAppStore((s) => s.fetchApps);
   const removeApp = useMCPAppStore((s) => s.removeApp);
-  const currentProject = useProjectStore((s) => s.currentProject);
+  const { projectId } = useMcpProjectScope();
 
   const [search, setSearch] = useState('');
   const [deleting, setDeleting] = useState<Set<string>>(new Set());
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    void fetchApps(currentProject?.id);
-  }, [currentProject?.id, fetchApps]);
+    void fetchApps(projectId);
+  }, [projectId, fetchApps]);
 
   const appList = useMemo(() => {
     const list = Object.values(apps);
@@ -75,7 +75,7 @@ export const McpAppsTabV2: React.FC = () => {
       setRetrying((prev) => new Set(prev).add(appId));
       try {
         await mcpAppAPI.refresh(appId);
-        await fetchApps(currentProject?.id);
+        await fetchApps(projectId);
         message.success(t('mcp.apps.refreshSuccess'));
       } catch {
         message.error(t('mcp.apps.retryFailed'));
@@ -87,7 +87,7 @@ export const McpAppsTabV2: React.FC = () => {
         });
       }
     },
-    [fetchApps, currentProject?.id, t]
+    [fetchApps, projectId, t]
   );
 
   const handleOpenInCanvas = useCallback((app: MCPApp) => {
@@ -103,8 +103,8 @@ export const McpAppsTabV2: React.FC = () => {
   }, []);
 
   const handleRefresh = useCallback(() => {
-    void fetchApps(currentProject?.id);
-  }, [currentProject?.id, fetchApps]);
+    void fetchApps(projectId);
+  }, [projectId, fetchApps]);
 
   // Status counts
   const statusCounts = useMemo(() => {
