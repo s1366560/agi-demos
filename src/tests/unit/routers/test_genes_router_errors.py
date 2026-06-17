@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -233,6 +234,151 @@ class _UpdateValidationContainer(_Container):
 @pytest.fixture(autouse=True)
 def patch_container(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(genes, "get_container_with_db", lambda _request, _db: _Container())
+
+
+def _tenant_dependency(handler: object) -> object:
+    default = inspect.signature(handler).parameters["tenant_id"].default
+    return getattr(default, "dependency", None)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "handler_name",
+    [
+        "create_gene",
+        "update_gene",
+        "delete_gene",
+        "publish_gene",
+        "unpublish_gene",
+        "create_genome",
+        "update_genome",
+        "delete_genome",
+        "publish_genome",
+        "unpublish_genome",
+        "install_gene",
+        "uninstall_gene",
+        "create_evolution_event",
+    ],
+)
+def test_gene_write_routes_require_admin_tenant_dependency(handler_name: str) -> None:
+    assert (
+        _tenant_dependency(getattr(genes, handler_name)) is genes._get_selected_gene_admin_tenant_id
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "handler_name",
+    [
+        "list_genes",
+        "get_gene",
+        "list_genomes",
+        "get_genome",
+        "list_instance_genes",
+        "get_instance_gene",
+        "rate_gene",
+        "list_gene_ratings",
+        "list_genome_ratings",
+        "rate_genome",
+        "list_evolution_events",
+        "get_evolution_event",
+        "list_gene_reviews",
+        "create_gene_review",
+        "delete_gene_review",
+    ],
+)
+def test_gene_member_routes_keep_member_tenant_dependency(handler_name: str) -> None:
+    assert _tenant_dependency(getattr(genes, handler_name)) is genes._get_selected_gene_tenant_id
+
+
+@pytest.mark.unit
+async def test_selected_gene_admin_tenant_requires_admin_for_selected_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[tuple[object, object, str, bool]] = []
+
+    async def require_access(
+        db: object,
+        user: object,
+        tenant_id: str,
+        *,
+        require_admin: bool = False,
+    ) -> None:
+        captured.append((db, user, tenant_id, require_admin))
+
+    monkeypatch.setattr(genes, "require_tenant_access", require_access)
+    db = SimpleNamespace(name="db")
+    user = SimpleNamespace(id="user-1")
+
+    tenant_id = await genes._get_selected_gene_admin_tenant_id(
+        selected_tenant_id="tenant-2",
+        fallback_tenant_id="tenant-1",
+        current_user=user,
+        db=db,
+    )
+
+    assert tenant_id == "tenant-2"
+    assert captured == [(db, user, "tenant-2", True)]
+
+
+@pytest.mark.unit
+async def test_selected_gene_admin_tenant_requires_admin_for_fallback_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[tuple[object, object, str, bool]] = []
+
+    async def require_access(
+        db: object,
+        user: object,
+        tenant_id: str,
+        *,
+        require_admin: bool = False,
+    ) -> None:
+        captured.append((db, user, tenant_id, require_admin))
+
+    monkeypatch.setattr(genes, "require_tenant_access", require_access)
+    db = SimpleNamespace(name="db")
+    user = SimpleNamespace(id="user-1")
+
+    tenant_id = await genes._get_selected_gene_admin_tenant_id(
+        selected_tenant_id=None,
+        fallback_tenant_id="tenant-1",
+        current_user=user,
+        db=db,
+    )
+
+    assert tenant_id == "tenant-1"
+    assert captured == [(db, user, "tenant-1", True)]
+
+
+@pytest.mark.unit
+async def test_selected_gene_member_tenant_keeps_member_access_for_selected_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[tuple[object, object, str, bool]] = []
+
+    async def require_access(
+        db: object,
+        user: object,
+        tenant_id: str,
+        *,
+        require_admin: bool = False,
+    ) -> None:
+        captured.append((db, user, tenant_id, require_admin))
+
+    monkeypatch.setattr(genes, "require_tenant_access", require_access)
+    db = SimpleNamespace(name="db")
+    user = SimpleNamespace(id="user-1")
+
+    tenant_id = await genes._get_selected_gene_tenant_id(
+        selected_tenant_id="tenant-2",
+        fallback_tenant_id="tenant-1",
+        current_user=user,
+        db=db,
+    )
+
+    assert tenant_id == "tenant-2"
+    assert captured == [(db, user, "tenant-2", False)]
 
 
 @pytest.mark.unit

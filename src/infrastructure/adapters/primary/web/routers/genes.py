@@ -274,10 +274,52 @@ async def _get_selected_gene_tenant_id(
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> str:
-    if selected_tenant_id is None:
-        return fallback_tenant_id
-    await require_tenant_access(db, cast(Any, current_user), selected_tenant_id)
-    return selected_tenant_id
+    return await _resolve_selected_gene_tenant_id(
+        selected_tenant_id=selected_tenant_id,
+        fallback_tenant_id=fallback_tenant_id,
+        current_user=current_user,
+        db=db,
+        require_admin=False,
+    )
+
+
+async def _get_selected_gene_admin_tenant_id(
+    selected_tenant_id: str | None = Query(
+        None,
+        alias="tenant_id",
+        min_length=1,
+        description="Explicit tenant scope for multi-tenant callers.",
+    ),
+    fallback_tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    return await _resolve_selected_gene_tenant_id(
+        selected_tenant_id=selected_tenant_id,
+        fallback_tenant_id=fallback_tenant_id,
+        current_user=current_user,
+        db=db,
+        require_admin=True,
+    )
+
+
+async def _resolve_selected_gene_tenant_id(
+    *,
+    selected_tenant_id: str | None,
+    fallback_tenant_id: str,
+    current_user: DBUser,
+    db: AsyncSession,
+    require_admin: bool,
+) -> str:
+    tenant_id = selected_tenant_id or fallback_tenant_id
+    if require_admin or selected_tenant_id is not None:
+        await require_tenant_access(
+            db,
+            cast(Any, current_user),
+            tenant_id,
+            require_admin=require_admin,
+        )
+    return tenant_id
 
 
 def _ensure_request_tenant_matches(payload_tenant_id: str | None, tenant_id: str) -> None:
@@ -450,7 +492,7 @@ async def _ensure_instance_gene_tenant_access(
 async def create_gene(
     request: Request,
     data: GeneCreate,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GeneResponse:
@@ -536,7 +578,7 @@ async def update_gene(
     request: Request,
     gene_id: str,
     data: GeneUpdate,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GeneResponse:
     """Update a gene."""
@@ -560,7 +602,7 @@ async def update_gene(
 async def delete_gene(
     request: Request,
     gene_id: str,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete (soft-delete) a gene."""
@@ -578,7 +620,7 @@ async def delete_gene(
 async def publish_gene(
     request: Request,
     gene_id: str,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GeneResponse:
     """Publish a gene to the marketplace."""
@@ -597,7 +639,7 @@ async def publish_gene(
 async def unpublish_gene(
     request: Request,
     gene_id: str,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GeneResponse:
     """Remove a gene from the marketplace."""
@@ -625,7 +667,7 @@ async def unpublish_gene(
 async def create_genome(
     request: Request,
     data: GenomeCreate,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GenomeResponse:
@@ -702,7 +744,7 @@ async def update_genome(
     request: Request,
     genome_id: str,
     data: GenomeUpdate,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GenomeResponse:
     """Update a genome."""
@@ -726,7 +768,7 @@ async def update_genome(
 async def delete_genome(
     request: Request,
     genome_id: str,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete (soft-delete) a genome."""
@@ -747,7 +789,7 @@ async def delete_genome(
 async def publish_genome(
     request: Request,
     genome_id: str,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GenomeResponse:
     """Publish a genome to the marketplace."""
@@ -769,7 +811,7 @@ async def publish_genome(
 async def unpublish_genome(
     request: Request,
     genome_id: str,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GenomeResponse:
     """Remove a genome from the marketplace."""
@@ -798,7 +840,7 @@ async def install_gene(
     request: Request,
     instance_id: str,
     data: InstallGeneRequest,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceGeneResponse:
     """Install a gene on an agent instance."""
@@ -829,7 +871,7 @@ async def uninstall_gene(
     request: Request,
     instance_id: str,
     instance_gene_id: str,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Uninstall a gene from an agent instance."""
@@ -1111,7 +1153,7 @@ async def list_evolution_events(
 async def create_evolution_event(
     request: Request,
     data: EvolutionEventCreateRequest,
-    tenant_id: str = Depends(_get_selected_gene_tenant_id),
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> EvolutionEventResponse:
     """Create an evolution event record."""
