@@ -7,7 +7,7 @@ from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
-from src.domain.model.gene.enums import EffectMetricType, InstanceGeneStatus
+from src.domain.model.gene.enums import ContentVisibility, EffectMetricType, InstanceGeneStatus
 from src.domain.model.gene.instance_gene import GeneEffectLog, InstanceGene
 from src.domain.ports.repositories.instance_gene_repository import (
     InstanceGeneRepository,
@@ -53,7 +53,9 @@ class SqlInstanceGeneRepository(
             InstanceGeneModel.created_at.desc(), InstanceGeneModel.id.asc()
         )
         query = query.offset(offset).limit(limit)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_models = result.scalars().all()
         return [
             domain
@@ -98,7 +100,9 @@ class SqlInstanceGeneRepository(
             .where(InstanceGeneModel.deleted_at.is_(None))
             .order_by(InstanceGeneModel.created_at.desc(), InstanceGeneModel.id.asc())
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_models = result.scalars().all()
         return [
             domain
@@ -143,13 +147,24 @@ class SqlInstanceGeneRepository(
             GeneMarketModel.deleted_at.is_(None),
         ]
         if tenant_id is not None:
-            join_conditions.append(GeneMarketModel.tenant_id == tenant_id)
+            join_conditions.append(
+                or_(
+                    GeneMarketModel.tenant_id == tenant_id,
+                    and_(
+                        GeneMarketModel.tenant_id.is_(None),
+                        GeneMarketModel.is_published.is_(True),
+                        GeneMarketModel.visibility == ContentVisibility.public.value,
+                    ),
+                )
+            )
         pattern = f"%{search_term}%"
         return query.outerjoin(GeneMarketModel, and_(*join_conditions)).where(
             or_(
                 InstanceGeneModel.gene_id.ilike(pattern),
                 GeneMarketModel.name.ilike(pattern),
+                GeneMarketModel.slug.ilike(pattern),
                 GeneMarketModel.description.ilike(pattern),
+                GeneMarketModel.short_description.ilike(pattern),
                 GeneMarketModel.category.ilike(pattern),
             )
         )

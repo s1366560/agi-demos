@@ -617,3 +617,53 @@ async def test_list_instance_genes_with_summary_searches_metadata_before_paginat
     assert active_total == 1
     assert usage_total == 0
     assert [gene.gene_id for gene in page] == [matching_gene.id]
+
+
+@pytest.mark.unit
+async def test_list_instance_genes_with_summary_searches_global_public_metadata(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    await _create_instance(
+        test_db,
+        instance_id="instance-search-global-installed",
+        tenant_id=test_project_db.tenant_id,
+        created_by=test_user.id,
+    )
+    global_gene = await service.create_gene(
+        name="Shared Contract Engine",
+        slug=_slug("shared-contract-engine"),
+        short_description="Cross tenant discovery",
+        created_by=test_user.id,
+        tenant_id=None,
+        category="official",
+    )
+    global_gene = await service.publish_gene(global_gene.id)
+    tenant_gene = await service.create_gene(
+        name="Tenant Local Engine",
+        slug=_slug("tenant-local-engine"),
+        short_description="Local only discovery",
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        category="tenant",
+    )
+    global_install = await service.install_gene("instance-search-global-installed", global_gene.id)
+    await service.install_gene("instance-search-global-installed", tenant_gene.id)
+    instance_gene_repo = DIContainer().with_db(test_db).instance_gene_repository()
+    global_install.usage_count = 9
+    await instance_gene_repo.save(global_install)
+
+    page, total, active_total, usage_total = await service.list_instance_genes_with_summary(
+        "instance-search-global-installed",
+        limit=10,
+        offset=0,
+        search="cross tenant",
+        tenant_id=test_project_db.tenant_id,
+    )
+
+    assert total == 1
+    assert active_total == 1
+    assert usage_total == 9
+    assert [gene.gene_id for gene in page] == [global_gene.id]
