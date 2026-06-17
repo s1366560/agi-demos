@@ -3,7 +3,7 @@
 import logging
 from typing import Any, override
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
@@ -70,13 +70,20 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
         self,
         *,
         tenant_id: str,
+        include_global: bool = False,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Genome]:
-        filters = self._filters(tenant_id=tenant_id, is_published=is_published)
+        filters = self._filters(is_published=is_published)
         stmt = (
-            self._apply_listing_order(self._build_active_query(filters=filters))
+            self._apply_listing_order(
+                self._apply_tenant_scope(
+                    self._build_active_query(filters=filters),
+                    tenant_id,
+                    include_global=include_global,
+                )
+            )
             .offset(offset)
             .limit(limit)
         )
@@ -91,20 +98,42 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
         self,
         *,
         tenant_id: str,
+        include_global: bool = False,
         is_published: bool | None = None,
     ) -> int:
-        filters = self._filters(tenant_id=tenant_id, is_published=is_published)
+        filters = self._filters(is_published=is_published)
         stmt = select(func.count()).select_from(GenomeModel).where(GenomeModel.deleted_at.is_(None))
         stmt = self._apply_filters(stmt, **filters)
+        stmt = self._apply_tenant_scope(stmt, tenant_id, include_global=include_global)
         result = await self._session.execute(refresh_select_statement(stmt))
         return result.scalar() or 0
 
     @staticmethod
-    def _filters(*, tenant_id: str, is_published: bool | None = None) -> dict[str, object]:
-        filters: dict[str, object] = {"tenant_id": tenant_id}
+    def _filters(*, is_published: bool | None = None) -> dict[str, object]:
+        filters: dict[str, object] = {}
         if is_published is not None:
             filters["is_published"] = is_published
         return filters
+
+    @staticmethod
+    def _apply_tenant_scope(
+        stmt: Select[Any],
+        tenant_id: str,
+        *,
+        include_global: bool = False,
+    ) -> Select[Any]:
+        if include_global:
+            return stmt.where(
+                or_(
+                    GenomeModel.tenant_id == tenant_id,
+                    and_(
+                        GenomeModel.tenant_id.is_(None),
+                        GenomeModel.is_published.is_(True),
+                        GenomeModel.visibility == ContentVisibility.public.value,
+                    ),
+                )
+            )
+        return stmt.where(GenomeModel.tenant_id == tenant_id)
 
     @override
     async def find_featured(self, limit: int = 20) -> list[Genome]:

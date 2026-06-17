@@ -28,6 +28,7 @@ class GeneRepository(ABC):
         self,
         *,
         tenant_id: str | None = None,
+        include_global: bool = False,
         category: str | None = None,
         search: str | None = None,
         slugs: list[str] | None = None,
@@ -40,6 +41,7 @@ class GeneRepository(ABC):
         """List genes with filters applied before pagination.
 
         A ``None`` tenant ID means the global marketplace scope, not every tenant.
+        ``include_global`` adds published public global entries to a tenant-scoped list.
         """
         raise NotImplementedError
 
@@ -47,6 +49,7 @@ class GeneRepository(ABC):
         self,
         *,
         tenant_id: str | None = None,
+        include_global: bool = False,
         category: str | None = None,
         search: str | None = None,
         slugs: list[str] | None = None,
@@ -57,6 +60,7 @@ class GeneRepository(ABC):
         """Count genes matching the same filters used for listing.
 
         A ``None`` tenant ID means the global marketplace scope, not every tenant.
+        ``include_global`` adds published public global entries to a tenant-scoped count.
         """
         raise NotImplementedError
 

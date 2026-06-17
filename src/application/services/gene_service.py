@@ -151,6 +151,7 @@ class GeneService:
     async def list_genes(
         self,
         tenant_id: str | None = None,
+        include_global: bool = False,
         category: str | None = None,
         search: str | None = None,
         slugs: list[str] | None = None,
@@ -163,6 +164,7 @@ class GeneService:
         """List genes with optional filtering."""
         genes, _total = await self.list_genes_with_total(
             tenant_id=tenant_id,
+            include_global=include_global,
             category=category,
             search=search,
             slugs=slugs,
@@ -177,6 +179,7 @@ class GeneService:
     async def list_genes_with_total(
         self,
         tenant_id: str | None = None,
+        include_global: bool = False,
         category: str | None = None,
         search: str | None = None,
         slugs: list[str] | None = None,
@@ -191,6 +194,7 @@ class GeneService:
 
         Args:
             tenant_id: Filter by tenant.
+            include_global: Include published public global entries for tenant lists.
             category: Filter by category.
             search: Search by name, slug, description, or short description.
             slugs: Exact slug allow-list.
@@ -208,6 +212,7 @@ class GeneService:
         )
         genes = await self._gene_repo.find_by_filters(
             tenant_id=tenant_id,
+            include_global=include_global,
             category=category,
             search=search,
             slugs=slugs,
@@ -219,6 +224,7 @@ class GeneService:
         )
         total = await self._gene_repo.count_by_filters(
             tenant_id=tenant_id,
+            include_global=include_global,
             category=category,
             search=search,
             slugs=slugs,
@@ -443,6 +449,7 @@ class GeneService:
 
         genes = await self._gene_repo.find_by_filters(
             tenant_id=tenant_id,
+            include_global=tenant_id is not None,
             slugs=normalized,
             limit=len(normalized),
             offset=0,
@@ -469,6 +476,7 @@ class GeneService:
     async def list_genomes(
         self,
         tenant_id: str | None = None,
+        include_global: bool = False,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -476,6 +484,7 @@ class GeneService:
         """List genomes with optional filtering."""
         genomes, _total = await self.list_genomes_with_total(
             tenant_id=tenant_id,
+            include_global=include_global,
             is_published=is_published,
             limit=limit,
             offset=offset,
@@ -485,6 +494,7 @@ class GeneService:
     async def list_genomes_with_total(
         self,
         tenant_id: str | None = None,
+        include_global: bool = False,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -494,6 +504,7 @@ class GeneService:
 
         Args:
             tenant_id: Filter by tenant.
+            include_global: Include published public global entries for tenant lists.
             is_published: Filter by published status.
             limit: Maximum results.
             offset: Pagination offset.
@@ -506,12 +517,14 @@ class GeneService:
 
         genomes = await self._genome_repo.find_by_filters(
             tenant_id=tenant_id,
+            include_global=include_global,
             is_published=is_published,
             limit=limit,
             offset=offset,
         )
         total = await self._genome_repo.count_by_filters(
             tenant_id=tenant_id,
+            include_global=include_global,
             is_published=is_published,
         )
         return genomes, total

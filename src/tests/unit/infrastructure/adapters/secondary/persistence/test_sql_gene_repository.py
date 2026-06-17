@@ -29,6 +29,7 @@ def _gene(
     category: str = "target",
     is_featured: bool = False,
     is_published: bool = True,
+    visibility: str = "public",
     created_at: datetime | None = None,
     deleted_at: datetime | None = None,
 ) -> GeneMarketModel:
@@ -43,6 +44,7 @@ def _gene(
         short_description="Needle",
         is_featured=is_featured,
         is_published=is_published,
+        visibility=visibility,
         deleted_at=deleted_at,
     )
     if created_at is not None:
@@ -54,11 +56,12 @@ def _genome(
     *,
     genome_id: str,
     slug: str,
-    tenant_id: str,
+    tenant_id: str | None,
     created_by: str,
     name: str,
     is_featured: bool = False,
     is_published: bool = True,
+    visibility: str = "public",
     created_at: datetime | None = None,
     deleted_at: datetime | None = None,
 ) -> GenomeModel:
@@ -72,6 +75,7 @@ def _genome(
         gene_slugs=[],
         is_featured=is_featured,
         is_published=is_published,
+        visibility=visibility,
         deleted_at=deleted_at,
     )
     if created_at is not None:
@@ -212,6 +216,70 @@ async def test_gene_repository_defaults_to_global_scope_when_tenant_id_is_omitte
 
     assert [gene.id for gene in listed] == ["global-gene"]
     assert total == 1
+
+
+@pytest.mark.unit
+async def test_gene_repository_can_include_public_global_rows_in_tenant_scope(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    test_db.add_all(
+        [
+            _gene(
+                gene_id="tenant-gene",
+                slug="tenant-gene",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Tenant Gene",
+                created_at=created_at + timedelta(minutes=3),
+            ),
+            _gene(
+                gene_id="global-public-gene",
+                slug="global-public-gene",
+                tenant_id=None,
+                created_by=test_user.id,
+                name="Global Public Gene",
+                created_at=created_at + timedelta(minutes=2),
+            ),
+            _gene(
+                gene_id="global-draft-gene",
+                slug="global-draft-gene",
+                tenant_id=None,
+                created_by=test_user.id,
+                name="Global Draft Gene",
+                is_published=False,
+                created_at=created_at + timedelta(minutes=1),
+            ),
+            _gene(
+                gene_id="global-private-gene",
+                slug="global-private-gene",
+                tenant_id=None,
+                created_by=test_user.id,
+                name="Global Private Gene",
+                visibility="org_private",
+                created_at=created_at,
+            ),
+        ]
+    )
+    await test_db.flush()
+
+    repo = SqlGeneRepository(test_db)
+
+    listed = await repo.find_by_filters(
+        tenant_id=test_project_db.tenant_id,
+        include_global=True,
+        limit=10,
+        offset=0,
+    )
+    total = await repo.count_by_filters(
+        tenant_id=test_project_db.tenant_id,
+        include_global=True,
+    )
+
+    assert [gene.id for gene in listed] == ["tenant-gene", "global-public-gene"]
+    assert total == 2
 
 
 @pytest.mark.unit
@@ -476,6 +544,70 @@ async def test_genome_repository_featured_defaults_to_global_scope(
     featured = await repo.find_featured(limit=10)
 
     assert [genome.id for genome in featured] == ["global-featured-genome"]
+
+
+@pytest.mark.unit
+async def test_genome_repository_can_include_public_global_rows_in_tenant_scope(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    test_db.add_all(
+        [
+            _genome(
+                genome_id="tenant-genome",
+                slug="tenant-genome",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Tenant Genome",
+                created_at=created_at + timedelta(minutes=3),
+            ),
+            _genome(
+                genome_id="global-public-genome",
+                slug="global-public-genome",
+                tenant_id=None,
+                created_by=test_user.id,
+                name="Global Public Genome",
+                created_at=created_at + timedelta(minutes=2),
+            ),
+            _genome(
+                genome_id="global-draft-genome",
+                slug="global-draft-genome",
+                tenant_id=None,
+                created_by=test_user.id,
+                name="Global Draft Genome",
+                is_published=False,
+                created_at=created_at + timedelta(minutes=1),
+            ),
+            _genome(
+                genome_id="global-private-genome",
+                slug="global-private-genome",
+                tenant_id=None,
+                created_by=test_user.id,
+                name="Global Private Genome",
+                visibility="org_private",
+                created_at=created_at,
+            ),
+        ]
+    )
+    await test_db.flush()
+
+    repo = SqlGenomeRepository(test_db)
+
+    listed = await repo.find_by_filters(
+        tenant_id=test_project_db.tenant_id,
+        include_global=True,
+        limit=10,
+        offset=0,
+    )
+    total = await repo.count_by_filters(
+        tenant_id=test_project_db.tenant_id,
+        include_global=True,
+    )
+
+    assert [genome.id for genome in listed] == ["tenant-genome", "global-public-genome"]
+    assert total == 2
 
 
 @pytest.mark.unit

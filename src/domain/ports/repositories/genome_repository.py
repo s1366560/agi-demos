@@ -30,20 +30,28 @@ class GenomeRepository(ABC):
         self,
         *,
         tenant_id: str,
+        include_global: bool = False,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Genome]:
-        """List genomes with filters applied before pagination."""
+        """List genomes with filters applied before pagination.
+
+        ``include_global`` adds published public global entries to a tenant-scoped list.
+        """
         raise NotImplementedError
 
     async def count_by_filters(
         self,
         *,
         tenant_id: str,
+        include_global: bool = False,
         is_published: bool | None = None,
     ) -> int:
-        """Count genomes matching the same filters used for listing."""
+        """Count genomes matching the same filters used for listing.
+
+        ``include_global`` adds published public global entries to a tenant-scoped count.
+        """
         raise NotImplementedError
 
     @abstractmethod

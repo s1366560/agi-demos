@@ -234,6 +234,46 @@ async def test_list_genes_with_total_defaults_to_global_scope(
 
 
 @pytest.mark.unit
+async def test_list_genes_with_total_can_include_public_globals_for_tenant_scope(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+
+    tenant_gene = await service.create_gene(
+        name="Tenant Listed Gene",
+        slug=_slug("tenant-listed"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    global_gene = await service.create_gene(
+        name="Global Listed Gene",
+        slug=_slug("global-listed"),
+        created_by=test_user.id,
+        tenant_id=None,
+    )
+    global_gene = await service.publish_gene(global_gene.id)
+    global_draft = await service.create_gene(
+        name="Global Draft Gene",
+        slug=_slug("global-draft"),
+        created_by=test_user.id,
+        tenant_id=None,
+    )
+
+    genes, total = await service.list_genes_with_total(
+        tenant_id=test_project_db.tenant_id,
+        include_global=True,
+        limit=10,
+        offset=0,
+    )
+
+    assert {gene.id for gene in genes} == {tenant_gene.id, global_gene.id}
+    assert global_draft.id not in {gene.id for gene in genes}
+    assert total == 2
+
+
+@pytest.mark.unit
 async def test_list_genomes_with_total_filters_before_pagination(
     test_db: AsyncSession,
     test_project_db: Project,
@@ -311,6 +351,46 @@ async def test_unpublish_genome_removes_it_from_published_results(
     assert published_total == 0
     assert genome.id in {item.id for item in unpublished_genomes}
     assert unpublished_total == 1
+
+
+@pytest.mark.unit
+async def test_list_genomes_with_total_can_include_public_globals_for_tenant_scope(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+
+    tenant_genome = await service.create_genome(
+        name="Tenant Listed Genome",
+        slug=_slug("tenant-listed-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    global_genome = await service.create_genome(
+        name="Global Listed Genome",
+        slug=_slug("global-listed-genome"),
+        created_by=test_user.id,
+        tenant_id=None,
+    )
+    global_genome = await service.publish_genome(global_genome.id)
+    global_draft = await service.create_genome(
+        name="Global Draft Genome",
+        slug=_slug("global-draft-genome"),
+        created_by=test_user.id,
+        tenant_id=None,
+    )
+
+    genomes, total = await service.list_genomes_with_total(
+        tenant_id=test_project_db.tenant_id,
+        include_global=True,
+        limit=10,
+        offset=0,
+    )
+
+    assert {genome.id for genome in genomes} == {tenant_genome.id, global_genome.id}
+    assert global_draft.id not in {genome.id for genome in genomes}
+    assert total == 2
 
 
 @pytest.mark.unit

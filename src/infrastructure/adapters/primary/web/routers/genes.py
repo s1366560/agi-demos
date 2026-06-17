@@ -32,7 +32,7 @@ from src.application.schemas.gene_schemas import (
     GenomeUpdate,
 )
 from src.configuration.di_container import DIContainer
-from src.domain.model.gene.enums import EvolutionEventType
+from src.domain.model.gene.enums import ContentVisibility, EvolutionEventType
 from src.domain.model.gene.instance_gene import EvolutionEvent
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
@@ -436,9 +436,10 @@ async def _ensure_gene_tenant_access(
     *,
     gene_id: str,
     tenant_id: str,
+    allow_global: bool = False,
 ) -> _TenantScopedEntity:
     gene = await service.get_gene(gene_id)
-    if gene is None or gene.tenant_id != tenant_id:
+    if gene is None or not _tenant_entity_matches(gene, tenant_id, allow_global=allow_global):
         raise _gene_not_found_error()
     return gene
 
@@ -448,11 +449,30 @@ async def _ensure_genome_tenant_access(
     *,
     genome_id: str,
     tenant_id: str,
+    allow_global: bool = False,
 ) -> _TenantScopedEntity:
     genome = await service.get_genome(genome_id)
-    if genome is None or genome.tenant_id != tenant_id:
+    if genome is None or not _tenant_entity_matches(genome, tenant_id, allow_global=allow_global):
         raise _genome_not_found_error()
     return genome
+
+
+def _tenant_entity_matches(
+    entity: _TenantScopedEntity,
+    tenant_id: str,
+    *,
+    allow_global: bool,
+) -> bool:
+    if entity.tenant_id == tenant_id:
+        return True
+    if not allow_global or entity.tenant_id is not None:
+        return False
+    visibility = getattr(entity, "visibility", None)
+    visibility_value = getattr(visibility, "value", visibility)
+    return (
+        getattr(entity, "is_published", False) is True
+        and visibility_value == ContentVisibility.public.value
+    )
 
 
 async def _ensure_instance_gene_tenant_access(
@@ -555,6 +575,7 @@ async def list_genes(
     offset = (page - 1) * page_size
     genes, total = await service.list_genes_with_total(
         tenant_id=tenant_id,
+        include_global=True,
         category=category,
         search=search,
         slugs=_split_slug_query(slugs),
@@ -709,6 +730,7 @@ async def list_genomes(
     offset = (page - 1) * page_size
     genomes, total = await service.list_genomes_with_total(
         tenant_id=tenant_id,
+        include_global=True,
         is_published=is_published,
         limit=page_size,
         offset=offset,
@@ -732,7 +754,12 @@ async def get_genome(
     """Get a genome by ID."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
-    genome = await _ensure_genome_tenant_access(service, genome_id=genome_id, tenant_id=tenant_id)
+    genome = await _ensure_genome_tenant_access(
+        service,
+        genome_id=genome_id,
+        tenant_id=tenant_id,
+        allow_global=True,
+    )
     return GenomeResponse.model_validate(genome, from_attributes=True)
 
 
@@ -850,7 +877,12 @@ async def install_gene(
         await _ensure_instance_tenant_access(
             container, instance_id=instance_id, tenant_id=tenant_id
         )
-        await _ensure_gene_tenant_access(service, gene_id=data.gene_id, tenant_id=tenant_id)
+        await _ensure_gene_tenant_access(
+            service,
+            gene_id=data.gene_id,
+            tenant_id=tenant_id,
+            allow_global=True,
+        )
         instance_gene = await service.install_gene(
             instance_id=instance_id,
             gene_id=data.gene_id,
@@ -997,7 +1029,12 @@ async def rate_gene(
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
-        await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
+        await _ensure_gene_tenant_access(
+            service,
+            gene_id=gene_id,
+            tenant_id=tenant_id,
+            allow_global=True,
+        )
         rating = await service.rate_gene(
             gene_id=gene_id,
             user_id=current_user.id,
@@ -1025,7 +1062,12 @@ async def list_gene_ratings(
     """List ratings for a gene."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
-    await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
+    await _ensure_gene_tenant_access(
+        service,
+        gene_id=gene_id,
+        tenant_id=tenant_id,
+        allow_global=True,
+    )
     ratings = await service.list_gene_ratings(
         gene_id=gene_id,
         limit=limit,
@@ -1049,7 +1091,12 @@ async def list_genome_ratings(
     """List ratings for a genome."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
-    await _ensure_genome_tenant_access(service, genome_id=genome_id, tenant_id=tenant_id)
+    await _ensure_genome_tenant_access(
+        service,
+        genome_id=genome_id,
+        tenant_id=tenant_id,
+        allow_global=True,
+    )
     ratings = await service.list_genome_ratings(
         genome_id=genome_id,
         limit=limit,
@@ -1075,7 +1122,12 @@ async def rate_genome(
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
-        await _ensure_genome_tenant_access(service, genome_id=genome_id, tenant_id=tenant_id)
+        await _ensure_genome_tenant_access(
+            service,
+            genome_id=genome_id,
+            tenant_id=tenant_id,
+            allow_global=True,
+        )
         rating = await service.rate_genome(
             genome_id=genome_id,
             user_id=current_user.id,
@@ -1124,6 +1176,7 @@ async def list_evolution_events(
                 service,
                 gene_id=gene_id,
                 tenant_id=tenant_id,
+                allow_global=True,
             )
         events, total = await service.list_evolution_events_with_total(
             instance_id=instance_id,
@@ -1170,12 +1223,14 @@ async def create_evolution_event(
             service,
             gene_id=data.gene_id,
             tenant_id=tenant_id,
+            allow_global=True,
         )
     if data.genome_id:
         await _ensure_genome_tenant_access(
             service,
             genome_id=data.genome_id,
             tenant_id=tenant_id,
+            allow_global=True,
         )
     event = await service.create_evolution_event(
         instance_id=data.instance_id,
@@ -1228,7 +1283,12 @@ async def get_gene(
     """Get a gene by ID."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
-    gene = await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
+    gene = await _ensure_gene_tenant_access(
+        service,
+        gene_id=gene_id,
+        tenant_id=tenant_id,
+        allow_global=True,
+    )
     return GeneResponse.model_validate(gene, from_attributes=True)
 
 
@@ -1247,7 +1307,12 @@ async def list_gene_reviews(
 ) -> GeneReviewListResponse:
     container = get_container_with_db(request, db)
     service = container.gene_service()
-    await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
+    await _ensure_gene_tenant_access(
+        service,
+        gene_id=gene_id,
+        tenant_id=tenant_id,
+        allow_global=True,
+    )
     reviews, total = await service.list_gene_reviews(
         gene_id=gene_id,
         page=page,
@@ -1278,7 +1343,12 @@ async def create_gene_review(
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
-        await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
+        await _ensure_gene_tenant_access(
+            service,
+            gene_id=gene_id,
+            tenant_id=tenant_id,
+            allow_global=True,
+        )
         review = await service.create_gene_review(
             gene_id=gene_id,
             user_id=current_user.id,
@@ -1308,7 +1378,12 @@ async def delete_gene_review(
     try:
         container = get_container_with_db(request, db)
         service = container.gene_service()
-        await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
+        await _ensure_gene_tenant_access(
+            service,
+            gene_id=gene_id,
+            tenant_id=tenant_id,
+            allow_global=True,
+        )
         await service.delete_gene_review(
             gene_id=gene_id,
             review_id=review_id,

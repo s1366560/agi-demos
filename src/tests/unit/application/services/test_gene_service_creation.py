@@ -243,6 +243,32 @@ async def test_create_genome_normalizes_gene_slugs(
 
 
 @pytest.mark.unit
+async def test_create_genome_allows_published_global_gene_slugs(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    global_gene = await service.create_gene(
+        name="Global Genome Gene",
+        slug=_slug("global-genome-gene"),
+        created_by=test_user.id,
+        tenant_id=None,
+    )
+    global_gene = await service.publish_gene(global_gene.id)
+
+    genome = await service.create_genome(
+        name="Global Slug Genome",
+        slug=_slug("global-slug-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        gene_slugs=[global_gene.slug],
+    )
+
+    assert genome.gene_slugs == [global_gene.slug]
+
+
+@pytest.mark.unit
 async def test_create_genome_rejects_missing_or_foreign_gene_slugs(
     test_db: AsyncSession,
     test_project_db: Project,

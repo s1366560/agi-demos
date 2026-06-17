@@ -75,6 +75,72 @@ class _Container:
         return _InstanceService()
 
 
+def _gene_entity(
+    *,
+    gene_id: str,
+    tenant_id: str | None,
+    is_published: bool = True,
+    visibility: str = "public",
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=gene_id,
+        name="Global Gene" if tenant_id is None else "Tenant Gene",
+        slug=gene_id,
+        tenant_id=tenant_id,
+        description=None,
+        short_description=None,
+        category=None,
+        tags=[],
+        source="official",
+        source_ref=None,
+        icon=None,
+        version="1.0.0",
+        manifest={},
+        dependencies=[],
+        synergies=[],
+        parent_gene_id=None,
+        visibility=visibility,
+        install_count=0,
+        avg_rating=None,
+        effectiveness_score=None,
+        is_featured=False,
+        review_status=None,
+        is_published=is_published,
+        created_by="user-1",
+        created_by_instance_id=None,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        updated_at=None,
+    )
+
+
+def _genome_entity(
+    *,
+    genome_id: str,
+    tenant_id: str | None,
+    is_published: bool = True,
+    visibility: str = "public",
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=genome_id,
+        name="Global Genome" if tenant_id is None else "Tenant Genome",
+        slug=genome_id,
+        tenant_id=tenant_id,
+        description=None,
+        short_description=None,
+        icon=None,
+        gene_slugs=[],
+        config_override={},
+        visibility=visibility,
+        install_count=0,
+        avg_rating=None,
+        is_featured=False,
+        is_published=is_published,
+        created_by="user-1",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        updated_at=None,
+    )
+
+
 class _InstanceGeneListService(_FailingGeneService):
     async def list_instance_genes_with_summary(
         self,
@@ -129,6 +195,7 @@ class _InstanceGeneListContainer(_Container):
 class _GeneListService(_FailingGeneService):
     async def list_genes_with_total(self, **kwargs: object) -> tuple[list[SimpleNamespace], int]:
         assert kwargs["tenant_id"] == "tenant-1"
+        assert kwargs["include_global"] is True
         assert kwargs["slugs"] == ["code-review", "test-writer"]
         return (
             [
@@ -171,12 +238,38 @@ class _GeneListContainer(_Container):
         return _GeneListService()
 
 
+class _GenomeListService(_FailingGeneService):
+    async def list_genomes_with_total(self, **kwargs: object) -> tuple[list[SimpleNamespace], int]:
+        assert kwargs["tenant_id"] == "tenant-1"
+        assert kwargs["include_global"] is True
+        return ([_genome_entity(genome_id="global-genome", tenant_id=None)], 1)
+
+
+class _GenomeListContainer(_Container):
+    def gene_service(self) -> _GenomeListService:
+        return _GenomeListService()
+
+
 class _EvolutionAccessGeneService(_FailingGeneService):
     async def get_gene(self, gene_id: str, *_args: object, **_kwargs: object) -> object | None:
         if gene_id == "missing-gene":
             return None
+        if gene_id == "global-gene":
+            return _gene_entity(gene_id=gene_id, tenant_id=None)
+        if gene_id == "global-draft-gene":
+            return _gene_entity(gene_id=gene_id, tenant_id=None, is_published=False)
         tenant_id = "tenant-2" if gene_id == "foreign-gene" else "tenant-1"
-        return SimpleNamespace(id=gene_id, tenant_id=tenant_id)
+        return _gene_entity(gene_id=gene_id, tenant_id=tenant_id)
+
+    async def get_genome(self, genome_id: str, *_args: object, **_kwargs: object) -> object | None:
+        if genome_id == "missing-genome":
+            return None
+        if genome_id == "global-genome":
+            return _genome_entity(genome_id=genome_id, tenant_id=None)
+        if genome_id == "global-draft-genome":
+            return _genome_entity(genome_id=genome_id, tenant_id=None, is_published=False)
+        tenant_id = "tenant-2" if genome_id == "foreign-genome" else "tenant-1"
+        return _genome_entity(genome_id=genome_id, tenant_id=tenant_id)
 
     async def get_evolution_event(self, event_id: str) -> object | None:
         instance_id = "foreign-instance" if event_id == "foreign-event" else "instance-1"
@@ -487,6 +580,68 @@ async def test_get_gene_hides_foreign_gene(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.unit
+async def test_get_gene_allows_published_global_gene(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _EvolutionAccessContainer(),
+    )
+
+    response = await genes.get_gene(
+        request=SimpleNamespace(),
+        gene_id="global-gene",
+        tenant_id="tenant-1",
+        db=SimpleNamespace(),
+    )
+
+    assert response.id == "global-gene"
+    assert response.tenant_id is None
+
+
+@pytest.mark.unit
+async def test_get_gene_hides_unpublished_global_gene(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _EvolutionAccessContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.get_gene(
+            request=SimpleNamespace(),
+            gene_id="global-draft-gene",
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Gene not found"
+
+
+@pytest.mark.unit
+async def test_update_gene_hides_global_gene_from_tenant_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _EvolutionAccessContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.update_gene(
+            request=SimpleNamespace(),
+            gene_id="global-gene",
+            data=GeneUpdate(name="Updated"),
+            tenant_id="tenant-1",
+            db=SimpleNamespace(commit=AsyncMock()),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Gene not found"
+
+
+@pytest.mark.unit
 async def test_list_genes_splits_comma_separated_slug_filter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -512,6 +667,29 @@ async def test_list_genes_splits_comma_separated_slug_filter(
 
     assert response.total == 1
     assert response.genes[0].slug == "code-review"
+
+
+@pytest.mark.unit
+async def test_list_genomes_passes_global_inclusion_to_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _GenomeListContainer(),
+    )
+
+    response = await genes.list_genomes(
+        request=SimpleNamespace(),
+        page=1,
+        page_size=20,
+        is_published=True,
+        tenant_id="tenant-1",
+        db=SimpleNamespace(),
+    )
+
+    assert response.total == 1
+    assert response.genomes[0].id == "global-genome"
 
 
 @pytest.mark.unit
@@ -545,6 +723,49 @@ async def test_get_genome_sanitizes_missing_genome_id() -> None:
 
 
 @pytest.mark.unit
+async def test_get_genome_allows_published_global_genome(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _EvolutionAccessContainer(),
+    )
+
+    response = await genes.get_genome(
+        request=SimpleNamespace(),
+        genome_id="global-genome",
+        tenant_id="tenant-1",
+        db=SimpleNamespace(),
+    )
+
+    assert response.id == "global-genome"
+    assert response.tenant_id is None
+
+
+@pytest.mark.unit
+async def test_get_genome_hides_unpublished_global_genome(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _EvolutionAccessContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.get_genome(
+            request=SimpleNamespace(),
+            genome_id="global-draft-genome",
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Genome not found"
+
+
+@pytest.mark.unit
 async def test_unpublish_genome_sanitizes_missing_genome_id() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await genes.unpublish_genome(
@@ -552,6 +773,29 @@ async def test_unpublish_genome_sanitizes_missing_genome_id() -> None:
             genome_id="genome-secret",
             tenant_id="tenant-1",
             db=SimpleNamespace(commit=None),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Genome not found"
+
+
+@pytest.mark.unit
+async def test_update_genome_hides_global_genome_from_tenant_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _EvolutionAccessContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.update_genome(
+            request=SimpleNamespace(),
+            genome_id="global-genome",
+            data=genes.GenomeUpdate(name="Updated"),
+            tenant_id="tenant-1",
+            db=SimpleNamespace(commit=AsyncMock()),
         )
 
     assert exc_info.value.status_code == 404

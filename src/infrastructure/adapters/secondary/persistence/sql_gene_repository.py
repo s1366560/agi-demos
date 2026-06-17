@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, cast, override
 
-from sqlalchemy import case, func, or_, select, update
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
@@ -72,6 +72,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         self,
         *,
         tenant_id: str | None = None,
+        include_global: bool = False,
         category: str | None = None,
         search: str | None = None,
         slugs: list[str] | None = None,
@@ -87,7 +88,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
             is_published=is_published,
         )
         stmt = self._build_active_query(filters=filters)
-        stmt = self._apply_tenant_scope(stmt, tenant_id)
+        stmt = self._apply_tenant_scope(stmt, tenant_id, include_global=include_global)
         stmt = self._apply_search_filter(stmt, search)
         stmt = self._apply_slug_filter(stmt, slugs)
         stmt = self._apply_exclude_installed_filter(stmt, exclude_installed_instance_id)
@@ -104,6 +105,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         self,
         *,
         tenant_id: str | None = None,
+        include_global: bool = False,
         category: str | None = None,
         search: str | None = None,
         slugs: list[str] | None = None,
@@ -122,7 +124,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
             .where(GeneMarketModel.deleted_at.is_(None))
         )
         stmt = self._apply_filters(stmt, **filters)
-        stmt = self._apply_tenant_scope(stmt, tenant_id)
+        stmt = self._apply_tenant_scope(stmt, tenant_id, include_global=include_global)
         stmt = self._apply_search_filter(stmt, search)
         stmt = self._apply_slug_filter(stmt, slugs)
         stmt = self._apply_exclude_installed_filter(stmt, exclude_installed_instance_id)
@@ -173,9 +175,25 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         return filters
 
     @staticmethod
-    def _apply_tenant_scope(stmt: Select[Any], tenant_id: str | None) -> Select[Any]:
+    def _apply_tenant_scope(
+        stmt: Select[Any],
+        tenant_id: str | None,
+        *,
+        include_global: bool = False,
+    ) -> Select[Any]:
         if tenant_id is None:
             return stmt.where(GeneMarketModel.tenant_id.is_(None))
+        if include_global:
+            return stmt.where(
+                or_(
+                    GeneMarketModel.tenant_id == tenant_id,
+                    and_(
+                        GeneMarketModel.tenant_id.is_(None),
+                        GeneMarketModel.is_published.is_(True),
+                        GeneMarketModel.visibility == ContentVisibility.public.value,
+                    ),
+                )
+            )
         return stmt.where(GeneMarketModel.tenant_id == tenant_id)
 
     @staticmethod
