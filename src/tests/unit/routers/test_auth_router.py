@@ -132,10 +132,14 @@ class TestAuthRouter:
         api_key = SimpleNamespace(
             id="key-1",
             key="masked",
+            key_hash="hash-1",
             name="Paged Key",
+            user_id="user-1",
+            is_active=True,
             created_at=created_at,
             expires_at=None,
             permissions=["read"],
+            last_used_at=None,
         )
         result = Mock()
         result.scalars.return_value.all.return_value = [api_key]
@@ -149,5 +153,6 @@ class TestAuthRouter:
         compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
         assert "LIMIT 2" in compiled
         assert "OFFSET 3" in compiled
+        assert "ORDER BY api_keys.created_at DESC, api_keys.id ASC" in compiled
         assert response[0].key_id == "key-1"
         assert response[0].key == "*****************"

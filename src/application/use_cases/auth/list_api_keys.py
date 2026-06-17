@@ -1,23 +1,37 @@
-# Auth use cases
+"""Use case for listing API keys."""
 
-from src.application.use_cases.auth import (
-    CreateAPIKeyCommand,
-    CreateAPIKeyUseCase,
-)
-from src.application.use_cases.auth.create_api_key import (
-    DeleteAPIKeyCommand,
-    DeleteAPIKeyUseCase,
-)
-from src.application.use_cases.auth.delete_api_key import (
-    ListAPIKeysQuery,
-    ListAPIKeysUseCase,
-)
+from pydantic import BaseModel, Field, field_validator
 
-__all__ = [
-    "CreateAPIKeyCommand",
-    "CreateAPIKeyUseCase",
-    "DeleteAPIKeyCommand",
-    "DeleteAPIKeyUseCase",
-    "ListAPIKeysQuery",
-    "ListAPIKeysUseCase",
-]
+from src.domain.model.auth.api_key import APIKey
+from src.domain.ports.repositories.api_key_repository import APIKeyRepository
+
+
+class ListAPIKeysQuery(BaseModel):
+    """Query to list API keys."""
+
+    model_config = {"frozen": True}
+
+    user_id: str
+    limit: int = Field(default=50, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
+
+    @field_validator("user_id")
+    @classmethod
+    def must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("must not be empty")
+        return v
+
+
+class ListAPIKeysUseCase:
+    """Use case for listing API keys."""
+
+    def __init__(self, api_key_repository: APIKeyRepository) -> None:
+        super().__init__()
+        self._api_key_repo = api_key_repository
+
+    async def execute(self, query: ListAPIKeysQuery) -> list[APIKey]:
+        """List API keys for a user."""
+        return await self._api_key_repo.find_by_user(
+            query.user_id, limit=query.limit, offset=query.offset
+        )

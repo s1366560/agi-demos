@@ -1,23 +1,19 @@
-"""
-Use case for listing API keys.
-"""
+"""Use case for deleting API keys."""
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 
-from src.domain.model.auth.api_key import APIKey
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
 
 
-class ListAPIKeysQuery(BaseModel):
-    """Query to list API keys"""
+class DeleteAPIKeyCommand(BaseModel):
+    """Command to delete an API key."""
 
     model_config = {"frozen": True}
 
+    key_id: str
     user_id: str
-    limit: int = Field(default=50, ge=1, le=1000)
-    offset: int = Field(default=0, ge=0)
 
-    @field_validator("user_id")
+    @field_validator("key_id", "user_id")
     @classmethod
     def must_not_be_empty(cls, v: str) -> str:
         if not v or not v.strip():
@@ -25,14 +21,18 @@ class ListAPIKeysQuery(BaseModel):
         return v
 
 
-class ListAPIKeysUseCase:
-    """Use case for listing API keys"""
+class DeleteAPIKeyUseCase:
+    """Use case for deleting API keys."""
 
     def __init__(self, api_key_repository: APIKeyRepository) -> None:
+        super().__init__()
         self._api_key_repo = api_key_repository
 
-    async def execute(self, query: ListAPIKeysQuery) -> list[APIKey]:
-        """List API keys for user"""
-        return await self._api_key_repo.find_by_user(
-            query.user_id, limit=query.limit, offset=query.offset
-        )
+    async def execute(self, command: DeleteAPIKeyCommand) -> bool:
+        """Delete an API key when it belongs to the requested user."""
+        api_key = await self._api_key_repo.find_by_id(command.key_id)
+        if not api_key or api_key.user_id != command.user_id:
+            return False
+
+        _ = await self._api_key_repo.delete(command.key_id)
+        return True

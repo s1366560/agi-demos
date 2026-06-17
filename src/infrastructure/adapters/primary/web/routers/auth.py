@@ -24,6 +24,7 @@ from src.application.schemas.auth import (
     User as UserSchema,
     UserUpdate,
 )
+from src.application.use_cases.auth.list_api_keys import ListAPIKeysQuery, ListAPIKeysUseCase
 from src.infrastructure.adapters.primary.web.dependencies import (
     create_api_key,
     get_current_user,
@@ -39,6 +40,9 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserProject,
     UserRole,
     UserTenant,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository import (
+    SqlAPIKeyRepository,
 )
 from src.infrastructure.i18n import gettext as _
 
@@ -260,18 +264,16 @@ async def list_api_keys(
     offset: int = Query(0, ge=0),
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> list[Any]:
+) -> list[APIKeyResponse]:
     """List all API keys for the current user."""
-    result = await db.execute(
-        refresh_select_statement(
-            select(DBAPIKey)
-            .where(DBAPIKey.user_id == current_user.id)
-            .order_by(DBAPIKey.created_at.desc())
-            .limit(limit)
-            .offset(offset)
+    use_case = ListAPIKeysUseCase(SqlAPIKeyRepository(db))
+    keys = await use_case.execute(
+        ListAPIKeysQuery(
+            user_id=current_user.id,
+            limit=limit,
+            offset=offset,
         )
     )
-    keys = result.scalars().all()
 
     return [
         APIKeyResponse(

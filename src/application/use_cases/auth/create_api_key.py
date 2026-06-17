@@ -1,47 +1,69 @@
-"""
-Use case for deleting API keys.
-"""
+"""Use case for creating API keys."""
+
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel, field_validator
 
+from src.domain.model.auth.api_key import APIKey
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
 
 
-class DeleteAPIKeyCommand(BaseModel):
-    """Command to delete an API key"""
+class CreateAPIKeyCommand(BaseModel):
+    """Command to create an API key."""
 
     model_config = {"frozen": True}
 
-    key_id: str
-    user_id: str  # For authorization
+    user_id: str
+    name: str
+    permissions: list[str]
+    expires_in_days: int | None = None
 
-    @field_validator("key_id", "user_id")
+    @field_validator("user_id", "name")
     @classmethod
     def must_not_be_empty(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("must not be empty")
         return v
 
+    @field_validator("expires_in_days")
+    @classmethod
+    def must_be_positive(cls, v: int | None) -> int | None:
+        if v is not None and v <= 0:
+            raise ValueError("must be positive")
+        return v
 
-class DeleteAPIKeyUseCase:
-    """Use case for deleting API keys"""
 
-    def __init__(self, api_key_repository: APIKeyRepository) -> None:
+class CreateAPIKeyUseCase:
+    """Use case for creating API keys."""
+
+    def __init__(
+        self,
+        api_key_repository: APIKeyRepository,
+        generate_key_func: Callable[[], str],
+        hash_key_func: Callable[[str], str],
+    ) -> None:
+        super().__init__()
         self._api_key_repo = api_key_repository
+        self._generate_key = generate_key_func
+        self._hash_key = hash_key_func
 
-    async def execute(self, command: DeleteAPIKeyCommand) -> bool:
-        """Delete API key - returns True if deleted"""
-        # Implementation would be in the execute method
+    async def execute(self, command: CreateAPIKeyCommand) -> tuple[str, APIKey]:
+        """Create an API key and return the plain key with the saved entity."""
+        plain_key = self._generate_key()
+        hashed_key = self._hash_key(plain_key)
 
-        # Get the key
-        api_key = await self._api_key_repo.find_by_id(command.key_id)
+        expires_at = None
+        if command.expires_in_days:
+            expires_at = datetime.now(UTC) + timedelta(days=command.expires_in_days)
 
-        if not api_key:
-            return False
+        api_key = APIKey(
+            user_id=command.user_id,
+            key_hash=hashed_key,
+            name=command.name,
+            permissions=command.permissions,
+            expires_at=expires_at,
+        )
 
-        # Authorization check
-        if api_key.user_id != command.user_id:
-            return False
-
-        await self._api_key_repo.delete(command.key_id)
-        return True
+        _ = await self._api_key_repo.save(api_key)
+        return plain_key, api_key

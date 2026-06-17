@@ -193,6 +193,39 @@ class TestSqlAPIKeyRepositoryList:
         page2 = await v2_api_key_repo.find_by_user("user-test-1", limit=2, offset=2)
         assert len(page2) == 2
 
+    @pytest.mark.asyncio
+    async def test_find_by_user_orders_by_created_at_and_id(
+        self, v2_api_key_repo: SqlAPIKeyRepository
+    ):
+        """Test listing API keys has deterministic page order."""
+        created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        await v2_api_key_repo.save(
+            APIKey(
+                id="key-order-b",
+                user_id="user-test-1",
+                key_hash="hash-order-b",
+                name="Order B",
+                is_active=True,
+                permissions=["read"],
+                created_at=created_at,
+            )
+        )
+        await v2_api_key_repo.save(
+            APIKey(
+                id="key-order-a",
+                user_id="user-test-1",
+                key_hash="hash-order-a",
+                name="Order A",
+                is_active=True,
+                permissions=["read"],
+                created_at=created_at,
+            )
+        )
+
+        keys = await v2_api_key_repo.find_by_user("user-test-1")
+
+        assert [key.id for key in keys] == ["key-order-a", "key-order-b"]
+
 
 class TestSqlAPIKeyRepositoryDelete:
     """Tests for deleting API keys."""
