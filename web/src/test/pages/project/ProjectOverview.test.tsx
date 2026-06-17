@@ -10,9 +10,9 @@
  * 4. Date formatting is memoized
  */
 
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 
-import { screen, render, waitFor, renderHook } from '@testing-library/react';
+import { fireEvent, screen, render, waitFor, renderHook } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { ProjectOverview } from '../../../pages/project/ProjectOverview';
@@ -54,6 +54,36 @@ const _createRenderCounter = (componentId: string) => {
     reset: () => (count = 0),
     id: componentId,
   };
+};
+
+const createDeferred = <T,>() => {
+  let resolvePromise: (value: T | PromiseLike<T>) => void = () => {};
+  let rejectPromise: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+
+  return {
+    promise,
+    resolve: resolvePromise,
+    reject: rejectPromise,
+  };
+};
+
+const RouteSwitcher: React.FC = () => {
+  const navigate = useNavigate();
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigate('/project/p2/overview');
+      }}
+    >
+      Switch project
+    </button>
+  );
 };
 
 describe('ProjectOverview - Performance Optimizations', () => {
@@ -111,6 +141,17 @@ describe('ProjectOverview - Performance Optimizations', () => {
       <MemoryRouter initialEntries={[route]}>
         <Routes>
           <Route path="/project/:projectId/overview" element={ui} />
+        </Routes>
+      </MemoryRouter>
+    );
+  };
+
+  const renderSwitchableOverview = () => {
+    return render(
+      <MemoryRouter initialEntries={['/project/p1/overview']}>
+        <RouteSwitcher />
+        <Routes>
+          <Route path="/project/:projectId/overview" element={<ProjectOverview />} />
         </Routes>
       </MemoryRouter>
     );
@@ -183,6 +224,98 @@ describe('ProjectOverview - Performance Optimizations', () => {
 
       await waitFor(() => {
         expect(screen.getByText(/no memories/i)).toBeInTheDocument();
+      });
+    });
+
+    it('ignores stale project overview responses after route changes', async () => {
+      const p1Stats = createDeferred<unknown>();
+      const p1Project = createDeferred<any>();
+      const p1Memories = createDeferred<any>();
+      const p2Stats = createDeferred<unknown>();
+      const p2Project = createDeferred<any>();
+      const p2Memories = createDeferred<any>();
+
+      vi.mocked(projectAPI.getStats).mockImplementation((projectId: string) => {
+        if (projectId === 'p1') return p1Stats.promise;
+        return p2Stats.promise;
+      });
+      vi.mocked(projectAPI.get).mockImplementation((_tenantId: string, projectId: string) => {
+        if (projectId === 'p1') return p1Project.promise;
+        return p2Project.promise;
+      });
+      vi.mocked(memoryAPI.list).mockImplementation((projectId: string) => {
+        if (projectId === 'p1') return p1Memories.promise;
+        return p2Memories.promise;
+      });
+
+      renderSwitchableOverview();
+
+      await waitFor(() => {
+        expect(projectAPI.getStats).toHaveBeenCalledWith('p1');
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Switch project' }));
+
+      await waitFor(() => {
+        expect(projectAPI.getStats).toHaveBeenCalledWith('p2');
+      });
+
+      p2Stats.resolve({
+        ...mockStats,
+        memory_count: 7,
+        active_nodes: 3,
+        collaborators: 2,
+      });
+      p2Project.resolve({ id: 'p2', name: 'Current Project', description: '' });
+      p2Memories.resolve({
+        memories: [
+          {
+            id: 'current-memory',
+            title: 'Current Memory',
+            content: 'Current memory content',
+            content_type: 'text',
+            status: 'ENABLED',
+            created_at: '2024-01-01T00:00:00Z',
+            updated_at: '2024-01-02T00:00:00Z',
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 5,
+      });
+
+      expect(await screen.findByText('Current Memory')).toBeInTheDocument();
+      expect(screen.getByText('7')).toBeInTheDocument();
+
+      p1Stats.resolve({
+        ...mockStats,
+        memory_count: 999,
+        active_nodes: 998,
+        collaborators: 997,
+      });
+      p1Project.resolve({ id: 'p1', name: 'Stale Project', description: '' });
+      p1Memories.resolve({
+        memories: [
+          {
+            id: 'stale-memory',
+            title: 'Stale Memory',
+            content: 'Stale memory content',
+            content_type: 'text',
+            status: 'ENABLED',
+            created_at: '2024-01-01T00:00:00Z',
+            updated_at: '2024-01-02T00:00:00Z',
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 5,
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByText('Stale Memory')).not.toBeInTheDocument();
+        expect(screen.queryByText('999')).not.toBeInTheDocument();
+        expect(screen.getByText('Current Memory')).toBeInTheDocument();
+        expect(screen.getByText('7')).toBeInTheDocument();
       });
     });
   });

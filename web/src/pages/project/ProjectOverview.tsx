@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
@@ -75,6 +75,7 @@ export const ProjectOverview: React.FC = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const loadRequestRef = useRef(0);
 
   // Action states
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -84,26 +85,36 @@ export const ProjectOverview: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       if (projectId) {
+        const requestId = loadRequestRef.current + 1;
+        loadRequestRef.current = requestId;
+        const requestedProjectId = projectId;
         setIsLoading(true);
         try {
           // Pass projectId as tenantId since it's ignored by the API wrapper currently,
           // or we could get the tenantId from context/url if available.
           const [statsData, projectData, memoriesData] = await Promise.all([
-            projectAPI.getStats(projectId),
-            projectAPI.get(projectId, projectId),
-            memoryAPI.list(projectId, { page: 1, page_size: 5 }),
+            projectAPI.getStats(requestedProjectId),
+            projectAPI.get(requestedProjectId, requestedProjectId),
+            memoryAPI.list(requestedProjectId, { page: 1, page_size: 5 }),
           ]);
+          if (loadRequestRef.current !== requestId) return;
           setStats(statsData as ProjectOverviewStats);
           setProject(projectData);
           setMemories(memoriesData.memories);
         } catch (error) {
+          if (loadRequestRef.current !== requestId) return;
           console.error('Failed to fetch project data:', error);
         } finally {
-          setIsLoading(false);
+          if (loadRequestRef.current === requestId) {
+            setIsLoading(false);
+          }
         }
       }
     };
     void fetchData();
+    return () => {
+      loadRequestRef.current += 1;
+    };
   }, [projectId]);
 
   const handleReprocess = async (memoryId: string) => {
