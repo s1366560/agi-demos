@@ -30,6 +30,8 @@ from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1/projects/{project_id}/schema", tags=["schema"])
 
+SCHEMA_WRITE_ROLES = ["owner", "admin", "member"]
+
 
 async def verify_project_access(
     project_id: str,
@@ -74,7 +76,7 @@ async def create_entity_type(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db, ["owner", "admin", "member"])
+    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
 
     # Check uniqueness
     existing = await db.execute(
@@ -109,7 +111,7 @@ async def update_entity_type(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db)
+    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
     entity_type = await db.get(EntityType, entity_id)
     if not entity_type or entity_type.project_id != project_id:
         raise HTTPException(status_code=404, detail=_("Entity type not found"))
@@ -131,7 +133,7 @@ async def delete_entity_type(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    await verify_project_access(project_id, current_user, db)
+    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
     entity_type = await db.get(EntityType, entity_id)
     if not entity_type or entity_type.project_id != project_id:
         raise HTTPException(status_code=404, detail=_("Entity type not found"))
@@ -162,7 +164,7 @@ async def create_edge_type(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db)
+    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
 
     existing = await db.execute(
         refresh_select_statement(select(EdgeType).where(
@@ -193,7 +195,7 @@ async def update_edge_type(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db)
+    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
     edge_type = await db.get(EdgeType, edge_id)
     if not edge_type or edge_type.project_id != project_id:
         raise HTTPException(status_code=404, detail=_("Edge type not found"))
@@ -215,7 +217,7 @@ async def delete_edge_type(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    await verify_project_access(project_id, current_user, db)
+    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
     edge_type = await db.get(EdgeType, edge_id)
     if not edge_type or edge_type.project_id != project_id:
         raise HTTPException(status_code=404, detail=_("Edge type not found"))
@@ -246,7 +248,7 @@ async def create_edge_map(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    await verify_project_access(project_id, current_user, db)
+    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
 
     # Check uniqueness
     existing = await db.execute(
@@ -282,7 +284,7 @@ async def delete_edge_map(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    await verify_project_access(project_id, current_user, db)
+    await verify_project_access(project_id, current_user, db, SCHEMA_WRITE_ROLES)
     edge_map = await db.get(EdgeTypeMap, map_id)
     if not edge_map or edge_map.project_id != project_id:
         raise HTTPException(status_code=404, detail=_("Mapping not found"))
