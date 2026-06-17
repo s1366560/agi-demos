@@ -1,0 +1,54 @@
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.domain.model.gene.enums import EvolutionEventType
+from src.domain.model.gene.instance_gene import EvolutionEvent
+from src.infrastructure.adapters.secondary.persistence.sql_evolution_event_repository import (
+    SqlEvolutionEventRepository,
+)
+
+
+def _event(
+    *,
+    event_id: str,
+    instance_id: str = "instance-1",
+    gene_id: str | None = "gene-1",
+    created_at: datetime,
+) -> EvolutionEvent:
+    return EvolutionEvent(
+        id=event_id,
+        instance_id=instance_id,
+        gene_id=gene_id,
+        event_type=EvolutionEventType.learned,
+        gene_name=event_id,
+        created_at=created_at,
+    )
+
+
+@pytest.mark.unit
+async def test_evolution_event_repository_orders_timelines_by_newest_then_id(
+    test_db: AsyncSession,
+) -> None:
+    repo = SqlEvolutionEventRepository(test_db)
+    base_time = datetime(2026, 1, 1, tzinfo=UTC)
+
+    for event in [
+        _event(event_id="tie-b", created_at=base_time + timedelta(minutes=1)),
+        _event(event_id="oldest", created_at=base_time),
+        _event(event_id="newest", created_at=base_time + timedelta(minutes=2)),
+        _event(event_id="tie-a", created_at=base_time + timedelta(minutes=1)),
+    ]:
+        await repo.save(event)
+    await test_db.flush()
+
+    by_instance = await repo.find_by_instance("instance-1", limit=4)
+    by_gene = await repo.find_by_gene("gene-1", limit=4)
+    by_filters = await repo.find_by_filters(instance_id="instance-1", limit=4)
+    second_page = await repo.find_by_filters(instance_id="instance-1", limit=2, offset=2)
+
+    assert [event.id for event in by_instance] == ["newest", "tie-a", "tie-b", "oldest"]
+    assert [event.id for event in by_gene] == ["newest", "tie-a", "tie-b", "oldest"]
+    assert [event.id for event in by_filters] == ["newest", "tie-a", "tie-b", "oldest"]
+    assert [event.id for event in second_page] == ["tie-b", "oldest"]

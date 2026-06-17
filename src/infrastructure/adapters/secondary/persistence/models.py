@@ -2894,6 +2894,12 @@ class EvolutionEventModel(Base):
     details: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    __table_args__ = (
+        Index("ix_evolution_events_instance", "instance_id"),
+        Index("ix_evolution_events_instance_created_id", "instance_id", "created_at", "id"),
+        Index("ix_evolution_events_gene_created_id", "gene_id", "created_at", "id"),
+    )
+
 
 class OrgGenePolicyModel(Base):
     """Organization-level gene policy configuration."""

@@ -39,7 +39,7 @@ class SqlEvolutionEventRepository(
             filters={"instance_id": instance_id},
             order_by="created_at",
             order_desc=True,
-        )
+        ).order_by(EvolutionEventModel.id.asc())
         query = query.offset(offset).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(query))
@@ -55,7 +55,7 @@ class SqlEvolutionEventRepository(
             filters={"gene_id": gene_id},
             order_by="created_at",
             order_desc=True,
-        )
+        ).order_by(EvolutionEventModel.id.asc())
         query = query.offset(offset).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(query))
@@ -78,7 +78,11 @@ class SqlEvolutionEventRepository(
             gene_id=gene_id,
             event_type=event_type,
         )
-        query = self._build_query(filters=filters, order_by="created_at", order_desc=True)
+        query = self._build_query(
+            filters=filters,
+            order_by="created_at",
+            order_desc=True,
+        ).order_by(EvolutionEventModel.id.asc())
         query = query.offset(offset).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(query))
