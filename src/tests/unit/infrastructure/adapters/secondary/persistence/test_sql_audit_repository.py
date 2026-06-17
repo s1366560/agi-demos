@@ -1,6 +1,7 @@
 """Tests for SQL audit repository tenant scoping."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,25 @@ from src.infrastructure.adapters.secondary.persistence.models import AuditLog
 from src.infrastructure.adapters.secondary.persistence.sql_audit_repository import (
     SqlAuditRepository,
 )
+
+
+class _ScalarRows:
+    def all(self) -> list[Any]:
+        return []
+
+
+class _FetchResult:
+    def scalars(self) -> _ScalarRows:
+        return _ScalarRows()
+
+
+class _RecordingSession:
+    def __init__(self) -> None:
+        self.statements: list[Any] = []
+
+    async def execute(self, statement: Any) -> _FetchResult:
+        self.statements.append(statement)
+        return _FetchResult()
 
 
 def _audit_log(
@@ -33,6 +53,19 @@ def _audit_log(
             "isolation_mode": "host",
         },
     )
+
+
+@pytest.mark.unit
+async def test_audit_listing_queries_declare_deterministic_order_by() -> None:
+    session = _RecordingSession()
+    repo = SqlAuditRepository(cast(AsyncSession, session))
+
+    await repo.find_by_tenant("tenant-1")
+    await repo.find_by_tenant_filtered("tenant-1", action_prefix="runtime_hook.")
+
+    order_fragment = "ORDER BY audit_logs.timestamp DESC, audit_logs.id ASC"
+    assert order_fragment in str(session.statements[0])
+    assert order_fragment in str(session.statements[1])
 
 
 @pytest.mark.unit

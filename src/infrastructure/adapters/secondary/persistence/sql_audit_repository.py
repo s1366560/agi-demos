@@ -22,6 +22,7 @@ class SqlAuditRepository(AuditRepository):
     """Standalone read-only repository -- not extending BaseRepository."""
 
     def __init__(self, db: AsyncSession) -> None:
+        super().__init__()
         self._session = db
 
     @override
@@ -35,7 +36,7 @@ class SqlAuditRepository(AuditRepository):
         stmt = (
             select(AuditLog)
             .where(self._tenant_scope(tenant_id))
-            .order_by(AuditLog.timestamp.desc())
+            .order_by(AuditLog.timestamp.desc(), AuditLog.id.asc())
             .limit(limit)
             .offset(offset)
         )
@@ -75,7 +76,11 @@ class SqlAuditRepository(AuditRepository):
             start_time=start_time,
             end_time=end_time,
         )
-        filtered = filtered.order_by(AuditLog.timestamp.desc()).limit(limit).offset(offset)
+        filtered = (
+            filtered.order_by(AuditLog.timestamp.desc(), AuditLog.id.asc())
+            .limit(limit)
+            .offset(offset)
+        )
         result = await self._session.execute(refresh_select_statement(filtered))
         return [self._to_domain(row) for row in result.scalars().all()]
 
@@ -137,15 +142,9 @@ class SqlAuditRepository(AuditRepository):
         result = await self._session.execute(refresh_select_statement(filtered))
         rows = result.scalars().all()
         action_counts = Counter(row.action for row in rows)
-        executor_counts = Counter(
-            str((row.details or {}).get("executor_kind", "unknown")) for row in rows
-        )
-        family_counts = Counter(
-            str((row.details or {}).get("hook_family", "unknown")) for row in rows
-        )
-        isolation_counts = Counter(
-            str((row.details or {}).get("isolation_mode", "unknown")) for row in rows
-        )
+        executor_counts = Counter(self._detail_value(row, "executor_kind") for row in rows)
+        family_counts = Counter(self._detail_value(row, "hook_family") for row in rows)
+        isolation_counts = Counter(self._detail_value(row, "isolation_mode") for row in rows)
         return {
             "total": len(rows),
             "action_counts": dict(action_counts),
@@ -187,6 +186,11 @@ class SqlAuditRepository(AuditRepository):
     def _tenant_scope(tenant_id: str) -> ColumnElement[bool]:
         """Include tenant-owned rows and legacy system rows without tenant scope."""
         return or_(AuditLog.tenant_id == tenant_id, AuditLog.tenant_id.is_(None))
+
+    @staticmethod
+    def _detail_value(row: AuditLog, key: str) -> str:
+        details: dict[str, Any] = row.details or {}
+        return str(details.get(key, "unknown"))
 
     @staticmethod
     def _to_domain(row: AuditLog) -> AuditEntry:
