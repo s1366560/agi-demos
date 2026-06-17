@@ -108,4 +108,48 @@ describe('useWorkspaceConversations', () => {
       expect(result.current.error).toBeNull();
     });
   });
+
+  it('clears stale conversations while loading a different workspace', async () => {
+    const nextWorkspaceRequest = deferred<{
+      items: Conversation[];
+      has_more: boolean;
+    }>();
+    listConversations
+      .mockResolvedValueOnce({
+        items: [conversation('conversation-1', 'workspace-1')],
+        has_more: false,
+      })
+      .mockReturnValueOnce(nextWorkspaceRequest.promise);
+
+    const { result, rerender } = renderHook(
+      ({ workspaceId }) => useWorkspaceConversations('project-1', workspaceId),
+      {
+        initialProps: { workspaceId: 'workspace-1' },
+      }
+    );
+
+    await waitFor(() => {
+      expect(result.current.conversations.map((item) => item.id)).toEqual(['conversation-1']);
+    });
+
+    rerender({ workspaceId: 'workspace-2' });
+
+    await waitFor(() => expect(listConversations).toHaveBeenCalledTimes(2));
+
+    expect(result.current.loading).toBe(true);
+    expect(result.current.conversations).toEqual([]);
+
+    await act(async () => {
+      nextWorkspaceRequest.resolve({
+        items: [conversation('conversation-2', 'workspace-2')],
+        has_more: false,
+      });
+      await nextWorkspaceRequest.promise;
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.conversations.map((item) => item.id)).toEqual(['conversation-2']);
+    });
+  });
 });

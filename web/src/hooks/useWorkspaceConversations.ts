@@ -36,7 +36,11 @@ export function useWorkspaceConversations(
       return;
     }
     const key = `${projectId}|${workspaceId}`;
+    const keyChanged = activeKey.current !== key;
     activeKey.current = key;
+    if (keyChanged) {
+      setConversations([]);
+    }
     setLoading(true);
     setError(null);
     try {
