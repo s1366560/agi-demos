@@ -5,7 +5,7 @@
  * executions and update the sandbox store accordingly.
  */
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback } from 'react';
 
 import { useSandboxStore, isSandboxTool } from '../stores/sandbox';
 
@@ -84,14 +84,10 @@ export function useSandboxDetection(
     setActiveTab,
   } = useSandboxStore();
 
-  // Track if we've set the sandbox ID
-  const hasSetSandboxId = useRef(false);
-
   // Set sandbox ID when provided
   useEffect(() => {
-    if (sandboxId && !hasSetSandboxId.current) {
+    if (sandboxId !== undefined) {
       setSandboxId(sandboxId);
-      hasSetSandboxId.current = true;
     }
   }, [sandboxId, setSandboxId]);
 
