@@ -18,12 +18,22 @@ class InstanceGeneRepository(ABC):
 
     @abstractmethod
     async def find_by_instance(
-        self, instance_id: str, limit: int = 50, offset: int = 0
+        self,
+        instance_id: str,
+        limit: int = 50,
+        offset: int = 0,
+        search: str | None = None,
+        tenant_id: str | None = None,
     ) -> list[InstanceGene]:
         """List active genes installed on an instance."""
 
     @abstractmethod
-    async def summarize_by_instance(self, instance_id: str) -> tuple[int, int, int]:
+    async def summarize_by_instance(
+        self,
+        instance_id: str,
+        search: str | None = None,
+        tenant_id: str | None = None,
+    ) -> tuple[int, int, int]:
         """Return active row count, installed count, and usage total for an instance."""
 
     @abstractmethod

@@ -3019,6 +3019,8 @@
         "colUsage": "使用量",
         "colVersion": "版本",
         "description": "安装和管理此实例的能力基因。",
+        "availableGenesError": "加载可用基因失败",
+        "availableSearchPlaceholder": "搜索可用基因...",
         "fetchError": "加载基因失败",
         "installError": "安装基因失败",
         "installGene": "安装基因",

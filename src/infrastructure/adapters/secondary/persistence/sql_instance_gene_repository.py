@@ -1,10 +1,11 @@
 """SQLAlchemy implementation of InstanceGeneRepository using BaseRepository."""
 
 import logging
-from typing import override
+from typing import Any, override
 
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from src.domain.model.gene.enums import EffectMetricType, InstanceGeneStatus
 from src.domain.model.gene.instance_gene import GeneEffectLog, InstanceGene
@@ -17,6 +18,7 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
     GeneEffectLogModel,
+    GeneMarketModel,
     InstanceGeneModel,
 )
 
@@ -35,21 +37,22 @@ class SqlInstanceGeneRepository(
 
     @override
     async def find_by_instance(
-        self, instance_id: str, limit: int = 50, offset: int = 0
+        self,
+        instance_id: str,
+        limit: int = 50,
+        offset: int = 0,
+        search: str | None = None,
+        tenant_id: str | None = None,
     ) -> list[InstanceGene]:
         if limit < 0:
             raise ValueError("Limit must be non-negative")
         if limit == 0:
             return []
 
-        query = (
-            select(InstanceGeneModel)
-            .where(InstanceGeneModel.instance_id == instance_id)
-            .where(InstanceGeneModel.deleted_at.is_(None))
-            .order_by(InstanceGeneModel.created_at.desc(), InstanceGeneModel.id.asc())
-            .offset(offset)
-            .limit(limit)
+        query = self._instance_query(instance_id, search=search, tenant_id=tenant_id).order_by(
+            InstanceGeneModel.created_at.desc(), InstanceGeneModel.id.asc()
         )
+        query = query.offset(offset).limit(limit)
         result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
         db_models = result.scalars().all()
         return [
@@ -60,27 +63,29 @@ class SqlInstanceGeneRepository(
         ]
 
     @override
-    async def summarize_by_instance(self, instance_id: str) -> tuple[int, int, int]:
-        query = (
-            select(
-                func.count(InstanceGeneModel.id),
-                func.coalesce(
-                    func.sum(
-                        case(
-                            (
-                                InstanceGeneModel.status == InstanceGeneStatus.installed.value,
-                                1,
-                            ),
-                            else_=0,
-                        )
-                    ),
-                    0,
+    async def summarize_by_instance(
+        self,
+        instance_id: str,
+        search: str | None = None,
+        tenant_id: str | None = None,
+    ) -> tuple[int, int, int]:
+        query = select(
+            func.count(InstanceGeneModel.id),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            InstanceGeneModel.status == InstanceGeneStatus.installed.value,
+                            1,
+                        ),
+                        else_=0,
+                    )
                 ),
-                func.coalesce(func.sum(InstanceGeneModel.usage_count), 0),
-            )
-            .where(InstanceGeneModel.instance_id == instance_id)
-            .where(InstanceGeneModel.deleted_at.is_(None))
+                0,
+            ),
+            func.coalesce(func.sum(InstanceGeneModel.usage_count), 0),
         )
+        query = self._apply_instance_filters(query, instance_id, search=search, tenant_id=tenant_id)
         result = await self._session.execute(refresh_select_statement(query))
         total, installed_total, usage_total = result.one()
         return int(total or 0), int(installed_total or 0), int(usage_total or 0)
@@ -108,6 +113,47 @@ class SqlInstanceGeneRepository(
     ) -> InstanceGene | None:
         return await self.find_one(instance_id=instance_id, gene_id=gene_id)
 
+    def _instance_query(
+        self,
+        instance_id: str,
+        *,
+        search: str | None = None,
+        tenant_id: str | None = None,
+    ) -> Select[Any]:
+        query = select(InstanceGeneModel)
+        return self._apply_instance_filters(query, instance_id, search=search, tenant_id=tenant_id)
+
+    @staticmethod
+    def _apply_instance_filters(
+        query: Select[Any],
+        instance_id: str,
+        *,
+        search: str | None,
+        tenant_id: str | None,
+    ) -> Select[Any]:
+        query = query.where(InstanceGeneModel.instance_id == instance_id).where(
+            InstanceGeneModel.deleted_at.is_(None)
+        )
+        search_term = search.strip() if search else ""
+        if not search_term:
+            return query
+
+        join_conditions = [
+            GeneMarketModel.id == InstanceGeneModel.gene_id,
+            GeneMarketModel.deleted_at.is_(None),
+        ]
+        if tenant_id is not None:
+            join_conditions.append(GeneMarketModel.tenant_id == tenant_id)
+        pattern = f"%{search_term}%"
+        return query.outerjoin(GeneMarketModel, and_(*join_conditions)).where(
+            or_(
+                InstanceGeneModel.gene_id.ilike(pattern),
+                GeneMarketModel.name.ilike(pattern),
+                GeneMarketModel.description.ilike(pattern),
+                GeneMarketModel.category.ilike(pattern),
+            )
+        )
+
     @override
     async def save_effect_log(self, log: GeneEffectLog) -> GeneEffectLog:
         db_log = GeneEffectLogModel(
@@ -134,7 +180,9 @@ class SqlInstanceGeneRepository(
             .order_by(GeneEffectLogModel.created_at.desc())
             .limit(limit)
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_logs = result.scalars().all()
         return [self._log_to_domain(log) for log in db_logs]
 

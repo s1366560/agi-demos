@@ -31,6 +31,7 @@ describe('geneMarketService', () => {
       search: 'review',
       category: 'tool',
       visibility: 'org_private',
+      exclude_installed_instance_id: 'instance-1',
     });
 
     expect(mockHttpClient.get).toHaveBeenCalledWith('/genes/', {
@@ -40,6 +41,35 @@ describe('geneMarketService', () => {
         search: 'review',
         category: 'tool',
         visibility: 'org_private',
+        exclude_installed_instance_id: 'instance-1',
+      },
+    });
+  });
+
+  it('lists instance genes with tenant, offset, and server-side search params', async () => {
+    mockHttpClient.get.mockResolvedValue({
+      active_total: 0,
+      has_more: false,
+      items: [],
+      limit: 25,
+      offset: 25,
+      total: 0,
+      usage_total: 0,
+    });
+
+    await geneMarketService.listInstanceGenes('instance-1', {
+      limit: 25,
+      offset: 25,
+      search: 'review',
+      tenant_id: 'tenant-1',
+    });
+
+    expect(mockHttpClient.get).toHaveBeenCalledWith('/genes/instances/instance-1/genes', {
+      params: {
+        tenant_id: 'tenant-1',
+        limit: 25,
+        offset: 25,
+        search: 'review',
       },
     });
   });

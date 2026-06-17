@@ -2855,6 +2855,8 @@
         "colUsage": "Usage",
         "colVersion": "Version",
         "description": "Install and manage capability genes for this instance.",
+        "availableGenesError": "Failed to load available genes",
+        "availableSearchPlaceholder": "Search available genes...",
         "fetchError": "Failed to load genes",
         "installError": "Failed to install gene",
         "installGene": "Install gene",

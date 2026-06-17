@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { Input, Tag, Table } from 'antd';
+import { Input, Pagination, Tag, Table } from 'antd';
 import {
   BarChart,
   CheckCircle,
@@ -16,6 +16,8 @@ import {
 
 import { geneMarketService } from '@/services/geneMarketService';
 import type { GeneResponse, InstanceGeneResponse } from '@/services/geneMarketService';
+
+import { useDebounce } from '@/hooks/useDebounce';
 
 import {
   useLazyMessage,
@@ -43,6 +45,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const INSTANCE_GENES_PAGE_SIZE = 25;
+const AVAILABLE_GENES_PAGE_SIZE = 20;
 
 export const InstanceGenes: React.FC = () => {
   const { t } = useTranslation();
@@ -58,50 +61,72 @@ export const InstanceGenes: React.FC = () => {
   const [instanceGenesUsageTotal, setInstanceGenesUsageTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search.trim(), 250);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [availableGenes, setAvailableGenes] = useState<GeneResponse[]>([]);
+  const [availableGenesTotal, setAvailableGenesTotal] = useState(0);
+  const [availableGenesPage, setAvailableGenesPage] = useState(1);
+  const [availableGeneSearch, setAvailableGeneSearch] = useState('');
+  const debouncedAvailableGeneSearch = useDebounce(availableGeneSearch.trim(), 250);
   const [isGenesLoading, setIsGenesLoading] = useState(false);
+  const [availableGenesError, setAvailableGenesError] = useState<string | null>(null);
   const [selectedGeneId, setSelectedGeneId] = useState<string | null>(null);
 
-  const fetchInstanceGenes = useCallback(async (page: number) => {
-    if (!tenantId || !instanceId) return;
-    setIsLoading(true);
-    try {
-      const response = await geneMarketService.listInstanceGenes(instanceId, {
-        tenant_id: tenantId,
-        limit: INSTANCE_GENES_PAGE_SIZE,
-        offset: (page - 1) * INSTANCE_GENES_PAGE_SIZE,
-      });
-      setInstanceGenes(response.items);
-      setInstanceGenesTotal(response.total);
-      setInstanceGenesActiveTotal(response.active_total);
-      setInstanceGenesUsageTotal(response.usage_total);
-      setCurrentPage(page);
-    } catch (err) {
-      console.error('Failed to fetch instance genes:', err);
-      messageApi?.error(t('tenant.instances.genes.fetchError'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [instanceId, messageApi, t, tenantId]);
+  const fetchInstanceGenes = useCallback(
+    async (page: number) => {
+      if (!tenantId || !instanceId) return;
+      setIsLoading(true);
+      try {
+        const response = await geneMarketService.listInstanceGenes(instanceId, {
+          tenant_id: tenantId,
+          limit: INSTANCE_GENES_PAGE_SIZE,
+          offset: (page - 1) * INSTANCE_GENES_PAGE_SIZE,
+          search: debouncedSearch || undefined,
+        });
+        setInstanceGenes(response.items);
+        setInstanceGenesTotal(response.total);
+        setInstanceGenesActiveTotal(response.active_total);
+        setInstanceGenesUsageTotal(response.usage_total);
+        setCurrentPage(page);
+      } catch (err) {
+        console.error('Failed to fetch instance genes:', err);
+        messageApi?.error(t('tenant.instances.genes.fetchError'));
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [debouncedSearch, instanceId, messageApi, t, tenantId]
+  );
 
-  const fetchAvailableGenes = useCallback(async () => {
-    if (!tenantId) return;
-    setIsGenesLoading(true);
-    try {
-      const response = await geneMarketService.listGenes({
-        is_published: true,
-        page_size: 100,
-        tenant_id: tenantId,
-      });
-      setAvailableGenes(response.genes);
-    } catch (err) {
-      console.error('Failed to fetch available genes:', err);
-      // Ignored
-    } finally {
-      setIsGenesLoading(false);
-    }
-  }, [tenantId]);
+  const fetchAvailableGenes = useCallback(
+    async (page: number) => {
+      if (!tenantId || !instanceId) return;
+      setIsGenesLoading(true);
+      setAvailableGenesError(null);
+      try {
+        const response = await geneMarketService.listGenes({
+          is_published: true,
+          page,
+          page_size: AVAILABLE_GENES_PAGE_SIZE,
+          tenant_id: tenantId,
+          exclude_installed_instance_id: instanceId,
+          search: debouncedAvailableGeneSearch || undefined,
+        });
+        setAvailableGenes(response.genes);
+        setAvailableGenesTotal(response.total);
+        setAvailableGenesPage(response.page);
+      } catch (err) {
+        console.error('Failed to fetch available genes:', err);
+        setAvailableGenes([]);
+        setAvailableGenesTotal(0);
+        setAvailableGenesError(t('tenant.instances.genes.availableGenesError'));
+        messageApi?.error(t('tenant.instances.genes.availableGenesError'));
+      } finally {
+        setIsGenesLoading(false);
+      }
+    },
+    [debouncedAvailableGeneSearch, instanceId, messageApi, t, tenantId]
+  );
 
   useEffect(() => {
     void fetchInstanceGenes(1);
@@ -109,30 +134,10 @@ export const InstanceGenes: React.FC = () => {
 
   useEffect(() => {
     if (isAddModalOpen) {
-      void fetchAvailableGenes();
+      setSelectedGeneId(null);
+      void fetchAvailableGenes(1);
     }
   }, [isAddModalOpen, fetchAvailableGenes]);
-
-  const filteredGenes = useMemo(() => {
-    if (!search) return instanceGenes;
-    const q = search.toLowerCase();
-    return instanceGenes.filter(
-      (g) =>
-        g.gene_id.toLowerCase().includes(q) ||
-        (g.gene_name && g.gene_name.toLowerCase().includes(q)) ||
-        (g.gene_category && g.gene_category.toLowerCase().includes(q))
-    );
-  }, [instanceGenes, search]);
-
-  const installedGeneIds = useMemo(
-    () => new Set(instanceGenes.map((g) => g.gene_id)),
-    [instanceGenes]
-  );
-
-  const genesNotInstalled = useMemo(
-    () => availableGenes.filter((g) => !installedGeneIds.has(g.id)),
-    [availableGenes, installedGeneIds]
-  );
 
   const handleInstallGene = useCallback(async () => {
     if (!tenantId || !instanceId || !selectedGeneId) return;
@@ -383,35 +388,31 @@ export const InstanceGenes: React.FC = () => {
           <div className="flex items-center justify-center py-20">
             <LazySpin size="large" />
           </div>
-        ) : filteredGenes.length === 0 ? (
+        ) : instanceGenes.length === 0 ? (
           <div className="py-20">
             <LazyEmpty description={t('tenant.instances.genes.noGenes')} />
           </div>
         ) : (
           <Table<InstanceGeneResponse>
             columns={columns}
-            dataSource={filteredGenes}
+            dataSource={instanceGenes}
             rowKey="id"
-            pagination={
-              search
-                ? false
-                : {
-                    current: currentPage,
-                    pageSize: INSTANCE_GENES_PAGE_SIZE,
-                    total: instanceGenesTotal,
-                    showSizeChanger: false,
-                    showTotal: (total, range) =>
-                      t('tenant.instances.genes.paginationTotal', {
-                        from: range[0],
-                        to: range[1],
-                        total,
-                      }),
-                    onChange: (page) => {
-                      void fetchInstanceGenes(page);
-                    },
-                    disabled: isLoading,
-                  }
-            }
+            pagination={{
+              current: currentPage,
+              pageSize: INSTANCE_GENES_PAGE_SIZE,
+              total: instanceGenesTotal,
+              showSizeChanger: false,
+              showTotal: (total, range) =>
+                t('tenant.instances.genes.paginationTotal', {
+                  from: range[0],
+                  to: range[1],
+                  total,
+                }),
+              onChange: (page) => {
+                void fetchInstanceGenes(page);
+              },
+              disabled: isLoading,
+            }}
             scroll={{ x: 'max-content' }}
             className="max-w-full"
           />
@@ -435,11 +436,37 @@ export const InstanceGenes: React.FC = () => {
           <p className="text-sm text-text-muted dark:text-text-muted">
             {t('tenant.instances.genes.selectGeneDescription')}
           </p>
+          <Search
+            placeholder={t('tenant.instances.genes.availableSearchPlaceholder')}
+            value={availableGeneSearch}
+            onChange={(event) => {
+              setAvailableGeneSearch(event.target.value);
+            }}
+            allowClear
+            enterButton={
+              <>
+                <span className="sr-only">{t('common.search', 'Search')}</span>
+                <SearchIcon size={16} aria-hidden="true" />
+              </>
+            }
+          />
           {isGenesLoading ? (
             <div className="flex justify-center py-8">
               <LazySpin />
             </div>
-          ) : genesNotInstalled.length === 0 ? (
+          ) : availableGenesError ? (
+            <div className="text-center py-8">
+              <p className="text-sm text-danger dark:text-danger-light">{availableGenesError}</p>
+              <LazyButton
+                type="link"
+                onClick={() => {
+                  void fetchAvailableGenes(availableGenesPage);
+                }}
+              >
+                {t('common.retry')}
+              </LazyButton>
+            </div>
+          ) : availableGenes.length === 0 ? (
             <div className="text-center py-8">
               <Package
                 size={16}
@@ -450,41 +477,56 @@ export const InstanceGenes: React.FC = () => {
               </p>
             </div>
           ) : (
-            <div className="max-h-80 overflow-y-auto border border-border-light dark:border-border-separator rounded-lg">
-              {genesNotInstalled.map((gene) => (
-                <LazyButton
-                  key={gene.id}
-                  type="text"
-                  block
-                  onClick={() => {
-                    setSelectedGeneId(gene.id);
+            <div className="space-y-3">
+              <div className="max-h-80 overflow-y-auto border border-border-light dark:border-border-separator rounded-lg">
+                {availableGenes.map((gene) => (
+                  <LazyButton
+                    key={gene.id}
+                    type="text"
+                    block
+                    onClick={() => {
+                      setSelectedGeneId(gene.id);
+                    }}
+                    className={`h-auto w-full text-left px-4 py-3 hover:bg-surface-alt dark:hover:bg-surface-elevated flex items-center justify-start gap-3 transition-colors border-0 border-b border-solid border-border-subtle dark:border-border-dark last:border-b-0 rounded-none ${
+                      selectedGeneId === gene.id ? 'bg-info-bg dark:bg-info-bg-dark' : ''
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-purple-bg dark:bg-purple-bg-dark flex items-center justify-center flex-shrink-0">
+                      <Puzzle size={16} className="text-purple-dark dark:text-purple-light" />
+                    </div>
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="text-sm font-medium text-text-primary dark:text-text-inverse truncate m-0">
+                        {gene.name}
+                      </p>
+                      <p className="text-xs text-text-muted dark:text-text-muted truncate m-0 mt-0.5">
+                        {gene.description || t('tenant.instances.genes.noDescription')}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+                      <Tag color="blue" className="m-0">
+                        {gene.version}
+                      </Tag>
+                      {gene.category && <Tag className="m-0">{gene.category}</Tag>}
+                    </div>
+                    {selectedGeneId === gene.id && (
+                      <CheckCircle size={16} className="text-info-dark flex-shrink-0 ml-2" />
+                    )}
+                  </LazyButton>
+                ))}
+              </div>
+              {availableGenesTotal > AVAILABLE_GENES_PAGE_SIZE ? (
+                <Pagination
+                  current={availableGenesPage}
+                  pageSize={AVAILABLE_GENES_PAGE_SIZE}
+                  total={availableGenesTotal}
+                  showSizeChanger={false}
+                  size="small"
+                  onChange={(page) => {
+                    void fetchAvailableGenes(page);
                   }}
-                  className={`h-auto w-full text-left px-4 py-3 hover:bg-surface-alt dark:hover:bg-surface-elevated flex items-center justify-start gap-3 transition-colors border-0 border-b border-solid border-border-subtle dark:border-border-dark last:border-b-0 rounded-none ${
-                    selectedGeneId === gene.id ? 'bg-info-bg dark:bg-info-bg-dark' : ''
-                  }`}
-                >
-                  <div className="w-10 h-10 rounded-lg bg-purple-bg dark:bg-purple-bg-dark flex items-center justify-center flex-shrink-0">
-                    <Puzzle size={16} className="text-purple-dark dark:text-purple-light" />
-                  </div>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="text-sm font-medium text-text-primary dark:text-text-inverse truncate m-0">
-                      {gene.name}
-                    </p>
-                    <p className="text-xs text-text-muted dark:text-text-muted truncate m-0 mt-0.5">
-                      {gene.description || t('tenant.instances.genes.noDescription')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
-                    <Tag color="blue" className="m-0">
-                      {gene.version}
-                    </Tag>
-                    {gene.category && <Tag className="m-0">{gene.category}</Tag>}
-                  </div>
-                  {selectedGeneId === gene.id && (
-                    <CheckCircle size={16} className="text-info-dark flex-shrink-0 ml-2" />
-                  )}
-                </LazyButton>
-              ))}
+                  className="text-right"
+                />
+              ) : null}
             </div>
           )}
         </div>

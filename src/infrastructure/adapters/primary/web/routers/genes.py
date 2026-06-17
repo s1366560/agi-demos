@@ -471,12 +471,22 @@ async def list_genes(
     search: str | None = Query(None, description="Search by name, slug, or description"),
     visibility: str | None = Query(None, description="Filter by visibility"),
     is_published: bool | None = Query(None, description="Filter by published status"),
+    exclude_installed_instance_id: str | None = Query(
+        None,
+        description="Exclude genes already installed on this instance",
+    ),
     tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> GeneListResponse:
     """List genes with optional filtering."""
     container = get_container_with_db(request, db)
     service = container.gene_service()
+    if exclude_installed_instance_id:
+        await _ensure_instance_tenant_access(
+            container,
+            instance_id=exclude_installed_instance_id,
+            tenant_id=tenant_id,
+        )
     offset = (page - 1) * page_size
     genes, total = await service.list_genes_with_total(
         tenant_id=tenant_id,
@@ -484,6 +494,7 @@ async def list_genes(
         search=search,
         visibility=visibility,
         is_published=is_published,
+        exclude_installed_instance_id=exclude_installed_instance_id,
         limit=page_size,
         offset=offset,
     )
@@ -801,6 +812,7 @@ async def list_instance_genes(
     instance_id: str,
     limit: int = Query(25, ge=1, le=100, description="Max installed genes to return"),
     offset: int = Query(0, ge=0, description="Installed gene offset"),
+    search: str | None = Query(None, description="Search installed genes by ID or metadata"),
     tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceGeneListResponse:
@@ -817,6 +829,8 @@ async def list_instance_genes(
         instance_id,
         limit=limit,
         offset=offset,
+        search=search,
+        tenant_id=tenant_id,
     )
     gene_metadata_by_id = await _get_gene_metadata_by_id(
         db,

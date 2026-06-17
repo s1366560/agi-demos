@@ -9,6 +9,7 @@ export interface TenantScopedOptions {
 export interface TenantScopedPaginationOptions extends TenantScopedOptions {
   limit?: number | undefined;
   offset?: number | undefined;
+  search?: string | undefined;
 }
 
 const tenantParams = (options: TenantScopedOptions = {}): { tenant_id?: string } =>
@@ -274,9 +275,10 @@ export interface GeneListParams {
   page?: number;
   page_size?: number;
   category?: string;
-  search?: string;
+  search?: string | undefined;
   visibility?: string;
   is_published?: boolean;
+  exclude_installed_instance_id?: string | undefined;
   tenant_id?: string | null | undefined;
 }
 
@@ -360,6 +362,7 @@ export const geneMarketService = {
         ...tenantParams(options),
         limit: options?.limit,
         offset: options?.offset,
+        search: options?.search,
       },
     }),
 

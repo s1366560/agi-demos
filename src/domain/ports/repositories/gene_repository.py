@@ -32,6 +32,7 @@ class GeneRepository(ABC):
         search: str | None = None,
         visibility: str | None = None,
         is_published: bool | None = None,
+        exclude_installed_instance_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Gene]:
@@ -46,6 +47,7 @@ class GeneRepository(ABC):
         search: str | None = None,
         visibility: str | None = None,
         is_published: bool | None = None,
+        exclude_installed_instance_id: str | None = None,
     ) -> int:
         """Count genes matching the same filters used for listing."""
         raise NotImplementedError

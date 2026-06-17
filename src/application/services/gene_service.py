@@ -155,6 +155,7 @@ class GeneService:
         search: str | None = None,
         visibility: str | None = None,
         is_published: bool | None = None,
+        exclude_installed_instance_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Gene]:
@@ -165,6 +166,7 @@ class GeneService:
             search=search,
             visibility=visibility,
             is_published=is_published,
+            exclude_installed_instance_id=exclude_installed_instance_id,
             limit=limit,
             offset=offset,
         )
@@ -177,6 +179,7 @@ class GeneService:
         search: str | None = None,
         visibility: str | None = None,
         is_published: bool | None = None,
+        exclude_installed_instance_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[Gene], int]:
@@ -189,6 +192,7 @@ class GeneService:
             search: Search by name, slug, description, or short description.
             visibility: Filter by visibility.
             is_published: Filter by published status.
+            exclude_installed_instance_id: Exclude genes active on this instance.
             limit: Maximum results.
             offset: Pagination offset.
 
@@ -204,6 +208,7 @@ class GeneService:
             search=search,
             visibility=visibility,
             is_published=effective_is_published,
+            exclude_installed_instance_id=exclude_installed_instance_id,
             limit=limit,
             offset=offset,
         )
@@ -213,6 +218,7 @@ class GeneService:
             search=search,
             visibility=visibility,
             is_published=effective_is_published,
+            exclude_installed_instance_id=exclude_installed_instance_id,
         )
         return genes, total
 
@@ -678,6 +684,8 @@ class GeneService:
         instance_id: str,
         limit: int = 50,
         offset: int = 0,
+        search: str | None = None,
+        tenant_id: str | None = None,
     ) -> list[InstanceGene]:
         """
         List all genes installed on an agent instance.
@@ -692,6 +700,8 @@ class GeneService:
             instance_id,
             limit=limit,
             offset=offset,
+            search=search,
+            tenant_id=tenant_id,
         )
 
     async def list_instance_genes_with_summary(
@@ -699,15 +709,21 @@ class GeneService:
         instance_id: str,
         limit: int = 50,
         offset: int = 0,
+        search: str | None = None,
+        tenant_id: str | None = None,
     ) -> tuple[list[InstanceGene], int, int, int]:
         """List active instance genes with collection totals."""
         instance_genes = await self.list_instance_genes(
             instance_id,
             limit=limit,
             offset=offset,
+            search=search,
+            tenant_id=tenant_id,
         )
         total, installed_total, usage_total = await self._instance_gene_repo.summarize_by_instance(
-            instance_id
+            instance_id,
+            search=search,
+            tenant_id=tenant_id,
         )
         return instance_genes, total, installed_total, usage_total
 

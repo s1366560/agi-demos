@@ -16,6 +16,7 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
     GeneMarketModel,
+    InstanceGeneModel,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         search: str | None = None,
         visibility: str | None = None,
         is_published: bool | None = None,
+        exclude_installed_instance_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Gene]:
@@ -71,6 +73,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         )
         stmt = self._build_active_query(filters=filters)
         stmt = self._apply_search_filter(stmt, search)
+        stmt = self._apply_exclude_installed_filter(stmt, exclude_installed_instance_id)
         stmt = stmt.offset(offset).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
@@ -87,6 +90,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         search: str | None = None,
         visibility: str | None = None,
         is_published: bool | None = None,
+        exclude_installed_instance_id: str | None = None,
     ) -> int:
         filters = self._filters(
             tenant_id=tenant_id,
@@ -101,6 +105,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         )
         stmt = self._apply_filters(stmt, **filters)
         stmt = self._apply_search_filter(stmt, search)
+        stmt = self._apply_exclude_installed_filter(stmt, exclude_installed_instance_id)
         result = await self._session.execute(refresh_select_statement(stmt))
         return result.scalar() or 0
 
@@ -163,6 +168,22 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
                 GeneMarketModel.short_description.ilike(pattern),
             )
         )
+
+    @staticmethod
+    def _apply_exclude_installed_filter(
+        stmt: Select[Any],
+        instance_id: str | None,
+    ) -> Select[Any]:
+        if not instance_id:
+            return stmt
+        installed_gene_exists = (
+            select(InstanceGeneModel.id)
+            .where(InstanceGeneModel.instance_id == instance_id)
+            .where(InstanceGeneModel.gene_id == GeneMarketModel.id)
+            .where(InstanceGeneModel.deleted_at.is_(None))
+            .exists()
+        )
+        return stmt.where(~installed_gene_exists)
 
     @override
     async def find_featured(self, limit: int = 20) -> list[Gene]:

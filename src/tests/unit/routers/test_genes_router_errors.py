@@ -80,9 +80,13 @@ class _InstanceGeneListService(_FailingGeneService):
         instance_id: str,
         limit: int,
         offset: int,
+        search: str | None = None,
+        tenant_id: str | None = None,
     ) -> tuple[list[SimpleNamespace], int, int, int]:
         assert limit == 25
         assert offset == 0
+        assert search is None
+        assert tenant_id == "tenant-1"
         return (
             [
                 SimpleNamespace(
@@ -391,6 +395,7 @@ async def test_list_instance_genes_enriches_gene_display_metadata(
         instance_id="instance-1",
         limit=25,
         offset=0,
+        search=None,
         tenant_id="tenant-1",
         db=db,
     )
@@ -417,6 +422,7 @@ async def test_list_instance_genes_hides_deleted_instance() -> None:
             instance_id="deleted-instance",
             limit=25,
             offset=0,
+            search=None,
             tenant_id="tenant-1",
             db=SimpleNamespace(),
         )

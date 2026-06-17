@@ -123,6 +123,44 @@ async def test_list_genes_with_total_filters_by_search_and_visibility(
 
 
 @pytest.mark.unit
+async def test_list_genes_with_total_excludes_installed_instance_genes_before_pagination(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    await _create_instance(
+        test_db,
+        instance_id="instance-installable",
+        tenant_id=test_project_db.tenant_id,
+        created_by=test_user.id,
+    )
+    installed_gene = await service.create_gene(
+        name="Already Installed",
+        slug=_slug("already-installed"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    available_gene = await service.create_gene(
+        name="Still Available",
+        slug=_slug("still-available"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    await service.install_gene("instance-installable", installed_gene.id)
+
+    genes, total = await service.list_genes_with_total(
+        tenant_id=test_project_db.tenant_id,
+        exclude_installed_instance_id="instance-installable",
+        limit=1,
+        offset=0,
+    )
+
+    assert total == 1
+    assert [gene.id for gene in genes] == [available_gene.id]
+
+
+@pytest.mark.unit
 async def test_list_genomes_with_total_filters_before_pagination(
     test_db: AsyncSession,
     test_project_db: Project,
@@ -275,3 +313,47 @@ async def test_list_instance_genes_with_summary_filters_deleted_before_paginatio
     assert usage_total == 12
     assert len(page) == 2
     assert all(gene.deleted_at is None for gene in page)
+
+
+@pytest.mark.unit
+async def test_list_instance_genes_with_summary_searches_metadata_before_pagination(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    await _create_instance(
+        test_db,
+        instance_id="instance-search-installed",
+        tenant_id=test_project_db.tenant_id,
+        created_by=test_user.id,
+    )
+    matching_gene = await service.create_gene(
+        name="Contract Reviewer",
+        slug=_slug("contract-reviewer"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        category="review",
+    )
+    other_gene = await service.create_gene(
+        name="Load Tester",
+        slug=_slug("load-tester"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        category="testing",
+    )
+    await service.install_gene("instance-search-installed", other_gene.id)
+    await service.install_gene("instance-search-installed", matching_gene.id)
+
+    page, total, active_total, usage_total = await service.list_instance_genes_with_summary(
+        "instance-search-installed",
+        limit=1,
+        offset=0,
+        search="contract",
+        tenant_id=test_project_db.tenant_id,
+    )
+
+    assert total == 1
+    assert active_total == 1
+    assert usage_total == 0
+    assert [gene.gene_id for gene in page] == [matching_gene.id]
