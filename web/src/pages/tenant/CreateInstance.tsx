@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { Steps, Form, Input, InputNumber, Space, Descriptions } from 'antd';
 
@@ -36,11 +36,11 @@ const slugifyInstanceName = (name: string): string =>
     .slice(0, 255) || 'instance';
 
 const stringifyJsonField = (value: unknown): unknown =>
-  value && typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value, null, 2) : value;
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? JSON.stringify(value, null, 2)
+    : value;
 
-const buildTemplateInitialValues = (
-  template: InstanceTemplateResponse
-): InstanceFormValues => {
+const buildTemplateInitialValues = (template: InstanceTemplateResponse): InstanceFormValues => {
   const values = Object.entries(template.default_config).reduce<Record<string, unknown>>(
     (acc, [key, value]) => {
       acc[key] =
@@ -68,6 +68,7 @@ const buildTemplateInitialValues = (
 export const CreateInstance: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { tenantId: urlTenantId } = useParams<{ tenantId?: string | undefined }>();
   const [searchParams] = useSearchParams();
   const [form] = Form.useForm<InstanceFormValues>();
   const messageApi = useLazyMessage();
@@ -81,8 +82,20 @@ export const CreateInstance: React.FC = () => {
   const { listClusters } = useClusterActions();
   const workspaces = useWorkspaces();
   const loadWorkspaces = useWorkspaceStore((s) => s.loadWorkspaces);
-  const tenantId = useTenantStore((s) => s.currentTenant?.id);
-  const projectId = useProjectStore((s) => s.currentProject?.id);
+  const currentTenant = useTenantStore((s) => s.currentTenant);
+  const currentProject = useProjectStore((s) => s.currentProject);
+  const tenantId = urlTenantId || currentTenant?.id;
+  const projectId =
+    currentProject && currentProject.tenant_id === tenantId ? currentProject.id : undefined;
+  const scopedWorkspaces = React.useMemo(
+    () =>
+      tenantId && projectId
+        ? workspaces.filter(
+            (workspace) => workspace.tenant_id === tenantId && workspace.project_id === projectId
+          )
+        : [],
+    [projectId, tenantId, workspaces]
+  );
   const templateId = searchParams.get('templateId');
 
   useEffect(() => {
@@ -391,7 +404,7 @@ export const CreateInstance: React.FC = () => {
                   'tenant.instances.create.placeholders.workspace',
                   'Select a workspace (optional)'
                 )}
-                options={workspaces.map((ws) => ({
+                options={scopedWorkspaces.map((ws) => ({
                   label: ws.name,
                   value: ws.id,
                 }))}
@@ -532,7 +545,15 @@ export const CreateInstance: React.FC = () => {
         ),
       },
     ],
-    [t, clusters, handleNameChange, formData, workspaces, formatReviewValue, getJsonObjectRule]
+    [
+      t,
+      clusters,
+      handleNameChange,
+      formData,
+      scopedWorkspaces,
+      formatReviewValue,
+      getJsonObjectRule,
+    ]
   );
 
   const parseJsonField = useCallback((val: unknown): Record<string, unknown> | undefined => {
@@ -568,12 +589,18 @@ export const CreateInstance: React.FC = () => {
     form
       .validateFields()
       .then((values: InstanceFormValues) => {
+        if (!tenantId) {
+          messageApi?.error(
+            t('tenant.instances.create.missingTenant', 'Tenant context is required')
+          );
+          throw new Error('missing-tenant-context');
+        }
         const finalFormData = { ...formData, ...values };
         const finalData: InstanceCreate = {
           ...finalFormData,
           name: String(finalFormData.name),
           slug: String(finalFormData.slug),
-          tenant_id: tenantId || 'default',
+          tenant_id: tenantId,
         } as InstanceCreate;
 
         if (finalData.env_vars) {
@@ -600,6 +627,9 @@ export const CreateInstance: React.FC = () => {
       })
       .catch((err: unknown) => {
         if (err && typeof err === 'object' && 'errorFields' in err) {
+          return;
+        }
+        if (err instanceof Error && err.message === 'missing-tenant-context') {
           return;
         }
         console.error('Failed to create instance:', err);
