@@ -574,6 +574,16 @@ export const workspacePlanService = {
     return response.json() as Promise<WorkspacePlanActionResult>;
   },
 
+  recoverStaleAttempts: async (
+    workspaceId: string,
+    options: { reason?: string } = {}
+  ): Promise<WorkspacePlanActionResult> => {
+    const response = await apiFetch.post(`${planBase(workspaceId)}/recover-stale-attempts`, {
+      reason: options.reason ?? null,
+    });
+    return response.json() as Promise<WorkspacePlanActionResult>;
+  },
+
   requestNodeReplan: async (
     workspaceId: string,
     nodeId: string,

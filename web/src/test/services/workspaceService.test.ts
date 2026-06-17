@@ -228,6 +228,30 @@ describe('workspaceService', () => {
     expect(result.outbox_id).toBe('outbox-1');
   });
 
+  it('requests explicit durable workspace plan stale-attempt recovery', async () => {
+    const { apiFetch } = await import('@/services/client/urlUtils');
+    vi.mocked(apiFetch.post).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers(),
+      json: async () => ({
+        ok: true,
+        message: 'Workspace plan stale attempt recovery queued.',
+        plan_id: 'plan-1',
+      }),
+    } as Response);
+
+    const result = await workspacePlanService.recoverStaleAttempts('ws-1', {
+      reason: 'operator requested recovery',
+    });
+
+    expect(apiFetch.post).toHaveBeenCalledWith('/workspaces/ws-1/plan/recover-stale-attempts', {
+      reason: 'operator requested recovery',
+    });
+    expect(result.plan_id).toBe('plan-1');
+  });
+
   it('requests durable workspace plan node replan', async () => {
     const { apiFetch } = await import('@/services/client/urlUtils');
     vi.mocked(apiFetch.post).mockResolvedValueOnce({

@@ -572,6 +572,46 @@ async def test_get_workspace_plan_snapshot_lightweight_mode_is_read_only(
 
 
 @pytest.mark.asyncio
+async def test_get_workspace_plan_snapshot_default_mode_does_not_recover_stale_attempts(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-default-read-only"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+    recover_stale_attempts = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        workspace_plans,
+        "_recover_stale_attempts_for_snapshot",
+        recover_stale_attempts,
+    )
+
+    response = await workspace_plans.get_workspace_plan_snapshot(
+        workspace_id=workspace_id,
+        request=cast(Request, SimpleNamespace()),
+        outbox_limit=5,
+        event_limit=5,
+        include_details=True,
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert response.plan is not None
+    recover_stale_attempts.assert_not_awaited()
+    assert workspace_service.calls == [(workspace_id, "plan-api-user")]
+    assert workspace_service.editor_calls == []
+
+
+@pytest.mark.asyncio
 async def test_get_workspace_plan_snapshot_exposes_and_selects_goal_plan_history(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -3047,9 +3087,60 @@ async def test_get_workspace_plan_snapshot_does_not_recover_stale_attempts_for_v
 
 
 @pytest.mark.asyncio
+async def test_recover_workspace_plan_stale_attempts_runs_explicit_recovery(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-plan-api-explicit-recovery"
+    await _seed_workspace(db_session, workspace_id)
+    plan = _make_plan(workspace_id)
+    await SqlPlanRepository(db_session).save(plan)
+    await db_session.commit()
+
+    workspace_service = _WorkspaceServiceStub()
+    monkeypatch.setattr(
+        workspace_plans,
+        "_get_workspace_service",
+        lambda _request, _db: workspace_service,
+    )
+    ensure_worker = AsyncMock(return_value=None)
+    recover_stale_attempts = AsyncMock(return_value=True)
+    publish_updated = AsyncMock(return_value=None)
+    monkeypatch.setattr(workspace_plans, "_ensure_plan_outbox_worker_running", ensure_worker)
+    monkeypatch.setattr(
+        workspace_plans,
+        "_recover_stale_attempts_for_snapshot",
+        recover_stale_attempts,
+    )
+    monkeypatch.setattr(workspace_plans, "_publish_plan_updated_event", publish_updated)
+
+    response = await workspace_plans.recover_workspace_plan_stale_attempts(
+        workspace_id=workspace_id,
+        body=workspace_plans.WorkspacePlanActionRequest(reason="operator requested recovery"),
+        request=cast(Request, SimpleNamespace()),
+        current_user=cast(User, SimpleNamespace(id="plan-api-user")),
+        db=db_session,
+    )
+
+    assert response.ok is True
+    assert response.plan_id == plan.id
+    assert response.message == "Workspace plan stale attempt recovery queued."
+    assert workspace_service.editor_calls == [(workspace_id, "plan-api-user")]
+    ensure_worker.assert_awaited_once()
+    recover_stale_attempts.assert_awaited_once()
+    publish_updated.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("handler", "extra_kwargs"),
     [
+        (
+            workspace_plans.recover_workspace_plan_stale_attempts,
+            {
+                "body": workspace_plans.WorkspacePlanActionRequest(reason="recover"),
+            },
+        ),
         (
             workspace_plans.retry_workspace_plan_outbox_item,
             {

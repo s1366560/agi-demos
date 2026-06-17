@@ -897,6 +897,7 @@ export function PlanRunSnapshotSection({
         const snapshotOptions = {
           outboxLimit: 20,
           eventLimit: 80,
+          recoverStaleAttempts: false,
           ...(selectedPlanId ? { planId: selectedPlanId } : {}),
         };
         const nextSnapshot = await workspacePlanService.getSnapshot(workspaceId, snapshotOptions);

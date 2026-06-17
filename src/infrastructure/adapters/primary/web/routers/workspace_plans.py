@@ -623,7 +623,8 @@ async def _ensure_workspace_editor_access(
         workspace_id=workspace_id,
         user_id=current_user.id,
         minimum=WorkspaceRole.EDITOR,
-        error_message=error_message or "Only workspace owners and editors can modify workspace plans",
+        error_message=error_message
+        or "Only workspace owners and editors can modify workspace plans",
     )
 
 
@@ -3013,7 +3014,9 @@ def _to_root_goal_response(
         if isinstance(evidence, dict) and isinstance(evidence.get("verification_grade"), str)
         else None
     )
-    response_status = "done" if plan is not None and plan.status is PlanStatus.COMPLETED else row.status
+    response_status = (
+        "done" if plan is not None and plan.status is PlanStatus.COMPLETED else row.status
+    )
     return WorkspacePlanRootGoalResponse(
         id=row.id,
         title=row.title,
@@ -3956,7 +3959,9 @@ async def _has_pending_node_recovery_job(
             .where(WorkspacePlanOutboxModel.workspace_id == workspace_id)
             .where(WorkspacePlanOutboxModel.plan_id == plan_id)
             .where(
-                WorkspacePlanOutboxModel.event_type.in_([HANDOFF_RESUME_EVENT, SUPERVISOR_TICK_EVENT])
+                WorkspacePlanOutboxModel.event_type.in_(
+                    [HANDOFF_RESUME_EVENT, SUPERVISOR_TICK_EVENT]
+                )
             )
             .where(WorkspacePlanOutboxModel.status == "completed")
             .where(WorkspacePlanOutboxModel.created_at >= recent_cutoff)
@@ -4792,7 +4797,7 @@ async def get_workspace_plan_snapshot(
     outbox_limit: int = Query(20, ge=0, le=100),
     event_limit: int = Query(50, ge=0, le=200),
     include_details: bool = Query(True),
-    recover_stale_attempts: bool = Query(True),
+    recover_stale_attempts: bool = Query(False),
     plan_id: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -4823,7 +4828,7 @@ async def get_workspace_plan_snapshot(
         can_recover_stale_attempts = (
             selected_is_latest
             and include_details
-            and recover_stale_attempts
+            and recover_stale_attempts is True
             and await _workspace_user_can_edit(
                 workspace_id=workspace_id,
                 request=request,
@@ -4929,6 +4934,51 @@ async def get_workspace_plan_snapshot(
                 blackboard_entries=blackboard_entries,
                 delivery=delivery,
             ),
+        )
+    except Exception as exc:
+        raise _map_error(exc) from exc
+
+
+@router.post("/recover-stale-attempts", response_model=WorkspacePlanActionResultResponse)
+async def recover_workspace_plan_stale_attempts(
+    workspace_id: str,
+    body: WorkspacePlanActionRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkspacePlanActionResultResponse:
+    """Explicitly run the stale-attempt recovery path for the latest workspace plan."""
+    try:
+        await _ensure_workspace_editor_access(
+            workspace_id=workspace_id,
+            request=request,
+            db=db,
+            current_user=current_user,
+        )
+        await _ensure_plan_outbox_worker_running(request)
+        plan = await _load_plan_for_workspace(db, workspace_id)
+        recovered = await _recover_stale_attempts_for_snapshot(
+            session=db,
+            workspace_id=workspace_id,
+            plan=plan,
+            actor_id=current_user.id,
+        )
+        if recovered:
+            await _publish_plan_updated_event(
+                request=request,
+                workspace_id=workspace_id,
+                plan_id=plan.id,
+                action="operator_stale_attempt_recovery_requested",
+                reason=body.reason,
+            )
+        return WorkspacePlanActionResultResponse(
+            ok=True,
+            message=(
+                "Workspace plan stale attempt recovery queued."
+                if recovered
+                else "No stale workspace plan attempts needed recovery."
+            ),
+            plan_id=plan.id,
         )
     except Exception as exc:
         raise _map_error(exc) from exc
