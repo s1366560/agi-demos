@@ -49,8 +49,8 @@ def create_media_import_service(
         logger.info("Successfully created MediaImportService")
         return media_import_service
 
-    except Exception as e:
-        logger.error(f"Failed to create MediaImportService: {e}", exc_info=True)
+    except Exception:
+        logger.error("Failed to create MediaImportService")
         return None
 
 
@@ -77,8 +77,8 @@ async def create_media_import_service_from_config(
         )
 
         logger.info(
-            f"[MediaImportFactory] Creating MediaImportService - "
-            f"channel_config_id={channel_config_id}"
+            "[MediaImportFactory] Creating MediaImportService - channel_config_id=%s",
+            channel_config_id,
         )
 
         # Build query
@@ -103,8 +103,10 @@ async def create_media_import_service_from_config(
             return None
 
         logger.info(
-            f"[MediaImportFactory] Found config: id={config.id}, "
-            f"app_id={config.app_id}, project_id={config.project_id}"
+            "[MediaImportFactory] Found config: id=%s, app_id=%s, project_id=%s",
+            config.id,
+            config.app_id,
+            config.project_id,
         )
 
         # Extract config
@@ -118,8 +120,8 @@ async def create_media_import_service_from_config(
 
                 encryption_service = get_encryption_service()
                 app_secret = encryption_service.decrypt(app_secret)
-            except Exception as e:
-                logger.warning(f"[MediaImportFactory] Failed to decrypt app_secret: {e}")
+            except Exception:
+                logger.warning("[MediaImportFactory] Failed to decrypt app_secret")
 
         # Use domain field if available, otherwise check extra_settings
         domain = "feishu"
@@ -130,8 +132,10 @@ async def create_media_import_service_from_config(
 
         if not app_id or not app_secret:
             logger.warning(
-                f"[MediaImportFactory] Channel config {config.id} missing credentials - "
-                f"app_id={bool(app_id)}, app_secret={bool(app_secret)}"
+                "[MediaImportFactory] Channel config %s missing credentials - app_id=%s, app_secret=%s",
+                config.id,
+                bool(app_id),
+                bool(app_secret),
             )
             return None
 
@@ -144,9 +148,6 @@ async def create_media_import_service_from_config(
             domain=domain,
         )
 
-    except Exception as e:
-        logger.error(
-            f"[MediaImportFactory] Failed to create MediaImportService from config: {e}",
-            exc_info=True,
-        )
+    except Exception:
+        logger.error("[MediaImportFactory] Failed to create MediaImportService from config")
         return None
