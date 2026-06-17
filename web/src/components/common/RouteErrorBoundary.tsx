@@ -117,7 +117,7 @@ function RouteErrorFallback({
  * ```tsx
  * import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary'
  *
- * export const ProjectLayout: React.FC = () => {
+ * export const TenantProjectRoute: React.FC = () => {
  *   const { projectId } = useParams()
  *   return (
  *     <RouteErrorBoundary context="Project" fallbackPath={`/tenant/${tenantId}/project/${projectId}`}>

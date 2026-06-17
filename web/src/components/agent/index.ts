@@ -15,7 +15,7 @@ export { SandboxSection } from './SandboxSection';
 // ProjectReActAgent Lifecycle Status Bar
 export { ProjectAgentStatusBar } from './ProjectAgentStatusBar';
 
-// Content-only component for use in ProjectLayout
+// Content-only component for tenant/project agent workspace routes
 export { AgentChatContent } from './AgentChatContent';
 
 // Resizer component for draggable panels
