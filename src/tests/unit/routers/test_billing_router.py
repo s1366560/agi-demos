@@ -4,11 +4,13 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 
 from src.infrastructure.adapters.secondary.persistence.models import (
     Invoice,
     Memory,
     Project,
+    Tenant,
     UserTenant,
 )
 
@@ -360,18 +362,21 @@ class TestUpgradePlan:
     """Tests for POST /tenants/{tenant_id}/upgrade"""
 
     @pytest.mark.asyncio
-    async def test_upgrade_to_pro_success(
-        self, test_db, client, test_tenant_in_db, test_user, test_tenant
-    ):
+    async def test_upgrade_to_pro_success(self, test_db, client, test_tenant_in_db, test_user):
         """Test successful upgrade to Pro plan."""
         user_tenant = UserTenant(
-            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=test_tenant["id"], role="owner"
+            id=str(uuid.uuid4()),
+            user_id=test_user.id,
+            tenant_id=test_tenant_in_db["id"],
+            role="owner",
         )
         test_db.add(user_tenant)
         await test_db.commit()
 
         plan_data = {"plan": "pro"}
-        response = client.post(f"{TENANTS_API_URL}/{test_tenant['id']}/upgrade", json=plan_data)
+        response = client.post(
+            f"{TENANTS_API_URL}/{test_tenant_in_db['id']}/upgrade", json=plan_data
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -380,18 +385,21 @@ class TestUpgradePlan:
         assert data["tenant"]["storage_limit"] == 100 * 1024 * 1024 * 1024  # 100GB
 
     @pytest.mark.asyncio
-    async def test_upgrade_to_free_success(
-        self, test_db, client, test_tenant_in_db, test_user, test_tenant
-    ):
+    async def test_upgrade_to_free_success(self, test_db, client, test_tenant_in_db, test_user):
         """Test downgrading to Free plan."""
         user_tenant = UserTenant(
-            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=test_tenant["id"], role="owner"
+            id=str(uuid.uuid4()),
+            user_id=test_user.id,
+            tenant_id=test_tenant_in_db["id"],
+            role="owner",
         )
         test_db.add(user_tenant)
         await test_db.commit()
 
         plan_data = {"plan": "free"}
-        response = client.post(f"{TENANTS_API_URL}/{test_tenant['id']}/upgrade", json=plan_data)
+        response = client.post(
+            f"{TENANTS_API_URL}/{test_tenant_in_db['id']}/upgrade", json=plan_data
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -400,17 +408,22 @@ class TestUpgradePlan:
 
     @pytest.mark.asyncio
     async def test_upgrade_to_enterprise_success(
-        self, test_db, client, test_tenant_in_db, test_user, test_tenant
+        self, test_db, client, test_tenant_in_db, test_user
     ):
         """Test successful upgrade to Enterprise plan."""
         user_tenant = UserTenant(
-            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=test_tenant["id"], role="owner"
+            id=str(uuid.uuid4()),
+            user_id=test_user.id,
+            tenant_id=test_tenant_in_db["id"],
+            role="owner",
         )
         test_db.add(user_tenant)
         await test_db.commit()
 
         plan_data = {"plan": "enterprise"}
-        response = client.post(f"{TENANTS_API_URL}/{test_tenant['id']}/upgrade", json=plan_data)
+        response = client.post(
+            f"{TENANTS_API_URL}/{test_tenant_in_db['id']}/upgrade", json=plan_data
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -465,6 +478,50 @@ class TestUpgradePlan:
 
         assert response.status_code == 404
         assert "Tenant not found" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_upgrade_missing_tenant_does_not_auto_create_when_other_tenants_exist(
+        self, test_db, client, test_tenant_in_db, test_user
+    ):
+        """Test upgrade refuses stale membership rows for tenants that do not exist."""
+        missing_tenant_id = "missing_tenant_with_membership"
+        user_tenant = UserTenant(
+            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=missing_tenant_id, role="owner"
+        )
+        test_db.add(user_tenant)
+        await test_db.commit()
+
+        response = client.post(
+            f"{TENANTS_API_URL}/{missing_tenant_id}/upgrade", json={"plan": "pro"}
+        )
+
+        assert response.status_code == 404
+        assert "Tenant not found" in response.json()["detail"]
+
+        tenant_result = await test_db.execute(select(Tenant).where(Tenant.id == missing_tenant_id))
+        assert tenant_result.scalar_one_or_none() is None
+        assert test_tenant_in_db["id"] != missing_tenant_id
+
+    @pytest.mark.asyncio
+    async def test_upgrade_rejects_unknown_plan(
+        self, test_db, client, test_tenant_in_db, test_user
+    ):
+        """Test upgrade rejects arbitrary plan names."""
+        user_tenant = UserTenant(
+            id=str(uuid.uuid4()),
+            user_id=test_user.id,
+            tenant_id=test_tenant_in_db["id"],
+            role="owner",
+        )
+        test_db.add(user_tenant)
+        await test_db.commit()
+
+        response = client.post(
+            f"{TENANTS_API_URL}/{test_tenant_in_db['id']}/upgrade", json={"plan": "gold"}
+        )
+
+        assert response.status_code == 400
+        assert "Invalid billing plan" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_upgrade_no_access(self, test_db, client, test_tenant):

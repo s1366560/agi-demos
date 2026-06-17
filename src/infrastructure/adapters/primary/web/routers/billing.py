@@ -16,10 +16,41 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Tenant,
     User,
     UserProject,
+    UserTenant,
 )
 from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1/tenants", tags=["billing"])
+
+BILLING_ADMIN_ROLES = frozenset({"admin", "owner"})
+BILLING_OWNER_ROLES = frozenset({"owner"})
+PLAN_STORAGE_LIMITS = {
+    "free": 10 * 1024 * 1024 * 1024,
+    "pro": 100 * 1024 * 1024 * 1024,
+    "enterprise": 1024 * 1024 * 1024 * 1024,
+}
+
+
+async def _require_billing_role(
+    db: AsyncSession,
+    current_user: User,
+    tenant_id: str,
+    *,
+    allowed_roles: frozenset[str],
+    denial_detail: str,
+) -> None:
+    user_tenant_result = await db.execute(
+        refresh_select_statement(
+            select(UserTenant).where(
+                UserTenant.user_id == current_user.id,
+                UserTenant.tenant_id == tenant_id,
+            )
+        )
+    )
+    user_tenant = user_tenant_result.scalar_one_or_none()
+
+    if not user_tenant or user_tenant.role not in allowed_roles:
+        raise HTTPException(status_code=403, detail=_(denial_detail))
 
 
 @router.get("/{tenant_id}/billing")
@@ -30,20 +61,13 @@ async def get_billing_info(
 ) -> dict[str, Any]:
     """Get billing information for a tenant."""
 
-    # Verify user has access to tenant (permission-first)
-    from src.infrastructure.adapters.secondary.persistence.models import UserTenant
-
-    user_tenant_result = await db.execute(
-        refresh_select_statement(
-            select(UserTenant).where(
-                UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id
-            )
-        )
+    await _require_billing_role(
+        db,
+        current_user,
+        tenant_id,
+        allowed_roles=BILLING_ADMIN_ROLES,
+        denial_detail="Access denied",
     )
-    user_tenant = user_tenant_result.scalar_one_or_none()
-
-    if not user_tenant or user_tenant.role not in ["admin", "owner"]:
-        raise HTTPException(status_code=403, detail=_("Access denied"))
 
     # Optional tenant info; fall back to defaults if not present
     tenant_result = await db.execute(
@@ -133,20 +157,13 @@ async def list_invoices(
 ) -> dict[str, Any]:
     """List all invoices for a tenant."""
 
-    # Verify user has access to tenant (permission-first)
-    from src.infrastructure.adapters.secondary.persistence.models import UserTenant
-
-    user_tenant_result = await db.execute(
-        refresh_select_statement(
-            select(UserTenant).where(
-                UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id
-            )
-        )
+    await _require_billing_role(
+        db,
+        current_user,
+        tenant_id,
+        allowed_roles=BILLING_ADMIN_ROLES,
+        denial_detail="Access denied",
     )
-    user_tenant = user_tenant_result.scalar_one_or_none()
-
-    if not user_tenant or user_tenant.role not in ["admin", "owner"]:
-        raise HTTPException(status_code=403, detail=_("Access denied"))
 
     # Optional existence; invoices can be listed by tenant_id regardless
     # Get invoices
@@ -186,53 +203,27 @@ async def upgrade_plan(
 ) -> dict[str, Any]:
     """Upgrade tenant plan."""
 
-    # Verify user is owner (permission-first)
-    from src.infrastructure.adapters.secondary.persistence.models import UserTenant
-
-    user_tenant_result = await db.execute(
-        refresh_select_statement(
-            select(UserTenant).where(
-                UserTenant.user_id == current_user.id, UserTenant.tenant_id == tenant_id
-            )
-        )
+    await _require_billing_role(
+        db,
+        current_user,
+        tenant_id,
+        allowed_roles=BILLING_OWNER_ROLES,
+        denial_detail="Only owner can upgrade plan",
     )
-    user_tenant = user_tenant_result.scalar_one_or_none()
 
-    if not user_tenant or user_tenant.role != "owner":
-        raise HTTPException(status_code=403, detail=_("Only owner can upgrade plan"))
-
-    # Existence after permission; allow auto-create only if system has tenants
     tenant_result = await db.execute(
         refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
     )
     tenant = tenant_result.scalar_one_or_none()
     if not tenant:
-        # Check whether any tenant exists; if none, treat as not found
-        any_tenant = await db.execute(refresh_select_statement(select(func.count(Tenant.id))))
-        if (any_tenant.scalar() or 0) == 0:
-            raise HTTPException(status_code=404, detail=_("Tenant not found"))
-        # Auto-create minimal tenant record
-        tenant = Tenant(
-            id=tenant_id,
-            name=f"Tenant {tenant_id}",
-            slug=str(tenant_id).lower().replace(" ", "-"),
-            description=None,
-            owner_id=current_user.id,
-        )
-        db.add(tenant)
-        await db.flush()
+        raise HTTPException(status_code=404, detail=_("Tenant not found"))
 
-    # Update plan (in a real implementation, this would integrate with payment processor)
-    new_plan = plan_data.get("plan", "pro")
+    new_plan = plan_data.get("plan") or "pro"
+    if not isinstance(new_plan, str) or new_plan not in PLAN_STORAGE_LIMITS:
+        raise HTTPException(status_code=400, detail=_("Invalid billing plan"))
+
     tenant.plan = new_plan
-
-    # Set limits based on plan
-    if new_plan == "free":
-        tenant.max_storage = 10 * 1024 * 1024 * 1024  # 10GB
-    elif new_plan == "pro":
-        tenant.max_storage = 100 * 1024 * 1024 * 1024  # 100GB
-    elif new_plan == "enterprise":
-        tenant.max_storage = 1024 * 1024 * 1024 * 1024  # 1TB
+    tenant.max_storage = PLAN_STORAGE_LIMITS[new_plan]
 
     await db.commit()
     await db.refresh(tenant)
