@@ -33,7 +33,7 @@ vi.mock('../../../services/graphService', () => ({
 }));
 
 vi.mock('react-router-dom', () => ({
-  useParams: vi.fn(() => ({ projectId: 'test-project-1' })),
+  useParams: vi.fn(() => ({ tenantId: 'tenant-route-1', projectId: 'test-project-1' })),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -139,6 +139,23 @@ describe('EntitiesList Compound Component', () => {
       );
 
       await waitForEntityGrid();
+    });
+
+    it('should pass route tenant context to entity graph requests', async () => {
+      render(
+        <EntitiesList>
+          <EntitiesList.List />
+        </EntitiesList>
+      );
+
+      await waitFor(() => {
+        expect(graphService.listEntities).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tenant_id: 'tenant-route-1',
+            project_id: 'test-project-1',
+          })
+        );
+      });
     });
   });
 

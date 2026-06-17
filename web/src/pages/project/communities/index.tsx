@@ -226,13 +226,15 @@ function formatPercent(value: number): string {
 interface CommunitiesListProviderProps {
   children: React.ReactNode;
   projectId?: string | undefined;
+  tenantId?: string | undefined;
   limit?: number | undefined;
 }
 
 const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
-  ({ children, projectId: propProjectId, limit: propLimit = 20 }) => {
+  ({ children, projectId: propProjectId, tenantId: propTenantId, limit: propLimit = 20 }) => {
     const { t } = useTranslation();
-    const { projectId: urlProjectId } = useParams();
+    const { tenantId: urlTenantId, projectId: urlProjectId } = useParams();
+    const tenantId = propTenantId || urlTenantId;
     const projectId = propProjectId || urlProjectId;
 
     // State
@@ -260,7 +262,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
         });
 
         const result = await graphService.listCommunities({
-          tenant_id: undefined,
+          tenant_id: tenantId,
           project_id: projectId,
           min_members: 1,
           limit: propLimit,
@@ -283,7 +285,7 @@ const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
       } finally {
         setLoading(false);
       }
-    }, [projectId, page, propLimit, t]);
+    }, [tenantId, projectId, page, propLimit, t]);
 
     // Load members
     const loadMembers = useCallback(async (communityUuid: string) => {
@@ -1043,13 +1045,14 @@ Info.displayName = 'CommunitiesList.Info';
 
 interface RootProps {
   projectId?: string | undefined;
+  tenantId?: string | undefined;
   limit?: number | undefined;
   children?: React.ReactNode | undefined;
 }
 
-const Root: React.FC<RootProps> = memo(({ children, projectId, limit }) => {
+const Root: React.FC<RootProps> = memo(({ children, projectId, tenantId, limit }) => {
   return (
-    <CommunitiesListProvider projectId={projectId} limit={limit}>
+    <CommunitiesListProvider projectId={projectId} tenantId={tenantId} limit={limit}>
       {children ?? (
         <>
           <Header />

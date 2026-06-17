@@ -25,7 +25,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
+from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
 from src.infrastructure.graph.neo4j_client import Neo4jClient
 from src.infrastructure.i18n import gettext as _
 
@@ -39,8 +39,19 @@ async def _graph_project_scope(
     project_id: str | None,
     current_user: User,
     db: AsyncSession,
+    tenant_id: str | None = None,
 ) -> tuple[bool, list[str]]:
     """Return whether the caller is global admin plus the allowed project IDs."""
+    if project_id and tenant_id:
+        project_result = await db.execute(
+            refresh_select_statement(select(Project.tenant_id).where(Project.id == project_id))
+        )
+        project_tenant_id = project_result.scalar_one_or_none()
+        if project_tenant_id is None:
+            raise HTTPException(status_code=404, detail=_("Project not found"))
+        if str(project_tenant_id) != tenant_id:
+            raise HTTPException(status_code=400, detail=_("Project does not belong to tenant"))
+
     if getattr(current_user, "is_superuser", False):
         return True, [project_id] if project_id else []
 
@@ -57,6 +68,10 @@ async def _graph_project_scope(
         return False, [project_id]
 
     statement = select(UserProject.project_id).where(UserProject.user_id == current_user.id)
+    if tenant_id:
+        statement = statement.join(Project, Project.id == UserProject.project_id).where(
+            Project.tenant_id == tenant_id
+        )
     result = await db.execute(refresh_select_statement(statement))
     return False, list(result.scalars().all())
 
@@ -176,6 +191,7 @@ class SubgraphRequest(BaseModel):
 
 @router.get("/communities/")
 async def list_communities(
+    tenant_id: str | None = None,
     project_id: str | None = None,
     min_members: int | None = Query(None, description="Minimum member count"),
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
@@ -193,7 +209,9 @@ async def list_communities(
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-        is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+        is_superuser, allowed_project_ids = await _graph_project_scope(
+            project_id, current_user, db, tenant_id=tenant_id
+        )
         if not is_superuser and not allowed_project_ids:
             return {"communities": [], "total": 0, "limit": limit, "offset": offset}
 
@@ -204,6 +222,9 @@ async def list_communities(
         if project_id:
             conditions.append("c.project_id = $project_id")
             params["project_id"] = project_id
+        elif tenant_id and is_superuser:
+            conditions.append("c.tenant_id = $tenant_id")
+            params["tenant_id"] = tenant_id
         elif not is_superuser:
             conditions.append("c.project_id IN $project_ids")
             params["project_ids"] = allowed_project_ids
@@ -265,6 +286,7 @@ async def list_communities(
 
 @router.get("/entities/")
 async def list_entities(
+    tenant_id: str | None = None,
     project_id: str | None = None,
     entity_type: str | None = Query(None, description="Filter by entity type"),
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
@@ -277,7 +299,9 @@ async def list_entities(
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-        is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+        is_superuser, allowed_project_ids = await _graph_project_scope(
+            project_id, current_user, db, tenant_id=tenant_id
+        )
         if not is_superuser and not allowed_project_ids:
             return {"entities": [], "total": 0, "limit": limit, "offset": offset}
 
@@ -296,6 +320,9 @@ async def list_entities(
             """
             conditions.append(project_condition)
             params["project_id"] = project_id
+        elif tenant_id and is_superuser:
+            conditions.append("e.tenant_id = $tenant_id")
+            params["tenant_id"] = tenant_id
         elif not is_superuser:
             project_condition = """
             (

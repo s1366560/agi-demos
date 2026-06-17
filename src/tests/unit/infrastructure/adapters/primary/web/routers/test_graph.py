@@ -6,6 +6,7 @@ from src.infrastructure.adapters.primary.web.routers.graph import (
     get_entity_types,
     get_graph,
     get_subgraph,
+    list_communities,
     list_entities,
 )
 
@@ -154,6 +155,36 @@ async def test_list_entities_filters_by_entity_type_property_for_historical_node
     assert response["entities"][0]["entity_type"] == "Person"
     assert "e.entity_type = $entity_type" in client.calls[0]["query"]
     assert client.calls[0]["params"]["entity_type"] == "Person"
+
+
+async def test_list_entities_filters_by_tenant_for_superuser_scope() -> None:
+    client = SequentialNeo4jClient([[{"total": 0}], []])
+
+    response = await list_entities(
+        tenant_id="tenant-1",
+        project_id=None,
+        current_user=SimpleNamespace(is_superuser=True),
+        neo4j_client=client,
+    )
+
+    assert response["total"] == 0
+    assert "e.tenant_id = $tenant_id" in client.calls[0]["query"]
+    assert client.calls[0]["params"]["tenant_id"] == "tenant-1"
+
+
+async def test_list_communities_filters_by_tenant_for_superuser_scope() -> None:
+    client = SequentialNeo4jClient([[{"total": 0}], []])
+
+    response = await list_communities(
+        tenant_id="tenant-1",
+        project_id=None,
+        current_user=SimpleNamespace(is_superuser=True),
+        neo4j_client=client,
+    )
+
+    assert response["total"] == 0
+    assert "c.tenant_id = $tenant_id" in client.calls[0]["query"]
+    assert client.calls[0]["params"]["tenant_id"] == "tenant-1"
 
 
 async def test_get_entity_types_counts_entity_type_property_for_historical_nodes() -> None:

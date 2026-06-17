@@ -52,6 +52,8 @@ export type SortOption = 'name' | 'created_at';
 export interface EntitiesListRootProps {
   /** Project ID from route */
   projectId?: string | undefined;
+  /** Tenant ID from route */
+  tenantId?: string | undefined;
   /** Children for compound component pattern */
   children?: React.ReactNode | undefined;
   /** Default sort option */

@@ -75,6 +75,46 @@ class TestGraphRouter:
         neo4j_client.execute_query.assert_not_called()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("endpoint_name", ["list_entities", "list_communities"])
+    async def test_graph_lists_reject_project_tenant_mismatch(
+        self,
+        endpoint_name: str,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock()
+
+        with pytest.raises(HTTPException) as exc_info:
+            if endpoint_name == "list_entities":
+                await list_entities(
+                    tenant_id="other-tenant",
+                    project_id=test_project_db.id,
+                    entity_type=None,
+                    limit=50,
+                    offset=0,
+                    current_user=test_user,
+                    db=test_db,
+                    neo4j_client=neo4j_client,
+                )
+            else:
+                await list_communities(
+                    tenant_id="other-tenant",
+                    project_id=test_project_db.id,
+                    min_members=None,
+                    limit=50,
+                    offset=0,
+                    current_user=test_user,
+                    db=test_db,
+                    neo4j_client=neo4j_client,
+                )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert exc_info.value.detail == "Project does not belong to tenant"
+        neo4j_client.execute_query.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_list_entities_uses_parameterized_entity_type_filter(
         self,
         test_db: AsyncSession,

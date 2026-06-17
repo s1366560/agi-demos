@@ -211,9 +211,16 @@ markSubComponent(DetailMarker, DETAIL_SYMBOL, 'EntitiesListDetail');
 // ========================================
 
 const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
-  ({ projectId: propProjectId, children, defaultSortBy = 'created_at', limit = 20 }) => {
+  ({
+    projectId: propProjectId,
+    tenantId: propTenantId,
+    children,
+    defaultSortBy = 'created_at',
+    limit = 20,
+  }) => {
     const { t } = useTranslation();
-    const { projectId: routeProjectId } = useParams();
+    const { tenantId: routeTenantId, projectId: routeProjectId } = useParams();
+    const tenantId = propTenantId || routeTenantId;
     const projectId = propProjectId || routeProjectId;
 
     // Parse children to detect sub-components
@@ -283,7 +290,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
       setError(null);
       try {
         const result = await graphService.listEntities({
-          tenant_id: undefined,
+          tenant_id: tenantId,
           project_id: projectId,
           entity_type: entityTypeFilter || undefined,
           limit,
@@ -297,7 +304,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
       } finally {
         setLoading(false);
       }
-    }, [projectId, entityTypeFilter, page, limit, t]);
+    }, [tenantId, projectId, entityTypeFilter, page, limit, t]);
 
     // Load relationships
     const loadRelationships = async (entityUuid: string) => {

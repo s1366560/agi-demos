@@ -33,7 +33,7 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
-    useParams: vi.fn(() => ({ projectId: 'p1' })),
+    useParams: vi.fn(() => ({ tenantId: 'tenant-route-1', projectId: 'p1' })),
   };
 });
 
@@ -106,6 +106,19 @@ describe('CommunitiesList Compound Component', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('virtual-grid')).toBeInTheDocument();
+      });
+    });
+
+    it('should pass route tenant context to community graph requests', async () => {
+      render(<CommunitiesList />);
+
+      await waitFor(() => {
+        expect(graphService.listCommunities).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tenant_id: 'tenant-route-1',
+            project_id: 'p1',
+          })
+        );
       });
     });
 
