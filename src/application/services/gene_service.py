@@ -76,11 +76,13 @@ class GeneService:
         category: str | None = None,
         tags: list[str] | None = None,
         source: str = "official",
+        source_ref: str | None = None,
         icon: str | None = None,
         version: str = "1.0.0",
         manifest: dict[str, Any] | None = None,
         dependencies: list[str] | None = None,
         synergies: list[str] | None = None,
+        parent_gene_id: str | None = None,
         visibility: str = "public",
     ) -> Gene:
         """
@@ -120,11 +122,13 @@ class GeneService:
             category=category,
             tags=tags or [],
             source=GeneSource(source),
+            source_ref=source_ref,
             icon=icon,
             version=version,
             manifest=manifest or {},
             dependencies=dependencies or [],
             synergies=synergies or [],
+            parent_gene_id=parent_gene_id,
             visibility=ContentVisibility(visibility),
         )
 
@@ -236,6 +240,7 @@ class GeneService:
 
         allowed = {
             "name",
+            "slug",
             "description",
             "short_description",
             "category",
@@ -245,12 +250,20 @@ class GeneService:
             "manifest",
             "dependencies",
             "synergies",
+            "source_ref",
+            "parent_gene_id",
             "visibility",
             "source",
         }
         for key, value in fields.items():
             if key not in allowed:
                 continue
+            if key == "slug":
+                if not isinstance(value, str) or not value:
+                    raise ValueError("Gene slug cannot be empty")
+                existing_gene = await self._gene_repo.find_by_slug(value)
+                if existing_gene is not None and existing_gene.id != gene_id:
+                    raise ValueError("Gene slug already exists")
             if key == "visibility":
                 value = ContentVisibility(value)
             if key == "source":
@@ -472,6 +485,7 @@ class GeneService:
 
         allowed = {
             "name",
+            "slug",
             "description",
             "short_description",
             "icon",
@@ -482,6 +496,12 @@ class GeneService:
         for key, value in fields.items():
             if key not in allowed:
                 continue
+            if key == "slug":
+                if not isinstance(value, str) or not value:
+                    raise ValueError("Genome slug cannot be empty")
+                existing_genome = await self._genome_repo.find_by_slug(value)
+                if existing_genome is not None and existing_genome.id != genome_id:
+                    raise ValueError("Genome slug already exists")
             if key == "visibility":
                 value = ContentVisibility(value)
             setattr(genome, key, value)

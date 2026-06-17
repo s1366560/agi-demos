@@ -87,13 +87,20 @@ class TestMarketplaceAuditFields:
     ) -> None:
         response = await create_gene(
             _request(),
-            GeneCreate(name="Audit Gene", slug=_slug("gene")),
+            GeneCreate(
+                name="Audit Gene",
+                slug=_slug("gene"),
+                source_ref="github:org/repo/gene",
+                parent_gene_id="parent-gene-1",
+            ),
             tenant_id=test_project_db.tenant_id,
             current_user=test_user,
             db=test_db,
         )
 
         assert response.created_by == test_user.id
+        assert response.source_ref == "github:org/repo/gene"
+        assert response.parent_gene_id == "parent-gene-1"
 
     @pytest.mark.asyncio
     async def test_create_genome_records_authenticated_user(

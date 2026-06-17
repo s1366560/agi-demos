@@ -433,11 +433,13 @@ async def create_gene(
             category=data.category,
             tags=data.tags,
             source=data.source,
+            source_ref=data.source_ref,
             icon=data.icon,
             version=data.version,
             manifest=data.manifest,
             dependencies=data.dependencies,
             synergies=data.synergies,
+            parent_gene_id=data.parent_gene_id,
             visibility=data.visibility,
         )
         await db.commit()
