@@ -10,6 +10,12 @@ import { getToolLabel } from './ExecutionTimeline';
 
 import type { TimelineStep } from './ExecutionTimeline';
 
+const getCurrentMCPProjectId = (uiProjectId?: string): string => {
+  const conversationProjectId = useConversationsStore.getState().currentConversation?.project_id;
+  const projectStoreId = useProjectStore.getState().currentProject?.id;
+  return uiProjectId || conversationProjectId || projectStoreId || '';
+};
+
 /**
  * Hook for handling MCP app opening from timeline steps
  * Implements 4-priority lookup strategy:
@@ -39,11 +45,7 @@ export const useMCPAppOpen = (step: TimelineStep) => {
 
       // Priority 2: Use UI metadata from observe event (persisted with events)
       if (ui?.resource_uri) {
-        // Priority: ui.project_id > project store > conversation store
-        const projectStoreId = useProjectStore.getState().currentProject?.id;
-        const conversationProjectId =
-          useConversationsStore.getState().currentConversation?.project_id;
-        const currentProjectId = ui.project_id || projectStoreId || conversationProjectId || '';
+        const currentProjectId = getCurrentMCPProjectId(ui.project_id);
         const tabId = `mcp-app-${ui.resource_uri}`;
 
         // Look up cached HTML from mcp_app_result event
@@ -68,12 +70,8 @@ export const useMCPAppOpen = (step: TimelineStep) => {
 
       // Priority 3: Look up app from store
       let apps = mcpState.apps;
-      // Priority: ui.project_id > project store > conversation store
       const uiProjectId = ui?.project_id;
-      const projectStoreId = useProjectStore.getState().currentProject?.id;
-      const conversationProjectId =
-        useConversationsStore.getState().currentConversation?.project_id;
-      const currentProjectId = uiProjectId || projectStoreId || conversationProjectId || '';
+      const currentProjectId = getCurrentMCPProjectId(uiProjectId);
 
       let match = Object.values(apps).find(
         (a) =>
