@@ -4,15 +4,17 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException, status
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.services.auth_service_v2 import AuthService
+from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.main import create_app
 from src.infrastructure.adapters.primary.web.routers import tasks as tasks_router
 from src.infrastructure.adapters.secondary.persistence.models import (
     APIKey as DBAPIKey,
     Memory,
+    Project,
     TaskLog as DBTaskLog,
 )
 
@@ -101,6 +103,7 @@ async def test_task_stream_accepts_authorized_header(
     test_db: AsyncSession,
     test_engine,
     test_user,
+    test_project_db,
     monkeypatch: pytest.MonkeyPatch,
 ):
     stream_session_factory = async_sessionmaker(
@@ -122,9 +125,10 @@ async def test_task_stream_accepts_authorized_header(
     test_db.add(
         DBTaskLog(
             id="stream-complete",
-            group_id="proj_123",
+            group_id=test_project_db.id,
             task_type="rebuild",
             status="COMPLETED",
+            payload={"project_id": test_project_db.id},
             created_at=datetime.now(UTC),
             completed_at=datetime.now(UTC),
         )
@@ -138,9 +142,152 @@ async def test_task_stream_accepts_authorized_header(
 
 
 @pytest.mark.asyncio
+async def test_task_stats_requires_authentication(test_app):
+    original_override = test_app.dependency_overrides.pop(get_current_user, None)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=test_app), base_url="http://test"
+        ) as client:
+            response = await client.get("/api/v1/tasks/stats")
+    finally:
+        if original_override is not None:
+            test_app.dependency_overrides[get_current_user] = original_override
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_recent_tasks_filters_to_current_user_projects(
+    test_db: AsyncSession,
+    test_project_db,
+    test_user,
+    another_user,
+):
+    foreign_project = Project(
+        id="foreign-task-project",
+        tenant_id=test_project_db.tenant_id,
+        name="Foreign Task Project",
+        owner_id=another_user.id,
+    )
+    allowed_task = DBTaskLog(
+        id="allowed-task",
+        group_id=test_project_db.id,
+        task_type="add_episode",
+        status="PENDING",
+        payload={"project_id": test_project_db.id},
+        created_at=datetime.now(UTC),
+    )
+    foreign_task = DBTaskLog(
+        id="foreign-task",
+        group_id=foreign_project.id,
+        task_type="add_episode",
+        status="PENDING",
+        payload={"project_id": foreign_project.id},
+        created_at=datetime.now(UTC),
+    )
+    test_db.add_all([foreign_project, allowed_task, foreign_task])
+    await test_db.commit()
+
+    response = await tasks_router.get_recent_tasks(
+        limit=10,
+        offset=0,
+        current_user=test_user,
+        db=test_db,
+    )
+
+    assert [task.id for task in response] == ["allowed-task"]
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_rejects_unowned_project_task(
+    test_db: AsyncSession,
+    test_project_db,
+    test_user,
+    another_user,
+):
+    foreign_project = Project(
+        id="foreign-status-project",
+        tenant_id=test_project_db.tenant_id,
+        name="Foreign Status Project",
+        owner_id=another_user.id,
+    )
+    task = DBTaskLog(
+        id="foreign-status-task",
+        group_id=foreign_project.id,
+        task_type="add_episode",
+        status="PENDING",
+        payload={"project_id": foreign_project.id},
+        created_at=datetime.now(UTC),
+    )
+    test_db.add_all([foreign_project, task])
+    await test_db.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await tasks_router.get_task_status(
+            "foreign-status-task",
+            current_user=test_user,
+            db=test_db,
+        )
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_task_stream_rejects_unowned_project_task(
+    authenticated_async_client: AsyncClient,
+    test_db: AsyncSession,
+    test_engine,
+    test_user,
+    test_project_db,
+    another_user,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    stream_session_factory = async_sessionmaker(
+        test_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    monkeypatch.setattr(tasks_router, "async_session_factory", stream_session_factory)
+
+    token = "ms_sk_test_token_123456789"
+    foreign_project = Project(
+        id="foreign-stream-project",
+        tenant_id=test_project_db.tenant_id,
+        name="Foreign Stream Project",
+        owner_id=another_user.id,
+    )
+    test_db.add_all(
+        [
+            DBAPIKey(
+                id="task-stream-foreign-key",
+                key_hash=AuthService.hash_api_key(token),
+                name="Task stream foreign key",
+                user_id=test_user.id,
+                permissions=["read"],
+                is_active=True,
+            ),
+            foreign_project,
+            DBTaskLog(
+                id="foreign-stream-task",
+                group_id=foreign_project.id,
+                task_type="add_episode",
+                status="COMPLETED",
+                payload={"project_id": foreign_project.id},
+                created_at=datetime.now(UTC),
+                completed_at=datetime.now(UTC),
+            ),
+        ]
+    )
+    await test_db.commit()
+
+    response = await authenticated_async_client.get("/api/v1/tasks/foreign-stream-task/stream")
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
 async def test_retry_task_endpoint_restarts_pending_add_episode_task(
     test_db: AsyncSession,
     test_project_db,
+    test_user,
 ):
     task = DBTaskLog(
         id="pending-add-episode",
@@ -163,6 +310,7 @@ async def test_retry_task_endpoint_restarts_pending_add_episode_task(
 
     response = await tasks_router.retry_task_endpoint(
         "pending-add-episode",
+        current_user=test_user,
         db=test_db,
         workflow_engine=workflow_engine,
     )
@@ -183,6 +331,7 @@ async def test_retry_task_endpoint_restarts_pending_add_episode_task(
 async def test_retry_task_endpoint_restarts_pending_maintenance_task(
     test_db: AsyncSession,
     test_project_db,
+    test_user,
 ):
     task = DBTaskLog(
         id="pending-rebuild",
@@ -199,6 +348,7 @@ async def test_retry_task_endpoint_restarts_pending_maintenance_task(
 
     response = await tasks_router.retry_task_endpoint(
         "pending-rebuild",
+        current_user=test_user,
         db=test_db,
         workflow_engine=workflow_engine,
     )
@@ -216,6 +366,7 @@ async def test_retry_task_endpoint_restarts_pending_maintenance_task(
 async def test_retry_pending_tasks_endpoint_batches_retryable_pending_tasks(
     test_db: AsyncSession,
     test_project_db,
+    test_user,
 ):
     retryable = DBTaskLog(
         id="pending-refresh",
@@ -240,6 +391,7 @@ async def test_retry_pending_tasks_endpoint_batches_retryable_pending_tasks(
     response = await tasks_router.retry_pending_tasks_endpoint(
         limit=10,
         task_type=None,
+        current_user=test_user,
         db=test_db,
         workflow_engine=workflow_engine,
     )
@@ -262,6 +414,7 @@ async def test_retry_pending_tasks_endpoint_batches_retryable_pending_tasks(
 async def test_retry_pending_tasks_endpoint_can_include_failed_tasks(
     test_db: AsyncSession,
     test_project_db,
+    test_user,
 ):
     failed_task = DBTaskLog(
         id="failed-add-episode",
@@ -286,6 +439,7 @@ async def test_retry_pending_tasks_endpoint_can_include_failed_tasks(
         limit=10,
         task_type="add_episode",
         include_failed=True,
+        current_user=test_user,
         db=test_db,
         workflow_engine=workflow_engine,
     )
@@ -325,6 +479,7 @@ async def test_retry_pending_tasks_endpoint_skips_missing_project(test_db: Async
         limit=10,
         task_type="add_episode",
         include_failed=True,
+        current_user=SimpleNamespace(id="system-admin", is_superuser=True),
         db=test_db,
         workflow_engine=workflow_engine,
     )
@@ -342,6 +497,7 @@ async def test_retry_pending_tasks_endpoint_skips_missing_project(test_db: Async
 async def test_retry_pending_tasks_endpoint_can_include_stale_processing_tasks(
     test_db: AsyncSession,
     test_project_db,
+    test_user,
 ):
     stale_task = DBTaskLog(
         id="stale-processing-refresh",
@@ -373,6 +529,7 @@ async def test_retry_pending_tasks_endpoint_can_include_stale_processing_tasks(
         task_type="incremental_refresh",
         include_stale_processing=True,
         stale_after_minutes=15,
+        current_user=test_user,
         db=test_db,
         workflow_engine=workflow_engine,
     )
@@ -412,6 +569,7 @@ async def test_retry_pending_tasks_endpoint_creates_tasks_for_orphan_pending_mem
     response = await tasks_router.retry_pending_tasks_endpoint(
         limit=1,
         task_type="add_episode",
+        current_user=test_user,
         db=test_db,
         workflow_engine=workflow_engine,
     )
@@ -451,6 +609,7 @@ async def test_retry_task_endpoint_checks_status_before_mutating_task(test_db: A
     with pytest.raises(HTTPException) as exc_info:
         await tasks_router.retry_task_endpoint(
             "processing-add-episode",
+            current_user=SimpleNamespace(id="system-admin", is_superuser=True),
             db=test_db,
             workflow_engine=SimpleNamespace(start_workflow=AsyncMock()),
         )

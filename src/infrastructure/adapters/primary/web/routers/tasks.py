@@ -4,13 +4,14 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, desc, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
@@ -22,9 +23,12 @@ from src.application.use_cases.task import (
 from src.configuration.di_container import DIContainer
 from src.domain.model.task.task_log import TaskLog, TaskLogStatus
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
-from src.infrastructure.adapters.primary.web.dependencies import get_workflow_engine
+from src.infrastructure.adapters.primary.web.dependencies import (
+    get_current_user,
+    get_workflow_engine,
+)
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
-    get_api_key_from_header,
+    get_api_key_from_header_or_query,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory, get_db
@@ -32,6 +36,8 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     Memory,
     Project,
     TaskLog as DBTaskLog,
+    User,
+    UserProject,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository import (
     SqlAPIKeyRepository,
@@ -94,6 +100,12 @@ class RetryPendingResponse(BaseModel):
     task_ids: list[str]
 
 
+@dataclass(frozen=True)
+class TaskAccessPrincipal:
+    id: str
+    is_superuser: bool = False
+
+
 # --- FastAPI Dependencies ---
 
 
@@ -102,21 +114,31 @@ async def get_di_container(db: AsyncSession = Depends(get_db)) -> DIContainer:
     return DIContainer(db)
 
 
-async def verify_task_stream_api_key(api_key: str) -> None:
-    """Verify task stream API keys without holding a DB session open for the SSE lifetime."""
+async def get_task_stream_principal(api_key: str) -> TaskAccessPrincipal:
+    """Resolve a stream caller without holding a DB session for the SSE lifetime."""
     async with async_session_factory() as session:
         auth_service = AuthService(
             user_repository=SqlUserRepository(session),
             api_key_repository=SqlAPIKeyRepository(session),
         )
         try:
-            await auth_service.verify_api_key(api_key)
+            domain_api_key = await auth_service.verify_api_key_read_only(api_key)
+            if domain_api_key is None:
+                raise ValueError("Invalid API key")
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=_("Invalid API key"),
             ) from exc
+
+        result = await session.execute(
+            refresh_select_statement(select(User).where(User.id == domain_api_key.user_id))
+        )
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("User not found"))
         await session.commit()
+        return TaskAccessPrincipal(id=user.id, is_superuser=bool(user.is_superuser))
 
 
 # --- Helper Functions ---
@@ -154,6 +176,82 @@ def task_to_response(task: TaskLog) -> TaskLogResponse:
     )
 
 
+def _is_superuser(current_user: Any) -> bool:
+    return bool(getattr(current_user, "is_superuser", False))
+
+
+async def _task_access_project_ids(
+    db: AsyncSession,
+    current_user: Any,
+) -> list[str] | None:
+    """Return allowed project ids, or None when the caller may see all tasks."""
+    if _is_superuser(current_user):
+        return None
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserProject.project_id).where(UserProject.user_id == current_user.id)
+        )
+    )
+    return list(result.scalars().all())
+
+
+def _task_project_scope_filter(project_ids: list[str] | None) -> Any | None:
+    if project_ids is None:
+        return None
+    if not project_ids:
+        return false()
+    return or_(
+        DBTaskLog.group_id.in_(project_ids),
+        DBTaskLog.payload["project_id"].as_string().in_(project_ids),
+        DBTaskLog.payload["group_id"].as_string().in_(project_ids),
+        DBTaskLog.payload["task_group_id"].as_string().in_(project_ids),
+    )
+
+
+def _apply_task_scope(statement: Any, scope_filter: Any | None) -> Any:
+    if scope_filter is None:
+        return statement
+    return statement.where(scope_filter)
+
+
+def _task_project_id(task: Any) -> str | None:
+    payload = getattr(task, "payload", None)
+    if isinstance(payload, dict):
+        payload_dict = cast(dict[str, Any], payload)
+        for key in ("project_id", "group_id", "task_group_id"):
+            value = payload_dict.get(key)
+            if isinstance(value, str) and value:
+                return value
+
+    group_id = getattr(task, "group_id", None)
+    return group_id if isinstance(group_id, str) and group_id else None
+
+
+async def _ensure_task_access(db: AsyncSession, current_user: Any, task: Any) -> None:
+    if _is_superuser(current_user):
+        return
+
+    project_id = _task_project_id(task)
+    if project_id is None:
+        raise HTTPException(status_code=403, detail=_("Access denied to task"))
+
+    result = await db.execute(
+        refresh_select_statement(
+            select(UserProject.id)
+            .where(
+                and_(
+                    UserProject.user_id == current_user.id,
+                    UserProject.project_id == project_id,
+                )
+            )
+            .limit(1)
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=403, detail=_("Access denied to task"))
+
+
 # --- Endpoints ---
 
 # NOTE: Dynamic routes with path parameters must be defined AFTER specific routes
@@ -161,36 +259,65 @@ def task_to_response(task: TaskLog) -> TaskLogResponse:
 
 
 @router.get("/stats", response_model=TaskStatsResponse)
-async def get_task_stats(db: AsyncSession = Depends(get_db)) -> TaskStatsResponse:
+async def get_task_stats(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TaskStatsResponse:
     """Get task statistics."""
     now = datetime.now(UTC)
     one_day_ago = now - timedelta(days=1)
     one_hour_ago = now - timedelta(hours=1)
+    scope_filter = _task_project_scope_filter(await _task_access_project_ids(db, current_user))
 
-    total = await db.scalar(select(func.count(DBTaskLog.id))) or 0
+    total = await db.scalar(_apply_task_scope(select(func.count(DBTaskLog.id)), scope_filter)) or 0
 
     completed = (
-        await db.scalar(select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "COMPLETED"))
+        await db.scalar(
+            _apply_task_scope(
+                select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "COMPLETED"),
+                scope_filter,
+            )
+        )
         or 0
     )
 
     failed = (
-        await db.scalar(select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "FAILED")) or 0
+        await db.scalar(
+            _apply_task_scope(
+                select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "FAILED"),
+                scope_filter,
+            )
+        )
+        or 0
     )
 
     pending = (
-        await db.scalar(select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "PENDING")) or 0
+        await db.scalar(
+            _apply_task_scope(
+                select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "PENDING"),
+                scope_filter,
+            )
+        )
+        or 0
     )
     processing = (
-        await db.scalar(select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "PROCESSING"))
+        await db.scalar(
+            _apply_task_scope(
+                select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "PROCESSING"),
+                scope_filter,
+            )
+        )
         or 0
     )
 
     # Throughput (completed per minute in last hour)
     completed_1h = (
         await db.scalar(
-            select(func.count(DBTaskLog.id)).where(
-                DBTaskLog.status == "COMPLETED", DBTaskLog.completed_at >= one_hour_ago
+            _apply_task_scope(
+                select(func.count(DBTaskLog.id)).where(
+                    DBTaskLog.status == "COMPLETED", DBTaskLog.completed_at >= one_hour_ago
+                ),
+                scope_filter,
             )
         )
         or 0
@@ -198,13 +325,21 @@ async def get_task_stats(db: AsyncSession = Depends(get_db)) -> TaskStatsRespons
     throughput = completed_1h / 60
 
     total_24h = (
-        await db.scalar(select(func.count(DBTaskLog.id)).where(DBTaskLog.created_at >= one_day_ago))
+        await db.scalar(
+            _apply_task_scope(
+                select(func.count(DBTaskLog.id)).where(DBTaskLog.created_at >= one_day_ago),
+                scope_filter,
+            )
+        )
         or 0
     )
     failed_24h = (
         await db.scalar(
-            select(func.count(DBTaskLog.id)).where(
-                DBTaskLog.status == "FAILED", DBTaskLog.created_at >= one_day_ago
+            _apply_task_scope(
+                select(func.count(DBTaskLog.id)).where(
+                    DBTaskLog.status == "FAILED", DBTaskLog.created_at >= one_day_ago
+                ),
+                scope_filter,
             )
         )
         or 0
@@ -223,13 +358,17 @@ async def get_task_stats(db: AsyncSession = Depends(get_db)) -> TaskStatsRespons
 
 
 @router.get("/queue-depth", response_model=list[QueueDepthPoint])
-async def get_queue_depth(db: AsyncSession = Depends(get_db)) -> Any:
+async def get_queue_depth(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
     """Get queue depth over time."""
     now = datetime.now(UTC)
-    points = []
+    points: list[QueueDepthPoint] = []
+    scope_filter = _task_project_scope_filter(await _task_access_project_ids(db, current_user))
 
     # Generate points every 3 hours for the last 24 hours
-    times = []
+    times: list[datetime] = []
     for i in range(8, -1, -1):
         t = now - timedelta(hours=i * 3)
         times.append(t)
@@ -238,9 +377,12 @@ async def get_queue_depth(db: AsyncSession = Depends(get_db)) -> Any:
         # Count tasks that were created <= t AND (completed > t OR completed is NULL)
         count = (
             await db.scalar(
-                select(func.count(DBTaskLog.id)).where(
-                    DBTaskLog.created_at <= t,
-                    (DBTaskLog.completed_at > t) | (DBTaskLog.completed_at.is_(None)),
+                _apply_task_scope(
+                    select(func.count(DBTaskLog.id)).where(
+                        DBTaskLog.created_at <= t,
+                        (DBTaskLog.completed_at > t) | (DBTaskLog.completed_at.is_(None)),
+                    ),
+                    scope_filter,
                 )
             )
             or 0
@@ -260,12 +402,15 @@ async def get_recent_tasks(
     entity_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     """Get recent tasks with filtering."""
     # For complex queries with multiple filters, use direct DB access
     # In a full refactoring, this would move to a use case with filter objects
     query = select(DBTaskLog).order_by(desc(DBTaskLog.created_at))
+    scope_filter = _task_project_scope_filter(await _task_access_project_ids(db, current_user))
+    query = _apply_task_scope(query, scope_filter)
 
     if status and status != "All Statuses":
         query = query.where(DBTaskLog.status == status.upper())
@@ -290,7 +435,7 @@ async def get_recent_tasks(
     db_tasks = result.scalars().all()
 
     # Convert to domain models for consistency
-    response = []
+    response: list[TaskLogResponse] = []
     for t in db_tasks:
         duration_str = "-"
         if t.started_at and t.completed_at:
@@ -324,9 +469,14 @@ async def get_recent_tasks(
 
 
 @router.get("/status-breakdown")
-async def get_status_breakdown(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+async def get_status_breakdown(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
     """Get task status breakdown."""
     query = select(DBTaskLog.status, func.count(DBTaskLog.id)).group_by(DBTaskLog.status)
+    scope_filter = _task_project_scope_filter(await _task_access_project_ids(db, current_user))
+    query = _apply_task_scope(query, scope_filter)
 
     result = await db.execute(refresh_select_statement(query))
     breakdown = {row[0]: row[1] for row in result.all()}
@@ -453,22 +603,27 @@ def _create_task_for_memory_retry(
 async def _prepare_orphan_memory_retries(
     db: AsyncSession,
     limit: int,
+    allowed_project_ids: list[str] | None,
 ) -> list[tuple[DBTaskLog, str, dict[str, Any]]]:
     if limit <= 0:
         return []
+    if allowed_project_ids == []:
+        return []
 
-    result = await db.execute(
-        refresh_select_statement(
-            select(Memory, Project)
-            .join(Project, Project.id == Memory.project_id)
-            .where(
-                Memory.processing_status == "PENDING",
-                Memory.task_id.is_(None),
-            )
-            .order_by(desc(Memory.created_at))
-            .limit(limit)
+    query = (
+        select(Memory, Project)
+        .join(Project, Project.id == Memory.project_id)
+        .where(
+            Memory.processing_status == "PENDING",
+            Memory.task_id.is_(None),
         )
+        .order_by(desc(Memory.created_at))
+        .limit(limit)
     )
+    if allowed_project_ids is not None:
+        query = query.where(Memory.project_id.in_(allowed_project_ids))
+
+    result = await db.execute(refresh_select_statement(query))
 
     now = datetime.now(UTC)
     prepared: list[tuple[DBTaskLog, str, dict[str, Any]]] = []
@@ -487,12 +642,13 @@ async def _start_retry_workflow(
     workflow_engine: WorkflowEnginePort,
 ) -> None:
     workflow_id = f"{workflow_name.replace('_', '-')}-retry-{task.id}"
-    await workflow_engine.start_workflow(
+    _workflow_result = await workflow_engine.start_workflow(
         workflow_name=workflow_name,
         workflow_id=workflow_id,
         input_data=payload,
         task_queue="default",
     )
+    del _workflow_result
 
 
 async def _mark_retry_start_failed(db: AsyncSession, task: DBTaskLog, exc: Exception) -> None:
@@ -511,6 +667,7 @@ async def retry_pending_tasks_endpoint(
     include_failed: bool = Query(False),
     include_stale_processing: bool = Query(False),
     stale_after_minutes: int = Query(15, ge=1, le=1440),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
 ) -> RetryPendingResponse:
@@ -551,17 +708,20 @@ async def retry_pending_tasks_endpoint(
         )
         status_filter = or_(status_filter, stale_processing_filter)
 
-    result = await db.execute(
-        refresh_select_statement(
-            select(DBTaskLog)
-            .where(
-                status_filter,
-                DBTaskLog.task_type.in_(retryable_types),
-            )
-            .order_by(desc(DBTaskLog.created_at))
-            .limit(limit)
+    allowed_project_ids = await _task_access_project_ids(db, current_user)
+    scope_filter = _task_project_scope_filter(allowed_project_ids)
+    query = (
+        select(DBTaskLog)
+        .where(
+            status_filter,
+            DBTaskLog.task_type.in_(retryable_types),
         )
+        .order_by(desc(DBTaskLog.created_at))
+        .limit(limit)
     )
+    query = _apply_task_scope(query, scope_filter)
+
+    result = await db.execute(refresh_select_statement(query))
     tasks = list(result.scalars().all())
 
     prepared: list[tuple[DBTaskLog, str, dict[str, Any]]] = []
@@ -582,7 +742,9 @@ async def retry_pending_tasks_endpoint(
 
     remaining_limit = limit - len(prepared)
     if (task_type is None or task_type == "add_episode") and remaining_limit > 0:
-        prepared.extend(await _prepare_orphan_memory_retries(db, remaining_limit))
+        prepared.extend(
+            await _prepare_orphan_memory_retries(db, remaining_limit, allowed_project_ids)
+        )
 
     await db.commit()
 
@@ -611,6 +773,7 @@ async def retry_pending_tasks_endpoint(
 @router.post("/{task_id}/retry")
 async def retry_task_endpoint(
     task_id: str,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
 ) -> dict[str, Any]:
@@ -622,6 +785,8 @@ async def retry_task_endpoint(
 
     if not task:
         raise HTTPException(status_code=404, detail=_("Task not found"))
+
+    await _ensure_task_access(db, current_user, task)
 
     if task.status not in {"FAILED", "PENDING", "STOPPED"}:
         raise HTTPException(
@@ -659,6 +824,7 @@ async def retry_task_endpoint(
 @router.post("/{task_id}/stop")
 async def stop_task_endpoint(
     task_id: str,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     container: DIContainer = Depends(get_di_container),
 ) -> dict[str, Any]:
@@ -672,6 +838,8 @@ async def stop_task_endpoint(
     if not task:
         raise HTTPException(status_code=404, detail=_("Task not found"))
 
+    await _ensure_task_access(db, current_user, task)
+
     if task.status not in ["PENDING", "PROCESSING"]:
         raise HTTPException(
             status_code=400, detail=_("Task can only be stopped if pending or processing")
@@ -679,7 +847,7 @@ async def stop_task_endpoint(
 
     # Mark task as stopped
     now = datetime.now(UTC)
-    await update_use_case.execute(
+    _update_result = await update_use_case.execute(
         refresh_select_statement(
             UpdateTaskCommand(
                 task_id=task_id,
@@ -690,6 +858,7 @@ async def stop_task_endpoint(
             )
         )
     )
+    del _update_result
     await db.commit()
 
     return {"message": "Task marked as stopped"}
@@ -756,16 +925,22 @@ async def _poll_task_updates(
                 current_status = task.status
 
                 logger.info(
-                    f"Polling task {task_id}: status={current_status}, "
-                    f"progress={current_progress}, last_status={last_status}, "
-                    f"last_progress={last_progress}"
+                    "Polling task %s: status=%s, progress=%s, last_status=%s, last_progress=%s",
+                    task_id,
+                    current_status,
+                    current_progress,
+                    last_status,
+                    last_progress,
                 )
 
                 if current_progress != last_progress or current_status != last_status:
                     logger.info(
-                        f"Task {task_id} status changed: "
-                        f"{last_status}->{current_status}, "
-                        f"progress: {last_progress}->{current_progress}"
+                        "Task %s status changed: %s->%s, progress: %s->%s",
+                        task_id,
+                        last_status,
+                        current_status,
+                        last_progress,
+                        current_progress,
                     )
                     yield _build_progress_event(task)
                     last_progress = current_progress
@@ -805,7 +980,7 @@ async def _poll_task_updates(
 @router.get("/{task_id}/stream", response_class=EventSourceResponse, response_model=None)
 async def stream_task_status(
     task_id: str,
-    api_key: str = Depends(get_api_key_from_header),
+    api_key: str = Depends(get_api_key_from_header_or_query),
 ) -> EventSourceResponse:
     """Stream task status updates using Server-Sent Events (SSE).
 
@@ -836,7 +1011,16 @@ async def stream_task_status(
         });
     """
     logger.info(f"SSE stream requested for task {task_id}")
-    await verify_task_stream_api_key(api_key)
+    principal = await get_task_stream_principal(api_key)
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            refresh_select_statement(select(DBTaskLog).where(DBTaskLog.id == task_id))
+        )
+        task = result.scalar_one_or_none()
+        if not task:
+            raise HTTPException(status_code=404, detail=_("Task not found"))
+        await _ensure_task_access(session, principal, task)
 
     async def event_generator() -> AsyncGenerator[Any, None]:
         """Generate SSE events for task status updates."""
@@ -872,8 +1056,10 @@ async def stream_task_status(
             last_progress = getattr(task, "progress", 0)
             last_status = task.status
             logger.info(
-                f"Starting polling loop for task {task_id}: "
-                f"initial status={last_status}, initial progress={last_progress}"
+                "Starting polling loop for task %s: initial status=%s, initial progress=%s",
+                task_id,
+                last_status,
+                last_progress,
             )
 
             async for event in _poll_task_updates(task_id, last_progress, last_status):
@@ -903,7 +1089,11 @@ async def stream_task_status(
 
 
 @router.get("/{task_id}", response_model=TaskLogResponse)
-async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)) -> Any:
+async def get_task_status(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
     """Get a single task by ID."""
     result = await db.execute(
         refresh_select_statement(select(DBTaskLog).where(DBTaskLog.id == task_id))
@@ -912,6 +1102,8 @@ async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)) -> A
 
     if not task:
         raise HTTPException(status_code=404, detail=_("Task not found"))
+
+    await _ensure_task_access(db, current_user, task)
 
     return task_to_response(
         TaskLog(
@@ -937,9 +1129,10 @@ async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)) -> A
 @router.post("/{task_id}/cancel")
 async def cancel_task_endpoint(
     task_id: str,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     container: DIContainer = Depends(get_di_container),
 ) -> Any:
     """Cancel a task (alias for stop)."""
     # Reuse the stop logic
-    return await stop_task_endpoint(task_id, db, container)
+    return await stop_task_endpoint(task_id, current_user, db, container)
