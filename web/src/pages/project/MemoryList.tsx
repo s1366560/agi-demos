@@ -20,6 +20,8 @@ import { useParams, Link } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   AlertCircle,
+  ChevronLeft,
+  ChevronRight,
   Database,
   FileImage,
   FileText,
@@ -73,6 +75,10 @@ const TEXTS = {
   activeMetric: 'Active',
   indexingMetric: 'Indexing',
   countSummary: '{{shown}} of {{total}} shown',
+  paginationSummary: '{{start}}-{{end}} of {{total}}',
+  rowsPerPage: 'Rows',
+  previousPage: 'Previous page',
+  nextPage: 'Next page',
   contentTypes: {
     text: 'Text',
     document: 'Document',
@@ -124,6 +130,18 @@ function formatCountSummary(template: string, shown: number, total: number): str
   return template.replace('{{shown}}', String(shown)).replace('{{total}}', String(total));
 }
 
+function formatPaginationSummary(
+  template: string,
+  start: number,
+  end: number,
+  total: number
+): string {
+  return template
+    .replace('{{start}}', String(start))
+    .replace('{{end}}', String(end))
+    .replace('{{total}}', String(total));
+}
+
 function useMemoryListTexts(): MemoryListTexts {
   const { t } = useTranslation();
 
@@ -149,6 +167,14 @@ function useMemoryListTexts(): MemoryListTexts {
       activeMetric: textFallback(t, 'project.memories.metrics.active', TEXTS.activeMetric),
       indexingMetric: textFallback(t, 'project.memories.metrics.indexing', TEXTS.indexingMetric),
       countSummary: textFallback(t, 'project.memories.filter.summary', TEXTS.countSummary),
+      paginationSummary: textFallback(
+        t,
+        'project.memories.pagination.summary',
+        TEXTS.paginationSummary
+      ),
+      rowsPerPage: textFallback(t, 'project.memories.pagination.rowsPerPage', TEXTS.rowsPerPage),
+      previousPage: textFallback(t, 'project.memories.pagination.previousPage', TEXTS.previousPage),
+      nextPage: textFallback(t, 'project.memories.pagination.nextPage', TEXTS.nextPage),
       contentTypes: {
         text: textFallback(t, 'project.memories.contentTypes.text', TEXTS.contentTypes.text),
         document: textFallback(
@@ -201,6 +227,8 @@ function useMemoryListTexts(): MemoryListTexts {
 }
 
 const ROW_HEIGHT = 72;
+const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 const TABLE_MIN_WIDTH_CLASS = 'min-w-[960px]';
 const MEMORY_TABLE_COLUMNS = [
   { key: 'name', width: '330px' },
@@ -286,6 +314,7 @@ const EmptyMarker = Symbol('MemoryList.Empty');
 const LoadingMarker = Symbol('MemoryList.Loading');
 const ErrorMarker = Symbol('MemoryList.Error');
 const DeleteModalMarker = Symbol('MemoryList.DeleteModal');
+const PaginationMarker = Symbol('MemoryList.Pagination');
 
 // ============================================================================
 // Context
@@ -293,6 +322,9 @@ const DeleteModalMarker = Symbol('MemoryList.DeleteModal');
 
 interface MemoryListState {
   memories: Memory[];
+  total: number;
+  page: number;
+  pageSize: number;
   isLoading: boolean;
   fetchError: string | null;
   search: string;
@@ -307,6 +339,8 @@ interface MemoryListState {
 interface MemoryListActions {
   setSearch: (search: string) => void;
   setContentTypeFilter: (contentType: MemoryTypeFilter) => void;
+  setPage: (page: number) => void;
+  setPageSize: (pageSize: number) => void;
   confirmDelete: (memory: Memory) => void;
   handleDelete: () => Promise<void>;
   handleReprocess: (id: string) => Promise<void>;
@@ -350,6 +384,9 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
 
   // State
   const [memories, setMemories] = useState<Memory[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -361,18 +398,9 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
   const [taskProgress, setTaskProgress] = useState<MemoryTaskProgress>({});
 
   const parentRef = useRef<HTMLDivElement>(null);
+  const fetchSequenceRef = useRef(0);
 
-  // Filter memories
-  const filteredMemories = useMemo(() => {
-    const lowerSearch = debouncedSearch.toLowerCase();
-    return memories.filter(
-      (m) =>
-        (contentTypeFilter === 'all' || m.content_type === contentTypeFilter) &&
-        (!lowerSearch ||
-          m.title.toLowerCase().includes(lowerSearch) ||
-          m.content_type.toLowerCase().includes(lowerSearch))
-    );
-  }, [memories, debouncedSearch, contentTypeFilter]);
+  const filteredMemories = memories;
 
   // Virtual list
   const virtualizer = useVirtualizer({
@@ -385,18 +413,42 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
   // Fetch memories
   const fetchMemories = useCallback(async () => {
     if (!projectId) return;
+    const sequence = fetchSequenceRef.current + 1;
+    fetchSequenceRef.current = sequence;
     setIsLoading(true);
     setFetchError(null);
     try {
-      const data = await memoryAPI.list(projectId, { page_size: 100 });
-      setMemories(data.memories.map(normalizeMemory));
+      const trimmedSearch = debouncedSearch.trim();
+      const data = await memoryAPI.list(projectId, {
+        page,
+        page_size: pageSize,
+        ...(trimmedSearch ? { search: trimmedSearch } : {}),
+        ...(contentTypeFilter !== 'all' ? { content_type: contentTypeFilter } : {}),
+      });
+      if (fetchSequenceRef.current !== sequence) return;
+      const normalizedMemories = data.memories.map(normalizeMemory);
+      if (normalizedMemories.length === 0 && data.total > 0 && data.page > 1) {
+        setPage(Math.max(1, data.page - 1));
+        return;
+      }
+      setMemories(normalizedMemories);
+      setTotal(data.total);
+      setPage(data.page);
+      setPageSize(data.page_size);
     } catch (error) {
+      if (fetchSequenceRef.current !== sequence) return;
       console.error('Failed to list memories:', error);
       setFetchError('Failed to load memories. Please check your connection and try again.');
     } finally {
-      setIsLoading(false);
+      if (fetchSequenceRef.current === sequence) {
+        setIsLoading(false);
+      }
     }
-  }, [projectId]);
+  }, [contentTypeFilter, debouncedSearch, page, pageSize, projectId]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [contentTypeFilter, debouncedSearch]);
 
   // Delete handlers
   const confirmDelete = useCallback((memory: Memory) => {
@@ -449,6 +501,9 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
   // Context value
   const state: MemoryListState = {
     memories,
+    total,
+    page,
+    pageSize,
     isLoading,
     fetchError,
     search,
@@ -463,6 +518,8 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
   const actions: MemoryListActions = {
     setSearch,
     setContentTypeFilter,
+    setPage,
+    setPageSize,
     confirmDelete,
     handleDelete,
     handleReprocess,
@@ -502,6 +559,7 @@ const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
               />
             )}
           </div>
+          {!fetchError && !isLoading && total > 0 && <MemoryList.Pagination />}
         </div>
         {isDeleteModalOpen && memoryToDelete && (
           <MemoryList.DeleteModal
@@ -535,12 +593,13 @@ const HeaderInternal: React.FC<HeaderProps> = ({ className = '' }) => {
   const texts = useMemoryListTexts();
   const context = useMemoryListContextOptional();
   const memories = context?.state.memories ?? EMPTY_MEMORIES;
+  const total = context?.state.total ?? memories.length;
   const activeCount = memories.filter((memory) => memory.status !== 'DISABLED').length;
   const indexingCount = memories.filter((memory) =>
     ['PENDING', 'PROCESSING'].includes(memory.processing_status)
   ).length;
   const stats = [
-    { label: texts.totalMetric, value: memories.length },
+    { label: texts.totalMetric, value: total },
     { label: texts.activeMetric, value: activeCount },
     { label: texts.indexingMetric, value: indexingCount },
   ];
@@ -608,7 +667,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
   const onContentTypeFilterChange =
     propOnContentTypeFilterChange ?? context?.actions.setContentTypeFilter;
   const memories = context?.state.memories ?? EMPTY_MEMORIES;
-  const effectiveSearch = context?.state.debouncedSearch ?? search;
+  const total = context?.state.total ?? memories.length;
   const typeCounts = useMemo(
     () => ({
       all: memories.length,
@@ -619,16 +678,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
     }),
     [memories]
   );
-  const shownCount = useMemo(() => {
-    const lowerSearch = effectiveSearch.toLowerCase();
-    return memories.filter(
-      (memory) =>
-        (contentTypeFilter === 'all' || memory.content_type === contentTypeFilter) &&
-        (!lowerSearch ||
-          memory.title.toLowerCase().includes(lowerSearch) ||
-          memory.content_type.toLowerCase().includes(lowerSearch))
-    ).length;
-  }, [contentTypeFilter, effectiveSearch, memories]);
+  const shownCount = memories.length;
   const filterOptions: Array<{ value: MemoryTypeFilter; label: string; count: number }> = [
     { value: 'all', label: texts.allTypes, count: typeCounts.all },
     { value: 'text', label: texts.contentTypes.text, count: typeCounts.text },
@@ -656,7 +706,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = ({
           />
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          {formatCountSummary(texts.countSummary, shownCount, memories.length)}
+          {formatCountSummary(texts.countSummary, shownCount, total)}
         </p>
       </div>
       <div className="flex w-full flex-col gap-2 lg:w-auto lg:items-end">
@@ -1088,6 +1138,74 @@ const ErrorInternal: React.FC<ErrorProps> = ({ error, onRetry, className = '' })
 ErrorInternal.displayName = 'MemoryList.Error';
 
 // ============================================================================
+// Pagination Sub-Component
+// ============================================================================
+
+const PaginationInternal: React.FC<{ className?: string | undefined }> = ({ className = '' }) => {
+  const { state, actions } = useMemoryListContext();
+  const texts = useMemoryListTexts();
+  const totalPages = Math.max(1, Math.ceil(state.total / state.pageSize));
+  const safePage = Math.min(Math.max(state.page, 1), totalPages);
+  const start = state.total === 0 ? 0 : (safePage - 1) * state.pageSize + 1;
+  const end = Math.min(safePage * state.pageSize, state.total);
+
+  return (
+    <div
+      className={`flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950/20 dark:text-slate-300 sm:flex-row sm:items-center sm:justify-between ${className}`}
+    >
+      <div className="font-medium">
+        {formatPaginationSummary(texts.paginationSummary, start, end, state.total)}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+          <span>{texts.rowsPerPage}</span>
+          <select
+            value={state.pageSize}
+            onChange={(event) => {
+              actions.setPageSize(Number(event.target.value));
+              actions.setPage(1);
+            }}
+            className="h-8 rounded border border-slate-200 bg-white px-2 text-sm text-slate-950 outline-none focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-50 dark:focus:border-slate-400 dark:focus:ring-slate-50/10"
+            aria-label={texts.rowsPerPage}
+          >
+            {PAGE_SIZE_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={() => actions.setPage(Math.max(1, safePage - 1))}
+          disabled={safePage <= 1}
+          className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus:ring-slate-50/10"
+          aria-label={texts.previousPage}
+          title={texts.previousPage}
+        >
+          <ChevronLeft size={16} aria-hidden="true" />
+        </button>
+        <span className="min-w-16 text-center text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">
+          {safePage} / {totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => actions.setPage(Math.min(totalPages, safePage + 1))}
+          disabled={safePage >= totalPages}
+          className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-950/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus:ring-slate-50/10"
+          aria-label={texts.nextPage}
+          title={texts.nextPage}
+        >
+          <ChevronRight size={16} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+PaginationInternal.displayName = 'MemoryList.Pagination';
+
+// ============================================================================
 // DeleteModal Sub-Component
 // ============================================================================
 
@@ -1165,6 +1283,7 @@ export const MemoryList = Object.assign(MemoryListInternal, {
   Empty: attachMarker(EmptyInternal, EmptyMarker),
   Loading: attachMarker(LoadingInternal, LoadingMarker),
   Error: attachMarker(ErrorInternal, ErrorMarker),
+  Pagination: attachMarker(PaginationInternal, PaginationMarker),
   DeleteModal: attachMarker(DeleteModalInternal, DeleteModalMarker),
   useContext: useMemoryListContext,
 });

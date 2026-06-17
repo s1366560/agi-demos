@@ -46,3 +46,39 @@ async def test_create_memory_indexes_chunks(
 
     assert chunks
     assert all(chunk.category == "fact" for chunk in chunks)
+
+
+@pytest.mark.asyncio
+async def test_list_memories_filters_by_content_type(
+    authenticated_async_client,
+    test_project_db,
+):
+    for title, content_type in [
+        ("Text Memory", "text"),
+        ("Document Memory", "document"),
+    ]:
+        response = await authenticated_async_client.post(
+            "/api/v1/memories/",
+            json={
+                "project_id": test_project_db.id,
+                "title": title,
+                "content": f"{title} body",
+                "content_type": content_type,
+            },
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
+    response = await authenticated_async_client.get(
+        "/api/v1/memories/",
+        params={
+            "project_id": test_project_db.id,
+            "content_type": "document",
+            "page": 1,
+            "page_size": 10,
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["total"] == 1
+    assert [memory["content_type"] for memory in data["memories"]] == ["document"]

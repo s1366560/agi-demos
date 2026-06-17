@@ -64,7 +64,7 @@ describe('MemoryList', () => {
       ],
       total: 1,
       page: 1,
-      page_size: 100,
+      page_size: 20,
     });
 
     renderWithRouter(<MemoryList />, { route: '/project/p1/memories' });
@@ -72,6 +72,8 @@ describe('MemoryList', () => {
     await waitFor(() => {
       expect(screen.getByText('Memory 1')).toBeInTheDocument();
     });
+
+    expect(memoryAPI.list).toHaveBeenCalledWith('p1', { page: 1, page_size: 20 });
   });
 
   it('keeps the virtualized table horizontally scrollable on narrow screens', async () => {
@@ -88,7 +90,7 @@ describe('MemoryList', () => {
       ],
       total: 1,
       page: 1,
-      page_size: 100,
+      page_size: 20,
     });
 
     renderWithRouter(<MemoryList />, { route: '/project/p1/memories' });
@@ -131,7 +133,7 @@ describe('MemoryList', () => {
       ],
       total: 3,
       page: 1,
-      page_size: 100,
+      page_size: 20,
     });
 
     renderWithRouter(<MemoryList />, { route: '/project/p1/memories' });
@@ -160,7 +162,7 @@ describe('MemoryList', () => {
       ],
       total: 1,
       page: 1,
-      page_size: 100,
+      page_size: 20,
     });
 
     renderWithRouter(<MemoryList />, { route: '/project/p1/memories' });
@@ -178,7 +180,7 @@ describe('MemoryList', () => {
       memories: [],
       total: 0,
       page: 1,
-      page_size: 100,
+      page_size: 20,
     });
 
     renderWithRouter(<MemoryList />, { route: '/project/p1/memories' });
@@ -190,24 +192,38 @@ describe('MemoryList', () => {
   });
 
   it('filters memories by search term', async () => {
-    vi.mocked(memoryAPI.list).mockResolvedValue({
-      memories: [
-        {
-          id: 'm1',
-          title: 'Apple Memory',
-          content: 'About apples',
-          processing_status: 'COMPLETED',
-        } as Memory,
-        {
-          id: 'm2',
-          title: 'Banana Memory',
-          content: 'About bananas',
-          processing_status: 'COMPLETED',
-        } as Memory,
-      ],
-      total: 2,
-      page: 1,
-      page_size: 100,
+    vi.mocked(memoryAPI.list).mockImplementation(async (_projectId, params = {}) => {
+      const query = params as { search?: string };
+      const memories =
+        query.search === 'Apple'
+          ? [
+              {
+                id: 'm1',
+                title: 'Apple Memory',
+                content: 'About apples',
+                processing_status: 'COMPLETED',
+              } as Memory,
+            ]
+          : [
+              {
+                id: 'm1',
+                title: 'Apple Memory',
+                content: 'About apples',
+                processing_status: 'COMPLETED',
+              } as Memory,
+              {
+                id: 'm2',
+                title: 'Banana Memory',
+                content: 'About bananas',
+                processing_status: 'COMPLETED',
+              } as Memory,
+            ];
+      return {
+        memories,
+        total: memories.length,
+        page: 1,
+        page_size: 20,
+      };
     });
 
     renderWithRouter(<MemoryList />, { route: '/project/p1/memories' });
@@ -226,29 +242,49 @@ describe('MemoryList', () => {
       expect(screen.getByText('Apple Memory')).toBeInTheDocument();
       expect(screen.queryByText('Banana Memory')).not.toBeInTheDocument();
     });
+    expect(memoryAPI.list).toHaveBeenLastCalledWith('p1', {
+      page: 1,
+      page_size: 20,
+      search: 'Apple',
+    });
   });
 
   it('filters memories by content type', async () => {
-    vi.mocked(memoryAPI.list).mockResolvedValue({
-      memories: [
-        {
-          id: 'm1',
-          title: 'Text Memory',
-          content: 'Plain note',
-          content_type: 'text',
-          processing_status: 'COMPLETED',
-        } as Memory,
-        {
-          id: 'm2',
-          title: 'Document Memory',
-          content: 'Uploaded document',
-          content_type: 'document',
-          processing_status: 'COMPLETED',
-        } as Memory,
-      ],
-      total: 2,
-      page: 1,
-      page_size: 100,
+    vi.mocked(memoryAPI.list).mockImplementation(async (_projectId, params = {}) => {
+      const query = params as { content_type?: string };
+      const memories =
+        query.content_type === 'document'
+          ? [
+              {
+                id: 'm2',
+                title: 'Document Memory',
+                content: 'Uploaded document',
+                content_type: 'document',
+                processing_status: 'COMPLETED',
+              } as Memory,
+            ]
+          : [
+              {
+                id: 'm1',
+                title: 'Text Memory',
+                content: 'Plain note',
+                content_type: 'text',
+                processing_status: 'COMPLETED',
+              } as Memory,
+              {
+                id: 'm2',
+                title: 'Document Memory',
+                content: 'Uploaded document',
+                content_type: 'document',
+                processing_status: 'COMPLETED',
+              } as Memory,
+            ];
+      return {
+        memories,
+        total: memories.length,
+        page: 1,
+        page_size: 20,
+      };
     });
 
     renderWithRouter(<MemoryList />, { route: '/project/p1/memories' });
@@ -260,7 +296,45 @@ describe('MemoryList', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Document' }));
 
-    expect(screen.queryByText('Text Memory')).not.toBeInTheDocument();
-    expect(screen.getByText('Document Memory')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText('Text Memory')).not.toBeInTheDocument();
+      expect(screen.getByText('Document Memory')).toBeInTheDocument();
+    });
+    expect(memoryAPI.list).toHaveBeenLastCalledWith('p1', {
+      page: 1,
+      page_size: 20,
+      content_type: 'document',
+    });
+  });
+
+  it('requests the next server page from pagination controls', async () => {
+    vi.mocked(memoryAPI.list).mockImplementation(async (_projectId, params = {}) => {
+      const query = params as { page?: number };
+      const isSecondPage = query.page === 2;
+      return {
+        memories: [
+          {
+            id: isSecondPage ? 'm2' : 'm1',
+            title: isSecondPage ? 'Second Page Memory' : 'First Page Memory',
+            content: 'Content',
+            processing_status: 'COMPLETED',
+          } as Memory,
+        ],
+        total: 21,
+        page: isSecondPage ? 2 : 1,
+        page_size: 20,
+      };
+    });
+
+    renderWithRouter(<MemoryList />, { route: '/project/p1/memories' });
+
+    expect(await screen.findByText('First Page Memory')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Second Page Memory')).toBeInTheDocument();
+    });
+    expect(memoryAPI.list).toHaveBeenLastCalledWith('p1', { page: 2, page_size: 20 });
   });
 });

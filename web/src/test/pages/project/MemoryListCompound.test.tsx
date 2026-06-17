@@ -117,7 +117,7 @@ describe('MemoryList Compound Component', () => {
       memories: mockMemories,
       total: mockMemories.length,
       page: 1,
-      page_size: 100,
+      page_size: 20,
     });
   });
 
@@ -439,6 +439,19 @@ describe('MemoryList Compound Component', () => {
 
   describe('Integration', () => {
     it('should filter memories by search term', async () => {
+      vi.mocked(memoryAPI.list).mockImplementation(async (_projectId, params = {}) => {
+        const query = params as { search?: string };
+        const memories =
+          query.search === 'Research'
+            ? mockMemories.filter((memory) => memory.title === 'Research Findings')
+            : mockMemories;
+        return {
+          memories,
+          total: memories.length,
+          page: 1,
+          page_size: 20,
+        };
+      });
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       render(<MemoryList />);
       await waitFor(() => {
@@ -450,9 +463,27 @@ describe('MemoryList Compound Component', () => {
         expect(screen.queryByText('Meeting Notes')).not.toBeInTheDocument();
         expect(screen.getByText('Research Findings')).toBeInTheDocument();
       });
+      expect(memoryAPI.list).toHaveBeenLastCalledWith('test-project-1', {
+        page: 1,
+        page_size: 20,
+        search: 'Research',
+      });
     });
 
     it('should filter memories by content type', async () => {
+      vi.mocked(memoryAPI.list).mockImplementation(async (_projectId, params = {}) => {
+        const query = params as { content_type?: string };
+        const memories =
+          query.content_type === 'document'
+            ? mockMemories.filter((memory) => memory.content_type === 'document')
+            : mockMemories;
+        return {
+          memories,
+          total: memories.length,
+          page: 1,
+          page_size: 20,
+        };
+      });
       const { MemoryList } = await import('../../../pages/project/MemoryList');
       render(<MemoryList />);
       await waitFor(() => {
@@ -465,6 +496,11 @@ describe('MemoryList Compound Component', () => {
       await waitFor(() => {
         expect(screen.queryByText('Meeting Notes')).not.toBeInTheDocument();
         expect(screen.getByText('Research Findings')).toBeInTheDocument();
+      });
+      expect(memoryAPI.list).toHaveBeenLastCalledWith('test-project-1', {
+        page: 1,
+        page_size: 20,
+        content_type: 'document',
       });
     });
 

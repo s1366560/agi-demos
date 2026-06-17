@@ -3,7 +3,7 @@
 import json
 import logging
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -681,6 +681,10 @@ async def list_memories(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
     search: str | None = Query(None, description="Search query"),
+    content_type: Literal["text", "document", "image", "video"] | None = Query(
+        None,
+        description="Memory content type filter",
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MemoryListResponse:
@@ -713,6 +717,8 @@ async def list_memories(
                 Memory.content.ilike(f"%{search}%"),
             )
         )
+    if content_type:
+        query = query.where(Memory.content_type == content_type)
 
     # Count
     count_query = select(func.count(Memory.id)).where(Memory.project_id == project_id)
@@ -723,6 +729,8 @@ async def list_memories(
                 Memory.content.ilike(f"%{search}%"),
             )
         )
+    if content_type:
+        count_query = count_query.where(Memory.content_type == content_type)
 
     total = (await db.execute(refresh_select_statement(count_query))).scalar()
 
