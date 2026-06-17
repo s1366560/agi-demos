@@ -17,8 +17,14 @@ class InstanceGeneRepository(ABC):
         """Find an instance gene by ID."""
 
     @abstractmethod
-    async def find_by_instance(self, instance_id: str) -> list[InstanceGene]:
-        """List all genes installed on an instance."""
+    async def find_by_instance(
+        self, instance_id: str, limit: int = 50, offset: int = 0
+    ) -> list[InstanceGene]:
+        """List active genes installed on an instance."""
+
+    @abstractmethod
+    async def summarize_by_instance(self, instance_id: str) -> tuple[int, int, int]:
+        """Return active row count, installed count, and usage total for an instance."""
 
     @abstractmethod
     async def find_by_gene(self, gene_id: str) -> list[InstanceGene]:

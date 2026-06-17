@@ -6,6 +6,11 @@ export interface TenantScopedOptions {
   tenant_id?: string | null | undefined;
 }
 
+export interface TenantScopedPaginationOptions extends TenantScopedOptions {
+  limit?: number | undefined;
+  offset?: number | undefined;
+}
+
 const tenantParams = (options: TenantScopedOptions = {}): { tenant_id?: string } =>
   options.tenant_id ? { tenant_id: options.tenant_id } : {};
 
@@ -211,6 +216,11 @@ export interface InstanceGeneResponse {
 export interface InstanceGeneListResponse {
   items: InstanceGeneResponse[];
   total: number;
+  active_total: number;
+  usage_total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
 }
 
 export interface EvolutionEventCreate {
@@ -344,8 +354,14 @@ export const geneMarketService = {
   uninstallGene: (instanceId: string, instanceGeneId: string, options?: TenantScopedOptions) =>
     deleteWithTenant(`${BASE_URL}/instances/${instanceId}/genes/${instanceGeneId}`, options),
 
-  listInstanceGenes: (instanceId: string, options?: TenantScopedOptions) =>
-    getWithTenant<InstanceGeneListResponse>(`${BASE_URL}/instances/${instanceId}/genes`, options),
+  listInstanceGenes: (instanceId: string, options?: TenantScopedPaginationOptions) =>
+    httpClient.get<InstanceGeneListResponse>(`${BASE_URL}/instances/${instanceId}/genes`, {
+      params: {
+        ...tenantParams(options),
+        limit: options?.limit,
+        offset: options?.offset,
+      },
+    }),
 
   listGeneRatings: (geneId: string, options?: TenantScopedOptions) =>
     getWithTenant<GeneRatingResponse[]>(`${BASE_URL}/${geneId}/ratings`, options),

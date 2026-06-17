@@ -597,15 +597,29 @@ class GeneService:
         if existing and existing.deleted_at is None:
             raise ValueError(f"Gene {gene_id} already installed on {instance_id}")
 
-        instance_gene = InstanceGene(
-            instance_id=instance_id,
-            gene_id=gene_id,
-            genome_id=genome_id,
-            status=InstanceGeneStatus.installed,
-            installed_version=installed_version or gene.version,
-            config_snapshot=config_snapshot or {},
-            installed_at=datetime.now(UTC),
-        )
+        installed_at = datetime.now(UTC)
+        if existing is not None:
+            existing.genome_id = genome_id
+            existing.status = InstanceGeneStatus.installed
+            existing.installed_version = installed_version or gene.version
+            existing.learning_output = None
+            existing.config_snapshot = config_snapshot or {}
+            existing.agent_self_eval = None
+            existing.usage_count = 0
+            existing.variant_published = False
+            existing.installed_at = installed_at
+            existing.deleted_at = None
+            instance_gene = existing
+        else:
+            instance_gene = InstanceGene(
+                instance_id=instance_id,
+                gene_id=gene_id,
+                genome_id=genome_id,
+                status=InstanceGeneStatus.installed,
+                installed_version=installed_version or gene.version,
+                config_snapshot=config_snapshot or {},
+                installed_at=installed_at,
+            )
 
         await self._instance_gene_repo.save(instance_gene)
 
@@ -662,6 +676,8 @@ class GeneService:
     async def list_instance_genes(
         self,
         instance_id: str,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[InstanceGene]:
         """
         List all genes installed on an agent instance.
@@ -674,7 +690,26 @@ class GeneService:
         """
         return await self._instance_gene_repo.find_by_instance(
             instance_id,
+            limit=limit,
+            offset=offset,
         )
+
+    async def list_instance_genes_with_summary(
+        self,
+        instance_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[InstanceGene], int, int, int]:
+        """List active instance genes with collection totals."""
+        instance_genes = await self.list_instance_genes(
+            instance_id,
+            limit=limit,
+            offset=offset,
+        )
+        total, installed_total, usage_total = await self._instance_gene_repo.summarize_by_instance(
+            instance_id
+        )
+        return instance_genes, total, installed_total, usage_total
 
     async def get_instance_gene(
         self,

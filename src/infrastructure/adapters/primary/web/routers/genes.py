@@ -126,6 +126,11 @@ class InstanceGeneListResponse(BaseModel):
 
     items: list[InstanceGeneResponse]
     total: int
+    active_total: int
+    usage_total: int
+    limit: int
+    offset: int
+    has_more: bool
 
 
 class EvolutionEventResponse(BaseModel):
@@ -785,6 +790,8 @@ async def uninstall_gene(
 async def list_instance_genes(
     request: Request,
     instance_id: str,
+    limit: int = Query(25, ge=1, le=100, description="Max installed genes to return"),
+    offset: int = Query(0, ge=0, description="Installed gene offset"),
     tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
 ) -> InstanceGeneListResponse:
@@ -792,7 +799,11 @@ async def list_instance_genes(
     container = get_container_with_db(request, db)
     service = container.gene_service()
     await _ensure_instance_tenant_access(container, instance_id=instance_id, tenant_id=tenant_id)
-    instance_genes = await service.list_instance_genes(instance_id)
+    instance_genes, total, active_total, usage_total = await service.list_instance_genes_with_summary(
+        instance_id,
+        limit=limit,
+        offset=offset,
+    )
     gene_metadata_by_id = await _get_gene_metadata_by_id(
         db,
         {ig.gene_id for ig in instance_genes},
@@ -805,7 +816,15 @@ async def list_instance_genes(
         )
         for ig in instance_genes
     ]
-    return InstanceGeneListResponse(items=items, total=len(items))
+    return InstanceGeneListResponse(
+        items=items,
+        total=total,
+        active_total=active_total,
+        usage_total=usage_total,
+        limit=limit,
+        offset=offset,
+        has_more=offset + len(items) < total,
+    )
 
 
 @router.get(

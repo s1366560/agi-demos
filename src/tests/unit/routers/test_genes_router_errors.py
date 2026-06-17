@@ -74,7 +74,14 @@ class _Container:
 
 
 class _InstanceGeneListService(_FailingGeneService):
-    async def list_instance_genes(self, instance_id: str) -> list[SimpleNamespace]:
+    async def list_instance_genes_with_summary(
+        self,
+        instance_id: str,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[SimpleNamespace], int, int, int]:
+        assert limit == 25
+        assert offset == 0
         return [
             SimpleNamespace(
                 id="instance-gene-1",
@@ -88,7 +95,7 @@ class _InstanceGeneListService(_FailingGeneService):
                 installed_at=datetime(2026, 1, 1, tzinfo=UTC),
                 created_at=datetime(2026, 1, 1, tzinfo=UTC),
             )
-        ]
+        ], 3, 2, 17
 
 
 class _InstanceGeneListContainer(_Container):
@@ -339,11 +346,18 @@ async def test_list_instance_genes_enriches_gene_display_metadata(
     response = await genes.list_instance_genes(
         request=SimpleNamespace(),
         instance_id="instance-1",
+        limit=25,
+        offset=0,
         tenant_id="tenant-1",
         db=db,
     )
 
-    assert response.total == 1
+    assert response.total == 3
+    assert response.active_total == 2
+    assert response.usage_total == 17
+    assert response.limit == 25
+    assert response.offset == 0
+    assert response.has_more is True
     item = response.items[0]
     assert item.gene_id == "gene-1"
     assert item.gene_name == "Code Review"

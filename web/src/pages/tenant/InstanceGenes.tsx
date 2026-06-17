@@ -31,12 +31,18 @@ import type { ColumnsType } from 'antd/es/table';
 const { Search } = Input;
 
 const STATUS_COLORS: Record<string, string> = {
-  active: 'green',
-  inactive: 'default',
-  pending: 'blue',
-  error: 'red',
-  disabled: 'gray',
+  failed: 'red',
+  forget_failed: 'red',
+  forgetting: 'orange',
+  installed: 'green',
+  installing: 'blue',
+  learn_failed: 'red',
+  learning: 'blue',
+  simplified: 'purple',
+  uninstalling: 'orange',
 };
+
+const INSTANCE_GENES_PAGE_SIZE = 25;
 
 export const InstanceGenes: React.FC = () => {
   const { t } = useTranslation();
@@ -47,20 +53,30 @@ export const InstanceGenes: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [instanceGenes, setInstanceGenes] = useState<InstanceGeneResponse[]>([]);
+  const [instanceGenesTotal, setInstanceGenesTotal] = useState(0);
+  const [instanceGenesActiveTotal, setInstanceGenesActiveTotal] = useState(0);
+  const [instanceGenesUsageTotal, setInstanceGenesUsageTotal] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [availableGenes, setAvailableGenes] = useState<GeneResponse[]>([]);
   const [isGenesLoading, setIsGenesLoading] = useState(false);
   const [selectedGeneId, setSelectedGeneId] = useState<string | null>(null);
 
-  const fetchInstanceGenes = useCallback(async () => {
+  const fetchInstanceGenes = useCallback(async (page: number) => {
     if (!tenantId || !instanceId) return;
     setIsLoading(true);
     try {
       const response = await geneMarketService.listInstanceGenes(instanceId, {
         tenant_id: tenantId,
+        limit: INSTANCE_GENES_PAGE_SIZE,
+        offset: (page - 1) * INSTANCE_GENES_PAGE_SIZE,
       });
       setInstanceGenes(response.items);
+      setInstanceGenesTotal(response.total);
+      setInstanceGenesActiveTotal(response.active_total);
+      setInstanceGenesUsageTotal(response.usage_total);
+      setCurrentPage(page);
     } catch (err) {
       console.error('Failed to fetch instance genes:', err);
       messageApi?.error(t('tenant.instances.genes.fetchError'));
@@ -88,7 +104,7 @@ export const InstanceGenes: React.FC = () => {
   }, [tenantId]);
 
   useEffect(() => {
-    void fetchInstanceGenes();
+    void fetchInstanceGenes(1);
   }, [fetchInstanceGenes]);
 
   useEffect(() => {
@@ -133,7 +149,7 @@ export const InstanceGenes: React.FC = () => {
       messageApi?.success(t('tenant.instances.genes.installSuccess'));
       setIsAddModalOpen(false);
       setSelectedGeneId(null);
-      void fetchInstanceGenes();
+      void fetchInstanceGenes(1);
     } catch (err) {
       console.error('Failed to install gene:', err);
       messageApi?.error(t('tenant.instances.genes.installError'));
@@ -151,7 +167,9 @@ export const InstanceGenes: React.FC = () => {
           tenant_id: tenantId,
         });
         messageApi?.success(t('tenant.instances.genes.uninstallSuccess'));
-        void fetchInstanceGenes();
+        const nextPage =
+          instanceGenes.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
+        void fetchInstanceGenes(nextPage);
       } catch (err) {
         console.error('Failed to uninstall gene:', err);
         messageApi?.error(t('tenant.instances.genes.uninstallError'));
@@ -159,7 +177,7 @@ export const InstanceGenes: React.FC = () => {
         setIsSubmitting(false);
       }
     },
-    [instanceId, messageApi, t, fetchInstanceGenes, tenantId]
+    [currentPage, instanceGenes.length, instanceId, messageApi, t, fetchInstanceGenes, tenantId]
   );
 
   const handleViewGene = useCallback(
@@ -300,7 +318,7 @@ export const InstanceGenes: React.FC = () => {
             </div>
             <div>
               <p className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
-                {instanceGenes.length}
+                {instanceGenesTotal}
               </p>
               <p className="text-xs text-text-muted dark:text-text-muted">
                 {t('tenant.instances.genes.totalGenes')}
@@ -315,7 +333,7 @@ export const InstanceGenes: React.FC = () => {
             </div>
             <div>
               <p className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
-                {instanceGenes.filter((g) => g.status === 'active').length}
+                {instanceGenesActiveTotal}
               </p>
               <p className="text-xs text-text-muted dark:text-text-muted">
                 {t('tenant.instances.genes.activeGenes')}
@@ -330,7 +348,7 @@ export const InstanceGenes: React.FC = () => {
             </div>
             <div>
               <p className="text-2xl font-semibold text-text-primary dark:text-text-inverse">
-                {instanceGenes.reduce((sum, g) => sum + g.usage_count, 0)}
+                {instanceGenesUsageTotal}
               </p>
               <p className="text-xs text-text-muted dark:text-text-muted">
                 {t('tenant.instances.genes.totalUsage')}
@@ -374,7 +392,26 @@ export const InstanceGenes: React.FC = () => {
             columns={columns}
             dataSource={filteredGenes}
             rowKey="id"
-            pagination={false}
+            pagination={
+              search
+                ? false
+                : {
+                    current: currentPage,
+                    pageSize: INSTANCE_GENES_PAGE_SIZE,
+                    total: instanceGenesTotal,
+                    showSizeChanger: false,
+                    showTotal: (total, range) =>
+                      t('tenant.instances.genes.paginationTotal', {
+                        from: range[0],
+                        to: range[1],
+                        total,
+                      }),
+                    onChange: (page) => {
+                      void fetchInstanceGenes(page);
+                    },
+                    disabled: isLoading,
+                  }
+            }
             scroll={{ x: 'max-content' }}
             className="max-w-full"
           />

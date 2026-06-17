@@ -3,7 +3,7 @@
 import logging
 from typing import override
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.gene.enums import EffectMetricType, InstanceGeneStatus
@@ -34,12 +34,73 @@ class SqlInstanceGeneRepository(
         super().__init__(session)
 
     @override
-    async def find_by_instance(self, instance_id: str) -> list[InstanceGene]:
-        return await self.list_all(instance_id=instance_id)
+    async def find_by_instance(
+        self, instance_id: str, limit: int = 50, offset: int = 0
+    ) -> list[InstanceGene]:
+        if limit < 0:
+            raise ValueError("Limit must be non-negative")
+        if limit == 0:
+            return []
+
+        query = (
+            select(InstanceGeneModel)
+            .where(InstanceGeneModel.instance_id == instance_id)
+            .where(InstanceGeneModel.deleted_at.is_(None))
+            .order_by(InstanceGeneModel.created_at.desc(), InstanceGeneModel.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        db_models = result.scalars().all()
+        return [
+            domain
+            for db_model in db_models
+            if db_model is not None
+            if (domain := self._to_domain(db_model)) is not None
+        ]
+
+    @override
+    async def summarize_by_instance(self, instance_id: str) -> tuple[int, int, int]:
+        query = (
+            select(
+                func.count(InstanceGeneModel.id),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                InstanceGeneModel.status == InstanceGeneStatus.installed.value,
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(func.sum(InstanceGeneModel.usage_count), 0),
+            )
+            .where(InstanceGeneModel.instance_id == instance_id)
+            .where(InstanceGeneModel.deleted_at.is_(None))
+        )
+        result = await self._session.execute(refresh_select_statement(query))
+        total, installed_total, usage_total = result.one()
+        return int(total or 0), int(installed_total or 0), int(usage_total or 0)
 
     @override
     async def find_by_gene(self, gene_id: str) -> list[InstanceGene]:
-        return await self.list_all(gene_id=gene_id)
+        query = (
+            select(InstanceGeneModel)
+            .where(InstanceGeneModel.gene_id == gene_id)
+            .where(InstanceGeneModel.deleted_at.is_(None))
+            .order_by(InstanceGeneModel.created_at.desc(), InstanceGeneModel.id.asc())
+        )
+        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        db_models = result.scalars().all()
+        return [
+            domain
+            for db_model in db_models
+            if db_model is not None
+            if (domain := self._to_domain(db_model)) is not None
+        ]
 
     @override
     async def find_by_instance_and_gene(

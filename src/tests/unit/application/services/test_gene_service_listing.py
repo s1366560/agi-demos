@@ -6,12 +6,33 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.di_container import DIContainer
-from src.domain.model.gene.enums import EvolutionEventType
-from src.infrastructure.adapters.secondary.persistence.models import Project, User
+from src.domain.model.gene.enums import EvolutionEventType, InstanceGeneStatus
+from src.infrastructure.adapters.secondary.persistence.models import InstanceModel, Project, User
 
 
 def _slug(prefix: str) -> str:
     return f"{prefix}-{uuid4().hex[:12]}"
+
+
+async def _create_instance(
+    test_db: AsyncSession,
+    *,
+    instance_id: str,
+    tenant_id: str,
+    created_by: str,
+) -> None:
+    test_db.add(
+        InstanceModel(
+            id=instance_id,
+            name=instance_id,
+            slug=instance_id,
+            tenant_id=tenant_id,
+            service_type="ClusterIP",
+            status="running",
+            created_by=created_by,
+        )
+    )
+    await test_db.flush()
 
 
 @pytest.mark.unit
@@ -175,3 +196,82 @@ async def test_list_evolution_events_with_total_filters_before_pagination(
     assert total == 2
     assert len(events) == 1
     assert events[0].event_type == EvolutionEventType.learned
+
+
+@pytest.mark.unit
+async def test_install_gene_reactivates_soft_deleted_instance_gene(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    await _create_instance(
+        test_db,
+        instance_id="instance-reinstall",
+        tenant_id=test_project_db.tenant_id,
+        created_by=test_user.id,
+    )
+    gene = await service.create_gene(
+        name="Reusable Gene",
+        slug=_slug("reusable-gene"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        version="1.2.3",
+    )
+
+    first_install = await service.install_gene("instance-reinstall", gene.id)
+    await service.uninstall_gene(first_install.id)
+    second_install = await service.install_gene(
+        "instance-reinstall",
+        gene.id,
+        config_snapshot={"mode": "strict"},
+    )
+
+    assert second_install.id == first_install.id
+    assert second_install.deleted_at is None
+    assert second_install.status == InstanceGeneStatus.installed
+    assert second_install.installed_version == "1.2.3"
+    assert second_install.config_snapshot == {"mode": "strict"}
+
+
+@pytest.mark.unit
+async def test_list_instance_genes_with_summary_filters_deleted_before_pagination(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    await _create_instance(
+        test_db,
+        instance_id="instance-list",
+        tenant_id=test_project_db.tenant_id,
+        created_by=test_user.id,
+    )
+    genes = [
+        await service.create_gene(
+            name=f"Installed Gene {index}",
+            slug=_slug(f"installed-gene-{index}"),
+            created_by=test_user.id,
+            tenant_id=test_project_db.tenant_id,
+        )
+        for index in range(4)
+    ]
+    installed = [await service.install_gene("instance-list", gene.id) for gene in genes]
+    instance_gene_repo = DIContainer().with_db(test_db).instance_gene_repository()
+    installed[1].usage_count = 5
+    installed[2].usage_count = 7
+    await instance_gene_repo.save(installed[1])
+    await instance_gene_repo.save(installed[2])
+    await service.uninstall_gene(installed[3].id)
+
+    page, total, active_total, usage_total = await service.list_instance_genes_with_summary(
+        "instance-list",
+        limit=2,
+        offset=0,
+    )
+
+    assert total == 3
+    assert active_total == 3
+    assert usage_total == 12
+    assert len(page) == 2
+    assert all(gene.deleted_at is None for gene in page)
