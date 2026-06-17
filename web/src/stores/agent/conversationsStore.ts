@@ -109,6 +109,41 @@ export const initialState = {
 };
 
 const groupedConversationListOptions = { groupByWorkspace: true };
+let listConversationsRequestSequence = 0;
+let activeListConversationsRequest: {
+  key: string;
+  sequence: number;
+} | null = null;
+
+function conversationListRequestKey(
+  projectId: string,
+  status: ConversationStatus | undefined,
+  limit: number
+): string {
+  return `${projectId}:${status ?? 'all'}:${String(limit)}`;
+}
+
+function startListConversationsRequest(key: string): number {
+  const sequence = listConversationsRequestSequence + 1;
+  listConversationsRequestSequence = sequence;
+  activeListConversationsRequest = { key, sequence };
+  return sequence;
+}
+
+function isActiveListConversationsRequest(sequence: number): boolean {
+  return activeListConversationsRequest?.sequence === sequence;
+}
+
+function finishListConversationsRequest(sequence: number): void {
+  if (isActiveListConversationsRequest(sequence)) {
+    activeListConversationsRequest = null;
+  }
+}
+
+function resetListConversationsRequestTracking(): void {
+  activeListConversationsRequest = null;
+  listConversationsRequestSequence = 0;
+}
 
 function conversationActivityTime(conversation: Conversation): number {
   const rawTimestamp = conversation.updated_at || conversation.created_at;
@@ -193,12 +228,19 @@ export const useConversationsStore = create<ConversationsState>()(
         signalOrOptions?: AbortSignal | ListConversationsOptions
       ) => {
         const { signal, silent = false } = normalizeListOptions(signalOrOptions);
-        // Skip if already loading for the same project
         const state = get();
-        if (state.conversationsLoading) {
+        const requestKey = conversationListRequestKey(projectId, status, limit);
+        if (activeListConversationsRequest?.key === requestKey) {
+          return;
+        }
+        if (silent && state.conversationsLoading) {
+          return;
+        }
+        if (state.conversationsLoading && activeListConversationsRequest === null) {
           return;
         }
 
+        const requestSequence = startListConversationsRequest(requestKey);
         if (!silent) {
           set({ conversationsLoading: true, conversationsError: null });
         }
@@ -220,6 +262,9 @@ export const useConversationsStore = create<ConversationsState>()(
                 undefined,
                 groupedConversationListOptions
               );
+          if (!isActiveListConversationsRequest(requestSequence)) {
+            return;
+          }
           set({
             conversations: mergeUniqueConversations([], response.items),
             hasMoreConversations: response.has_more,
@@ -227,7 +272,12 @@ export const useConversationsStore = create<ConversationsState>()(
             conversationsNextOffset: responseNextOffset(response, 0),
             ...(!silent ? { conversationsLoading: false } : {}),
           });
+          finishListConversationsRequest(requestSequence);
         } catch (error: unknown) {
+          if (!isActiveListConversationsRequest(requestSequence)) {
+            return;
+          }
+          finishListConversationsRequest(requestSequence);
           // Defect #15: silently swallow aborted requests so a stale
           // project switch does not surface as a user-facing error.
           if (signal?.aborted || (error as { name?: string }).name === 'CanceledError') {
@@ -532,6 +582,7 @@ export const useConversationsStore = create<ConversationsState>()(
        * Completely resets all state in this store.
        */
       reset: () => {
+        resetListConversationsRequestTracking();
         set(initialState);
       },
     }),

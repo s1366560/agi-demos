@@ -54,6 +54,16 @@ const createMockConversation = (
   updated_at: '2024-01-01T00:00:00Z',
 });
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 // Mock agent service
 vi.mock('../../../services/agentService', () => ({
   agentService: {
@@ -221,6 +231,50 @@ describe('ConversationsStore', () => {
       // Resolve and complete
       resolveConversations!({ items: [], has_more: false, total: 0 });
       await fetchPromise;
+    });
+
+    it('allows a newer project request while an older project is still loading', async () => {
+      const projectARequest = deferred<{
+        items: Conversation[];
+        has_more: boolean;
+        total: number;
+      }>();
+      const projectBRequest = deferred<{
+        items: Conversation[];
+        has_more: boolean;
+        total: number;
+      }>();
+      const projectAConversation = createMockConversation('conv-a', 'proj-a', 'Project A');
+      const projectBConversation = createMockConversation('conv-b', 'proj-b', 'Project B');
+
+      listConversationsMock
+        .mockReturnValueOnce(projectARequest.promise as any)
+        .mockReturnValueOnce(projectBRequest.promise as any);
+
+      const projectAPromise = useConversationsStore.getState().listConversations('proj-a');
+      expect(useConversationsStore.getState().conversationsLoading).toBe(true);
+
+      const projectBPromise = useConversationsStore.getState().listConversations('proj-b');
+      expect(listConversationsMock).toHaveBeenCalledTimes(2);
+
+      projectBRequest.resolve({
+        items: [projectBConversation],
+        has_more: false,
+        total: 1,
+      });
+      await projectBPromise;
+
+      expect(useConversationsStore.getState().conversations).toEqual([projectBConversation]);
+      expect(useConversationsStore.getState().conversationsLoading).toBe(false);
+
+      projectARequest.resolve({
+        items: [projectAConversation],
+        has_more: false,
+        total: 1,
+      });
+      await projectAPromise;
+
+      expect(useConversationsStore.getState().conversations).toEqual([projectBConversation]);
     });
 
     it('should handle fetch error', async () => {
