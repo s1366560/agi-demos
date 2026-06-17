@@ -1760,6 +1760,8 @@ async def list_configs(
     project_id: str,
     channel_type: str | None = None,
     enabled_only: bool = False,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ChannelConfigList:
@@ -1769,10 +1771,17 @@ async def list_configs(
 
     repo = ChannelConfigRepository(db)
     configs = await repo.list_by_project(
+        project_id,
+        channel_type=channel_type,
+        enabled_only=enabled_only,
+        limit=limit,
+        offset=offset,
+    )
+    total = await repo.count_by_project(
         project_id, channel_type=channel_type, enabled_only=enabled_only
     )
 
-    return ChannelConfigList(items=[to_response(c) for c in configs], total=len(configs))
+    return ChannelConfigList(items=[to_response(c) for c in configs], total=total)
 
 
 @router.get("/configs/{config_id}", response_model=ChannelConfigResponse)

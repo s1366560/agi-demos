@@ -28,6 +28,7 @@ from src.infrastructure.adapters.primary.web.routers.channels import (
     get_tenant_plugin_config,
     get_tenant_plugin_config_schema,
     list_all_connection_status,
+    list_configs as route_list_configs,
     list_project_channel_plugin_catalog,
     list_tenant_channel_plugin_catalog,
     list_tenant_plugins,
@@ -227,6 +228,55 @@ class TestToResponse:
         assert response.name == sample_channel_config.name
         assert response.enabled == sample_channel_config.enabled
         assert response.status == sample_channel_config.status
+
+
+class TestConfigListing:
+    """Channel configuration listing should stay bounded and return true totals."""
+
+    @pytest.mark.asyncio
+    async def test_list_configs_uses_pagination_and_filtered_count(
+        self,
+        mock_db_session,
+        sample_channel_config,
+    ):
+        """List endpoint should pass page bounds and return count metadata."""
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        repo = MagicMock()
+        repo.list_by_project = AsyncMock(return_value=[sample_channel_config])
+        repo.count_by_project = AsyncMock(return_value=3)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository",
+                return_value=repo,
+            ),
+        ):
+            response = await route_list_configs(
+                project_id="project-456",
+                channel_type="feishu",
+                enabled_only=True,
+                limit=1,
+                offset=2,
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        assert response.total == 3
+        assert [item.id for item in response.items] == [sample_channel_config.id]
+        repo.list_by_project.assert_awaited_once_with(
+            "project-456",
+            channel_type="feishu",
+            enabled_only=True,
+            limit=1,
+            offset=2,
+        )
+        repo.count_by_project.assert_awaited_once_with(
+            "project-456", channel_type="feishu", enabled_only=True
+        )
 
 
 class TestPydanticSchemas:

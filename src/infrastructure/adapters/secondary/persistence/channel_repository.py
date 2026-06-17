@@ -3,10 +3,11 @@
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
@@ -39,14 +40,16 @@ class ChannelConfigRepository:
     async def get_by_id(self, config_id: str) -> ChannelConfigModel | None:
         """Get configuration by ID."""
         result = await self._session.execute(
-            refresh_select_statement(select(ChannelConfigModel).where(ChannelConfigModel.id == config_id))
+            refresh_select_statement(
+                select(ChannelConfigModel).where(ChannelConfigModel.id == config_id)
+            )
         )
         return result.scalar_one_or_none()
 
-    async def list_by_project(
-        self, project_id: str, channel_type: str | None = None, enabled_only: bool = False
-    ) -> list[ChannelConfigModel]:
-        """List configurations for a project."""
+    @staticmethod
+    def _project_configs_query(
+        project_id: str, channel_type: str | None = None, enabled_only: bool = False
+    ) -> Select[tuple[ChannelConfigModel]]:
         query = select(ChannelConfigModel).where(ChannelConfigModel.project_id == project_id)
 
         if channel_type:
@@ -55,8 +58,40 @@ class ChannelConfigRepository:
         if enabled_only:
             query = query.where(ChannelConfigModel.enabled.is_(True))
 
+        return query
+
+    async def list_by_project(
+        self,
+        project_id: str,
+        channel_type: str | None = None,
+        enabled_only: bool = False,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[ChannelConfigModel]:
+        """List configurations for a project."""
+        query = self._project_configs_query(
+            project_id, channel_type=channel_type, enabled_only=enabled_only
+        ).order_by(ChannelConfigModel.created_at.desc(), ChannelConfigModel.id.desc())
+
+        if limit is not None:
+            query = query.limit(limit)
+
+        if offset > 0:
+            query = query.offset(offset)
+
         result = await self._session.execute(refresh_select_statement(query))
         return list(result.scalars().all())
+
+    async def count_by_project(
+        self, project_id: str, channel_type: str | None = None, enabled_only: bool = False
+    ) -> int:
+        """Count configurations for a project using the same filters as list_by_project."""
+        filtered_query = self._project_configs_query(
+            project_id, channel_type=channel_type, enabled_only=enabled_only
+        )
+        query = select(func.count()).select_from(filtered_query.subquery())
+        result = await self._session.execute(refresh_select_statement(query))
+        return int(result.scalar_one() or 0)
 
     async def list_all_enabled(self) -> list[ChannelConfigModel]:
         """List all enabled configurations across all projects.
@@ -131,14 +166,16 @@ class ChannelMessageRepository:
         )
 
         result = await self._session.execute(
-            refresh_select_statement(select(ChannelMessageModel)
-            .where(
-                ChannelMessageModel.project_id == project_id,
-                ChannelMessageModel.chat_id == chat_id,
+            refresh_select_statement(
+                select(ChannelMessageModel)
+                .where(
+                    ChannelMessageModel.project_id == project_id,
+                    ChannelMessageModel.chat_id == chat_id,
+                )
+                .order_by(ChannelMessageModel.created_at.desc())
+                .limit(limit)
+                .offset(offset)
             )
-            .order_by(ChannelMessageModel.created_at.desc())
-            .limit(limit)
-            .offset(offset))
         )
         return list(result.scalars().all())
 
@@ -156,10 +193,12 @@ class ChannelSessionBindingRepository:
     ) -> ChannelSessionBindingModel | None:
         """Get binding by project and deterministic session key."""
         result = await self._session.execute(
-            refresh_select_statement(select(ChannelSessionBindingModel).where(
-                ChannelSessionBindingModel.project_id == project_id,
-                ChannelSessionBindingModel.session_key == session_key,
-            ))
+            refresh_select_statement(
+                select(ChannelSessionBindingModel).where(
+                    ChannelSessionBindingModel.project_id == project_id,
+                    ChannelSessionBindingModel.session_key == session_key,
+                )
+            )
         )
         return result.scalar_one_or_none()
 
@@ -169,9 +208,11 @@ class ChannelSessionBindingRepository:
     ) -> ChannelSessionBindingModel | None:
         """Get binding by conversation ID."""
         result = await self._session.execute(
-            refresh_select_statement(select(ChannelSessionBindingModel).where(
-                ChannelSessionBindingModel.conversation_id == conversation_id
-            ))
+            refresh_select_statement(
+                select(ChannelSessionBindingModel).where(
+                    ChannelSessionBindingModel.conversation_id == conversation_id
+                )
+            )
         )
         return result.scalar_one_or_none()
 
@@ -235,24 +276,28 @@ class ChannelOutboxRepository:
     async def get_by_id(self, outbox_id: str) -> ChannelOutboxModel | None:
         """Get outbox record by ID."""
         result = await self._session.execute(
-            refresh_select_statement(select(ChannelOutboxModel).where(ChannelOutboxModel.id == outbox_id))
+            refresh_select_statement(
+                select(ChannelOutboxModel).where(ChannelOutboxModel.id == outbox_id)
+            )
         )
         return result.scalar_one_or_none()
 
     async def mark_sent(self, outbox_id: str, sent_channel_message_id: str | None) -> bool:
         """Mark outbox message as sent."""
         result = await self._session.execute(
-            refresh_select_statement(update(ChannelOutboxModel)
-            .where(
-                ChannelOutboxModel.id == outbox_id,
-                ChannelOutboxModel.status.in_(("pending", "failed")),
+            refresh_select_statement(
+                update(ChannelOutboxModel)
+                .where(
+                    ChannelOutboxModel.id == outbox_id,
+                    ChannelOutboxModel.status.in_(("pending", "failed")),
+                )
+                .values(
+                    status="sent",
+                    sent_channel_message_id=sent_channel_message_id,
+                    last_error=None,
+                    next_retry_at=None,
+                )
             )
-            .values(
-                status="sent",
-                sent_channel_message_id=sent_channel_message_id,
-                last_error=None,
-                next_retry_at=None,
-            ))
         )
         await self._session.flush()
         return cast(CursorResult[Any], result).rowcount > 0
@@ -260,12 +305,14 @@ class ChannelOutboxRepository:
     async def mark_failed(self, outbox_id: str, error_message: str) -> bool:
         """Mark outbox message as failed/dead-letter with retry backoff."""
         current_result = await self._session.execute(
-            refresh_select_statement(select(ChannelOutboxModel.attempt_count, ChannelOutboxModel.max_attempts)
-            .where(
-                ChannelOutboxModel.id == outbox_id,
-                ChannelOutboxModel.status.in_(("pending", "failed")),
+            refresh_select_statement(
+                select(ChannelOutboxModel.attempt_count, ChannelOutboxModel.max_attempts)
+                .where(
+                    ChannelOutboxModel.id == outbox_id,
+                    ChannelOutboxModel.status.in_(("pending", "failed")),
+                )
+                .with_for_update()
             )
-            .with_for_update())
         )
         current = current_result.one_or_none()
         if current is None:
@@ -280,18 +327,20 @@ class ChannelOutboxRepository:
             next_retry_at = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
 
         result = await self._session.execute(
-            refresh_select_statement(update(ChannelOutboxModel)
-            .where(
-                ChannelOutboxModel.id == outbox_id,
-                ChannelOutboxModel.status.in_(("pending", "failed")),
-                ChannelOutboxModel.attempt_count == int(current_attempt_count),
+            refresh_select_statement(
+                update(ChannelOutboxModel)
+                .where(
+                    ChannelOutboxModel.id == outbox_id,
+                    ChannelOutboxModel.status.in_(("pending", "failed")),
+                    ChannelOutboxModel.attempt_count == int(current_attempt_count),
+                )
+                .values(
+                    attempt_count=next_attempt_count,
+                    last_error=error_message,
+                    status="dead_letter" if move_to_dead_letter else "failed",
+                    next_retry_at=next_retry_at,
+                )
             )
-            .values(
-                attempt_count=next_attempt_count,
-                last_error=error_message,
-                status="dead_letter" if move_to_dead_letter else "failed",
-                next_retry_at=next_retry_at,
-            ))
         )
         await self._session.flush()
         return cast(CursorResult[Any], result).rowcount > 0
@@ -303,12 +352,14 @@ class ChannelOutboxRepository:
         """
         now = datetime.now(UTC)
         result = await self._session.execute(
-            refresh_select_statement(select(ChannelOutboxModel)
-            .where(
-                ChannelOutboxModel.status == "failed",
-                ChannelOutboxModel.next_retry_at <= now,
+            refresh_select_statement(
+                select(ChannelOutboxModel)
+                .where(
+                    ChannelOutboxModel.status == "failed",
+                    ChannelOutboxModel.next_retry_at <= now,
+                )
+                .order_by(ChannelOutboxModel.next_retry_at.asc())
+                .limit(limit)
             )
-            .order_by(ChannelOutboxModel.next_retry_at.asc())
-            .limit(limit))
         )
         return list(result.scalars().all())

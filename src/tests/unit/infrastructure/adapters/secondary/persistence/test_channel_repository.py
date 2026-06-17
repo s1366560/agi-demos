@@ -163,6 +163,45 @@ class TestChannelConfigRepositoryCRUD:
         assert len(result) == 1
 
     @pytest.mark.asyncio
+    async def test_list_by_project_supports_pagination(self, mock_session, sample_config):
+        """Should bound project listing when limit and offset are provided."""
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [sample_config]
+        mock_session.execute.return_value = mock_result
+
+        repo = ChannelConfigRepository(mock_session)
+        result = await repo.list_by_project("project-456", limit=2, offset=4)
+
+        statement = mock_session.execute.await_args.args[0]
+        compiled = str(statement.compile(compile_kwargs={"literal_binds": True})).upper()
+
+        assert len(result) == 1
+        assert "LIMIT 2" in compiled
+        assert "OFFSET 4" in compiled
+        assert "ORDER BY" in compiled
+
+    @pytest.mark.asyncio
+    async def test_count_by_project_uses_filtered_count(self, mock_session):
+        """Should count project configs using channel and enabled filters."""
+        mock_result = MagicMock()
+        mock_result.scalar_one.return_value = 3
+        mock_session.execute.return_value = mock_result
+
+        repo = ChannelConfigRepository(mock_session)
+        result = await repo.count_by_project(
+            "project-456", channel_type="feishu", enabled_only=True
+        )
+
+        statement = mock_session.execute.await_args.args[0]
+        compiled = str(statement.compile(compile_kwargs={"literal_binds": True})).lower()
+
+        assert result == 3
+        assert "count" in compiled
+        assert "project-456" in compiled
+        assert "feishu" in compiled
+        assert "enabled is true" in compiled or "enabled = true" in compiled
+
+    @pytest.mark.asyncio
     async def test_update_config(self, mock_session, sample_config):
         """Should update configuration."""
         mock_session.merge = AsyncMock(return_value=sample_config)
