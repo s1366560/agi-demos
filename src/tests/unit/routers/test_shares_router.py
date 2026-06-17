@@ -12,6 +12,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     MemoryShare,
     Project,
     User,
+    UserProject,
 )
 
 
@@ -127,6 +128,104 @@ class TestCreateShare:
 
         assert response.status_code == 403
         assert "Access denied" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_create_share_user_target_must_exist(
+        self, test_db, client, test_memory_with_project
+    ):
+        """User-targeted shares cannot be created for unknown users."""
+        share_data = {
+            "target_type": "user",
+            "target_id": "missing_user_target",
+            "permission_level": "view",
+        }
+
+        response = client.post(
+            f"/api/v1/memories/{test_memory_with_project.id}/shares", json=share_data
+        )
+
+        assert response.status_code == 404
+        assert "Target user not found" in response.json()["detail"]
+        result = await test_db.execute(
+            select(MemoryShare).where(
+                MemoryShare.memory_id == test_memory_with_project.id,
+                MemoryShare.shared_with_user_id == "missing_user_target",
+            )
+        )
+        assert result.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
+    async def test_create_share_project_target_requires_admin_access(
+        self, test_db, client, test_memory_with_project
+    ):
+        """Project-targeted shares require admin or owner access to the target project."""
+        target_project = Project(
+            id="share_target_project_denied",
+            tenant_id="tenant_123",
+            name="Denied Target Project",
+            description="No current user membership",
+            owner_id="other_owner_for_share_target",
+            is_public=False,
+        )
+        test_db.add(target_project)
+        await test_db.commit()
+
+        share_data = {
+            "target_type": "project",
+            "target_id": target_project.id,
+            "permission_level": "view",
+        }
+
+        response = client.post(
+            f"/api/v1/memories/{test_memory_with_project.id}/shares", json=share_data
+        )
+
+        assert response.status_code == 403
+        assert "Access denied" in response.json()["detail"]
+        result = await test_db.execute(
+            select(MemoryShare).where(
+                MemoryShare.memory_id == test_memory_with_project.id,
+                MemoryShare.shared_with_project_id == target_project.id,
+            )
+        )
+        assert result.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
+    async def test_create_share_project_target_with_admin_access(
+        self, test_db, client, test_memory_with_project, test_user
+    ):
+        """Project-targeted shares succeed only after target project authorization passes."""
+        target_project = Project(
+            id="share_target_project_allowed",
+            tenant_id="tenant_123",
+            name="Allowed Target Project",
+            description="Current user is admin",
+            owner_id=test_user.id,
+            is_public=False,
+        )
+        membership = UserProject(
+            id=str(uuid.uuid4()),
+            user_id=test_user.id,
+            project_id=target_project.id,
+            role="admin",
+        )
+        test_db.add_all([target_project, membership])
+        await test_db.commit()
+
+        share_data = {
+            "target_type": "project",
+            "target_id": target_project.id,
+            "permission_level": "edit",
+        }
+
+        response = client.post(
+            f"/api/v1/memories/{test_memory_with_project.id}/shares", json=share_data
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["shared_with_project_id"] == target_project.id
+        assert data["permissions"]["edit"] is True
 
 
 class TestListShares:

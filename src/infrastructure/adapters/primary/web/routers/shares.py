@@ -18,6 +18,7 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     Memory,
     MemoryShare,
+    Project,
     User,
     UserProject,
 )
@@ -63,6 +64,73 @@ def _new_share_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+async def _ensure_share_target_authorized(
+    db: AsyncSession,
+    current_user_id: str,
+    target_type: str,
+    target_id: str,
+) -> None:
+    """Validate that an explicit share target exists and can receive this share."""
+    if target_type == "user":
+        target_user_result = await db.execute(
+            refresh_select_statement(select(User.id).where(User.id == target_id))
+        )
+        if target_user_result.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail=_("Target user not found"))
+        return
+
+    target_project_result = await db.execute(
+        refresh_select_statement(select(Project.id).where(Project.id == target_id))
+    )
+    if target_project_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail=_("Target project not found"))
+    if not await _check_project_admin_access(db, current_user_id, target_id):
+        raise HTTPException(status_code=403, detail=_("Access denied"))
+
+
+async def _find_existing_target_share(
+    db: AsyncSession,
+    memory_id: str,
+    target_type: str,
+    target_id: str,
+) -> MemoryShare | None:
+    """Return an existing explicit target share for duplicate detection."""
+    if target_type == "user":
+        result = await db.execute(
+            refresh_select_statement(select(MemoryShare).where(
+                MemoryShare.memory_id == memory_id,
+                MemoryShare.shared_with_user_id == target_id,
+            ))
+        )
+    else:
+        result = await db.execute(
+            refresh_select_statement(select(MemoryShare).where(
+                MemoryShare.memory_id == memory_id,
+                MemoryShare.shared_with_project_id == target_id,
+            ))
+        )
+    return result.scalar_one_or_none()
+
+
+def _parse_share_expiration(share_data: dict[str, Any]) -> datetime | None:
+    """Parse either absolute or relative share expiration payload fields."""
+    if share_data.get("expires_at"):
+        try:
+            return datetime.fromisoformat(share_data["expires_at"])
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail=_("Invalid expires_at format"),
+            ) from None
+
+    if "expires_in_days" in share_data:
+        days = share_data["expires_in_days"]
+        if isinstance(days, int) and days > 0:
+            return datetime.now(UTC) + timedelta(days=days)
+
+    return None
+
+
 @router.post("/memories/{memory_id}/shares", status_code=status.HTTP_201_CREATED)
 async def create_share(
     memory_id: str,
@@ -80,46 +148,31 @@ async def create_share(
     target_type = share_data.get("target_type")
     permission_level = share_data.get("permission_level")
     target_id = share_data.get("target_id")
+    validated_target_id: str | None = None
     if target_type:
         if target_type not in ["user", "project"]:
             raise HTTPException(status_code=400, detail=_("target_type must be 'user' or 'project'"))
         if permission_level not in ["view", "edit"]:
             raise HTTPException(status_code=400, detail=_("permission_level must be 'view' or 'edit'"))
-        # duplicate check
-        if target_type == "user":
-            existing_share = await db.execute(
-                refresh_select_statement(select(MemoryShare).where(
-                    MemoryShare.memory_id == memory_id, MemoryShare.shared_with_user_id == target_id
-                ))
-            )
-        else:
-            existing_share = await db.execute(
-                refresh_select_statement(select(MemoryShare).where(
-                    MemoryShare.memory_id == memory_id,
-                    MemoryShare.shared_with_project_id == target_id,
-                ))
-            )
-        if existing_share.scalar_one_or_none():
+        if not isinstance(target_id, str) or not target_id.strip():
+            raise HTTPException(status_code=400, detail=_("target_id is required"))
+        validated_target_id = target_id.strip()
+
+        await _ensure_share_target_authorized(
+            db,
+            current_user.id,
+            target_type,
+            validated_target_id,
+        )
+        if await _find_existing_target_share(db, memory_id, target_type, validated_target_id):
             raise HTTPException(status_code=400, detail=_("Memory already shared with this target"))
-    # expiration
-    expires_at = None
-    if share_data.get("expires_at"):
-        try:
-            expires_at = datetime.fromisoformat(share_data["expires_at"])
-        except (TypeError, ValueError):
-            raise HTTPException(
-                status_code=400,
-                detail=_("Invalid expires_at format"),
-            ) from None
-    elif "expires_in_days" in share_data:
-        days = share_data["expires_in_days"]
-        if isinstance(days, int) and days > 0:
-            expires_at = datetime.now(UTC) + timedelta(days=days)
+
+    expires_at = _parse_share_expiration(share_data)
     share = MemoryShare(
         id=str(uuid4()),
         memory_id=memory_id,
-        shared_with_user_id=target_id if target_type == "user" else None,
-        shared_with_project_id=target_id if target_type == "project" else None,
+        shared_with_user_id=validated_target_id if target_type == "user" else None,
+        shared_with_project_id=validated_target_id if target_type == "project" else None,
         share_token=_new_share_token(),
         shared_by=current_user.id,
         permissions=share_data.get(
