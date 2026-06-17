@@ -127,7 +127,10 @@ class SqlInstanceTemplateRepository(
     async def find_items_by_template(self, template_id: str) -> list[TemplateItem]:
         query = (
             select(TemplateItemModel)
-            .where(TemplateItemModel.template_id == template_id)
+            .where(
+                TemplateItemModel.template_id == template_id,
+                TemplateItemModel.deleted_at.is_(None),
+            )
             .order_by(TemplateItemModel.display_order)
         )
         result = await self._session.execute(
@@ -137,8 +140,10 @@ class SqlInstanceTemplateRepository(
         return [self._item_to_domain(i) for i in db_items]
 
     @override
-    async def delete_item(self, item_id: str) -> bool:
+    async def delete_item(self, item_id: str, template_id: str | None = None) -> bool:
         query = select(TemplateItemModel).where(TemplateItemModel.id == item_id)
+        if template_id is not None:
+            query = query.where(TemplateItemModel.template_id == template_id)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(query))
         )

@@ -314,17 +314,18 @@ class InstanceTemplateService:
         )
         return saved
 
-    async def remove_template_item(self, item_id: str) -> None:
+    async def remove_template_item(self, item_id: str, template_id: str | None = None) -> None:
         """
         Soft-delete a template item.
 
         Args:
             item_id: Template item ID.
+            template_id: Optional parent template ID to enforce.
 
         Raises:
             ValueError: If template item does not exist.
         """
-        deleted = await self._template_repo.delete_item(item_id)
+        deleted = await self._template_repo.delete_item(item_id, template_id=template_id)
         if not deleted:
             raise ValueError(f"Template item {item_id} not found")
         logger.info("Removed template item %s", item_id)

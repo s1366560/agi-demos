@@ -66,5 +66,5 @@ class InstanceTemplateRepository(ABC):
         """List all items in a template."""
 
     @abstractmethod
-    async def delete_item(self, item_id: str) -> bool:
+    async def delete_item(self, item_id: str, template_id: str | None = None) -> bool:
         """Delete a template item. Returns True if deleted, False if not found."""

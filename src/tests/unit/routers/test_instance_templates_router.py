@@ -39,10 +39,12 @@ class _FailingTemplateService:
     async def get_template(self, *_args: object) -> object | None:
         return SimpleNamespace(
             id="tmpl-source",
+            tenant_id="tenant-1",
             description=None,
             icon=None,
             image_version=None,
             default_config={},
+            deleted_at=None,
         )
 
     async def list_template_items(self, *_args: object) -> list[object]:
@@ -51,7 +53,7 @@ class _FailingTemplateService:
     async def add_template_item(self, **_kwargs: object) -> object:
         raise ValueError("Template tmpl-secret not found")
 
-    async def remove_template_item(self, *_args: object) -> None:
+    async def remove_template_item(self, *_args: object, **_kwargs: object) -> None:
         raise ValueError("Template item item-secret not found")
 
 
@@ -205,3 +207,66 @@ async def test_clone_template_sanitizes_create_value_errors(
     assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
     assert exc_info.value.detail == "Invalid template request"
     assert "internal" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+async def test_list_template_items_rejects_cross_tenant_template(
+    monkeypatch: pytest.MonkeyPatch,
+    db: SimpleNamespace,
+) -> None:
+    class CrossTenantService:
+        list_template_items = AsyncMock()
+
+        async def get_template(self, *_args: object) -> object:
+            return SimpleNamespace(id="tmpl-other", tenant_id="tenant-2", deleted_at=None)
+
+    service = CrossTenantService()
+
+    class Container:
+        def instance_template_service(self) -> CrossTenantService:
+            return service
+
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: Container())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router.list_template_items(
+            request=SimpleNamespace(),
+            template_id="tmpl-other",
+            tenant_id="tenant-1",
+            db=db,
+        )
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    assert exc_info.value.detail == "Template not found"
+    service.list_template_items.assert_not_called()
+
+
+@pytest.mark.unit
+async def test_remove_template_item_passes_route_template_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    db: SimpleNamespace,
+) -> None:
+    class ScopedService:
+        def __init__(self) -> None:
+            self.remove_template_item = AsyncMock()
+
+        async def get_template(self, *_args: object) -> object:
+            return SimpleNamespace(id="tmpl-owned", tenant_id="tenant-1", deleted_at=None)
+
+    service = ScopedService()
+
+    class Container:
+        def instance_template_service(self) -> ScopedService:
+            return service
+
+    monkeypatch.setattr(router, "get_container_with_db", lambda *_args: Container())
+
+    await router.remove_template_item(
+        request=SimpleNamespace(),
+        template_id="tmpl-owned",
+        item_id="item-owned",
+        tenant_id="tenant-1",
+        db=db,
+    )
+
+    service.remove_template_item.assert_awaited_once_with("item-owned", template_id="tmpl-owned")

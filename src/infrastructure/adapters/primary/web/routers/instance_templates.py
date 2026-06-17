@@ -5,6 +5,7 @@ for creating instances with predefined settings and gene compositions.
 """
 
 import logging
+from typing import Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -19,6 +20,7 @@ from src.application.schemas.instance_template_schemas import (
     TemplateItemResponse,
 )
 from src.configuration.di_container import DIContainer
+from src.domain.model.instance_template.instance_template import InstanceTemplate
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
@@ -57,6 +59,10 @@ class CloneTemplateRequest(BaseModel):
     )
 
 
+class _TemplateReader(Protocol):
+    async def get_template(self, template_id: str) -> InstanceTemplate | None: ...
+
+
 def _template_value_error_to_http(error: ValueError) -> HTTPException:
     """Map service/domain validation errors to stable API responses."""
     message = str(error).lower()
@@ -70,6 +76,20 @@ def _template_value_error_to_http(error: ValueError) -> HTTPException:
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=_("Invalid template request"),
     )
+
+
+async def _get_tenant_template_or_404(
+    service: _TemplateReader,
+    template_id: str,
+    tenant_id: str,
+) -> InstanceTemplate:
+    template = await service.get_template(template_id)
+    if not template or template.tenant_id != tenant_id or template.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Template not found"),
+        )
+    return template
 
 
 # ------------------------------------------------------------------
@@ -169,12 +189,7 @@ async def get_template(
     container = get_container_with_db(request, db)
     service = container.instance_template_service()
 
-    template = await service.get_template(template_id)
-    if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_("Template not found"),
-        )
+    template = await _get_tenant_template_or_404(service, template_id, tenant_id)
 
     return InstanceTemplateResponse.model_validate(template, from_attributes=True)
 
@@ -195,6 +210,7 @@ async def update_template(
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
+        _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
         template = await service.update_template(
             template_id=template_id,
             name=data.name,
@@ -231,6 +247,7 @@ async def delete_template(
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
+        _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
         await service.delete_template(template_id)
         await db.commit()
 
@@ -262,6 +279,7 @@ async def publish_template(
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
+        _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
         template = await service.publish_template(template_id)
         await db.commit()
 
@@ -289,6 +307,7 @@ async def unpublish_template(
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
+        _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
         template = await service.unpublish_template(template_id)
         await db.commit()
 
@@ -324,12 +343,7 @@ async def clone_template(
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
-        source = await service.get_template(template_id)
-        if not source:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=_("Source template not found"),
-            )
+        source = await _get_tenant_template_or_404(service, template_id, tenant_id)
 
         slug = data.new_name.lower().replace(" ", "-")
         cloned = await service.create_template(
@@ -389,6 +403,7 @@ async def add_template_item(
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
+        _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
         item = await service.add_template_item(
             template_id=template_id,
             item_type=TemplateItemType(data.item_type),
@@ -427,7 +442,8 @@ async def remove_template_item(
         container = get_container_with_db(request, db)
         service = container.instance_template_service()
 
-        await service.remove_template_item(item_id)
+        _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
+        await service.remove_template_item(item_id, template_id=template_id)
         await db.commit()
 
         logger.info(
@@ -456,6 +472,7 @@ async def list_template_items(
     container = get_container_with_db(request, db)
     service = container.instance_template_service()
 
+    _ = await _get_tenant_template_or_404(service, template_id, tenant_id)
     items = await service.list_template_items(template_id)
 
     return [TemplateItemResponse.model_validate(item, from_attributes=True) for item in items]
