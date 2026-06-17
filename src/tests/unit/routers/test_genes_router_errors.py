@@ -123,6 +123,25 @@ class _ReviewFailingContainer(_Container):
         return _ReviewFailingGeneService()
 
 
+class _UpdateValidationGeneService(_FailingGeneService):
+    async def get_gene(self, gene_id: str, *_args: object, **_kwargs: object) -> object | None:
+        return SimpleNamespace(id=gene_id, tenant_id="tenant-1")
+
+    async def update_gene(self, *_args: object, **_kwargs: object) -> object:
+        raise ValueError("gene slug secret duplicate")
+
+    async def get_genome(self, genome_id: str, *_args: object, **_kwargs: object) -> object | None:
+        return SimpleNamespace(id=genome_id, tenant_id="tenant-1")
+
+    async def update_genome(self, *_args: object, **_kwargs: object) -> object:
+        raise ValueError("genome slug secret duplicate")
+
+
+class _UpdateValidationContainer(_Container):
+    def gene_service(self) -> _UpdateValidationGeneService:
+        return _UpdateValidationGeneService()
+
+
 @pytest.fixture(autouse=True)
 def patch_container(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(genes, "get_container_with_db", lambda _request, _db: _Container())
@@ -173,6 +192,30 @@ async def test_update_gene_sanitizes_missing_gene_id() -> None:
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Gene not found"
     assert "gene-secret" not in str(exc_info.value.detail)
+
+
+@pytest.mark.unit
+async def test_update_gene_reports_validation_errors_as_bad_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _UpdateValidationContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.update_gene(
+            request=SimpleNamespace(),
+            gene_id="gene-1",
+            data=GeneUpdate(slug="secret-slug"),
+            tenant_id="tenant-1",
+            db=SimpleNamespace(commit=None),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid gene request"
+    assert "secret" not in str(exc_info.value.detail)
 
 
 @pytest.mark.unit
@@ -237,6 +280,30 @@ async def test_get_genome_sanitizes_missing_genome_id() -> None:
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Genome not found"
+
+
+@pytest.mark.unit
+async def test_update_genome_reports_validation_errors_as_bad_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _UpdateValidationContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.update_genome(
+            request=SimpleNamespace(),
+            genome_id="genome-1",
+            data=genes.GenomeUpdate(slug="secret-slug"),
+            tenant_id="tenant-1",
+            db=SimpleNamespace(commit=None),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid gene request"
+    assert "secret" not in str(exc_info.value.detail)
 
 
 @pytest.mark.unit

@@ -500,7 +500,7 @@ async def update_gene(
         await db.commit()
         return GeneResponse.model_validate(gene, from_attributes=True)
     except ValueError as e:
-        raise _gene_not_found_error() from e
+        raise _invalid_gene_request_error() from e
 
 
 @router.delete(
@@ -666,7 +666,7 @@ async def update_genome(
         await db.commit()
         return GenomeResponse.model_validate(genome, from_attributes=True)
     except ValueError as e:
-        raise _genome_not_found_error() from e
+        raise _invalid_gene_request_error() from e
 
 
 @router.delete(
