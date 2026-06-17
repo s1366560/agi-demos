@@ -2621,6 +2621,7 @@
         "storage": "Storage",
         "quota": "Quota",
         "members": "Members",
+        "membersLoadFailed": "Failed to load instance members",
         "config": "Configuration",
         "envVars": "Environment Variables",
         "advancedConfig": "Advanced Configuration"

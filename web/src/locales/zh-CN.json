@@ -2785,6 +2785,7 @@
         "storage": "存储",
         "quota": "配额",
         "members": "成员",
+        "membersLoadFailed": "实例成员加载失败",
         "config": "配置",
         "envVars": "环境变量",
         "advancedConfig": "高级配置"

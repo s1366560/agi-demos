@@ -17,7 +17,7 @@ import {
   Minus,
 } from 'lucide-react';
 
-import { LazyButton, useLazyMessage } from '@/components/ui/lazyAntd';
+import { LazyAlert, LazyButton, useLazyMessage } from '@/components/ui/lazyAntd';
 
 import {
   useCurrentInstance,
@@ -78,6 +78,11 @@ function formatUptime(createdAt: string): string {
   return hours > 0 ? `${String(hours)}h ${String(minutes)}m` : `${String(minutes)}m`;
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 export const InstanceOverview: React.FC = () => {
   const { t } = useTranslation();
   const messageApi = useLazyMessage();
@@ -85,6 +90,8 @@ export const InstanceOverview: React.FC = () => {
   const [showToken, setShowToken] = useState<boolean>(false);
   const [scaleTarget, setScaleTarget] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [membersLoadError, setMembersLoadError] = useState<string | null>(null);
+  const [isMembersLoading, setIsMembersLoading] = useState<boolean>(false);
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const instance = useCurrentInstance();
@@ -96,11 +103,22 @@ export const InstanceOverview: React.FC = () => {
   const fetchInstance = useInstanceStore((s) => s.getInstance);
   const instanceId = instance?.id ?? null;
 
-  useEffect(() => {
-    if (instanceId) {
-      void listMembers(instanceId);
+  const loadMembers = useCallback(async () => {
+    if (!instanceId) return;
+    setIsMembersLoading(true);
+    try {
+      await listMembers(instanceId);
+      setMembersLoadError(null);
+    } catch (error) {
+      setMembersLoadError(getErrorMessage(error));
+    } finally {
+      setIsMembersLoading(false);
     }
   }, [instanceId, listMembers]);
+
+  useEffect(() => {
+    void loadMembers();
+  }, [loadMembers]);
 
   // Auto-refresh instance status every 30s
   useEffect(() => {
@@ -372,6 +390,31 @@ export const InstanceOverview: React.FC = () => {
         className="bg-surface-light dark:bg-surface-dark rounded-lg border border-border-light dark:border-border-dark p-0"
         styles={{ body: { padding: 0 } }}
       >
+        {membersLoadError && (
+          <div className="border-b border-border-light p-4 dark:border-border-dark">
+            <LazyAlert
+              type="error"
+              showIcon
+              message={t(
+                'tenant.instances.detail.membersLoadFailed',
+                'Failed to load instance members'
+              )}
+              description={membersLoadError}
+              action={
+                <button
+                  type="button"
+                  onClick={() => {
+                    void loadMembers();
+                  }}
+                  disabled={isMembersLoading}
+                  className="inline-flex items-center justify-center rounded-md border border-red-300 px-3 py-1 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/30"
+                >
+                  {t('common.retry')}
+                </button>
+              }
+            />
+          </div>
+        )}
         <Table
           columns={memberColumns}
           dataSource={members}
