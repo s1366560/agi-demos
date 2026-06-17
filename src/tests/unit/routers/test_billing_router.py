@@ -25,16 +25,17 @@ class TestGetBillingInfo:
         self, test_db, client, test_tenant_in_db, test_user, test_tenant
     ):
         """Test getting billing info as admin."""
+        tenant_id = test_tenant_in_db["id"]
         # Create user-tenant relationship with admin role
         user_tenant = UserTenant(
-            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=test_tenant["id"], role="admin"
+            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=tenant_id, role="admin"
         )
         test_db.add(user_tenant)
 
         # Add some test data (Project doesn't have storage_used field)
         project = Project(
             id="proj_billing_1",
-            tenant_id=test_tenant["id"],
+            tenant_id=tenant_id,
             name="Billing Test Project",
             description="Test",
             owner_id=test_user.id,
@@ -53,7 +54,7 @@ class TestGetBillingInfo:
         # Add invoice
         invoice = Invoice(
             id="inv_123",
-            tenant_id=test_tenant["id"],
+            tenant_id=tenant_id,
             amount=2999,
             currency="USD",
             status="paid",
@@ -63,7 +64,7 @@ class TestGetBillingInfo:
         test_db.add(invoice)
         await test_db.commit()
 
-        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/billing")
+        response = client.get(f"{TENANTS_API_URL}/{tenant_id}/billing")
 
         assert response.status_code == 200
         data = response.json()
@@ -72,7 +73,7 @@ class TestGetBillingInfo:
         assert "invoices" in data
 
         # Verify tenant info
-        assert data["tenant"]["id"] == test_tenant["id"]
+        assert data["tenant"]["id"] == tenant_id
         assert "plan" in data["tenant"]
 
         # Verify usage stats
@@ -89,13 +90,14 @@ class TestGetBillingInfo:
         self, test_db, client, test_tenant_in_db, test_user, test_tenant
     ):
         """Test getting billing info as owner."""
+        tenant_id = test_tenant_in_db["id"]
         user_tenant = UserTenant(
-            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=test_tenant["id"], role="owner"
+            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=tenant_id, role="owner"
         )
         test_db.add(user_tenant)
         await test_db.commit()
 
-        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/billing")
+        response = client.get(f"{TENANTS_API_URL}/{tenant_id}/billing")
 
         assert response.status_code == 200
         data = response.json()
@@ -157,12 +159,31 @@ class TestGetBillingInfo:
         assert "Tenant not found" in response.json()["detail"]
 
     @pytest.mark.asyncio
+    async def test_get_billing_missing_tenant_does_not_return_defaults(
+        self, test_db, client, test_tenant_in_db, test_user
+    ):
+        """Test billing info refuses stale membership rows for tenants that do not exist."""
+        missing_tenant_id = "missing_billing_tenant"
+        user_tenant = UserTenant(
+            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=missing_tenant_id, role="admin"
+        )
+        test_db.add(user_tenant)
+        await test_db.commit()
+
+        response = client.get(f"{TENANTS_API_URL}/{missing_tenant_id}/billing")
+
+        assert response.status_code == 404
+        assert "Tenant not found" in response.json()["detail"]
+        assert test_tenant_in_db["id"] != missing_tenant_id
+
+    @pytest.mark.asyncio
     async def test_get_billing_usage_calculation(
         self, test_db, client, test_tenant_in_db, test_user, test_tenant
     ):
         """Test that usage statistics are calculated correctly."""
+        tenant_id = test_tenant_in_db["id"]
         user_tenant = UserTenant(
-            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=test_tenant["id"], role="admin"
+            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=tenant_id, role="admin"
         )
         test_db.add(user_tenant)
 
@@ -170,7 +191,7 @@ class TestGetBillingInfo:
         for i in range(3):
             project = Project(
                 id=f"proj_usage_{i}",
-                tenant_id=test_tenant["id"],
+                tenant_id=tenant_id,
                 name=f"Project {i}",
                 description="Test",
                 owner_id=test_user.id,
@@ -190,7 +211,7 @@ class TestGetBillingInfo:
 
         await test_db.commit()
 
-        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/billing")
+        response = client.get(f"{TENANTS_API_URL}/{tenant_id}/billing")
 
         assert response.status_code == 200
         data = response.json()
@@ -204,8 +225,9 @@ class TestGetBillingInfo:
         self, test_db, client, test_tenant_in_db, test_user, test_tenant
     ):
         """Test that only recent 12 invoices are returned."""
+        tenant_id = test_tenant_in_db["id"]
         user_tenant = UserTenant(
-            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=test_tenant["id"], role="admin"
+            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=tenant_id, role="admin"
         )
         test_db.add(user_tenant)
 
@@ -213,7 +235,7 @@ class TestGetBillingInfo:
         for i in range(15):
             invoice = Invoice(
                 id=f"inv_{i}",
-                tenant_id=test_tenant["id"],
+                tenant_id=tenant_id,
                 amount=1000 + i * 100,
                 currency="USD",
                 status="paid",
@@ -223,7 +245,7 @@ class TestGetBillingInfo:
             test_db.add(invoice)
         await test_db.commit()
 
-        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/billing")
+        response = client.get(f"{TENANTS_API_URL}/{tenant_id}/billing")
 
         assert response.status_code == 200
         data = response.json()
@@ -239,8 +261,9 @@ class TestListInvoices:
         self, test_db, client, test_tenant_in_db, test_user, test_tenant
     ):
         """Test listing invoices as admin."""
+        tenant_id = test_tenant_in_db["id"]
         user_tenant = UserTenant(
-            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=test_tenant["id"], role="admin"
+            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=tenant_id, role="admin"
         )
         test_db.add(user_tenant)
 
@@ -248,7 +271,7 @@ class TestListInvoices:
         for i in range(3):
             invoice = Invoice(
                 id=f"inv_list_{i}",
-                tenant_id=test_tenant["id"],
+                tenant_id=tenant_id,
                 amount=1000 * (i + 1),
                 currency="USD",
                 status="paid" if i < 2 else "pending",
@@ -258,7 +281,7 @@ class TestListInvoices:
             test_db.add(invoice)
         await test_db.commit()
 
-        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/invoices")
+        response = client.get(f"{TENANTS_API_URL}/{tenant_id}/invoices")
 
         assert response.status_code == 200
         data = response.json()
@@ -279,13 +302,14 @@ class TestListInvoices:
         self, test_db, client, test_tenant_in_db, test_user, test_tenant
     ):
         """Test listing invoices as owner."""
+        tenant_id = test_tenant_in_db["id"]
         user_tenant = UserTenant(
-            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=test_tenant["id"], role="owner"
+            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=tenant_id, role="owner"
         )
         test_db.add(user_tenant)
         await test_db.commit()
 
-        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/invoices")
+        response = client.get(f"{TENANTS_API_URL}/{tenant_id}/invoices")
 
         assert response.status_code == 200
         data = response.json()
@@ -312,25 +336,45 @@ class TestListInvoices:
         self, test_db, client, test_tenant_in_db, test_user, test_tenant
     ):
         """Test listing invoices when none exist."""
+        tenant_id = test_tenant_in_db["id"]
         user_tenant = UserTenant(
-            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=test_tenant["id"], role="admin"
+            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=tenant_id, role="admin"
         )
         test_db.add(user_tenant)
         await test_db.commit()
 
-        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/invoices")
+        response = client.get(f"{TENANTS_API_URL}/{tenant_id}/invoices")
 
         assert response.status_code == 200
         data = response.json()
         assert data["invoices"] == []
 
     @pytest.mark.asyncio
+    async def test_list_invoices_missing_tenant_does_not_return_empty_defaults(
+        self, test_db, client, test_tenant_in_db, test_user
+    ):
+        """Test invoices refuse stale membership rows for tenants that do not exist."""
+        missing_tenant_id = "missing_invoice_tenant"
+        user_tenant = UserTenant(
+            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=missing_tenant_id, role="admin"
+        )
+        test_db.add(user_tenant)
+        await test_db.commit()
+
+        response = client.get(f"{TENANTS_API_URL}/{missing_tenant_id}/invoices")
+
+        assert response.status_code == 404
+        assert "Tenant not found" in response.json()["detail"]
+        assert test_tenant_in_db["id"] != missing_tenant_id
+
+    @pytest.mark.asyncio
     async def test_list_invoices_ordering(
         self, test_db, client, test_tenant_in_db, test_user, test_tenant
     ):
         """Test that invoices are ordered by created_at descending."""
+        tenant_id = test_tenant_in_db["id"]
         user_tenant = UserTenant(
-            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=test_tenant["id"], role="admin"
+            id=str(uuid.uuid4()), user_id=test_user.id, tenant_id=tenant_id, role="admin"
         )
         test_db.add(user_tenant)
 
@@ -339,7 +383,7 @@ class TestListInvoices:
         for i in range(3):
             invoice = Invoice(
                 id=f"inv_order_{i}",
-                tenant_id=test_tenant["id"],
+                tenant_id=tenant_id,
                 amount=1000,
                 currency="USD",
                 status="paid",
@@ -349,7 +393,7 @@ class TestListInvoices:
             test_db.add(invoice)
         await test_db.commit()
 
-        response = client.get(f"{TENANTS_API_URL}/{test_tenant['id']}/invoices")
+        response = client.get(f"{TENANTS_API_URL}/{tenant_id}/invoices")
 
         assert response.status_code == 200
         data = response.json()

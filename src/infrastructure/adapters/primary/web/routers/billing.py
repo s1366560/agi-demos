@@ -53,6 +53,16 @@ async def _require_billing_role(
         raise HTTPException(status_code=403, detail=_(denial_detail))
 
 
+async def _get_billing_tenant_or_404(db: AsyncSession, tenant_id: str) -> Tenant:
+    tenant_result = await db.execute(
+        refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
+    )
+    tenant = tenant_result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(status_code=404, detail=_("Tenant not found"))
+    return tenant
+
+
 @router.get("/{tenant_id}/billing")
 async def get_billing_info(
     tenant_id: str,
@@ -68,12 +78,7 @@ async def get_billing_info(
         allowed_roles=BILLING_ADMIN_ROLES,
         denial_detail="Access denied",
     )
-
-    # Optional tenant info; fall back to defaults if not present
-    tenant_result = await db.execute(
-        refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
-    )
-    tenant = tenant_result.scalar_one_or_none()
+    tenant = await _get_billing_tenant_or_404(db, tenant_id)
     # Get invoices
     invoices_result = await db.execute(
         refresh_select_statement(
@@ -111,20 +116,12 @@ async def get_billing_info(
     )
     user_count = users_result.scalar() or 0
 
-    # If no tenant record and no associated data, return defaults unless system has zero tenants
-    if not tenant and not projects and not invoices:
-        any_tenant = await db.execute(refresh_select_statement(select(func.count(Tenant.id))))
-        if (any_tenant.scalar() or 0) == 0:
-            raise HTTPException(status_code=404, detail=_("Tenant not found"))
-
     return {
         "tenant": {
-            "id": tenant_id if not tenant else tenant.id,
-            "name": None if not tenant else tenant.name,
-            "plan": ("free" if not tenant else getattr(tenant, "plan", "free")),
-            "storage_limit": (
-                10737418240 if not tenant else getattr(tenant, "max_storage", 10737418240)
-            ),
+            "id": tenant.id,
+            "name": tenant.name,
+            "plan": getattr(tenant, "plan", "free"),
+            "storage_limit": getattr(tenant, "max_storage", 10737418240),
         },
         "usage": {
             "projects": len(projects),
@@ -164,9 +161,8 @@ async def list_invoices(
         allowed_roles=BILLING_ADMIN_ROLES,
         denial_detail="Access denied",
     )
+    _ = await _get_billing_tenant_or_404(db, tenant_id)
 
-    # Optional existence; invoices can be listed by tenant_id regardless
-    # Get invoices
     result = await db.execute(
         refresh_select_statement(
             select(Invoice)
@@ -211,12 +207,7 @@ async def upgrade_plan(
         denial_detail="Only owner can upgrade plan",
     )
 
-    tenant_result = await db.execute(
-        refresh_select_statement(select(Tenant).where(Tenant.id == tenant_id))
-    )
-    tenant = tenant_result.scalar_one_or_none()
-    if not tenant:
-        raise HTTPException(status_code=404, detail=_("Tenant not found"))
+    tenant = await _get_billing_tenant_or_404(db, tenant_id)
 
     new_plan = plan_data.get("plan") or "pro"
     if not isinstance(new_plan, str) or new_plan not in PLAN_STORAGE_LIMITS:
