@@ -37,7 +37,10 @@ class GeneRepository(ABC):
         limit: int = 50,
         offset: int = 0,
     ) -> list[Gene]:
-        """List genes with filters applied before pagination."""
+        """List genes with filters applied before pagination.
+
+        A ``None`` tenant ID means the global marketplace scope, not every tenant.
+        """
         raise NotImplementedError
 
     async def count_by_filters(
@@ -51,7 +54,10 @@ class GeneRepository(ABC):
         is_published: bool | None = None,
         exclude_installed_instance_id: str | None = None,
     ) -> int:
-        """Count genes matching the same filters used for listing."""
+        """Count genes matching the same filters used for listing.
+
+        A ``None`` tenant ID means the global marketplace scope, not every tenant.
+        """
         raise NotImplementedError
 
     @abstractmethod

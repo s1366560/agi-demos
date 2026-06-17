@@ -1080,6 +1080,7 @@ async def list_evolution_events(
             )
         events, total = await service.list_evolution_events_with_total(
             instance_id=instance_id,
+            tenant_id=tenant_id,
             gene_id=gene_id,
             event_type=event_type,
             limit=page_size,

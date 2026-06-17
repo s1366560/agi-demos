@@ -1,9 +1,11 @@
 """SQLAlchemy implementation of EvolutionEventRepository using BaseRepository."""
 
 import logging
-from typing import override
+from typing import Any, override
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from src.domain.model.gene.enums import EvolutionEventType
 from src.domain.model.gene.instance_gene import EvolutionEvent
@@ -16,6 +18,7 @@ from src.infrastructure.adapters.secondary.common.base_repository import (
 )
 from src.infrastructure.adapters.secondary.persistence.models import (
     EvolutionEventModel,
+    InstanceModel,
 )
 
 logger = logging.getLogger(__name__)
@@ -67,6 +70,7 @@ class SqlEvolutionEventRepository(
     async def find_by_filters(
         self,
         *,
+        tenant_id: str | None = None,
         instance_id: str | None = None,
         gene_id: str | None = None,
         event_type: EvolutionEventType | str | None = None,
@@ -78,11 +82,10 @@ class SqlEvolutionEventRepository(
             gene_id=gene_id,
             event_type=event_type,
         )
-        query = self._build_query(
-            filters=filters,
-            order_by="created_at",
-            order_desc=True,
-        ).order_by(EvolutionEventModel.id.asc())
+        query = select(EvolutionEventModel)
+        query = self._apply_filters(query, **filters)
+        query = self._apply_tenant_scope(query, tenant_id)
+        query = query.order_by(EvolutionEventModel.created_at.desc(), EvolutionEventModel.id.asc())
         query = query.offset(offset).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(query))
@@ -94,6 +97,7 @@ class SqlEvolutionEventRepository(
     async def count_by_filters(
         self,
         *,
+        tenant_id: str | None = None,
         instance_id: str | None = None,
         gene_id: str | None = None,
         event_type: EvolutionEventType | str | None = None,
@@ -103,7 +107,11 @@ class SqlEvolutionEventRepository(
             gene_id=gene_id,
             event_type=event_type,
         )
-        return await self.count(**filters)
+        query = select(func.count()).select_from(EvolutionEventModel)
+        query = self._apply_filters(query, **filters)
+        query = self._apply_tenant_scope(query, tenant_id)
+        result = await self._session.execute(refresh_select_statement(query))
+        return result.scalar() or 0
 
     @staticmethod
     def _filters(
@@ -122,6 +130,18 @@ class SqlEvolutionEventRepository(
                 event_type.value if isinstance(event_type, EvolutionEventType) else event_type
             )
         return filters
+
+    @staticmethod
+    def _apply_tenant_scope(stmt: Select[Any], tenant_id: str | None) -> Select[Any]:
+        if tenant_id is None:
+            return stmt
+        return stmt.join(
+            InstanceModel,
+            EvolutionEventModel.instance_id == InstanceModel.id,
+        ).where(
+            InstanceModel.tenant_id == tenant_id,
+            InstanceModel.deleted_at.is_(None),
+        )
 
     @override
     def _to_domain(self, db_model: EvolutionEventModel | None) -> EvolutionEvent | None:

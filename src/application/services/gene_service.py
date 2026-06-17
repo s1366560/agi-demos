@@ -982,6 +982,7 @@ class GeneService:
         self,
         instance_id: str | None = None,
         *,
+        tenant_id: str | None = None,
         gene_id: str | None = None,
         event_type: EvolutionEventType | str | None = None,
         limit: int = 50,
@@ -990,6 +991,7 @@ class GeneService:
         """List evolution events for an agent instance or gene."""
         events, _total = await self.list_evolution_events_with_total(
             instance_id=instance_id,
+            tenant_id=tenant_id,
             gene_id=gene_id,
             event_type=event_type,
             limit=limit,
@@ -1001,6 +1003,7 @@ class GeneService:
         self,
         instance_id: str | None = None,
         *,
+        tenant_id: str | None = None,
         gene_id: str | None = None,
         event_type: EvolutionEventType | str | None = None,
         limit: int = 50,
@@ -1011,6 +1014,7 @@ class GeneService:
 
         Args:
             instance_id: Agent instance ID.
+            tenant_id: Optional tenant scope for the event's instance.
             gene_id: Optional gene ID.
             event_type: Optional event type filter.
             limit: Maximum results.
@@ -1028,6 +1032,7 @@ class GeneService:
             else EvolutionEventType(event_type)
         )
         events = await self._evolution_event_repo.find_by_filters(
+            tenant_id=tenant_id,
             instance_id=instance_id,
             gene_id=gene_id,
             event_type=event_type_value,
@@ -1035,6 +1040,7 @@ class GeneService:
             offset=offset,
         )
         total = await self._evolution_event_repo.count_by_filters(
+            tenant_id=tenant_id,
             instance_id=instance_id,
             gene_id=gene_id,
             event_type=event_type_value,

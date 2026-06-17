@@ -32,6 +32,7 @@ class EvolutionEventRepository(ABC):
     async def find_by_filters(
         self,
         *,
+        tenant_id: str | None = None,
         instance_id: str | None = None,
         gene_id: str | None = None,
         event_type: EvolutionEventType | str | None = None,
@@ -44,6 +45,7 @@ class EvolutionEventRepository(ABC):
     async def count_by_filters(
         self,
         *,
+        tenant_id: str | None = None,
         instance_id: str | None = None,
         gene_id: str | None = None,
         event_type: EvolutionEventType | str | None = None,

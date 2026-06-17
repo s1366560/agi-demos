@@ -80,12 +80,12 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         offset: int = 0,
     ) -> list[Gene]:
         filters = self._filters(
-            tenant_id=tenant_id,
             category=category,
             visibility=visibility,
             is_published=is_published,
         )
         stmt = self._build_active_query(filters=filters)
+        stmt = self._apply_tenant_scope(stmt, tenant_id)
         stmt = self._apply_search_filter(stmt, search)
         stmt = self._apply_slug_filter(stmt, slugs)
         stmt = self._apply_exclude_installed_filter(stmt, exclude_installed_instance_id)
@@ -110,7 +110,6 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         exclude_installed_instance_id: str | None = None,
     ) -> int:
         filters = self._filters(
-            tenant_id=tenant_id,
             category=category,
             visibility=visibility,
             is_published=is_published,
@@ -121,6 +120,7 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
             .where(GeneMarketModel.deleted_at.is_(None))
         )
         stmt = self._apply_filters(stmt, **filters)
+        stmt = self._apply_tenant_scope(stmt, tenant_id)
         stmt = self._apply_search_filter(stmt, search)
         stmt = self._apply_slug_filter(stmt, slugs)
         stmt = self._apply_exclude_installed_filter(stmt, exclude_installed_instance_id)
@@ -156,14 +156,11 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
     @staticmethod
     def _filters(
         *,
-        tenant_id: str | None = None,
         category: str | None = None,
         visibility: str | None = None,
         is_published: bool | None = None,
     ) -> dict[str, object]:
         filters: dict[str, object] = {}
-        if tenant_id is not None:
-            filters["tenant_id"] = tenant_id
         if category is not None:
             filters["category"] = category
         if visibility is not None:
@@ -171,6 +168,12 @@ class SqlGeneRepository(BaseRepository[Gene, GeneMarketModel], GeneRepository):
         if is_published is not None:
             filters["is_published"] = is_published
         return filters
+
+    @staticmethod
+    def _apply_tenant_scope(stmt: Select[Any], tenant_id: str | None) -> Select[Any]:
+        if tenant_id is None:
+            return stmt.where(GeneMarketModel.tenant_id.is_(None))
+        return stmt.where(GeneMarketModel.tenant_id == tenant_id)
 
     @staticmethod
     def _apply_search_filter(stmt: Select[Any], search: str | None) -> Select[Any]:

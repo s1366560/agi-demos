@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.di_container import DIContainer
 from src.domain.model.gene.enums import EvolutionEventType, InstanceGeneStatus
-from src.infrastructure.adapters.secondary.persistence.models import InstanceModel, Project, User
+from src.infrastructure.adapters.secondary.persistence.models import (
+    InstanceModel,
+    Project,
+    Tenant,
+    User,
+)
 
 
 def _slug(prefix: str) -> str:
@@ -200,6 +205,35 @@ async def test_list_genes_with_total_excludes_installed_instance_genes_before_pa
 
 
 @pytest.mark.unit
+async def test_list_genes_with_total_defaults_to_global_scope(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+
+    global_gene = await service.create_gene(
+        name="Global Listed Gene",
+        slug=_slug("global-listed"),
+        created_by=test_user.id,
+        tenant_id=None,
+    )
+    global_gene = await service.publish_gene(global_gene.id)
+    tenant_gene = await service.create_gene(
+        name="Tenant Hidden Gene",
+        slug=_slug("tenant-hidden"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    await service.publish_gene(tenant_gene.id)
+
+    genes, total = await service.list_genes_with_total(limit=10, offset=0)
+
+    assert [gene.id for gene in genes] == [global_gene.id]
+    assert total == 1
+
+
+@pytest.mark.unit
 async def test_list_genomes_with_total_filters_before_pagination(
     test_db: AsyncSession,
     test_project_db: Project,
@@ -311,6 +345,58 @@ async def test_list_evolution_events_with_total_filters_before_pagination(
     assert total == 2
     assert len(events) == 1
     assert events[0].event_type == EvolutionEventType.learned
+
+
+@pytest.mark.unit
+async def test_list_evolution_events_with_total_filters_by_tenant_scope(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    foreign_tenant = Tenant(
+        id="foreign-service-event-tenant",
+        name="Foreign Service Event Tenant",
+        slug="foreign-service-event-tenant",
+        owner_id=test_user.id,
+    )
+    test_db.add(foreign_tenant)
+    await test_db.flush()
+    await _create_instance(
+        test_db,
+        instance_id="service-tenant-instance",
+        tenant_id=test_project_db.tenant_id,
+        created_by=test_user.id,
+    )
+    await _create_instance(
+        test_db,
+        instance_id="service-foreign-instance",
+        tenant_id=foreign_tenant.id,
+        created_by=test_user.id,
+    )
+
+    tenant_event = await service.create_evolution_event(
+        "service-tenant-instance",
+        gene_id="shared-service-gene",
+        event_type=EvolutionEventType.learned,
+        gene_name="Tenant Event",
+    )
+    await service.create_evolution_event(
+        "service-foreign-instance",
+        gene_id="shared-service-gene",
+        event_type=EvolutionEventType.learned,
+        gene_name="Foreign Event",
+    )
+
+    events, total = await service.list_evolution_events_with_total(
+        tenant_id=test_project_db.tenant_id,
+        gene_id="shared-service-gene",
+        limit=10,
+        offset=0,
+    )
+
+    assert [event.id for event in events] == [tenant_event.id]
+    assert total == 1
 
 
 @pytest.mark.unit

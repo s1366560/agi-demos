@@ -23,7 +23,7 @@ def _gene(
     *,
     gene_id: str,
     slug: str,
-    tenant_id: str,
+    tenant_id: str | None,
     created_by: str,
     name: str,
     category: str = "target",
@@ -144,6 +144,44 @@ async def test_gene_repository_lists_and_counts_only_active_rows(
     assert [gene.id for gene in search_results] == ["active-gene"]
     assert [gene.id for gene in featured] == ["active-gene"]
     assert deleted_detail is None
+
+
+@pytest.mark.unit
+async def test_gene_repository_defaults_to_global_scope_when_tenant_id_is_omitted(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    test_db.add_all(
+        [
+            _gene(
+                gene_id="tenant-gene",
+                slug="tenant-gene",
+                tenant_id=test_project_db.tenant_id,
+                created_by=test_user.id,
+                name="Tenant Gene",
+                created_at=created_at + timedelta(minutes=1),
+            ),
+            _gene(
+                gene_id="global-gene",
+                slug="global-gene",
+                tenant_id=None,
+                created_by=test_user.id,
+                name="Global Gene",
+                created_at=created_at,
+            ),
+        ]
+    )
+    await test_db.flush()
+
+    repo = SqlGeneRepository(test_db)
+
+    listed = await repo.find_by_filters(is_published=True, limit=10, offset=0)
+    total = await repo.count_by_filters(is_published=True)
+
+    assert [gene.id for gene in listed] == ["global-gene"]
+    assert total == 1
 
 
 @pytest.mark.unit
