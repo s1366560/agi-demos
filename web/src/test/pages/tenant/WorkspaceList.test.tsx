@@ -51,8 +51,8 @@ describe('WorkspaceList', () => {
     };
 
     projectState = {
-      projects: [{ id: 'project-1', name: 'Project One' }],
-      currentProject: { id: 'project-1', name: 'Project One' },
+      projects: [{ id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' }],
+      currentProject: { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' },
       listProjects: vi.fn().mockResolvedValue(undefined),
     };
 
@@ -63,6 +63,28 @@ describe('WorkspaceList', () => {
         loadWorkspaces: vi.fn().mockResolvedValue(undefined),
       },
     };
+  });
+
+  it('does not load workspaces from a stale project outside the active tenant', async () => {
+    projectState.projects = [{ id: 'project-stale', name: 'Stale Project', tenant_id: 'tenant-2' }];
+    projectState.currentProject = {
+      id: 'project-stale',
+      name: 'Stale Project',
+      tenant_id: 'tenant-2',
+    };
+
+    render(
+      <Routes>
+        <Route path="/tenant/:tenantId/workspaces" element={<WorkspaceList />} />
+      </Routes>,
+      { route: '/tenant/tenant-1/workspaces' }
+    );
+
+    expect(await screen.findByText('Pick a tenant and project')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1');
+    });
+    expect(workspaceState.actions.loadWorkspaces).not.toHaveBeenCalled();
   });
 
   it('loads and renders workspaces using store tenant/project context', async () => {

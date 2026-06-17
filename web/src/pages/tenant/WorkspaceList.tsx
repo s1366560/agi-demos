@@ -136,7 +136,13 @@ export function WorkspaceList() {
   const [summaries, setSummaries] = useState<Record<string, ObjectiveSummary>>({});
 
   const tenantId = params.tenantId ?? currentTenant?.id ?? null;
-  const projectId = params.projectId ?? currentProject?.id ?? projects[0]?.id ?? null;
+  const tenantCurrentProject =
+    tenantId && currentProject?.tenant_id === tenantId ? currentProject : null;
+  const tenantProjects = useMemo(
+    () => (tenantId ? projects.filter((project) => project.tenant_id === tenantId) : []),
+    [projects, tenantId]
+  );
+  const projectId = params.projectId ?? tenantCurrentProject?.id ?? tenantProjects[0]?.id ?? null;
   const useCaseLabels = useMemo(
     () =>
       ({
@@ -159,11 +165,11 @@ export function WorkspaceList() {
     [t]
   );
   useEffect(() => {
-    if (!tenantId || params.projectId || currentProject || projects.length > 0) return;
+    if (!tenantId || params.projectId || tenantCurrentProject || tenantProjects.length > 0) return;
     void listProjects(tenantId).catch(() => {
       // ignore and keep empty-state guidance visible
     });
-  }, [tenantId, params.projectId, currentProject, projects.length, listProjects]);
+  }, [tenantId, params.projectId, tenantCurrentProject, tenantProjects.length, listProjects]);
 
   useEffect(() => {
     if (!tenantId || !projectId) return;
