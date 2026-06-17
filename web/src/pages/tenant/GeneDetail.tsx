@@ -203,14 +203,17 @@ export const GeneDetail: FC = () => {
     try {
       const values = await reviewForm.validateFields();
       if (geneId && tenantId) {
+        const options = { tenant_id: tenantId };
         await createGeneReview(
           geneId,
           {
             rating: values.rating,
             content: values.content,
           },
-          { tenant_id: tenantId }
+          options
         );
+        setReviewPage(1);
+        await fetchGeneReviews(geneId, 1, reviewPageSize, options);
         message.success(t('gene.reviewSubmitSuccess'));
         setIsReviewModalVisible(false);
         reviewForm.resetFields();
@@ -253,7 +256,11 @@ export const GeneDetail: FC = () => {
       onOk: async () => {
         if (geneId && tenantId) {
           try {
-            await deleteGeneReview(geneId, reviewId, { tenant_id: tenantId });
+            const options = { tenant_id: tenantId };
+            await deleteGeneReview(geneId, reviewId, options);
+            const nextPage = reviews.length === 1 && reviewPage > 1 ? reviewPage - 1 : reviewPage;
+            setReviewPage(nextPage);
+            await fetchGeneReviews(geneId, nextPage, reviewPageSize, options);
             message.success(t('gene.reviewDeleteSuccess'));
           } catch {
             showActionError(t('gene.reviewDeleteError'));

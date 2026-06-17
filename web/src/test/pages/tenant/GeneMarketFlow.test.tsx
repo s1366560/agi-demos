@@ -297,6 +297,35 @@ describe('Gene marketplace rating flow', () => {
     });
   });
 
+  it('refreshes reviews with the visible page size after creating a review', async () => {
+    const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
+    stateMock.currentGene = gene();
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'gene.writeReview' }));
+    fireEvent.change(screen.getByLabelText('gene.reviewContent'), {
+      target: { value: 'Useful and reliable.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await waitFor(() => {
+      expect(actionsMock.createGeneReview).toHaveBeenCalledWith(
+        'gene-1',
+        { rating: 5, content: 'Useful and reliable.' },
+        { tenant_id: 'tenant-1' }
+      );
+    });
+    expect(actionsMock.fetchGeneReviews).toHaveBeenLastCalledWith('gene-1', 1, 5, {
+      tenant_id: 'tenant-1',
+    });
+    expect(messageSuccessSpy).toHaveBeenCalledWith('gene.reviewSubmitSuccess');
+  });
+
   it('surfaces review deletion failures from the gene store', async () => {
     const messageErrorSpy = vi.spyOn(message, 'error').mockImplementation(vi.fn());
     vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
@@ -323,6 +352,54 @@ describe('Gene marketplace rating flow', () => {
     await waitFor(() => {
       expect(messageErrorSpy).toHaveBeenCalledWith('Delete API failed');
     });
+  });
+
+  it('refreshes the previous reviews page after deleting the last item on a later page', async () => {
+    const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
+    vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
+      void config.onOk?.();
+      return {
+        destroy: vi.fn(),
+        update: vi.fn(),
+      };
+    });
+    stateMock.currentGene = gene();
+    stateMock.reviews = [review()];
+    stateMock.reviewsTotal = 10;
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(actionsMock.fetchGeneReviews).toHaveBeenCalledWith('gene-1', 1, 5, {
+        tenant_id: 'tenant-1',
+      });
+    });
+    actionsMock.fetchGeneReviews.mockClear();
+
+    fireEvent.click(screen.getByText('2'));
+
+    await waitFor(() => {
+      expect(actionsMock.fetchGeneReviews).toHaveBeenCalledWith('gene-1', 2, 5, {
+        tenant_id: 'tenant-1',
+      });
+    });
+    actionsMock.fetchGeneReviews.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: 'gene.deleteReview' }));
+
+    await waitFor(() => {
+      expect(actionsMock.deleteGeneReview).toHaveBeenCalledWith('gene-1', 'review-1', {
+        tenant_id: 'tenant-1',
+      });
+    });
+    expect(actionsMock.fetchGeneReviews).toHaveBeenLastCalledWith('gene-1', 1, 5, {
+      tenant_id: 'tenant-1',
+    });
+    expect(messageSuccessSpy).toHaveBeenCalledWith('gene.reviewDeleteSuccess');
   });
 
   it('paginates reviews without refetching gene detail or resetting state', async () => {

@@ -119,7 +119,7 @@ describe('gene market store', () => {
     expect(state.reviewsLoading).toBe(false);
   });
 
-  it('refreshes selected-tenant reviews after creating a gene review', async () => {
+  it('leaves review refresh pagination to the caller after creating a gene review', async () => {
     vi.mocked(geneMarketService.createGeneReview).mockResolvedValue({ id: 'review-1' } as any);
 
     await useGeneMarketStore
@@ -131,12 +131,10 @@ describe('gene market store', () => {
       { rating: 5, content: 'Helpful' },
       { tenant_id: 'tenant-2' }
     );
-    expect(geneMarketService.getGeneReviews).toHaveBeenCalledWith('gene-1', 1, 10, {
-      tenant_id: 'tenant-2',
-    });
+    expect(geneMarketService.getGeneReviews).not.toHaveBeenCalled();
   });
 
-  it('refreshes selected-tenant reviews after deleting a gene review', async () => {
+  it('leaves review refresh pagination to the caller after deleting a gene review', async () => {
     vi.mocked(geneMarketService.deleteGeneReview).mockResolvedValue(undefined);
 
     await useGeneMarketStore
@@ -146,9 +144,7 @@ describe('gene market store', () => {
     expect(geneMarketService.deleteGeneReview).toHaveBeenCalledWith('gene-1', 'review-1', {
       tenant_id: 'tenant-2',
     });
-    expect(geneMarketService.getGeneReviews).toHaveBeenCalledWith('gene-1', 1, 10, {
-      tenant_id: 'tenant-2',
-    });
+    expect(geneMarketService.getGeneReviews).not.toHaveBeenCalled();
   });
 
   it('updates gene list and current gene after publishing', async () => {
