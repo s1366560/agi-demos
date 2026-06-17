@@ -100,7 +100,19 @@ class _InstanceGeneListService(_FailingGeneService):
                     usage_count=7,
                     installed_at=datetime(2026, 1, 1, tzinfo=UTC),
                     created_at=datetime(2026, 1, 1, tzinfo=UTC),
-                )
+                ),
+                SimpleNamespace(
+                    id="instance-gene-2",
+                    instance_id=instance_id,
+                    gene_id="global-gene",
+                    genome_id=None,
+                    status=InstanceGeneStatus.installed,
+                    installed_version="2.0.0",
+                    config_snapshot={},
+                    usage_count=10,
+                    installed_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
             ],
             3,
             2,
@@ -489,6 +501,7 @@ async def test_list_instance_genes_enriches_gene_display_metadata(
     metadata_result = Mock()
     metadata_result.all.return_value = [
         ("gene-1", "Code Review", "Reviews code changes", "tool"),
+        ("global-gene", "Global Review", "Official shared gene", "official"),
     ]
     db = SimpleNamespace(execute=AsyncMock(return_value=metadata_result))
 
@@ -513,7 +526,14 @@ async def test_list_instance_genes_enriches_gene_display_metadata(
     assert item.gene_name == "Code Review"
     assert item.gene_description == "Reviews code changes"
     assert item.gene_category == "tool"
+    global_item = response.items[1]
+    assert global_item.gene_id == "global-gene"
+    assert global_item.gene_name == "Global Review"
     db.execute.assert_awaited_once()
+    metadata_statement = db.execute.await_args.args[0]
+    compiled_statement = str(metadata_statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "gene_market.tenant_id = 'tenant-1'" in compiled_statement
+    assert "gene_market.tenant_id IS NULL" in compiled_statement
 
 
 @pytest.mark.unit

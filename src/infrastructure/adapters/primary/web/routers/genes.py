@@ -11,7 +11,7 @@ from typing import Any, Protocol, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.gene_schemas import (
@@ -330,7 +330,12 @@ async def _get_gene_metadata_by_id(
                 GeneMarketModel.category,
             )
             .where(GeneMarketModel.id.in_(gene_ids))
-            .where(GeneMarketModel.tenant_id == tenant_id)
+            .where(
+                or_(
+                    GeneMarketModel.tenant_id == tenant_id,
+                    GeneMarketModel.tenant_id.is_(None),
+                )
+            )
             .where(GeneMarketModel.deleted_at.is_(None))
         )
     )
