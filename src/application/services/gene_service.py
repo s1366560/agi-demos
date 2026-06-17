@@ -1078,12 +1078,15 @@ class GeneService:
 
     async def delete_gene_review(
         self,
+        gene_id: str,
         review_id: str,
         user_id: str,
         tenant_id: str,
     ) -> None:
         review = await self._gene_review_repo.find_by_id(review_id)
         if not review:
+            raise ValueError(f"Review {review_id} not found")
+        if review.gene_id != gene_id:
             raise ValueError(f"Review {review_id} not found")
         if review.user_id != user_id:
             raise PermissionError("Cannot delete another user's review")

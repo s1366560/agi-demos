@@ -1262,6 +1262,7 @@ async def delete_gene_review(
         service = container.gene_service()
         await _ensure_gene_tenant_access(service, gene_id=gene_id, tenant_id=tenant_id)
         await service.delete_gene_review(
+            gene_id=gene_id,
             review_id=review_id,
             user_id=current_user.id,
             tenant_id=tenant_id,
