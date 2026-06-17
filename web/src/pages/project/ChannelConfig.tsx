@@ -29,6 +29,13 @@ import { useChannelStore } from '@/stores/channel';
 
 import { channelService } from '@/services/channelService';
 
+import {
+  CHANNEL_SETTING_FIELDS,
+  SECRET_UNCHANGED_SENTINEL,
+  getChannelConfigEditValues,
+  getChannelConfigSubmitValues,
+  isRecord,
+} from '@/pages/project/channelConfigSanitizers';
 import { formatPluginCapabilityCounts } from '@/utils/pluginCapabilityCounts';
 
 import type {
@@ -67,18 +74,6 @@ const POLICY_OPTIONS = [
 ];
 
 const STATUS_REFRESH_INTERVAL = 10_000;
-const SECRET_UNCHANGED_SENTINEL = '__MEMSTACK_SECRET_UNCHANGED__';
-const CHANNEL_SETTING_FIELDS = new Set([
-  'app_id',
-  'app_secret',
-  'encrypt_key',
-  'verification_token',
-  'connection_mode',
-  'webhook_url',
-  'webhook_port',
-  'webhook_path',
-  'domain',
-]);
 
 const humanizeChannelType = (channelType: string): string =>
   channelType
@@ -93,9 +88,6 @@ const humanizeFieldName = (fieldName: string): string =>
     .filter(Boolean)
     .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join(' ');
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
 
 const ChannelConfigPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -260,11 +252,9 @@ const ChannelConfigPage: React.FC = () => {
     (config: ChannelConfig) => {
       setEditingConfig(config);
       void loadChannelSchema(config.channel_type);
-      form.setFieldsValue({
-        ...config,
-        // Don't populate app_secret for security
-        app_secret: undefined,
-      });
+      form.setFieldsValue(
+        getChannelConfigEditValues(config) as Parameters<typeof form.setFieldsValue>[0]
+      );
       setIsModalVisible(true);
     },
     [form, loadChannelSchema]
@@ -375,12 +365,16 @@ const ChannelConfigPage: React.FC = () => {
   const handleSubmit = useCallback(
     async (values: CreateChannelConfig | UpdateChannelConfig) => {
       try {
+        const payload = getChannelConfigSubmitValues(values, {
+          editingConfig,
+          schemaSecretPaths: activeChannelSchema?.secret_paths,
+          schemaSupported: activeChannelSchema?.schema_supported,
+        });
+
         if (editingConfig) {
-          // Only include app_secret if it was changed
-          const updateData: UpdateChannelConfig = { ...values };
-          if (!updateData.app_secret) {
-            delete updateData.app_secret;
-          }
+          const updateData = Object.fromEntries(
+            Object.entries(payload).filter(([key]) => key !== 'channel_type')
+          ) as UpdateChannelConfig;
           await updateConfig(editingConfig.id, updateData);
           message.success(t('project.channelConfig.messages.configUpdated'));
         } else {
@@ -388,7 +382,7 @@ const ChannelConfigPage: React.FC = () => {
             message.error(t('project.channelConfig.messages.projectIdRequired'));
             return;
           }
-          await createConfig(projectId, values as CreateChannelConfig);
+          await createConfig(projectId, payload as CreateChannelConfig);
           message.success(t('project.channelConfig.messages.configCreated'));
         }
         setIsModalVisible(false);
@@ -397,7 +391,7 @@ const ChannelConfigPage: React.FC = () => {
         message.error(t('project.channelConfig.messages.failedToSave'));
       }
     },
-    [editingConfig, projectId, createConfig, updateConfig, form, t]
+    [activeChannelSchema, editingConfig, projectId, createConfig, updateConfig, form, t]
   );
 
   const getStatusBadge = (status: string) => {
