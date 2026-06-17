@@ -8,7 +8,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-import { subagentAPI } from '../services/subagentService';
+import { subagentAPI, type SubAgentListParams } from '../services/subagentService';
 
 import type {
   SubAgentResponse,
@@ -17,7 +17,6 @@ import type {
   SubAgentTemplate,
 } from '../types/agent';
 import type { UnknownError } from '../types/common';
-import type { SubAgentListParams } from '../services/subagentService';
 
 /**
  * Helper function to extract error message from unknown error
@@ -166,10 +165,10 @@ export const useSubAgentStore = create<SubAgentState>()(
                   : undefined,
           };
           const response = await subagentAPI.list(queryParams);
-          const subagents = response.subagents ?? [];
+          const subagents = response.subagents;
           set({
             subagents,
-            total: response.total ?? subagents.length,
+            total: response.total,
             enabledTotal:
               response.enabled_total ?? subagents.filter((subagent) => subagent.enabled).length,
             averageSuccessRate:
