@@ -11,6 +11,15 @@ import React from 'react';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+const storeMocks = vi.hoisted(() => ({
+  project: {
+    currentProject: { id: 'proj-1', tenant_id: 'tenant-1' },
+  },
+  conversations: {
+    currentConversation: { project_id: 'proj-1' } as { project_id: string } | null,
+  },
+}));
+
 // Mock the mcpAppAPI - must be before vi.mock calls
 vi.mock('../../../services/mcpAppService', () => ({
   mcpAppAPI: {
@@ -35,7 +44,16 @@ vi.mock('../../../hooks/useMCPClient', () => ({
 
 // Mock the project store
 vi.mock('../../../stores/project', () => ({
-  useProjectStore: vi.fn(() => ({ currentProject: { id: 'proj-1' } })),
+  useProjectStore: vi.fn((selector?: (state: typeof storeMocks.project) => unknown) =>
+    typeof selector === 'function' ? selector(storeMocks.project) : storeMocks.project
+  ),
+}));
+
+// Mock the conversations store
+vi.mock('../../../stores/agent/conversationsStore', () => ({
+  useConversationsStore: vi.fn((selector?: (state: typeof storeMocks.conversations) => unknown) =>
+    typeof selector === 'function' ? selector(storeMocks.conversations) : storeMocks.conversations
+  ),
 }));
 
 // Mock the theme store
@@ -86,6 +104,11 @@ const mockMcpAppAPI = mcpAppAPI as unknown as {
 };
 
 const mockUseMCPClient = useMCPClient as ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  storeMocks.project.currentProject = { id: 'proj-1', tenant_id: 'tenant-1' };
+  storeMocks.conversations.currentConversation = { project_id: 'proj-1' };
+});
 
 describe('StandardMCPAppRenderer - Synthetic ID Problem (P2)', () => {
   beforeEach(() => {
@@ -435,6 +458,29 @@ describe('StandardMCPAppRenderer - General Functionality', () => {
       error: null,
       reconnect: vi.fn(),
     });
+  });
+
+  it('should prefer active conversation project over stale store project when prop is missing', async () => {
+    storeMocks.project.currentProject = { id: 'stale-store-project', tenant_id: 'tenant-2' };
+    storeMocks.conversations.currentConversation = { project_id: 'conversation-project' };
+
+    render(
+      <StandardMCPAppRenderer
+        {...createProps({
+          projectId: undefined,
+          html: '<div>Test</div>',
+        })}
+      />
+    );
+
+    await screen.findByTestId('app-renderer', {}, { timeout: 10000 });
+
+    expect(mockUseMCPClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: 'conversation-project',
+        enabled: true,
+      })
+    );
   });
 
   it('should render error state when error occurs', async () => {

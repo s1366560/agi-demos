@@ -236,13 +236,13 @@ export const StandardMCPAppRenderer = forwardRef<
       },
       [t]
     );
-    // Fall back to current project from store when prop is not provided
-    // Also try conversation's project_id as a second fallback (for page refresh scenarios)
+    // Fall back to the active conversation before the global project store. The store can briefly
+    // point at another tenant during route transitions, while the conversation owns this MCP app.
     const storeProjectId = useProjectStore((state) => state.currentProject?.id);
     const conversationProjectId = useConversationsStore(
       (state) => state.currentConversation?.project_id
     );
-    const effectiveProjectId = projectId || storeProjectId || conversationProjectId;
+    const effectiveProjectId = projectId || conversationProjectId || storeProjectId;
 
     const [error, setError] = useState<string | null>(null);
     const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
