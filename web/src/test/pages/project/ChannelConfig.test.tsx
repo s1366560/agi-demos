@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getChannelConfigEditValues,
   getChannelConfigSubmitValues,
-} from '@/pages/project/channelConfigSanitizers';
+} from '@/utils/channelConfigSanitizers';
 
 import type { ChannelConfig } from '@/types/channel';
 

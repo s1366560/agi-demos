@@ -28,6 +28,13 @@ import { useTenantStore } from '@/stores/tenant';
 
 import { channelService } from '@/services/channelService';
 
+import {
+  CHANNEL_SETTING_FIELDS,
+  SECRET_UNCHANGED_SENTINEL,
+  getChannelConfigEditValues,
+  getChannelConfigSubmitValues,
+  isRecord,
+} from '@/utils/channelConfigSanitizers';
 import { formatPluginCapabilityCounts } from '@/utils/pluginCapabilityCounts';
 
 import type {
@@ -46,19 +53,6 @@ import type { Project } from '@/types/memory';
 
 const { Title, Text } = Typography;
 
-const SECRET_UNCHANGED_SENTINEL = '__MEMSTACK_SECRET_UNCHANGED__';
-const CHANNEL_SETTING_FIELDS = new Set([
-  'app_id',
-  'app_secret',
-  'encrypt_key',
-  'verification_token',
-  'connection_mode',
-  'webhook_url',
-  'webhook_port',
-  'webhook_path',
-  'domain',
-]);
-
 const humanizeChannelType = (channelType: string): string =>
   channelType
     .split(/[-_]/g)
@@ -75,43 +69,6 @@ const humanizeFieldName = (fieldName: string): string =>
 
 const contractCount = (plugin: RuntimePlugin, key: string): number =>
   plugin.contracts?.[key]?.length ?? 0;
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const removeUndefinedValues = (record: Record<string, unknown>): Record<string, unknown> =>
-  Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined));
-
-const removeEmptySecretValues = (
-  record: Record<string, unknown>,
-  secretPaths: Set<string>,
-  isSecretKey: (key: string) => boolean
-): Record<string, unknown> =>
-  Object.fromEntries(
-    Object.entries(record).filter(
-      ([key, value]) =>
-        !(secretPaths.has(key) && isSecretKey(key) && (value === undefined || value === ''))
-    )
-  );
-
-const sanitizeExtraSettings = (
-  extraSettings: Record<string, unknown> | undefined,
-  secretPaths: Set<string>,
-  editingConfig: ChannelConfig | null
-): Record<string, unknown> | undefined => {
-  if (!extraSettings) return undefined;
-
-  const sanitized = Object.fromEntries(
-    Object.entries(extraSettings).filter(([key, value]) => {
-      if (value === undefined || value === '' || value === SECRET_UNCHANGED_SENTINEL) {
-        return false;
-      }
-      return !(editingConfig && secretPaths.has(key) && value === '');
-    })
-  );
-
-  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
-};
 
 const sanitizePluginConfigValues = (
   values: Record<string, unknown>,
@@ -588,24 +545,10 @@ export const PluginHub: React.FC = () => {
   const handleEditConfig = useCallback(
     (config: ChannelConfig) => {
       setEditingConfig(config);
-      const normalizedExtraSettings =
-        config.extra_settings && typeof config.extra_settings === 'object'
-          ? Object.fromEntries(
-              Object.entries(config.extra_settings).map(([key, value]) => [
-                key,
-                value === SECRET_UNCHANGED_SENTINEL ? undefined : value,
-              ])
-            )
-          : {};
-
       form.resetFields();
-      form.setFieldsValue({
-        ...config,
-        app_secret: undefined,
-        encrypt_key: undefined,
-        verification_token: undefined,
-        extra_settings: normalizedExtraSettings,
-      });
+      form.setFieldsValue(
+        getChannelConfigEditValues(config) as Parameters<typeof form.setFieldsValue>[0]
+      );
       setConfigModalVisible(true);
       void loadChannelSchema(config.channel_type);
     },
@@ -659,32 +602,14 @@ export const PluginHub: React.FC = () => {
     }
     try {
       const values = await form.validateFields();
-      let mutablePayload: Record<string, unknown> = { ...values };
-      const schemaSecretPaths =
-        activeChannelSchema?.schema_supported === true
-          ? new Set(activeChannelSchema.secret_paths)
-          : new Set<string>();
-      const fallbackSecretPaths = new Set(['app_secret', 'encrypt_key', 'verification_token']);
-      let extraSettings = isRecord(mutablePayload.extra_settings)
-        ? { ...mutablePayload.extra_settings }
-        : undefined;
-
-      if (activeChannelSchema?.schema_supported) {
-        mutablePayload = editingConfig
-          ? removeEmptySecretValues(mutablePayload, schemaSecretPaths, (key) =>
-              CHANNEL_SETTING_FIELDS.has(key)
-            )
-          : mutablePayload;
-      } else if (editingConfig) {
-        mutablePayload = removeEmptySecretValues(mutablePayload, fallbackSecretPaths, () => true);
-      }
-
-      extraSettings = sanitizeExtraSettings(extraSettings, schemaSecretPaths, editingConfig);
-      mutablePayload = removeUndefinedValues({
-        ...mutablePayload,
-        extra_settings: extraSettings,
-      });
-      const payload = mutablePayload as Partial<CreateChannelConfig & UpdateChannelConfig>;
+      const payload = getChannelConfigSubmitValues(
+        values as CreateChannelConfig | UpdateChannelConfig,
+        {
+          editingConfig,
+          schemaSecretPaths: activeChannelSchema?.secret_paths,
+          schemaSupported: activeChannelSchema?.schema_supported,
+        }
+      );
 
       setConfigActionKey('save');
       if (editingConfig) {
@@ -695,9 +620,8 @@ export const PluginHub: React.FC = () => {
         message.success(t('tenant.pluginHub.configModal.updateSuccess'));
       } else {
         const channelType =
-          typeof mutablePayload.channel_type === 'string' ? mutablePayload.channel_type : undefined;
-        const channelName =
-          typeof mutablePayload.name === 'string' ? mutablePayload.name : undefined;
+          typeof payload.channel_type === 'string' ? payload.channel_type : undefined;
+        const channelName = typeof payload.name === 'string' ? payload.name : undefined;
         if (!channelType || !channelName) {
           message.error(t('tenant.pluginHub.configModal.channelTypeNameRequired'));
           return;

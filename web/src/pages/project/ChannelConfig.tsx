@@ -35,7 +35,7 @@ import {
   getChannelConfigEditValues,
   getChannelConfigSubmitValues,
   isRecord,
-} from '@/pages/project/channelConfigSanitizers';
+} from '@/utils/channelConfigSanitizers';
 import { formatPluginCapabilityCounts } from '@/utils/pluginCapabilityCounts';
 
 import type {
