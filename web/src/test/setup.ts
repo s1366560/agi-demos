@@ -397,6 +397,8 @@ const commonTranslations: Record<string, string> = {
   'tenant.providers.notAvailable': 'N/A',
   'tenant.providers.deleteConfirm': 'Are you sure you want to delete this provider?',
   'tenant.providers.deleteSuccess': 'Provider deleted',
+  'tenant.providers.systemStatusError': 'Failed to load provider system status',
+  'tenant.providers.healthCheckError': 'Failed to check provider health',
   'tenant.providers.connectionTest.savedPrefix': 'Saved provider health check',
   'tenant.providers.connectionTest.livePrefix': 'Connection test',
   'tenant.providers.connectionTest.passed': '{{prefix}} passed{{responseTime}}.',

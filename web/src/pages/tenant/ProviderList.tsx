@@ -142,8 +142,9 @@ export const ProviderList: React.FC = () => {
       setSystemStatus(status);
     } catch (err) {
       console.error('Failed to load system status:', err);
+      message.error(t('tenant.providers.systemStatusError'));
     }
-  }, []);
+  }, [message, t]);
 
   useEffect(() => {
     void loadProviders();
@@ -158,6 +159,7 @@ export const ProviderList: React.FC = () => {
       await loadSystemStatus();
     } catch (err) {
       console.error('Health check failed:', err);
+      message.error(t('tenant.providers.healthCheckError'));
     } finally {
       setCheckingHealth(null);
     }

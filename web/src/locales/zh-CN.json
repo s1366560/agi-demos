@@ -1301,6 +1301,8 @@
       "notAvailable": "无",
       "deleteConfirm": "您确定要删除此提供商吗？",
       "deleteSuccess": "提供商已删除",
+      "systemStatusError": "加载提供商系统状态失败",
+      "healthCheckError": "检查提供商健康状态失败",
       "connectionTest": {
         "savedPrefix": "已保存提供商健康检查",
         "livePrefix": "连接测试",
