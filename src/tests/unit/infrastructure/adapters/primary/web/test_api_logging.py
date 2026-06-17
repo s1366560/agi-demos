@@ -26,6 +26,14 @@ def _app() -> FastAPI:
     async def get_shared(share_token: str) -> dict[str, str]:
         return {"share_token": share_token}
 
+    @app.get("/api/v1/invitations/verify/{token}")
+    async def verify_invitation(token: str) -> dict[str, str]:
+        return {"token": token}
+
+    @app.post("/api/v1/invitations/accept/{token}")
+    async def accept_invitation(token: str) -> dict[str, str]:
+        return {"token": token}
+
     return app
 
 
@@ -105,3 +113,44 @@ def test_api_access_log_redacts_shared_token_path(
     assert payload["path"] == "/api/v1/shared/{share_token}"
     assert payload["route"] == "/api/v1/shared/{share_token}"
     assert "secret-share-token" not in record.message
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("method", "path", "route_template", "secret"),
+    [
+        (
+            "get",
+            "/api/v1/invitations/verify/secret-invitation-token",
+            "/api/v1/invitations/verify/{token}",
+            "secret-invitation-token",
+        ),
+        (
+            "post",
+            "/api/v1/invitations/accept/secret-accept-token",
+            "/api/v1/invitations/accept/{token}",
+            "secret-accept-token",
+        ),
+    ],
+)
+def test_api_access_log_redacts_invitation_token_paths(
+    caplog: pytest.LogCaptureFixture,
+    method: str,
+    path: str,
+    route_template: str,
+    secret: str,
+) -> None:
+    client = TestClient(_app())
+
+    with caplog.at_level(
+        logging.INFO,
+        logger="src.infrastructure.adapters.primary.web.api_access",
+    ):
+        response = getattr(client, method)(path)
+
+    assert response.status_code == 200
+    [record] = [record for record in caplog.records if record.name.endswith(".api_access")]
+    payload = _api_log_payload(record)
+    assert payload["path"] == route_template
+    assert payload["route"] == route_template
+    assert secret not in record.message

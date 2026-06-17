@@ -12,7 +12,13 @@ logger = logging.getLogger("src.infrastructure.adapters.primary.web.api_access")
 
 _REQUEST_ID_HEADER = "X-Request-ID"
 _NO_ROUTE = "-"
-_ROUTES_WITH_SENSITIVE_PATH_VALUES = frozenset({"/api/v1/shared/{share_token}"})
+_ROUTES_WITH_SENSITIVE_PATH_VALUES = frozenset(
+    {
+        "/api/v1/shared/{share_token}",
+        "/api/v1/invitations/verify/{token}",
+        "/api/v1/invitations/accept/{token}",
+    }
+)
 
 
 def _client_host(request: Request) -> str:
