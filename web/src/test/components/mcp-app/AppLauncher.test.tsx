@@ -7,10 +7,12 @@ import { AppLauncher } from '@/components/mcp-app/AppLauncher';
 import { mcpAppAPI } from '@/services/mcpAppService';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
 
-vi.mock('@/stores/project', () => ({
-  useProjectStore: (
-    selector: (state: { currentProject: { id: string; name: string } }) => unknown
-  ) => selector({ currentProject: { id: 'project-1', name: 'Project One' } }),
+const mockScope = vi.hoisted(() => ({
+  projectId: 'project-1' as string | undefined,
+}));
+
+vi.mock('@/components/mcp/useMcpProjectScope', () => ({
+  useMcpProjectScope: () => ({ projectId: mockScope.projectId }),
 }));
 
 vi.mock('@/stores/canvasStore', () => ({
@@ -68,6 +70,7 @@ vi.mock('antd', async (importOriginal) => {
 describe('AppLauncher', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    mockScope.projectId = 'project-1';
     useMCPAppStore.getState().reset();
   });
 
@@ -80,6 +83,7 @@ describe('AppLauncher', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load MCP apps');
     expect(screen.getByRole('alert')).toHaveTextContent('Registry unavailable');
     expect(screen.queryByText('No MCP apps available')).not.toBeInTheDocument();
+    expect(mcpAppAPI.list).toHaveBeenCalledWith('project-1');
   });
 
   it('retries loading apps from the failure state', async () => {
@@ -112,5 +116,37 @@ describe('AppLauncher', () => {
     });
     expect(await screen.findByText('Charts')).toBeInTheDocument();
     expect(listSpy).toHaveBeenCalledTimes(2);
+    expect(listSpy).toHaveBeenNthCalledWith(1, 'project-1');
+    expect(listSpy).toHaveBeenNthCalledWith(2, 'project-1');
+  });
+
+  it('does not expose cached apps when scoped project is unavailable', () => {
+    mockScope.projectId = undefined;
+    const listSpy = vi.spyOn(mcpAppAPI, 'list').mockResolvedValue([]);
+    useMCPAppStore.setState({
+      apps: {
+        'app-1': {
+          id: 'app-1',
+          project_id: 'project-2',
+          tenant_id: 'tenant-2',
+          server_id: 'server-1',
+          server_name: 'charts',
+          tool_name: 'render_chart',
+          ui_metadata: { resourceUri: 'ui://charts/app.html', title: 'Charts' },
+          source: 'user_added',
+          status: 'ready',
+          has_resource: true,
+        },
+      },
+      loading: false,
+      error: null,
+    });
+
+    render(<AppLauncher />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open MCP Apps' }));
+
+    expect(screen.queryByText('Charts')).not.toBeInTheDocument();
+    expect(screen.getByText('No MCP apps available')).toBeInTheDocument();
+    expect(listSpy).not.toHaveBeenCalled();
   });
 });

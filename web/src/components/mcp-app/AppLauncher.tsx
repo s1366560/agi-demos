@@ -18,8 +18,8 @@ import { AlertCircle, AppWindow, ExternalLink, Pin, RefreshCw, Search } from 'lu
 import { useCanvasStore, usePinnedCanvasTabs } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
-import { useProjectStore } from '@/stores/project';
 
+import { useMcpProjectScope } from '@/components/mcp/useMcpProjectScope';
 import { LazyTooltip } from '@/components/ui/lazyAntd';
 
 import type { MCPApp } from '@/types/mcpApp';
@@ -34,7 +34,7 @@ export const AppLauncher: FC<AppLauncherProps> = ({ variant = 'header' }) => {
   const loading = useMCPAppStore((s) => s.loading);
   const error = useMCPAppStore((s) => s.error);
   const fetchApps = useMCPAppStore((s) => s.fetchApps);
-  const currentProject = useProjectStore((s) => s.currentProject);
+  const { projectId } = useMcpProjectScope();
   const pinnedTabs = usePinnedCanvasTabs();
 
   const [open, setOpen] = useState(false);
@@ -42,13 +42,16 @@ export const AppLauncher: FC<AppLauncherProps> = ({ variant = 'header' }) => {
 
   // Fetch apps when popover opens (if not already loaded)
   useEffect(() => {
-    if (open && currentProject?.id) {
-      void fetchApps(currentProject.id);
+    if (open && projectId) {
+      void fetchApps(projectId);
     }
-  }, [open, currentProject?.id, fetchApps]);
+  }, [open, projectId, fetchApps]);
 
   const appList = useMemo(() => {
-    const list = Object.values(apps).filter((app) => app.status === 'ready');
+    if (!projectId) return [];
+    const list = Object.values(apps).filter(
+      (app) => app.status === 'ready' && app.project_id === projectId
+    );
     if (!search) return list;
     const q = search.toLowerCase();
     return list.filter(
@@ -57,7 +60,7 @@ export const AppLauncher: FC<AppLauncherProps> = ({ variant = 'header' }) => {
         app.server_name.toLowerCase().includes(q) ||
         (app.ui_metadata.title || '').toLowerCase().includes(q)
     );
-  }, [apps, search]);
+  }, [apps, projectId, search]);
 
   // Separate pinned apps from the rest
   const pinnedAppIds = useMemo(
@@ -89,14 +92,14 @@ export const AppLauncher: FC<AppLauncherProps> = ({ variant = 'header' }) => {
         mcpAppId: app.id,
         mcpResourceUri: app.ui_metadata.resourceUri,
         mcpServerName: app.server_name,
-        mcpProjectId: currentProject?.id,
+        mcpProjectId: projectId,
         mcpToolName: app.tool_name,
         mcpAppUiMetadata: app.ui_metadata as unknown as Record<string, unknown>,
       });
       useLayoutModeStore.getState().setMode('canvas');
       setOpen(false);
     },
-    [currentProject?.id]
+    [projectId]
   );
 
   const handleTogglePin = useCallback(
@@ -116,23 +119,23 @@ export const AppLauncher: FC<AppLauncherProps> = ({ variant = 'header' }) => {
           mcpAppId: app.id,
           mcpResourceUri: app.ui_metadata.resourceUri,
           mcpServerName: app.server_name,
-          mcpProjectId: currentProject?.id,
+          mcpProjectId: projectId,
           mcpToolName: app.tool_name,
           mcpAppUiMetadata: app.ui_metadata as unknown as Record<string, unknown>,
         });
         store.togglePin(tabId);
       }
     },
-    [currentProject?.id]
+    [projectId]
   );
 
   const handleRefresh = useCallback(() => {
-    if (currentProject?.id) {
-      void fetchApps(currentProject.id);
+    if (projectId) {
+      void fetchApps(projectId);
     }
-  }, [currentProject, fetchApps]);
+  }, [projectId, fetchApps]);
 
-  const totalReady = Object.values(apps).filter((a) => a.status === 'ready').length;
+  const totalReady = appList.length;
   const isStatusVariant = variant === 'status';
 
   const content = (
