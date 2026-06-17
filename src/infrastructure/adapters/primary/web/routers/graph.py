@@ -565,6 +565,16 @@ async def get_entity_relationships(
             rel_filter = "AND type(r) = $relationship_type"
             params["relationship_type"] = relationship_type
 
+        count_query = f"""
+        MATCH (e:Entity {{uuid: $uuid}})
+        MATCH (e)-[r]-(related:Entity)
+        WHERE related IS NOT NULL {rel_filter}
+        AND ($is_superuser OR related.project_id = $project_id)
+        RETURN count(r) as total
+        """
+        count_result = await neo4j_client.execute_query(count_query, **params)
+        total = count_result.records[0]["total"] if count_result.records else 0
+
         # Query for both outgoing and incoming relationships
         query = f"""
         MATCH (e:Entity {{uuid: $uuid}})
@@ -619,7 +629,7 @@ async def get_entity_relationships(
                 }
             )
 
-        return {"relationships": relationships, "total": len(relationships)}
+        return {"relationships": relationships, "total": total}
     except HTTPException:
         raise
     except Exception as e:
@@ -943,6 +953,19 @@ async def get_community_members(
         await _ensure_graph_project_access(community_project_id, current_user, db)
 
         # Note: Entity-[:BELONGS_TO]->Community (not Community-[:HAS_MEMBER]->Entity)
+        count_query = """
+        MATCH (e:Entity)-[:BELONGS_TO]->(c:Community {uuid: $uuid})
+        WHERE $is_superuser OR e.project_id = $project_id
+        RETURN count(e) as total
+        """
+        count_result = await neo4j_client.execute_query(
+            count_query,
+            uuid=community_id,
+            project_id=community_project_id,
+            is_superuser=getattr(current_user, "is_superuser", False),
+        )
+        total = count_result.records[0]["total"] if count_result.records else 0
+
         query = """
         MATCH (e:Entity)-[:BELONGS_TO]->(c:Community {uuid: $uuid})
         WHERE $is_superuser OR e.project_id = $project_id
@@ -974,7 +997,7 @@ async def get_community_members(
                 }
             )
 
-        return {"members": members, "total": len(members)}
+        return {"members": members, "total": total}
     except HTTPException:
         raise
     except Exception as e:

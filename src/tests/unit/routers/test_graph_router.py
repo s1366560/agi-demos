@@ -179,6 +179,7 @@ class TestGraphRouter:
         neo4j_client.execute_query = AsyncMock(
             side_effect=[
                 _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
+                _neo4j_result([{"total": 0}]),
                 _neo4j_result([]),
             ]
         )
@@ -193,11 +194,60 @@ class TestGraphRouter:
         )
 
         assert response == {"relationships": [], "total": 0}
-        relationship_query = neo4j_client.execute_query.await_args_list[1].args[0]
-        relationship_kwargs = neo4j_client.execute_query.await_args_list[1].kwargs
+        count_query = neo4j_client.execute_query.await_args_list[1].args[0]
+        relationship_query = neo4j_client.execute_query.await_args_list[2].args[0]
+        relationship_kwargs = neo4j_client.execute_query.await_args_list[2].kwargs
+        assert "related.project_id = $project_id" in count_query
         assert "related.project_id = $project_id" in relationship_query
         assert relationship_kwargs["project_id"] == test_project_db.id
         assert relationship_kwargs["is_superuser"] is False
+
+    @pytest.mark.asyncio
+    async def test_get_entity_relationships_total_counts_all_matching_relationships(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock(
+            side_effect=[
+                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
+                _neo4j_result([{"total": 3}]),
+                _neo4j_result(
+                    [
+                        {
+                            "edge_id": "edge-1",
+                            "relation_type": "KNOWS",
+                            "edge_props": {"fact": "Alice knows Bob", "score": 0.9},
+                            "related_props": {
+                                "uuid": "entity-2",
+                                "name": "Bob",
+                                "summary": "Related person",
+                            },
+                            "related_labels": ["Entity", "Person"],
+                            "direction": "outgoing",
+                        }
+                    ]
+                ),
+            ]
+        )
+
+        response = await get_entity_relationships(
+            entity_id="entity-1",
+            relationship_type=None,
+            limit=1,
+            current_user=test_user,
+            db=test_db,
+            neo4j_client=neo4j_client,
+        )
+
+        assert response["total"] == 3
+        assert len(response["relationships"]) == 1
+        count_query = neo4j_client.execute_query.await_args_list[1].args[0]
+        page_query = neo4j_client.execute_query.await_args_list[2].args[0]
+        assert "RETURN count(r) as total" in count_query
+        assert "LIMIT $limit" in page_query
 
     @pytest.mark.asyncio
     async def test_get_community_members_filters_members_by_project(
@@ -210,6 +260,7 @@ class TestGraphRouter:
         neo4j_client.execute_query = AsyncMock(
             side_effect=[
                 _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
+                _neo4j_result([{"total": 0}]),
                 _neo4j_result([]),
             ]
         )
@@ -223,11 +274,55 @@ class TestGraphRouter:
         )
 
         assert response == {"members": [], "total": 0}
-        member_query = neo4j_client.execute_query.await_args_list[1].args[0]
-        member_kwargs = neo4j_client.execute_query.await_args_list[1].kwargs
+        count_query = neo4j_client.execute_query.await_args_list[1].args[0]
+        member_query = neo4j_client.execute_query.await_args_list[2].args[0]
+        member_kwargs = neo4j_client.execute_query.await_args_list[2].kwargs
+        assert "e.project_id = $project_id" in count_query
         assert "e.project_id = $project_id" in member_query
         assert member_kwargs["project_id"] == test_project_db.id
         assert member_kwargs["is_superuser"] is False
+
+    @pytest.mark.asyncio
+    async def test_get_community_members_total_counts_all_matching_members(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock(
+            side_effect=[
+                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
+                _neo4j_result([{"total": 4}]),
+                _neo4j_result(
+                    [
+                        {
+                            "props": {
+                                "uuid": "entity-1",
+                                "name": "Alice",
+                                "entity_type": "Person",
+                                "summary": "Community member",
+                            }
+                        }
+                    ]
+                ),
+            ]
+        )
+
+        response = await get_community_members(
+            community_id="community-1",
+            limit=1,
+            current_user=test_user,
+            db=test_db,
+            neo4j_client=neo4j_client,
+        )
+
+        assert response["total"] == 4
+        assert len(response["members"]) == 1
+        count_query = neo4j_client.execute_query.await_args_list[1].args[0]
+        page_query = neo4j_client.execute_query.await_args_list[2].args[0]
+        assert "RETURN count(e) as total" in count_query
+        assert "LIMIT $limit" in page_query
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
