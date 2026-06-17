@@ -1,12 +1,17 @@
 """Unit tests for notifications API endpoints."""
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException, status
 from sqlalchemy import select
 
-from src.infrastructure.adapters.primary.web.routers.notifications import create_notification
+from src.infrastructure.adapters.primary.web.routers.notifications import (
+    create_notification,
+    mark_all_read,
+)
 from src.infrastructure.adapters.secondary.persistence.models import Notification
 
 
@@ -210,6 +215,21 @@ class TestMarkNotificationRead:
 
 class TestMarkAllRead:
     """Tests for PUT /notifications/read-all"""
+
+    @pytest.mark.asyncio
+    async def test_mark_all_read_uses_bulk_update(self):
+        """Test mark-all-read uses a bounded SQL update instead of loading rows."""
+        db = SimpleNamespace(
+            execute=AsyncMock(return_value=SimpleNamespace(rowcount=7)),
+            commit=AsyncMock(),
+        )
+
+        result = await mark_all_read(current_user=SimpleNamespace(id="user_bulk"), db=db)
+
+        statement = db.execute.await_args.args[0]
+        assert statement.is_update is True
+        assert result == {"success": True, "count": 7}
+        db.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_mark_all_read_success(self, test_db, client, test_user):

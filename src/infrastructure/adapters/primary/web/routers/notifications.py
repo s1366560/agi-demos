@@ -2,11 +2,12 @@
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
@@ -99,18 +100,15 @@ async def mark_all_read(
 ) -> dict[str, Any]:
     """Mark all notifications as read for the current user."""
     result = await db.execute(
-        refresh_select_statement(select(Notification).where(
-            and_(Notification.user_id == current_user.id, Notification.is_read.is_(False))
-        ))
+        update(Notification)
+        .where(and_(Notification.user_id == current_user.id, Notification.is_read.is_(False)))
+        .values(is_read=True)
+        .execution_options(synchronize_session=False)
     )
-    notifications = result.scalars().all()
-
-    for notif in notifications:
-        notif.is_read = True
 
     await db.commit()
 
-    return {"success": True, "count": len(notifications)}
+    return {"success": True, "count": int(cast(CursorResult[Any], result).rowcount or 0)}
 
 
 @router.delete("/notifications/{notification_id}")
