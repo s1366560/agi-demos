@@ -99,9 +99,10 @@ class TrustService:
         *,
         reviewer_id: str,
         decision: str,
+        tenant_id: str | None = None,
     ) -> DecisionRecord:
         record = await self._record_repo.find_by_id(record_id)
-        if record is None:
+        if record is None or (tenant_id is not None and record.tenant_id != tenant_id):
             msg = f"Decision record not found: {record_id}"
             raise ValueError(msg)
 

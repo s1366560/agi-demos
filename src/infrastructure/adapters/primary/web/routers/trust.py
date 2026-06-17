@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.schemas.trust_schemas import (
@@ -21,7 +22,9 @@ from src.application.services.trust_service import TrustService
 from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.models import WorkspaceModel
 from src.infrastructure.adapters.secondary.persistence.sql_decision_record_repository import (
     SqlDecisionRecordRepository,
 )
@@ -57,6 +60,21 @@ async def _require_tenant_access(
     await require_tenant_access(db, current_user, tenant_id, require_admin=require_admin)
 
 
+async def _require_workspace_in_tenant(
+    db: AsyncSession,
+    tenant_id: str,
+    workspace_id: str,
+) -> None:
+    result = await db.execute(
+        refresh_select_statement(select(WorkspaceModel.id).where(
+            WorkspaceModel.id == workspace_id,
+            WorkspaceModel.tenant_id == tenant_id,
+        ))
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail=_("Workspace not found"))
+
+
 # ---------------------------------------------------------------------------
 # Trust Policies
 # ---------------------------------------------------------------------------
@@ -71,6 +89,7 @@ async def list_trust_policies(
     agent_instance_id: str | None = Query(default=None),
 ) -> TrustPolicyListResponse:
     await _require_tenant_access(db, current_user, tenant_id)
+    await _require_workspace_in_tenant(db, tenant_id, workspace_id)
     service = _build_service(db)
     items = await service.list_policies(workspace_id, agent_instance_id=agent_instance_id)
     return TrustPolicyListResponse(
@@ -99,6 +118,7 @@ async def create_trust_policy(
     db: AsyncSession = Depends(get_db),
 ) -> TrustPolicyResponse:
     await _require_tenant_access(db, current_user, tenant_id, require_admin=True)
+    await _require_workspace_in_tenant(db, tenant_id, body.workspace_id)
     service = _build_service(db)
     policy = await service.create_policy(
         tenant_id=tenant_id,
@@ -132,6 +152,7 @@ async def check_trust(
     action_type: str = Query(...),
 ) -> TrustCheckResponse:
     await _require_tenant_access(db, current_user, tenant_id)
+    await _require_workspace_in_tenant(db, tenant_id, workspace_id)
     service = _build_service(db)
     trusted = await service.check_trust(workspace_id, agent_instance_id, action_type)
     return TrustCheckResponse(trusted=trusted)
@@ -154,6 +175,7 @@ async def submit_approval_request(
     db: AsyncSession = Depends(get_db),
 ) -> DecisionRecordResponse:
     await _require_tenant_access(db, current_user, tenant_id)
+    await _require_workspace_in_tenant(db, tenant_id, body.workspace_id)
     service = _build_service(db)
     record = await service.submit_approval(
         tenant_id=tenant_id,
@@ -185,6 +207,7 @@ async def resolve_approval_request(
             record_id,
             reviewer_id=current_user.id,
             decision=body.decision,
+            tenant_id=tenant_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=_("Approval request not found")) from exc
@@ -202,6 +225,7 @@ async def list_decision_records(
     decision_type: str | None = Query(default=None),
 ) -> DecisionRecordListResponse:
     await _require_tenant_access(db, current_user, tenant_id)
+    await _require_workspace_in_tenant(db, tenant_id, workspace_id)
     service = _build_service(db)
     items = await service.list_decision_records(
         workspace_id, agent_id=agent_id, decision_type=decision_type
@@ -221,9 +245,10 @@ async def get_decision_record(
     workspace_id: str = Query(...),
 ) -> DecisionRecordResponse:
     await _require_tenant_access(db, current_user, tenant_id)
+    await _require_workspace_in_tenant(db, tenant_id, workspace_id)
     service = _build_service(db)
     record = await service.get_decision_record(record_id)
-    if record is None:
+    if record is None or record.tenant_id != tenant_id or record.workspace_id != workspace_id:
         raise HTTPException(status_code=404, detail=_("Decision record not found"))
     return _record_response(record)
 
