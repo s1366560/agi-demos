@@ -4,6 +4,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.adapters.primary.web.routers import tenants as tenants_router
 from src.infrastructure.adapters.primary.web.routers.tenants import (
     _get_project_memory_stats,
     get_tenant_analytics,
@@ -70,6 +71,58 @@ async def test_get_tenant_stats_returns_real_cumulative_memory_history(
     assert yesterday["used"] == 13
     assert yesterday["daily_added"] == 3
     assert yesterday["memory_count"] == 1
+
+
+@pytest.mark.unit
+async def test_get_tenant_stats_uses_batched_project_memory_stats(
+    monkeypatch: pytest.MonkeyPatch,
+    test_db: AsyncSession,
+    test_tenant_db: Tenant,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    empty_project = Project(
+        id=str(uuid4()),
+        tenant_id=test_tenant_db.id,
+        name="Empty Project",
+        owner_id=test_user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    test_db.add(empty_project)
+    await test_db.commit()
+
+    captured_batches: list[list[str]] = []
+
+    async def fake_project_memory_stats(
+        db: AsyncSession,
+        project_ids: list[str],
+    ) -> dict[str, dict[str, int]]:
+        captured_batches.append(project_ids)
+        return {
+            test_project_db.id: {
+                "storage_bytes": 2048,
+                "memory_count": 1,
+            }
+        }
+
+    monkeypatch.setattr(
+        tenants_router,
+        "_get_project_memory_stats",
+        fake_project_memory_stats,
+    )
+
+    stats = await tenants_router.get_tenant_stats(
+        test_tenant_db.id,
+        current_user=test_user,
+        db=test_db,
+    )
+
+    assert len(captured_batches) == 1
+    assert {test_project_db.id, empty_project.id}.issubset(set(captured_batches[0]))
+    projects_by_id = {item["id"]: item for item in stats["projects"]["list"]}
+    assert projects_by_id[test_project_db.id]["memory_consumed"] == "2.0 KB"
+    assert projects_by_id[empty_project.id]["memory_consumed"] == "0.0 KB"
 
 
 @pytest.mark.unit

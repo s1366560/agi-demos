@@ -648,22 +648,29 @@ async def get_tenant_stats(
     new_members_this_week = new_members_result.scalar() or 0
 
     # Project details with memory usage
-    active_projects_list = []
-    for project in projects[:5]:  # Top 5 projects
-        # Get owner name
-        owner_result = await db.execute(
-            refresh_select_statement(select(User).where(User.id == project.owner_id))
+    top_projects = list(projects[:5])
+    owner_ids = {project.owner_id for project in top_projects if project.owner_id}
+    owners_by_id: dict[str, User] = {}
+    if owner_ids:
+        owners_result = await db.execute(
+            refresh_select_statement(select(User).where(User.id.in_(owner_ids)))
         )
-        owner = owner_result.scalar_one_or_none()
+        owners_by_id = {owner.id: owner for owner in owners_result.scalars().all()}
+
+    project_memory_stats = await _get_project_memory_stats(
+        db,
+        [project.id for project in top_projects],
+    )
+    active_projects_list: list[dict[str, Any]] = []
+    for project in top_projects:  # Top 5 projects
+        owner = owners_by_id.get(project.owner_id)
         owner_name = owner.full_name if owner else "Unknown"
 
-        # Get memory consumption for this project
-        proj_storage_result = await db.execute(
-            refresh_select_statement(
-                select(func.sum(func.length(Memory.content))).where(Memory.project_id == project.id)
-            )
+        memory_stats = project_memory_stats.get(
+            project.id,
+            {"storage_bytes": 0, "memory_count": 0},
         )
-        proj_storage = proj_storage_result.scalar() or 0
+        proj_storage = memory_stats["storage_bytes"]
 
         # Format storage
         if proj_storage > 1024 * 1024 * 1024:
