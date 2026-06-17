@@ -44,6 +44,8 @@ export interface SubAgentListParams {
   source?: 'filesystem' | 'database' | undefined;
   include_filesystem?: boolean | undefined;
   tenant_id?: string | null | undefined;
+  search?: string | undefined;
+  sort?: 'name' | 'invocations' | 'success_rate' | 'recent' | undefined;
   skip?: number | undefined;
   offset?: number | undefined;
   limit?: number | undefined;

@@ -23,6 +23,10 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+vi.mock('../../../hooks/useDebounce', () => ({
+  useDebounce: (value: unknown) => value,
+}));
+
 // Mock SubAgentModal
 vi.mock('../../../components/subagent/SubAgentModal', () => ({
   SubAgentModal: ({ isOpen, onClose, onSuccess, tenantId }: any) =>
@@ -63,6 +67,7 @@ const createFromTemplateMock = vi.hoisted(() => vi.fn());
 const setFiltersMock = vi.hoisted(() => vi.fn());
 const clearErrorMock = vi.hoisted(() => vi.fn());
 const listProjectsMock = vi.hoisted(() => vi.fn());
+const subAgentTotalMock = vi.hoisted(() => ({ value: 2 }));
 
 vi.mock('../../../components/subagent/SubAgentGrid', () => ({
   SubAgentGrid: ({ subagents, onImport, getScopeLabel }: any) => (
@@ -141,6 +146,7 @@ vi.mock('../../../stores/subagent', () => ({
   useSubAgentLoading: () => false,
   useSubAgentTemplatesLoading: () => false,
   useSubAgentError: () => null,
+  useSubAgentTotal: () => subAgentTotalMock.value,
   useEnabledSubAgentsCount: () => 1,
   useAverageSuccessRate: () => 90,
   useTotalInvocations: () => 150,
@@ -165,6 +171,7 @@ describe('SubAgentList', () => {
     deleteSubAgentMock.mockResolvedValue(undefined);
     createFromTemplateMock.mockResolvedValue(mockSubAgents[0]);
     listProjectsMock.mockResolvedValue(undefined);
+    subAgentTotalMock.value = mockSubAgents.length;
     useTenantStore.setState({
       currentTenant: null,
     });
@@ -242,10 +249,59 @@ describe('SubAgentList', () => {
       render(<SubAgentList />);
 
       await waitFor(() => {
-        expect(listSubAgentsMock).toHaveBeenCalledWith({ tenant_id: 'tenant-1' });
+        expect(listSubAgentsMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tenant_id: 'tenant-1',
+            limit: 20,
+            offset: 0,
+            sort: 'name',
+          })
+        );
         expect(listTemplatesMock).toHaveBeenCalledWith({ tenant_id: 'tenant-1' });
       });
       expect(listProjectsMock).toHaveBeenCalledWith('tenant-1', { page_size: 100 });
+    });
+
+    it('should request server-side search from the selected tenant', async () => {
+      useTenantStore.setState({
+        currentTenant: { id: 'tenant-1', name: 'Tenant One' } as any,
+      });
+
+      render(<SubAgentList />);
+      fireEvent.change(screen.getByPlaceholderText('Search subagents...'), {
+        target: { value: 'Test' },
+      });
+
+      await waitFor(() => {
+        expect(listSubAgentsMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tenant_id: 'tenant-1',
+            limit: 20,
+            offset: 0,
+            search: 'Test',
+          })
+        );
+      });
+    });
+
+    it('should request the next backend page from pagination controls', async () => {
+      subAgentTotalMock.value = 25;
+      useTenantStore.setState({
+        currentTenant: { id: 'tenant-1', name: 'Tenant One' } as any,
+      });
+
+      render(<SubAgentList />);
+      fireEvent.click(screen.getByRole('button', { name: 'tenant.subagents.pagination.nextPage' }));
+
+      await waitFor(() => {
+        expect(listSubAgentsMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tenant_id: 'tenant-1',
+            limit: 20,
+            offset: 20,
+          })
+        );
+      });
     });
 
     it('should pass selected route tenant into the create modal', () => {

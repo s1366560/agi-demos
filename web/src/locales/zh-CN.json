@@ -2585,6 +2585,12 @@
         "successRate": "成功率",
         "recent": "最近使用"
       },
+      "pagination": {
+        "summary": "第 {{start}}-{{end}} 个，共 {{total}} 个",
+        "rowsPerPage": "每页行数",
+        "previousPage": "上一页",
+        "nextPage": "下一页"
+      },
       "card": {
         "inherit": "继承",
         "allTools": "全部",

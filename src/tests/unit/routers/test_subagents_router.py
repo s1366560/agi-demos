@@ -506,6 +506,9 @@ async def test_list_subagents_filters_project_scoped_agents_by_project_access(
 
     response = await router.list_subagents(
         request=SimpleNamespace(),
+        enabled_only=False,
+        search=None,
+        sort="name",
         source="database",
         include_filesystem=False,
         limit=100,
@@ -520,6 +523,50 @@ async def test_list_subagents_filters_project_scoped_agents_by_project_access(
         "subagent-visible",
         "subagent-tenant",
     }
+
+
+@pytest.mark.unit
+async def test_list_subagents_searches_before_paginating(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    alpha_subagent = _make_subagent(
+        subagent_id="subagent-alpha",
+        name="alpha-agent",
+        project_id=None,
+    )
+    beta_subagent = _make_subagent(
+        subagent_id="subagent-beta",
+        name="beta-agent",
+        project_id=None,
+    )
+    beta_subagent.trigger = router.AgentTrigger(
+        description="Handles database diagnostics",
+        keywords=["database"],
+    )
+    beta_subagent.total_invocations = 12
+    beta_subagent.success_rate = 0.75
+    repo = _SubagentAccessRepository(subagents=[alpha_subagent, beta_subagent])
+    _patch_container(monkeypatch, _Container(subagent_repo=repo))
+
+    response = await router.list_subagents(
+        request=SimpleNamespace(),
+        enabled_only=False,
+        search="database",
+        sort="invocations",
+        source="database",
+        include_filesystem=False,
+        limit=1,
+        offset=0,
+        tenant_id="tenant-1",
+        current_user=SimpleNamespace(id="user-1"),
+        db=SimpleNamespace(),
+    )
+
+    assert response.total == 1
+    assert response.enabled_total == 1
+    assert response.total_invocations == 12
+    assert response.average_success_rate == 0.75
+    assert [subagent.id for subagent in response.subagents] == ["subagent-beta"]
 
 
 @pytest.mark.unit

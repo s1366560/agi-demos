@@ -8,7 +8,7 @@ isolated tool access and custom system prompts.
 
 import logging
 from datetime import UTC
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -275,6 +275,9 @@ class SubAgentListResponse(BaseModel):
 
     subagents: list[SubAgentResponse]
     total: int
+    enabled_total: int = 0
+    average_success_rate: float = 0.0
+    total_invocations: int = 0
 
 
 class SubAgentMatchRequest(BaseModel):
@@ -417,6 +420,77 @@ def subagent_to_response(subagent: SubAgent) -> SubAgentResponse:
     )
 
 
+SubAgentSortField = Literal["name", "invocations", "success_rate", "recent"]
+
+
+def _filter_subagents_by_search(
+    subagents: list[SubAgent],
+    search: str | None,
+) -> list[SubAgent]:
+    query = (search or "").strip().lower()
+    if not query:
+        return subagents
+
+    def matches(subagent: SubAgent) -> bool:
+        searchable = [
+            subagent.name,
+            subagent.display_name,
+            subagent.trigger.description,
+            subagent.model.value,
+            *(subagent.trigger.keywords or []),
+        ]
+        return any(query in value.lower() for value in searchable if value)
+
+    return [subagent for subagent in subagents if matches(subagent)]
+
+
+def _sort_subagents(
+    subagents: list[SubAgent],
+    sort: SubAgentSortField,
+) -> list[SubAgent]:
+    if sort == "invocations":
+        return sorted(subagents, key=lambda subagent: subagent.total_invocations, reverse=True)
+    if sort == "success_rate":
+        return sorted(subagents, key=lambda subagent: subagent.success_rate, reverse=True)
+    if sort == "recent":
+        return sorted(subagents, key=lambda subagent: subagent.updated_at, reverse=True)
+    return sorted(subagents, key=lambda subagent: subagent.display_name.lower())
+
+
+def _subagent_list_metrics(subagents: list[SubAgent]) -> dict[str, int | float]:
+    enabled_subagents = [subagent for subagent in subagents if subagent.enabled]
+    rated_subagents = [subagent for subagent in enabled_subagents if subagent.total_invocations > 0]
+    average_success_rate = (
+        sum(subagent.success_rate for subagent in rated_subagents) / len(rated_subagents)
+        if rated_subagents
+        else 0.0
+    )
+    return {
+        "enabled_total": len(enabled_subagents),
+        "average_success_rate": average_success_rate,
+        "total_invocations": sum(subagent.total_invocations for subagent in subagents),
+    }
+
+
+def _prepare_subagent_page(
+    subagents: list[SubAgent],
+    *,
+    enabled_only: bool,
+    search: str | None,
+    sort: SubAgentSortField,
+    limit: int,
+    offset: int,
+) -> tuple[list[SubAgent], int, dict[str, int | float]]:
+    filtered = (
+        [subagent for subagent in subagents if subagent.enabled] if enabled_only else subagents
+    )
+    filtered = _filter_subagents_by_search(filtered, search)
+    filtered = _sort_subagents(filtered, sort)
+    total = len(filtered)
+    metrics = _subagent_list_metrics(filtered)
+    return filtered[offset : offset + limit], total, metrics
+
+
 # === API Endpoints ===
 
 
@@ -489,6 +563,8 @@ async def create_subagent(
 async def list_subagents(
     request: Request,
     enabled_only: bool = Query(False, description="Only return enabled subagents"),
+    search: str | None = Query(None, description="Search by name, model, or trigger keywords"),
+    sort: SubAgentSortField = Query("name", description="Sort field"),
     source: str | None = Query(
         None, description="Filter by source: 'filesystem', 'database', or None for all"
     ),
@@ -517,10 +593,14 @@ async def list_subagents(
         loader = FileSystemSubAgentLoader(base_path=Path.cwd(), tenant_id=tenant_id)
         result = await loader.load_all()
         all_subagents = [loaded.subagent for loaded in result.subagents]
-        if enabled_only:
-            all_subagents = [s for s in all_subagents if s.enabled]
-        total = len(all_subagents)
-        page = all_subagents[offset : offset + limit]
+        page, total, metrics = _prepare_subagent_page(
+            all_subagents,
+            enabled_only=enabled_only,
+            search=search,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+        )
     elif source == "database" or not include_filesystem:
         # Only database SubAgents
         db_total = await repo.count_by_tenant(tenant_id, enabled_only=enabled_only)
@@ -540,8 +620,14 @@ async def list_subagents(
             current_user=current_user,
             db=db,
         )
-        total = len(all_subagents)
-        page = all_subagents[offset : offset + limit]
+        page, total, metrics = _prepare_subagent_page(
+            all_subagents,
+            enabled_only=False,
+            search=search,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+        )
     else:
         # Merged: DB + FS (default)
         from src.application.services.subagent_service import SubAgentService
@@ -568,14 +654,21 @@ async def list_subagents(
         )
         fs_subagents = await service.load_filesystem_subagents()
         all_subagents = service.merge(db_subagents, fs_subagents)
-        if enabled_only:
-            all_subagents = [s for s in all_subagents if s.enabled]
-        total = len(all_subagents)
-        page = all_subagents[offset : offset + limit]
+        page, total, metrics = _prepare_subagent_page(
+            all_subagents,
+            enabled_only=enabled_only,
+            search=search,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+        )
 
     return SubAgentListResponse(
         subagents=[subagent_to_response(s) for s in page],
         total=total,
+        enabled_total=int(metrics["enabled_total"]),
+        average_success_rate=float(metrics["average_success_rate"]),
+        total_invocations=int(metrics["total_invocations"]),
     )
 
 

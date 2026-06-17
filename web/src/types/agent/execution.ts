@@ -164,6 +164,9 @@ export interface SubAgentTemplatesResponse {
 export interface SubAgentsListResponse {
   subagents: SubAgentResponse[];
   total: number;
+  enabled_total?: number | undefined;
+  average_success_rate?: number | undefined;
+  total_invocations?: number | undefined;
 }
 
 /**

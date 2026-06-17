@@ -1872,6 +1872,12 @@
         "successRate": "Success Rate",
         "recent": "Recently Used"
       },
+      "pagination": {
+        "summary": "{{start}}-{{end}} of {{total}}",
+        "rowsPerPage": "Rows",
+        "previousPage": "Previous page",
+        "nextPage": "Next page"
+      },
       "card": {
         "inherit": "Inherit",
         "allTools": "All",

@@ -17,6 +17,7 @@ import type {
   SubAgentTemplate,
 } from '../types/agent';
 import type { UnknownError } from '../types/common';
+import type { SubAgentListParams } from '../services/subagentService';
 
 /**
  * Helper function to extract error message from unknown error
@@ -54,6 +55,9 @@ interface SubAgentState {
 
   // Pagination
   total: number;
+  enabledTotal: number;
+  averageSuccessRate: number;
+  totalInvocations: number;
   page: number;
   pageSize: number;
 
@@ -69,13 +73,7 @@ interface SubAgentState {
   error: string | null;
 
   // Actions - SubAgent CRUD
-  listSubAgents: (params?: {
-    enabled_only?: boolean | undefined;
-    tenant_id?: string | null | undefined;
-    skip?: number | undefined;
-    offset?: number | undefined;
-    limit?: number | undefined;
-  }) => Promise<void>;
+  listSubAgents: (params?: SubAgentListParams) => Promise<void>;
   getSubAgent: (id: string, options?: SubAgentActionOptions) => Promise<SubAgentResponse>;
   createSubAgent: (
     data: SubAgentCreate,
@@ -127,6 +125,9 @@ const initialState = {
   currentSubAgent: null,
   templates: [],
   total: 0,
+  enabledTotal: 0,
+  averageSuccessRate: 0,
+  totalInvocations: 0,
   page: 1,
   pageSize: 20,
   filters: initialFilters,
@@ -151,8 +152,12 @@ export const useSubAgentStore = create<SubAgentState>()(
         set({ isLoading: true, error: null });
         try {
           const { filters } = get();
+          const limit = params.limit ?? get().pageSize;
+          const offset = params.offset ?? params.skip ?? 0;
           const queryParams = {
             ...params,
+            limit,
+            offset,
             enabled_only:
               params.enabled_only !== undefined
                 ? params.enabled_only
@@ -161,9 +166,28 @@ export const useSubAgentStore = create<SubAgentState>()(
                   : undefined,
           };
           const response = await subagentAPI.list(queryParams);
+          const subagents = response.subagents ?? [];
           set({
-            subagents: response.subagents,
-            total: response.total,
+            subagents,
+            total: response.total ?? subagents.length,
+            enabledTotal:
+              response.enabled_total ?? subagents.filter((subagent) => subagent.enabled).length,
+            averageSuccessRate:
+              response.average_success_rate ??
+              (() => {
+                const ratedSubagents = subagents.filter(
+                  (subagent) => subagent.enabled && subagent.total_invocations > 0
+                );
+                return ratedSubagents.length > 0
+                  ? ratedSubagents.reduce((sum, subagent) => sum + subagent.success_rate, 0) /
+                      ratedSubagents.length
+                  : 0;
+              })(),
+            totalInvocations:
+              response.total_invocations ??
+              subagents.reduce((sum, subagent) => sum + subagent.total_invocations, 0),
+            page: Math.floor(offset / Math.max(limit, 1)) + 1,
+            pageSize: limit,
             isLoading: false,
           });
         } catch (error: unknown) {
@@ -358,6 +382,8 @@ export const useSubAgents = () => useSubAgentStore((state) => state.subagents);
 export const useCurrentSubAgent = () => useSubAgentStore((state) => state.currentSubAgent);
 export const useSubAgentTemplates = () => useSubAgentStore((state) => state.templates);
 export const useSubAgentTotal = () => useSubAgentStore((state) => state.total);
+export const useSubAgentPage = () => useSubAgentStore((state) => state.page);
+export const useSubAgentPageSize = () => useSubAgentStore((state) => state.pageSize);
 
 // Filter selectors
 export const useSubAgentFilters = () => useSubAgentStore((state) => state.filters);
@@ -397,19 +423,11 @@ export const filterSubAgents = (subagents: SubAgentResponse[], filters: SubAgent
   });
 };
 
-export const useEnabledSubAgentsCount = () =>
-  useSubAgentStore((state) => state.subagents.filter((sa) => sa.enabled).length);
+export const useEnabledSubAgentsCount = () => useSubAgentStore((state) => state.enabledTotal);
 
-export const useAverageSuccessRate = () =>
-  useSubAgentStore((state) => {
-    const enabledAgents = state.subagents.filter((sa) => sa.enabled && sa.total_invocations > 0);
-    if (enabledAgents.length === 0) return 0;
-    const totalRate = enabledAgents.reduce((sum, sa) => sum + sa.success_rate, 0);
-    return Math.round(totalRate / enabledAgents.length);
-  });
+export const useAverageSuccessRate = () => useSubAgentStore((state) => state.averageSuccessRate);
 
-export const useTotalInvocations = () =>
-  useSubAgentStore((state) => state.subagents.reduce((sum, sa) => sum + sa.total_invocations, 0));
+export const useTotalInvocations = () => useSubAgentStore((state) => state.totalInvocations);
 
 // Action selectors - each returns a stable function reference
 export const useListSubAgents = () => useSubAgentStore((state) => state.listSubAgents);
