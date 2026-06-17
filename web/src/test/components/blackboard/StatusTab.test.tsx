@@ -609,6 +609,7 @@ describe('StatusTab', () => {
     expect(workspacePlanService.getSnapshot).toHaveBeenCalledWith('ws-1', {
       outboxLimit: 20,
       eventLimit: 80,
+      recoverStaleAttempts: false,
     });
 
     fireEvent.click(screen.getByText('Pause'));
@@ -752,6 +753,7 @@ describe('StatusTab', () => {
       expect(workspacePlanService.getSnapshot).toHaveBeenLastCalledWith('ws-1', {
         outboxLimit: 20,
         eventLimit: 80,
+        recoverStaleAttempts: false,
         planId: 'plan-old',
       });
     });
