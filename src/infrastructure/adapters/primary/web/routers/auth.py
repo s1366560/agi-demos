@@ -8,7 +8,7 @@ import secrets
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -256,11 +256,20 @@ async def create_new_api_key(
 
 @router.get("/auth/keys", response_model=list[APIKeyResponse])
 async def list_api_keys(
-    current_user: DBUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: DBUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> list[Any]:
     """List all API keys for the current user."""
     result = await db.execute(
-        refresh_select_statement(select(DBAPIKey).where(DBAPIKey.user_id == current_user.id))
+        refresh_select_statement(
+            select(DBAPIKey)
+            .where(DBAPIKey.user_id == current_user.id)
+            .order_by(DBAPIKey.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
     )
     keys = result.scalars().all()
 

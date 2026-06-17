@@ -9,6 +9,7 @@ import pytest
 from src.application.schemas.auth import APIKeyCreate, UserUpdate
 from src.infrastructure.adapters.primary.web.routers.auth import (
     create_new_api_key,
+    list_api_keys,
     read_users_me,
     update_user_me,
 )
@@ -122,3 +123,31 @@ class TestAuthRouter:
         db.commit.assert_awaited_once()
         assert response.key == "ms_sk_test_key"
         assert response.key_id == "key-1"
+
+    async def test_list_api_keys_applies_limit_and_offset(self) -> None:
+        current_user = Mock()
+        current_user.id = "user-1"
+
+        created_at = datetime.now(UTC)
+        api_key = SimpleNamespace(
+            id="key-1",
+            key="masked",
+            name="Paged Key",
+            created_at=created_at,
+            expires_at=None,
+            permissions=["read"],
+        )
+        result = Mock()
+        result.scalars.return_value.all.return_value = [api_key]
+
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=result)
+
+        response = await list_api_keys(limit=2, offset=3, current_user=current_user, db=db)
+
+        statement = db.execute.await_args.args[0]
+        compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+        assert "LIMIT 2" in compiled
+        assert "OFFSET 3" in compiled
+        assert response[0].key_id == "key-1"
+        assert response[0].key == "*****************"

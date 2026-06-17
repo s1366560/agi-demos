@@ -248,9 +248,11 @@ class MemStackAsyncClient:
         )
         return APIKey(**response)
 
-    async def list_api_keys(self) -> List[APIKey]:
-        """List all API keys."""
-        response = await self._make_request("GET", "/api/v1/auth/keys")
+    async def list_api_keys(self, limit: int = 100, offset: int = 0) -> List[APIKey]:
+        """List API keys."""
+        response = await self._make_request(
+            "GET", "/api/v1/auth/keys", params={"limit": limit, "offset": offset}
+        )
         return [APIKey(**key) for key in response]
 
     async def revoke_api_key(self, key_id: str) -> None:
