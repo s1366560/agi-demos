@@ -86,6 +86,7 @@ _SANDBOX_NETWORK_UNAVAILABLE_DETAIL = _("Unable to resolve sandbox network addre
 _DESKTOP_SERVICE_NOT_RUNNING_DETAIL = _("Desktop service is not running")
 _TERMINAL_SERVICE_NOT_RUNNING_DETAIL = _("Terminal service is not running")
 _MCP_SERVICE_NOT_RUNNING_DETAIL = _("MCP service is not running")
+_SANDBOX_INTERACTIVE_ACCESS_ROLES = ["owner", "admin", "member"]
 
 
 # ============================================================================
@@ -111,6 +112,26 @@ async def verify_project_access(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Access denied to project"),
         )
+
+
+async def _verify_project_access_or_close(
+    websocket: WebSocket,
+    project_id: str,
+    current_user: User,
+    db: AsyncSession,
+) -> bool:
+    """Verify project access for WebSocket routes before opening upstream channels."""
+    try:
+        await verify_project_access(
+            project_id,
+            current_user,
+            db,
+            _SANDBOX_INTERACTIVE_ACCESS_ROLES,
+        )
+    except HTTPException:
+        await websocket.close(code=1008, reason=_("Access denied to project"))
+        return False
+    return True
 
 
 def _set_sandbox_proxy_auth_cookie(
@@ -1771,10 +1792,13 @@ async def start_project_desktop(
     resolution: str = Query("1920x1080", description="Screen resolution"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
 ) -> dict[str, Any]:
     """Start desktop service (KasmVNC) for the project's sandbox."""
+    await verify_project_access(project_id, current_user, db, _SANDBOX_INTERACTIVE_ACCESS_ROLES)
+
     # Ensure sandbox exists and is running
     info = await service.ensure_sandbox_running(
         project_id=project_id,
@@ -1807,10 +1831,13 @@ async def start_project_desktop(
 async def stop_project_desktop(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
 ) -> dict[str, Any]:
     """Stop desktop service for the project's sandbox."""
+    await verify_project_access(project_id, current_user, db, _SANDBOX_INTERACTIVE_ACCESS_ROLES)
+
     info = await service.get_project_sandbox(project_id)
 
     if not info:
@@ -1833,10 +1860,13 @@ async def start_project_terminal(
     project_id: str,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
 ) -> dict[str, Any]:
     """Start terminal service for the project's sandbox."""
+    await verify_project_access(project_id, current_user, db, _SANDBOX_INTERACTIVE_ACCESS_ROLES)
+
     info = await service.ensure_sandbox_running(
         project_id=project_id,
         tenant_id=tenant_id,
@@ -1864,10 +1894,13 @@ async def start_project_terminal(
 async def stop_project_terminal(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
 ) -> dict[str, Any]:
     """Stop terminal service for the project's sandbox."""
+    await verify_project_access(project_id, current_user, db, _SANDBOX_INTERACTIVE_ACCESS_ROLES)
+
     info = await service.get_project_sandbox(project_id)
 
     if not info:
@@ -2940,6 +2973,7 @@ async def proxy_project_desktop(
     path: str,
     request: Request,
     current_user: User = Depends(get_current_user_from_desktop_proxy),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
 ) -> Any:
     """Proxy requests to the project's sandbox desktop (KasmVNC) web client.
@@ -2948,6 +2982,8 @@ async def proxy_project_desktop(
     Uses httpx to proxy all content (HTML, JS, CSS, WebSocket) through the API server.
     Supports token via query parameter for iframe access.
     """
+    await verify_project_access(project_id, current_user, db, _SANDBOX_INTERACTIVE_ACCESS_ROLES)
+
     info = await service.get_project_sandbox(project_id)
 
     if not info:
@@ -3030,6 +3066,7 @@ async def proxy_project_desktop_websocket(
     websocket: WebSocket,
     project_id: str,
     current_user: User = Depends(get_current_user_from_desktop_proxy),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
 ) -> None:
     """WebSocket proxy for the project's sandbox desktop (KasmVNC).
@@ -3038,6 +3075,8 @@ async def proxy_project_desktop_websocket(
     relaying binary VNC frames bidirectionally. This enables the KasmVNC
     web client to connect to the remote desktop through the API server.
     """
+    if not await _verify_project_access_or_close(websocket, project_id, current_user, db):
+        return
 
     info = await service.get_project_sandbox(project_id)
 
@@ -3090,6 +3129,7 @@ async def proxy_project_terminal_websocket(
     project_id: str,
     session_id: str | None = None,
     current_user: User = Depends(get_current_user_from_desktop_proxy),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
 ) -> None:
     """WebSocket proxy for the project's sandbox terminal service.
@@ -3097,6 +3137,9 @@ async def proxy_project_terminal_websocket(
     This allows browser WebSocket connections to the terminal without exposing container ports.
     Uses the terminal proxy to create/manage sessions with Docker containers.
     """
+    if not await _verify_project_access_or_close(websocket, project_id, current_user, db):
+        return
+
     from src.infrastructure.adapters.secondary.sandbox.terminal_proxy import (
         TerminalSession,
         get_terminal_proxy,
@@ -3182,6 +3225,7 @@ async def proxy_project_mcp_websocket(
     websocket: WebSocket,
     project_id: str,
     current_user: User = Depends(get_current_user_from_desktop_proxy),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
 ) -> None:
     """WebSocket proxy for the project's sandbox MCP server.
@@ -3190,6 +3234,8 @@ async def proxy_project_mcp_websocket(
     Enables direct MCP client connections from the frontend (Mode A) for
     low-latency tool calls without HTTP round-trips.
     """
+    if not await _verify_project_access_or_close(websocket, project_id, current_user, db):
+        return
 
     info = await service.get_project_sandbox(project_id)
 

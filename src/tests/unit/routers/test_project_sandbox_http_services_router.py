@@ -7,10 +7,20 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 import websockets
-from fastapi import FastAPI, status
+from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
 
 from src.infrastructure.adapters.primary.web.routers import project_sandbox as router_mod
+
+
+@pytest.fixture(autouse=True)
+def allow_project_access_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep focused route tests on their target behavior unless they override access."""
+
+    async def _allow_access(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(router_mod, "verify_project_access", _allow_access)
 
 
 @pytest.fixture
@@ -21,9 +31,6 @@ def sandbox_http_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app.include_router(router_mod.preview_router)
 
     router_mod._http_service_registry.clear()
-
-    async def _allow_access(*args, **kwargs) -> None:
-        return None
 
     async def _current_user():
         return SimpleNamespace(id="user-1")
@@ -58,8 +65,6 @@ def sandbox_http_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
         lambda: manager,
     )
-    monkeypatch.setattr(router_mod, "verify_project_access", _allow_access)
-
     return TestClient(app)
 
 
@@ -286,6 +291,141 @@ def test_stop_project_terminal_missing_sandbox_is_sanitized(
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.json()["detail"] == "Sandbox not found"
     assert "proj-1" not in response.text
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("method", "path", "service_method"),
+    [
+        ("post", "/api/v1/projects/proj-1/sandbox/desktop", "ensure_sandbox_running"),
+        ("delete", "/api/v1/projects/proj-1/sandbox/desktop", "get_project_sandbox"),
+        ("post", "/api/v1/projects/proj-1/sandbox/terminal", "ensure_sandbox_running"),
+        ("delete", "/api/v1/projects/proj-1/sandbox/terminal", "get_project_sandbox"),
+    ],
+)
+def test_project_interactive_lifecycle_requires_project_access(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    service_method: str,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.ensure_sandbox_running = AsyncMock()
+    lifecycle_service.get_project_sandbox = AsyncMock()
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    async def deny_access(*_args, **_kwargs) -> None:
+        raise HTTPException(status_code=403, detail="Access denied to project")
+
+    monkeypatch.setattr(router_mod, "verify_project_access", deny_access)
+
+    response = getattr(sandbox_http_client, method)(path)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json()["detail"] == "Access denied to project"
+    getattr(lifecycle_service, service_method).assert_not_awaited()
+
+
+@pytest.mark.unit
+def test_desktop_http_proxy_requires_project_access(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.get_project_sandbox = AsyncMock()
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    async def deny_access(*_args, **_kwargs) -> None:
+        raise HTTPException(status_code=403, detail="Access denied to project")
+
+    monkeypatch.setattr(router_mod, "verify_project_access", deny_access)
+
+    response = sandbox_http_client.get("/api/v1/projects/proj-1/sandbox/desktop/proxy/")
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert response.json()["detail"] == "Access denied to project"
+    lifecycle_service.get_project_sandbox.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_desktop_websocket_proxy_requires_project_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = _FakeWebSocket()
+    service = SimpleNamespace(get_project_sandbox=AsyncMock())
+
+    async def deny_access(*_args, **_kwargs) -> None:
+        raise HTTPException(status_code=403, detail="Access denied to project")
+
+    monkeypatch.setattr(router_mod, "verify_project_access", deny_access)
+
+    await router_mod.proxy_project_desktop_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.closed is True
+    assert websocket.close_code == 1008
+    assert websocket.close_reason == "Access denied to project"
+    service.get_project_sandbox.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_terminal_websocket_proxy_requires_project_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = _FakeWebSocket()
+    service = SimpleNamespace(get_project_sandbox=AsyncMock())
+
+    async def deny_access(*_args, **_kwargs) -> None:
+        raise HTTPException(status_code=403, detail="Access denied to project")
+
+    monkeypatch.setattr(router_mod, "verify_project_access", deny_access)
+
+    await router_mod.proxy_project_terminal_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        session_id=None,
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.closed is True
+    assert websocket.close_code == 1008
+    assert websocket.close_reason == "Access denied to project"
+    service.get_project_sandbox.assert_not_awaited()
+
+
+@pytest.mark.unit
+async def test_mcp_websocket_proxy_requires_project_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = _FakeWebSocket()
+    service = SimpleNamespace(get_project_sandbox=AsyncMock())
+
+    async def deny_access(*_args, **_kwargs) -> None:
+        raise HTTPException(status_code=403, detail="Access denied to project")
+
+    monkeypatch.setattr(router_mod, "verify_project_access", deny_access)
+
+    await router_mod.proxy_project_mcp_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.closed is True
+    assert websocket.close_code == 1008
+    assert websocket.close_reason == "Access denied to project"
+    service.get_project_sandbox.assert_not_awaited()
 
 
 @pytest.mark.unit
