@@ -119,6 +119,10 @@ export const PluginHub: React.FC = () => {
       listProjects: state.listProjects,
     }))
   );
+  const tenantProjects = useMemo(
+    () => (tenantId ? projects.filter((project: Project) => project.tenant_id === tenantId) : []),
+    [projects, tenantId]
+  );
 
   const [form] = Form.useForm<Record<string, unknown>>();
   const [pluginConfigForm] = Form.useForm<Record<string, unknown>>();
@@ -249,23 +253,23 @@ export const PluginHub: React.FC = () => {
   }, [selectedProjectId]);
 
   useEffect(() => {
-    if (projects.length === 0) {
+    if (tenantProjects.length === 0) {
       setSelectedProjectId(null);
       return;
     }
 
-    if (projectIdFromQuery && projects.some((project) => project.id === projectIdFromQuery)) {
+    if (projectIdFromQuery && tenantProjects.some((project) => project.id === projectIdFromQuery)) {
       setSelectedProjectId(projectIdFromQuery);
       return;
     }
 
     setSelectedProjectId((prev) => {
-      if (prev && projects.some((project) => project.id === prev)) {
+      if (prev && tenantProjects.some((project) => project.id === prev)) {
         return prev;
       }
-      return projects[0]?.id ?? prev;
+      return tenantProjects[0]?.id ?? null;
     });
-  }, [projectIdFromQuery, projects]);
+  }, [projectIdFromQuery, tenantProjects]);
 
   const loadPluginRuntime = useCallback(async () => {
     const requestTenantId = tenantId;
@@ -405,11 +409,11 @@ export const PluginHub: React.FC = () => {
 
   const projectOptions = useMemo(
     () =>
-      projects.map((project: Project) => ({
+      tenantProjects.map((project: Project) => ({
         label: project.name,
         value: project.id,
       })),
-    [projects]
+    [tenantProjects]
   );
 
   const channelTypeOptions = useMemo(() => {

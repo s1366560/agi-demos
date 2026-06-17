@@ -94,12 +94,14 @@ vi.mock('@/services/channelService', () => ({
 
 describe('PluginHub', () => {
   let currentTenantId: string;
-  let projectStoreProjects: Array<{ id: string; name: string }>;
+  let projectStoreProjects: Array<{ id: string; name: string; tenant_id: string }>;
+  let listProjectsMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     currentTenantId = 'tenant-1';
-    projectStoreProjects = [{ id: 'project-1', name: 'Project One' }];
+    projectStoreProjects = [{ id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' }];
+    listProjectsMock = vi.fn().mockResolvedValue(undefined);
 
     vi.mocked(useTenantStore).mockImplementation((selector: any) =>
       selector({ currentTenant: { id: currentTenantId } })
@@ -108,7 +110,7 @@ describe('PluginHub', () => {
       selector({
         projects: projectStoreProjects,
         isLoading: false,
-        listProjects: vi.fn().mockResolvedValue(undefined),
+        listProjects: listProjectsMock,
       })
     );
 
@@ -254,7 +256,7 @@ describe('PluginHub', () => {
     });
 
     currentTenantId = 'tenant-2';
-    projectStoreProjects = [{ id: 'project-2', name: 'Project Two' }];
+    projectStoreProjects = [{ id: 'project-2', name: 'Project Two', tenant_id: 'tenant-2' }];
     rerender(
       <MemoryRouter initialEntries={['/tenant/plugins']}>
         <PluginHub />
@@ -309,7 +311,7 @@ describe('PluginHub', () => {
       expect(channelService.listConfigs).toHaveBeenCalledWith('project-1');
     });
 
-    projectStoreProjects = [{ id: 'project-2', name: 'Project Two' }];
+    projectStoreProjects = [{ id: 'project-2', name: 'Project Two', tenant_id: 'tenant-1' }];
     rerender(
       <MemoryRouter initialEntries={['/tenant/plugins']}>
         <PluginHub />
@@ -409,5 +411,23 @@ describe('PluginHub', () => {
         }
       );
     });
+  });
+
+  it('does not select stale projects from another tenant', async () => {
+    projectStoreProjects = [{ id: 'stale-project', name: 'Stale Project', tenant_id: 'tenant-2' }];
+
+    render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=stale-project' });
+
+    await waitFor(() => {
+      expect(listProjectsMock).toHaveBeenCalledWith('tenant-1');
+      expect(channelService.listTenantPlugins).toHaveBeenCalledWith('tenant-1');
+    });
+
+    expect(channelService.listConfigs).not.toHaveBeenCalled();
+    expect(
+      screen.getByText('tenant.pluginHub.channelsList.selectProjectToConfigure')
+    ).toBeInTheDocument();
+    const addChannelLabel = screen.getByText('tenant.pluginHub.channelsList.addChannel');
+    expect(addChannelLabel.closest('button')).toBeDisabled();
   });
 });
