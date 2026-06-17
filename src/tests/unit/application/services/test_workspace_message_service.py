@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -19,11 +20,18 @@ def _make_agent(agent_id: str, display_name: str) -> MagicMock:
     return agent
 
 
+class _FindByIdOnlyUserRepo:
+    def __init__(self, users: dict[str, Any]) -> None:
+        self._users = users
+        self.find_by_id = AsyncMock(side_effect=lambda user_id: self._users.get(user_id))
+
+
 def _build_service(
     *,
     agents: list[MagicMock] | None = None,
     members: list[MagicMock] | None = None,
     publisher: AsyncMock | None = AsyncMock(),
+    user_repo: Any | None = None,
     allow_legacy_text_mentions: bool = False,
 ) -> tuple[WorkspaceMessageService, AsyncMock, AsyncMock, AsyncMock]:
     message_repo = AsyncMock()
@@ -43,6 +51,7 @@ def _build_service(
         member_repo=member_repo,
         agent_repo=agent_repo,
         workspace_event_publisher=publisher,
+        user_repo=user_repo,
         allow_legacy_text_mentions=allow_legacy_text_mentions,
     )
     return service, message_repo, member_repo, agent_repo
@@ -215,6 +224,56 @@ class TestSendMessage:
         )
 
         assert msg.mentions == ["agent-abc"]
+
+    async def test_legacy_text_mentions_bulk_load_member_aliases(self) -> None:
+        members = [MagicMock(user_id="user-1"), MagicMock(user_id="user-2")]
+        user_repo = MagicMock()
+        user_repo.find_by_ids = AsyncMock(
+            return_value=[
+                SimpleNamespace(id="user-1", email="alice@example.com", name="Alice"),
+                SimpleNamespace(id="user-2", email="bob@example.com", name="Bob"),
+            ]
+        )
+        user_repo.find_by_id = AsyncMock()
+        service, *_ = _build_service(
+            members=members,
+            user_repo=user_repo,
+            allow_legacy_text_mentions=True,
+        )
+
+        msg = await service.send_message(
+            workspace_id="ws-1",
+            sender_id="user-0",
+            sender_type=MessageSenderType.HUMAN,
+            sender_name="Sender",
+            content="Ping @alice and @Bob",
+        )
+
+        assert msg.mentions == ["user-1", "user-2"]
+        user_repo.find_by_ids.assert_awaited_once_with(["user-1", "user-2"])
+        user_repo.find_by_id.assert_not_called()
+
+    async def test_legacy_text_mentions_fall_back_without_bulk_user_lookup(self) -> None:
+        members = [MagicMock(user_id="user-1"), MagicMock(user_id="user-1")]
+        user_repo = _FindByIdOnlyUserRepo(
+            {"user-1": SimpleNamespace(id="user-1", email="alice@example.com", name="Alice")}
+        )
+        service, *_ = _build_service(
+            members=members,
+            user_repo=user_repo,
+            allow_legacy_text_mentions=True,
+        )
+
+        msg = await service.send_message(
+            workspace_id="ws-1",
+            sender_id="user-0",
+            sender_type=MessageSenderType.HUMAN,
+            sender_name="Sender",
+            content="Ping @Alice",
+        )
+
+        assert msg.mentions == ["user-1"]
+        user_repo.find_by_id.assert_awaited_once_with("user-1")
 
 
 @pytest.mark.unit

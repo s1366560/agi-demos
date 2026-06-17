@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Protocol, cast
 
 from src.domain.model.workspace.workspace_message import (
     MessageSenderType,
@@ -24,6 +24,12 @@ logger = logging.getLogger(__name__)
 
 # Supports: @word, @word-with.dots, @"Multi Word Name"
 _MENTION_RE = re.compile(r'@"([^"]{1,64})"|@([\w][\w\-.]{0,62}[\w]|[\w])')
+
+
+class _BulkUserRepository(Protocol):
+    async def find_by_ids(self, entity_ids: list[str]) -> list[object]:
+        """Find multiple users by id."""
+        ...
 
 
 class WorkspaceMessageService:
@@ -202,12 +208,41 @@ class WorkspaceMessageService:
         name_to_id: dict[str, str],
         members: list[Any],
     ) -> None:
-        if self._user_repo and members:
-            for member in members:
-                await self._register_user_aliases(name_to_id, member.user_id)
+        member_user_ids = self._member_user_ids(members)
+        if self._user_repo and member_user_ids:
+            bulk_find = getattr(self._user_repo, "find_by_ids", None)
+            if callable(bulk_find):
+                users = await cast(_BulkUserRepository, self._user_repo).find_by_ids(
+                    member_user_ids
+                )
+                users_by_id: dict[str, object] = {}
+                for user in users:
+                    user_id = getattr(user, "id", None)
+                    if isinstance(user_id, str) and user_id in member_user_ids:
+                        users_by_id[user_id] = user
+                for user_id in member_user_ids:
+                    user = users_by_id.get(user_id)
+                    if user is not None:
+                        self._register_user_alias_values(name_to_id, user_id, user)
+                return
+
+            for user_id in member_user_ids:
+                await self._register_user_aliases(name_to_id, user_id)
         else:
-            for member in members:
-                name_to_id[member.user_id.lower()] = member.user_id
+            for user_id in member_user_ids:
+                name_to_id[user_id.lower()] = user_id
+
+    @staticmethod
+    def _member_user_ids(members: list[Any]) -> list[str]:
+        user_ids: list[str] = []
+        seen: set[str] = set()
+        for member in members:
+            user_id = getattr(member, "user_id", None)
+            if not isinstance(user_id, str) or user_id in seen:
+                continue
+            user_ids.append(user_id)
+            seen.add(user_id)
+        return user_ids
 
     async def _register_user_aliases(
         self,
@@ -217,6 +252,14 @@ class WorkspaceMessageService:
         user = await self._user_repo.find_by_id(user_id)  # type: ignore[union-attr]
         if user is None:
             return
+        self._register_user_alias_values(name_to_id, user_id, user)
+
+    @staticmethod
+    def _register_user_alias_values(
+        name_to_id: dict[str, str],
+        user_id: str,
+        user: object,
+    ) -> None:
         email = getattr(user, "email", None)
         if email:
             name_to_id[email.lower()] = user_id
