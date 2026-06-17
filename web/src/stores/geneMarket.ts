@@ -57,6 +57,28 @@ const orderGenesBySlugs = (genes: GeneResponse[], slugs: string[]): GeneResponse
   });
 };
 
+type DetailRequestScope = 'currentGene' | 'currentGenome' | 'currentGenomeGenes';
+
+const detailRequestVersions: Record<DetailRequestScope, number> = {
+  currentGene: 0,
+  currentGenome: 0,
+  currentGenomeGenes: 0,
+};
+
+const nextDetailRequestVersion = (scope: DetailRequestScope): number => {
+  detailRequestVersions[scope] += 1;
+  return detailRequestVersions[scope];
+};
+
+const isLatestDetailRequest = (scope: DetailRequestScope, version: number): boolean =>
+  detailRequestVersions[scope] === version;
+
+const invalidateDetailRequests = (...scopes: DetailRequestScope[]): void => {
+  scopes.forEach((scope) => {
+    detailRequestVersions[scope] += 1;
+  });
+};
+
 // ============================================================================
 // STATE INTERFACE
 // ============================================================================
@@ -248,13 +270,18 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       },
 
       getGene: async (id: string, options?: TenantScopedOptions) => {
+        const requestVersion = nextDetailRequestVersion('currentGene');
         set({ isLoading: true, error: null });
         try {
           const response = await geneMarketService.getGene(id, options);
-          set({ currentGene: response, isLoading: false });
+          if (isLatestDetailRequest('currentGene', requestVersion)) {
+            set({ currentGene: response, isLoading: false });
+          }
           return response;
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to get gene'), isLoading: false });
+          if (isLatestDetailRequest('currentGene', requestVersion)) {
+            set({ error: getErrorMessage(error, 'Failed to get gene'), isLoading: false });
+          }
           throw error;
         }
       },
@@ -362,21 +389,29 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       },
 
       getGenome: async (id: string, options?: TenantScopedOptions) => {
+        const requestVersion = nextDetailRequestVersion('currentGenome');
         set({ isLoading: true, error: null });
         try {
           const response = await geneMarketService.getGenome(id, options);
-          set({ currentGenome: response, isLoading: false });
+          if (isLatestDetailRequest('currentGenome', requestVersion)) {
+            set({ currentGenome: response, isLoading: false });
+          }
           return response;
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to get genome'), isLoading: false });
+          if (isLatestDetailRequest('currentGenome', requestVersion)) {
+            set({ error: getErrorMessage(error, 'Failed to get genome'), isLoading: false });
+          }
           throw error;
         }
       },
 
       fetchGenomeGenes: async (slugs: string[], options?: TenantScopedOptions) => {
+        const requestVersion = nextDetailRequestVersion('currentGenomeGenes');
         const normalizedSlugs = normalizeSlugs(slugs);
         if (normalizedSlugs.length === 0) {
-          set({ currentGenomeGenes: [], currentGenomeGenesLoading: false });
+          if (isLatestDetailRequest('currentGenomeGenes', requestVersion)) {
+            set({ currentGenomeGenes: [], currentGenomeGenesLoading: false });
+          }
           return [];
         }
 
@@ -402,13 +437,17 @@ export const useGeneMarketStore = create<GeneMarketState>()(
             responses.flatMap((response) => response.genes),
             normalizedSlugs
           );
-          set({ currentGenomeGenes: orderedGenes, currentGenomeGenesLoading: false });
+          if (isLatestDetailRequest('currentGenomeGenes', requestVersion)) {
+            set({ currentGenomeGenes: orderedGenes, currentGenomeGenesLoading: false });
+          }
           return orderedGenes;
         } catch (error: unknown) {
-          set({
-            error: getErrorMessage(error, 'Failed to fetch genome genes'),
-            currentGenomeGenesLoading: false,
-          });
+          if (isLatestDetailRequest('currentGenomeGenes', requestVersion)) {
+            set({
+              error: getErrorMessage(error, 'Failed to fetch genome genes'),
+              currentGenomeGenesLoading: false,
+            });
+          }
           throw error;
         }
       },
@@ -716,13 +755,17 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       },
 
       setCurrentGene: (gene: GeneResponse | null) => {
-        set({ currentGene: gene });
+        invalidateDetailRequests('currentGene');
+        set({ currentGene: gene, ...(gene ? {} : { isLoading: false }) });
       },
 
       setCurrentGenome: (genome: GenomeResponse | null) => {
+        invalidateDetailRequests('currentGenome', 'currentGenomeGenes');
         set({
           currentGenome: genome,
-          ...(genome ? {} : { currentGenomeGenes: [], currentGenomeGenesLoading: false }),
+          ...(genome
+            ? {}
+            : { currentGenomeGenes: [], currentGenomeGenesLoading: false, isLoading: false }),
         });
       },
 
@@ -731,6 +774,7 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       },
 
       reset: () => {
+        invalidateDetailRequests('currentGene', 'currentGenome', 'currentGenomeGenes');
         set(initialState);
       },
     }),

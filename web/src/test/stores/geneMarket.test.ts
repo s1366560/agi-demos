@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { geneMarketService } from '@/services/geneMarketService';
 import { useGeneMarketStore } from '@/stores/geneMarket';
 
-import type { GeneResponse, GenomeResponse } from '@/services/geneMarketService';
+import type { GeneListResponse, GeneResponse, GenomeResponse } from '@/services/geneMarketService';
 
 vi.mock('@/services/geneMarketService', () => ({
   geneMarketService: {
@@ -73,6 +73,23 @@ const genome = (overrides: Partial<GenomeResponse> = {}): GenomeResponse => ({
   visibility: 'public',
   ...overrides,
 });
+
+const geneListResponse = (genes: GeneResponse[]): GeneListResponse => ({
+  genes,
+  total: genes.length,
+  page: 1,
+  page_size: genes.length,
+});
+
+const deferred = <T>() => {
+  let resolve: (value: T | PromiseLike<T>) => void = () => {};
+  let reject: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+};
 
 describe('gene market store', () => {
   beforeEach(() => {
@@ -163,6 +180,88 @@ describe('gene market store', () => {
     expect(useGeneMarketStore.getState().genomes[0]?.is_published).toBe(false);
     expect(useGeneMarketStore.getState().currentGenome?.is_published).toBe(false);
     expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+  });
+
+  it('ignores stale gene detail responses after a newer detail request starts', async () => {
+    const staleRequest = deferred<GeneResponse>();
+    const latestRequest = deferred<GeneResponse>();
+    vi.mocked(geneMarketService.getGene)
+      .mockReturnValueOnce(staleRequest.promise)
+      .mockReturnValueOnce(latestRequest.promise);
+
+    const staleResult = useGeneMarketStore.getState().getGene('gene-1', { tenant_id: 'tenant-2' });
+    const latestResult = useGeneMarketStore.getState().getGene('gene-2', { tenant_id: 'tenant-2' });
+
+    latestRequest.resolve(gene({ id: 'gene-2', slug: 'test-writer', name: 'Test Writer' }));
+    await expect(latestResult).resolves.toMatchObject({ id: 'gene-2' });
+    expect(useGeneMarketStore.getState().currentGene?.id).toBe('gene-2');
+
+    staleRequest.resolve(gene({ id: 'gene-1', slug: 'code-review', name: 'Code Review' }));
+    await expect(staleResult).resolves.toMatchObject({ id: 'gene-1' });
+    expect(useGeneMarketStore.getState().currentGene?.id).toBe('gene-2');
+    expect(useGeneMarketStore.getState().isLoading).toBe(false);
+  });
+
+  it('invalidates pending gene detail responses when current gene is cleared', async () => {
+    const pendingRequest = deferred<GeneResponse>();
+    vi.mocked(geneMarketService.getGene).mockReturnValueOnce(pendingRequest.promise);
+
+    const request = useGeneMarketStore.getState().getGene('gene-1', { tenant_id: 'tenant-2' });
+    useGeneMarketStore.getState().setCurrentGene(null);
+
+    pendingRequest.resolve(gene());
+    await expect(request).resolves.toMatchObject({ id: 'gene-1' });
+    expect(useGeneMarketStore.getState().currentGene).toBeNull();
+    expect(useGeneMarketStore.getState().isLoading).toBe(false);
+  });
+
+  it('ignores stale genome detail and included-gene responses after newer requests start', async () => {
+    const staleGenomeRequest = deferred<GenomeResponse>();
+    const latestGenomeRequest = deferred<GenomeResponse>();
+    const staleGenesRequest = deferred<GeneListResponse>();
+    const latestGenesRequest = deferred<GeneListResponse>();
+    vi.mocked(geneMarketService.getGenome)
+      .mockReturnValueOnce(staleGenomeRequest.promise)
+      .mockReturnValueOnce(latestGenomeRequest.promise);
+    vi.mocked(geneMarketService.listGenes)
+      .mockReturnValueOnce(staleGenesRequest.promise)
+      .mockReturnValueOnce(latestGenesRequest.promise);
+
+    const staleGenomeResult = useGeneMarketStore
+      .getState()
+      .getGenome('genome-1', { tenant_id: 'tenant-2' });
+    const latestGenomeResult = useGeneMarketStore
+      .getState()
+      .getGenome('genome-2', { tenant_id: 'tenant-2' });
+    const staleGenesResult = useGeneMarketStore
+      .getState()
+      .fetchGenomeGenes(['code-review'], { tenant_id: 'tenant-2' });
+    const latestGenesResult = useGeneMarketStore
+      .getState()
+      .fetchGenomeGenes(['test-writer'], { tenant_id: 'tenant-2' });
+
+    latestGenomeRequest.resolve(genome({ id: 'genome-2', slug: 'test-pack', name: 'Test Pack' }));
+    latestGenesRequest.resolve(
+      geneListResponse([gene({ id: 'gene-2', slug: 'test-writer', name: 'Test Writer' })])
+    );
+
+    await expect(latestGenomeResult).resolves.toMatchObject({ id: 'genome-2' });
+    await expect(latestGenesResult).resolves.toHaveLength(1);
+    expect(useGeneMarketStore.getState().currentGenome?.id).toBe('genome-2');
+    expect(useGeneMarketStore.getState().currentGenomeGenes.map((item) => item.slug)).toEqual([
+      'test-writer',
+    ]);
+
+    staleGenomeRequest.resolve(genome({ id: 'genome-1', slug: 'review-pack' }));
+    staleGenesRequest.resolve(geneListResponse([gene({ slug: 'code-review' })]));
+
+    await expect(staleGenomeResult).resolves.toMatchObject({ id: 'genome-1' });
+    await expect(staleGenesResult).resolves.toHaveLength(1);
+    expect(useGeneMarketStore.getState().currentGenome?.id).toBe('genome-2');
+    expect(useGeneMarketStore.getState().currentGenomeGenes.map((item) => item.slug)).toEqual([
+      'test-writer',
+    ]);
+    expect(useGeneMarketStore.getState().currentGenomeGenesLoading).toBe(false);
   });
 
   it('refreshes gene list and current gene after rating', async () => {
