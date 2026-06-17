@@ -67,7 +67,27 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
         self, project_id: str, limit: int = 50, offset: int = 0
     ) -> list[Memory]:
         """List all memories for a project."""
-        return await self.list_all(limit=limit, offset=offset, project_id=project_id)
+        if limit < 0:
+            raise ValueError("Limit must be non-negative")
+        if limit == 0:
+            return []
+
+        result = await self._session.execute(
+            refresh_select_statement(
+                self._refresh_statement(
+                    select(DBMemory)
+                    .where(DBMemory.project_id == project_id)
+                    .order_by(DBMemory.created_at.desc(), DBMemory.id.asc())
+                    .offset(offset)
+                    .limit(limit)
+                )
+            )
+        )
+        return [
+            domain_memory
+            for db_memory in result.scalars().all()
+            if (domain_memory := self._to_domain(db_memory)) is not None
+        ]
 
     @override
     async def search_by_project(
@@ -81,6 +101,7 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
                     select(DBMemory)
                     .where(DBMemory.project_id == project_id)
                     .where(or_(DBMemory.title.ilike(pattern), DBMemory.content.ilike(pattern)))
+                    .order_by(DBMemory.created_at.desc(), DBMemory.id.asc())
                     .offset(offset)
                     .limit(limit)
                 )

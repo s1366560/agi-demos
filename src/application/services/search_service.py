@@ -7,13 +7,18 @@ pagination.
 """
 
 import logging
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from src.domain.model.memory.memory import Memory
 from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.services.graph_service_port import GraphServicePort
 
 logger = logging.getLogger(__name__)
+
+_SEARCH_FETCH_CAP = 1000
+_MEMORY_FILTER_BATCH_SIZE = 50
 
 
 class GraphContext:
@@ -101,17 +106,20 @@ class SearchService:
         """
         filters = filters or {}
         page = (offset // limit) + 1 if limit > 0 else 1
+        if limit <= 0:
+            return SearchResults(query=query, results=[], total=0, page=page, page_size=limit)
 
         try:
+            fetch_limit = self._graph_fetch_limit(limit=limit, offset=offset, filters=filters)
             # Perform graph search (includes episodes and entities)
             graph_results = await self._graph_service.search(
                 query=query,
                 project_id=project_id,
-                limit=limit * 2,  # Fetch more for filtering
+                limit=fetch_limit,
             )
 
             # Convert to SearchResult objects
-            results = []
+            results: list[SearchResult] = []
             for item in graph_results:
                 result_type = item.get("type", "unknown")
 
@@ -175,12 +183,9 @@ class SearchService:
             List of memories with matching tags
         """
         try:
-            # Get all memories in project
-            memories = await self._memory_repo.list_by_project(project_id, limit=limit * 2)
-
             # Filter by tags (match any tag)
-            filtered = []
-            for memory in memories:
+            filtered: list[dict[str, Any]] = []
+            async for memory in self._iter_project_memories(project_id=project_id, limit=limit):
                 if any(tag in memory.tags for tag in tags):
                     filtered.append(
                         {
@@ -226,12 +231,9 @@ class SearchService:
             date_to = datetime.now(UTC)
 
         try:
-            # Get all memories in project
-            memories = await self._memory_repo.list_by_project(project_id, limit=limit * 10)
-
             # Filter by date range
-            filtered = []
-            for memory in memories:
+            filtered: list[dict[str, Any]] = []
+            async for memory in self._iter_project_memories(project_id=project_id, limit=limit):
                 if memory.created_at and date_from <= memory.created_at <= date_to:
                     filtered.append(
                         {
@@ -273,8 +275,8 @@ class SearchService:
             )
 
             # Find the entity
-            entity = None
-            neighbors = []
+            entity: dict[str, Any] | None = None
+            neighbors: list[dict[str, Any]] = []
 
             for node in graph_data.get("nodes", []):
                 if node.get("uuid") == entity_id or node.get("id") == entity_id:
@@ -372,3 +374,38 @@ class SearchService:
         except Exception as e:
             logger.error(f"Failed to get recent activity for project {project_id}: {e}")
             raise
+
+    def _graph_fetch_limit(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        filters: dict[str, Any],
+    ) -> int:
+        window_end = max(offset, 0) + limit
+        fetch_limit = max(limit * 2, window_end)
+        if filters.get("content_type"):
+            fetch_limit = max(fetch_limit, window_end * 2)
+        return min(fetch_limit, _SEARCH_FETCH_CAP)
+
+    async def _iter_project_memories(self, *, project_id: str, limit: int) -> AsyncIterator[Memory]:
+        if limit <= 0:
+            return
+
+        batch_size = max(limit, _MEMORY_FILTER_BATCH_SIZE)
+        offset = 0
+        while True:
+            memories = await self._memory_repo.list_by_project(
+                project_id,
+                limit=batch_size,
+                offset=offset,
+            )
+            if not memories:
+                break
+
+            for memory in memories:
+                yield memory
+
+            if len(memories) < batch_size:
+                break
+            offset += len(memories)

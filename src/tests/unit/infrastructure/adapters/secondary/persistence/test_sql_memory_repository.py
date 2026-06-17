@@ -20,7 +20,16 @@ async def v2_memory_repo(v2_db_session: AsyncSession) -> SqlMemoryRepository:
     return SqlMemoryRepository(v2_db_session)
 
 
-def _memory(memory_id: str, project_id: str, title: str, content: str) -> Memory:
+def _memory(
+    memory_id: str,
+    project_id: str,
+    title: str,
+    content: str,
+    *,
+    created_at: datetime | None = None,
+    tags: list[str] | None = None,
+) -> Memory:
+    created_at = created_at or datetime.now(UTC)
     return Memory(
         id=memory_id,
         project_id=project_id,
@@ -28,7 +37,7 @@ def _memory(memory_id: str, project_id: str, title: str, content: str) -> Memory
         content=content,
         author_id="user-1",
         content_type="text",
-        tags=[],
+        tags=tags or [],
         entities=[],
         relationships=[],
         version=1,
@@ -37,8 +46,8 @@ def _memory(memory_id: str, project_id: str, title: str, content: str) -> Memory
         status="enabled",
         processing_status="pending",
         metadata={},
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+        created_at=created_at,
+        updated_at=created_at,
     )
 
 
@@ -228,6 +237,30 @@ class TestSqlMemoryRepositoryFind:
         assert len(memories) == 3
 
     @pytest.mark.asyncio
+    async def test_list_by_project_orders_by_created_at_desc_then_id(
+        self, v2_memory_repo: SqlMemoryRepository
+    ):
+        """Test project memory pages keep stable newest-first ordering."""
+        newer_created_at = datetime(2026, 1, 2, tzinfo=UTC)
+        older_created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        for memory_id, created_at in (
+            ("mem-order-b", newer_created_at),
+            ("mem-order-old", older_created_at),
+            ("mem-order-a", newer_created_at),
+        ):
+            await v2_memory_repo.save(
+                _memory(memory_id, "proj-order", memory_id, "content", created_at=created_at)
+            )
+
+        memories = await v2_memory_repo.list_by_project("proj-order")
+
+        assert [memory.id for memory in memories] == [
+            "mem-order-a",
+            "mem-order-b",
+            "mem-order-old",
+        ]
+
+    @pytest.mark.asyncio
     async def test_list_by_project_with_pagination(self, v2_memory_repo: SqlMemoryRepository):
         """Test listing memories with pagination."""
         for i in range(5):
@@ -282,6 +315,31 @@ class TestSqlMemoryRepositoryFind:
         memories = await v2_memory_repo.search_by_project("proj-search", "retention")
 
         assert {memory.id for memory in memories} == {"mem-search-1", "mem-search-2"}
+
+    @pytest.mark.asyncio
+    async def test_search_by_project_orders_by_created_at_desc_then_id(
+        self, v2_memory_repo: SqlMemoryRepository
+    ):
+        """Test memory search pages keep stable newest-first ordering."""
+        newer_created_at = datetime(2026, 1, 2, tzinfo=UTC)
+        older_created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        for memory_id, created_at, content in (
+            ("mem-search-order-b", newer_created_at, "needle"),
+            ("mem-search-order-old", older_created_at, "needle"),
+            ("mem-search-order-ignored", newer_created_at, "other"),
+            ("mem-search-order-a", newer_created_at, "needle"),
+        ):
+            await v2_memory_repo.save(
+                _memory(memory_id, "proj-search-order", memory_id, content, created_at=created_at)
+            )
+
+        memories = await v2_memory_repo.search_by_project("proj-search-order", "needle")
+
+        assert [memory.id for memory in memories] == [
+            "mem-search-order-a",
+            "mem-search-order-b",
+            "mem-search-order-old",
+        ]
 
 
 class TestSqlMemoryRepositoryDelete:

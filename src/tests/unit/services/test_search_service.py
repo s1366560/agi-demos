@@ -1,0 +1,167 @@
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+import pytest
+
+from src.application.services.search_service import SearchService
+from src.domain.model.memory.episode import Episode
+from src.domain.model.memory.memory import Memory
+from src.domain.ports.repositories.memory_repository import MemoryRepository
+from src.domain.ports.services.graph_service_port import GraphServicePort
+
+
+class _GraphServiceStub(GraphServicePort):
+    def __init__(self, items: list[dict[str, Any]]) -> None:
+        self._items = items
+        self.search_calls: list[dict[str, Any]] = []
+
+    async def add_episode(self, episode: Episode) -> Episode:
+        return episode
+
+    async def search(self, query: str, project_id: str | None = None, limit: int = 10) -> list[Any]:
+        self.search_calls.append({"query": query, "project_id": project_id, "limit": limit})
+        return self._items[:limit]
+
+    async def get_graph_data(self, project_id: str, limit: int = 100) -> dict[str, Any]:
+        return {"nodes": [], "edges": []}
+
+    async def delete_episode(self, episode_name: str) -> bool:
+        return True
+
+    async def delete_episode_by_memory_id(self, memory_id: str) -> bool:
+        return True
+
+    async def remove_episode(self, episode_uuid: str) -> bool:
+        return True
+
+
+class _MemoryRepositoryStub(MemoryRepository):
+    def __init__(self, memories: list[Memory]) -> None:
+        self._memories = memories
+        self.list_calls: list[dict[str, Any]] = []
+
+    async def save(self, memory: Memory) -> Memory:
+        self._memories.append(memory)
+        return memory
+
+    async def find_by_id(self, memory_id: str) -> Memory | None:
+        return next((memory for memory in self._memories if memory.id == memory_id), None)
+
+    async def list_by_project(
+        self, project_id: str, limit: int = 50, offset: int = 0
+    ) -> list[Memory]:
+        self.list_calls.append({"project_id": project_id, "limit": limit, "offset": offset})
+        project_memories = [memory for memory in self._memories if memory.project_id == project_id]
+        return project_memories[offset : offset + limit]
+
+    async def delete(self, memory_id: str) -> bool:
+        before = len(self._memories)
+        self._memories = [memory for memory in self._memories if memory.id != memory_id]
+        return len(self._memories) != before
+
+
+def _episode(index: int) -> dict[str, Any]:
+    return {
+        "type": "episode",
+        "uuid": f"episode-{index}",
+        "name": f"Episode {index}",
+        "content": f"Episode content {index}",
+        "score": 1.0,
+    }
+
+
+def _entity(index: int) -> dict[str, Any]:
+    return {
+        "type": "entity",
+        "uuid": f"entity-{index}",
+        "name": f"Entity {index}",
+        "summary": f"Entity summary {index}",
+        "score": 1.0,
+    }
+
+
+def _memory(
+    index: int, *, tags: list[str] | None = None, created_at: datetime | None = None
+) -> Memory:
+    return Memory(
+        id=f"memory-{index}",
+        project_id="project-1",
+        title=f"Memory {index}",
+        content=f"Memory content {index}",
+        author_id="user-1",
+        tags=tags or [],
+        created_at=created_at or datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_fetches_requested_window_before_local_pagination() -> None:
+    graph_service = _GraphServiceStub([_episode(i) if i % 2 == 0 else _entity(i) for i in range(6)])
+    memory_repo = _MemoryRepositoryStub([])
+    service = SearchService(graph_service=graph_service, memory_repo=memory_repo)
+
+    results = await service.search("query", "project-1", limit=2, offset=4)
+
+    assert graph_service.search_calls == [{"query": "query", "project_id": "project-1", "limit": 6}]
+    assert [result.id for result in results.results] == ["episode-4", "entity-5"]
+    assert results.total == 6
+
+
+@pytest.mark.asyncio
+async def test_search_fetches_extra_candidates_before_content_type_filtering() -> None:
+    graph_service = _GraphServiceStub(
+        [*[_episode(i) for i in range(4)], *[_entity(i) for i in range(4)]]
+    )
+    memory_repo = _MemoryRepositoryStub([])
+    service = SearchService(graph_service=graph_service, memory_repo=memory_repo)
+
+    results = await service.search(
+        "query",
+        "project-1",
+        filters={"content_type": "entity"},
+        limit=2,
+        offset=2,
+    )
+
+    assert graph_service.search_calls == [{"query": "query", "project_id": "project-1", "limit": 8}]
+    assert [result.id for result in results.results] == ["entity-2", "entity-3"]
+    assert results.total == 4
+
+
+@pytest.mark.asyncio
+async def test_search_memories_by_tags_reads_additional_pages_until_limit() -> None:
+    memories = [_memory(i, tags=["target"] if i in {55, 56} else []) for i in range(60)]
+    memory_repo = _MemoryRepositoryStub(memories)
+    service = SearchService(graph_service=_GraphServiceStub([]), memory_repo=memory_repo)
+
+    results = await service.search_memories_by_tags(["target"], "project-1", limit=2)
+
+    assert memory_repo.list_calls == [
+        {"project_id": "project-1", "limit": 50, "offset": 0},
+        {"project_id": "project-1", "limit": 50, "offset": 50},
+    ]
+    assert [result["id"] for result in results] == ["memory-55", "memory-56"]
+
+
+@pytest.mark.asyncio
+async def test_search_by_date_range_reads_additional_pages_until_limit() -> None:
+    old_date = datetime(2026, 1, 1, tzinfo=UTC)
+    matching_date = datetime(2026, 1, 10, tzinfo=UTC)
+    memories = [
+        _memory(i, created_at=matching_date if i in {55, 56} else old_date) for i in range(60)
+    ]
+    memory_repo = _MemoryRepositoryStub(memories)
+    service = SearchService(graph_service=_GraphServiceStub([]), memory_repo=memory_repo)
+
+    results = await service.search_by_date_range(
+        "project-1",
+        date_from=matching_date - timedelta(days=1),
+        date_to=matching_date + timedelta(days=1),
+        limit=2,
+    )
+
+    assert memory_repo.list_calls == [
+        {"project_id": "project-1", "limit": 50, "offset": 0},
+        {"project_id": "project-1", "limit": 50, "offset": 50},
+    ]
+    assert [result["id"] for result in results] == ["memory-55", "memory-56"]
