@@ -290,6 +290,54 @@ class TestGraphRouter:
         neo4j_client.execute_query.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_get_entity_types_with_tenant_filters_allowed_project_ids(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        other_project = await _add_other_tenant_project(test_db, test_user, "entity-types")
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+
+        response = await get_entity_types(
+            tenant_id=test_project_db.tenant_id,
+            project_id=None,
+            current_user=test_user,
+            db=test_db,
+            neo4j_client=neo4j_client,
+        )
+
+        assert response == {"entity_types": [], "total": 0}
+        query = neo4j_client.execute_query.await_args.args[0]
+        query_kwargs = neo4j_client.execute_query.await_args.kwargs
+        assert "e.project_id IN $project_ids" in query
+        assert query_kwargs["project_ids"] == [test_project_db.id]
+        assert other_project.id not in query_kwargs["project_ids"]
+
+    @pytest.mark.asyncio
+    async def test_get_entity_types_rejects_project_tenant_mismatch(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        neo4j_client = Mock()
+        neo4j_client.execute_query = AsyncMock()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_entity_types(
+                tenant_id="not-the-project-tenant",
+                project_id=test_project_db.id,
+                current_user=test_user,
+                db=test_db,
+                neo4j_client=neo4j_client,
+            )
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        neo4j_client.execute_query.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_get_entity_relationships_filters_related_entities_by_project(
         self,
         test_db: AsyncSession,

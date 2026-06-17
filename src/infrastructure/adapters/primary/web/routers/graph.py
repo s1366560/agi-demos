@@ -421,6 +421,7 @@ async def list_entities(
 
 @router.get("/entities/types")
 async def get_entity_types(
+    tenant_id: str | None = None,
     project_id: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -434,7 +435,9 @@ async def get_entity_types(
     try:
         if neo4j_client is None:
             raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-        is_superuser, allowed_project_ids = await _graph_project_scope(project_id, current_user, db)
+        is_superuser, allowed_project_ids = await _graph_project_scope(
+            project_id, current_user, db, tenant_id=tenant_id
+        )
         if not is_superuser and not allowed_project_ids:
             return {"entity_types": [], "total": 0}
 
@@ -446,6 +449,9 @@ async def get_entity_types(
                 "(e.project_id = $project_id OR EXISTS { MATCH (e)<-[:MENTIONS]-(ep:Episodic) WHERE ep.project_id = $project_id })"
             )
             params["project_id"] = project_id
+        elif tenant_id and is_superuser:
+            conditions.append("e.tenant_id = $tenant_id")
+            params["tenant_id"] = tenant_id
         elif not is_superuser:
             conditions.append(
                 "(e.project_id IN $project_ids OR EXISTS { MATCH (e)<-[:MENTIONS]-(ep:Episodic) WHERE ep.project_id IN $project_ids })"

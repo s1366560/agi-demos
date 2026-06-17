@@ -235,3 +235,18 @@ async def test_get_entity_types_counts_entity_type_property_for_historical_nodes
     assert response == {"entity_types": [{"entity_type": "Person", "count": 2}], "total": 1}
     assert "coalesce(" in client.calls[0]["query"]
     assert "head([label IN labels(e)" in client.calls[0]["query"]
+
+
+async def test_get_entity_types_filters_by_tenant_for_superuser_scope() -> None:
+    client = FakeNeo4jClient([])
+
+    response = await get_entity_types(
+        tenant_id="tenant-1",
+        project_id=None,
+        current_user=SimpleNamespace(is_superuser=True),
+        neo4j_client=client,
+    )
+
+    assert response == {"entity_types": [], "total": 0}
+    assert "e.tenant_id = $tenant_id" in client.calls[0]["query"]
+    assert client.calls[0]["params"]["tenant_id"] == "tenant-1"

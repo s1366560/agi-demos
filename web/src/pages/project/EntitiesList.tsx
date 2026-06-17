@@ -293,7 +293,10 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
       entityTypesRequestRef.current = requestId;
       setLoadingTypes(true);
       try {
-        const result = await graphService.getEntityTypes({ project_id: projectId });
+        const result = await graphService.getEntityTypes({
+          tenant_id: tenantId,
+          project_id: projectId,
+        });
         if (entityTypesRequestRef.current !== requestId) return;
         setEntityTypes(result.entity_types);
       } catch (err) {
@@ -304,7 +307,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
           setLoadingTypes(false);
         }
       }
-    }, [projectId]);
+    }, [tenantId, projectId]);
 
     // Load entities
     const loadEntities = useCallback(async () => {

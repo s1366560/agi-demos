@@ -159,11 +159,18 @@ describe('EntitiesList Compound Component', () => {
     it('should pass route tenant context to entity graph requests', async () => {
       render(
         <EntitiesList>
+          <EntitiesList.Filters />
           <EntitiesList.List />
         </EntitiesList>
       );
 
       await waitFor(() => {
+        expect(graphService.getEntityTypes).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tenant_id: 'tenant-route-1',
+            project_id: 'test-project-1',
+          })
+        );
         expect(graphService.listEntities).toHaveBeenCalledWith(
           expect.objectContaining({
             tenant_id: 'tenant-route-1',

@@ -296,8 +296,11 @@ export const graphService = {
     };
   },
 
-  async getEntityTypes(params: { project_id?: string | undefined } = {}): Promise<EntityTypeStats> {
+  async getEntityTypes(
+    params: { tenant_id?: string | undefined; project_id?: string | undefined } = {}
+  ): Promise<EntityTypeStats> {
     const queryParams = new URLSearchParams();
+    if (params.tenant_id) queryParams.append('tenant_id', params.tenant_id);
     if (params.project_id) queryParams.append('project_id', params.project_id);
 
     return await apiClient.get<EntityTypeStats>(`/graph/entities/types?${queryParams.toString()}`);

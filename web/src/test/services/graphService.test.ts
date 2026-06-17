@@ -36,4 +36,14 @@ describe('graphService', () => {
 
     expect(mockHttpClient.delete).toHaveBeenCalledWith('/episodes/by-name/Launch%20Notes');
   });
+
+  it('loads entity type counts with tenant and project scope', async () => {
+    mockHttpClient.get.mockResolvedValue({ entity_types: [], total: 0 });
+
+    await graphService.getEntityTypes({ tenant_id: 'tenant-1', project_id: 'project-1' });
+
+    expect(mockHttpClient.get).toHaveBeenCalledWith(
+      '/graph/entities/types?tenant_id=tenant-1&project_id=project-1'
+    );
+  });
 });
