@@ -1,6 +1,7 @@
 """Memory sharing API endpoints."""
 
 import logging
+import secrets
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -55,6 +56,11 @@ def _share_can_view(permissions: object) -> bool:
         return False
     permissions_map = cast(Mapping[str, object], permissions)
     return permissions_map.get("view") is True
+
+
+def _new_share_token() -> str:
+    """Generate a high-entropy URL-safe bearer token for public share links."""
+    return secrets.token_urlsafe(32)
 
 
 @router.post("/memories/{memory_id}/shares", status_code=status.HTTP_201_CREATED)
@@ -114,7 +120,7 @@ async def create_share(
         memory_id=memory_id,
         shared_with_user_id=target_id if target_type == "user" else None,
         shared_with_project_id=target_id if target_type == "project" else None,
-        share_token=f"{uuid4().hex[:16]}",
+        share_token=_new_share_token(),
         shared_by=current_user.id,
         permissions=share_data.get(
             "permissions", {"view": True, "edit": permission_level == "edit"}

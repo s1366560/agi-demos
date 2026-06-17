@@ -31,6 +31,7 @@ class TestCreateShare:
         data = response.json()
         assert "id" in data
         assert "share_token" in data
+        assert len(data["share_token"]) >= 32
         assert data["permissions"] == share_data["permissions"]
         assert "expires_at" in data
         assert data["access_count"] == 0
