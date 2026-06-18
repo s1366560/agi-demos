@@ -60,10 +60,12 @@ export const useNotificationStore = create<NotificationState>()(
         try {
           await api.put(`/notifications/${id}/read`);
 
-          const { notifications } = get();
+          const { notifications, unreadCount } = get();
+          const notification = notifications.find((n) => n.id === id);
           set({
             notifications: notifications.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
-            unreadCount: Math.max(0, get().unreadCount - 1),
+            unreadCount:
+              notification && !notification.is_read ? Math.max(0, unreadCount - 1) : unreadCount,
           });
         } catch (error) {
           console.error('Failed to mark notification as read:', error);

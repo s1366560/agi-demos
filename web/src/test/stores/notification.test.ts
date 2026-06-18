@@ -122,8 +122,8 @@ describe('Notification Store', () => {
       const api = (await import('../../services/api')).default;
 
       // Create a promise that we can control
-      let resolveFetch: () => void;
-      const fetchPromise = new Promise<void>((resolve) => {
+      let resolveFetch: (value: { notifications: [] }) => void;
+      const fetchPromise = new Promise<{ notifications: [] }>((resolve) => {
         resolveFetch = resolve;
       });
 
@@ -136,8 +136,7 @@ describe('Notification Store', () => {
       expect(useNotificationStore.getState().isLoading).toBe(true);
 
       // Resolve and wait
-      resolveFetch!();
-      vi.mocked(api.get).mockResolvedValue({ data: { notifications: [] } });
+      resolveFetch!({ notifications: [] });
       await fetchCall;
 
       expect(useNotificationStore.getState().isLoading).toBe(false);
@@ -174,6 +173,70 @@ describe('Notification Store', () => {
       expect(state.notifications[0].is_read).toBe(true);
       expect(state.unreadCount).toBe(0);
       expect(api.put).toHaveBeenCalledWith('/notifications/1/read');
+    });
+
+    it('should not decrease unread count when notification is already read', async () => {
+      const api = (await import('../../services/api')).default;
+      vi.mocked(api.put).mockResolvedValue({ success: true });
+
+      useNotificationStore.setState({
+        notifications: [
+          {
+            id: '1',
+            type: 'info',
+            title: 'Read',
+            message: 'Already read',
+            data: {},
+            is_read: true,
+            created_at: '2024-01-01T00:00:00Z',
+          },
+          {
+            id: '2',
+            type: 'warning',
+            title: 'Unread',
+            message: 'Still unread',
+            data: {},
+            is_read: false,
+            created_at: '2024-01-01T00:00:00Z',
+          },
+        ],
+        unreadCount: 1,
+      });
+
+      const { markAsRead } = useNotificationStore.getState();
+      await markAsRead('1');
+
+      const state = useNotificationStore.getState();
+      expect(state.notifications[0].is_read).toBe(true);
+      expect(state.unreadCount).toBe(1);
+    });
+
+    it('should not decrease unread count when notification is missing locally', async () => {
+      const api = (await import('../../services/api')).default;
+      vi.mocked(api.put).mockResolvedValue({ success: true });
+
+      const notifications = [
+        {
+          id: '1',
+          type: 'info',
+          title: 'Unread',
+          message: 'Still unread',
+          data: {},
+          is_read: false,
+          created_at: '2024-01-01T00:00:00Z',
+        },
+      ];
+      useNotificationStore.setState({
+        notifications,
+        unreadCount: 1,
+      });
+
+      const { markAsRead } = useNotificationStore.getState();
+      await markAsRead('missing');
+
+      const state = useNotificationStore.getState();
+      expect(state.notifications).toEqual(notifications);
+      expect(state.unreadCount).toBe(1);
     });
 
     it('should handle markAsRead errors gracefully', async () => {
