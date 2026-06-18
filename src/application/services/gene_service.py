@@ -1351,6 +1351,7 @@ class GeneService:
         review = GeneReview(
             gene_id=gene_id,
             user_id=user_id,
+            tenant_id=tenant_id,
             rating=rating,
             content=content,
         )
@@ -1366,7 +1367,7 @@ class GeneService:
         tenant_id: str,
     ) -> tuple[list[GeneReview], int]:
         await self._ensure_reviewable_gene(gene_id, tenant_id)
-        return await self._gene_review_repo.find_by_gene_id(gene_id, page, page_size)
+        return await self._gene_review_repo.find_by_gene_id(gene_id, tenant_id, page, page_size)
 
     async def delete_gene_review(
         self,
@@ -1376,12 +1377,12 @@ class GeneService:
         tenant_id: str,
     ) -> None:
         await self._ensure_reviewable_gene(gene_id, tenant_id)
-        review = await self._gene_review_repo.find_by_id(review_id)
+        review = await self._gene_review_repo.find_by_id(review_id, tenant_id)
         if not review:
             raise ValueError(f"Review {review_id} not found")
         if review.gene_id != gene_id:
             raise ValueError(f"Review {review_id} not found")
         if review.user_id != user_id:
             raise PermissionError("Cannot delete another user's review")
-        await self._gene_review_repo.soft_delete(review_id, user_id)
+        await self._gene_review_repo.soft_delete(review_id, user_id, tenant_id)
         logger.info(f"Soft-deleted review {review_id}")

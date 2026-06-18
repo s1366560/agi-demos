@@ -33,6 +33,7 @@ class SqlGeneReviewRepository(BaseRepository[GeneReview, GeneReviewModel], GeneR
             id=db_model.id,
             gene_id=db_model.gene_id,
             user_id=db_model.user_id,
+            tenant_id=db_model.tenant_id,
             rating=db_model.rating,
             content=db_model.content,
             created_at=db_model.created_at,
@@ -45,6 +46,7 @@ class SqlGeneReviewRepository(BaseRepository[GeneReview, GeneReviewModel], GeneR
             id=domain_entity.id,
             gene_id=domain_entity.gene_id,
             user_id=domain_entity.user_id,
+            tenant_id=domain_entity.tenant_id,
             rating=domain_entity.rating,
             content=domain_entity.content,
             created_at=domain_entity.created_at,
@@ -53,13 +55,14 @@ class SqlGeneReviewRepository(BaseRepository[GeneReview, GeneReviewModel], GeneR
 
     @override
     def _update_fields(self, db_model: GeneReviewModel, domain_entity: GeneReview) -> None:
+        db_model.tenant_id = domain_entity.tenant_id
         db_model.rating = domain_entity.rating
         db_model.content = domain_entity.content
         db_model.deleted_at = domain_entity.deleted_at
 
     @override
     async def find_by_gene_id(
-        self, gene_id: str, page: int, page_size: int
+        self, gene_id: str, tenant_id: str, page: int, page_size: int
     ) -> tuple[list[GeneReview], int]:
         offset = (page - 1) * page_size
 
@@ -67,31 +70,39 @@ class SqlGeneReviewRepository(BaseRepository[GeneReview, GeneReviewModel], GeneR
         base_query = (
             select(GeneReviewModel)
             .where(GeneReviewModel.gene_id == gene_id)
+            .where(GeneReviewModel.tenant_id == tenant_id)
             .where(GeneReviewModel.deleted_at.is_(None))
         )
 
         # Count
         count_query = select(func.count()).select_from(base_query.subquery())
-        count_result = await self._session.execute(refresh_select_statement(self._refresh_statement(count_query)))
+        count_result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(count_query))
+        )
         total = count_result.scalar_one()
 
         # Fetch items
         items_query = (
             base_query.order_by(GeneReviewModel.created_at.desc()).offset(offset).limit(page_size)
         )
-        items_result = await self._session.execute(refresh_select_statement(self._refresh_statement(items_query)))
+        items_result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(items_query))
+        )
         items = [d for r in items_result.scalars().all() if (d := self._to_domain(r)) is not None]
 
         return items, total
 
     @override
-    async def find_by_id(self, entity_id: str) -> GeneReview | None:
+    async def find_by_id(self, entity_id: str, tenant_id: str) -> GeneReview | None:
         query = (
             select(GeneReviewModel)
             .where(GeneReviewModel.id == entity_id)
+            .where(GeneReviewModel.tenant_id == tenant_id)
             .where(GeneReviewModel.deleted_at.is_(None))
         )
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         db_review = result.scalar_one_or_none()
         if db_review is None:
             return None
@@ -100,7 +111,9 @@ class SqlGeneReviewRepository(BaseRepository[GeneReview, GeneReviewModel], GeneR
     @override
     async def save(self, domain_entity: GeneReview) -> GeneReview:
         query = select(GeneReviewModel).where(GeneReviewModel.id == domain_entity.id).limit(1)
-        result = await self._session.execute(refresh_select_statement(self._refresh_statement(query)))
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
         existing = result.scalar_one_or_none()
         if existing is not None:
             self._update_fields(existing, domain_entity)
@@ -111,11 +124,12 @@ class SqlGeneReviewRepository(BaseRepository[GeneReview, GeneReviewModel], GeneR
         return domain_entity
 
     @override
-    async def soft_delete(self, review_id: str, user_id: str) -> None:
+    async def soft_delete(self, review_id: str, user_id: str, tenant_id: str) -> None:
         stmt = (
             update(GeneReviewModel)
             .where(GeneReviewModel.id == review_id)
             .where(GeneReviewModel.user_id == user_id)
+            .where(GeneReviewModel.tenant_id == tenant_id)
             .where(GeneReviewModel.deleted_at.is_(None))
             .values(deleted_at=datetime.now(UTC))
         )

@@ -2848,6 +2848,9 @@ class GeneReviewModel(Base):
     gene_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("gene_market.id", ondelete="CASCADE"), nullable=False
     )
+    tenant_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
+    )
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
@@ -2855,6 +2858,19 @@ class GeneReviewModel(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "uq_gene_review_tenant_user_gene",
+            "tenant_id",
+            "gene_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
+        ),
+        Index("ix_gene_reviews_tenant_gene_created", "tenant_id", "gene_id", "created_at"),
+    )
 
 
 class GeneRatingModel(Base):

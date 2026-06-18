@@ -70,6 +70,7 @@ class GeneReview(Entity):
 
     gene_id: str
     user_id: str
+    tenant_id: str | None = None
     rating: int = 0
     content: str = ""
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
