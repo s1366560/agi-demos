@@ -3,7 +3,7 @@
  *
  * Environment-aware logging with consistent prefixes.
  *
- * - `debug` and `info` only output in development
+ * - `debug` and `info` are opt-in, even in development
  * - `warn` and `error` always output
  * - All messages have level prefixes: [DEBUG], [INFO], [WARN], [ERROR]
  */
@@ -24,49 +24,54 @@ export interface Logger {
 }
 
 /**
- * Check if we are in development mode
+ * Check whether verbose logs are explicitly enabled.
  *
- * Uses Vite's MODE env var which is set to 'development' in dev
- * and 'production' in build. Also enables debug in test mode.
- * Falls back to NODE_ENV for compatibility.
+ * Dev sessions can emit thousands of WebSocket/timeline events during tenant
+ * switches. Keep verbose logs off by default and require a deliberate opt-in.
  */
-const isDevelopment = (): boolean => {
-  // Vite sets MODE automatically
-  const isViteDev = import.meta.env.MODE === 'development' || import.meta.env.MODE === 'test';
-  // Fallback to NODE_ENV for Node.js environments
-  const isNodeDev =
-    typeof process !== 'undefined' && ['development', 'test'].includes(process.env.NODE_ENV ?? '');
-  return isViteDev || isNodeDev;
+function isTruthyFlag(value: unknown): boolean {
+  return typeof value === 'string' && ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
+}
+
+const isVerboseLoggingEnabled = (): boolean => {
+  if (
+    isTruthyFlag(import.meta.env.VITE_ENABLE_DEBUG_LOGS) ||
+    isTruthyFlag(import.meta.env.VITE_DEBUG_LOGS)
+  ) {
+    return true;
+  }
+
+  try {
+    return (
+      typeof localStorage !== 'undefined' &&
+      isTruthyFlag(localStorage.getItem('memstack:debugLogs'))
+    );
+  } catch {
+    return false;
+  }
 };
-
-const dev = isDevelopment();
-
-/**
- * No-op function for disabled logging
- */
-const noop = (): void => {};
 
 /**
  * Logger implementation
  */
 export const logger: Logger = {
   /**
-   * Debug level - only in development
+   * Debug level - opt-in only
    */
-  debug: dev
-    ? (...args: unknown[]): void => {
-        console.log('[DEBUG]', ...args);
-      }
-    : noop,
+  debug: (...args: unknown[]): void => {
+    if (isVerboseLoggingEnabled()) {
+      console.log('[DEBUG]', ...args);
+    }
+  },
 
   /**
-   * Info level - only in development
+   * Info level - opt-in only
    */
-  info: dev
-    ? (...args: unknown[]): void => {
-        console.info('[INFO]', ...args);
-      }
-    : noop,
+  info: (...args: unknown[]): void => {
+    if (isVerboseLoggingEnabled()) {
+      console.info('[INFO]', ...args);
+    }
+  },
 
   /**
    * Warn level - always enabled

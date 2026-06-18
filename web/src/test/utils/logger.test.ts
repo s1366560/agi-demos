@@ -61,28 +61,38 @@ describe('logger', () => {
     });
   });
 
-  describe('in test mode (development)', () => {
-    // Vite sets MODE to 'test' during testing
-    // Our logger checks for 'development', but in test environment
-    // we need to verify behavior based on actual implementation
+  describe('verbose logs', () => {
+    beforeEach(() => {
+      localStorage.removeItem('memstack:debugLogs');
+    });
 
-    it('should output debug messages with [DEBUG] prefix', () => {
+    it('should not output debug or info messages by default', () => {
+      logger.debug('test debug message');
+      logger.info('test info message');
+
+      expect(mockCalls.log).toHaveLength(0);
+      expect(mockCalls.info).toHaveLength(0);
+    });
+
+    it('should output debug messages with [DEBUG] prefix when explicitly enabled', () => {
+      localStorage.setItem('memstack:debugLogs', 'true');
+
       logger.debug('test debug message');
       logger.debug('test with param', 42, { key: 'value' });
 
-      expect(mockCalls.log.length).toBeGreaterThanOrEqual(1);
-      if (mockCalls.log.length >= 2) {
-        expect(mockCalls.log[0]).toContain('[DEBUG]');
-        expect(mockCalls.log[0]).toContain('test debug message');
-      }
+      expect(mockCalls.log).toHaveLength(2);
+      expect(mockCalls.log[0]).toContain('[DEBUG]');
+      expect(mockCalls.log[0]).toContain('test debug message');
     });
 
-    it('should output info messages with [INFO] prefix', () => {
+    it('should output info messages with [INFO] prefix when explicitly enabled', () => {
+      localStorage.setItem('memstack:debugLogs', '1');
+
       logger.info('test info message');
 
-      // In test mode, info may or may not be enabled depending on env
-      // Just verify the method exists and doesn't throw
-      expect(() => logger.info('test')).not.toThrow();
+      expect(mockCalls.info).toHaveLength(1);
+      expect(mockCalls.info[0]).toContain('[INFO]');
+      expect(mockCalls.info[0]).toContain('test info message');
     });
 
     it('should output warn messages with [WARN] prefix', () => {
