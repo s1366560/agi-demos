@@ -54,15 +54,30 @@ describe('agent HITL store', () => {
     await Promise.all([firstLoad, secondLoad]);
   });
 
-  it('skips recent completed pending HITL loads', async () => {
+  it('skips completed pending HITL loads within the tenant switch recovery window', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
     const agentServiceMock = vi.mocked(
       (await import('../../../services/agentService')).agentService
     );
-    agentServiceMock.getPendingHITLRequests.mockResolvedValue({ requests: [] } as any);
 
-    await useAgentHITLStore.getState().loadPendingHITL('conv-recent');
-    await useAgentHITLStore.getState().loadPendingHITL('conv-recent');
+    try {
+      agentServiceMock.getPendingHITLRequests.mockResolvedValue({ requests: [] } as any);
 
-    expect(agentServiceMock.getPendingHITLRequests).toHaveBeenCalledTimes(1);
+      await useAgentHITLStore.getState().loadPendingHITL('conv-recent');
+      await useAgentHITLStore.getState().loadPendingHITL('conv-recent');
+      expect(agentServiceMock.getPendingHITLRequests).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(29_999);
+      await useAgentHITLStore.getState().loadPendingHITL('conv-recent');
+      expect(agentServiceMock.getPendingHITLRequests).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(2);
+      await useAgentHITLStore.getState().loadPendingHITL('conv-recent');
+      expect(agentServiceMock.getPendingHITLRequests).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -66,7 +66,7 @@ const compareTimelineEvents = (a: TimelineEvent, b: TimelineEvent): number => {
   return a.eventCounter - b.eventCounter;
 };
 
-const RECENT_MESSAGE_LOAD_SKIP_MS = 5000;
+const RECENT_MESSAGE_LOAD_SKIP_MS = 30_000;
 const activeMessageLoadRequests = new Map<string, Promise<boolean>>();
 const completedMessageLoadRequests = new Map<string, number>();
 

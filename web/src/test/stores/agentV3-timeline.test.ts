@@ -381,40 +381,55 @@ describe('agentV3 Store - Timeline Field', () => {
       expect(agentServiceMock.subscribe).toHaveBeenCalledTimes(1);
     });
 
-    it('skips recent completed message loads unless forced', async () => {
+    it('skips completed message loads within the tenant switch recovery window unless forced', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
       const { result } = renderHook(() => useAgentV3Store());
       const agentServiceMock = vi.mocked(
         (await import('../../services/agentService')).agentService
       );
-      agentServiceMock.getConversationMessages.mockResolvedValue({
-        conversationId: 'conv-recent',
-        timeline: [],
-        total: 0,
-        has_more: false,
-        first_time_us: null,
-        first_counter: null,
-        last_time_us: null,
-        last_counter: null,
-      } as any);
 
-      act(() => {
-        useAgentV3Store.setState({ activeConversationId: 'conv-recent' });
-      });
+      try {
+        agentServiceMock.getConversationMessages.mockResolvedValue({
+          conversationId: 'conv-recent',
+          timeline: [],
+          total: 0,
+          has_more: false,
+          first_time_us: null,
+          first_counter: null,
+          last_time_us: null,
+          last_counter: null,
+        } as any);
 
-      await act(async () => {
-        await result.current.loadMessages('conv-recent', 'proj-123');
-      });
-      expect(agentServiceMock.getConversationMessages).toHaveBeenCalledTimes(1);
+        act(() => {
+          useAgentV3Store.setState({ activeConversationId: 'conv-recent' });
+        });
 
-      await act(async () => {
-        await result.current.loadMessages('conv-recent', 'proj-123');
-      });
-      expect(agentServiceMock.getConversationMessages).toHaveBeenCalledTimes(1);
+        await act(async () => {
+          await result.current.loadMessages('conv-recent', 'proj-123');
+        });
+        expect(agentServiceMock.getConversationMessages).toHaveBeenCalledTimes(1);
 
-      await act(async () => {
-        await result.current.loadMessages('conv-recent', 'proj-123', { force: true });
-      });
-      expect(agentServiceMock.getConversationMessages).toHaveBeenCalledTimes(2);
+        vi.advanceTimersByTime(29_999);
+        await act(async () => {
+          await result.current.loadMessages('conv-recent', 'proj-123');
+        });
+        expect(agentServiceMock.getConversationMessages).toHaveBeenCalledTimes(1);
+
+        vi.advanceTimersByTime(2);
+        await act(async () => {
+          await result.current.loadMessages('conv-recent', 'proj-123');
+        });
+        expect(agentServiceMock.getConversationMessages).toHaveBeenCalledTimes(2);
+
+        await act(async () => {
+          await result.current.loadMessages('conv-recent', 'proj-123', { force: true });
+        });
+        expect(agentServiceMock.getConversationMessages).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

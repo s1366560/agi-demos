@@ -63,7 +63,7 @@ interface AgentHITLState {
   }) => void;
 }
 
-const RECENT_HITL_LOAD_SKIP_MS = 5000;
+const RECENT_HITL_LOAD_SKIP_MS = 30_000;
 const pendingHITLLoadRequests = new Map<string, Promise<boolean>>();
 const completedHITLLoadRequests = new Map<string, number>();
 
