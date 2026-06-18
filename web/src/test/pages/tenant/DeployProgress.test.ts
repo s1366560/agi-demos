@@ -78,4 +78,43 @@ describe('parseDeployProgressSseEvent', () => {
       },
     ]);
   });
+
+  it('streams CRLF-delimited progress events as separate frames', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            'data: {"type":"status","status":"in_progress","deploy_id":"deploy-1"}\r\n\r\n'
+          )
+        );
+        controller.enqueue(
+          new TextEncoder().encode(
+            'data: {"type":"done","status":"success","deploy_id":"deploy-1"}\r\n\r\n'
+          )
+        );
+        controller.close();
+      },
+    });
+    vi.mocked(apiFetch.get).mockResolvedValueOnce(new Response(stream));
+    const events: unknown[] = [];
+
+    await streamDeployProgress({
+      deployId: 'deploy-1',
+      signal: new AbortController().signal,
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(events).toEqual([
+      {
+        type: 'status',
+        status: 'in_progress',
+        deploy_id: 'deploy-1',
+      },
+      {
+        type: 'done',
+        status: 'success',
+        deploy_id: 'deploy-1',
+      },
+    ]);
+  });
 });
