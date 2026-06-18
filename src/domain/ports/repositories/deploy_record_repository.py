@@ -23,6 +23,10 @@ class DeployRecordRepository(ABC):
         """List deploy records for an instance."""
 
     @abstractmethod
+    async def count_by_instance(self, instance_id: str) -> int:
+        """Count deploy records for an instance."""
+
+    @abstractmethod
     async def find_latest_by_instance(self, instance_id: str) -> DeployRecord | None:
         """Find the latest deploy record for an instance."""
 

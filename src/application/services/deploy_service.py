@@ -143,6 +143,17 @@ class DeployService:
             instance_id, limit=limit, offset=offset
         )
 
+    async def list_deploys_with_total(
+        self,
+        instance_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[DeployRecord], int]:
+        """List deploy records with total matching count for pagination."""
+        records = await self.list_deploys(instance_id, limit=limit, offset=offset)
+        total = await self._deploy_record_repo.count_by_instance(instance_id)
+        return records, total
+
     async def mark_deploy_success(
         self,
         deploy_id: str,

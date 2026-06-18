@@ -46,6 +46,10 @@ class SqlDeployRecordRepository(
         return [d for r in db_records if (d := self._to_domain(r)) is not None]
 
     @override
+    async def count_by_instance(self, instance_id: str) -> int:
+        return await self.count(instance_id=instance_id)
+
+    @override
     async def find_latest_by_instance(self, instance_id: str) -> DeployRecord | None:
         query = self._build_query(
             filters={"instance_id": instance_id},

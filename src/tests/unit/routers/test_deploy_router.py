@@ -139,6 +139,48 @@ class TestDeployRouterAuthorization:
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
 
     @pytest.mark.asyncio
+    async def test_list_deploys_returns_total_count_not_page_size(
+        self,
+        test_db: AsyncSession,
+        deploy_instance: InstanceModel,
+        test_user: User,
+    ) -> None:
+        for revision in range(1, 4):
+            test_db.add(
+                DeployRecordModel(
+                    id=str(uuid4()),
+                    instance_id=deploy_instance.id,
+                    revision=revision,
+                    action="update",
+                    status="pending",
+                    triggered_by=test_user.id,
+                )
+            )
+        await test_db.commit()
+
+        request = SimpleNamespace(
+            app=SimpleNamespace(
+                state=SimpleNamespace(
+                    container=SimpleNamespace(graph_service=None, redis_client=None)
+                )
+            )
+        )
+
+        response = await list_deploys(
+            request,
+            instance_id=deploy_instance.id,
+            page=2,
+            page_size=1,
+            current_user=test_user,
+            db=test_db,
+        )
+
+        assert len(response.deploys) == 1
+        assert response.total == 3
+        assert response.page == 2
+        assert response.page_size == 1
+
+    @pytest.mark.asyncio
     async def test_create_deploy_records_authenticated_user_as_trigger(
         self,
         test_db: AsyncSession,

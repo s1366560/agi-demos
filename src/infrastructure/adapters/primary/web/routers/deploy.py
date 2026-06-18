@@ -193,14 +193,14 @@ async def list_deploys(
         container = get_container_with_db(request, db)
         service = container.deploy_service()
         offset = (page - 1) * page_size
-        items = await service.list_deploys(
+        items, total = await service.list_deploys_with_total(
             instance_id=instance_id,
             limit=page_size,
             offset=offset,
         )
         return DeployListResponse(
             deploys=[DeployResponse.model_validate(r, from_attributes=True) for r in items],
-            total=len(items),
+            total=total,
             page=page,
             page_size=page_size,
         )
