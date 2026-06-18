@@ -15,6 +15,10 @@ import { devtools } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
 import { projectAPI } from '../services/api';
+import {
+  clearCurrentProject as clearCurrentProjectContext,
+  setCurrentProject as setCurrentProjectContext,
+} from '../services/client/currentProject';
 
 import type { Project, ProjectCreate, ProjectUpdate, ProjectListResponse } from '../types/memory';
 
@@ -225,9 +229,11 @@ export const useProjectStore = create<ProjectState>()(
        * await createProject('tenant-1', { name: 'My Project', description: '...' });
        */
       createProject: async (tenantId: string, data: ProjectCreate) => {
+        const requestGeneration = projectStateGeneration;
         set({ isLoading: true, error: null });
         try {
           const response: Project = await projectAPI.create(tenantId, data);
+          if (requestGeneration !== projectStateGeneration) return;
           const { projects } = get();
           cacheProjectResponse(getProjectRequestKey(tenantId, response.id), response);
           set({
@@ -235,10 +241,12 @@ export const useProjectStore = create<ProjectState>()(
             isLoading: false,
           });
         } catch (error: unknown) {
-          set({
-            error: getErrorMessage(error),
-            isLoading: false,
-          });
+          if (requestGeneration === projectStateGeneration) {
+            set({
+              error: getErrorMessage(error),
+              isLoading: false,
+            });
+          }
           throw error;
         }
       },
@@ -254,9 +262,11 @@ export const useProjectStore = create<ProjectState>()(
        * await updateProject('tenant-1', 'proj-1', { name: 'Updated Name' });
        */
       updateProject: async (tenantId: string, projectId: string, data: ProjectUpdate) => {
+        const requestGeneration = projectStateGeneration;
         set({ isLoading: true, error: null });
         try {
           const response: Project = await projectAPI.update(tenantId, projectId, data);
+          if (requestGeneration !== projectStateGeneration) return;
           const { projects } = get();
           cacheProjectResponse(getProjectRequestKey(tenantId, projectId), response);
           set({
@@ -266,10 +276,12 @@ export const useProjectStore = create<ProjectState>()(
             isLoading: false,
           });
         } catch (error: unknown) {
-          set({
-            error: getErrorMessage(error),
-            isLoading: false,
-          });
+          if (requestGeneration === projectStateGeneration) {
+            set({
+              error: getErrorMessage(error),
+              isLoading: false,
+            });
+          }
           throw error;
         }
       },
@@ -284,9 +296,11 @@ export const useProjectStore = create<ProjectState>()(
        * await deleteProject('tenant-1', 'proj-1');
        */
       deleteProject: async (tenantId: string, projectId: string) => {
+        const requestGeneration = projectStateGeneration;
         set({ isLoading: true, error: null });
         try {
           await projectAPI.delete(tenantId, projectId);
+          if (requestGeneration !== projectStateGeneration) return;
           const { projects } = get();
           deleteCachedProjectResponses(projectId);
           set({
@@ -295,10 +309,12 @@ export const useProjectStore = create<ProjectState>()(
             isLoading: false,
           });
         } catch (error: unknown) {
-          set({
-            error: getErrorMessage(error),
-            isLoading: false,
-          });
+          if (requestGeneration === projectStateGeneration) {
+            set({
+              error: getErrorMessage(error),
+              isLoading: false,
+            });
+          }
           throw error;
         }
       },
@@ -311,6 +327,7 @@ export const useProjectStore = create<ProjectState>()(
        * setCurrentProject(selectedProject);
        */
       setCurrentProject: (project: Project | null) => {
+        setCurrentProjectContext(project?.id ?? null);
         if (isSameCurrentProject(get().currentProject, project)) {
           return;
         }
@@ -329,6 +346,7 @@ export const useProjectStore = create<ProjectState>()(
         pendingListProjectRequests.clear();
         pendingGetProjectRequests.clear();
         recentGetProjectResponses.clear();
+        clearCurrentProjectContext();
         set({
           projects: [],
           currentProject: null,

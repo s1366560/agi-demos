@@ -5,7 +5,7 @@
  * with project selector for choosing which project's context to use.
  */
 
-import { Suspense, lazy, useState, useEffect, useCallback, useMemo } from 'react';
+import { Suspense, lazy, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
@@ -119,6 +119,7 @@ export const AgentWorkspace: FC = () => {
   const [resolvedStoredProject, setResolvedStoredProject] = useState<Project | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [projectLoadError, setProjectLoadError] = useState<string | null>(null);
+  const previousTenantIdRef = useRef<string | undefined>(tenantId);
   const queryProjectId = searchParams.get('projectId');
   const queryWorkspaceId = searchParams.get('workspaceId');
   const tenantCurrentProjectId = tenantCurrentProject?.id ?? null;
@@ -177,6 +178,19 @@ export const AgentWorkspace: FC = () => {
   // Subscribe to workspace SSE events for real-time group chat updates
   useBlackboardSSE(effectiveWorkspaceId);
   useConversationListAutoRefresh(activeSelectedProjectId);
+
+  useEffect(() => {
+    const previousTenantId = previousTenantIdRef.current;
+    previousTenantIdRef.current = tenantId;
+    if (previousTenantId === tenantId) {
+      return;
+    }
+
+    setSelectedProjectId(null);
+    setResolvedStoredProject(null);
+    setProjectLoadError(null);
+    setInitializing(true);
+  }, [tenantId]);
 
   useEffect(() => {
     setResolvedStoredProject((project) => (project?.tenant_id === tenantId ? project : null));

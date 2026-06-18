@@ -1,7 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { projectAPI } from '../../services/api';
+import {
+  getCurrentProject,
+  setCurrentProject as setCurrentProjectContext,
+} from '../../services/client/currentProject';
 import { useProjectStore } from '../../stores/project';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
 
 vi.mock('../../services/api', () => ({
   projectAPI: {
@@ -16,6 +30,7 @@ vi.mock('../../services/api', () => ({
 describe('ProjectStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setCurrentProjectContext(null);
     useProjectStore.getState().clearProjects();
     useProjectStore.setState({
       projects: [],
@@ -75,9 +90,7 @@ describe('ProjectStore', () => {
     });
 
     await Promise.all([firstList, secondList]);
-    expect(useProjectStore.getState().projects).toEqual([
-      { id: 'shared', name: 'Shared Result' },
-    ]);
+    expect(useProjectStore.getState().projects).toEqual([{ id: 'shared', name: 'Shared Result' }]);
   });
 
   it('listProjects should ignore stale responses', async () => {
@@ -123,6 +136,27 @@ describe('ProjectStore', () => {
     expect(useProjectStore.getState().projects).toContainEqual(newProject);
   });
 
+  it('createProject should ignore stale responses after clearProjects', async () => {
+    const staleCreate = deferred<{ id: string; tenant_id: string; name: string }>();
+    (projectAPI.create as any).mockReturnValueOnce(staleCreate.promise);
+
+    const createProject = useProjectStore
+      .getState()
+      .createProject('tenant-1', { name: 'Stale Project' } as any);
+    expect(useProjectStore.getState().isLoading).toBe(true);
+
+    useProjectStore.getState().clearProjects();
+    staleCreate.resolve({ id: 'stale-project', tenant_id: 'tenant-1', name: 'Stale Project' });
+    await createProject;
+
+    expect(useProjectStore.getState()).toMatchObject({
+      projects: [],
+      currentProject: null,
+      isLoading: false,
+      error: null,
+    });
+  });
+
   it('updateProject should update project in list', async () => {
     useProjectStore.setState({ projects: [{ id: '1', name: 'Old Name' } as any] });
     const updatedProject = { id: '1', name: 'New Name' };
@@ -134,6 +168,28 @@ describe('ProjectStore', () => {
     expect(useProjectStore.getState().projects[0]).toEqual(updatedProject);
   });
 
+  it('updateProject should ignore stale responses after clearProjects', async () => {
+    const originalProject = { id: '1', tenant_id: 'tenant-1', name: 'Old Name' } as any;
+    const staleUpdate = deferred<{ id: string; tenant_id: string; name: string }>();
+    useProjectStore.setState({ projects: [originalProject], currentProject: originalProject });
+    (projectAPI.update as any).mockReturnValueOnce(staleUpdate.promise);
+
+    const updateProject = useProjectStore
+      .getState()
+      .updateProject('tenant-1', '1', { name: 'Stale Name' } as any);
+
+    useProjectStore.getState().clearProjects();
+    staleUpdate.resolve({ id: '1', tenant_id: 'tenant-1', name: 'Stale Name' });
+    await updateProject;
+
+    expect(useProjectStore.getState()).toMatchObject({
+      projects: [],
+      currentProject: null,
+      isLoading: false,
+      error: null,
+    });
+  });
+
   it('deleteProject should remove project from list', async () => {
     useProjectStore.setState({ projects: [{ id: '1', name: 'Project 1' } as any] });
     (projectAPI.delete as any).mockResolvedValue({});
@@ -142,6 +198,28 @@ describe('ProjectStore', () => {
 
     expect(projectAPI.delete).toHaveBeenCalledWith('tenant-1', '1');
     expect(useProjectStore.getState().projects).toHaveLength(0);
+  });
+
+  it('deleteProject should ignore stale failures after clearProjects', async () => {
+    const staleDelete = deferred<void>();
+    useProjectStore.setState({
+      projects: [{ id: '1', tenant_id: 'tenant-1', name: 'Project 1' } as any],
+      currentProject: { id: '1', tenant_id: 'tenant-1', name: 'Project 1' } as any,
+    });
+    (projectAPI.delete as any).mockReturnValueOnce(staleDelete.promise);
+
+    const deleteProject = useProjectStore.getState().deleteProject('tenant-1', '1');
+
+    useProjectStore.getState().clearProjects();
+    staleDelete.reject(new Error('Delete failed after tenant switch'));
+    await expect(deleteProject).rejects.toThrow('Delete failed after tenant switch');
+
+    expect(useProjectStore.getState()).toMatchObject({
+      projects: [],
+      currentProject: null,
+      isLoading: false,
+      error: null,
+    });
   });
 
   it('getProject should return the current project without fetching', async () => {
@@ -252,6 +330,15 @@ describe('ProjectStore', () => {
     const project = { id: '1', name: 'Project 1' } as any;
     useProjectStore.getState().setCurrentProject(project);
     expect(useProjectStore.getState().currentProject).toEqual(project);
+    expect(getCurrentProject()).toBe('1');
+  });
+
+  it('setCurrentProject should clear the global project context', () => {
+    setCurrentProjectContext('previous-project');
+
+    useProjectStore.getState().setCurrentProject(null);
+
+    expect(getCurrentProject()).toBeNull();
   });
 
   it('setCurrentProject should not notify subscribers for the same current project', () => {
@@ -292,6 +379,7 @@ describe('ProjectStore', () => {
   });
 
   it('clearProjects should reset tenant-scoped state', () => {
+    setCurrentProjectContext('1');
     useProjectStore.setState({
       projects: [{ id: '1', name: 'Project 1' } as any],
       currentProject: { id: '1', name: 'Project 1' } as any,
@@ -315,6 +403,7 @@ describe('ProjectStore', () => {
       pageSize: 20,
       ownerIds: [],
     });
+    expect(getCurrentProject()).toBeNull();
   });
 
   it('clearProjects should ignore stale list responses', async () => {
