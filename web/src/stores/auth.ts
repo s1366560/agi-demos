@@ -15,7 +15,7 @@ import { devtools, persist } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
 import i18n from '../i18n/config';
-import { authAPI, tenantAPI } from '../services/api';
+import { authAPI } from '../services/api';
 import { httpClient } from '../services/client/httpClient';
 import { setFeatures } from '../utils/featureCheck';
 import { registerAuthStateClearer } from '../utils/tokenResolver';
@@ -186,30 +186,29 @@ export const useAuthStore = create<AuthState>()(
           }
 
           try {
-            const tenantResp = await tenantAPI.list();
-            const firstTenant = tenantResp.tenants[0];
+            await useTenantStore.getState().listTenants();
             const tenantState = useTenantStore.getState();
-            useTenantStore.setState({
-              tenants: tenantResp.tenants,
-              total: tenantResp.total,
-              page: tenantResp.page,
-              pageSize: tenantResp.page_size,
-              isLoading: false,
-              error: null,
-            });
+            const tenantResp = {
+              tenants: tenantState.tenants,
+              total: tenantState.total,
+              page: tenantState.page,
+              page_size: tenantState.pageSize,
+            };
+            const firstTenant = tenantResp.tenants[0];
 
             if (firstTenant) {
               const currentTenant = tenantState.currentTenant;
               const currentTenantFromList = currentTenant
                 ? tenantResp.tenants.find((tenant) => tenant.id === currentTenant.id)
                 : undefined;
-              useTenantStore.getState().setCurrentTenant(currentTenantFromList ?? firstTenant);
+              const activeTenant = currentTenantFromList ?? firstTenant;
+              useTenantStore.getState().setCurrentTenant(activeTenant);
 
-              const { name } = firstTenant;
+              const { name } = activeTenant;
               const isSetup = !!name && name !== 'New Tenant' && name.trim() !== '';
               set({ orgSetupComplete: isSetup });
             } else {
-              if (tenantState.currentTenant) {
+              if (useTenantStore.getState().currentTenant) {
                 useTenantStore.getState().setCurrentTenant(null);
               }
               set({ orgSetupComplete: false });

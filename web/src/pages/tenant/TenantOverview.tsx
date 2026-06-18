@@ -57,6 +57,26 @@ interface TenantOverviewStats {
   };
 }
 
+const inFlightTenantStatsRequests = new Map<string, Promise<TenantOverviewStats>>();
+
+function getTenantOverviewStats(tenantId: string): Promise<TenantOverviewStats> {
+  const existingRequest = inFlightTenantStatsRequests.get(tenantId);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const trackedRequest = tenantAPI
+    .getStats(tenantId)
+    .then((data) => data as TenantOverviewStats)
+    .finally(() => {
+      if (inFlightTenantStatsRequests.get(tenantId) === trackedRequest) {
+        inFlightTenantStatsRequests.delete(tenantId);
+      }
+    });
+  inFlightTenantStatsRequests.set(tenantId, trackedRequest);
+  return trackedRequest;
+}
+
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
 
 const formatStorage = (bytes: number) => {
@@ -158,9 +178,9 @@ export const TenantOverview: React.FC = () => {
       setStats(null);
       setIsLoadingStats(true);
       try {
-        const data = await tenantAPI.getStats(tenant.id);
+        const data = await getTenantOverviewStats(tenant.id);
         if (isCurrent) {
-          setStats(data as TenantOverviewStats);
+          setStats(data);
         }
       } catch (error) {
         console.error('Failed to fetch tenant stats:', error);

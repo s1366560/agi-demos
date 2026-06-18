@@ -74,6 +74,55 @@ function getErrorMessage(error: unknown): string {
 
 let latestListTenantsRequest = 0;
 let latestGetTenantRequest = 0;
+const inFlightListTenantsRequests = new Map<string, Promise<TenantListResponse>>();
+const inFlightGetTenantRequests = new Map<string, Promise<Tenant>>();
+
+function tenantListParamsKey(params: {
+  page?: number | undefined;
+  page_size?: number | undefined;
+  search?: string | undefined;
+}): string {
+  return JSON.stringify({
+    page: params.page ?? null,
+    page_size: params.page_size ?? null,
+    search: params.search ?? null,
+  });
+}
+
+function listTenantsRequest(params: {
+  page?: number | undefined;
+  page_size?: number | undefined;
+  search?: string | undefined;
+}): Promise<TenantListResponse> {
+  const key = tenantListParamsKey(params);
+  const existingRequest = inFlightListTenantsRequests.get(key);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const request = tenantAPI.list(params).finally(() => {
+    if (inFlightListTenantsRequests.get(key) === request) {
+      inFlightListTenantsRequests.delete(key);
+    }
+  });
+  inFlightListTenantsRequests.set(key, request);
+  return request;
+}
+
+function getTenantRequest(id: string): Promise<Tenant> {
+  const existingRequest = inFlightGetTenantRequests.get(id);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const request = tenantAPI.get(id).finally(() => {
+    if (inFlightGetTenantRequests.get(id) === request) {
+      inFlightGetTenantRequests.delete(id);
+    }
+  });
+  inFlightGetTenantRequests.set(id, request);
+  return request;
+}
 
 export const useTenantStore = create<TenantState>()(
   devtools(
@@ -99,7 +148,7 @@ export const useTenantStore = create<TenantState>()(
         latestListTenantsRequest = requestId;
         set({ isLoading: true, error: null });
         try {
-          const response: TenantListResponse = await tenantAPI.list(params);
+          const response: TenantListResponse = await listTenantsRequest(params);
           if (requestId !== latestListTenantsRequest) return;
           set({
             tenants: response.tenants,
@@ -131,7 +180,7 @@ export const useTenantStore = create<TenantState>()(
         latestGetTenantRequest = requestId;
         set({ isLoading: true, error: null });
         try {
-          const response: Tenant = await tenantAPI.get(id);
+          const response: Tenant = await getTenantRequest(id);
           if (requestId !== latestGetTenantRequest) return;
           set({
             currentTenant: response,

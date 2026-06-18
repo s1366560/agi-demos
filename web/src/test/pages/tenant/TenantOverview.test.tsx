@@ -1,3 +1,5 @@
+import { StrictMode } from 'react';
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
 
@@ -8,6 +10,14 @@ import { screen, render, waitFor } from '../../utils';
 
 vi.mock('../../../stores/tenant');
 vi.mock('../../../services/api');
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
 
 describe('TenantOverview', () => {
   beforeEach(() => {
@@ -73,6 +83,50 @@ describe('TenantOverview', () => {
         'href',
         '/tenant/t1/billing'
       );
+    });
+  });
+
+  it('coalesces duplicate tenant stats loads during strict-mode remounts', async () => {
+    vi.mocked(useTenantStore).mockReturnValue({
+      currentTenant: {
+        id: 't1',
+        name: 'Test Corp',
+        description: 'A test tenant',
+        plan: 'basic',
+        created_at: '2023-01-01',
+      },
+      tenants: [{ id: 't1' }],
+      listTenants: vi.fn(),
+      setCurrentTenant: vi.fn(),
+    } as any);
+    const request = deferred<Awaited<ReturnType<typeof tenantAPI.getStats>>>();
+    vi.mocked(tenantAPI.getStats).mockReturnValueOnce(request.promise);
+
+    render(
+      <StrictMode>
+        <TenantOverview />
+      </StrictMode>
+    );
+
+    await waitFor(() => {
+      expect(tenantAPI.getStats).toHaveBeenCalledTimes(1);
+    });
+
+    request.resolve({
+      storage: { used: 100, total: 1000, percentage: 10 },
+      projects: { active: 0, new_this_week: 0, list: [] },
+      members: { total: 0, new_added: 0 },
+      memory_history: [],
+      tenant_info: {
+        organization_id: 'ORG-STRICT',
+        plan: 'basic',
+        region: 'US-East',
+        next_billing_date: '2023-02-01',
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('ORG-STRICT')).toBeInTheDocument();
     });
   });
 

@@ -55,6 +55,27 @@ describe('TenantStore', () => {
     expect(useTenantStore.getState().isLoading).toBe(false);
   });
 
+  it('listTenants should coalesce concurrent requests with the same params', async () => {
+    const request = deferred<Awaited<ReturnType<typeof tenantAPI.list>>>();
+    const mockResponse = {
+      tenants: [{ id: 'tenant-1', name: 'Tenant One' }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    };
+    vi.mocked(tenantAPI.list).mockReturnValueOnce(request.promise);
+
+    const firstLoad = useTenantStore.getState().listTenants({ page: 1, page_size: 20 });
+    const secondLoad = useTenantStore.getState().listTenants({ page: 1, page_size: 20 });
+
+    expect(tenantAPI.list).toHaveBeenCalledTimes(1);
+    request.resolve(mockResponse);
+    await Promise.all([firstLoad, secondLoad]);
+
+    expect(useTenantStore.getState().tenants).toEqual(mockResponse.tenants);
+    expect(useTenantStore.getState().isLoading).toBe(false);
+  });
+
   it('listTenants should ignore stale responses from older requests', async () => {
     const oldRequest = deferred<Awaited<ReturnType<typeof tenantAPI.list>>>();
     const newResponse = {
@@ -111,6 +132,22 @@ describe('TenantStore', () => {
     await useTenantStore.getState().getTenant('1');
 
     expect(tenantAPI.get).toHaveBeenCalledWith('1');
+    expect(useTenantStore.getState().currentTenant).toEqual(mockTenant);
+    expect(useTenantStore.getState().isLoading).toBe(false);
+  });
+
+  it('getTenant should coalesce concurrent requests for the same tenant id', async () => {
+    const request = deferred<Awaited<ReturnType<typeof tenantAPI.get>>>();
+    const mockTenant = { id: 'tenant-1', name: 'Tenant One' };
+    vi.mocked(tenantAPI.get).mockReturnValueOnce(request.promise);
+
+    const firstLoad = useTenantStore.getState().getTenant('tenant-1');
+    const secondLoad = useTenantStore.getState().getTenant('tenant-1');
+
+    expect(tenantAPI.get).toHaveBeenCalledTimes(1);
+    request.resolve(mockTenant);
+    await Promise.all([firstLoad, secondLoad]);
+
     expect(useTenantStore.getState().currentTenant).toEqual(mockTenant);
     expect(useTenantStore.getState().isLoading).toBe(false);
   });
