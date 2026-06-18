@@ -490,7 +490,73 @@ export const TenantOverview: React.FC = () => {
             {t('common.actions.viewAll')}
           </Link>
         </div>
-        <div className="overflow-x-auto">
+        <div
+          data-testid="overview-project-mobile-list"
+          className="divide-y divide-slate-100 dark:divide-slate-800 md:hidden"
+        >
+          {stats.projects.list.map((project) => (
+            <div key={project.id} className="px-4 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex items-start gap-3">
+                  <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-primary dark:border-slate-700 dark:bg-slate-900">
+                    <Plug size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <Link
+                      to={`/tenant/${tenant.id}/project/${project.id}`}
+                      className="block truncate text-sm font-semibold text-slate-900 transition-colors hover:text-primary dark:text-white"
+                    >
+                      {project.name}
+                    </Link>
+                    <p className="mt-0.5 text-xs font-mono text-slate-500">
+                      ID: #{project.id.slice(0, 8)}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                    isActiveProject(project.status)
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'
+                      : hasValue(project.status)
+                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                  }`}
+                >
+                  <span
+                    className={`size-1.5 rounded-full ${
+                      isActiveProject(project.status)
+                        ? 'bg-emerald-500'
+                        : hasValue(project.status)
+                          ? 'bg-amber-500'
+                          : 'bg-slate-400'
+                    }`}
+                  ></span>
+                  {formatProjectStatus(project.status)}
+                </span>
+              </div>
+              <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                <div>
+                  <dt className="text-xs font-medium text-slate-500">
+                    {t('common.stats.owner')}
+                  </dt>
+                  <dd className="mt-1 truncate text-slate-700 dark:text-slate-300">
+                    {project.owner}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-slate-500">
+                    {t('tenant.overview.memoryConsumed')}
+                  </dt>
+                  <dd className="mt-1 font-medium text-slate-900 dark:text-white">
+                    {project.memory_consumed}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          ))}
+        </div>
+
+        <div data-testid="overview-project-desktop-table" className="hidden overflow-x-auto md:block">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
