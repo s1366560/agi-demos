@@ -79,7 +79,7 @@ export function initTabSync(): void {
               .getState()
               .conversations.find((c) => c.id === msg.conversationId);
             if (conv) {
-              void state.loadMessages(msg.conversationId, conv.project_id);
+              void state.loadMessages(msg.conversationId, conv.project_id, { force: true });
             }
           }
           break;

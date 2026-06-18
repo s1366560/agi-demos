@@ -331,6 +331,91 @@ describe('agentV3 Store - Timeline Field', () => {
 
       expect(useTimelineStore.getState().agentIsLoadingHistory).toBe(false);
     });
+
+    it('joins concurrent message loads for the same conversation', async () => {
+      const { result } = renderHook(() => useAgentV3Store());
+      const responseRequest = deferred<{
+        conversationId: string;
+        timeline: TimelineEvent[];
+        total: number;
+        has_more: boolean;
+        first_time_us: number | null;
+        first_counter: number | null;
+        last_time_us: number | null;
+        last_counter: number | null;
+      }>();
+      const agentServiceMock = vi.mocked(
+        (await import('../../services/agentService')).agentService
+      );
+      agentServiceMock.getConversationMessages.mockReturnValueOnce(responseRequest.promise as any);
+
+      act(() => {
+        useAgentV3Store.setState({ activeConversationId: 'conv-deduped' });
+      });
+
+      const firstLoad = result.current.loadMessages('conv-deduped', 'proj-123');
+      const secondLoad = result.current.loadMessages('conv-deduped', 'proj-123');
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(agentServiceMock.getConversationMessages).toHaveBeenCalledTimes(1);
+
+      responseRequest.resolve({
+        conversationId: 'conv-deduped',
+        timeline: [],
+        total: 0,
+        has_more: false,
+        first_time_us: null,
+        first_counter: null,
+        last_time_us: null,
+        last_counter: null,
+      });
+
+      await act(async () => {
+        await Promise.all([firstLoad, secondLoad]);
+      });
+
+      expect(agentServiceMock.subscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips recent completed message loads unless forced', async () => {
+      const { result } = renderHook(() => useAgentV3Store());
+      const agentServiceMock = vi.mocked(
+        (await import('../../services/agentService')).agentService
+      );
+      agentServiceMock.getConversationMessages.mockResolvedValue({
+        conversationId: 'conv-recent',
+        timeline: [],
+        total: 0,
+        has_more: false,
+        first_time_us: null,
+        first_counter: null,
+        last_time_us: null,
+        last_counter: null,
+      } as any);
+
+      act(() => {
+        useAgentV3Store.setState({ activeConversationId: 'conv-recent' });
+      });
+
+      await act(async () => {
+        await result.current.loadMessages('conv-recent', 'proj-123');
+      });
+      expect(agentServiceMock.getConversationMessages).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await result.current.loadMessages('conv-recent', 'proj-123');
+      });
+      expect(agentServiceMock.getConversationMessages).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await result.current.loadMessages('conv-recent', 'proj-123', { force: true });
+      });
+      expect(agentServiceMock.getConversationMessages).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('Streaming - Timeline Append', () => {

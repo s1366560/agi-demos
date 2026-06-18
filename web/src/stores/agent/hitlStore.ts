@@ -63,6 +63,10 @@ interface AgentHITLState {
   }) => void;
 }
 
+const RECENT_HITL_LOAD_SKIP_MS = 5000;
+const pendingHITLLoadRequests = new Map<string, Promise<boolean>>();
+const completedHITLLoadRequests = new Map<string, number>();
+
 // -- Store --
 
 export const useAgentHITLStore = create<AgentHITLState>()(
@@ -89,90 +93,125 @@ export const useAgentHITLStore = create<AgentHITLState>()(
       },
 
       loadPendingHITL: async (conversationId: string) => {
-        logger.debug('[hitlStore] Loading pending HITL requests for conversation:', conversationId);
-        try {
-          const response = await agentService.getPendingHITLRequests(conversationId);
-          logger.debug('[hitlStore] Pending HITL response:', response);
+        const activeRequest = pendingHITLLoadRequests.get(conversationId);
+        if (activeRequest) {
+          logger.debug('[hitlStore] Pending HITL load already running for:', conversationId);
+          await activeRequest;
+          return;
+        }
 
-          if (response.requests.length === 0) {
-            logger.debug('[hitlStore] No pending HITL requests');
-            return;
-          }
+        const completedAt = completedHITLLoadRequests.get(conversationId);
+        if (
+          typeof completedAt === 'number' &&
+          Date.now() - completedAt < RECENT_HITL_LOAD_SKIP_MS
+        ) {
+          logger.debug('[hitlStore] Pending HITL load recently completed for:', conversationId);
+          return;
+        }
 
-          // Process each pending request and restore dialog state
-          for (const request of response.requests) {
-            logger.debug(
-              '[hitlStore] Restoring pending HITL request:',
-              request.request_type,
-              request.id
-            );
+        const request = (async (): Promise<boolean> => {
+          logger.debug(
+            '[hitlStore] Loading pending HITL requests for conversation:',
+            conversationId
+          );
+          try {
+            const response = await agentService.getPendingHITLRequests(conversationId);
+            logger.debug('[hitlStore] Pending HITL response:', response);
 
-            switch (request.request_type) {
-              case 'clarification': {
-                const clarificationType =
-                  typeof request.metadata?.clarification_type === 'string'
-                    ? (request.metadata.clarification_type as ClarificationType)
-                    : 'custom';
-                const allowCustom =
-                  typeof request.metadata?.allow_custom === 'boolean'
-                    ? request.metadata.allow_custom
-                    : true;
-                set({
-                  pendingClarification: {
-                    request_id: request.id,
-                    question: request.question,
-                    clarification_type: clarificationType,
-                    options: (request.options as ClarificationOption[] | undefined) || [],
-                    allow_custom: allowCustom,
-                    context: request.context || {},
-                  },
-                });
-                break;
-              }
-
-              case 'decision': {
-                const decisionType =
-                  typeof request.metadata?.decision_type === 'string'
-                    ? (request.metadata.decision_type as DecisionType)
-                    : 'custom';
-                const allowCustom =
-                  typeof request.metadata?.allow_custom === 'boolean'
-                    ? request.metadata.allow_custom
-                    : true;
-                set({
-                  pendingDecision: {
-                    request_id: request.id,
-                    question: request.question,
-                    decision_type: decisionType,
-                    options: (request.options as DecisionOption[] | undefined) || [],
-                    allow_custom: allowCustom,
-                    context: request.context || {},
-                  },
-                });
-                break;
-              }
-
-              case 'env_var': {
-                const fields = (request.options as EnvVarField[] | undefined) || [];
-                set({
-                  pendingEnvVarRequest: {
-                    request_id: request.id,
-                    tool_name: (request.metadata?.tool_name as string) || 'unknown',
-                    fields: fields,
-                    message: request.question,
-                    context: request.context || {},
-                  },
-                });
-                break;
-              }
+            if (response.requests.length === 0) {
+              logger.debug('[hitlStore] No pending HITL requests');
+              return true;
             }
 
-            // Only restore the first pending request (user should answer one at a time)
-            break;
+            // Process each pending request and restore dialog state
+            for (const request of response.requests) {
+              logger.debug(
+                '[hitlStore] Restoring pending HITL request:',
+                request.request_type,
+                request.id
+              );
+
+              switch (request.request_type) {
+                case 'clarification': {
+                  const clarificationType =
+                    typeof request.metadata?.clarification_type === 'string'
+                      ? (request.metadata.clarification_type as ClarificationType)
+                      : 'custom';
+                  const allowCustom =
+                    typeof request.metadata?.allow_custom === 'boolean'
+                      ? request.metadata.allow_custom
+                      : true;
+                  set({
+                    pendingClarification: {
+                      request_id: request.id,
+                      question: request.question,
+                      clarification_type: clarificationType,
+                      options: (request.options as ClarificationOption[] | undefined) || [],
+                      allow_custom: allowCustom,
+                      context: request.context || {},
+                    },
+                  });
+                  break;
+                }
+
+                case 'decision': {
+                  const decisionType =
+                    typeof request.metadata?.decision_type === 'string'
+                      ? (request.metadata.decision_type as DecisionType)
+                      : 'custom';
+                  const allowCustom =
+                    typeof request.metadata?.allow_custom === 'boolean'
+                      ? request.metadata.allow_custom
+                      : true;
+                  set({
+                    pendingDecision: {
+                      request_id: request.id,
+                      question: request.question,
+                      decision_type: decisionType,
+                      options: (request.options as DecisionOption[] | undefined) || [],
+                      allow_custom: allowCustom,
+                      context: request.context || {},
+                    },
+                  });
+                  break;
+                }
+
+                case 'env_var': {
+                  const fields = (request.options as EnvVarField[] | undefined) || [];
+                  set({
+                    pendingEnvVarRequest: {
+                      request_id: request.id,
+                      tool_name: (request.metadata?.tool_name as string) || 'unknown',
+                      fields: fields,
+                      message: request.question,
+                      context: request.context || {},
+                    },
+                  });
+                  break;
+                }
+              }
+
+              // Only restore the first pending request (user should answer one at a time)
+              break;
+            }
+            return true;
+          } catch (error) {
+            console.error('[hitlStore] Failed to load pending HITL requests:', error);
+            // Don't throw - this is a recovery mechanism, not critical
+            return false;
           }
-        } catch (error) {
-          console.error('[hitlStore] Failed to load pending HITL requests:', error);
-          // Don't throw - this is a recovery mechanism, not critical
+        })();
+
+        pendingHITLLoadRequests.set(conversationId, request);
+        try {
+          const didLoad = await request;
+          if (didLoad) {
+            completedHITLLoadRequests.set(conversationId, Date.now());
+          }
+        } finally {
+          if (pendingHITLLoadRequests.get(conversationId) === request) {
+            pendingHITLLoadRequests.delete(conversationId);
+          }
         }
       },
 

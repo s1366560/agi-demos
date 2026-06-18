@@ -63,7 +63,11 @@ export interface AgentV3State {
     signalOrOptions?: AbortSignal | LoadConversationsOptions
   ) => Promise<void>;
   loadMoreConversations: (projectId: string) => Promise<void>;
-  loadMessages: (conversationId: string, projectId: string) => Promise<void>;
+  loadMessages: (
+    conversationId: string,
+    projectId: string,
+    options?: LoadMessagesOptions
+  ) => Promise<void>;
   loadEarlierMessages: (conversationId: string, projectId: string) => Promise<boolean>;
   createNewConversation: (projectId: string) => Promise<string | null>;
   sendMessage: (
@@ -83,4 +87,8 @@ export interface AgentV3State {
   togglePinEvent: (eventId: string) => void;
   setLlmOverrides: (conversationId: string, overrides: LLMConfigOverrides | null) => void;
   setLlmModelOverride: (conversationId: string, modelName: string | null) => void;
+}
+
+export interface LoadMessagesOptions {
+  force?: boolean | undefined;
 }
