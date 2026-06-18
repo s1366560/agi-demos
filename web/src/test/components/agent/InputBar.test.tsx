@@ -145,4 +145,14 @@ describe('InputBar autocomplete overlays', () => {
       'items-start'
     );
   });
+
+  it('names the hidden file input for accessibility audits', () => {
+    render(<InputBar onSend={vi.fn()} onAbort={vi.fn()} isStreaming={false} />);
+
+    const fileInput = screen.getByTestId('chat-file-input');
+
+    expect(fileInput).toHaveAttribute('type', 'file');
+    expect(fileInput).toHaveAttribute('aria-label', 'Attach files (or drag & drop)');
+    expect(fileInput).toHaveAttribute('title', 'Attach files (or drag & drop)');
+  });
 });

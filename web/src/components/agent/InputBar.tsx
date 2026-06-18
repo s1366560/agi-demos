@@ -475,6 +475,9 @@ export const InputBar = memo<InputBarProps>(
           type="file"
           multiple
           onChange={handleFileInputChange}
+          aria-label={t('agent.inputBar.attachFiles', 'Attach files (or drag & drop)')}
+          title={t('agent.inputBar.attachFiles', 'Attach files (or drag & drop)')}
+          data-testid="chat-file-input"
           className="hidden"
           disabled={disabled || !capabilities.supportsAttachment}
         />
