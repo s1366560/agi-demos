@@ -77,6 +77,16 @@ const initialState = {
   error: null as string | null,
 };
 
+let latestListClustersRequest = 0;
+let latestGetClusterRequest = 0;
+let latestGetClusterHealthRequest = 0;
+
+function invalidateClusterReadRequests(): void {
+  latestListClustersRequest += 1;
+  latestGetClusterRequest += 1;
+  latestGetClusterHealthRequest += 1;
+}
+
 // ============================================================================
 // STORE
 // ============================================================================
@@ -87,6 +97,8 @@ export const useClusterStore = create<ClusterState>()(
       ...initialState,
 
       listClusters: async (params = {}) => {
+        const requestId = latestListClustersRequest + 1;
+        latestListClustersRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const { page, pageSize } = get();
@@ -94,6 +106,7 @@ export const useClusterStore = create<ClusterState>()(
             page: params.page ?? page,
             page_size: params.page_size ?? pageSize,
           });
+          if (requestId !== latestListClustersRequest) return;
           set({
             clusters: response.clusters,
             total: response.total,
@@ -102,18 +115,23 @@ export const useClusterStore = create<ClusterState>()(
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (requestId !== latestListClustersRequest) return;
           set({ error: getErrorMessage(error, 'Failed to list clusters'), isLoading: false });
           throw error;
         }
       },
 
       getCluster: async (id: string) => {
+        const requestId = latestGetClusterRequest + 1;
+        latestGetClusterRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await clusterService.getById(id);
+          if (requestId !== latestGetClusterRequest) return response;
           set({ currentCluster: response, isLoading: false });
           return response;
         } catch (error: unknown) {
+          if (requestId !== latestGetClusterRequest) throw error;
           set({ error: getErrorMessage(error, 'Failed to get cluster'), isLoading: false });
           throw error;
         }
@@ -171,12 +189,16 @@ export const useClusterStore = create<ClusterState>()(
       },
 
       getClusterHealth: async (id: string) => {
+        const requestId = latestGetClusterHealthRequest + 1;
+        latestGetClusterHealthRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await clusterService.getHealth(id);
+          if (requestId !== latestGetClusterHealthRequest) return response;
           set({ clusterHealth: response, isLoading: false });
           return response;
         } catch (error: unknown) {
+          if (requestId !== latestGetClusterHealthRequest) throw error;
           set({
             error: getErrorMessage(error, 'Failed to get cluster health'),
             isLoading: false,
@@ -194,6 +216,7 @@ export const useClusterStore = create<ClusterState>()(
       },
 
       reset: () => {
+        invalidateClusterReadRequests();
         set(initialState);
       },
     }),
