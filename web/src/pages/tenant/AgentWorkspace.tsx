@@ -346,6 +346,7 @@ export const AgentWorkspace: FC = () => {
             externalProjectId={effectiveProjectId}
             basePath={basePath}
             navigationQuery={navigationQuery}
+            loadConversationList={false}
           />
           <ContextDetailPanel />
         </Suspense>

@@ -82,15 +82,26 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
         return;
       }
 
-      logger.debug(`[agentV3] loadConversations called for project: ${projectId}`);
-
       // Prevent duplicate calls for the same project
       const currentConvos = get().conversations;
+      const conversationListState = useConversationsStore.getState();
+      if (!options.force && conversationListState.conversationListProjectId === projectId) {
+        set({
+          conversations: conversationListState.conversations,
+          hasMoreConversations: conversationListState.hasMoreConversations,
+          conversationsTotal: conversationListState.conversationsTotal,
+        });
+        logger.debug(`[agentV3] Conversations already loaded for project ${projectId}, skipping`);
+        return;
+      }
+
       const firstConvoProject = currentConvos[0]?.project_id;
       if (!options.force && currentConvos.length > 0 && firstConvoProject === projectId) {
         logger.debug(`[agentV3] Conversations already loaded for project ${projectId}, skipping`);
         return;
       }
+
+      logger.debug(`[agentV3] loadConversations called for project: ${projectId}`);
 
       const loadPromise = (async () => {
         // Delegate to conversationsStore for API call + list management

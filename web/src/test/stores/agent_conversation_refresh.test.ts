@@ -137,4 +137,38 @@ describe('conversation lifecycle refresh', () => {
       conversationsTotal: 1,
     });
   });
+
+  it('caches an empty project conversation list without refetching', async () => {
+    mockListConversations.mockResolvedValueOnce({
+      items: [],
+      has_more: false,
+      total: 0,
+    });
+    let state = {
+      activeConversationId: null,
+      conversations: [],
+      conversationStates: new Map<string, ConversationState>(),
+      hasMoreConversations: false,
+    };
+    const set = vi.fn((updates: Partial<typeof state>) => {
+      state = { ...state, ...updates };
+    });
+    const actions = createConversationLifecycleActions({
+      get: () => state,
+      set,
+      resetCanvasForConversationScope: vi.fn(),
+    });
+
+    await act(async () => {
+      await actions.loadConversations('project-empty');
+      await actions.loadConversations('project-empty');
+    });
+
+    expect(mockListConversations).toHaveBeenCalledTimes(1);
+    expect(set).toHaveBeenLastCalledWith({
+      conversations: [],
+      hasMoreConversations: false,
+      conversationsTotal: 0,
+    });
+  });
 });

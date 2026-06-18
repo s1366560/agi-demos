@@ -50,6 +50,7 @@ interface ConversationsState {
   hasMoreConversations: boolean;
   conversationsTotal: number;
   conversationsNextOffset: number;
+  conversationListProjectId: string | null;
 
   // Actions
   listConversations: (
@@ -106,6 +107,7 @@ export const initialState = {
   hasMoreConversations: false,
   conversationsTotal: 0,
   conversationsNextOffset: 0,
+  conversationListProjectId: null,
 };
 
 const groupedConversationListOptions = { groupByWorkspace: true };
@@ -270,6 +272,7 @@ export const useConversationsStore = create<ConversationsState>()(
             hasMoreConversations: response.has_more,
             conversationsTotal: response.total,
             conversationsNextOffset: responseNextOffset(response, 0),
+            conversationListProjectId: projectId,
             ...(!silent ? { conversationsLoading: false } : {}),
           });
           finishListConversationsRequest(requestSequence);
@@ -322,6 +325,7 @@ export const useConversationsStore = create<ConversationsState>()(
             hasMoreConversations: response.has_more,
             conversationsTotal: response.total,
             conversationsNextOffset: responseNextOffset(response, offset),
+            conversationListProjectId: projectId,
             conversationsLoadingMore: false,
           });
         } catch (error: unknown) {

@@ -106,6 +106,8 @@ interface AgentChatContentProps {
   navigationQuery?: string | undefined;
   /** Extra content to show in header area */
   headerExtra?: React.ReactNode | undefined;
+  /** Whether this surface owns initial conversation-list loading. */
+  loadConversationList?: boolean | undefined;
 }
 
 // Constants for resize constraints
@@ -183,6 +185,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     basePath: customBasePath,
     navigationQuery,
     headerExtra,
+    loadConversationList = true,
   }) => {
     const { t } = useTranslation();
     const notification = useLazyNotification();
@@ -501,10 +504,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       };
     }, [inputBarRef]);
 
-    // Load conversations only when the project scope changes. The Zustand
-    // action reference can churn during store/HMR updates; depending on it here
-    // turns streaming and background state updates into repeated list reloads.
-    useProjectConversationLoader(projectId, loadConversations);
+    // Load conversations only when this surface owns the list. Tenant workspace
+    // pages delegate list ownership to TenantChatSidebar so tenant switches do
+    // not fan out duplicate project history requests.
+    useProjectConversationLoader(loadConversationList ? projectId : null, loadConversations);
 
     useEffect(() => {
       if (!projectId || !conversationId) {
