@@ -71,6 +71,7 @@ async def edit_by_ast(
                 self.new_name = new_name
                 self.target_type = target_type
                 self.modified = False
+                self.definition_modified = False
                 self._class_depth = 0
                 self._function_depth = 0
 
@@ -78,6 +79,7 @@ async def edit_by_ast(
                 if target_type == "class" and node.name == self.old_name:
                     node.name = self.new_name
                     self.modified = True
+                    self.definition_modified = True
                 self._class_depth += 1
                 node = self.generic_visit(node)
                 self._class_depth -= 1
@@ -89,12 +91,19 @@ async def edit_by_ast(
             ) -> ast.FunctionDef | ast.AsyncFunctionDef:
                 is_method = self._class_depth > 0
                 is_direct_method = is_method and self._function_depth == 0
-                if target_type == "function" and not is_method and node.name == self.old_name:
+                is_top_level_function = not is_method and self._function_depth == 0
+                if (
+                    target_type == "function"
+                    and is_top_level_function
+                    and node.name == self.old_name
+                ):
                     node.name = self.new_name
                     self.modified = True
+                    self.definition_modified = True
                 elif target_type == "method" and is_direct_method and node.name == self.old_name:
                     node.name = self.new_name
                     self.modified = True
+                    self.definition_modified = True
                 self._function_depth += 1
                 try:
                     return self.generic_visit(node)
@@ -115,11 +124,23 @@ async def edit_by_ast(
                 node = self.generic_visit(node)
                 if (
                     target_type == "method"
+                    and self.definition_modified
                     and node.attr == self.old_name
                     and isinstance(node.value, ast.Name)
                     and node.value.id in {"self", "cls"}
                 ):
                     node.attr = self.new_name
+                    self.modified = True
+                return node
+
+            def visit_Name(self, node: ast.Name) -> ast.Name:
+                if (
+                    target_type in {"class", "function"}
+                    and self.definition_modified
+                    and isinstance(node.ctx, ast.Load)
+                    and node.id == self.old_name
+                ):
+                    node.id = self.new_name
                     self.modified = True
                 return node
 
@@ -129,7 +150,7 @@ async def edit_by_ast(
             new_tree = transformer.visit(tree)
             ast.fix_missing_locations(new_tree)
 
-            if transformer.modified:
+            if transformer.definition_modified:
                 modified = True
                 new_content = ast.unparse(new_tree)
             else:

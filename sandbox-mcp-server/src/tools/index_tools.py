@@ -86,7 +86,15 @@ class CodeIndexer:
         """
         async with self._index_lock:
             if exclude_dirs is None:
-                exclude_dirs = ["venv", ".venv", "__pycache__", ".git", "node_modules", "dist", "build"]
+                exclude_dirs = [
+                    "venv",
+                    ".venv",
+                    "__pycache__",
+                    ".git",
+                    "node_modules",
+                    "dist",
+                    "build",
+                ]
 
             try:
                 project = _resolve_path(project_path, str(self.workspace_dir))
@@ -153,23 +161,29 @@ class CodeIndexer:
             content = full_path.read_text(encoding="utf-8")
             tree = ast.parse(content, filename=str(full_path))
 
-            # Get module name
-            module_name = file_path.replace("/", ".").replace("\\", ".").removesuffix(".py")
+            # Get module name. Keep this separate from imported module names so
+            # import statements cannot overwrite definition scope labels.
+            source_module_name = file_path.replace("/", ".").replace("\\", ".").removesuffix(".py")
 
-            # Track imports for this module
-            imported_modules = set()
+            imported_modules: set[str] = set()
+            class_names = {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
 
-            for node in ast.walk(tree):
-                # Index definitions
-                if isinstance(node, ast.ClassDef):
-                    self._add_definition(node.name, {
-                        "file": file_path,
-                        "lineno": node.lineno,
-                        "end_lineno": node.end_lineno,
-                        "type": "class",
-                        "module": module_name,
-                    })
-                    # Track base classes
+            class IndexVisitor(ast.NodeVisitor):
+                def __init__(self, outer: CodeIndexer) -> None:
+                    self.outer = outer
+                    self.scope_stack: list[str] = []
+
+                def visit_ClassDef(self, node: ast.ClassDef) -> None:
+                    self.outer._add_definition(
+                        node.name,
+                        {
+                            "file": file_path,
+                            "lineno": node.lineno,
+                            "end_lineno": node.end_lineno,
+                            "type": "class",
+                            "module": source_module_name,
+                        },
+                    )
                     bases = []
                     for base in node.bases:
                         if isinstance(base, ast.Name):
@@ -177,70 +191,119 @@ class CodeIndexer:
                         elif isinstance(base, ast.Attribute):
                             bases.append(ast.unparse(base))
                     if bases:
-                        self.index.class_hierarchy[node.name] = bases
+                        self.outer.index.class_hierarchy[node.name] = bases
 
-                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    self._add_definition(node.name, {
-                        "file": file_path,
-                        "lineno": node.lineno,
-                        "end_lineno": node.end_lineno,
-                        "type": "async_function" if isinstance(node, ast.AsyncFunctionDef) else "function",
-                        "module": module_name,
-                    })
+                    self.scope_stack.append(node.name)
+                    try:
+                        self.generic_visit(node)
+                    finally:
+                        self.scope_stack.pop()
 
-                    # Track function arguments as local definitions
-                    for arg in node.args.args:
-                        if arg.arg not in ["self", "cls"]:
-                            self._add_definition(arg.arg, {
-                                "file": file_path,
-                                "lineno": node.lineno,
-                                "type": "parameter",
-                                "scope": node.name,
-                            })
+                def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                    self._visit_function(node, "function")
 
-                # Index imports
-                elif isinstance(node, ast.Import):
-                    for alias in node.names:
-                        module_name = alias.name
-                        imported_modules.add(module_name)
-                        # Track imported symbols
-                        symbol_name = alias.asname or module_name.split(".")[0]
-                        self._add_definition(symbol_name, {
+                def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+                    self._visit_function(node, "async_function")
+
+                def _visit_function(
+                    self,
+                    node: ast.FunctionDef | ast.AsyncFunctionDef,
+                    type_label: str,
+                ) -> None:
+                    self.outer._add_definition(
+                        node.name,
+                        {
                             "file": file_path,
                             "lineno": node.lineno,
-                            "type": "imported_module",
-                            "from_module": module_name,
-                        })
+                            "end_lineno": node.end_lineno,
+                            "type": type_label,
+                            "module": source_module_name,
+                        },
+                    )
 
-                elif isinstance(node, ast.ImportFrom):
+                    for arg in node.args.args:
+                        if arg.arg not in ["self", "cls"]:
+                            self.outer._add_definition(
+                                arg.arg,
+                                {
+                                    "file": file_path,
+                                    "lineno": node.lineno,
+                                    "type": "parameter",
+                                    "scope": node.name,
+                                },
+                            )
+
+                    self.scope_stack.append(node.name)
+                    try:
+                        self.generic_visit(node)
+                    finally:
+                        self.scope_stack.pop()
+
+                def visit_Import(self, node: ast.Import) -> None:
+                    for alias in node.names:
+                        imported_module_name = alias.name
+                        imported_modules.add(imported_module_name)
+                        symbol_name = alias.asname or imported_module_name.split(".")[0]
+                        self.outer._add_definition(
+                            symbol_name,
+                            {
+                                "file": file_path,
+                                "lineno": node.lineno,
+                                "type": "imported_module",
+                                "from_module": imported_module_name,
+                            },
+                        )
+
+                def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
                     module = node.module or ""
                     imported_modules.add(module)
                     for alias in node.names:
-                        self._add_definition(alias.name, {
-                            "file": file_path,
-                            "lineno": node.lineno,
-                            "type": "imported_symbol",
-                            "from_module": module,
-                        })
+                        self.outer._add_definition(
+                            alias.name,
+                            {
+                                "file": file_path,
+                                "lineno": node.lineno,
+                                "type": "imported_symbol",
+                                "from_module": module,
+                            },
+                        )
 
-                # Index name references (simplified)
-                elif isinstance(node, ast.Name):
-                    # Only track references to things that might be definitions
+                def visit_Name(self, node: ast.Name) -> None:
                     if node.id not in ["True", "False", "None"]:
-                        self._add_reference(node.id, {
-                            "file": file_path,
-                            "lineno": node.lineno,
-                            "type": "name_ref",
-                        })
+                        self.outer._add_reference(
+                            node.id,
+                            {
+                                "file": file_path,
+                                "lineno": node.lineno,
+                                "type": "name_ref",
+                            },
+                        )
 
-                # Track function calls
-                elif isinstance(node, ast.Call):
-                    if isinstance(node.func, ast.Name):
-                        self._add_call(node.func.id, node.func.id, file_path)
-                    elif isinstance(node.func, ast.Attribute):
-                        # Method call like obj.method()
-                        if isinstance(node.func.value, ast.Name):
-                            self._add_call(node.func.value.id, node.func.attr, file_path)
+                def visit_Call(self, node: ast.Call) -> None:
+                    caller = self.scope_stack[-1] if self.scope_stack else source_module_name
+                    callee = self._call_name(node.func)
+                    if callee:
+                        self.outer._add_call(caller, callee, file_path)
+                    self.generic_visit(node)
+
+                def _call_name(self, func: ast.expr) -> str | None:
+                    if isinstance(func, ast.Name):
+                        return func.id
+                    if isinstance(func, ast.Attribute):
+                        if isinstance(func.value, ast.Name):
+                            if func.value.id in class_names:
+                                return f"{func.value.id}.{func.attr}"
+                            return func.attr
+                        if (
+                            isinstance(func.value, ast.Call)
+                            and isinstance(func.value.func, ast.Name)
+                            and func.value.func.id in class_names
+                        ):
+                            return f"{func.value.func.id}.{func.attr}"
+                        return ast.unparse(func)
+                    return None
+
+            IndexVisitor(self).visit(tree)
 
             # Record import graph
             if imported_modules:
@@ -315,7 +378,8 @@ class CodeIndexer:
                 "symbol": symbol_name,
                 "calls": list(self.index.call_graph.get(symbol_name, set())),
                 "called_by": [
-                    caller for caller, callees in self.index.call_graph.items()
+                    caller
+                    for caller, callees in self.index.call_graph.items()
                     if symbol_name in callees
                 ],
             }
@@ -490,7 +554,12 @@ async def find_definition(
 
         if not definitions:
             return {
-                "content": [{"type": "text", "text": f"Definition not found: {symbol_name} (type: {symbol_type})"}],
+                "content": [
+                    {
+                        "type": "text",
+                        "text": f"Definition not found: {symbol_name} (type: {symbol_type})",
+                    }
+                ],
                 "isError": False,
                 "metadata": {"found": False, "symbol": symbol_name, "type_filter": symbol_type},
             }
@@ -514,7 +583,9 @@ async def find_definition(
 
     except Exception as e:
         logger.error(f"Error finding definition: {e}", exc_info=True)
-        return _error_result(str(e), code="find_definition_failed", metadata={"symbol": symbol_name})
+        return _error_result(
+            str(e), code="find_definition_failed", metadata={"symbol": symbol_name}
+        )
 
 
 def create_find_definition_tool() -> MCPTool:
@@ -531,7 +602,14 @@ def create_find_definition_tool() -> MCPTool:
                 },
                 "symbol_type": {
                     "type": "string",
-                    "enum": ["class", "function", "async_function", "imported_module", "imported_symbol", "parameter"],
+                    "enum": [
+                        "class",
+                        "function",
+                        "async_function",
+                        "imported_module",
+                        "imported_symbol",
+                        "parameter",
+                    ],
                     "description": "Optional filter by symbol type",
                 },
             },
@@ -624,7 +702,9 @@ async def find_references(
 
     except Exception as e:
         logger.error(f"Error finding references: {e}", exc_info=True)
-        return _error_result(str(e), code="find_references_failed", metadata={"symbol": symbol_name})
+        return _error_result(
+            str(e), code="find_references_failed", metadata={"symbol": symbol_name}
+        )
 
 
 def create_find_references_tool() -> MCPTool:
@@ -695,7 +775,9 @@ async def get_call_graph(
 
             if not graph["calls"] and not graph["called_by"]:
                 return {
-                    "content": [{"type": "text", "text": f"No call information found for: {symbol_name}"}],
+                    "content": [
+                        {"type": "text", "text": f"No call information found for: {symbol_name}"}
+                    ],
                     "isError": False,
                     "metadata": {"symbol": symbol_name, "found": False},
                 }
@@ -719,7 +801,9 @@ async def get_call_graph(
                 for callee in sorted(list(graph["calls"])[:20]):  # Limit for performance
                     callee_graph = indexer.get_call_graph(callee)
                     if callee_graph.get("calls"):
-                        lines.append(f"    {callee} calls: {', '.join(list(callee_graph['calls'])[:5])}")
+                        lines.append(
+                            f"    {callee} calls: {', '.join(list(callee_graph['calls'])[:5])}"
+                        )
 
             return _success_result(
                 "\n".join(lines),
@@ -842,7 +926,10 @@ async def get_dependency_graph(
                     if module not in internal_deps:
                         internal_deps[module] = set()
                     internal_deps[module].add(imp)
-                elif any(root in imp for root in ["src", project_path.split("/")[-1] if project_path else ""]):
+                elif any(
+                    root in imp
+                    for root in ["src", project_path.split("/")[-1] if project_path else ""]
+                ):
                     # Internal import
                     if module not in internal_deps:
                         internal_deps[module] = set()

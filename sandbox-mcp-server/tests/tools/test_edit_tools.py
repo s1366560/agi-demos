@@ -81,6 +81,45 @@ def old_function():
             assert "def old_function():" not in content
 
     @pytest.mark.asyncio
+    async def test_edit_function_renames_call_sites(self):
+        """Renaming a function should update recursive and external call sites."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "test_sample.py"
+            test_file.write_text("""
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+
+result = factorial(5)
+""")
+
+            result = await edit_by_ast(
+                file_path=str(test_file),
+                target_type="function",
+                target_name="factorial",
+                operation="rename",
+                new_value="compute_factorial",
+                _workspace_dir=tmpdir,
+            )
+
+            assert not result.get("isError")
+
+            content = test_file.read_text()
+            assert "def compute_factorial(n):" in content
+            assert "compute_factorial(n - 1)" in content
+            assert "result = compute_factorial(5)" in content
+            assert "def factorial" not in content
+            assert "result = factorial(5)" not in content
+
+            namespace: dict[str, object] = {}
+            exec(content, namespace)
+            assert namespace["result"] == 120
+
+    @pytest.mark.asyncio
     async def test_edit_method_name(self):
         """Test renaming a method without renaming a top-level function."""
         import tempfile
@@ -111,6 +150,29 @@ def old_name():
             content = test_file.read_text()
             assert "def new_name(self):" in content
             assert "def old_name():" in content
+
+    @pytest.mark.asyncio
+    async def test_edit_function_does_not_rename_when_definition_missing(self):
+        """A matching call site alone should not count as a successful rename."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "test_sample.py"
+            test_file.write_text("result = old_function()\n")
+
+            result = await edit_by_ast(
+                file_path=str(test_file),
+                target_type="function",
+                target_name="old_function",
+                operation="rename",
+                new_value="new_function",
+                _workspace_dir=tmpdir,
+            )
+
+            assert not result.get("isError")
+            assert result["metadata"]["modified"] is False
+            assert test_file.read_text() == "result = old_function()\n"
 
     @pytest.mark.asyncio
     async def test_edit_method_renames_self_references(self):

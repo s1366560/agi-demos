@@ -27,15 +27,22 @@ class TestGitDiff:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Initialize a git repo
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True
+            )
 
             # Create a file and commit it
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("original content\n")
             subprocess.run(["git", "add", "."], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "Initial commit"], cwd=tmpdir, capture_output=True
+            )
 
             # Modify the file
             test_file.write_text("modified content\n")
@@ -54,9 +61,14 @@ class TestGitDiff:
         """Test getting git diff for a specific file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True
+            )
 
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("original\n")
@@ -77,9 +89,14 @@ class TestGitDiff:
         """Test git diff with custom context lines."""
         with tempfile.TemporaryDirectory() as tmpdir:
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True
+            )
 
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("line1\nline2\nline3\nline4\nline5\n")
@@ -100,9 +117,14 @@ class TestGitDiff:
         """Test git diff when there are no changes."""
         with tempfile.TemporaryDirectory() as tmpdir:
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True
+            )
 
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("content\n")
@@ -118,6 +140,38 @@ class TestGitDiff:
             # No files changed
             assert metadata.get("files_changed", 0) == 0
 
+    @pytest.mark.asyncio
+    async def test_git_diff_uses_nested_working_dir(self):
+        """git_diff should inspect a git repo below the workspace root."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import subprocess
+
+            repo_dir = Path(tmpdir) / "my-evo"
+            repo_dir.mkdir()
+            subprocess.run(["git", "init"], cwd=repo_dir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=repo_dir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=repo_dir, capture_output=True
+            )
+
+            test_file = repo_dir / "test.txt"
+            test_file.write_text("original\n")
+            subprocess.run(["git", "add", "."], cwd=repo_dir, capture_output=True)
+            subprocess.run(["git", "commit", "-m", "Initial"], cwd=repo_dir, capture_output=True)
+            test_file.write_text("modified\n")
+
+            result = await git_diff(
+                repo_path="my-evo",
+                _workspace_dir=tmpdir,
+            )
+
+            assert not result.get("isError")
+            metadata = result.get("metadata", {})
+            assert metadata.get("in_git_repo") is True
+            assert metadata.get("files_changed") == 1
+
 
 class TestGitLog:
     """Test suite for git_log tool."""
@@ -127,9 +181,14 @@ class TestGitLog:
         """Test getting git log with default parameters."""
         with tempfile.TemporaryDirectory() as tmpdir:
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True
+            )
 
             # Create some commits
             test_file = Path(tmpdir) / "test.txt"
@@ -139,7 +198,9 @@ class TestGitLog:
 
             test_file.write_text("content2\n")
             subprocess.run(["git", "add", "."], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "commit", "-m", "Second commit"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "Second commit"], cwd=tmpdir, capture_output=True
+            )
 
             result = await git_log(
                 _workspace_dir=tmpdir,
@@ -154,15 +215,22 @@ class TestGitLog:
         """Test git log with commit limit."""
         with tempfile.TemporaryDirectory() as tmpdir:
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True
+            )
 
             test_file = Path(tmpdir) / "test.txt"
             for i in range(5):
                 test_file.write_text(f"content{i}\n")
                 subprocess.run(["git", "add", "."], cwd=tmpdir, capture_output=True)
-                subprocess.run(["git", "commit", "-m", f"Commit {i}"], cwd=tmpdir, capture_output=True)
+                subprocess.run(
+                    ["git", "commit", "-m", f"Commit {i}"], cwd=tmpdir, capture_output=True
+                )
 
             result = await git_log(
                 max_count=3,
@@ -179,9 +247,14 @@ class TestGitLog:
         """Test git log for a specific file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True
+            )
 
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("v1\n")
@@ -206,6 +279,7 @@ class TestGitLog:
         """Test git log in a repo with no commits."""
         with tempfile.TemporaryDirectory() as tmpdir:
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
 
             result = await git_log(
@@ -217,6 +291,41 @@ class TestGitLog:
             metadata = result.get("metadata", {})
             assert metadata.get("commit_count", 0) == 0
 
+    @pytest.mark.asyncio
+    async def test_git_log_uses_nested_working_dir(self):
+        """git_log should inspect a git repo below the workspace root."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import subprocess
+
+            repo_dir = Path(tmpdir) / "my-evo"
+            repo_dir.mkdir()
+            subprocess.run(["git", "init"], cwd=repo_dir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=repo_dir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=repo_dir, capture_output=True
+            )
+
+            test_file = repo_dir / "test.txt"
+            test_file.write_text("content\n")
+            subprocess.run(["git", "add", "."], cwd=repo_dir, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "Nested commit"], cwd=repo_dir, capture_output=True
+            )
+
+            result = await git_log(
+                max_count=1,
+                working_dir="my-evo",
+                _workspace_dir=tmpdir,
+            )
+
+            assert not result.get("isError")
+            metadata = result.get("metadata", {})
+            assert metadata.get("in_git_repo") is True
+            assert metadata.get("commit_count") == 1
+            assert metadata["commits"][0]["message"] == "Nested commit"
+
 
 class TestGenerateCommit:
     """Test suite for generate_commit tool."""
@@ -226,9 +335,14 @@ class TestGenerateCommit:
         """Test generating a commit message from diff."""
         with tempfile.TemporaryDirectory() as tmpdir:
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True
+            )
 
             # Create initial commit
             test_file = Path(tmpdir) / "test.txt"
@@ -253,9 +367,14 @@ class TestGenerateCommit:
         """Test generating commit with a custom message."""
         with tempfile.TemporaryDirectory() as tmpdir:
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True
+            )
 
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("original\n")
@@ -278,9 +397,14 @@ class TestGenerateCommit:
         """Test generating commit with auto_add enabled."""
         with tempfile.TemporaryDirectory() as tmpdir:
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True
+            )
 
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("new file\n")
@@ -307,9 +431,14 @@ class TestGenerateCommit:
         """Test generating commit in dry-run mode."""
         with tempfile.TemporaryDirectory() as tmpdir:
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True
+            )
 
             test_file = Path(tmpdir) / "test.txt"
             test_file.write_text("original\n")
@@ -345,9 +474,14 @@ class TestGitToolsIntegration:
         """Test complete workflow: diff -> log -> commit."""
         with tempfile.TemporaryDirectory() as tmpdir:
             import subprocess
+
             subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@test.com"], cwd=tmpdir, capture_output=True
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"], cwd=tmpdir, capture_output=True
+            )
 
             # Initial commit
             test_file = Path(tmpdir) / "feature.py"

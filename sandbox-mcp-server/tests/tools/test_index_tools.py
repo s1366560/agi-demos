@@ -246,6 +246,34 @@ class TestFindDefinition:
         assert not result.get("isError")
         assert result["metadata"]["found"] is True
 
+    @pytest.mark.asyncio
+    async def test_find_definition_reports_source_module_after_import(self, tmp_path):
+        """Imported modules should not replace the source module label."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "sample.py").write_text(
+            "import asyncio\n\ndef after_import():\n    return asyncio.sleep\n",
+            encoding="utf-8",
+        )
+        reset_indexer(str(workspace))
+
+        await code_index_build(
+            project_path=".",
+            force_rebuild=True,
+            _workspace_dir=str(workspace),
+        )
+        result = await find_definition(
+            symbol_name="after_import",
+            _workspace_dir=str(workspace),
+        )
+
+        assert not result.get("isError")
+        definitions = result["metadata"]["definitions"]
+        assert definitions[0]["module"] == "sample"
+        output = result["content"][0]["text"]
+        assert "(function in sample)" in output
+        assert "(function in asyncio)" not in output
+
 
 class TestFindReferences:
     """Test suite for find_references tool."""
@@ -372,6 +400,40 @@ class TestCallGraph:
         )
 
         assert not result.get("isError")
+
+    @pytest.mark.asyncio
+    async def test_get_call_graph_tracks_internal_function_calls(self, tmp_path):
+        """Call graph should list calls made inside a file-local function."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        (workspace / "sample.py").write_text(
+            "def compute_factorial(n):\n"
+            "    if n <= 1:\n"
+            "        return 1\n"
+            "    return n * compute_factorial(n - 1)\n\n"
+            "class Calculator:\n"
+            "    def multiply(self, a, b):\n"
+            "        return a * b\n\n"
+            "def call_internal():\n"
+            "    return compute_factorial(3) + Calculator().multiply(2, 3)\n",
+            encoding="utf-8",
+        )
+        reset_indexer(str(workspace))
+
+        await code_index_build(
+            project_path=".",
+            force_rebuild=True,
+            _workspace_dir=str(workspace),
+        )
+        result = await get_call_graph(
+            symbol_name="call_internal",
+            _workspace_dir=str(workspace),
+        )
+
+        assert not result.get("isError")
+        graph = result["metadata"]["graph"]
+        assert "compute_factorial" in graph["calls"]
+        assert "Calculator.multiply" in graph["calls"]
 
 
 class TestDependencyGraph:

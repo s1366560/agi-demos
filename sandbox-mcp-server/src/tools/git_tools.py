@@ -9,8 +9,33 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.server.websocket_server import MCPTool
+from src.tools.file_tools import _resolve_path
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_git_working_dir(
+    workspace_dir: str,
+    working_dir: Optional[str] = None,
+    repo_path: Optional[str] = None,
+) -> Path:
+    """Resolve the requested git repository directory inside the workspace."""
+    requested_dir = repo_path or working_dir or "."
+    resolved = _resolve_path(requested_dir, workspace_dir)
+    if not resolved.is_dir():
+        raise ValueError(f"Git working directory is not a directory: {requested_dir}")
+    return resolved
+
+
+def _is_git_repository(path: Path) -> bool:
+    """Return whether path is inside a git working tree."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0 and result.stdout.strip() == "true"
 
 
 # =============================================================================
@@ -22,6 +47,8 @@ async def git_diff(
     file_path: Optional[str] = None,
     cached: bool = False,
     context_lines: int = 3,
+    working_dir: Optional[str] = None,
+    repo_path: Optional[str] = None,
     _workspace_dir: str = "/workspace",
     **kwargs,
 ) -> Dict[str, Any]:
@@ -32,19 +59,24 @@ async def git_diff(
         file_path: Optional specific file to diff
         cached: Show staged changes instead of working directory
         context_lines: Number of context lines to show
+        working_dir: Optional git working directory relative to the workspace
+        repo_path: Alias for working_dir
         _workspace_dir: Workspace directory
 
     Returns:
         Git diff output
     """
     try:
-        # Check if we're in a git repo
-        git_dir = Path(_workspace_dir)
-        if not (git_dir / ".git").exists():
+        git_dir = _resolve_git_working_dir(_workspace_dir, working_dir, repo_path)
+        if not _is_git_repository(git_dir):
             return {
                 "content": [{"type": "text", "text": "Not a git repository"}],
                 "isError": False,
-                "metadata": {"files_changed": 0, "in_git_repo": False},
+                "metadata": {
+                    "files_changed": 0,
+                    "in_git_repo": False,
+                    "working_dir": str(git_dir),
+                },
             }
 
         # Build git diff command
@@ -52,11 +84,12 @@ async def git_diff(
         if cached:
             cmd.append("--cached")
         if file_path:
+            cmd.append("--")
             cmd.append(file_path)
 
         result = subprocess.run(
             cmd,
-            cwd=_workspace_dir,
+            cwd=git_dir,
             capture_output=True,
             text=True,
         )
@@ -92,6 +125,7 @@ async def git_diff(
                 "hunks": len(hunks),
                 "cached": cached,
                 "in_git_repo": True,
+                "working_dir": str(git_dir),
             },
         }
 
@@ -125,6 +159,14 @@ def create_git_diff_tool() -> MCPTool:
                     "description": "Number of context lines to show",
                     "default": 3,
                 },
+                "working_dir": {
+                    "type": "string",
+                    "description": "Optional git working directory relative to the workspace",
+                },
+                "repo_path": {
+                    "type": "string",
+                    "description": "Alias for working_dir",
+                },
             },
             "required": [],
         },
@@ -141,6 +183,8 @@ async def git_log(
     max_count: int = 10,
     file_path: Optional[str] = None,
     since: Optional[str] = None,
+    working_dir: Optional[str] = None,
+    repo_path: Optional[str] = None,
     _workspace_dir: str = "/workspace",
     **kwargs,
 ) -> Dict[str, Any]:
@@ -151,24 +195,30 @@ async def git_log(
         max_count: Maximum number of commits to show
         file_path: Optional specific file to show history for
         since: Show commits since a specific date (e.g., "1 week ago")
+        working_dir: Optional git working directory relative to the workspace
+        repo_path: Alias for working_dir
         _workspace_dir: Workspace directory
 
     Returns:
         Git log output
     """
     try:
-        # Check if we're in a git repo
-        git_dir = Path(_workspace_dir)
-        if not (git_dir / ".git").exists():
+        git_dir = _resolve_git_working_dir(_workspace_dir, working_dir, repo_path)
+        if not _is_git_repository(git_dir):
             return {
                 "content": [{"type": "text", "text": "Not a git repository"}],
                 "isError": False,
-                "metadata": {"commit_count": 0, "in_git_repo": False},
+                "metadata": {
+                    "commit_count": 0,
+                    "in_git_repo": False,
+                    "working_dir": str(git_dir),
+                },
             }
 
         # Build git log command
         cmd = [
-            "git", "log",
+            "git",
+            "log",
             f"-{max_count}",
             "--pretty=format:%H|%an|%ae|%ad|%s",
             "--date=short",
@@ -181,7 +231,7 @@ async def git_log(
 
         result = subprocess.run(
             cmd,
-            cwd=_workspace_dir,
+            cwd=git_dir,
             capture_output=True,
             text=True,
         )
@@ -194,13 +244,15 @@ async def git_log(
             if "|" in line:
                 parts = line.split("|", 4)
                 if len(parts) == 5:
-                    commits.append({
-                        "hash": parts[0][:8],  # Short hash
-                        "author": parts[1],
-                        "email": parts[2],
-                        "date": parts[3],
-                        "message": parts[4],
-                    })
+                    commits.append(
+                        {
+                            "hash": parts[0][:8],  # Short hash
+                            "author": parts[1],
+                            "email": parts[2],
+                            "date": parts[3],
+                            "message": parts[4],
+                        }
+                    )
 
         output_lines = [f"Found {len(commits)} commit(s):", ""]
 
@@ -221,6 +273,7 @@ async def git_log(
                 "commit_count": len(commits),
                 "commits": commits,
                 "in_git_repo": True,
+                "working_dir": str(git_dir),
             },
         }
 
@@ -252,6 +305,14 @@ def create_git_log_tool() -> MCPTool:
                 "since": {
                     "type": "string",
                     "description": "Show commits since a specific date (e.g., '1 week ago')",
+                },
+                "working_dir": {
+                    "type": "string",
+                    "description": "Optional git working directory relative to the workspace",
+                },
+                "repo_path": {
+                    "type": "string",
+                    "description": "Alias for working_dir",
                 },
             },
             "required": [],
@@ -389,7 +450,9 @@ async def generate_commit(
             else:
                 output_lines.append("Failed to create commit.")
         elif not staged_files:
-            output_lines.append("Note: No staged changes. Stage files with 'git add' or use auto_add=True.")
+            output_lines.append(
+                "Note: No staged changes. Stage files with 'git add' or use auto_add=True."
+            )
 
         return {
             "content": [{"type": "text", "text": "\n".join(output_lines)}],
