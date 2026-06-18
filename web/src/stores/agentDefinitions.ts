@@ -85,11 +85,7 @@ interface AgentDefinitionState {
     options?: DefinitionActionOptions
   ) => Promise<AgentDefinition>;
   deleteDefinition: (id: string, options?: DefinitionActionOptions) => Promise<void>;
-  toggleEnabled: (
-    id: string,
-    enabled: boolean,
-    options?: DefinitionActionOptions
-  ) => Promise<void>;
+  toggleEnabled: (id: string, enabled: boolean, options?: DefinitionActionOptions) => Promise<void>;
   setCurrentDefinition: (definition: AgentDefinition | null) => void;
 
   // Actions - Filters
@@ -123,6 +119,8 @@ const initialState = {
   filters: initialFilters,
 };
 
+let definitionListRequestSequence = 0;
+
 // ============================================================================
 // STORE CREATION
 // ============================================================================
@@ -135,12 +133,17 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
       // ========== CRUD ==========
 
       listDefinitions: async (params = {}) => {
+        const requestId = ++definitionListRequestSequence;
         set({ isLoading: true, error: null });
         try {
           const { filters } = get();
           const enabledOnlyFilter =
             params.enabled_only ??
-            (params.enabled !== undefined ? undefined : filters.enabled === true ? true : undefined);
+            (params.enabled !== undefined
+              ? undefined
+              : filters.enabled === true
+                ? true
+                : undefined);
           const queryParams = {
             ...params,
             tenant_id: params.tenant_id ?? undefined,
@@ -151,8 +154,14 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
             enabled_only: enabledOnlyFilter,
           };
           const definitions = await definitionsService.list(queryParams);
+          if (definitionListRequestSequence !== requestId) {
+            return;
+          }
           set({ definitions, total: definitions.length, page: 1, isLoading: false });
         } catch (error: unknown) {
+          if (definitionListRequestSequence !== requestId) {
+            return;
+          }
           const msg = getErrorMessage(error, 'Failed to list agent definitions');
           set({ error: msg, isLoading: false });
           throw error;
@@ -160,6 +169,7 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
       },
 
       listDefinitionsPage: async (params = {}) => {
+        const requestId = ++definitionListRequestSequence;
         set({ isLoading: true, error: null });
         try {
           const { filters, pageSize: currentPageSize } = get();
@@ -174,6 +184,9 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
             offset: params.offset ?? 0,
           };
           const response = await definitionsService.listPage(queryParams);
+          if (definitionListRequestSequence !== requestId) {
+            return;
+          }
           const pageSize = response.limit || queryParams.limit || currentPageSize;
           set({
             definitions: response.definitions,
@@ -183,6 +196,9 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (definitionListRequestSequence !== requestId) {
+            return;
+          }
           const msg = getErrorMessage(error, 'Failed to list agent definitions');
           set({ error: msg, isLoading: false });
           throw error;
@@ -302,6 +318,7 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
       },
 
       reset: () => {
+        definitionListRequestSequence += 1;
         set(initialState);
       },
     }),
