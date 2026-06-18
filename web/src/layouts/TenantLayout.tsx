@@ -38,6 +38,8 @@ import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
 import TenantHeader from '@/components/layout/TenantHeader';
 
+import type { Tenant } from '@/types/memory';
+
 // HTTP status codes for error handling
 const HTTP_STATUS = {
   FORBIDDEN: 403,
@@ -50,6 +52,10 @@ function getResponseStatus(error: unknown): number | undefined {
   if (!response || typeof response !== 'object' || !('status' in response)) return undefined;
   const status = (response as { status?: unknown }).status;
   return typeof status === 'number' ? status : undefined;
+}
+
+function isBareTenantEntryPath(pathname: string): boolean {
+  return pathname === '/tenant' || pathname === '/tenant/';
 }
 
 /**
@@ -72,7 +78,6 @@ export const TenantLayout: React.FC = memo(() => {
 
   // Auth store
   const logout = useAuthStore((state) => state.logout);
-  const user = useAuthStore((state) => state.user);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [noTenants, setNoTenants] = useState(false);
@@ -87,14 +92,29 @@ export const TenantLayout: React.FC = memo(() => {
     void navigate('/login');
   }, [logout, navigate]);
 
+  const activateTenant = useCallback(
+    (tenant: Tenant | null | undefined) => {
+      if (!tenant) return false;
+
+      setCurrentTenant(tenant);
+      setNoTenants(false);
+
+      if (!tenantId && isBareTenantEntryPath(location.pathname)) {
+        void navigate(`/tenant/${tenant.id}`, { replace: true });
+      }
+
+      return true;
+    },
+    [location.pathname, navigate, setCurrentTenant, tenantId]
+  );
+
   const handleCreateTenant = useCallback(async () => {
     await listTenants();
     const tenants = useTenantStore.getState().tenants;
     if (tenants.length > 0) {
-      setCurrentTenant(tenants[tenants.length - 1] ?? null);
-      setNoTenants(false);
+      activateTenant(tenants[tenants.length - 1] ?? null);
     }
-  }, [listTenants, setCurrentTenant]);
+  }, [activateTenant, listTenants]);
 
   /**
    * Handle 403/404 errors when accessing unauthorized tenant
@@ -114,9 +134,9 @@ export const TenantLayout: React.FC = memo(() => {
           const tenants = useTenantStore.getState().tenants;
 
           if (tenants.length > 0) {
-            const firstAccessibleTenant = tenants[0];
+            const firstAccessibleTenant = tenants[0] ?? null;
+            activateTenant(firstAccessibleTenant);
             if (firstAccessibleTenant) {
-              setCurrentTenant(firstAccessibleTenant);
               void navigate(`/tenant/${firstAccessibleTenant.id}`, { replace: true });
             }
           } else {
@@ -128,7 +148,7 @@ export const TenantLayout: React.FC = memo(() => {
         }
       }
     },
-    [listTenants, setCurrentTenant, navigate]
+    [activateTenant, listTenants, navigate]
   );
 
   /**
@@ -136,54 +156,49 @@ export const TenantLayout: React.FC = memo(() => {
    * Extracted to reduce nested Promise chains in useEffect
    */
   const initializeTenantAndProject = useCallback(async () => {
+    if (currentTenant && (!tenantId || currentTenant.id === tenantId)) {
+      setNoTenants(false);
+      if (!tenantId && isBareTenantEntryPath(location.pathname)) {
+        void navigate(`/tenant/${currentTenant.id}`, { replace: true });
+      }
+      return;
+    }
+
     if (tenantId && (!currentTenant || currentTenant.id !== tenantId)) {
       try {
         await getTenant(tenantId);
+        setNoTenants(false);
       } catch (error) {
         await handleTenantAccessError(error, tenantId);
       }
     } else if (!tenantId && !currentTenant) {
       const tenants = useTenantStore.getState().tenants;
       if (tenants.length > 0) {
-        setCurrentTenant(tenants[0] ?? null);
+        activateTenant(tenants[0] ?? null);
       } else {
         try {
           await listTenants();
           const updatedTenants = useTenantStore.getState().tenants;
           if (updatedTenants.length > 0) {
-            setCurrentTenant(updatedTenants[0] ?? null);
+            activateTenant(updatedTenants[0] ?? null);
           } else {
-            // Auto-create default tenant
-            const defaultName = user?.name ? `${user.name}'s Workspace` : 'My Workspace';
-            try {
-              await useTenantStore.getState().createTenant({
-                name: defaultName,
-                description: 'Automatically created default workspace',
-              });
-              const newTenants = useTenantStore.getState().tenants;
-              if (newTenants.length > 0) {
-                setCurrentTenant(newTenants[newTenants.length - 1] ?? null);
-              } else {
-                setNoTenants(true);
-              }
-            } catch (err) {
-              console.error('Failed to auto-create tenant:', err);
-              setNoTenants(true);
-            }
+            setNoTenants(true);
           }
-        } catch {
-          // Silently handle listTenants failure
+        } catch (error) {
+          console.error('Failed to list accessible tenants:', error);
+          setNoTenants(true);
         }
       }
     }
   }, [
     tenantId,
     currentTenant,
+    location.pathname,
+    navigate,
     getTenant,
     handleTenantAccessError,
+    activateTenant,
     listTenants,
-    setCurrentTenant,
-    user,
   ]);
 
   // Sync tenant ID from URL with store - flattened for better performance

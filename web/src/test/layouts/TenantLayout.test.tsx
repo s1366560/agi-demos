@@ -33,6 +33,8 @@ let mockProjectState: any = {
 
 let mockRouteParams: Record<string, string | undefined> = { tenantId: 't1' };
 const mockRouteParamListeners = new Set<() => void>();
+let mockLocationPathname = '/tenant/t1/overview';
+const mockNavigate = vi.fn();
 
 function setMockRouteParams(params: Record<string, string | undefined>) {
   mockRouteParams = params;
@@ -174,6 +176,7 @@ vi.mock('react-router-dom', async () => {
   const React = await vi.importActual<typeof import('react')>('react');
   return {
     ...actual,
+    useNavigate: () => mockNavigate,
     useParams: () =>
       React.useSyncExternalStore(
         (listener) => {
@@ -185,7 +188,7 @@ vi.mock('react-router-dom', async () => {
         () => mockRouteParams,
         () => mockRouteParams
       ),
-    useLocation: () => ({ pathname: '/tenant/t1/overview' }),
+    useLocation: () => ({ pathname: mockLocationPathname }),
     Outlet: () => <div data-testid="outlet">Page Content</div>,
   };
 });
@@ -227,6 +230,7 @@ describe('TenantLayout', () => {
       }),
     };
     setMockRouteParams({ tenantId: 't1' });
+    mockLocationPathname = '/tenant/t1/overview';
   });
 
   it('renders layout elements', async () => {
@@ -271,17 +275,56 @@ describe('TenantLayout', () => {
     });
   });
 
-  it('auto creates tenant when none exist', async () => {
-    // Set state without tenant and empty tenants list
+  it('redirects bare tenant entry to the selected tenant already in state', async () => {
+    const tenant = { id: 'existing-tenant', name: 'Existing Tenant' };
+    setMockRouteParams({});
+    mockLocationPathname = '/tenant';
     mockTenantState.currentTenant = null;
-    mockTenantState.tenants = [];
+    mockTenantState.tenants = [tenant];
 
     render(<TenantLayout />);
 
-    // Component renders without tenant
     await waitFor(() => {
-      expect(screen.getByText('MemStack')).toBeInTheDocument();
+      expect(mockTenantState.setCurrentTenant).toHaveBeenCalledWith(tenant);
     });
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/existing-tenant', { replace: true });
+    expect(screen.queryByText('Welcome')).not.toBeInTheDocument();
+  });
+
+  it('redirects bare tenant entry after loading accessible tenants', async () => {
+    const tenant = { id: 'loaded-tenant', name: 'Loaded Tenant' };
+    setMockRouteParams({});
+    mockLocationPathname = '/tenant';
+    mockTenantState.currentTenant = null;
+    mockTenantState.tenants = [];
+    mockTenantState.listTenants = vi.fn().mockImplementation(async () => {
+      mockTenantState.tenants = [tenant];
+    });
+
+    render(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(mockTenantState.listTenants).toHaveBeenCalled();
+    });
+    expect(mockTenantState.setCurrentTenant).toHaveBeenCalledWith(tenant);
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/loaded-tenant', { replace: true });
+    expect(screen.queryByText('Welcome')).not.toBeInTheDocument();
+  });
+
+  it('shows the create-tenant empty state only when no accessible tenants exist', async () => {
+    setMockRouteParams({});
+    mockLocationPathname = '/tenant';
+    mockTenantState.currentTenant = null;
+    mockTenantState.tenants = [];
+    mockTenantState.listTenants = vi.fn().mockResolvedValue(undefined);
+
+    render(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Welcome')).toBeInTheDocument();
+    });
+    expect(mockTenantState.createTenant).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it('ignores stale project fetches after route project changes', async () => {
