@@ -160,6 +160,23 @@ describe('geneMarketService', () => {
     expect(mockHttpClient.post).toHaveBeenNthCalledWith(2, '/genes/genomes/genome-1/unpublish', {});
   });
 
+  it('installs genomes with tenant query params', async () => {
+    mockHttpClient.post.mockResolvedValue({ items: [], total: 0 });
+
+    await geneMarketService.installGenome(
+      'instance-1',
+      'genome-1',
+      { config: { 'code-review': { mode: 'strict' } } },
+      { tenant_id: 'tenant-2' }
+    );
+
+    expect(mockHttpClient.post).toHaveBeenCalledWith(
+      '/genes/instances/instance-1/genomes/genome-1/install',
+      { config: { 'code-review': { mode: 'strict' } } },
+      { params: { tenant_id: 'tenant-2' } }
+    );
+  });
+
   it('lists gene evolution events with a gene_id query parameter', async () => {
     mockHttpClient.get.mockResolvedValue({ events: [], total: 0, page: 1, page_size: 20 });
 

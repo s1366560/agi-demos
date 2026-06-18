@@ -6,6 +6,8 @@ import { useGeneMarketStore } from '@/stores/geneMarket';
 import type {
   GeneListResponse,
   GeneResponse,
+  InstanceGeneResponse,
+  GenomeInstallResponse,
   GenomeListResponse,
   GenomeResponse,
 } from '@/services/geneMarketService';
@@ -19,6 +21,7 @@ vi.mock('@/services/geneMarketService', () => ({
     getGene: vi.fn(),
     getGeneReviews: vi.fn(),
     getGenome: vi.fn(),
+    installGenome: vi.fn(),
     listGenes: vi.fn(),
     listGenomes: vi.fn(),
     publishGene: vi.fn(),
@@ -80,6 +83,27 @@ const genome = (overrides: Partial<GenomeResponse> = {}): GenomeResponse => ({
   updated_at: null,
   visibility: 'public',
   ...overrides,
+});
+
+const instanceGene = (overrides: Partial<InstanceGeneResponse> = {}): InstanceGeneResponse => ({
+  config_snapshot: {},
+  created_at: '2026-06-17T00:00:00Z',
+  gene_id: 'gene-1',
+  genome_id: 'genome-1',
+  id: 'instance-gene-1',
+  instance_id: 'instance-1',
+  installed_at: '2026-06-17T00:00:00Z',
+  installed_version: '1.0.0',
+  status: 'installed',
+  usage_count: 0,
+  ...overrides,
+});
+
+const genomeInstallResponse = (items: InstanceGeneResponse[]): GenomeInstallResponse => ({
+  genome_id: 'genome-1',
+  instance_id: 'instance-1',
+  items,
+  total: items.length,
 });
 
 const geneListResponse = (genes: GeneResponse[]): GeneListResponse => ({
@@ -190,6 +214,32 @@ describe('gene market store', () => {
     });
     expect(useGeneMarketStore.getState().genomes[0]?.is_published).toBe(false);
     expect(useGeneMarketStore.getState().currentGenome?.is_published).toBe(false);
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+  });
+
+  it('appends installed genome genes after installing a genome', async () => {
+    const installed = instanceGene();
+    vi.mocked(geneMarketService.installGenome).mockResolvedValue(
+      genomeInstallResponse([installed])
+    );
+
+    const result = await useGeneMarketStore
+      .getState()
+      .installGenome(
+        'instance-1',
+        'genome-1',
+        { config: { 'code-review': { mode: 'strict' } } },
+        { tenant_id: 'tenant-2' }
+      );
+
+    expect(result.total).toBe(1);
+    expect(geneMarketService.installGenome).toHaveBeenCalledWith(
+      'instance-1',
+      'genome-1',
+      { config: { 'code-review': { mode: 'strict' } } },
+      { tenant_id: 'tenant-2' }
+    );
+    expect(useGeneMarketStore.getState().installedGenes).toEqual([installed]);
     expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
   });
 

@@ -197,6 +197,10 @@ export interface GeneInstallRequest {
   config?: Record<string, unknown>;
 }
 
+export interface GenomeInstallRequest {
+  config?: Record<string, unknown>;
+}
+
 export interface InstanceGeneResponse {
   id: string;
   instance_id: string;
@@ -222,6 +226,13 @@ export interface InstanceGeneListResponse {
   limit: number;
   offset: number;
   has_more: boolean;
+}
+
+export interface GenomeInstallResponse {
+  instance_id: string;
+  genome_id: string;
+  items: InstanceGeneResponse[];
+  total: number;
 }
 
 export interface EvolutionEventCreate {
@@ -374,6 +385,18 @@ export const geneMarketService = {
   installGene: (instanceId: string, data: GeneInstallRequest, options?: TenantScopedOptions) =>
     postWithTenant<InstanceGeneResponse>(
       `${BASE_URL}/instances/${instanceId}/install`,
+      data,
+      options
+    ),
+
+  installGenome: (
+    instanceId: string,
+    genomeId: string,
+    data: GenomeInstallRequest,
+    options?: TenantScopedOptions
+  ) =>
+    postWithTenant<GenomeInstallResponse>(
+      `${BASE_URL}/instances/${instanceId}/genomes/${genomeId}/install`,
       data,
       options
     ),

@@ -20,7 +20,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { ArchiveX, ArrowLeft, Edit2, Star, Trash2, UploadCloud } from 'lucide-react';
+import { ArchiveX, ArrowLeft, Download, Edit2, Star, Trash2, UploadCloud } from 'lucide-react';
 
 import {
   useCurrentGenome,
@@ -40,6 +40,11 @@ const { Title, Text, Paragraph } = Typography;
 interface RateFormValues {
   score: number;
   comment?: string;
+}
+
+interface InstallGenomeFormValues {
+  instance_id: string;
+  config_override?: string;
 }
 
 interface EditGenomeFormValues {
@@ -95,13 +100,17 @@ export const GenomeDetail: React.FC = () => {
     rateGenome,
     deleteGenome,
     updateGenome,
+    installGenome,
   } = useGeneMarketActions();
   const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
+  const [isInstallModalVisible, setIsInstallModalVisible] = useState(false);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [isRateModalVisible, setIsRateModalVisible] = useState(false);
+  const [isInstallSubmitting, setIsInstallSubmitting] = useState(false);
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
   const [isRateSubmitting, setIsRateSubmitting] = useState(false);
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
+  const [installForm] = Form.useForm<InstallGenomeFormValues>();
   const [rateForm] = Form.useForm<RateFormValues>();
   const [editForm] = Form.useForm<EditGenomeFormValues>();
   const genomeGeneSlugKey = genome ? genome.gene_slugs.join('\n') : null;
@@ -140,6 +149,40 @@ export const GenomeDetail: React.FC = () => {
 
   const showActionError = (fallbackMessage: string) => {
     message.error(useGeneMarketStore.getState().error ?? fallbackMessage);
+  };
+
+  const handleInstallSubmit = async () => {
+    const values = await installForm.validateFields();
+    if (!genomeId || !tenantId) {
+      return;
+    }
+
+    let configOverride: Record<string, unknown> = {};
+    if (values.config_override) {
+      try {
+        configOverride = JSON.parse(values.config_override) as Record<string, unknown>;
+      } catch {
+        message.error(t('tenant.genes.invalidJson', 'Invalid JSON format'));
+        return;
+      }
+    }
+
+    setIsInstallSubmitting(true);
+    try {
+      await installGenome(
+        values.instance_id,
+        genomeId,
+        { config: configOverride },
+        { tenant_id: tenantId }
+      );
+      message.success(t('tenant.genomeDetail.installSuccess', 'Genome installed successfully'));
+      setIsInstallModalVisible(false);
+      installForm.resetFields();
+    } catch {
+      showActionError(t('tenant.genomeDetail.installError', 'Failed to install genome'));
+    } finally {
+      setIsInstallSubmitting(false);
+    }
   };
 
   const handlePublishToggle = async () => {
@@ -342,6 +385,15 @@ export const GenomeDetail: React.FC = () => {
             {t('tenant.genomeDetail.editAction', 'Edit')}
           </Button>
           <Button
+            type="primary"
+            onClick={() => {
+              setIsInstallModalVisible(true);
+            }}
+            icon={<Download className="w-4 h-4" />}
+          >
+            {t('tenant.genomeDetail.installAction', 'Install')}
+          </Button>
+          <Button
             onClick={() => {
               void handlePublishToggle();
             }}
@@ -482,6 +534,49 @@ export const GenomeDetail: React.FC = () => {
           </pre>
         </Card>
       )}
+
+      <Modal
+        title={t('tenant.genomeDetail.installGenome', 'Install Genome')}
+        open={isInstallModalVisible}
+        onOk={() => {
+          void handleInstallSubmit();
+        }}
+        onCancel={() => {
+          setIsInstallModalVisible(false);
+          installForm.resetFields();
+        }}
+        confirmLoading={isInstallSubmitting}
+        destroyOnHidden
+      >
+        <Form form={installForm} layout="vertical" className="mt-4">
+          <Form.Item
+            name="instance_id"
+            label={t('tenant.genes.instanceId', 'Instance ID')}
+            rules={[
+              {
+                required: true,
+                message: t('tenant.genes.instanceIdRequired', 'Instance ID is required'),
+              },
+            ]}
+          >
+            <Input placeholder={t('tenant.genes.instanceIdPlaceholder', 'Enter instance ID')} />
+          </Form.Item>
+          <Form.Item
+            name="config_override"
+            label={t('tenant.genes.configOverride', 'Config Override (JSON)')}
+            tooltip={t(
+              'tenant.genomeDetail.installConfigTooltip',
+              'Optional JSON config applied to the genome install. Use gene slugs as keys for per-gene config.'
+            )}
+          >
+            <Input.TextArea
+              rows={4}
+              className="font-mono text-sm"
+              placeholder={t('tenant.genomeDetail.configOverridePlaceholder', '{"key": "value"}')}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Modal
         title={t('tenant.genomeDetail.editGenome', 'Edit Genome')}

@@ -1,9 +1,11 @@
 """SQLAlchemy implementation of GenomeRepository using BaseRepository."""
 
 import logging
-from typing import Any, override
+from datetime import UTC, datetime
+from typing import Any, cast, override
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
@@ -166,6 +168,27 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
         )
         db_genomes = result.scalars().all()
         return [d for genome in db_genomes if (d := self._to_domain(genome)) is not None]
+
+    @override
+    async def adjust_install_count(self, genome_id: str, delta: int) -> bool:
+        if not genome_id:
+            raise ValueError("ID cannot be empty")
+        if delta == 0:
+            return True
+
+        next_count = GenomeModel.install_count + delta
+        stmt = (
+            update(GenomeModel)
+            .where(GenomeModel.id == genome_id)
+            .where(GenomeModel.deleted_at.is_(None))
+            .values(
+                install_count=case((next_count < 0, 0), else_=next_count),
+                updated_at=datetime.now(UTC),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        result = cast(CursorResult[Any], await self._session.execute(stmt))
+        return result.rowcount > 0
 
     def _build_active_query(self, filters: dict[str, Any] | None = None) -> Select[Any]:
         stmt = select(GenomeModel).where(GenomeModel.deleted_at.is_(None))

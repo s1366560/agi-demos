@@ -578,6 +578,110 @@ async def test_install_gene_reactivates_soft_deleted_instance_gene(
 
 
 @pytest.mark.unit
+async def test_install_genome_installs_all_member_genes_with_genome_context(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    await _create_instance(
+        test_db,
+        instance_id="instance-install-genome",
+        tenant_id=test_project_db.tenant_id,
+        created_by=test_user.id,
+    )
+    first_gene = await service.create_gene(
+        name="Genome First Gene",
+        slug=_slug("genome-first"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    second_gene = await service.create_gene(
+        name="Genome Second Gene",
+        slug=_slug("genome-second"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    genome = await service.create_genome(
+        name="Installable Genome",
+        slug=_slug("installable-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        gene_slugs=[first_gene.slug, second_gene.slug],
+        config_override={first_gene.slug: {"mode": "strict"}},
+    )
+
+    installed = await service.install_genome(
+        "instance-install-genome",
+        genome.id,
+        tenant_id=test_project_db.tenant_id,
+        config_snapshot={second_gene.slug: {"mode": "balanced"}},
+    )
+
+    assert [item.gene_id for item in installed] == [first_gene.id, second_gene.id]
+    assert {item.genome_id for item in installed} == {genome.id}
+    assert installed[0].config_snapshot == {"mode": "strict"}
+    assert installed[1].config_snapshot == {"mode": "balanced"}
+    updated_genome = await service.get_genome(genome.id)
+    assert updated_genome is not None
+    assert updated_genome.install_count == 1
+
+
+@pytest.mark.unit
+async def test_install_genome_rejects_already_installed_member_before_partial_install(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    await _create_instance(
+        test_db,
+        instance_id="instance-install-genome-duplicate",
+        tenant_id=test_project_db.tenant_id,
+        created_by=test_user.id,
+    )
+    first_gene = await service.create_gene(
+        name="Duplicate Genome First Gene",
+        slug=_slug("duplicate-genome-first"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    second_gene = await service.create_gene(
+        name="Duplicate Genome Second Gene",
+        slug=_slug("duplicate-genome-second"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    genome = await service.create_genome(
+        name="Duplicate Install Genome",
+        slug=_slug("duplicate-install-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        gene_slugs=[first_gene.slug, second_gene.slug],
+    )
+    await service.install_gene("instance-install-genome-duplicate", first_gene.id)
+
+    with pytest.raises(ValueError, match="already installed"):
+        await service.install_genome(
+            "instance-install-genome-duplicate",
+            genome.id,
+            tenant_id=test_project_db.tenant_id,
+        )
+
+    page, total, _active_total, _usage_total = await service.list_instance_genes_with_summary(
+        "instance-install-genome-duplicate",
+        limit=10,
+        offset=0,
+    )
+    updated_genome = await service.get_genome(genome.id)
+
+    assert total == 1
+    assert [item.gene_id for item in page] == [first_gene.id]
+    assert updated_genome is not None
+    assert updated_genome.install_count == 0
+
+
+@pytest.mark.unit
 async def test_list_instance_genes_with_summary_filters_deleted_before_pagination(
     test_db: AsyncSession,
     test_project_db: Project,

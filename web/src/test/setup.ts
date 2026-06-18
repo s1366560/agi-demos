@@ -803,6 +803,12 @@ const commonTranslations: Record<string, string> = {
   'tenant.genes.publish.createDraftError': 'Failed to create gene draft',
   'tenant.genes.publish.createGenomeDraftError': 'Failed to create genome draft',
   'tenant.genes.searchGenomesPlaceholder': 'Search genomes...',
+  'tenant.genomeDetail.installAction': 'Install',
+  'tenant.genomeDetail.installGenome': 'Install Genome',
+  'tenant.genomeDetail.installSuccess': 'Genome installed successfully',
+  'tenant.genomeDetail.installError': 'Failed to install genome',
+  'tenant.genomeDetail.installConfigTooltip':
+    'Optional JSON config applied to the genome install. Use gene slugs as keys for per-gene config.',
 
   // Tenant Instance Channels
   'tenant.instances.channels.config.serverUrlPlaceholder': 'ws://localhost:8080',

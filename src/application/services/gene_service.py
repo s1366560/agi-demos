@@ -751,6 +751,106 @@ class GeneService:
         logger.info(f"Installed gene {gene_id} on instance {instance_id}")
         return instance_gene
 
+    async def install_genome(
+        self,
+        instance_id: str,
+        genome_id: str,
+        tenant_id: str,
+        config_snapshot: dict[str, Any] | None = None,
+    ) -> list[InstanceGene]:
+        """
+        Install every gene in a genome on an agent instance.
+
+        Args:
+            instance_id: Target agent instance ID.
+            genome_id: Genome bundle to install.
+            tenant_id: Tenant scope used to resolve tenant and public global genes.
+            config_snapshot: Optional install config override.
+
+        Returns:
+            The installed InstanceGene records.
+
+        Raises:
+            ValueError: If the genome is missing, empty, references missing genes,
+                or any member gene is already installed.
+        """
+        genome = await self._genome_repo.find_by_id(genome_id)
+        if not genome:
+            raise ValueError(f"Genome {genome_id} not found")
+        if not genome.gene_slugs:
+            raise ValueError("Genome has no genes")
+
+        genes = await self._gene_repo.find_by_filters(
+            tenant_id=tenant_id,
+            include_global=True,
+            slugs=genome.gene_slugs,
+            limit=len(genome.gene_slugs),
+            offset=0,
+        )
+        genes_by_slug = {gene.slug: gene for gene in genes}
+        ordered_genes = [genes_by_slug[slug] for slug in genome.gene_slugs if slug in genes_by_slug]
+        missing_slugs = [slug for slug in genome.gene_slugs if slug not in genes_by_slug]
+        if missing_slugs:
+            raise ValueError("Genome gene slugs not found")
+
+        for gene in ordered_genes:
+            existing = await self._instance_gene_repo.find_by_instance_and_gene(
+                instance_id,
+                gene.id,
+            )
+            if existing and existing.deleted_at is None:
+                raise ValueError(f"Gene {gene.id} already installed on {instance_id}")
+
+        installed_genes: list[InstanceGene] = []
+        for gene in ordered_genes:
+            installed_genes.append(
+                await self.install_gene(
+                    instance_id=instance_id,
+                    gene_id=gene.id,
+                    genome_id=genome.id,
+                    config_snapshot=self._genome_gene_config(
+                        genome.config_override,
+                        config_snapshot,
+                        gene.slug,
+                    ),
+                )
+            )
+
+        _ = await self._genome_repo.adjust_install_count(genome_id, 1)
+        await self._evolution_event_repo.save(
+            EvolutionEvent(
+                instance_id=instance_id,
+                genome_id=genome.id,
+                event_type=EvolutionEventType.installed_genome,
+                gene_name=genome.name,
+                gene_slug=genome.slug,
+                details={
+                    "gene_count": len(installed_genes),
+                    "gene_slugs": list(genome.gene_slugs),
+                },
+            )
+        )
+
+        logger.info(f"Installed genome {genome_id} on instance {instance_id}")
+        return installed_genes
+
+    @staticmethod
+    def _genome_gene_config(
+        genome_config: dict[str, Any],
+        request_config: dict[str, Any] | None,
+        gene_slug: str,
+    ) -> dict[str, Any]:
+        config: dict[str, Any] = {}
+        for source in (genome_config, request_config or {}):
+            gene_specific_config = source.get(gene_slug)
+            if isinstance(gene_specific_config, dict):
+                config.update(cast(dict[str, Any], gene_specific_config))
+                continue
+            has_gene_specific_configs = any(isinstance(value, dict) for value in source.values())
+            if not has_gene_specific_configs:
+                config.update(source)
+        return config
+
     async def uninstall_gene(self, instance_gene_id: str) -> None:
         """
         Uninstall a gene from an agent instance (soft-delete).

@@ -253,6 +253,39 @@ class _GenomeListContainer(_Container):
         return _GenomeListService()
 
 
+class _GenomeInstallService(_FailingGeneService):
+    async def get_genome(self, genome_id: str, *_args: object, **_kwargs: object) -> object | None:
+        return _genome_entity(genome_id=genome_id, tenant_id=None)
+
+    async def install_genome(self, **kwargs: object) -> list[SimpleNamespace]:
+        assert kwargs == {
+            "instance_id": "instance-1",
+            "genome_id": "global-genome",
+            "tenant_id": "tenant-1",
+            "config_snapshot": {"code-review": {"mode": "strict"}},
+        }
+        return [
+            SimpleNamespace(
+                id="instance-gene-1",
+                instance_id="instance-1",
+                gene_id="gene-1",
+                genome_id="global-genome",
+                status=InstanceGeneStatus.installed,
+                installed_version="1.0.0",
+                config_snapshot={"mode": "strict"},
+                usage_count=0,
+                installed_at=datetime(2026, 1, 1, tzinfo=UTC),
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                deleted_at=None,
+            )
+        ]
+
+
+class _GenomeInstallContainer(_Container):
+    def gene_service(self) -> _GenomeInstallService:
+        return _GenomeInstallService()
+
+
 class _EvolutionAccessGeneService(_FailingGeneService):
     async def get_gene(self, gene_id: str, *_args: object, **_kwargs: object) -> object | None:
         if gene_id == "missing-gene":
@@ -352,6 +385,7 @@ def _tenant_dependency(handler: object) -> object:
         "publish_genome",
         "unpublish_genome",
         "install_gene",
+        "install_genome",
         "uninstall_gene",
         "create_evolution_event",
     ],
@@ -695,6 +729,33 @@ async def test_list_genomes_passes_global_inclusion_to_service(
 
     assert response.total == 1
     assert response.genomes[0].id == "global-genome"
+
+
+@pytest.mark.unit
+async def test_install_genome_allows_published_global_genome(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commit = AsyncMock()
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _GenomeInstallContainer(),
+    )
+
+    response = await genes.install_genome(
+        request=SimpleNamespace(),
+        instance_id="instance-1",
+        genome_id="global-genome",
+        data=genes.InstallGenomeRequest(config={"code-review": {"mode": "strict"}}),
+        tenant_id="tenant-1",
+        db=SimpleNamespace(commit=commit),
+    )
+
+    assert response.instance_id == "instance-1"
+    assert response.genome_id == "global-genome"
+    assert response.total == 1
+    assert response.items[0].genome_id == "global-genome"
+    commit.assert_awaited_once()
 
 
 @pytest.mark.unit

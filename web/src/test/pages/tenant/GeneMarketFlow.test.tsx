@@ -35,6 +35,7 @@ const actionsMock = vi.hoisted(() => ({
   getGene: vi.fn(),
   getGenome: vi.fn(),
   installGene: vi.fn(),
+  installGenome: vi.fn(),
   listGeneEvolutionEvents: vi.fn(),
   listGenes: vi.fn(),
   listGenomes: vi.fn(),
@@ -213,6 +214,7 @@ describe('Gene marketplace rating flow', () => {
     actionsMock.fetchGenomeGenes.mockResolvedValue([gene()]);
     actionsMock.getGene.mockResolvedValue(gene());
     actionsMock.getGenome.mockResolvedValue(genome());
+    actionsMock.installGenome.mockResolvedValue({ items: [], total: 0 });
     actionsMock.listGeneEvolutionEvents.mockResolvedValue(undefined);
     actionsMock.listGenes.mockResolvedValue(undefined);
     actionsMock.listGenomes.mockResolvedValue(undefined);
@@ -799,6 +801,36 @@ describe('Gene marketplace rating flow', () => {
       tenant_id: 'tenant-1',
     });
     expect(messageSuccessSpy).toHaveBeenCalledWith('Genome unpublished successfully');
+  });
+
+  it('installs genomes from the detail action bar', async () => {
+    const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
+    stateMock.currentGenome = genome({ is_published: true });
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/genomes/genome-1']}>
+        <GenomeDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Install' }));
+    fireEvent.change(screen.getByLabelText('Instance ID'), {
+      target: { value: 'instance-1' },
+    });
+    fireEvent.change(screen.getByLabelText('Config Override (JSON)'), {
+      target: { value: '{"code-review":{"mode":"strict"}}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await waitFor(() => {
+      expect(actionsMock.installGenome).toHaveBeenCalledWith(
+        'instance-1',
+        'genome-1',
+        { config: { 'code-review': { mode: 'strict' } } },
+        { tenant_id: 'tenant-1' }
+      );
+    });
+    expect(messageSuccessSpy).toHaveBeenCalledWith('Genome installed successfully');
   });
 
   it('deletes genomes from the detail action bar after confirmation', async () => {

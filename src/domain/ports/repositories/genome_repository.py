@@ -63,5 +63,9 @@ class GenomeRepository(ABC):
         """List featured genomes."""
 
     @abstractmethod
+    async def adjust_install_count(self, genome_id: str, delta: int) -> bool:
+        """Adjust a genome install counter without allowing negative values."""
+
+    @abstractmethod
     async def delete(self, entity_id: str) -> bool:
         """Delete a genome. Returns True if deleted, False if not found."""

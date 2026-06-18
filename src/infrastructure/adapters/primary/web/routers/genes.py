@@ -103,6 +103,12 @@ class InstallGeneRequest(BaseModel):
     config: dict[str, Any] | None = Field(None, description="Installation config")
 
 
+class InstallGenomeRequest(BaseModel):
+    """Request to install a genome on an instance."""
+
+    config: dict[str, Any] | None = Field(None, description="Installation config")
+
+
 class InstanceGeneResponse(BaseModel):
     """Response model for an installed gene record."""
 
@@ -133,6 +139,15 @@ class InstanceGeneListResponse(BaseModel):
     limit: int
     offset: int
     has_more: bool
+
+
+class InstallGenomeResponse(BaseModel):
+    """Response model for a genome installation."""
+
+    instance_id: str
+    genome_id: str
+    items: list[InstanceGeneResponse]
+    total: int
 
 
 class EvolutionEventResponse(BaseModel):
@@ -894,6 +909,50 @@ async def install_gene(
         )
         await db.commit()
         return _instance_gene_response(instance_gene)
+    except ValueError as e:
+        raise _invalid_gene_request_error() from e
+
+
+@router.post(
+    "/instances/{instance_id}/genomes/{genome_id}/install",
+    response_model=InstallGenomeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def install_genome(
+    request: Request,
+    instance_id: str,
+    genome_id: str,
+    data: InstallGenomeRequest,
+    tenant_id: str = Depends(_get_selected_gene_admin_tenant_id),
+    db: AsyncSession = Depends(get_db),
+) -> InstallGenomeResponse:
+    """Install every gene in a genome on an agent instance."""
+    try:
+        container = get_container_with_db(request, db)
+        service = container.gene_service()
+        await _ensure_instance_tenant_access(
+            container, instance_id=instance_id, tenant_id=tenant_id
+        )
+        await _ensure_genome_tenant_access(
+            service,
+            genome_id=genome_id,
+            tenant_id=tenant_id,
+            allow_global=True,
+        )
+        installed_genes = await service.install_genome(
+            instance_id=instance_id,
+            genome_id=genome_id,
+            tenant_id=tenant_id,
+            config_snapshot=data.config,
+        )
+        await db.commit()
+        items = [_instance_gene_response(instance_gene) for instance_gene in installed_genes]
+        return InstallGenomeResponse(
+            instance_id=instance_id,
+            genome_id=genome_id,
+            items=items,
+            total=len(items),
+        )
     except ValueError as e:
         raise _invalid_gene_request_error() from e
 

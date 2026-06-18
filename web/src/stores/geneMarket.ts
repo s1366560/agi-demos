@@ -12,8 +12,10 @@ import type {
   GenomeCreate,
   GenomeUpdate,
   InstanceGeneResponse,
+  GenomeInstallResponse,
   EvolutionEventResponse,
   GeneInstallRequest,
+  GenomeInstallRequest,
   GeneRatingCreate,
   GenomeRatingCreate,
   EvolutionEventCreate,
@@ -163,6 +165,12 @@ interface GeneMarketState {
     data: GeneInstallRequest,
     options?: TenantScopedOptions
   ) => Promise<void>;
+  installGenome: (
+    instanceId: string,
+    genomeId: string,
+    data: GenomeInstallRequest,
+    options?: TenantScopedOptions
+  ) => Promise<GenomeInstallResponse>;
   uninstallGene: (
     instanceId: string,
     instanceGeneId: string,
@@ -593,6 +601,32 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         }
       },
 
+      installGenome: async (
+        instanceId: string,
+        genomeId: string,
+        data: GenomeInstallRequest,
+        options?: TenantScopedOptions
+      ) => {
+        set({ isSubmitting: true, error: null });
+        try {
+          const response = await geneMarketService.installGenome(
+            instanceId,
+            genomeId,
+            data,
+            options
+          );
+          const { installedGenes } = get();
+          set({
+            installedGenes: [...installedGenes, ...response.items],
+            isSubmitting: false,
+          });
+          return response;
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error, 'Failed to install genome'), isSubmitting: false });
+          throw error;
+        }
+      },
+
       uninstallGene: async (
         instanceId: string,
         instanceGeneId: string,
@@ -882,6 +916,7 @@ export const useGeneMarketActions = () =>
       publishGenome: s.publishGenome,
       unpublishGenome: s.unpublishGenome,
       installGene: s.installGene,
+      installGenome: s.installGenome,
       uninstallGene: s.uninstallGene,
       listInstalledGenes: s.listInstalledGenes,
       fetchGeneReviews: s.fetchGeneReviews,
