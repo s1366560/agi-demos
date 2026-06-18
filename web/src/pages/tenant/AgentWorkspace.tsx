@@ -100,7 +100,8 @@ export const AgentWorkspace: FC = () => {
   const tenantScope = tenantId ?? 'global';
   const lastProjectIdKey = `agent:${tenantScope}:lastProjectId`;
   const lastProjectSelectionSourceKey =
-    lastProjectSelectionSourceStorageKey(tenantId) ?? `agent:${tenantScope}:lastProjectSelectionSource`;
+    lastProjectSelectionSourceStorageKey(tenantId) ??
+    `agent:${tenantScope}:lastProjectSelectionSource`;
   const lastWorkspaceIdKey = `agent:${tenantScope}:lastWorkspaceId`;
 
   // Track selected project for this session - using useLocalStorage for better performance
@@ -362,6 +363,7 @@ export const AgentWorkspace: FC = () => {
             externalProjectId={effectiveProjectId}
             basePath={basePath}
             navigationQuery={navigationQuery}
+            routeTenantId={tenantId}
             loadConversationList={false}
           />
           <ContextDetailPanel />

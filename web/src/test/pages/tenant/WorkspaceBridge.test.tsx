@@ -166,6 +166,32 @@ describe('workspace/agent workspace bridge', () => {
         expect.objectContaining({
           externalProjectId: 'project-2',
           navigationQuery: 'projectId=project-2&workspaceId=ws-9',
+          routeTenantId: 'tenant-1',
+        })
+      );
+    });
+  });
+
+  it('passes the route tenant to chat content while tenant store catches up', () => {
+    tenantState.currentTenant = { id: 'stale-tenant', name: 'Stale Tenant' };
+    projectState.projects = [{ id: 'project-2', tenant_id: 'tenant-2', name: 'Project 2' }];
+    projectState.currentProject = { id: 'project-2', tenant_id: 'tenant-2', name: 'Project 2' };
+
+    render(
+      <Routes>
+        <Route path="/tenant/:tenantId/agent-workspace" element={<AgentWorkspace />} />
+      </Routes>,
+      {
+        route: '/tenant/tenant-2/agent-workspace?projectId=project-2',
+      }
+    );
+
+    return waitFor(() => {
+      expect(screen.getByTestId('agent-chat-content')).toBeInTheDocument();
+      expect(agentChatContentProps).toHaveBeenCalledWith(
+        expect.objectContaining({
+          externalProjectId: 'project-2',
+          routeTenantId: 'tenant-2',
         })
       );
     });

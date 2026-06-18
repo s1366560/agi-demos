@@ -17,8 +17,19 @@ describe('deriveAgentChatTenantId', () => {
       deriveAgentChatTenantId({
         routeTenantId: null,
         projectTenantId: 'project-tenant',
+        storeTenantId: 'store-tenant',
       })
     ).toBe('project-tenant');
+  });
+
+  it('falls back to the store tenant only when route and project tenants are unavailable', () => {
+    expect(
+      deriveAgentChatTenantId({
+        routeTenantId: undefined,
+        projectTenantId: null,
+        storeTenantId: 'store-tenant',
+      })
+    ).toBe('store-tenant');
   });
 
   it('returns an empty tenant id when no scoped context is available', () => {

@@ -104,6 +104,8 @@ interface AgentChatContentProps {
   basePath?: string | undefined;
   /** Optional query string to preserve across conversation navigation */
   navigationQuery?: string | undefined;
+  /** Route tenant ID from tenant-scoped workspace pages. */
+  routeTenantId?: string | undefined;
   /** Extra content to show in header area */
   headerExtra?: React.ReactNode | undefined;
   /** Whether this surface owns initial conversation-list loading. */
@@ -184,6 +186,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     externalProjectId,
     basePath: customBasePath,
     navigationQuery,
+    routeTenantId,
     headerExtra,
     loadConversationList = true,
   }) => {
@@ -333,12 +336,13 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       };
     }, [projectId, setProjectId, setConnectionStatus, subscribeSSE, unsubscribeSSE, setSandboxId]);
 
-    // Route tenant is authoritative; currentProject can lag during tenant/project transitions.
+    // Route tenant is authoritative; currentProject/currentTenant can lag during transitions.
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentTenant = useTenantStore((state) => state.currentTenant);
     const tenantId = deriveAgentChatTenantId({
-      routeTenantId: currentTenant?.id,
+      routeTenantId,
       projectTenantId: currentProject?.tenant_id,
+      storeTenantId: currentTenant?.id,
     });
 
     // Note: HITL is now rendered inline in the message timeline via InlineHITLCard.
