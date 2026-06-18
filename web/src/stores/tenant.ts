@@ -72,6 +72,9 @@ function getErrorMessage(error: unknown): string {
     : 'Failed to process request';
 }
 
+let latestListTenantsRequest = 0;
+let latestGetTenantRequest = 0;
+
 export const useTenantStore = create<TenantState>()(
   devtools(
     (set, get) => ({
@@ -92,9 +95,12 @@ export const useTenantStore = create<TenantState>()(
        * await listTenants({ page: 1, page_size: 20 });
        */
       listTenants: async (params = {}) => {
+        const requestId = latestListTenantsRequest + 1;
+        latestListTenantsRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response: TenantListResponse = await tenantAPI.list(params);
+          if (requestId !== latestListTenantsRequest) return;
           set({
             tenants: response.tenants,
             total: response.total,
@@ -103,6 +109,7 @@ export const useTenantStore = create<TenantState>()(
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (requestId !== latestListTenantsRequest) return;
           set({
             error: getErrorMessage(error),
             isLoading: false,
@@ -120,14 +127,18 @@ export const useTenantStore = create<TenantState>()(
        * await getTenant('tenant-1');
        */
       getTenant: async (id: string) => {
+        const requestId = latestGetTenantRequest + 1;
+        latestGetTenantRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response: Tenant = await tenantAPI.get(id);
+          if (requestId !== latestGetTenantRequest) return;
           set({
             currentTenant: response,
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (requestId !== latestGetTenantRequest) return;
           set({
             error: getErrorMessage(error),
             isLoading: false,
@@ -225,10 +236,19 @@ export const useTenantStore = create<TenantState>()(
        * setCurrentTenant(selectedTenant);
        */
       setCurrentTenant: (tenant: Tenant | null) => {
+        latestGetTenantRequest += 1;
         set({ currentTenant: tenant });
         // If tenant is cleared (logout), also clear the list
         if (tenant === null) {
-          set({ tenants: [] });
+          latestListTenantsRequest += 1;
+          set({
+            tenants: [],
+            total: 0,
+            page: 1,
+            pageSize: 20,
+            isLoading: false,
+            error: null,
+          });
         }
       },
 
