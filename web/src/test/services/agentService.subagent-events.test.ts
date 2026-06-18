@@ -132,4 +132,18 @@ describe('agentService project-scoped subagent lifecycle routing', () => {
     expect(routed.data.run_id).toBe('run-20');
     expect(routed.data.error).toContain('timed_out');
   });
+
+  it('does not debug-log websocket control messages', () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      handleMessage({ type: 'connected', data: { session_id: 'session-1' } });
+      handleMessage({ type: 'pong', data: { ok: true } });
+      handleMessage({ type: 'ack', action: 'subscribe', conversation_id: 'conv-1' });
+
+      expect(logSpy).not.toHaveBeenCalled();
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
 });

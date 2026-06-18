@@ -77,6 +77,9 @@ interface ServerMessage {
   action?: string | undefined;
 }
 
+const CONTROL_EVENT_TYPES = new Set<string>(['connected', 'pong', 'ack']);
+const IDLE_DISCONNECT_DELAY_MS = 5000;
+
 // =============================================================================
 // Unified Event Service
 // =============================================================================
@@ -126,6 +129,7 @@ class UnifiedEventServiceImpl {
 
   // Pending subscribe/unsubscribe messages (sent after connection)
   private pendingMessages: Array<Record<string, unknown>> = [];
+  private idleDisconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Get the session ID
@@ -152,6 +156,7 @@ class UnifiedEventServiceImpl {
    * Connect to the WebSocket server
    */
   connect(): Promise<void> {
+    this.cancelIdleDisconnect();
     if (this.connectingPromise) {
       logger.debug('[UnifiedWS] Connection already in progress, returning existing promise');
       return this.connectingPromise;
@@ -256,6 +261,7 @@ class UnifiedEventServiceImpl {
    */
   disconnect(): void {
     this.isManualClose = true;
+    this.cancelIdleDisconnect();
     this.stopHeartbeat();
     this.stopWatchdog();
 
@@ -293,6 +299,7 @@ class UnifiedEventServiceImpl {
    * @returns Unsubscribe function
    */
   subscribe(topic: string, handler: EventHandler): () => void {
+    this.cancelIdleDisconnect();
     // Add to local subscriptions
     if (!this.subscriptions.has(topic)) {
       this.subscriptions.set(topic, new Set());
@@ -331,6 +338,7 @@ class UnifiedEventServiceImpl {
       }
     }
     logger.debug(`[UnifiedWS] Unsubscribed from ${topic}`);
+    this.scheduleIdleDisconnectIfUnused();
   }
 
   /**
@@ -360,6 +368,7 @@ class UnifiedEventServiceImpl {
    * Subscribe to sandbox events for a project
    */
   subscribeSandbox(projectId: string, handler: EventHandler): () => void {
+    this.cancelIdleDisconnect();
     const topic = `sandbox:${projectId}`;
 
     this.ensureConnected();
@@ -391,6 +400,7 @@ class UnifiedEventServiceImpl {
             type: 'unsubscribe_sandbox',
             project_id: projectId,
           });
+          this.scheduleIdleDisconnectIfUnused();
         }
       }
     };
@@ -407,6 +417,7 @@ class UnifiedEventServiceImpl {
    * Subscribe to project-scoped domain events.
    */
   subscribeProject(projectId: string, handler: EventHandler, fromSequence?: string): () => void {
+    this.cancelIdleDisconnect();
     const topic = `project:${projectId}`;
 
     this.ensureConnected();
@@ -435,6 +446,7 @@ class UnifiedEventServiceImpl {
             type: 'unsubscribe_project_events',
             project_id: projectId,
           });
+          this.scheduleIdleDisconnectIfUnused();
         }
       }
     };
@@ -444,6 +456,7 @@ class UnifiedEventServiceImpl {
    * Subscribe to lifecycle state events for a project
    */
   subscribeLifecycle(projectId: string, handler: EventHandler): () => void {
+    this.cancelIdleDisconnect();
     const topic = `lifecycle:${projectId}`;
 
     this.ensureConnected();
@@ -471,6 +484,7 @@ class UnifiedEventServiceImpl {
             type: 'unsubscribe_lifecycle_state',
             project_id: projectId,
           });
+          this.scheduleIdleDisconnectIfUnused();
         }
       }
     };
@@ -508,8 +522,7 @@ class UnifiedEventServiceImpl {
     const { type, routing_key, conversation_id, project_id, data } = message;
 
     // Handle internal messages
-    if (type === 'connected' || type === 'pong' || type === 'ack') {
-      logger.debug(`[UnifiedWS] ${type}:`, data);
+    if (CONTROL_EVENT_TYPES.has(type)) {
       return;
     }
 
@@ -732,6 +745,32 @@ class UnifiedEventServiceImpl {
     this.watchdog = null;
   }
 
+  private cancelIdleDisconnect(): void {
+    if (!this.idleDisconnectTimeout) {
+      return;
+    }
+    clearTimeout(this.idleDisconnectTimeout);
+    this.idleDisconnectTimeout = null;
+  }
+
+  private scheduleIdleDisconnectIfUnused(): void {
+    if (
+      this.subscriptions.size > 0 ||
+      this.pendingMessages.length > 0 ||
+      this.idleDisconnectTimeout ||
+      !this.isConnected()
+    ) {
+      return;
+    }
+
+    this.idleDisconnectTimeout = setTimeout(() => {
+      this.idleDisconnectTimeout = null;
+      if (this.subscriptions.size === 0 && this.pendingMessages.length === 0) {
+        this.disconnect();
+      }
+    }, IDLE_DISCONNECT_DELAY_MS);
+  }
+
   // ===========================================================================
   // Statistics
   // ===========================================================================
@@ -772,6 +811,12 @@ class UnifiedEventServiceImpl {
  * Global unified event service instance
  */
 export const unifiedEventService = new UnifiedEventServiceImpl();
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    unifiedEventService.disconnect();
+  });
+}
 
 /**
  * Export the class for type usage

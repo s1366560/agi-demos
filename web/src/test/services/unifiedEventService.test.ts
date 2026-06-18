@@ -8,6 +8,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import { logger } from '@/utils/logger';
+
 // Mock the logger
 vi.mock('@/utils/logger', () => ({
   logger: {
@@ -95,6 +97,7 @@ describe('unifiedEventService', () => {
     unifiedEventService.disconnect();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   describe('connect()', () => {
@@ -242,6 +245,20 @@ describe('unifiedEventService', () => {
       // This tests the subscription mechanism
     });
   });
+
+  describe('control messages', () => {
+    it('does not debug-log websocket control messages', () => {
+      const internal = unifiedEventService as unknown as {
+        handleMessage: (message: unknown) => void;
+      };
+
+      internal.handleMessage({ type: 'connected', data: { session_id: 'session-1' } });
+      internal.handleMessage({ type: 'pong', data: { ok: true } });
+      internal.handleMessage({ type: 'ack', data: { action: 'subscribe' } });
+
+      expect(logger.debug).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('unifiedEventService - Topic Management', () => {
@@ -262,6 +279,7 @@ describe('unifiedEventService - Topic Management', () => {
     unifiedEventService.disconnect();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it('should track active subscriptions', async () => {
@@ -291,5 +309,58 @@ describe('unifiedEventService - Topic Management', () => {
     // Both handlers should be called for events on this topic
     unsub1();
     unsub2();
+  });
+
+  it('disconnects after the last topic is removed', () => {
+    vi.useFakeTimers();
+    const handler = vi.fn();
+    const closeSpy = vi.fn();
+    const sendSpy = vi.fn();
+    const internal = unifiedEventService as unknown as {
+      subscriptions: Map<string, Set<(event: unknown) => void>>;
+      ws: { readyState: number; send: (data: string) => void; close: () => void } | null;
+    };
+    internal.subscriptions.set('project:proj-idle', new Set([handler]));
+    internal.ws = {
+      readyState: MockWebSocket.OPEN,
+      send: sendSpy,
+      close: closeSpy,
+    };
+
+    unifiedEventService.unsubscribe('project:proj-idle', handler);
+
+    expect(sendSpy).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'unsubscribe_project_events', project_id: 'proj-idle' })
+    );
+    expect(closeSpy).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(5000);
+
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the connection open when a topic is added during the idle grace window', () => {
+    vi.useFakeTimers();
+    const handler = vi.fn();
+    const closeSpy = vi.fn();
+    const sendSpy = vi.fn();
+    const internal = unifiedEventService as unknown as {
+      subscriptions: Map<string, Set<(event: unknown) => void>>;
+      ws: { readyState: number; send: (data: string) => void; close: () => void } | null;
+    };
+    internal.subscriptions.set('project:proj-old', new Set([handler]));
+    internal.ws = {
+      readyState: MockWebSocket.OPEN,
+      send: sendSpy,
+      close: closeSpy,
+    };
+
+    unifiedEventService.unsubscribe('project:proj-old', handler);
+    unifiedEventService.subscribeProject('proj-new', vi.fn());
+
+    vi.advanceTimersByTime(5000);
+
+    expect(closeSpy).not.toHaveBeenCalled();
+    expect(internal.subscriptions.has('project:proj-new')).toBe(true);
   });
 });

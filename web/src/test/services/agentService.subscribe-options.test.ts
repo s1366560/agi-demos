@@ -8,6 +8,10 @@ describe('agentService subscribe recovery options', () => {
   const service = agentService as any;
 
   beforeEach(() => {
+    if (service.idleDisconnectTimeout) {
+      clearTimeout(service.idleDisconnectTimeout);
+      service.idleDisconnectTimeout = null;
+    }
     service.subscriptions = new Set<string>();
     service.handlers = new Map<string, AgentStreamHandler>();
     service.subscriptionOptions = new Map<string, Record<string, unknown>>();
@@ -18,6 +22,7 @@ describe('agentService subscribe recovery options', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it('sends subscribe payload with recovery cursor', () => {
@@ -122,5 +127,43 @@ describe('agentService subscribe recovery options', () => {
     expect(service.subscriptionOptions.get('conv-5')).toEqual({
       message_id: 'msg-running',
     });
+  });
+
+  it('disconnects after the last realtime subscription is removed', () => {
+    vi.useFakeTimers();
+    const sendSpy = vi.spyOn(service, 'send').mockReturnValue(true);
+    const disconnectSpy = vi.spyOn(agentService, 'disconnect').mockImplementation(() => {});
+    vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
+    service.subscriptions.add('conv-idle');
+
+    agentService.unsubscribe('conv-idle');
+
+    expect(sendSpy).toHaveBeenCalledWith({
+      type: 'unsubscribe',
+      conversation_id: 'conv-idle',
+    });
+    expect(disconnectSpy).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(4999);
+    expect(disconnectSpy).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(disconnectSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the connection open when a new subscription arrives during the idle grace window', () => {
+    vi.useFakeTimers();
+    vi.spyOn(service, 'send').mockReturnValue(true);
+    const disconnectSpy = vi.spyOn(agentService, 'disconnect').mockImplementation(() => {});
+    vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
+    service.subscriptions.add('conv-old');
+
+    agentService.unsubscribe('conv-old');
+    agentService.subscribe('conv-new', {} as AgentStreamHandler);
+
+    vi.advanceTimersByTime(5000);
+
+    expect(disconnectSpy).not.toHaveBeenCalled();
+    expect(service.subscriptions.has('conv-new')).toBe(true);
   });
 });

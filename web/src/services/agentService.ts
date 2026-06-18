@@ -57,6 +57,8 @@ const SILENT_AGENT_EVENT_TYPES = new Set<string>([
   'sandbox_state_change',
   'sandbox_event',
 ]);
+const CONTROL_AGENT_EVENT_TYPES = new Set<string>(['connected', 'pong', 'ack']);
+const IDLE_DISCONNECT_DELAY_MS = 5000;
 
 class AgentServiceImpl implements AgentService {
   private sessionId: string = generateSessionId();
@@ -90,6 +92,7 @@ class AgentServiceImpl implements AgentService {
   // Performance tracking: Track event receive times for diagnostics
   private performanceMetrics: Map<string, number[]> = new Map();
   private readonly MAX_METRICS_SAMPLES = 100;
+  private idleDisconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.wsConnection = new WebSocketConnection({
@@ -108,10 +111,12 @@ class AgentServiceImpl implements AgentService {
   }
 
   connect(): Promise<void> {
+    this.cancelIdleDisconnect();
     return this.wsConnection.connect();
   }
 
   disconnect(): void {
+    this.cancelIdleDisconnect();
     this.wsConnection.disconnect();
   }
 
@@ -138,18 +143,7 @@ class AgentServiceImpl implements AgentService {
     const receiveTime = performance.now();
     this.recordEventMetric(type, receiveTime);
 
-    if (!SILENT_AGENT_EVENT_TYPES.has(type)) {
-      logger.debug('[AgentWS] handleMessage:', {
-        type,
-        conversation_id,
-        hasData: !!data,
-        eventTimeUs: message.event_time_us,
-        counter: message.event_counter,
-      });
-    }
-
     if (type === 'connected') {
-      logger.debug('[AgentWS] Connection confirmed:', data);
       return;
     }
 
@@ -158,10 +152,17 @@ class AgentServiceImpl implements AgentService {
     }
 
     if (type === 'ack') {
-      logger.debug(
-        `[AgentWS] Ack for ${message.action ?? 'unknown'} on ${conversation_id ?? 'global'}`
-      );
       return;
+    }
+
+    if (!CONTROL_AGENT_EVENT_TYPES.has(type) && !SILENT_AGENT_EVENT_TYPES.has(type)) {
+      logger.debug('[AgentWS] handleMessage:', {
+        type,
+        conversation_id,
+        hasData: !!data,
+        eventTimeUs: message.event_time_us,
+        counter: message.event_counter,
+      });
     }
 
     if (type === 'status_update') {
@@ -541,6 +542,7 @@ class AgentServiceImpl implements AgentService {
   }
 
   async chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void> {
+    this.cancelIdleDisconnect();
     const {
       conversation_id,
       message,
@@ -588,6 +590,7 @@ class AgentServiceImpl implements AgentService {
   }
 
   subscribe(conversationId: string, handler: AgentStreamHandler, options?: SubscribeOptions): void {
+    this.cancelIdleDisconnect();
     const alreadySubscribed = this.subscriptions.has(conversationId);
     const previousOptions = this.subscriptionOptions.get(conversationId);
     this.handlers.set(conversationId, handler);
@@ -629,6 +632,7 @@ class AgentServiceImpl implements AgentService {
         conversation_id: conversationId,
       });
     }
+    this.scheduleIdleDisconnectIfUnused();
   }
 
   private recordEventMetric(eventType: string, timestamp: number): void {
@@ -661,6 +665,7 @@ class AgentServiceImpl implements AgentService {
   }
 
   subscribeStatus(projectId: string, callback: (status: unknown) => void): void {
+    this.cancelIdleDisconnect();
     this.statusSubscriber = { projectId, callback };
 
     if (this.isConnected()) {
@@ -683,6 +688,7 @@ class AgentServiceImpl implements AgentService {
       );
     }
     this.statusSubscriber = null;
+    this.scheduleIdleDisconnectIfUnused();
   }
 
   subscribeLifecycleState(
@@ -690,6 +696,7 @@ class AgentServiceImpl implements AgentService {
     tenantId: string,
     callback: (state: LifecycleStateData) => void
   ): void {
+    this.cancelIdleDisconnect();
     this.lifecycleStateSubscriber = { projectId, tenantId, callback };
 
     if (this.isConnected()) {
@@ -710,6 +717,7 @@ class AgentServiceImpl implements AgentService {
       });
     }
     this.lifecycleStateSubscriber = null;
+    this.scheduleIdleDisconnectIfUnused();
   }
 
   subscribeSandboxState(
@@ -717,6 +725,7 @@ class AgentServiceImpl implements AgentService {
     tenantId: string,
     callback: (state: SandboxStateData) => void
   ): void {
+    this.cancelIdleDisconnect();
     this.sandboxStateSubscriber = { projectId, tenantId, callback };
 
     if (this.isConnected()) {
@@ -738,11 +747,48 @@ class AgentServiceImpl implements AgentService {
       }
     }
     this.sandboxStateSubscriber = null;
+    this.scheduleIdleDisconnectIfUnused();
+  }
+
+  private hasRealtimeConsumers(): boolean {
+    return (
+      this.subscriptions.size > 0 ||
+      this.statusSubscriber !== null ||
+      this.lifecycleStateSubscriber !== null ||
+      this.sandboxStateSubscriber !== null
+    );
+  }
+
+  private cancelIdleDisconnect(): void {
+    if (!this.idleDisconnectTimeout) {
+      return;
+    }
+    clearTimeout(this.idleDisconnectTimeout);
+    this.idleDisconnectTimeout = null;
+  }
+
+  private scheduleIdleDisconnectIfUnused(): void {
+    if (this.hasRealtimeConsumers() || this.idleDisconnectTimeout || !this.isConnected()) {
+      return;
+    }
+
+    this.idleDisconnectTimeout = setTimeout(() => {
+      this.idleDisconnectTimeout = null;
+      if (!this.hasRealtimeConsumers()) {
+        this.disconnect();
+      }
+    }, IDLE_DISCONNECT_DELAY_MS);
   }
 }
 
 // Export singleton instance
 export const agentService = new AgentServiceImpl();
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    agentService.disconnect();
+  });
+}
 
 // Export type for convenience
 export type { AgentService };
