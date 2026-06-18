@@ -229,6 +229,35 @@ class TestSqlAgentRegistryRepository:
         assert "legacy-project-sisyphus" not in ids
 
     @pytest.mark.asyncio
+    async def test_create_allows_same_agent_name_in_different_tenants(
+        self,
+        db_session: AsyncSession,
+    ) -> None:
+        repo = SqlAgentRegistryRepository(db_session)
+        first_agent = _build_custom_agent(
+            "tenant-one-worker-agent",
+            "worker-agent",
+            "tenant-one",
+        )
+        second_agent = _build_custom_agent(
+            "tenant-two-worker-agent",
+            "worker-agent",
+            "tenant-two",
+        )
+
+        await repo.create(first_agent)
+        await repo.create(second_agent)
+        await db_session.commit()
+
+        tenant_one_agent = await repo.get_by_name("tenant-one", "worker-agent")
+        tenant_two_agent = await repo.get_by_name("tenant-two", "worker-agent")
+
+        assert tenant_one_agent is not None
+        assert tenant_one_agent.id == "tenant-one-worker-agent"
+        assert tenant_two_agent is not None
+        assert tenant_two_agent.id == "tenant-two-worker-agent"
+
+    @pytest.mark.asyncio
     async def test_list_by_tenant_filters_project_scope_before_database_pagination(
         self,
         db_session: AsyncSession,

@@ -2154,7 +2154,7 @@ class AgentDefinitionModel(Base):
     project_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("projects.id"), nullable=True, index=True
     )
-    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     trigger_description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -2190,6 +2190,26 @@ class AgentDefinitionModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_agent_definitions_tenant_name",
+            "tenant_id",
+            "name",
+            unique=True,
+            postgresql_where=text("project_id IS NULL"),
+            sqlite_where=text("project_id IS NULL"),
+        ),
+        Index(
+            "uq_agent_definitions_tenant_project_name",
+            "tenant_id",
+            "project_id",
+            "name",
+            unique=True,
+            postgresql_where=text("project_id IS NOT NULL"),
+            sqlite_where=text("project_id IS NOT NULL"),
+        ),
     )
 
     project: Mapped[Optional["Project"]] = relationship(foreign_keys=[project_id])
