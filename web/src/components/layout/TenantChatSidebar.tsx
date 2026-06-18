@@ -46,7 +46,7 @@ import { formatDistanceToNow } from '@/utils/date';
 import {
   getContextualTopNavItems,
   isContextualTopNavItemActive,
-} from '@/components/layout/TenantHeader';
+} from '@/components/layout/tenantNavigation';
 import { LazyButton, LazyInput } from '@/components/ui/lazyAntd';
 
 import { Resizer } from '../agent/Resizer';
