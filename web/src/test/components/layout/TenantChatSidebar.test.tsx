@@ -22,6 +22,7 @@ const { formatDistanceToNowMock, loadWorkspaceSurfaceMock, modalConfirm } = vi.h
 
 const agentState = {
   activeConversationId: 'conv-1',
+  setActiveConversation: vi.fn(),
   loadConversations: vi.fn(),
   loadMoreConversations: vi.fn(),
   createNewConversation: vi.fn(),
@@ -40,6 +41,7 @@ const conversationsState = {
   ],
   conversationsLoading: false,
   hasMoreConversations: false,
+  reset: vi.fn(),
 };
 
 const projectState = {
@@ -233,6 +235,7 @@ describe('TenantChatSidebar', () => {
     vi.clearAllMocks();
     formatDistanceToNowMock.mockReturnValue('just now');
     agentState.activeConversationId = 'conv-1';
+    agentState.setActiveConversation.mockReset();
     agentState.createNewConversation.mockResolvedValue('conv-new');
     conversationsState.conversations = [
       {
@@ -244,6 +247,7 @@ describe('TenantChatSidebar', () => {
     ];
     conversationsState.conversationsLoading = false;
     conversationsState.hasMoreConversations = false;
+    conversationsState.reset.mockReset();
     projectState.projects = [
       { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' },
       { id: 'project-2', name: 'Project Two', tenant_id: 'tenant-1' },
@@ -492,6 +496,40 @@ describe('TenantChatSidebar', () => {
       tenant_id: 'tenant-2',
     });
     expect(localStorage.getItem('agent:tenant-2:lastProjectId')).toBe(JSON.stringify('project-2'));
+  });
+
+  it('clears stale conversations when the new tenant has no valid projects', async () => {
+    projectState.projects = [{ id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' }];
+    projectState.currentProject = { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' };
+
+    const { rerender } = rtlRender(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/agent-workspace']}>
+        <TenantChatSidebar tenantId="tenant-1" mobile />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Conversation One')).toBeInTheDocument();
+    });
+    conversationsState.reset.mockClear();
+    agentState.setActiveConversation.mockClear();
+
+    projectState.projects = [];
+    projectState.currentProject = null;
+
+    rerender(
+      <MemoryRouter initialEntries={['/tenant/tenant-2/agent-workspace']}>
+        <TenantChatSidebar tenantId="tenant-2" mobile />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Project switcher' })).toBeDisabled();
+      expect(screen.queryByText('Conversation One')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('No conversations yet')).toBeInTheDocument();
+    expect(conversationsState.reset).toHaveBeenCalledTimes(1);
+    expect(agentState.setActiveConversation).toHaveBeenCalledWith(null);
   });
 
   it('does not carry workspace context when creating a new conversation', async () => {

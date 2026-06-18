@@ -536,6 +536,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   const {
     activeConversationId,
+    setActiveConversation,
     loadConversations,
     loadMoreConversations,
     createNewConversation,
@@ -543,6 +544,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   } = useAgentV3Store(
     useShallow((state) => ({
       activeConversationId: state.activeConversationId,
+      setActiveConversation: state.setActiveConversation,
       loadConversations: state.loadConversations,
       loadMoreConversations: state.loadMoreConversations,
       createNewConversation: state.createNewConversation,
@@ -554,13 +556,15 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const workspaces = useWorkspaces();
   const { loadWorkspaceSurface } = useWorkspaceActions();
 
-  const { conversations, conversationsLoading, hasMoreConversations } = useConversationsStore(
-    useShallow((state) => ({
-      conversations: state.conversations,
-      conversationsLoading: state.conversationsLoading,
-      hasMoreConversations: state.hasMoreConversations,
-    }))
-  );
+  const { conversations, conversationsLoading, hasMoreConversations, reset: resetConversations } =
+    useConversationsStore(
+      useShallow((state) => ({
+        conversations: state.conversations,
+        conversationsLoading: state.conversationsLoading,
+        hasMoreConversations: state.hasMoreConversations,
+        reset: state.reset,
+      }))
+    );
 
   const { projects, currentProject, listProjects, setCurrentProject } = useProjectStore();
   const preferredWorkspaceId = currentWorkspace?.id ?? workspaces[0]?.id ?? null;
@@ -663,8 +667,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       tenantBasePath,
     ]
   );
+  const previousTenantIdRef = useRef<string | undefined>(resolvedTenantId);
 
   useEffect(() => {
+    const tenantChanged = previousTenantIdRef.current !== resolvedTenantId;
+    previousTenantIdRef.current = resolvedTenantId;
     setSelectedProjectId(null);
     setProjectSearchResults([]);
     setProjectSearchQuery('');
@@ -676,7 +683,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     }
     loadedProjectIdRef.current = null;
     loadedSidebarWorkspaceSurfaceRef.current = null;
-  }, [resolvedTenantId]);
+    if (tenantChanged) {
+      resetConversations();
+      setActiveConversation(null);
+    }
+  }, [resetConversations, resolvedTenantId, setActiveConversation]);
 
   useEffect(
     () => () => {
@@ -741,6 +752,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   useEffect(() => {
     if (selectedProjectId && loadedProjectIdRef.current !== selectedProjectId) {
+      if (loadedProjectIdRef.current) {
+        resetConversations();
+        setActiveConversation(null);
+      }
       loadedProjectIdRef.current = selectedProjectId;
       // Use ref to call latest function without triggering effect re-run
       void Promise.resolve(loadConversationsRef.current(selectedProjectId)).catch(
@@ -750,7 +765,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       );
     }
     // ONLY depend on selectedProjectId, NOT loadConversations
-  }, [selectedProjectId]);
+  }, [resetConversations, selectedProjectId, setActiveConversation]);
 
   useEffect(() => {
     if (!tenantId || !selectedProjectId || !workspaceIdFromQuery) {
@@ -788,6 +803,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   ]);
 
   // Enrich conversations with project info
+  const visibleConversations = useMemo(
+    () => (selectedProjectId ? conversations : []),
+    [conversations, selectedProjectId]
+  );
   const selectedProjectName = useMemo(
     () => projectById.get(selectedProjectId ?? '')?.name || 'Unknown Project',
     [projectById, selectedProjectId]
@@ -801,7 +820,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       workspaceNameById.set(currentWorkspace.id, currentWorkspace.name);
     }
     const workspaceTaskTitleById = new Map(workspaceTasks.map((task) => [task.id, task.title]));
-    return conversations
+    return visibleConversations
       .filter((conv) => !isDerivedAgentConversation(conv))
       .map((conv) => ({
         ...conv,
@@ -820,10 +839,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         })(),
       }));
   }, [
-    conversations,
     currentWorkspace,
     selectedProjectId,
     selectedProjectName,
+    visibleConversations,
     workspaceTasks,
     workspaces,
   ]);
@@ -946,12 +965,18 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     const contentFillsContainer = container.scrollHeight > container.clientHeight + 10;
 
     // If content doesn't fill container and there are more conversations, load more
-    if (!contentFillsContainer && conversations.length > 0) {
+    if (!contentFillsContainer && visibleConversations.length > 0) {
       void loadMore().catch((error: unknown) => {
         console.error('Failed to auto-load more conversations:', error);
       });
     }
-  }, [conversations.length, hasMoreConversations, isLoadingMore, selectedProjectId, loadMore]);
+  }, [
+    visibleConversations.length,
+    hasMoreConversations,
+    isLoadingMore,
+    selectedProjectId,
+    loadMore,
+  ]);
 
   const handleNewConversation = useCallback(async () => {
     if (!selectedProjectId) return;
@@ -1111,13 +1136,16 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   // Get current width for render
   const currentWidth = collapsed ? SIDEBAR_COLLAPSED_WIDTH : sidebarWidth;
   const conversationCountLabel = t('agent.sidebar.conversationCount', {
-    count: conversations.length,
+    count: visibleConversations.length,
     defaultValue: '{{count}} conversations',
   });
   const conversationCountText =
     typeof conversationCountLabel === 'string'
       ? conversationCountLabel
-      : `${conversations.length.toString()} ${t('agent.sidebar.conversations', 'conversations')}`;
+      : `${visibleConversations.length.toString()} ${t(
+          'agent.sidebar.conversations',
+          'conversations'
+        )}`;
 
   return (
     <aside
