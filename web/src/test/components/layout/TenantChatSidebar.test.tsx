@@ -351,6 +351,40 @@ describe('TenantChatSidebar', () => {
     expect(screen.getByText('Select a project to view conversations')).toBeInTheDocument();
   });
 
+  it('does not preload project options on non-agent tenant pages', async () => {
+    projectState.projects = [];
+    projectState.currentProject = null;
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/overview',
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(projectState.listProjects).not.toHaveBeenCalled();
+    expect(agentState.loadConversations).not.toHaveBeenCalled();
+    expect(screen.getByRole('combobox', { name: 'Project switcher' })).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'Search to select a project' })).toBeInTheDocument();
+  });
+
+  it('preloads the project switcher window on agent workspace pages', async () => {
+    projectState.projects = [];
+    projectState.currentProject = null;
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    await waitFor(() => {
+      expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1', {
+        page: 1,
+        page_size: 25,
+      });
+    });
+  });
+
   it('deduplicates project switcher options by project id', () => {
     projectState.projects = [
       { id: 'Project Aurora', name: 'Project Aurora', tenant_id: 'tenant-1' },

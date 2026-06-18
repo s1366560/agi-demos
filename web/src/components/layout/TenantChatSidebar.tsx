@@ -772,16 +772,17 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     }
   }, [sidebarWidth, isDragging]);
 
-  // Load projects on mount
+  // Load the default project window only when the agent workspace needs it.
+  // Other tenant pages keep search available without preloading large project lists.
   useEffect(() => {
-    if (tenantId && tenantScopedProjects.length === 0) {
+    if (tenantId && isAgentWorkspaceRoute && tenantScopedProjects.length === 0) {
       void Promise.resolve(
         listProjects(tenantId, { page: 1, page_size: PROJECT_SWITCHER_PAGE_SIZE })
       ).catch((error: unknown) => {
         console.error('Failed to load projects:', error);
       });
     }
-  }, [tenantId, tenantScopedProjects.length, listProjects]);
+  }, [isAgentWorkspaceRoute, tenantId, tenantScopedProjects.length, listProjects]);
 
   // Set default selected project
   useEffect(() => {
@@ -891,6 +892,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     () => projectById.get(selectedProjectId ?? '')?.name || 'Unknown Project',
     [projectById, selectedProjectId]
   );
+  const emptyProjectOptionLabel = isProjectSearchLoading
+    ? t('agent.sidebar.searchingProjects', 'Searching projects...')
+    : isAgentWorkspaceRoute || projectSearchQuery.trim()
+      ? t('agent.sidebar.noProjectsFound', 'No projects found')
+      : t('agent.sidebar.searchProjectsToSelect', 'Search to select a project');
 
   const enrichedConversations: ConversationWithProject[] = useMemo(() => {
     const workspaceNameById = new Map(
@@ -1314,11 +1320,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               className="h-9 w-full appearance-none rounded-md border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-900 outline-none transition-colors hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600"
             >
               {selectableProjects.length === 0 ? (
-                <option value="">
-                  {isProjectSearchLoading
-                    ? t('agent.sidebar.searchingProjects', 'Searching projects...')
-                    : t('agent.sidebar.noProjectsFound', 'No projects found')}
-                </option>
+                <option value="">{emptyProjectOptionLabel}</option>
               ) : (
                 <>
                   {!selectedProjectId ? (
