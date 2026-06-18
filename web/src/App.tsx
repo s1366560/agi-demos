@@ -363,6 +363,10 @@ function buildCanonicalProjectRedirectPath({
   return `/tenant/${tenantId}/project/${projectId ?? ''}${subPath}${normalizedQuery}`;
 }
 
+function buildTenantProjectsFallbackPath(tenantId: string | undefined, query: string): string {
+  return tenantId ? `/tenant/${tenantId}/projects${query}` : `/tenant/projects${query}`;
+}
+
 function useResolvedProjectRedirectPath({
   projectId,
   rest,
@@ -373,12 +377,15 @@ function useResolvedProjectRedirectPath({
   query?: string | undefined;
 }): string | null {
   const currentTenant = useTenantStore((state) => state.currentTenant);
+  const tenants = useTenantStore((state) => state.tenants);
+  const listTenants = useTenantStore((state) => state.listTenants);
   const user = useAuthStore((state) => state.user);
   const projects = useProjectStore((state) => state.projects);
   const getProject = useProjectStore((state) => state.getProject);
   const [resolvedPath, setResolvedPath] = useState<string | null>(null);
   const normalizedQuery = query || '';
-  const fallbackPath = `/tenant/projects${normalizedQuery}`;
+  const fallbackTenantId = currentTenant?.id || user?.tenant_id || tenants[0]?.id;
+  const fallbackPath = buildTenantProjectsFallbackPath(fallbackTenantId, normalizedQuery);
 
   useEffect(() => {
     let cancelled = false;
@@ -390,13 +397,21 @@ function useResolvedProjectRedirectPath({
     }
 
     const trustedTenantId =
-      currentTenant?.id && projects.some((project) => project.id === projectId)
+      currentTenant?.id &&
+      projects.some((project) => project.id === projectId && project.tenant_id === currentTenant.id)
         ? currentTenant.id
         : undefined;
-    const candidateTenantIds = [trustedTenantId, currentTenant?.id, user?.tenant_id].filter(
-      (tenantId, index, values): tenantId is string =>
-        Boolean(tenantId) && values.indexOf(tenantId) === index
-    );
+    const uniqueTenantIds = (tenantIds: Array<string | undefined>) =>
+      tenantIds.filter(
+        (tenantId, index, values): tenantId is string =>
+          Boolean(tenantId) && values.indexOf(tenantId) === index
+      );
+    let candidateTenantIds = uniqueTenantIds([
+      trustedTenantId,
+      currentTenant?.id,
+      user?.tenant_id,
+      ...tenants.map((tenant) => tenant.id),
+    ]);
 
     const resolvePath = async () => {
       if (trustedTenantId) {
@@ -406,6 +421,17 @@ function useResolvedProjectRedirectPath({
           rest,
           query: normalizedQuery,
         });
+      }
+
+      if (candidateTenantIds.length === 0) {
+        try {
+          await listTenants();
+          candidateTenantIds = uniqueTenantIds(
+            useTenantStore.getState().tenants.map((tenant) => tenant.id)
+          );
+        } catch {
+          return fallbackPath;
+        }
       }
 
       for (const tenantId of candidateTenantIds) {
@@ -422,7 +448,10 @@ function useResolvedProjectRedirectPath({
         }
       }
 
-      return fallbackPath;
+      return buildTenantProjectsFallbackPath(
+        candidateTenantIds[0] ?? fallbackTenantId,
+        normalizedQuery
+      );
     };
 
     void resolvePath().then((path) => {
@@ -437,11 +466,14 @@ function useResolvedProjectRedirectPath({
   }, [
     currentTenant?.id,
     fallbackPath,
+    fallbackTenantId,
     getProject,
+    listTenants,
     normalizedQuery,
     projectId,
     projects,
     rest,
+    tenants,
     user?.tenant_id,
   ]);
 
