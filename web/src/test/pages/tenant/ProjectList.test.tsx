@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Route, Routes } from 'react-router-dom';
 
 import { ProjectList } from '../../../pages/tenant/ProjectList';
 import { projectAPI } from '../../../services/api';
@@ -125,6 +126,76 @@ describe('ProjectList', () => {
         page_size: 20,
         visibility: 'all',
       })
+    );
+  });
+
+  it('uses the route tenant id when the tenant store is still stale', async () => {
+    vi.mocked(useTenantStore).mockReturnValue({
+      currentTenant: { id: 'tenant-store-old', max_storage: 1024 },
+    } as any);
+
+    const mockProjects: Project[] = [
+      {
+        id: 'project-route',
+        tenant_id: 'tenant-route-new',
+        name: 'Route Tenant Project',
+        description: 'Route scoped project',
+        owner_id: 'user1',
+        member_ids: [],
+        memory_rules: {
+          max_episodes: 1000,
+          retention_days: 30,
+          auto_refresh: true,
+          refresh_interval: 300,
+        },
+        graph_config: {
+          max_nodes: 500,
+          max_edges: 1000,
+          similarity_threshold: 0.8,
+          community_detection: true,
+        },
+        is_public: true,
+        created_at: '2024-01-01T00:00:00Z',
+        stats: {
+          memory_count: 0,
+          storage_used: 0,
+          node_count: 0,
+          member_count: 0,
+          last_active: null,
+        },
+      },
+    ];
+
+    vi.mocked(projectAPI.list).mockResolvedValue({
+      projects: mockProjects,
+      total: 1,
+      page: 1,
+      page_size: 20,
+    });
+
+    render(
+      <Routes>
+        <Route path="/tenant/:tenantId/projects" element={<ProjectList />} />
+      </Routes>,
+      { route: '/tenant/tenant-route-new/projects' }
+    );
+
+    const projectLink = await screen.findByRole('link', { name: 'Route Tenant Project' });
+
+    expect(projectAPI.list).toHaveBeenCalledWith(
+      'tenant-route-new',
+      expect.objectContaining({
+        page: 1,
+        page_size: 20,
+      })
+    );
+    expect(projectLink).toHaveAttribute(
+      'href',
+      '/tenant/tenant-route-new/project/project-route'
+    );
+    expect(screen.getAllByRole('link', { name: 'Create New Project' })[0]).toHaveAttribute(
+      'href',
+      '/tenant/tenant-route-new/projects/new'
     );
   });
 

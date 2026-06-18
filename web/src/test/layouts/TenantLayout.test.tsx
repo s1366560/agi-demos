@@ -378,6 +378,25 @@ describe('TenantLayout', () => {
     });
   });
 
+  it('fetches a route project with the route tenant while the tenant store is stale', async () => {
+    setMockRouteParams({ tenantId: 'tenant-new', projectId: 'project-new' });
+    mockLocationPathname = '/tenant/tenant-new/project/project-new';
+    mockTenantState.currentTenant = { id: 'tenant-old', name: 'Old Tenant' };
+    mockProjectState.currentProject = null;
+    mockProjectState.getProject.mockResolvedValue({
+      id: 'project-new',
+      tenant_id: 'tenant-new',
+      name: 'New Tenant Project',
+    });
+
+    render(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(mockProjectState.getProject).toHaveBeenCalledWith('tenant-new', 'project-new');
+    });
+    expect(mockProjectState.getProject).not.toHaveBeenCalledWith('tenant-old', 'project-new');
+  });
+
   it('syncs project state from agent workspace project query parameter', async () => {
     const queryProject = { id: 'query-project', tenant_id: 't1', name: 'Query Project' };
     setMockRouteParams({ tenantId: 't1' });

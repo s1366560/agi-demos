@@ -350,6 +350,25 @@ describe('TenantHeader', () => {
     expect(screen.queryByText('Tenant')).not.toBeInTheDocument();
   });
 
+  it('uses the route tenant as the selected dropdown tenant while currentTenant is stale', () => {
+    tenantState.currentTenant = { id: 'tenant-1', name: 'Tenant One' };
+
+    render(
+      <TenantHeader
+        tenantId="tenant-2"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'User menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tenant Two' }));
+
+    expect(setCurrentTenant).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
   it('falls back to /tenant base path when tenantId is empty', () => {
     tenantState.currentTenant = null;
     tenantState.tenants = [];

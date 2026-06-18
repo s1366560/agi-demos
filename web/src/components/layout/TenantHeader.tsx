@@ -530,7 +530,7 @@ function HeaderUserMenu({
 
   const handleTenantSelect = (tenant: Tenant) => {
     setOpen(false);
-    if (tenant.id === currentTenant?.id) {
+    if (tenant.id === normalizedTenantId) {
       return;
     }
     void navigate(`/tenant/${tenant.id}`);
@@ -643,7 +643,7 @@ function HeaderUserMenu({
               </div>
               <div className="py-1 max-h-44 overflow-y-auto">
                 {availableTenants.map((tenant) => {
-                  const isSelected = tenant.id === currentTenant?.id;
+                  const isSelected = tenant.id === normalizedTenantId;
 
                   return (
                     <button

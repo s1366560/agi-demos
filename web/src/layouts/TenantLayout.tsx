@@ -92,6 +92,7 @@ export const TenantLayout: React.FC = memo(() => {
   const projectSyncRequestRef = useRef(0);
   const tenantProjectScopeRef = useRef<string | null | undefined>(undefined);
   const tenantProjectScope = tenantId ?? currentTenant?.id ?? null;
+  const projectSyncTenantId = tenantId ?? currentTenant?.id ?? null;
 
   const handleLogout = useCallback(() => {
     logout();
@@ -232,20 +233,26 @@ export const TenantLayout: React.FC = memo(() => {
     projectSyncRequestRef.current = requestId;
     const requestProjectId = effectiveProjectId ?? null;
     const isCurrentProjectRequest = () => projectSyncRequestRef.current === requestId;
+    const currentProjectMatchesRequest =
+      !!requestProjectId &&
+      currentProject?.id === requestProjectId &&
+      (!projectSyncTenantId || currentProject.tenant_id === projectSyncTenantId);
 
     if (
       requestProjectId &&
-      currentTenant &&
-      (!currentProject || currentProject.id !== requestProjectId)
+      projectSyncTenantId &&
+      !currentProjectMatchesRequest
     ) {
       const { projects, setCurrentProject, getProject } = useProjectStore.getState();
-      const project = projects.find((p) => p.id === requestProjectId);
+      const project = projects.find(
+        (p) => p.id === requestProjectId && p.tenant_id === projectSyncTenantId
+      );
       if (project) {
         if (isCurrentProjectRequest()) {
           setCurrentProject(project);
         }
       } else {
-        getProject(currentTenant.id, requestProjectId)
+        getProject(projectSyncTenantId, requestProjectId)
           .then((p) => {
             if (isCurrentProjectRequest()) {
               setCurrentProject(p);
@@ -266,7 +273,7 @@ export const TenantLayout: React.FC = memo(() => {
         projectSyncRequestRef.current += 1;
       }
     };
-  }, [effectiveProjectId, currentTenant, currentProject, isAgentWorkspaceRoute]);
+  }, [effectiveProjectId, projectSyncTenantId, currentProject, isAgentWorkspaceRoute]);
 
   // No tenants state - welcome screen
   if (noTenants) {

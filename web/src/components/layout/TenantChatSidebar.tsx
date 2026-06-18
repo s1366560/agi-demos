@@ -694,7 +694,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   }, [location.pathname]);
   const selectedConversationId = routeConversationId ?? activeConversationId;
   const isProjectScopedPath = location.pathname.includes('/project/');
-  const contextualProjectId = isProjectScopedPath ? currentProject?.id : undefined;
+  const contextualProjectId =
+    isProjectScopedPath && projectBelongsToTenant(currentProject, resolvedTenantId)
+      ? currentProject.id
+      : undefined;
   const contextualProjectBasePath = contextualProjectId
     ? `${tenantBasePath}/project/${contextualProjectId}`
     : null;

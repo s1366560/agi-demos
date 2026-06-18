@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 import {
   Brain,
@@ -78,8 +78,12 @@ const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 // Use memo to prevent unnecessary re-renders (rerender-memo)
 const ProjectListInner: React.FC<ProjectListProps> = () => {
   const { t } = useTranslation();
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
   const { currentTenant } = useTenantStore();
   const { listProjects, deleteProject, projects, isLoading, total, ownerIds } = useProjectStore();
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
+  const tenantBasePath = tenantId ? `/tenant/${tenantId}` : '/tenant';
+  const tenantForLimits = currentTenant?.id === tenantId ? currentTenant : null;
   const [search, setSearch] = useState('');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -101,10 +105,10 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
   }, [debouncedSearch, ownerFilter, page, pageSize, visibilityFilter]);
 
   useEffect(() => {
-    if (currentTenant) {
-      void listProjects(currentTenant.id, projectQueryParams);
+    if (tenantId) {
+      void listProjects(tenantId, projectQueryParams);
     }
-  }, [currentTenant, listProjects, projectQueryParams]);
+  }, [listProjects, projectQueryParams, tenantId]);
 
   // Create formatTime function using translation hook
   const formatTime = createFormatTime(t);
@@ -142,11 +146,11 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
   };
 
   const handleDelete = async (projectId: string) => {
-    if (!currentTenant) return;
+    if (!tenantId) return;
     if (await confirmAction({ title: t('tenant.projects.deleteConfirm'), danger: true })) {
       try {
-        await deleteProject(currentTenant.id, projectId);
-        await listProjects(currentTenant.id, projectQueryParams);
+        await deleteProject(tenantId, projectId);
+        await listProjects(tenantId, projectQueryParams);
         setActiveMenu(null);
       } catch (error) {
         console.error('Failed to delete project:', error);
@@ -154,7 +158,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
     }
   };
 
-  if (!currentTenant) {
+  if (!tenantId) {
     return <div className="p-8 text-center text-slate-500">{t('tenant.overview.loading')}</div>;
   }
 
@@ -169,7 +173,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           <p className="text-sm text-slate-500">{t('tenant.projects.subtitle')}</p>
         </div>
         <Link
-          to={`/tenant/${currentTenant.id}/projects/new`}
+          to={`${tenantBasePath}/projects/new`}
           className="bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-primary/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity]"
         >
           <Plus size={16} />
@@ -292,7 +296,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                   </div>
                   <div>
                     <Link
-                      to={`/tenant/${currentTenant.id}/project/${project.id}`}
+                      to={`${tenantBasePath}/project/${project.id}`}
                       className="text-base font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors hover:underline"
                     >
                       {project.name}
@@ -319,7 +323,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                     style={{
                       width: formatStorageUsagePercent(
                         project.stats?.storage_used ?? 0,
-                        currentTenant.max_storage
+                        tenantForLimits?.max_storage
                       ),
                     }}
                   ></div>
@@ -366,7 +370,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                   {activeMenu === project.id && (
                     <div className="absolute right-0 bottom-full mb-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-10">
                       <Link
-                        to={`/tenant/${currentTenant.id}/projects/${project.id}/edit`}
+                        to={`${tenantBasePath}/projects/${project.id}/edit`}
                         className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
                         onClick={() => {
                           setActiveMenu(null);
@@ -395,7 +399,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
 
           {/* New Project Placeholder */}
           <Link
-            to={`/tenant/${currentTenant.id}/projects/new`}
+            to={`${tenantBasePath}/projects/new`}
             className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center justify-center gap-4 hover:border-primary hover:bg-primary/5 transition-[color,background-color,border-color,box-shadow,opacity] group min-h-50"
           >
             <div className="h-12 w-12 rounded-full bg-white dark:bg-slate-700 shadow-sm flex items-center justify-center text-slate-400 group-hover:text-primary transition-[color,background-color,border-color,box-shadow,opacity]">
@@ -451,7 +455,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                         </div>
                         <div>
                           <Link
-                            to={`/tenant/${currentTenant.id}/project/${project.id}`}
+                            to={`${tenantBasePath}/project/${project.id}`}
                             className="font-bold text-slate-900 dark:text-white hover:text-primary transition-colors"
                           >
                             {project.name}
@@ -483,7 +487,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                             style={{
                               width: formatStorageUsagePercent(
                                 project.stats?.storage_used ?? 0,
-                                currentTenant.max_storage
+                                tenantForLimits?.max_storage
                               ),
                             }}
                           ></div>
@@ -534,7 +538,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                         {activeMenu === project.id && (
                           <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-10">
                             <Link
-                              to={`/tenant/${currentTenant.id}/projects/${project.id}/edit`}
+                              to={`${tenantBasePath}/projects/${project.id}/edit`}
                               className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
                               onClick={() => {
                                 setActiveMenu(null);

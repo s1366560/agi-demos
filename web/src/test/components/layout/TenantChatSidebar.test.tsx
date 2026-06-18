@@ -298,6 +298,24 @@ describe('TenantChatSidebar', () => {
     expect(screen.queryByRole('link', { name: 'Agent Workspace' })).not.toBeInTheDocument();
   });
 
+  it('does not derive project navigation from a stale project in another tenant', () => {
+    projectState.currentProject = {
+      id: 'project-1',
+      name: 'Project One',
+      tenant_id: 'tenant-1',
+    };
+
+    render(<TenantChatSidebar tenantId="tenant-2" mobile />, {
+      route: '/tenant/tenant-2/project/project-2/memories',
+    });
+
+    expect(screen.queryByRole('link', { name: 'Memories' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Agent Workspace' })).toHaveAttribute(
+      'href',
+      '/tenant/tenant-2/agent-workspace'
+    );
+  });
+
   it('keeps the project switcher above conversation history', () => {
     render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
       route: '/tenant/tenant-1/agent-workspace',
