@@ -1,7 +1,8 @@
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { skillAPI, tenantSkillConfigAPI } from '@/services/skillService';
-import { useSkillStore } from '@/stores/skill';
+import { useFilteredSkills, useSkillStore } from '@/stores/skill';
 
 vi.mock('@/services/skillService', () => ({
   skillAPI: {
@@ -212,5 +213,29 @@ describe('skill store', () => {
 
     expect(useSkillStore.getState().tenantConfigs).toEqual([]);
     expect(useSkillStore.getState().isLoading).toBe(false);
+  });
+
+  it('keeps filtered skill hook output stable for unrelated state updates', () => {
+    useSkillStore.setState({
+      skills: [
+        {
+          id: 'skill-1',
+          name: 'Memory Search',
+          description: 'Searches memory',
+          status: 'active',
+          scope: 'tenant',
+        } as any,
+      ],
+      filters: { search: 'memory', status: null, scope: null },
+    });
+
+    const { result } = renderHook(() => useFilteredSkills());
+    const firstResult = result.current;
+
+    act(() => {
+      useSkillStore.setState({ isLoading: true });
+    });
+
+    expect(result.current).toBe(firstResult);
   });
 });

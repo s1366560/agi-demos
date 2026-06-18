@@ -9,6 +9,7 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 
 import { projectSandboxService } from '../services/projectSandboxService';
 import { sandboxSSEService } from '../services/sandboxSSEService';
@@ -1119,12 +1120,13 @@ export const useEnsureSandbox = () => useSandboxStore((state) => state.ensureSan
 export const useExecuteTool = () => useSandboxStore((state) => state.executeTool);
 
 // Artifact selectors
-export const useArtifacts = () => useSandboxStore((state) => Array.from(state.artifacts.values()));
+export const useArtifacts = () =>
+  useSandboxStore(useShallow((state) => Array.from(state.artifacts.values())));
 
 export const useArtifactById = (id: string) => useSandboxStore((state) => state.artifacts.get(id));
 
 export const useArtifactsByToolExecution = (toolExecutionId: string) =>
-  useSandboxStore((state) => state.getArtifactsByToolExecution(toolExecutionId));
+  useSandboxStore(useShallow((state) => state.getArtifactsByToolExecution(toolExecutionId)));
 
 // Helper to check if a tool is a sandbox tool
 export function isSandboxTool(toolName: string): boolean {

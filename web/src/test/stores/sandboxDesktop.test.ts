@@ -7,7 +7,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { useSandboxStore } from '../../stores/sandbox';
+import { useArtifacts, useArtifactsByToolExecution, useSandboxStore } from '../../stores/sandbox';
 
 import type { DesktopStatus, TerminalStatus } from '../../types/agent';
 
@@ -440,6 +440,40 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
 
       // Get state directly to verify
       expect(result.current.terminalStatus).toEqual(mockStatus);
+    });
+  });
+
+  describe('Artifact Selectors', () => {
+    it('keeps derived artifact arrays stable for unrelated state updates', () => {
+      const artifact = {
+        id: 'artifact-1',
+        projectId: 'project-1',
+        tenantId: 'tenant-1',
+        toolExecutionId: 'call-1',
+        filename: 'report.txt',
+        mimeType: 'text/plain',
+        category: 'document',
+        sizeBytes: 12,
+        status: 'ready',
+        createdAt: '2026-06-18T00:00:00.000Z',
+      } as const;
+
+      useSandboxStore.setState({
+        artifacts: new Map([[artifact.id, artifact]]),
+        artifactsByToolExecution: new Map([['call-1', [artifact.id]]]),
+      });
+
+      const allArtifacts = renderHook(() => useArtifacts());
+      const callArtifacts = renderHook(() => useArtifactsByToolExecution('call-1'));
+      const firstAllArtifacts = allArtifacts.result.current;
+      const firstCallArtifacts = callArtifacts.result.current;
+
+      act(() => {
+        useSandboxStore.setState({ panelVisible: true });
+      });
+
+      expect(allArtifacts.result.current).toBe(firstAllArtifacts);
+      expect(callArtifacts.result.current).toBe(firstCallArtifacts);
     });
   });
 });

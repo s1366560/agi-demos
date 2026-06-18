@@ -7,6 +7,7 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 
 import { skillAPI, tenantSkillConfigAPI } from '../services/skillService';
 
@@ -480,32 +481,34 @@ export const useListSkills = () => useSkillStore((state) => state.listSkills);
  * Get filtered skills based on search and filters
  */
 export const useFilteredSkills = () =>
-  useSkillStore((state) => {
-    const { skills, filters } = state;
-    return skills.filter((skill) => {
-      // Search filter
-      if (filters.search) {
-        const search = filters.search.toLowerCase();
-        const matchesName = skill.name.toLowerCase().includes(search);
-        const matchesDescription = skill.description.toLowerCase().includes(search);
-        if (!matchesName && !matchesDescription) {
+  useSkillStore(
+    useShallow((state) => {
+      const { skills, filters } = state;
+      return skills.filter((skill) => {
+        // Search filter
+        if (filters.search) {
+          const search = filters.search.toLowerCase();
+          const matchesName = skill.name.toLowerCase().includes(search);
+          const matchesDescription = skill.description.toLowerCase().includes(search);
+          if (!matchesName && !matchesDescription) {
+            return false;
+          }
+        }
+
+        // Status filter
+        if (filters.status && skill.status !== filters.status) {
           return false;
         }
-      }
 
-      // Status filter
-      if (filters.status && skill.status !== filters.status) {
-        return false;
-      }
+        // Scope filter
+        if (filters.scope && skill.scope !== filters.scope) {
+          return false;
+        }
 
-      // Scope filter
-      if (filters.scope && skill.scope !== filters.scope) {
-        return false;
-      }
-
-      return true;
-    });
-  });
+        return true;
+      });
+    })
+  );
 
 /**
  * Get system skills
