@@ -18,6 +18,7 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 import { confirmAction } from '@/utils/confirmAction';
 import { formatDateOnly } from '@/utils/date';
@@ -79,8 +80,17 @@ const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 const ProjectListInner: React.FC<ProjectListProps> = () => {
   const { t } = useTranslation();
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
-  const { currentTenant } = useTenantStore();
-  const { listProjects, deleteProject, projects, isLoading, total, ownerIds } = useProjectStore();
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const { listProjects, deleteProject, projects, isLoading, total, ownerIds } = useProjectStore(
+    useShallow((state) => ({
+      listProjects: state.listProjects,
+      deleteProject: state.deleteProject,
+      projects: state.projects,
+      isLoading: state.isLoading,
+      total: state.total,
+      ownerIds: state.ownerIds,
+    }))
+  );
   const tenantId = routeTenantId ?? currentTenant?.id ?? null;
   const tenantBasePath = tenantId ? `/tenant/${tenantId}` : '/tenant';
   const tenantForLimits = currentTenant?.id === tenantId ? currentTenant : null;
@@ -121,18 +131,6 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
         .filter(Boolean)
         .sort(),
     [ownerIds, projects]
-  );
-
-  const filteredProjects = React.useMemo(
-    () =>
-      projects.filter((project) => {
-        const matchesVisibility =
-          visibilityFilter === 'all' ||
-          (visibilityFilter === 'public' ? project.is_public : !project.is_public);
-        const matchesOwner = ownerFilter === 'all' || project.owner_id === ownerFilter;
-        return matchesVisibility && matchesOwner;
-      }),
-    [ownerFilter, projects, visibilityFilter]
   );
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -291,7 +289,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
         <div className="text-center py-10 text-slate-500">{t('tenant.projects.loading')}</div>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredProjects.map((project) => (
+          {projects.map((project) => (
             <div
               key={project.id}
               className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:border-primary/50 transition-[color,background-color,border-color,box-shadow,opacity,transform] group flex flex-col gap-4"
@@ -450,7 +448,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredProjects.map((project) => (
+                {projects.map((project) => (
                   <tr
                     key={project.id}
                     className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group"

@@ -15,6 +15,13 @@ vi.mock('../../../hooks/useDebounce', () => ({
   useDebounce: (value: unknown) => value,
 }));
 
+const mockTenantStore = (currentTenant: { id: string; max_storage: number } | null) => {
+  const state = { currentTenant };
+  vi.mocked(useTenantStore).mockImplementation((selector?: (store: typeof state) => unknown) =>
+    selector ? selector(state) : state
+  );
+};
+
 describe('ProjectList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -31,9 +38,7 @@ describe('ProjectList', () => {
   });
 
   it('renders list of projects', async () => {
-    vi.mocked(useTenantStore).mockReturnValue({
-      currentTenant: { id: 't1', max_storage: 1024 },
-    } as any);
+    mockTenantStore({ id: 't1', max_storage: 1024 });
 
     const mockProjects: Project[] = [
       {
@@ -141,9 +146,7 @@ describe('ProjectList', () => {
   });
 
   it('uses the route tenant id when the tenant store is still stale', async () => {
-    vi.mocked(useTenantStore).mockReturnValue({
-      currentTenant: { id: 'tenant-store-old', max_storage: 1024 },
-    } as any);
+    mockTenantStore({ id: 'tenant-store-old', max_storage: 1024 });
 
     const mockProjects: Project[] = [
       {
@@ -200,20 +203,15 @@ describe('ProjectList', () => {
         page_size: 20,
       })
     );
-    expect(projectLink).toHaveAttribute(
-      'href',
-      '/tenant/tenant-route-new/project/project-route'
-    );
+    expect(projectLink).toHaveAttribute('href', '/tenant/tenant-route-new/project/project-route');
     expect(screen.getAllByRole('link', { name: 'Create New Project' })[0]).toHaveAttribute(
       'href',
       '/tenant/tenant-route-new/projects/new'
     );
   });
 
-  it('filters projects by visibility and owner', async () => {
-    vi.mocked(useTenantStore).mockReturnValue({
-      currentTenant: { id: 't1', max_storage: 1024 },
-    } as any);
+  it('requests server filters instead of hiding the current page client-side', async () => {
+    mockTenantStore({ id: 't1', max_storage: 1024 });
 
     const mockProjects: Project[] = [
       {
@@ -281,8 +279,12 @@ describe('ProjectList', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('Public Project')).not.toBeInTheDocument();
-      expect(screen.getByText('Private Project')).toBeInTheDocument();
+      expect(projectAPI.list).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({
+          visibility: 'private',
+        })
+      );
     });
 
     fireEvent.change(screen.getByLabelText('tenant.projects.filters.ownerLabel'), {
@@ -290,15 +292,18 @@ describe('ProjectList', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('Public Project')).not.toBeInTheDocument();
-      expect(screen.queryByText('Private Project')).not.toBeInTheDocument();
+      expect(projectAPI.list).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({
+          owner_id: 'user1',
+          visibility: 'private',
+        })
+      );
     });
   });
 
   it('renders empty state', async () => {
-    vi.mocked(useTenantStore).mockReturnValue({
-      currentTenant: { id: 't1', max_storage: 1024 },
-    } as any);
+    mockTenantStore({ id: 't1', max_storage: 1024 });
 
     vi.mocked(projectAPI.list).mockResolvedValue({
       projects: [],
@@ -315,9 +320,7 @@ describe('ProjectList', () => {
   });
 
   it('requests server-side search and filters', async () => {
-    vi.mocked(useTenantStore).mockReturnValue({
-      currentTenant: { id: 't1', max_storage: 1024 },
-    } as any);
+    mockTenantStore({ id: 't1', max_storage: 1024 });
 
     vi.mocked(projectAPI.list).mockResolvedValue({
       projects: [],
@@ -358,9 +361,7 @@ describe('ProjectList', () => {
   });
 
   it('requests the next server page from the pagination footer', async () => {
-    vi.mocked(useTenantStore).mockReturnValue({
-      currentTenant: { id: 't1', max_storage: 1024 },
-    } as any);
+    mockTenantStore({ id: 't1', max_storage: 1024 });
 
     vi.mocked(projectAPI.list).mockResolvedValue({
       projects: [
