@@ -172,8 +172,8 @@ export const useAuditStore = create<AuditState>()(
           set({ error: null });
         },
         reset: () => {
-          listRequestSequence = 0;
-          summaryRequestSequence = 0;
+          listRequestSequence += 1;
+          summaryRequestSequence += 1;
           set(initialState);
         },
       };
