@@ -38,6 +38,8 @@ const ContextDetailPanel = lazy(() =>
   }))
 );
 
+const AGENT_WORKSPACE_PROJECT_WINDOW_SIZE = 25;
+
 function WorkspacePanelFallback() {
   const { t } = useTranslation();
 
@@ -158,7 +160,7 @@ export const AgentWorkspace: FC = () => {
 
     setProjectLoadError(null);
     try {
-      await listProjects(tenantId);
+      await listProjects(tenantId, { page: 1, page_size: AGENT_WORKSPACE_PROJECT_WINDOW_SIZE });
     } catch (error) {
       const message = getErrorMessage(error);
       setProjectLoadError(

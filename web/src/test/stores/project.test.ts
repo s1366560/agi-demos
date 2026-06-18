@@ -45,6 +45,41 @@ describe('ProjectStore', () => {
     expect(useProjectStore.getState().total).toBe(1);
   });
 
+  it('listProjects should deduplicate identical in-flight requests', async () => {
+    let resolveList: (value: any) => void = () => {};
+    const listRequest = new Promise((resolve) => {
+      resolveList = resolve;
+    });
+    (projectAPI.list as any).mockReturnValue(listRequest);
+
+    const firstList = useProjectStore.getState().listProjects('tenant-1', {
+      page: 1,
+      page_size: 25,
+    });
+    const secondList = useProjectStore.getState().listProjects('tenant-1', {
+      page: 1,
+      page_size: 25,
+    });
+
+    expect(projectAPI.list).toHaveBeenCalledTimes(1);
+    expect(projectAPI.list).toHaveBeenCalledWith('tenant-1', {
+      page: 1,
+      page_size: 25,
+    });
+
+    resolveList({
+      projects: [{ id: 'shared', name: 'Shared Result' }],
+      total: 1,
+      page: 1,
+      page_size: 25,
+    });
+
+    await Promise.all([firstList, secondList]);
+    expect(useProjectStore.getState().projects).toEqual([
+      { id: 'shared', name: 'Shared Result' },
+    ]);
+  });
+
   it('listProjects should ignore stale responses', async () => {
     let resolveFirst: (value: any) => void = () => {};
     let resolveSecond: (value: any) => void = () => {};

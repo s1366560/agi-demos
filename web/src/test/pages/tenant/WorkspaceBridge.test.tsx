@@ -361,7 +361,10 @@ describe('workspace/agent workspace bridge', () => {
     });
 
     await waitFor(() => {
-      expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1');
+      expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1', {
+        page: 1,
+        page_size: 25,
+      });
     });
     expect(await screen.findByText('agent.workspace.noProjects')).toBeInTheDocument();
     expect(agentChatContentProps).not.toHaveBeenCalled();
@@ -379,6 +382,12 @@ describe('workspace/agent workspace bridge', () => {
       route: '/tenant/tenant-1/agent-workspace',
     });
 
+    await waitFor(() => {
+      expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1', {
+        page: 1,
+        page_size: 25,
+      });
+    });
     expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load projects');
     expect(screen.getByRole('alert')).toHaveTextContent('Tenant projects unavailable');
 

@@ -20,6 +20,7 @@ import type { Project, ProjectCreate, ProjectUpdate, ProjectListResponse } from 
 
 let latestListProjectsRequest = 0;
 let projectStateGeneration = 0;
+const pendingListProjectRequests = new Map<string, Promise<ProjectListResponse>>();
 const pendingGetProjectRequests = new Map<string, Promise<Project>>();
 const recentGetProjectResponses = new Map<string, { project: Project; fetchedAt: number }>();
 const PROJECT_DETAIL_CACHE_TTL_MS = 10_000;
@@ -42,6 +43,51 @@ function isSameCurrentProject(left: Project | null, right: Project | null): bool
 
 function getProjectRequestKey(tenantId: string, projectId: string): string {
   return `${tenantId}:${projectId}`;
+}
+
+function getProjectListRequestKey(
+  tenantId: string,
+  params: {
+    page?: number | undefined;
+    page_size?: number | undefined;
+    search?: string | undefined;
+    visibility?: 'all' | 'public' | 'private' | undefined;
+    owner_id?: string | undefined;
+  }
+): string {
+  return JSON.stringify({
+    tenantId,
+    page: params.page ?? null,
+    page_size: params.page_size ?? null,
+    search: params.search ?? null,
+    visibility: params.visibility ?? null,
+    owner_id: params.owner_id ?? null,
+  });
+}
+
+function listProjectsRequest(
+  tenantId: string,
+  params: {
+    page?: number | undefined;
+    page_size?: number | undefined;
+    search?: string | undefined;
+    visibility?: 'all' | 'public' | 'private' | undefined;
+    owner_id?: string | undefined;
+  }
+): Promise<ProjectListResponse> {
+  const requestKey = getProjectListRequestKey(tenantId, params);
+  const pendingRequest = pendingListProjectRequests.get(requestKey);
+  if (pendingRequest) {
+    return pendingRequest;
+  }
+
+  const request = projectAPI.list(tenantId, params).finally(() => {
+    if (pendingListProjectRequests.get(requestKey) === request) {
+      pendingListProjectRequests.delete(requestKey);
+    }
+  });
+  pendingListProjectRequests.set(requestKey, request);
+  return request;
 }
 
 function getRecentProjectResponse(requestKey: string): Project | null {
@@ -149,7 +195,7 @@ export const useProjectStore = create<ProjectState>()(
         latestListProjectsRequest = requestId;
         set({ isLoading: true, error: null });
         try {
-          const response: ProjectListResponse = await projectAPI.list(tenantId, params);
+          const response: ProjectListResponse = await listProjectsRequest(tenantId, params);
           if (requestId !== latestListProjectsRequest) return;
           set({
             projects: response.projects,
@@ -280,6 +326,7 @@ export const useProjectStore = create<ProjectState>()(
       clearProjects: () => {
         latestListProjectsRequest += 1;
         projectStateGeneration += 1;
+        pendingListProjectRequests.clear();
         pendingGetProjectRequests.clear();
         recentGetProjectResponses.clear();
         set({
