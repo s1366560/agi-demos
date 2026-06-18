@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -6,6 +7,8 @@ from src.domain.model.memory.episode import Episode, SourceType
 from src.domain.model.memory.memory import Memory
 from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.services.graph_service_port import GraphServicePort
+
+logger = logging.getLogger(__name__)
 
 
 class CreateMemoryCommand(BaseModel):
@@ -88,6 +91,11 @@ class CreateMemoryUseCase:
             except Exception as e:
                 # Log error but don't fail the operation (consistent with current behavior)
                 # In a real system, we might want to use an Outbox pattern or event bus
-                print(f"Failed to sync to Graphiti: {e}")
+                logger.warning(
+                    "Failed to sync memory to Graphiti: memory_id=%s project_id=%s error_type=%s",
+                    memory.id,
+                    command.project_id,
+                    type(e).__name__,
+                )
 
         return memory

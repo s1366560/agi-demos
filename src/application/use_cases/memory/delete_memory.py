@@ -1,7 +1,11 @@
+import logging
+
 from pydantic import BaseModel, field_validator
 
 from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.services.graph_service_port import GraphServicePort
+
+logger = logging.getLogger(__name__)
 
 
 class DeleteMemoryCommand(BaseModel):
@@ -39,7 +43,11 @@ class DeleteMemoryUseCase:
             await self._graph_service.delete_episode_by_memory_id(command.memory_id)
         except Exception as e:
             # Log but continue to ensure DB consistency
-            print(f"Failed to delete from Graphiti: {e}")
+            logger.warning(
+                "Failed to delete memory from Graphiti: memory_id=%s error_type=%s",
+                command.memory_id,
+                type(e).__name__,
+            )
 
         # 3. Delete from DB
         await self._memory_repo.delete(command.memory_id)

@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -61,7 +62,9 @@ async def test_create_memory_success(mock_repo, mock_graph_service):
 
 
 @pytest.mark.asyncio
-async def test_create_memory_graph_failure_is_graceful(mock_repo, mock_graph_service):
+async def test_create_memory_graph_failure_is_graceful(
+    mock_repo, mock_graph_service, caplog, capsys
+):
     # Arrange
     use_case = CreateMemoryUseCase(mock_repo, mock_graph_service)
     command = CreateMemoryCommand(
@@ -73,7 +76,13 @@ async def test_create_memory_graph_failure_is_graceful(mock_repo, mock_graph_ser
     )
 
     mock_repo.save = AsyncMock()
-    mock_graph_service.add_episode = AsyncMock(side_effect=Exception("Graph Error"))
+    mock_graph_service.add_episode = AsyncMock(
+        side_effect=Exception("Graph Error with sensitive content")
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.use_cases.memory.create_memory",
+    )
 
     # Act
     # Should not raise exception
@@ -83,3 +92,7 @@ async def test_create_memory_graph_failure_is_graceful(mock_repo, mock_graph_ser
     assert memory.id is not None
     mock_repo.save.assert_called_once()
     mock_graph_service.add_episode.assert_called_once()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Graph Error with sensitive content" not in caplog.text
+    assert "Failed to sync memory to Graphiti" in caplog.text
