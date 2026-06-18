@@ -3,7 +3,7 @@
  * Lists templates with search, category filtering, and install actions.
  */
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -32,9 +32,13 @@ export const TemplateMarketplace: React.FC = () => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [installing, setInstalling] = useState<Set<string>>(new Set());
+  const loadRequestSeqRef = useRef(0);
 
   // Load templates and categories
   useEffect(() => {
+    const requestSeq = loadRequestSeqRef.current + 1;
+    loadRequestSeqRef.current = requestSeq;
+
     const load = async () => {
       setLoading(true);
       try {
@@ -45,15 +49,29 @@ export const TemplateMarketplace: React.FC = () => {
           }),
           subagentTemplateService.getCategories(),
         ]);
+        if (loadRequestSeqRef.current !== requestSeq) {
+          return;
+        }
+
         setTemplates(listRes.templates);
         setCategories(cats);
       } catch {
-        message.error(t('agent.templates.loadError', 'Failed to load templates'));
+        if (loadRequestSeqRef.current === requestSeq) {
+          message.error(t('agent.templates.loadError', 'Failed to load templates'));
+        }
       } finally {
-        setLoading(false);
+        if (loadRequestSeqRef.current === requestSeq) {
+          setLoading(false);
+        }
       }
     };
     void load();
+
+    return () => {
+      if (loadRequestSeqRef.current === requestSeq) {
+        loadRequestSeqRef.current += 1;
+      }
+    };
   }, [selectedCategory, search, message, t]);
 
   const handleInstall = useCallback(
