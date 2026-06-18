@@ -219,6 +219,43 @@ describe('ProjectStore', () => {
     expect(useProjectStore.getState().currentProject).toEqual(project);
   });
 
+  it('setCurrentProject should not notify subscribers for the same current project', () => {
+    const project = {
+      id: 'project-1',
+      tenant_id: 'tenant-1',
+      name: 'Project One',
+      updated_at: '2026-04-17T00:00:00.000Z',
+    } as any;
+    useProjectStore.getState().setCurrentProject(project);
+    const subscriber = vi.fn();
+    const unsubscribe = useProjectStore.subscribe(subscriber);
+
+    useProjectStore.getState().setCurrentProject({ ...project });
+
+    expect(subscriber).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it('setCurrentProject should update when current project content changes', () => {
+    const project = {
+      id: 'project-1',
+      tenant_id: 'tenant-1',
+      name: 'Project One',
+      updated_at: '2026-04-17T00:00:00.000Z',
+    } as any;
+    useProjectStore.getState().setCurrentProject(project);
+    const subscriber = vi.fn();
+    const unsubscribe = useProjectStore.subscribe(subscriber);
+
+    useProjectStore
+      .getState()
+      .setCurrentProject({ ...project, updated_at: '2026-04-18T00:00:00.000Z' });
+
+    expect(subscriber).toHaveBeenCalledTimes(1);
+    expect(useProjectStore.getState().currentProject?.updated_at).toBe('2026-04-18T00:00:00.000Z');
+    unsubscribe();
+  });
+
   it('clearProjects should reset tenant-scoped state', () => {
     useProjectStore.setState({
       projects: [{ id: '1', name: 'Project 1' } as any],

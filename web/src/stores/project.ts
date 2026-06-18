@@ -24,6 +24,22 @@ const pendingGetProjectRequests = new Map<string, Promise<Project>>();
 const recentGetProjectResponses = new Map<string, { project: Project; fetchedAt: number }>();
 const PROJECT_DETAIL_CACHE_TTL_MS = 10_000;
 
+function isSameCurrentProject(left: Project | null, right: Project | null): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return (
+    left.id === right.id &&
+    left.tenant_id === right.tenant_id &&
+    left.name === right.name &&
+    (left.description ?? '') === (right.description ?? '') &&
+    (left.updated_at ?? '') === (right.updated_at ?? '')
+  );
+}
+
 function getProjectRequestKey(tenantId: string, projectId: string): string {
   return `${tenantId}:${projectId}`;
 }
@@ -249,6 +265,9 @@ export const useProjectStore = create<ProjectState>()(
        * setCurrentProject(selectedProject);
        */
       setCurrentProject: (project: Project | null) => {
+        if (isSameCurrentProject(get().currentProject, project)) {
+          return;
+        }
         set({ currentProject: project });
       },
 

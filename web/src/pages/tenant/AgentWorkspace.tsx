@@ -193,14 +193,20 @@ export const AgentWorkspace: FC = () => {
     const init = async () => {
       if (queryProjectId) {
         if (isCancelled()) return;
-        setSelectedProjectId(queryProjectId);
-        setInitializing(false);
+        if (selectedProjectId !== queryProjectId) {
+          setSelectedProjectId(queryProjectId);
+        }
+        if (initializing) {
+          setInitializing(false);
+        }
 
         if (tenantId && tenantCurrentProjectId !== queryProjectId && !queryProjectInTenant) {
           try {
             const project = await getProject(tenantId, queryProjectId);
             if (isCancelled()) return;
-            setCurrentProject(project);
+            if (project.id !== tenantCurrentProjectId) {
+              setCurrentProject(project);
+            }
           } catch (error) {
             console.warn('AgentWorkspace: failed to load project from URL', error);
           }
@@ -208,16 +214,22 @@ export const AgentWorkspace: FC = () => {
       } else if (storedProjectIdInTenant) {
         // Try to restore last selected project from localStorage (now using cached hook)
         if (isCancelled()) return;
-        setSelectedProjectId(storedProjectIdInTenant);
+        if (selectedProjectId !== storedProjectIdInTenant) {
+          setSelectedProjectId(storedProjectIdInTenant);
+        }
       } else if (tenantCurrentProjectId) {
         if (isCancelled()) return;
-        setSelectedProjectId(tenantCurrentProjectId);
+        if (selectedProjectId !== tenantCurrentProjectId) {
+          setSelectedProjectId(tenantCurrentProjectId);
+        }
       } else if (firstTenantProjectId) {
         if (isCancelled()) return;
-        setSelectedProjectId(firstTenantProjectId);
+        if (selectedProjectId !== firstTenantProjectId) {
+          setSelectedProjectId(firstTenantProjectId);
+        }
       }
 
-      if (!isCancelled() && (tenantProjectCount > 0 || queryProjectId)) {
+      if (!isCancelled() && initializing && (tenantProjectCount > 0 || queryProjectId)) {
         setInitializing(false);
       }
     };
@@ -231,7 +243,9 @@ export const AgentWorkspace: FC = () => {
     queryProjectInTenant,
     queryProjectId,
     setCurrentProject,
+    selectedProjectId,
     storedProjectIdInTenant,
+    initializing,
     tenantId,
     tenantCurrentProjectId,
     tenantProjectCount,
@@ -248,10 +262,12 @@ export const AgentWorkspace: FC = () => {
     const controller = new AbortController();
     void loadConversations(activeSelectedProjectId, controller.signal);
     // Persist selection using cached hook
-    setLastProjectId(activeSelectedProjectId);
+    if (lastProjectId !== activeSelectedProjectId) {
+      setLastProjectId(activeSelectedProjectId);
+    }
     // Update global current project for consistency
     const project = tenantProjects.find((p: Project) => p.id === activeSelectedProjectId);
-    if (project) {
+    if (project && tenantCurrentProjectId !== project.id) {
       setCurrentProject(project);
     }
     return () => {
@@ -259,7 +275,9 @@ export const AgentWorkspace: FC = () => {
     };
   }, [
     activeSelectedProjectId,
+    lastProjectId,
     loadConversations,
+    tenantCurrentProjectId,
     tenantProjects,
     setCurrentProject,
     setLastProjectId,

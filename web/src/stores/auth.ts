@@ -178,23 +178,44 @@ export const useAuthStore = create<AuthState>()(
 
         async _loadPostAuthData() {
           try {
-            // Load features
             const featuresResp =
               await httpClient.get<Array<{ id: string; enabled: boolean }>>('/system/features');
             setFeatures(featuresResp);
+          } catch (e) {
+            console.error('Failed to load feature flags', e);
+          }
 
-            // Check org setup
+          try {
             const tenantResp = await tenantAPI.list();
             const firstTenant = tenantResp.tenants[0];
+            const tenantState = useTenantStore.getState();
+            useTenantStore.setState({
+              tenants: tenantResp.tenants,
+              total: tenantResp.total,
+              page: tenantResp.page,
+              pageSize: tenantResp.page_size,
+              isLoading: false,
+              error: null,
+            });
+
             if (firstTenant) {
+              const currentTenant = tenantState.currentTenant;
+              const currentTenantFromList = currentTenant
+                ? tenantResp.tenants.find((tenant) => tenant.id === currentTenant.id)
+                : undefined;
+              useTenantStore.getState().setCurrentTenant(currentTenantFromList ?? firstTenant);
+
               const { name } = firstTenant;
               const isSetup = !!name && name !== 'New Tenant' && name.trim() !== '';
               set({ orgSetupComplete: isSetup });
             } else {
+              if (tenantState.currentTenant) {
+                useTenantStore.getState().setCurrentTenant(null);
+              }
               set({ orgSetupComplete: false });
             }
           } catch (e) {
-            console.error('Failed to load post-auth data', e);
+            console.error('Failed to load post-auth tenant data', e);
           }
         },
 

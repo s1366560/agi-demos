@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { authAPI } from '../../services/api';
+import { httpClient } from '../../services/client/httpClient';
+import { authAPI, tenantAPI } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
+import { useTenantStore } from '../../stores/tenant';
+
+vi.mock('../../services/client/httpClient', () => ({
+  httpClient: {
+    get: vi.fn().mockResolvedValue([]),
+  },
+}));
 
 vi.mock('../../services/api', () => ({
   authAPI: {
@@ -45,12 +53,23 @@ describe('AuthStore', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
+    vi.mocked(httpClient.get).mockResolvedValue([]);
+    vi.mocked(tenantAPI.list).mockResolvedValue({ tenants: [], total: 0, page: 1, page_size: 20 });
     useAuthStore.setState({
       user: null,
       token: null,
       isLoading: false,
       error: null,
       isAuthenticated: false,
+    });
+    useTenantStore.setState({
+      tenants: [],
+      currentTenant: null,
+      isLoading: false,
+      error: null,
+      total: 0,
+      page: 1,
+      pageSize: 20,
     });
   });
 
@@ -68,6 +87,52 @@ describe('AuthStore', () => {
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
     // Token is stored in Zustand persist storage
     expect(getTokenFromStorage()).toBe(mockToken);
+  });
+
+  it('login should initialize the accessible tenant as current tenant', async () => {
+    const mockUser = { id: '1', email: 'test@example.com' };
+    const mockToken = 'mock-token';
+    const mockTenant = { id: 'tenant-1', name: 'Existing Tenant' };
+
+    vi.mocked(authAPI.login).mockResolvedValue({ user: mockUser, token: mockToken } as any);
+    vi.mocked(tenantAPI.list).mockResolvedValue({
+      tenants: [mockTenant],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    } as any);
+
+    await useAuthStore.getState().login('test@example.com', 'password');
+
+    expect(tenantAPI.list).toHaveBeenCalled();
+    expect(useTenantStore.getState().tenants).toEqual([mockTenant]);
+    expect(useTenantStore.getState().currentTenant).toEqual(mockTenant);
+    expect(useAuthStore.getState().orgSetupComplete).toBe(true);
+  });
+
+  it('login should initialize tenants even when feature flags fail', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const mockUser = { id: '1', email: 'test@example.com' };
+    const mockToken = 'mock-token';
+    const mockTenant = { id: 'tenant-1', name: 'Existing Tenant' };
+
+    vi.mocked(authAPI.login).mockResolvedValue({ user: mockUser, token: mockToken } as any);
+    vi.mocked(httpClient.get).mockRejectedValueOnce(new Error('features unavailable'));
+    vi.mocked(tenantAPI.list).mockResolvedValue({
+      tenants: [mockTenant],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    } as any);
+
+    try {
+      await useAuthStore.getState().login('test@example.com', 'password');
+    } finally {
+      consoleError.mockRestore();
+    }
+
+    expect(useTenantStore.getState().currentTenant).toEqual(mockTenant);
+    expect(useAuthStore.getState().orgSetupComplete).toBe(true);
   });
 
   it('login should set error on failure', async () => {

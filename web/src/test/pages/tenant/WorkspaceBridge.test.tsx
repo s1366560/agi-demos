@@ -243,6 +243,25 @@ describe('workspace/agent workspace bridge', () => {
     );
   });
 
+  it('does not rewrite project state when the URL project is already active', async () => {
+    localStorageMock.values.set('agent:tenant-1:lastProjectId', 'project-2');
+    projectState.currentProject = {
+      id: 'project-2',
+      tenant_id: 'tenant-1',
+      name: 'Project 2',
+    };
+
+    render(<AgentWorkspace />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-2',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-chat-content')).toBeInTheDocument();
+    });
+    expect(projectState.setCurrentProject).not.toHaveBeenCalled();
+    expect(localStorageMock.setValue).not.toHaveBeenCalled();
+  });
+
   it('refetches a URL project when the matching current project belongs to another tenant', async () => {
     projectState.projects = [];
     projectState.currentProject = {

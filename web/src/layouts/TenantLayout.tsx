@@ -66,6 +66,8 @@ export const TenantLayout: React.FC = memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
   const { tenantId, projectId } = useParams();
+  const queryProjectId = new URLSearchParams(location.search).get('projectId')?.trim() || undefined;
+  const effectiveProjectId = projectId ?? queryProjectId;
 
   // Optimized: Select only the state we need with typing
   const currentTenant = useTenantStore((state) => state.currentTenant);
@@ -224,7 +226,7 @@ export const TenantLayout: React.FC = memo(() => {
   useEffect(() => {
     const requestId = projectSyncRequestRef.current + 1;
     projectSyncRequestRef.current = requestId;
-    const requestProjectId = projectId ?? null;
+    const requestProjectId = effectiveProjectId ?? null;
     const isCurrentProjectRequest = () => projectSyncRequestRef.current === requestId;
 
     if (
@@ -260,7 +262,7 @@ export const TenantLayout: React.FC = memo(() => {
         projectSyncRequestRef.current += 1;
       }
     };
-  }, [projectId, currentTenant, currentProject]);
+  }, [effectiveProjectId, currentTenant, currentProject]);
 
   // No tenants state - welcome screen
   if (noTenants) {

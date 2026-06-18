@@ -1,4 +1,9 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+import {
+  StrictMode,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from 'react';
 
 import { render as rtlRender } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -361,7 +366,7 @@ describe('TenantChatSidebar', () => {
         search: 'Hidden Authorized',
       });
     });
-    expect(screen.getByRole('option', { name: 'project-hidden' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Hidden Authorized Project' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Project switcher' }), {
       target: { value: 'project-hidden' },
@@ -576,6 +581,44 @@ describe('TenantChatSidebar', () => {
     expect(screen.queryByText('Verifier')).not.toBeInTheDocument();
     expect(screen.queryByText('Supervisor')).not.toBeInTheDocument();
     expect(screen.queryByText('Chat')).not.toBeInTheDocument();
+  });
+
+  it('does not re-clean collapsed workspace groups when group ids are unchanged', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    conversationsState.conversations = [
+      {
+        id: 'workspace-chat:ws-current:agent-1',
+        title: 'Workspace Chat - Verifier',
+        created_at: '2026-04-17T00:00:00.000Z',
+        status: 'idle',
+        workspace_id: 'ws-current',
+      },
+    ];
+
+    const sidebar = (
+      <StrictMode>
+        <MemoryRouter
+          initialEntries={[
+            '/tenant/tenant-1/agent-workspace?projectId=project-1&workspaceId=ws-current',
+          ]}
+        >
+          <TenantChatSidebar tenantId="tenant-1" mobile />
+        </MemoryRouter>
+      </StrictMode>
+    );
+    const { rerender } = rtlRender(sidebar);
+
+    for (let index = 0; index < 5; index += 1) {
+      rerender(sidebar);
+    }
+
+    expect(screen.getByRole('button', { name: /Workspace Alpha/ })).toBeInTheDocument();
+    expect(
+      consoleErrorSpy.mock.calls.some((args) =>
+        String(args[0]).includes('Maximum update depth exceeded')
+      )
+    ).toBe(false);
+    consoleErrorSpy.mockRestore();
   });
 
   it('uses workspace names returned by the conversation API', () => {

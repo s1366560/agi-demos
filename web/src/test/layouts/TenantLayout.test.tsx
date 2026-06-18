@@ -34,6 +34,7 @@ let mockProjectState: any = {
 let mockRouteParams: Record<string, string | undefined> = { tenantId: 't1' };
 const mockRouteParamListeners = new Set<() => void>();
 let mockLocationPathname = '/tenant/t1/overview';
+let mockLocationSearch = '';
 const mockNavigate = vi.fn();
 
 function setMockRouteParams(params: Record<string, string | undefined>) {
@@ -188,7 +189,7 @@ vi.mock('react-router-dom', async () => {
         () => mockRouteParams,
         () => mockRouteParams
       ),
-    useLocation: () => ({ pathname: mockLocationPathname }),
+    useLocation: () => ({ pathname: mockLocationPathname, search: mockLocationSearch }),
     Outlet: () => <div data-testid="outlet">Page Content</div>,
   };
 });
@@ -231,6 +232,7 @@ describe('TenantLayout', () => {
     };
     setMockRouteParams({ tenantId: 't1' });
     mockLocationPathname = '/tenant/t1/overview';
+    mockLocationSearch = '';
   });
 
   it('renders layout elements', async () => {
@@ -374,6 +376,23 @@ describe('TenantLayout', () => {
         name: 'New Project',
       });
     });
+  });
+
+  it('syncs project state from agent workspace project query parameter', async () => {
+    const queryProject = { id: 'query-project', tenant_id: 't1', name: 'Query Project' };
+    setMockRouteParams({ tenantId: 't1' });
+    mockLocationPathname = '/tenant/t1/agent-workspace';
+    mockLocationSearch = '?projectId=query-project';
+    mockProjectState.projects = [queryProject];
+    mockProjectState.currentProject = null;
+
+    render(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(mockProjectState.setCurrentProject).toHaveBeenCalledWith(queryProject);
+    });
+    expect(mockProjectState.setCurrentProject).not.toHaveBeenCalledWith(null);
+    expect(mockProjectState.getProject).not.toHaveBeenCalled();
   });
 
   it('clears project state when tenant scope changes', async () => {

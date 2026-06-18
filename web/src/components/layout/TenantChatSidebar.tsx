@@ -16,11 +16,9 @@ import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect, mem
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, NavLink } from 'react-router-dom';
 
-import { Modal } from 'antd';
 import {
   Plus,
   MessageSquare,
-  MoreVertical,
   Trash2,
   Edit3,
   Bot,
@@ -49,14 +47,12 @@ import {
   getContextualTopNavItems,
   isContextualTopNavItemActive,
 } from '@/components/layout/TenantHeader';
-import { LazyButton, LazyDropdown, LazySelect, LazyInput } from '@/components/ui/lazyAntd';
+import { LazyButton, LazyInput } from '@/components/ui/lazyAntd';
 
 import { Resizer } from '../agent/Resizer';
 
 import type { Conversation } from '@/types/agent';
 import type { Project } from '@/types/memory';
-
-import type { MenuProps } from 'antd';
 
 interface ConversationWithProject extends Conversation {
   projectId: string;
@@ -337,34 +333,6 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
       }
     }, [conversation]);
 
-    const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
-      if (key === 'delete') {
-        onDelete({} as React.MouseEvent);
-      } else if (key === 'rename') {
-        onRename?.({} as React.MouseEvent);
-      }
-    };
-
-    const items: MenuProps['items'] = React.useMemo(
-      () => [
-        {
-          key: 'rename',
-          icon: <Edit3 size={14} />,
-          label: t('agent.sidebar.rename', 'Rename'),
-          onClick: () => onRename?.({} as React.MouseEvent),
-        },
-        {
-          key: 'delete',
-          icon: <Trash2 size={14} />,
-          label: t('agent.sidebar.delete', 'Delete'),
-          danger: true,
-          onClick: (e) => {
-            onDelete(e.domEvent as React.MouseEvent);
-          },
-        },
-      ],
-      [onDelete, onRename, t]
-    );
     const display = React.useMemo(
       () => buildConversationDisplay(conversation, t, timeAgo),
       [conversation, t, timeAgo]
@@ -434,21 +402,34 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
           </div>
 
           {/* Actions */}
-          <LazyDropdown
-            menu={{ items, onClick: handleMenuClick }}
-            trigger={['click']}
-            placement="bottomRight"
-          >
-            <LazyButton
-              type="text"
-              size="small"
-              icon={<MoreVertical size={14} />}
-              className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-              onClick={(e: React.MouseEvent) => {
-                e.stopPropagation();
+          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            {onRename ? (
+              <button
+                type="button"
+                aria-label={t('agent.sidebar.rename', 'Rename')}
+                title={t('agent.sidebar.rename', 'Rename')}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRename(event);
+                }}
+              >
+                <Edit3 size={14} />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              aria-label={t('agent.sidebar.delete', 'Delete')}
+              title={t('agent.sidebar.delete', 'Delete')}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete(event);
               }}
-            />
-          </LazyDropdown>
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -850,19 +831,24 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     () => buildConversationSections(enrichedConversations, t),
     [enrichedConversations, t]
   );
-  const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(() => new Set());
-
-  useEffect(() => {
-    setCollapsedGroupIds((current) => {
-      const validGroupIds = new Set(
+  const workspaceGroupIdsKey = useMemo(
+    () =>
+      JSON.stringify(
         conversationSections
           .filter((section) => section.type === 'workspace')
           .map((section) => section.id)
-      );
+      ),
+    [conversationSections]
+  );
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    const validGroupIds = new Set(JSON.parse(workspaceGroupIdsKey) as string[]);
+    setCollapsedGroupIds((current) => {
       const next = new Set(Array.from(current).filter((groupId) => validGroupIds.has(groupId)));
       return next.size === current.size ? current : next;
     });
-  }, [conversationSections]);
+  }, [workspaceGroupIdsKey]);
 
   const toggleConversationGroup = useCallback((groupId: string) => {
     setCollapsedGroupIds((current) => {
@@ -985,13 +971,18 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
       if (!selectedProjectId) return;
-      Modal.confirm({
-        title: t('agent.sidebar.deleteTitle', 'Delete Conversation'),
-        content: t('agent.sidebar.deleteConfirm', 'Are you sure? This action cannot be undone.'),
-        okText: t('agent.sidebar.delete', 'Delete'),
-        cancelText: t('common.cancel', 'Cancel'),
-        okType: 'danger',
-        onOk: async () => {
+      const confirmed = window.confirm(
+        `${t('agent.sidebar.deleteTitle', 'Delete Conversation')}\n\n${t(
+          'agent.sidebar.deleteConfirm',
+          'Are you sure? This action cannot be undone.'
+        )}`
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      void (async () => {
+        try {
           await deleteConversation(id, selectedProjectId);
           if (activeConversationId === id) {
             void navigate(
@@ -1002,8 +993,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               })
             );
           }
-        },
-      });
+        } catch (error) {
+          console.error('Failed to delete conversation:', error);
+        }
+      })();
     },
     [
       selectedProjectId,
@@ -1199,54 +1192,57 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
       {/* Project Selector */}
       {!collapsed && (
-        <div className="p-3 border-b border-slate-100 dark:border-slate-800/50">
-          <LazySelect
-            value={selectedProjectId}
-            onChange={handleProjectChange}
-            className="w-full"
-            placeholder={t('agent.sidebar.selectProject', 'Select a project')}
-            disabled={!resolvedTenantId}
-            loading={isProjectSearchLoading}
-            notFoundContent={
-              isProjectSearchLoading
-                ? t('agent.sidebar.searchingProjects', 'Searching projects...')
-                : t('agent.sidebar.noProjectsFound', 'No projects found')
-            }
-            popupRender={(menu: React.ReactNode) => (
-              <div>
-                <div
-                  className="border-b border-slate-100 p-2 dark:border-slate-800/50"
-                  onMouseDown={(event) => {
-                    event.stopPropagation();
-                  }}
-                >
-                  <LazyInput
-                    aria-label={t('agent.sidebar.searchProjects', 'Search projects')}
-                    className="w-full"
-                    placeholder={t(
-                      'agent.sidebar.searchProjectsPlaceholder',
-                      'Search all authorized projects'
-                    )}
-                    value={projectSearchQuery}
-                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-                      handleProjectSearch(event.target.value);
-                    }}
-                  />
-                </div>
-                {menu}
-              </div>
-            )}
-            suffixIcon={<ChevronDown size={16} />}
-            options={selectableProjects.map((p) => ({
-              value: p.id,
-              label: (
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-primary" />
-                  <span className="truncate">{p.name}</span>
-                </div>
-              ),
-            }))}
-          />
+        <div className="space-y-2 border-b border-slate-100 p-3 dark:border-slate-800/50">
+          <div className="relative">
+            <select
+              aria-label={t('agent.sidebar.projectSwitcher', 'Project switcher')}
+              value={selectedProjectId ?? ''}
+              onChange={(event) => {
+                if (event.target.value) {
+                  handleProjectChange(event.target.value);
+                }
+              }}
+              disabled={!resolvedTenantId || selectableProjects.length === 0}
+              className="h-9 w-full appearance-none rounded-md border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-900 outline-none transition-colors hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-600"
+            >
+              {selectableProjects.length === 0 ? (
+                <option value="">
+                  {isProjectSearchLoading
+                    ? t('agent.sidebar.searchingProjects', 'Searching projects...')
+                    : t('agent.sidebar.noProjectsFound', 'No projects found')}
+                </option>
+              ) : (
+                selectableProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))
+              )}
+            </select>
+            <ChevronDown
+              size={16}
+              className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+          </div>
+          <div className="relative">
+            <LazyInput
+              aria-label={t('agent.sidebar.searchProjects', 'Search projects')}
+              className="w-full"
+              placeholder={t(
+                'agent.sidebar.searchProjectsPlaceholder',
+                'Search all authorized projects'
+              )}
+              value={projectSearchQuery}
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                handleProjectSearch(event.target.value);
+              }}
+            />
+            {isProjectSearchLoading ? (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                {t('agent.sidebar.searchingProjects', 'Searching projects...')}
+              </span>
+            ) : null}
+          </div>
         </div>
       )}
 
@@ -1423,28 +1419,44 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         </div>
       )}
 
-      {/* Rename Modal */}
-      <Modal
-        title={t('agent.sidebar.renameTitle', 'Rename Conversation')}
-        open={!!renamingConversation}
-        onOk={() => {
-          void handleRenameSubmit();
-        }}
-        onCancel={handleRenameCancel}
-        confirmLoading={isRenaming}
-        okText={t('agent.sidebar.rename', 'Rename')}
-        cancelText={t('common.cancel', 'Cancel')}
-      >
-        <LazyInput
-          placeholder={t('agent.sidebar.renamePlaceholder', 'Enter conversation title')}
-          value={newTitle}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-            setNewTitle(e.target.value);
-          }}
-          onPressEnter={handleRenameSubmit}
-          autoFocus
-        />
-      </Modal>
+      {renamingConversation ? (
+        <div className="absolute inset-x-3 bottom-3 z-20 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <div role="dialog" aria-modal="true" aria-labelledby="tenant-sidebar-rename-title">
+            <h2
+              id="tenant-sidebar-rename-title"
+              className="text-sm font-semibold text-slate-900 dark:text-slate-100"
+            >
+              {t('agent.sidebar.renameTitle', 'Rename Conversation')}
+            </h2>
+            <LazyInput
+              className="mt-3"
+              placeholder={t('agent.sidebar.renamePlaceholder', 'Enter conversation title')}
+              value={newTitle}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                setNewTitle(e.target.value);
+              }}
+              onPressEnter={handleRenameSubmit}
+              autoFocus
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <LazyButton size="small" onClick={handleRenameCancel}>
+                {t('common.cancel', 'Cancel')}
+              </LazyButton>
+              <LazyButton
+                size="small"
+                type="primary"
+                loading={isRenaming}
+                disabled={!newTitle.trim()}
+                onClick={() => {
+                  void handleRenameSubmit();
+                }}
+              >
+                {t('agent.sidebar.rename', 'Rename')}
+              </LazyButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 };
