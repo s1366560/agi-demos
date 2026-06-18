@@ -228,6 +228,38 @@ describe('AgentDefinitionDetail', () => {
     expect(link).toHaveAttribute('href', '/tenant/tenant-1/agent-definitions/agent-1');
   });
 
+  it('uses the route tenant id when the tenant store is still stale', async () => {
+    const listProjects = vi.fn().mockResolvedValue(undefined);
+    useTenantStore.setState({
+      currentTenant: { ...makeTenant(), id: 'tenant-store-old' },
+    });
+    useProjectStore.setState({
+      projects: [],
+      currentProject: null,
+      listProjects,
+    });
+    vi.mocked(definitionsService.listPage).mockResolvedValue(
+      makeDefinitionPage([makeDefinition({ tenant_id: 'tenant-route-new' })])
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-route-new/agent-definitions']}>
+        <Routes>
+          <Route path="/tenant/:tenantId/agent-definitions" element={<AgentDefinitions />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(definitionsService.listPage).toHaveBeenCalledWith(
+        expect.objectContaining({ tenant_id: 'tenant-route-new' })
+      );
+    });
+    await waitFor(() => {
+      expect(listProjects).toHaveBeenCalledWith('tenant-route-new', { page_size: 100 });
+    });
+  });
+
   it('filters definitions by scope and creates with the selected project scope', async () => {
     useAuthStore.setState({
       user: {

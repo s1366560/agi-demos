@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 
 import {
   Badge,
@@ -57,6 +57,7 @@ function canManageTenantAgents(
 export const AgentDefinitions: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -68,7 +69,8 @@ export const AgentDefinitions: React.FC = () => {
 
   const user = useUser();
   const currentTenant = useCurrentTenant();
-  const tenantId = currentTenant?.id ?? null;
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
+  const tenantForPermissions = currentTenant?.id === tenantId ? currentTenant : null;
   const projects = useProjectStore((state) => state.projects);
   const listProjects = useProjectStore((state) => state.listProjects);
   const definitions = useDefinitions();
@@ -82,7 +84,7 @@ export const AgentDefinitions: React.FC = () => {
   const toggleEnabled = useToggleDefinitionEnabled();
   const setFilters = useSetDefinitionFilters();
   const clearError = useClearDefinitionError();
-  const canManageAgents = canManageTenantAgents(user, currentTenant);
+  const canManageAgents = canManageTenantAgents(user, tenantForPermissions);
 
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
@@ -166,17 +168,17 @@ export const AgentDefinitions: React.FC = () => {
   }, [loadDefinitionsPage]);
 
   useEffect(() => {
-    if (!currentTenant?.id) {
+    if (!tenantId) {
       return;
     }
-    void listProjects(currentTenant.id, { page_size: 100 }).catch(() => {
+    void listProjects(tenantId, { page_size: 100 }).catch(() => {
       message.error(
         t('tenant.agentDefinitions.messages.projectsLoadFailed', {
           defaultValue: 'Failed to load projects',
         })
       );
     });
-  }, [currentTenant?.id, listProjects, t]);
+  }, [listProjects, tenantId, t]);
 
   useEffect(() => {
     setFilters({

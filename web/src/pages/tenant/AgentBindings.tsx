@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
 import {
   Form,
@@ -71,10 +72,12 @@ function canManageTenantAgents(
 
 export const AgentBindings: React.FC = () => {
   const { t } = useTranslation();
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
 
   const user = useUser();
   const currentTenant = useCurrentTenant();
-  const tenantId = currentTenant?.id ?? null;
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
+  const tenantForPermissions = currentTenant?.id === tenantId ? currentTenant : null;
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
@@ -94,7 +97,7 @@ export const AgentBindings: React.FC = () => {
 
   const definitions = useDefinitions();
   const listDefinitions = useListDefinitions();
-  const canManageAgents = canManageTenantAgents(user, currentTenant);
+  const canManageAgents = canManageTenantAgents(user, tenantForPermissions);
 
   const defNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -553,6 +556,7 @@ export const AgentBindings: React.FC = () => {
         cancelText={t('common.cancel', 'Cancel')}
         confirmLoading={isTestLoading}
         width={500}
+        forceRender
         destroyOnHidden
       >
         <Form form={testForm} layout="vertical" className="mt-4">
