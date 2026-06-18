@@ -135,6 +135,35 @@ describe('skill store', () => {
     expect(state.isLoading).toBe(false);
   });
 
+  it('ignores skill list responses that resolve after reset', async () => {
+    let resolveList: ((value: any) => void) | null = null;
+    const listPromise = new Promise((resolve) => {
+      resolveList = resolve;
+    });
+
+    vi.mocked(skillAPI.list).mockReturnValueOnce(listPromise as Promise<any>);
+
+    const load = useSkillStore.getState().listSkills({
+      tenant_id: 'tenant-1',
+      page: 3,
+      pageSize: 10,
+    });
+
+    useSkillStore.getState().reset();
+    resolveList?.({
+      skills: [{ id: 'skill-stale', name: 'Stale', status: 'active', scope: 'tenant' }],
+      total: 1,
+    });
+    await load;
+
+    const state = useSkillStore.getState();
+    expect(state.skills).toEqual([]);
+    expect(state.total).toBe(0);
+    expect(state.page).toBe(1);
+    expect(state.pageSize).toBe(20);
+    expect(state.isLoading).toBe(false);
+  });
+
   it('ignores stale responses from older tenant config requests', async () => {
     let resolveFirstConfigs: ((value: any) => void) | null = null;
     const firstConfigPromise = new Promise((resolve) => {
@@ -161,6 +190,27 @@ describe('skill store', () => {
     expect(useSkillStore.getState().tenantConfigs).toEqual([
       expect.objectContaining({ id: 'config-new' }),
     ]);
+    expect(useSkillStore.getState().isLoading).toBe(false);
+  });
+
+  it('ignores tenant config responses that resolve after reset', async () => {
+    let resolveConfigs: ((value: any) => void) | null = null;
+    const configPromise = new Promise((resolve) => {
+      resolveConfigs = resolve;
+    });
+
+    vi.mocked(tenantSkillConfigAPI.list).mockReturnValueOnce(configPromise as Promise<any>);
+
+    const load = useSkillStore.getState().listTenantConfigs({ tenant_id: 'tenant-1' });
+
+    useSkillStore.getState().reset();
+    resolveConfigs?.({
+      configs: [{ id: 'config-stale', tenant_id: 'tenant-1', system_skill_name: 'stale-skill' }],
+      total: 1,
+    });
+    await load;
+
+    expect(useSkillStore.getState().tenantConfigs).toEqual([]);
     expect(useSkillStore.getState().isLoading).toBe(false);
   });
 });

@@ -450,6 +450,8 @@ export const useSkillStore = create<SkillState>()(
       },
 
       reset: () => {
+        skillListRequestSequence += 1;
+        tenantConfigRequestSequence += 1;
         set(initialState);
       },
     }),
