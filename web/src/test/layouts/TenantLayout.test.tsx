@@ -395,6 +395,21 @@ describe('TenantLayout', () => {
     expect(mockProjectState.getProject).not.toHaveBeenCalled();
   });
 
+  it('keeps workspace-selected project on base agent workspace routes', async () => {
+    const currentProject = { id: 'workspace-project', tenant_id: 't1', name: 'Workspace Project' };
+    setMockRouteParams({ tenantId: 't1' });
+    mockLocationPathname = '/tenant/t1/agent-workspace';
+    mockProjectState.currentProject = currentProject;
+
+    render(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(screen.getByText('MemStack')).toBeInTheDocument();
+    });
+    expect(mockProjectState.setCurrentProject).not.toHaveBeenCalledWith(null);
+    expect(mockProjectState.currentProject).toEqual(currentProject);
+  });
+
   it('clears project state when tenant scope changes', async () => {
     mockProjectState.projects = [{ id: 'project-1', name: 'Old Tenant Project' }];
     mockProjectState.currentProject = { id: 'project-1', name: 'Old Tenant Project' };

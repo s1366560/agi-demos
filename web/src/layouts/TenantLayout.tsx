@@ -68,6 +68,10 @@ export const TenantLayout: React.FC = memo(() => {
   const { tenantId, projectId } = useParams();
   const queryProjectId = new URLSearchParams(location.search).get('projectId')?.trim() || undefined;
   const effectiveProjectId = projectId ?? queryProjectId;
+  const tenantBasePath = tenantId ? `/tenant/${tenantId}` : '/tenant';
+  const isAgentWorkspaceRoute =
+    location.pathname === `${tenantBasePath}/agent-workspace` ||
+    location.pathname.startsWith(`${tenantBasePath}/agent-workspace/`);
 
   // Optimized: Select only the state we need with typing
   const currentTenant = useTenantStore((state) => state.currentTenant);
@@ -253,7 +257,7 @@ export const TenantLayout: React.FC = memo(() => {
             }
           });
       }
-    } else if (!requestProjectId && currentProject) {
+    } else if (!requestProjectId && currentProject && !isAgentWorkspaceRoute) {
       useProjectStore.getState().setCurrentProject(null);
     }
 
@@ -262,7 +266,7 @@ export const TenantLayout: React.FC = memo(() => {
         projectSyncRequestRef.current += 1;
       }
     };
-  }, [effectiveProjectId, currentTenant, currentProject]);
+  }, [effectiveProjectId, currentTenant, currentProject, isAgentWorkspaceRoute]);
 
   // No tenants state - welcome screen
   if (noTenants) {
@@ -314,7 +318,7 @@ export const TenantLayout: React.FC = memo(() => {
     );
   }
 
-  const basePath = tenantId ? `/tenant/${tenantId}` : '/tenant';
+  const basePath = tenantBasePath;
 
   // Determine if the current page is an agent workspace (needs full-height, no scroll)
   // Non-agent pages: overview, projects, users, providers, analytics, etc.

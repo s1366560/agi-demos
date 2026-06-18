@@ -495,6 +495,41 @@ export const LegacyTenantWorkspaceRedirect: React.FC = () => {
   );
 };
 
+function isUuidPathSegment(segment: string | undefined): boolean {
+  return Boolean(
+    segment?.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+  );
+}
+
+export const LegacyTenantSingleSegmentRedirect: React.FC = () => {
+  const { segment } = useParams<{ segment: string }>();
+  const location = useLocation();
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const tenants = useTenantStore((state) => state.tenants);
+  const { projectId, workspaceId } = getLegacyWorkspaceRedirectParams(location.search);
+  const isAccessibleTenant =
+    Boolean(segment) &&
+    (segment === currentTenant?.id ||
+      tenants.some((tenant) => tenant.id === segment) ||
+      isUuidPathSegment(segment));
+
+  if (!segment) {
+    return <Navigate to="/tenant" replace />;
+  }
+
+  return (
+    <Navigate
+      to={buildAgentWorkspacePath({
+        tenantId: isAccessibleTenant ? segment : undefined,
+        conversationId: isAccessibleTenant ? undefined : segment,
+        projectId,
+        workspaceId,
+      })}
+      replace
+    />
+  );
+};
+
 export const LegacyTenantConversationRedirect: React.FC = () => {
   const { tenantId, conversation } = useParams<{ tenantId: string; conversation: string }>();
   const location = useLocation();
@@ -650,10 +685,10 @@ function App() {
                 }
               />
               <Route
-                path=":conversation"
+                path=":segment"
                 element={
                   <Suspense fallback={<PageLoader />}>
-                    <AgentWorkspace />
+                    <LegacyTenantSingleSegmentRedirect />
                   </Suspense>
                 }
               />
@@ -1840,14 +1875,6 @@ function App() {
               </Route>
 
               {/* Legacy tenant workspace/conversation routes must stay after known tenant pages. */}
-              <Route
-                path=":tenantId"
-                element={
-                  <Suspense fallback={<PageLoader />}>
-                    <LegacyTenantWorkspaceRedirect />
-                  </Suspense>
-                }
-              />
               <Route
                 path=":tenantId/:conversation"
                 element={
