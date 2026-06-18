@@ -81,6 +81,7 @@ export const MemoryDetail: React.FC = () => {
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
   const sseCleanupRef = useRef<(() => void) | null>(null);
+  const fetchRequestSeqRef = useRef(0);
 
   // Subscribe to SSE for task updates
   const subscribeToMemoryTask = useCallback((taskId: string) => {
@@ -126,27 +127,46 @@ export const MemoryDetail: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!projectId || !memoryId) {
+      return;
+    }
+
+    const requestSeq = fetchRequestSeqRef.current + 1;
+    fetchRequestSeqRef.current = requestSeq;
+
     const fetchMemory = async () => {
-      if (projectId && memoryId) {
-        setIsLoading(true);
-        try {
-          const data = await memoryAPI.get(projectId, memoryId);
-          setMemory(data);
-          // If memory is processing and has task_id, subscribe to SSE
-          if (
-            (data.processing_status === 'PENDING' || data.processing_status === 'PROCESSING') &&
-            data.task_id
-          ) {
-            subscribeToMemoryTask(data.task_id);
-          }
-        } catch (error) {
+      setIsLoading(true);
+      try {
+        const data = await memoryAPI.get(projectId, memoryId);
+        if (fetchRequestSeqRef.current !== requestSeq) {
+          return;
+        }
+
+        setMemory(data);
+        // If memory is processing and has task_id, subscribe to SSE
+        if (
+          (data.processing_status === 'PENDING' || data.processing_status === 'PROCESSING') &&
+          data.task_id
+        ) {
+          subscribeToMemoryTask(data.task_id);
+        }
+      } catch (error) {
+        if (fetchRequestSeqRef.current === requestSeq) {
           console.error('Failed to fetch memory:', error);
-        } finally {
+        }
+      } finally {
+        if (fetchRequestSeqRef.current === requestSeq) {
           setIsLoading(false);
         }
       }
     };
     void fetchMemory();
+
+    return () => {
+      if (fetchRequestSeqRef.current === requestSeq) {
+        fetchRequestSeqRef.current += 1;
+      }
+    };
   }, [projectId, memoryId, subscribeToMemoryTask]);
 
   if (!projectId || !memoryId) {

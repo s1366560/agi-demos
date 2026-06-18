@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MemoryDetail } from '../../../pages/project/MemoryDetail';
@@ -53,6 +53,16 @@ const memory: Memory = {
   created_at: '2024-01-01T00:00:00Z',
 };
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('MemoryDetail', () => {
   const createObjectURL = vi.fn(() => 'blob:memory-export');
   const revokeObjectURL = vi.fn();
@@ -81,11 +91,38 @@ describe('MemoryDetail', () => {
 
   const renderDetail = () =>
     render(
-      <MemoryRouter initialEntries={['/tenant/t1/project/project-1/memories/memory-1']}>
+      <MemoryRouter initialEntries={['/tenant/t1/project/project-1/memory/memory-1']}>
         <Routes>
           <Route
-            path="/tenant/:tenantId/project/:projectId/memories/:memoryId"
+            path="/tenant/:tenantId/project/:projectId/memory/:memoryId"
             element={<MemoryDetail />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+  const RouteChangeHarness = () => {
+    const navigate = useNavigate();
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => navigate('/tenant/t1/project/project-1/memory/memory-2')}
+        >
+          Go to memory two
+        </button>
+        <MemoryDetail />
+      </>
+    );
+  };
+
+  const renderRouteChangeHarness = () =>
+    render(
+      <MemoryRouter initialEntries={['/tenant/t1/project/project-1/memory/memory-1']}>
+        <Routes>
+          <Route
+            path="/tenant/:tenantId/project/:projectId/memory/:memoryId"
+            element={<RouteChangeHarness />}
           />
         </Routes>
       </MemoryRouter>
@@ -118,5 +155,40 @@ describe('MemoryDetail', () => {
     expect(clickSpy).toHaveBeenCalled();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:memory-export');
     expect(messageMocks.success).toHaveBeenCalledWith('Memory exported');
+  });
+
+  it('ignores stale detail responses after the route changes', async () => {
+    const firstRequest = createDeferred<Memory>();
+    const secondRequest = createDeferred<Memory>();
+    vi.mocked(memoryAPI.get)
+      .mockReturnValueOnce(firstRequest.promise)
+      .mockReturnValueOnce(secondRequest.promise);
+
+    renderRouteChangeHarness();
+
+    await waitFor(() => {
+      expect(memoryAPI.get).toHaveBeenCalledWith('project-1', 'memory-1');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go to memory two' }));
+
+    await waitFor(() => {
+      expect(memoryAPI.get).toHaveBeenCalledWith('project-1', 'memory-2');
+    });
+
+    await act(async () => {
+      secondRequest.resolve({ ...memory, id: 'memory-2', title: 'Memory Two' });
+    });
+
+    expect((await screen.findAllByText('Memory Two')).length).toBeGreaterThan(0);
+
+    await act(async () => {
+      firstRequest.resolve({ ...memory, id: 'memory-1', title: 'Memory One' });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Memory One')).not.toBeInTheDocument();
+      expect(screen.getAllByText('Memory Two').length).toBeGreaterThan(0);
+    });
   });
 });
