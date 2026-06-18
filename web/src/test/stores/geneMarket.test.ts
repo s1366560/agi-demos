@@ -174,6 +174,48 @@ describe('gene market store', () => {
     expect(geneMarketService.getGeneReviews).not.toHaveBeenCalled();
   });
 
+  it('keeps submitting state active until overlapping submissions settle', async () => {
+    const slowRequest = deferred<{ id: string }>();
+    const fastRequest = deferred<{ id: string }>();
+    vi.mocked(geneMarketService.createGeneReview)
+      .mockReturnValueOnce(slowRequest.promise as any)
+      .mockReturnValueOnce(fastRequest.promise as any);
+
+    const slowSubmission = useGeneMarketStore
+      .getState()
+      .createGeneReview('gene-1', { rating: 5 }, { tenant_id: 'tenant-2' });
+    const fastSubmission = useGeneMarketStore
+      .getState()
+      .createGeneReview('gene-1', { rating: 4 }, { tenant_id: 'tenant-2' });
+
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(true);
+
+    fastRequest.resolve({ id: 'fast-review' });
+    await expect(fastSubmission).resolves.toBeUndefined();
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(true);
+
+    slowRequest.resolve({ id: 'slow-review' });
+    await expect(slowSubmission).resolves.toBeUndefined();
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+  });
+
+  it('resets pending submission tracking when the store resets', async () => {
+    const pendingRequest = deferred<{ id: string }>();
+    vi.mocked(geneMarketService.createGeneReview).mockReturnValueOnce(pendingRequest.promise as any);
+
+    const submission = useGeneMarketStore
+      .getState()
+      .createGeneReview('gene-1', { rating: 5 }, { tenant_id: 'tenant-2' });
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(true);
+
+    useGeneMarketStore.getState().reset();
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+
+    pendingRequest.resolve({ id: 'review-1' });
+    await expect(submission).resolves.toBeUndefined();
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+  });
+
   it('updates gene list and current gene after publishing', async () => {
     const draftGene = gene({ is_published: false });
     const publishedGene = gene({ is_published: true });
