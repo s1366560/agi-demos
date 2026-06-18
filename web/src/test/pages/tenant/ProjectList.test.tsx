@@ -112,6 +112,17 @@ describe('ProjectList', () => {
 
     expect(screen.getByLabelText('tenant.projects.filters.ownerLabel')).toHaveValue('all');
     expect(screen.getByLabelText('tenant.projects.filters.visibilityLabel')).toHaveValue('all');
+    expect(screen.getByLabelText('tenant.projects.filters.ownerLabel')).toHaveAttribute(
+      'aria-label',
+      'tenant.projects.filters.ownerLabel'
+    );
+    expect(screen.getByLabelText('tenant.projects.filters.visibilityLabel')).toHaveAttribute(
+      'aria-label',
+      'tenant.projects.filters.visibilityLabel'
+    );
+    const filterToolbar = screen.getByTestId('project-list-filters');
+    expect(filterToolbar).toHaveClass('flex-wrap');
+    expect(filterToolbar).not.toHaveClass('overflow-x-auto');
     expect(screen.queryByText('common.stats.owner')).not.toBeInTheDocument();
     expect(screen.getByText('0 Members')).toBeInTheDocument();
     expect(screen.getByText('3 Members')).toBeInTheDocument();

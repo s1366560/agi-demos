@@ -112,6 +112,8 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
 
   // Create formatTime function using translation hook
   const formatTime = createFormatTime(t);
+  const visibilityFilterLabel = t('tenant.projects.filters.visibilityLabel');
+  const ownerFilterLabel = t('tenant.projects.filters.ownerLabel');
 
   const ownerOptions = React.useMemo(
     () =>
@@ -200,16 +202,20 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           />
         </div>
         {/* Filters */}
-        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 px-2 md:px-0">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-1">
+        <div
+          data-testid="project-list-filters"
+          className="flex w-full flex-wrap items-center gap-2 px-2 pb-1 md:w-auto md:flex-nowrap md:px-0 md:pb-0"
+        >
+          <span className="mr-1 shrink-0 text-xs font-semibold uppercase tracking-wider text-slate-400">
             {t('tenant.projects.filter')}
           </span>
           <label className="sr-only" htmlFor="project-visibility-filter">
-            {t('tenant.projects.filters.visibilityLabel')}
+            {visibilityFilterLabel}
           </label>
-          <div className="relative">
+          <div className="relative shrink-0">
             <select
               id="project-visibility-filter"
+              aria-label={visibilityFilterLabel}
               value={visibilityFilter}
               onChange={(event) => {
                 setVisibilityFilter(event.target.value as VisibilityFilter);
@@ -227,17 +233,18 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
             />
           </div>
           <label className="sr-only" htmlFor="project-owner-filter">
-            {t('tenant.projects.filters.ownerLabel')}
+            {ownerFilterLabel}
           </label>
-          <div className="relative">
+          <div className="relative min-w-0 flex-1 sm:flex-none">
             <select
               id="project-owner-filter"
+              aria-label={ownerFilterLabel}
               value={ownerFilter}
               onChange={(event) => {
                 setOwnerFilter(event.target.value);
                 setPage(1);
               }}
-              className="appearance-none rounded-lg border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              className="w-full max-w-full appearance-none truncate rounded-lg border border-slate-200 bg-white py-1.5 pl-3 pr-8 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 sm:w-auto sm:max-w-72"
             >
               <option value="all">{t('tenant.projects.filters.allOwners')}</option>
               {ownerOptions.map((ownerId) => (
@@ -251,8 +258,8 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
               className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-500"
             />
           </div>
-          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
-          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+          <div className="mx-1 hidden h-6 w-px bg-slate-200 dark:bg-slate-700 sm:block"></div>
+          <div className="flex shrink-0 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
             <button
               type="button"
               aria-label={t('tenant.projects.viewGrid')}
