@@ -517,11 +517,14 @@ export const LegacyTenantSingleSegmentRedirect: React.FC = () => {
     return <Navigate to="/tenant" replace />;
   }
 
+  if (isAccessibleTenant) {
+    return <Navigate to={`/tenant/${segment}/overview${location.search || ''}`} replace />;
+  }
+
   return (
     <Navigate
       to={buildAgentWorkspacePath({
-        tenantId: isAccessibleTenant ? segment : undefined,
-        conversationId: isAccessibleTenant ? undefined : segment,
+        conversationId: segment,
         projectId,
         workspaceId,
       })}
@@ -680,7 +683,7 @@ function App() {
                 index
                 element={
                   <Suspense fallback={<PageLoader />}>
-                    <AgentWorkspace />
+                    <TenantOverview />
                   </Suspense>
                 }
               />

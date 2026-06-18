@@ -533,7 +533,7 @@ function HeaderUserMenu({
     if (tenant.id === normalizedTenantId) {
       return;
     }
-    void navigate(`/tenant/${tenant.id}`);
+    void navigate(`/tenant/${tenant.id}/overview`);
   };
 
   const cycleTheme = () => {

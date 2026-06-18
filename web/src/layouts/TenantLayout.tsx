@@ -107,7 +107,7 @@ export const TenantLayout: React.FC = memo(() => {
       setNoTenants(false);
 
       if (!tenantId && isBareTenantEntryPath(location.pathname)) {
-        void navigate(`/tenant/${tenant.id}`, { replace: true });
+        void navigate(`/tenant/${tenant.id}/overview`, { replace: true });
       }
 
       return true;
@@ -238,11 +238,7 @@ export const TenantLayout: React.FC = memo(() => {
       currentProject?.id === requestProjectId &&
       (!projectSyncTenantId || currentProject.tenant_id === projectSyncTenantId);
 
-    if (
-      requestProjectId &&
-      projectSyncTenantId &&
-      !currentProjectMatchesRequest
-    ) {
+    if (requestProjectId && projectSyncTenantId && !currentProjectMatchesRequest) {
       const { projects, setCurrentProject, getProject } = useProjectStore.getState();
       const project = projects.find(
         (p) => p.id === requestProjectId && p.tenant_id === projectSyncTenantId

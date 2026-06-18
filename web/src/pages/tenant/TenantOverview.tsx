@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 import {
   BadgeCheck,
@@ -106,7 +106,19 @@ const getStorageTrendLabel = (history: TenantMemoryHistoryPoint[]): string => {
 
 export const TenantOverview: React.FC = () => {
   const { t } = useTranslation();
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string | undefined }>();
   const { currentTenant, tenants, listTenants, setCurrentTenant } = useTenantStore();
+  const tenant = useMemo(() => {
+    if (!routeTenantId) {
+      return currentTenant;
+    }
+
+    if (currentTenant?.id === routeTenantId) {
+      return currentTenant;
+    }
+
+    return tenants.find((candidate) => candidate.id === routeTenantId) ?? null;
+  }, [currentTenant, routeTenantId, tenants]);
   const [stats, setStats] = useState<TenantOverviewStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
@@ -120,28 +132,41 @@ export const TenantOverview: React.FC = () => {
   }, [listTenants, tenants.length]);
 
   useEffect(() => {
+    if (routeTenantId) {
+      const routeTenant = tenants.find((candidate) => candidate.id === routeTenantId);
+      if (routeTenant && currentTenant?.id !== routeTenant.id) {
+        setCurrentTenant(routeTenant);
+      }
+      return;
+    }
+
     if (!currentTenant && tenants.length > 0) {
       setCurrentTenant(tenants[0] ?? null);
     }
-  }, [currentTenant, tenants, setCurrentTenant]);
+  }, [currentTenant, routeTenantId, tenants, setCurrentTenant]);
 
   useEffect(() => {
     let isCurrent = true;
 
     const fetchStats = async () => {
-      if (currentTenant) {
-        setIsLoadingStats(true);
-        try {
-          const data = await tenantAPI.getStats(currentTenant.id);
-          if (isCurrent) {
-            setStats(data as TenantOverviewStats);
-          }
-        } catch (error) {
-          console.error('Failed to fetch tenant stats:', error);
-        } finally {
-          if (isCurrent) {
-            setIsLoadingStats(false);
-          }
+      if (!tenant) {
+        setStats(null);
+        setIsLoadingStats(false);
+        return;
+      }
+
+      setStats(null);
+      setIsLoadingStats(true);
+      try {
+        const data = await tenantAPI.getStats(tenant.id);
+        if (isCurrent) {
+          setStats(data as TenantOverviewStats);
+        }
+      } catch (error) {
+        console.error('Failed to fetch tenant stats:', error);
+      } finally {
+        if (isCurrent) {
+          setIsLoadingStats(false);
         }
       }
     };
@@ -151,9 +176,9 @@ export const TenantOverview: React.FC = () => {
     return () => {
       isCurrent = false;
     };
-  }, [currentTenant]);
+  }, [tenant]);
 
-  if (!currentTenant) {
+  if (!tenant) {
     return <div className="p-8 text-center text-slate-500">{t('tenant.overview.loading')}</div>;
   }
 
@@ -414,7 +439,7 @@ export const TenantOverview: React.FC = () => {
                 </span>
               </div>
               <Link
-                to="/tenant/billing"
+                to={`/tenant/${tenant.id}/billing`}
                 className="block w-full rounded-md border border-slate-200 bg-white px-4 py-2 text-center text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
               >
                 {t('tenant.overview.viewInvoice')}
@@ -431,7 +456,7 @@ export const TenantOverview: React.FC = () => {
             {t('tenant.overview.mostActiveProjects')}
           </h3>
           <Link
-            to={`/tenant/${currentTenant.id}/projects`}
+            to={`/tenant/${tenant.id}/projects`}
             className="text-primary text-sm font-medium hover:underline"
           >
             {t('common.actions.viewAll')}
@@ -512,7 +537,7 @@ export const TenantOverview: React.FC = () => {
                   </td>
                   <td className="py-4 px-6 text-right">
                     <Link
-                      to={`/tenant/${currentTenant.id}/project/${project.id}`}
+                      to={`/tenant/${tenant.id}/project/${project.id}`}
                       aria-label={t('tenant.overview.openProject', {
                         name: project.name,
                       })}

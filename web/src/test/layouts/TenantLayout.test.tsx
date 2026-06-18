@@ -289,7 +289,9 @@ describe('TenantLayout', () => {
     await waitFor(() => {
       expect(mockTenantState.setCurrentTenant).toHaveBeenCalledWith(tenant);
     });
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/existing-tenant', { replace: true });
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/existing-tenant/overview', {
+      replace: true,
+    });
     expect(screen.queryByText('Welcome')).not.toBeInTheDocument();
   });
 
@@ -309,7 +311,9 @@ describe('TenantLayout', () => {
       expect(mockTenantState.listTenants).toHaveBeenCalled();
     });
     expect(mockTenantState.setCurrentTenant).toHaveBeenCalledWith(tenant);
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/loaded-tenant', { replace: true });
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/loaded-tenant/overview', {
+      replace: true,
+    });
     expect(screen.queryByText('Welcome')).not.toBeInTheDocument();
   });
 

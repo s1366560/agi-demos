@@ -329,7 +329,7 @@ describe('TenantHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tenant Two' }));
 
     expect(setCurrentTenant).not.toHaveBeenCalled();
-    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-2');
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-2/overview');
   });
 
   it('does not reload the current tenant from the user dropdown', () => {

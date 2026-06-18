@@ -105,7 +105,7 @@ describe('App route redirects', () => {
     });
   });
 
-  it('redirects a single tenant segment to the tenant agent workspace', async () => {
+  it('redirects a single tenant segment to the tenant overview', async () => {
     render(
       <MemoryRouter initialEntries={['/tenant/tenant-1?projectId=project-1']}>
         <Routes>
@@ -117,7 +117,7 @@ describe('App route redirects', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('location')).toHaveTextContent(
-        '/tenant/tenant-1/agent-workspace?projectId=project-1'
+        '/tenant/tenant-1/overview?projectId=project-1'
       );
     });
   });
@@ -137,9 +137,7 @@ describe('App route redirects', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('location')).toHaveTextContent(
-        `/tenant/${tenantId}/agent-workspace`
-      );
+      expect(screen.getByTestId('location')).toHaveTextContent(`/tenant/${tenantId}/overview`);
     });
   });
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Route, Routes } from 'react-router-dom';
 
 import { TenantOverview } from '../../../pages/tenant/TenantOverview';
 import { tenantAPI } from '../../../services/api';
@@ -70,9 +71,62 @@ describe('TenantOverview', () => {
       );
       expect(screen.getByRole('link', { name: 'View Invoice' })).toHaveAttribute(
         'href',
-        '/tenant/billing'
+        '/tenant/t1/billing'
       );
     });
+  });
+
+  it('uses the route tenant while the current tenant store value is stale', async () => {
+    const setCurrentTenant = vi.fn();
+    vi.mocked(useTenantStore).mockReturnValue({
+      currentTenant: {
+        id: 'old-tenant',
+        name: 'Old Tenant',
+        description: 'Old tenant',
+        plan: 'basic',
+        created_at: '2023-01-01',
+      },
+      tenants: [
+        { id: 'old-tenant', name: 'Old Tenant' },
+        { id: 'route-tenant', name: 'Route Tenant' },
+      ],
+      listTenants: vi.fn(),
+      setCurrentTenant,
+    } as any);
+
+    vi.mocked(tenantAPI.getStats).mockResolvedValue({
+      storage: { used: 100, total: 1000, percentage: 10 },
+      projects: { active: 0, new_this_week: 0, list: [] },
+      members: { total: 0, new_added: 0 },
+      memory_history: [],
+      tenant_info: {
+        organization_id: 'ORG-ROUTE',
+        plan: 'basic',
+        region: 'US-East',
+        next_billing_date: '2023-02-01',
+      },
+    });
+
+    render(
+      <Routes>
+        <Route path="/tenant/:tenantId/overview" element={<TenantOverview />} />
+      </Routes>,
+      { route: '/tenant/route-tenant/overview' }
+    );
+
+    await waitFor(() => {
+      expect(tenantAPI.getStats).toHaveBeenCalledWith('route-tenant');
+    });
+    expect(tenantAPI.getStats).not.toHaveBeenCalledWith('old-tenant');
+    expect(setCurrentTenant).toHaveBeenCalledWith({ id: 'route-tenant', name: 'Route Tenant' });
+    expect(screen.getByRole('link', { name: 'View All' })).toHaveAttribute(
+      'href',
+      '/tenant/route-tenant/projects'
+    );
+    expect(screen.getByRole('link', { name: 'View Invoice' })).toHaveAttribute(
+      'href',
+      '/tenant/route-tenant/billing'
+    );
   });
 
   it('shows unavailable labels instead of backend placeholder gaps', async () => {
