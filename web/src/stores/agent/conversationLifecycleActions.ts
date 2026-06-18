@@ -51,6 +51,17 @@ export interface ConversationLifecycleDeps {
   resetCanvasForConversationScope: () => void;
 }
 
+const inFlightConversationLoads = new Map<string, Promise<void>>();
+
+function conversationLoadKey(projectId: string, options: LoadConversationsOptions): string {
+  return [
+    projectId,
+    options.force ? 'force' : 'cached',
+    options.silent ? 'silent' : 'visible',
+    String(options.limit ?? 'default'),
+  ].join(':');
+}
+
 export function createConversationLifecycleActions(deps: ConversationLifecycleDeps) {
   const { get, set, resetCanvasForConversationScope } = deps;
 
@@ -59,8 +70,19 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
       projectId: string,
       signalOrOptions?: AbortSignal | LoadConversationsOptions
     ): Promise<void> => {
-      logger.debug(`[agentV3] loadConversations called for project: ${projectId}`);
       const options = normalizeLoadOptions(signalOrOptions);
+      const loadKey = conversationLoadKey(projectId, options);
+      const inFlightLoad = inFlightConversationLoads.get(loadKey);
+      if (inFlightLoad) {
+        try {
+          await inFlightLoad;
+        } catch {
+          // The owner call logs non-silent failures below; duplicate callers only coalesce.
+        }
+        return;
+      }
+
+      logger.debug(`[agentV3] loadConversations called for project: ${projectId}`);
 
       // Prevent duplicate calls for the same project
       const currentConvos = get().conversations;
@@ -70,7 +92,7 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
         return;
       }
 
-      try {
+      const loadPromise = (async () => {
         // Delegate to conversationsStore for API call + list management
         const limit =
           options.limit ?? (options.force ? Math.max(currentConvos.length, 10) : undefined);
@@ -92,6 +114,12 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
         logger.debug(
           `[agentV3] Loaded ${String(convState.conversations.length)} conversations via conversationsStore`
         );
+      })();
+
+      inFlightConversationLoads.set(loadKey, loadPromise);
+
+      try {
+        await loadPromise;
       } catch (error) {
         if (options.signal?.aborted || (error as { name?: string }).name === 'CanceledError') {
           return;
@@ -101,6 +129,10 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
           return;
         }
         console.error('[agentV3] Failed to list conversations', error);
+      } finally {
+        if (inFlightConversationLoads.get(loadKey) === loadPromise) {
+          inFlightConversationLoads.delete(loadKey);
+        }
       }
     },
 

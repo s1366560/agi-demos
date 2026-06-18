@@ -12,6 +12,9 @@ const localStorageMock = vi.hoisted(() => ({
   values: new Map<string, string | null>(),
   setValue: vi.fn(),
 }));
+const agentStoreMock = vi.hoisted(() => ({
+  loadConversations: vi.fn(),
+}));
 
 let projectState: any;
 let tenantState: any;
@@ -67,7 +70,7 @@ vi.mock('../../../stores/project', () => ({
 vi.mock('../../../stores/agentV3', () => ({
   useAgentV3Store: (selector: (state: any) => unknown) =>
     selector({
-      loadConversations: vi.fn(),
+      loadConversations: agentStoreMock.loadConversations,
     }),
 }));
 
@@ -110,6 +113,7 @@ describe('workspace/agent workspace bridge', () => {
     vi.clearAllMocks();
     localStorageMock.values.clear();
     localStorageMock.setValue.mockReset();
+    agentStoreMock.loadConversations.mockReset();
 
     authState = {
       user: { tenant_id: 'tenant-1' },
@@ -157,6 +161,18 @@ describe('workspace/agent workspace bridge', () => {
         })
       );
     });
+  });
+
+  it('lets child chat surfaces own conversation loading for the selected project', async () => {
+    render(<AgentWorkspace />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-2',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-chat-content')).toBeInTheDocument();
+    });
+
+    expect(agentStoreMock.loadConversations).not.toHaveBeenCalled();
   });
 
   it('restores saved workspace context on base agent workspace URLs', () => {

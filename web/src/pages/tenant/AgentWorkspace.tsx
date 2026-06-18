@@ -19,7 +19,6 @@ import { LazyEmpty, LazySpin, LazyButton } from '@/components/ui/lazyAntd';
 import { useBlackboardSSE } from '../../hooks/useBlackboardSSE';
 import { useConversationListAutoRefresh } from '../../hooks/useConversationListAutoRefresh';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
-import { useAgentV3Store } from '../../stores/agentV3';
 import { useAuthStore } from '../../stores/auth';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
@@ -74,7 +73,6 @@ export const AgentWorkspace: FC = () => {
   const setCurrentProject = useProjectStore((state) => state.setCurrentProject);
   const listProjects = useProjectStore((state) => state.listProjects);
   const getProject = useProjectStore((state) => state.getProject);
-  const loadConversations = useAgentV3Store((state) => state.loadConversations);
 
   // Resolve the effective tenant id early so localStorage keys can be scoped
   // by tenant. Without scoping, switching tenants would leak the previous
@@ -251,16 +249,13 @@ export const AgentWorkspace: FC = () => {
     tenantProjectCount,
   ]);
 
-  // Load conversations when project changes
+  // Persist project selection and keep the global project scope aligned.
+  // Conversation list loading is owned by the sidebar/chat surfaces and
+  // deduplicated in the agent store so tenant switches do not fan out requests.
   useEffect(() => {
     if (!activeSelectedProjectId) {
       return;
     }
-    // Defect #15: cancel any in-flight conversation list request when the
-    // user switches projects so a slow response can't overwrite the newer
-    // project's list.
-    const controller = new AbortController();
-    void loadConversations(activeSelectedProjectId, controller.signal);
     // Persist selection using cached hook
     if (lastProjectId !== activeSelectedProjectId) {
       setLastProjectId(activeSelectedProjectId);
@@ -270,13 +265,9 @@ export const AgentWorkspace: FC = () => {
     if (project && tenantCurrentProjectId !== project.id) {
       setCurrentProject(project);
     }
-    return () => {
-      controller.abort();
-    };
   }, [
     activeSelectedProjectId,
     lastProjectId,
-    loadConversations,
     tenantCurrentProjectId,
     tenantProjects,
     setCurrentProject,
