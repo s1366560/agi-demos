@@ -1,5 +1,6 @@
 import {
   StrictMode,
+  useEffect,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -7,7 +8,7 @@ import {
 
 import { render as rtlRender } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
 import { projectAPI } from '@/services/api';
@@ -230,6 +231,16 @@ function LocationProbe() {
   return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
 }
 
+function TenantChatSidebarRouteHarness({ route, tenantId }: { route: string; tenantId: string }) {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    void navigate(route, { replace: true });
+  }, [navigate, route]);
+
+  return <TenantChatSidebar tenantId={tenantId} mobile />;
+}
+
 describe('TenantChatSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -327,6 +338,17 @@ describe('TenantChatSidebar', () => {
     expect(
       projectSwitcher.compareDocumentPosition(conversation) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+
+  it('does not auto-load the first project on non-agent tenant pages', () => {
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/genes/genomes/genome-1',
+    });
+
+    expect(screen.getByRole('combobox', { name: 'Project switcher' })).toHaveValue('');
+    expect(agentState.loadConversations).not.toHaveBeenCalled();
+    expect(screen.queryByText('Conversation One')).not.toBeInTheDocument();
+    expect(screen.getByText('Select a project to view conversations')).toBeInTheDocument();
   });
 
   it('deduplicates project switcher options by project id', () => {
@@ -512,25 +534,37 @@ describe('TenantChatSidebar', () => {
 
     const { rerender } = rtlRender(
       <MemoryRouter initialEntries={['/tenant/tenant-1/agent-workspace']}>
-        <TenantChatSidebar tenantId="tenant-1" mobile />
+        <TenantChatSidebarRouteHarness
+          tenantId="tenant-1"
+          route="/tenant/tenant-1/agent-workspace"
+        />
       </MemoryRouter>
     );
 
     await waitFor(() => {
-      expect(agentState.loadConversations).toHaveBeenCalledWith('project-1');
+      expect(agentState.loadConversations).toHaveBeenCalledWith(
+        'project-1',
+        expect.any(AbortSignal)
+      );
     });
     agentState.loadConversations.mockClear();
 
     rerender(
-      <MemoryRouter initialEntries={['/tenant/tenant-2/agent-workspace']}>
-        <TenantChatSidebar tenantId="tenant-2" mobile />
+      <MemoryRouter initialEntries={['/tenant/tenant-1/agent-workspace']}>
+        <TenantChatSidebarRouteHarness
+          tenantId="tenant-2"
+          route="/tenant/tenant-2/agent-workspace"
+        />
       </MemoryRouter>
     );
 
     const projectSwitcher = await screen.findByRole('combobox', { name: 'Project switcher' });
     await waitFor(() => {
       expect(projectSwitcher).toHaveValue('project-2');
-      expect(agentState.loadConversations).toHaveBeenCalledWith('project-2');
+      expect(agentState.loadConversations).toHaveBeenCalledWith(
+        'project-2',
+        expect.any(AbortSignal)
+      );
     });
     expect(projectState.setCurrentProject).toHaveBeenLastCalledWith({
       id: 'project-2',
@@ -546,7 +580,10 @@ describe('TenantChatSidebar', () => {
 
     const { rerender } = rtlRender(
       <MemoryRouter initialEntries={['/tenant/tenant-1/agent-workspace']}>
-        <TenantChatSidebar tenantId="tenant-1" mobile />
+        <TenantChatSidebarRouteHarness
+          tenantId="tenant-1"
+          route="/tenant/tenant-1/agent-workspace"
+        />
       </MemoryRouter>
     );
 
@@ -560,8 +597,11 @@ describe('TenantChatSidebar', () => {
     projectState.currentProject = null;
 
     rerender(
-      <MemoryRouter initialEntries={['/tenant/tenant-2/agent-workspace']}>
-        <TenantChatSidebar tenantId="tenant-2" mobile />
+      <MemoryRouter initialEntries={['/tenant/tenant-1/agent-workspace']}>
+        <TenantChatSidebarRouteHarness
+          tenantId="tenant-2"
+          route="/tenant/tenant-2/agent-workspace"
+        />
       </MemoryRouter>
     );
 
@@ -569,7 +609,7 @@ describe('TenantChatSidebar', () => {
       expect(screen.getByRole('combobox', { name: 'Project switcher' })).toBeDisabled();
       expect(screen.queryByText('Conversation One')).not.toBeInTheDocument();
     });
-    expect(screen.getByText('No conversations yet')).toBeInTheDocument();
+    expect(screen.getByText('Select a project to view conversations')).toBeInTheDocument();
     expect(conversationsState.reset).toHaveBeenCalledTimes(1);
     expect(agentState.setActiveConversation).toHaveBeenCalledWith(null);
   });

@@ -116,6 +116,16 @@ function projectBelongsToTenant(
   return !!project && (!tenantId || project.tenant_id === tenantId);
 }
 
+function conversationBelongsToProject(
+  conversation: Conversation,
+  projectId: string | null
+): boolean {
+  if (!projectId) {
+    return false;
+  }
+  return !conversation.project_id || conversation.project_id === projectId;
+}
+
 function readMetadataString(
   metadata: Record<string, unknown> | undefined,
   key: string
@@ -668,6 +678,9 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     resolvedTenantId,
   ]);
   const tenantBasePath = normalizedTenantId ? `/tenant/${normalizedTenantId}` : '/tenant';
+  const isAgentWorkspaceRoute =
+    location.pathname === `${tenantBasePath}/agent-workspace` ||
+    location.pathname.startsWith(`${tenantBasePath}/agent-workspace/`);
   const queryProjectId = useMemo(
     () => new URLSearchParams(location.search).get('projectId'),
     [location.search]
@@ -779,7 +792,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       if (project) {
         setCurrentProject(project);
       }
-    } else if (!selectedProjectId && uniqueProjects.length > 0) {
+    } else if (isAgentWorkspaceRoute && !selectedProjectId && uniqueProjects.length > 0) {
       const project =
         (currentProject ? projectById.get(currentProject.id) : undefined) ?? uniqueProjects[0];
       if (!project) return;
@@ -789,6 +802,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     }
   }, [
     currentProject,
+    isAgentWorkspaceRoute,
     projectById,
     queryProjectId,
     resolvedTenantId,
@@ -805,19 +819,27 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   useEffect(() => {
     if (selectedProjectId && loadedProjectIdRef.current !== selectedProjectId) {
+      const controller = new AbortController();
       if (loadedProjectIdRef.current) {
         resetConversations();
         setActiveConversation(null);
       }
       loadedProjectIdRef.current = selectedProjectId;
       // Use ref to call latest function without triggering effect re-run
-      void Promise.resolve(loadConversationsRef.current(selectedProjectId)).catch(
-        (error: unknown) => {
-          console.error('Failed to load conversations:', error);
+      void Promise.resolve(
+        loadConversationsRef.current(selectedProjectId, controller.signal)
+      ).catch((error: unknown) => {
+        if (controller.signal.aborted || (error as { name?: string }).name === 'CanceledError') {
+          return;
         }
-      );
+        console.error('Failed to load conversations:', error);
+      });
+      return () => {
+        controller.abort();
+      };
     }
     // ONLY depend on selectedProjectId, NOT loadConversations
+    return undefined;
   }, [resetConversations, selectedProjectId, setActiveConversation]);
 
   useEffect(() => {
@@ -857,7 +879,12 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   // Enrich conversations with project info
   const visibleConversations = useMemo(
-    () => (selectedProjectId ? conversations : []),
+    () =>
+      selectedProjectId
+        ? conversations.filter((conversation) =>
+            conversationBelongsToProject(conversation, selectedProjectId)
+          )
+        : [],
     [conversations, selectedProjectId]
   );
   const selectedProjectName = useMemo(
@@ -1293,11 +1320,18 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                     : t('agent.sidebar.noProjectsFound', 'No projects found')}
                 </option>
               ) : (
-                selectableProjects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))
+                <>
+                  {!selectedProjectId ? (
+                    <option value="">
+                      {t('agent.sidebar.selectProjectTitle', 'Select Project')}
+                    </option>
+                  ) : null}
+                  {selectableProjects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </>
               )}
             </select>
             <ChevronDown
@@ -1396,7 +1430,12 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
                   <div className="text-center py-8 text-slate-400">
                     <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
                     <p className="text-xs">
-                      {t('agent.sidebar.noConversations', 'No conversations yet')}
+                      {selectedProjectId
+                        ? t('agent.sidebar.noConversations', 'No conversations yet')
+                        : t(
+                            'agent.sidebar.selectProjectToViewConversations',
+                            'Select a project to view conversations'
+                          )}
                     </p>
                   </div>
                 ) : (
