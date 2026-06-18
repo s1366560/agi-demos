@@ -1,6 +1,7 @@
-import { useEffect, useState, lazy, Suspense, memo, useCallback, useMemo, type FC } from 'react';
+import { useEffect, useState, lazy, Suspense, memo, useMemo, useRef, type FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
 import { Database, Loader2, TrendingUp } from 'lucide-react';
 
@@ -88,31 +89,60 @@ AnalyticsHeader.displayName = 'AnalyticsHeader';
 export const Analytics: FC = memo(() => {
   const { t } = useTranslation();
   const { currentTenant } = useTenantStore();
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string | undefined }>();
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
+  const tenantForPlan = currentTenant?.id === tenantId ? currentTenant : null;
   const [projects, setProjects] = useState<Project[]>([]);
   const [analytics, setAnalytics] = useState<TenantAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const fetchData = useCallback(async () => {
-    if (currentTenant) {
-      try {
-        // Fetch projects and analytics in parallel
-        const [projectData, analyticsData] = await Promise.all([
-          projectAPI.list(currentTenant.id),
-          analyticsService.getTenantAnalytics(currentTenant.id, '30d'),
-        ]);
-        setProjects(projectData.projects);
-        setAnalytics(analyticsData);
-      } catch (error) {
-        console.error('Failed to fetch analytics data:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-  }, [currentTenant]);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
-    void fetchData();
-  }, [fetchData]);
+    if (!tenantId) {
+      return;
+    }
+
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    const isCurrentRequest = () => requestIdRef.current === requestId;
+
+    void (async () => {
+      await Promise.resolve();
+      if (!isCurrentRequest()) {
+        return;
+      }
+
+      setLoading(true);
+      setProjects([]);
+      setAnalytics(null);
+
+      try {
+        const [projectData, analyticsData] = await Promise.all([
+          projectAPI.list(tenantId),
+          analyticsService.getTenantAnalytics(tenantId, '30d'),
+        ]);
+        if (!isCurrentRequest()) {
+          return;
+        }
+        setProjects(projectData.projects);
+        setAnalytics(analyticsData);
+      } catch (error: unknown) {
+        if (isCurrentRequest()) {
+          console.error('Failed to fetch analytics data:', error);
+        }
+      } finally {
+        if (isCurrentRequest()) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      if (isCurrentRequest()) {
+        requestIdRef.current += 1;
+      }
+    };
+  }, [tenantId]);
 
   // Memoize chart data to prevent recalculation on re-renders
   const chartData = useMemo(() => {
@@ -251,7 +281,7 @@ export const Analytics: FC = memo(() => {
         />
         <KPICard
           label={t('tenant.analytics.plan')}
-          value={currentTenant?.plan ?? '-'}
+          value={tenantForPlan?.plan ?? '-'}
           subtext={t('tenant.analytics.quota')}
           subtextColorClass="text-purple-600"
         />

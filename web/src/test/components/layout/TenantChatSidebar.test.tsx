@@ -369,6 +369,43 @@ describe('TenantChatSidebar', () => {
     expect(screen.getByRole('option', { name: 'Search to select a project' })).toBeInTheDocument();
   });
 
+  it('clears workspace conversations after leaving the agent workspace route', async () => {
+    const { rerender } = rtlRender(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/agent-workspace']}>
+        <TenantChatSidebarRouteHarness
+          tenantId="tenant-1"
+          route="/tenant/tenant-1/agent-workspace"
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(agentState.loadConversations).toHaveBeenCalledWith(
+        'project-1',
+        expect.any(AbortSignal)
+      );
+      expect(screen.getByText('Conversation One')).toBeInTheDocument();
+    });
+
+    agentState.loadConversations.mockClear();
+    conversationsState.reset.mockClear();
+    agentState.setActiveConversation.mockClear();
+
+    rerender(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/agent-workspace']}>
+        <TenantChatSidebarRouteHarness tenantId="tenant-1" route="/tenant/tenant-1/overview" />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Project switcher' })).toHaveValue('');
+      expect(screen.queryByText('Conversation One')).not.toBeInTheDocument();
+    });
+    expect(agentState.loadConversations).not.toHaveBeenCalled();
+    expect(conversationsState.reset).toHaveBeenCalled();
+    expect(agentState.setActiveConversation).toHaveBeenCalledWith(null);
+  });
+
   it('preloads the project switcher window on agent workspace pages', async () => {
     projectState.projects = [];
     projectState.currentProject = null;
@@ -644,7 +681,7 @@ describe('TenantChatSidebar', () => {
       expect(screen.queryByText('Conversation One')).not.toBeInTheDocument();
     });
     expect(screen.getByText('Select a project to view conversations')).toBeInTheDocument();
-    expect(conversationsState.reset).toHaveBeenCalledTimes(1);
+    expect(conversationsState.reset).toHaveBeenCalled();
     expect(agentState.setActiveConversation).toHaveBeenCalledWith(null);
   });
 

@@ -295,6 +295,24 @@ describe('TenantLayout', () => {
     expect(screen.queryByText('Welcome')).not.toBeInTheDocument();
   });
 
+  it('redirects bare tenant entry with current tenant directly to overview', async () => {
+    const tenant = { id: 'current-tenant', name: 'Current Tenant' };
+    setMockRouteParams({});
+    mockLocationPathname = '/tenant';
+    mockTenantState.currentTenant = tenant;
+    mockTenantState.tenants = [tenant];
+
+    render(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/tenant/current-tenant/overview', {
+        replace: true,
+      });
+    });
+    expect(mockTenantState.getTenant).not.toHaveBeenCalled();
+    expect(screen.queryByText('Welcome')).not.toBeInTheDocument();
+  });
+
   it('redirects bare tenant entry after loading accessible tenants', async () => {
     const tenant = { id: 'loaded-tenant', name: 'Loaded Tenant' };
     setMockRouteParams({});
@@ -331,6 +349,31 @@ describe('TenantLayout', () => {
     });
     expect(mockTenantState.createTenant).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('activates tenants that arrive after an initially stale tenant list read', async () => {
+    const tenant = { id: 'late-tenant', name: 'Late Tenant' };
+    setMockRouteParams({});
+    mockLocationPathname = '/tenant';
+    mockTenantState.currentTenant = null;
+    mockTenantState.tenants = [];
+    mockTenantState.listTenants = vi.fn().mockResolvedValue(undefined);
+
+    const { rerender } = render(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Welcome')).toBeInTheDocument();
+    });
+
+    mockTenantState.tenants = [tenant];
+    rerender(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(mockTenantState.setCurrentTenant).toHaveBeenCalledWith(tenant);
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/late-tenant/overview', {
+      replace: true,
+    });
   });
 
   it('ignores stale project fetches after route project changes', async () => {

@@ -1,7 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { Analytics } from '../../../pages/tenant/Analytics';
+import { analyticsService } from '../../../services/analyticsService';
+import { projectAPI } from '../../../services/api';
 import { useTenantStore } from '../../../stores/tenant';
 
 vi.mock('react-i18next', () => ({
@@ -64,10 +67,22 @@ describe('Analytics', () => {
     vi.clearAllMocks();
   });
 
+  const renderAnalytics = (
+    route = '/tenant/tenant-1/analytics',
+    path = '/tenant/:tenantId/analytics'
+  ) =>
+    render(
+      <MemoryRouter initialEntries={[route]}>
+        <Routes>
+          <Route path={path} element={<Analytics />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
   describe('Rendering', () => {
     it('should render loading state when no tenant', () => {
       (useTenantStore as any).mockReturnValue({ currentTenant: null });
-      render(<Analytics />);
+      renderAnalytics('/analytics', '/analytics');
       expect(screen.getByText('common.loading')).toBeInTheDocument();
     });
 
@@ -75,7 +90,7 @@ describe('Analytics', () => {
       (useTenantStore as any).mockReturnValue({
         currentTenant: { id: 'tenant-1', name: 'Test Tenant', plan: 'premium' },
       });
-      render(<Analytics />);
+      renderAnalytics();
       // Should show loading initially
       expect(screen.getByText(/loading/i)).toBeInTheDocument();
       await screen.findByText('tenant.analytics.title');
@@ -85,7 +100,7 @@ describe('Analytics', () => {
       (useTenantStore as any).mockReturnValue({
         currentTenant: { id: 'tenant-1', name: 'Test Tenant', plan: 'premium' },
       });
-      render(<Analytics />);
+      renderAnalytics();
 
       await waitFor(() => {
         expect(screen.getByText('tenant.analytics.total_memories')).toBeInTheDocument();
@@ -97,10 +112,28 @@ describe('Analytics', () => {
       (useTenantStore as any).mockReturnValue({
         currentTenant: { id: 'tenant-1', name: 'Test Tenant', plan: 'premium' },
       });
-      render(<Analytics />);
+      renderAnalytics();
 
       await waitFor(() => {
         expect(screen.queryByTestId('chart-components')).toBeInTheDocument();
+      });
+    });
+
+    it('uses the route tenant while the current tenant store value is stale', async () => {
+      (useTenantStore as any).mockReturnValue({
+        currentTenant: { id: 'old-tenant', name: 'Old Tenant', plan: 'legacy' },
+      });
+
+      renderAnalytics('/tenant/route-tenant/analytics');
+
+      await waitFor(() => {
+        expect(projectAPI.list).toHaveBeenCalledWith('route-tenant');
+        expect(analyticsService.getTenantAnalytics).toHaveBeenCalledWith('route-tenant', '30d');
+      });
+      expect(projectAPI.list).not.toHaveBeenCalledWith('old-tenant');
+      expect(analyticsService.getTenantAnalytics).not.toHaveBeenCalledWith('old-tenant', '30d');
+      await waitFor(() => {
+        expect(screen.getByText('-')).toBeInTheDocument();
       });
     });
   });
@@ -110,7 +143,7 @@ describe('Analytics', () => {
       (useTenantStore as any).mockReturnValue({
         currentTenant: { id: 'tenant-1', name: 'Test Tenant', plan: 'enterprise' },
       });
-      render(<Analytics />);
+      renderAnalytics();
 
       await waitFor(() => {
         expect(screen.getByText('enterprise')).toBeInTheDocument();
@@ -121,7 +154,7 @@ describe('Analytics', () => {
       (useTenantStore as any).mockReturnValue({
         currentTenant: { id: 'tenant-1', name: 'Test Tenant', plan: 'premium' },
       });
-      render(<Analytics />);
+      renderAnalytics();
 
       await waitFor(() => {
         expect(screen.getByText('tenant.analytics.storage_usage')).toBeInTheDocument();
@@ -153,7 +186,7 @@ describe('Analytics', () => {
         ),
       }));
 
-      render(<Analytics />);
+      renderAnalytics();
 
       // Suspense fallback should be shown initially
       expect(screen.getByText(/loading/i)).toBeInTheDocument();
@@ -173,7 +206,7 @@ describe('Analytics', () => {
       (useTenantStore as any).mockReturnValue({
         currentTenant: { id: 'tenant-1', name: 'Test Tenant', plan: 'premium' },
       });
-      render(<Analytics />);
+      renderAnalytics();
 
       await waitFor(() => {
         const h1 = screen.getByText('tenant.analytics.title');

@@ -74,6 +74,7 @@ export const TenantLayout: React.FC = memo(() => {
     location.pathname.startsWith(`${tenantBasePath}/agent-workspace/`);
 
   // Optimized: Select only the state we need with typing
+  const tenants = useTenantStore((state) => state.tenants);
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant);
   const getTenant = useTenantStore((state) => state.getTenant);
@@ -144,7 +145,7 @@ export const TenantLayout: React.FC = memo(() => {
             const firstAccessibleTenant = tenants[0] ?? null;
             activateTenant(firstAccessibleTenant);
             if (firstAccessibleTenant) {
-              void navigate(`/tenant/${firstAccessibleTenant.id}`, { replace: true });
+              void navigate(`/tenant/${firstAccessibleTenant.id}/overview`, { replace: true });
             }
           } else {
             setNoTenants(true);
@@ -166,12 +167,18 @@ export const TenantLayout: React.FC = memo(() => {
     if (currentTenant && (!tenantId || currentTenant.id === tenantId)) {
       setNoTenants(false);
       if (!tenantId && isBareTenantEntryPath(location.pathname)) {
-        void navigate(`/tenant/${currentTenant.id}`, { replace: true });
+        void navigate(`/tenant/${currentTenant.id}/overview`, { replace: true });
       }
       return;
     }
 
     if (tenantId && (!currentTenant || currentTenant.id !== tenantId)) {
+      const routeTenant = tenants.find((tenant) => tenant.id === tenantId);
+      if (routeTenant) {
+        activateTenant(routeTenant);
+        return;
+      }
+
       try {
         await getTenant(tenantId);
         setNoTenants(false);
@@ -179,7 +186,6 @@ export const TenantLayout: React.FC = memo(() => {
         await handleTenantAccessError(error, tenantId);
       }
     } else if (!tenantId && !currentTenant) {
-      const tenants = useTenantStore.getState().tenants;
       if (tenants.length > 0) {
         activateTenant(tenants[0] ?? null);
       } else {
@@ -199,6 +205,7 @@ export const TenantLayout: React.FC = memo(() => {
     }
   }, [
     tenantId,
+    tenants,
     currentTenant,
     location.pathname,
     navigate,

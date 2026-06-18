@@ -755,6 +755,20 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     }
   }, [resetConversations, resolvedTenantId, setActiveConversation]);
 
+  useEffect(() => {
+    if (isAgentWorkspaceRoute) {
+      return;
+    }
+
+    loadedProjectIdRef.current = null;
+    loadedSidebarWorkspaceSurfaceRef.current = null;
+    if (selectedProjectId) {
+      setSelectedProjectId(null);
+    }
+    resetConversations();
+    setActiveConversation(null);
+  }, [isAgentWorkspaceRoute, resetConversations, selectedProjectId, setActiveConversation]);
+
   useEffect(
     () => () => {
       if (projectSearchDebounceRef.current) {
@@ -786,6 +800,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   // Set default selected project
   useEffect(() => {
+    if (!isAgentWorkspaceRoute) {
+      return;
+    }
+
     if (queryProjectId && selectedProjectId !== queryProjectId) {
       setSelectedProjectId(queryProjectId);
       persistLastProjectId(resolvedTenantId, queryProjectId);
@@ -793,7 +811,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       if (project) {
         setCurrentProject(project);
       }
-    } else if (isAgentWorkspaceRoute && !selectedProjectId && uniqueProjects.length > 0) {
+    } else if (!selectedProjectId && uniqueProjects.length > 0) {
       const project =
         (currentProject ? projectById.get(currentProject.id) : undefined) ?? uniqueProjects[0];
       if (!project) return;
@@ -819,7 +837,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   loadConversationsRef.current = loadConversations;
 
   useEffect(() => {
-    if (selectedProjectId && loadedProjectIdRef.current !== selectedProjectId) {
+    if (
+      isAgentWorkspaceRoute &&
+      selectedProjectId &&
+      loadedProjectIdRef.current !== selectedProjectId
+    ) {
       const controller = new AbortController();
       if (loadedProjectIdRef.current) {
         resetConversations();
@@ -841,10 +863,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     }
     // ONLY depend on selectedProjectId, NOT loadConversations
     return undefined;
-  }, [resetConversations, selectedProjectId, setActiveConversation]);
+  }, [isAgentWorkspaceRoute, resetConversations, selectedProjectId, setActiveConversation]);
 
   useEffect(() => {
-    if (!tenantId || !selectedProjectId || !workspaceIdFromQuery) {
+    if (!isAgentWorkspaceRoute || !tenantId || !selectedProjectId || !workspaceIdFromQuery) {
       return;
     }
 
@@ -870,6 +892,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     });
   }, [
     currentWorkspace?.id,
+    isAgentWorkspaceRoute,
     loadWorkspaceSurface,
     selectedProjectId,
     tenantId,
@@ -881,12 +904,12 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   // Enrich conversations with project info
   const visibleConversations = useMemo(
     () =>
-      selectedProjectId
+      isAgentWorkspaceRoute && selectedProjectId
         ? conversations.filter((conversation) =>
             conversationBelongsToProject(conversation, selectedProjectId)
           )
         : [],
-    [conversations, selectedProjectId]
+    [conversations, isAgentWorkspaceRoute, selectedProjectId]
   );
   const selectedProjectName = useMemo(
     () => projectById.get(selectedProjectId ?? '')?.name || 'Unknown Project',
@@ -1038,6 +1061,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (
+      !isAgentWorkspaceRoute ||
       !container ||
       !hasMoreConversations ||
       isLoadingMore ||
@@ -1059,6 +1083,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   }, [
     visibleConversations.length,
     hasMoreConversations,
+    isAgentWorkspaceRoute,
     isLoadingMore,
     selectedProjectId,
     loadMore,
@@ -1403,7 +1428,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           type="primary"
           icon={<Plus size={collapsed ? 20 : 18} />}
           onClick={handleNewConversation}
-          disabled={!selectedProjectId}
+          disabled={!isAgentWorkspaceRoute || !selectedProjectId}
           className={`
             ${collapsed ? 'w-10 h-10 p-0' : 'w-full h-10'}
             bg-primary hover:bg-primary-600 shadow-sm
