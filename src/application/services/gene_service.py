@@ -481,6 +481,8 @@ class GeneService:
         self,
         tenant_id: str | None = None,
         include_global: bool = False,
+        search: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -489,6 +491,8 @@ class GeneService:
         genomes, _total = await self.list_genomes_with_total(
             tenant_id=tenant_id,
             include_global=include_global,
+            search=search,
+            visibility=visibility,
             is_published=is_published,
             limit=limit,
             offset=offset,
@@ -499,6 +503,8 @@ class GeneService:
         self,
         tenant_id: str | None = None,
         include_global: bool = False,
+        search: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -509,6 +515,8 @@ class GeneService:
         Args:
             tenant_id: Filter by tenant.
             include_global: Include published public global entries for tenant lists.
+            search: Search by name, slug, description, or short description.
+            visibility: Filter by visibility.
             is_published: Filter by published status.
             limit: Maximum results.
             offset: Pagination offset.
@@ -522,6 +530,8 @@ class GeneService:
         genomes = await self._genome_repo.find_by_filters(
             tenant_id=tenant_id,
             include_global=include_global,
+            search=search,
+            visibility=visibility,
             is_published=is_published,
             limit=limit,
             offset=offset,
@@ -529,6 +539,8 @@ class GeneService:
         total = await self._genome_repo.count_by_filters(
             tenant_id=tenant_id,
             include_global=include_global,
+            search=search,
+            visibility=visibility,
             is_published=is_published,
         )
         return genomes, total

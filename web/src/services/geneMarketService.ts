@@ -296,6 +296,8 @@ const geneListParams = (params?: GeneListParams) => {
 export interface GenomeListParams {
   page?: number;
   page_size?: number;
+  search?: string | undefined;
+  visibility?: string;
   is_published?: boolean;
   tenant_id?: string | null | undefined;
 }

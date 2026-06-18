@@ -3151,6 +3151,7 @@
         "createGenomeDraftError": "Failed to create genome draft"
       },
       "searchPlaceholder": "Search genes...",
+      "searchGenomesPlaceholder": "Search genomes...",
       "loading": "Loading genes...",
       "ratings": "ratings",
       "genesCount": "genes",
@@ -3207,6 +3208,7 @@
       "filters": {
         "categoryLabel": "Filter genes by category",
         "visibilityLabel": "Filter genes by visibility",
+        "genomeVisibilityLabel": "Filter genomes by visibility",
         "allCategories": "All Categories",
         "catAi": "AI",
         "catTool": "Tool",

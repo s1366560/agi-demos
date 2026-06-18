@@ -242,6 +242,9 @@ class _GenomeListService(_FailingGeneService):
     async def list_genomes_with_total(self, **kwargs: object) -> tuple[list[SimpleNamespace], int]:
         assert kwargs["tenant_id"] == "tenant-1"
         assert kwargs["include_global"] is True
+        assert kwargs["search"] == "review"
+        assert kwargs["visibility"] == "public"
+        assert kwargs["is_published"] is True
         return ([_genome_entity(genome_id="global-genome", tenant_id=None)], 1)
 
 
@@ -683,6 +686,8 @@ async def test_list_genomes_passes_global_inclusion_to_service(
         request=SimpleNamespace(),
         page=1,
         page_size=20,
+        search="review",
+        visibility="public",
         is_published=True,
         tenant_id="tenant-1",
         db=SimpleNamespace(),

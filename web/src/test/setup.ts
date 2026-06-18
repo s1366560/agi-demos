@@ -768,6 +768,10 @@ const commonTranslations: Record<string, string> = {
   'tenant.genes.description': 'Description',
   'tenant.genes.filters.categoryLabel': 'Filter genes by category',
   'tenant.genes.filters.visibilityLabel': 'Filter genes by visibility',
+  'tenant.genes.filters.genomeVisibilityLabel': 'Filter genomes by visibility',
+  'tenant.genes.filters.allVisibility': 'All Visibility',
+  'tenant.genes.filters.visPublic': 'Public',
+  'tenant.genes.filters.visPrivate': 'Private',
   'tenant.genes.publishGenomeButton': 'Create Genome',
   'tenant.genes.publish.modalTitle': 'Create Gene Draft',
   'tenant.genes.publish.genomeModalTitle': 'Create Genome Draft',
@@ -798,6 +802,7 @@ const commonTranslations: Record<string, string> = {
   'tenant.genes.publish.createGenomeDraftSuccess': 'Genome draft created',
   'tenant.genes.publish.createDraftError': 'Failed to create gene draft',
   'tenant.genes.publish.createGenomeDraftError': 'Failed to create genome draft',
+  'tenant.genes.searchGenomesPlaceholder': 'Search genomes...',
 
   // Tenant Instance Channels
   'tenant.instances.channels.config.serverUrlPlaceholder': 'ws://localhost:8080',

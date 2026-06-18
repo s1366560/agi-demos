@@ -48,6 +48,30 @@ describe('geneMarketService', () => {
     });
   });
 
+  it('lists genomes with marketplace filters and pagination', async () => {
+    mockHttpClient.get.mockResolvedValue({ genomes: [], total: 0, page: 1, page_size: 20 });
+
+    await geneMarketService.listGenomes({
+      page: 2,
+      page_size: 50,
+      search: 'review',
+      visibility: 'public',
+      is_published: true,
+      tenant_id: 'tenant-1',
+    });
+
+    expect(mockHttpClient.get).toHaveBeenCalledWith('/genes/genomes', {
+      params: {
+        page: 2,
+        page_size: 50,
+        search: 'review',
+        visibility: 'public',
+        is_published: true,
+        tenant_id: 'tenant-1',
+      },
+    });
+  });
+
   it('lists instance genes with tenant, offset, and server-side search params', async () => {
     mockHttpClient.get.mockResolvedValue({
       active_total: 0,

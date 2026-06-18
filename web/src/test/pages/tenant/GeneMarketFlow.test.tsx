@@ -376,6 +376,47 @@ describe('Gene marketplace rating flow', () => {
     expect(navigateMock).toHaveBeenCalledWith('./genomes/genome-new');
   });
 
+  it('lists genomes with search, visibility, and publish filters', async () => {
+    stateMock.activeTab = 'genomes';
+    stateMock.genomes = [genome()];
+    stateMock.genomeTotal = 1;
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes']}>
+        <GeneMarket />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(actionsMock.listGenomes).toHaveBeenCalledWith({
+        page: 1,
+        page_size: 20,
+        tenant_id: 'tenant-1',
+      });
+    });
+
+    fireEvent.change(screen.getByLabelText('Search genomes...'), {
+      target: { value: 'review' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Filter genomes by visibility' }));
+    fireEvent.click(screen.getByText('Public'));
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Filter by publish status' }));
+    const publishedOptions = screen.getAllByText('Published');
+    fireEvent.click(publishedOptions[publishedOptions.length - 1] as HTMLElement);
+
+    await waitFor(() => {
+      expect(actionsMock.listGenomes).toHaveBeenLastCalledWith({
+        page: 1,
+        page_size: 20,
+        tenant_id: 'tenant-1',
+        search: 'review',
+        visibility: 'public',
+        is_published: true,
+      });
+    });
+  });
+
   it('opens the rating modal from the rate query parameter', async () => {
     stateMock.currentGene = gene();
 

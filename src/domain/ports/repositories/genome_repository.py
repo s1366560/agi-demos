@@ -31,6 +31,8 @@ class GenomeRepository(ABC):
         *,
         tenant_id: str,
         include_global: bool = False,
+        search: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -46,6 +48,8 @@ class GenomeRepository(ABC):
         *,
         tenant_id: str,
         include_global: bool = False,
+        search: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
     ) -> int:
         """Count genomes matching the same filters used for listing.

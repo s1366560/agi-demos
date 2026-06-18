@@ -720,6 +720,8 @@ async def list_genomes(
     request: Request,
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
+    search: str | None = Query(None, description="Search by name, slug, or description"),
+    visibility: str | None = Query(None, description="Filter by visibility"),
     is_published: bool | None = Query(None, description="Filter by published status"),
     tenant_id: str = Depends(_get_selected_gene_tenant_id),
     db: AsyncSession = Depends(get_db),
@@ -731,6 +733,8 @@ async def list_genomes(
     genomes, total = await service.list_genomes_with_total(
         tenant_id=tenant_id,
         include_global=True,
+        search=search,
+        visibility=visibility,
         is_published=is_published,
         limit=page_size,
         offset=offset,

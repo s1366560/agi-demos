@@ -316,6 +316,51 @@ async def test_list_genomes_with_total_filters_before_pagination(
 
 
 @pytest.mark.unit
+async def test_list_genomes_with_total_filters_by_search_and_visibility(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+
+    public_match = await service.create_genome(
+        name="Needle Public Genome",
+        slug=_slug("needle-public-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        description="Matches the marketplace search",
+        visibility="public",
+    )
+    await service.create_genome(
+        name="Needle Private Genome",
+        slug=_slug("needle-private-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        description="Matches the marketplace search",
+        visibility="org_private",
+    )
+    await service.create_genome(
+        name="Other Public Genome",
+        slug=_slug("other-public-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        description="Does not match",
+        visibility="public",
+    )
+
+    genomes, total = await service.list_genomes_with_total(
+        tenant_id=test_project_db.tenant_id,
+        search="needle",
+        visibility="public",
+        limit=10,
+        offset=0,
+    )
+
+    assert total == 1
+    assert [genome.id for genome in genomes] == [public_match.id]
+
+
+@pytest.mark.unit
 async def test_unpublish_genome_removes_it_from_published_results(
     test_db: AsyncSession,
     test_project_db: Project,

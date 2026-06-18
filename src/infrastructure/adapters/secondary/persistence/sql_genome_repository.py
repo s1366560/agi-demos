@@ -71,22 +71,17 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
         *,
         tenant_id: str,
         include_global: bool = False,
+        search: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Genome]:
-        filters = self._filters(is_published=is_published)
-        stmt = (
-            self._apply_listing_order(
-                self._apply_tenant_scope(
-                    self._build_active_query(filters=filters),
-                    tenant_id,
-                    include_global=include_global,
-                )
-            )
-            .offset(offset)
-            .limit(limit)
-        )
+        filters = self._filters(visibility=visibility, is_published=is_published)
+        stmt = self._build_active_query(filters=filters)
+        stmt = self._apply_tenant_scope(stmt, tenant_id, include_global=include_global)
+        stmt = self._apply_search_filter(stmt, search)
+        stmt = self._apply_listing_order(stmt).offset(offset).limit(limit)
         result = await self._session.execute(
             refresh_select_statement(self._refresh_statement(stmt))
         )
@@ -99,21 +94,45 @@ class SqlGenomeRepository(BaseRepository[Genome, GenomeModel], GenomeRepository)
         *,
         tenant_id: str,
         include_global: bool = False,
+        search: str | None = None,
+        visibility: str | None = None,
         is_published: bool | None = None,
     ) -> int:
-        filters = self._filters(is_published=is_published)
+        filters = self._filters(visibility=visibility, is_published=is_published)
         stmt = select(func.count()).select_from(GenomeModel).where(GenomeModel.deleted_at.is_(None))
         stmt = self._apply_filters(stmt, **filters)
         stmt = self._apply_tenant_scope(stmt, tenant_id, include_global=include_global)
+        stmt = self._apply_search_filter(stmt, search)
         result = await self._session.execute(refresh_select_statement(stmt))
         return result.scalar() or 0
 
     @staticmethod
-    def _filters(*, is_published: bool | None = None) -> dict[str, object]:
+    def _filters(
+        *,
+        visibility: str | None = None,
+        is_published: bool | None = None,
+    ) -> dict[str, object]:
         filters: dict[str, object] = {}
+        if visibility is not None:
+            filters["visibility"] = visibility
         if is_published is not None:
             filters["is_published"] = is_published
         return filters
+
+    @staticmethod
+    def _apply_search_filter(stmt: Select[Any], search: str | None) -> Select[Any]:
+        search_term = search.strip() if search else ""
+        if not search_term:
+            return stmt
+        pattern = f"%{search_term}%"
+        return stmt.where(
+            or_(
+                GenomeModel.name.ilike(pattern),
+                GenomeModel.slug.ilike(pattern),
+                GenomeModel.description.ilike(pattern),
+                GenomeModel.short_description.ilike(pattern),
+            )
+        )
 
     @staticmethod
     def _apply_tenant_scope(
