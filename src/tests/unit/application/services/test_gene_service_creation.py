@@ -88,6 +88,27 @@ async def test_create_gene_persists_source_metadata(
 
 
 @pytest.mark.unit
+async def test_create_gene_accepts_unlisted_visibility(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+
+    gene = await service.create_gene(
+        name="Unlisted Gene",
+        slug=_slug("unlisted-gene"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        visibility="unlisted",
+    )
+    reloaded = await service.get_gene(gene.id)
+
+    assert reloaded is not None
+    assert reloaded.visibility.value == "unlisted"
+
+
+@pytest.mark.unit
 async def test_update_gene_applies_slug_and_metadata_fields(
     test_db: AsyncSession,
     test_project_db: Project,
@@ -342,6 +363,25 @@ async def test_update_genome_applies_slug(
     updated = await service.update_genome(genome.id, slug=new_slug)
 
     assert updated.slug == new_slug
+
+
+@pytest.mark.unit
+async def test_update_genome_accepts_unlisted_visibility(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    genome = await service.create_genome(
+        name="Visibility Genome",
+        slug=_slug("visibility-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+
+    updated = await service.update_genome(genome.id, visibility="unlisted")
+
+    assert updated.visibility.value == "unlisted"
 
 
 @pytest.mark.unit

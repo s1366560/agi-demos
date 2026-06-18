@@ -103,7 +103,7 @@ class GeneService:
             manifest: Structured capability manifest.
             dependencies: Slugs of required genes.
             synergies: Slugs of synergistic genes.
-            visibility: public or org_private.
+            visibility: public, org_private, or unlisted.
 
         Returns:
             The created Gene entity.
@@ -395,7 +395,7 @@ class GeneService:
             icon: Icon URL or emoji.
             gene_slugs: Ordered list of gene slugs.
             config_override: Per-gene config overrides.
-            visibility: public or org_private.
+            visibility: public, org_private, or unlisted.
 
         Returns:
             The created Genome entity.

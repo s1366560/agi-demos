@@ -402,7 +402,7 @@ describe('Gene marketplace rating flow', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Filter genomes by visibility' }));
-    fireEvent.click(screen.getByText('Public'));
+    fireEvent.click(screen.getByText('Unlisted'));
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Filter by publish status' }));
     const publishedOptions = screen.getAllByText('Published');
     fireEvent.click(publishedOptions[publishedOptions.length - 1] as HTMLElement);
@@ -413,7 +413,7 @@ describe('Gene marketplace rating flow', () => {
         page_size: 20,
         tenant_id: 'tenant-1',
         search: 'review',
-        visibility: 'public',
+        visibility: 'unlisted',
         is_published: true,
       });
     });

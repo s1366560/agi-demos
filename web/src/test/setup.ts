@@ -772,6 +772,7 @@ const commonTranslations: Record<string, string> = {
   'tenant.genes.filters.allVisibility': 'All Visibility',
   'tenant.genes.filters.visPublic': 'Public',
   'tenant.genes.filters.visPrivate': 'Private',
+  'tenant.genes.filters.visUnlisted': 'Unlisted',
   'tenant.genes.publishGenomeButton': 'Create Genome',
   'tenant.genes.publish.modalTitle': 'Create Gene Draft',
   'tenant.genes.publish.genomeModalTitle': 'Create Genome Draft',

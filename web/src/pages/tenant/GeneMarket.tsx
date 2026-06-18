@@ -46,6 +46,8 @@ import type {
 const { Search } = Input;
 const { Option } = Select;
 type PublishStatusFilter = 'all' | 'published' | 'draft';
+type ContentVisibilityValue = 'public' | 'org_private' | 'unlisted';
+type VisibilityFilter = 'all' | ContentVisibilityValue;
 
 interface PublishGeneFormValues {
   name: string;
@@ -54,7 +56,7 @@ interface PublishGeneFormValues {
   version?: string;
   short_description?: string;
   description?: string;
-  visibility?: 'public' | 'org_private';
+  visibility?: ContentVisibilityValue;
   tags?: string;
   gene_slugs?: string;
 }
@@ -100,8 +102,8 @@ export const GeneMarket: FC = () => {
   const [geneSearch, setGeneSearch] = useState('');
   const [genomeSearch, setGenomeSearch] = useState('');
   const [geneCategory, setGeneCategory] = useState('all');
-  const [geneVisibility, setGeneVisibility] = useState('all');
-  const [genomeVisibility, setGenomeVisibility] = useState('all');
+  const [geneVisibility, setGeneVisibility] = useState<VisibilityFilter>('all');
+  const [genomeVisibility, setGenomeVisibility] = useState<VisibilityFilter>('all');
   const [genePublishStatus, setGenePublishStatus] = useState<PublishStatusFilter>('all');
   const [genomePublishStatus, setGenomePublishStatus] = useState<PublishStatusFilter>('all');
   const [genePage, setGenePage] = useState(1);
@@ -549,6 +551,7 @@ export const GeneMarket: FC = () => {
                 <Option value="all">{t('tenant.genes.filters.allVisibility')}</Option>
                 <Option value="public">{t('tenant.genes.filters.visPublic')}</Option>
                 <Option value="org_private">{t('tenant.genes.filters.visPrivate')}</Option>
+                <Option value="unlisted">{t('tenant.genes.filters.visUnlisted')}</Option>
               </Select>
             </>
           )}
@@ -565,6 +568,7 @@ export const GeneMarket: FC = () => {
               <Option value="all">{t('tenant.genes.filters.allVisibility')}</Option>
               <Option value="public">{t('tenant.genes.filters.visPublic')}</Option>
               <Option value="org_private">{t('tenant.genes.filters.visPrivate')}</Option>
+              <Option value="unlisted">{t('tenant.genes.filters.visUnlisted')}</Option>
             </Select>
           )}
           <Select
@@ -686,6 +690,7 @@ export const GeneMarket: FC = () => {
             <Select>
               <Option value="public">{t('tenant.genes.filters.visPublic')}</Option>
               <Option value="org_private">{t('tenant.genes.filters.visPrivate')}</Option>
+              <Option value="unlisted">{t('tenant.genes.filters.visUnlisted')}</Option>
             </Select>
           </Form.Item>
           {activeTab === 'genomes' ? (

@@ -8,6 +8,7 @@ class ContentVisibility(str, Enum):
 
     public = "public"
     org_private = "org_private"
+    unlisted = "unlisted"
 
 
 class GeneSource(str, Enum):
