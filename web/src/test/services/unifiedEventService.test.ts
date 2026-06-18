@@ -31,6 +31,7 @@ class MockWebSocket {
   static OPEN = 1;
   static CLOSING = 2;
   static CLOSED = 3;
+  static instances: MockWebSocket[] = [];
 
   url: string;
   readyState = MockWebSocket.CONNECTING;
@@ -42,6 +43,7 @@ class MockWebSocket {
 
   constructor(url: string) {
     this.url = url;
+    MockWebSocket.instances.push(this);
     // Simulate async connection
     setTimeout(() => {
       this.readyState = MockWebSocket.OPEN;
@@ -82,6 +84,7 @@ describe('unifiedEventService', () => {
   let unifiedEventService: typeof import('@/services/unifiedEventService').unifiedEventService;
 
   beforeEach(async () => {
+    MockWebSocket.instances = [];
     vi.stubGlobal('WebSocket', MockWebSocket);
     vi.stubGlobal('crypto', {
       randomUUID: () => 'test-uuid-' + Date.now(),
@@ -141,6 +144,12 @@ describe('unifiedEventService', () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       expect(unifiedEventService.isConnected()).toBe(true);
+      const ws = MockWebSocket.instances.at(-1);
+      expect(ws).toBeDefined();
+      if (!ws) return;
+
+      const messageTypes = ws.sentMessages.map((message) => JSON.parse(message).type as string);
+      expect(messageTypes.filter((type) => type === 'subscribe_workspace')).toHaveLength(1);
     });
 
     it('should return unsubscribe function', async () => {
@@ -163,6 +172,58 @@ describe('unifiedEventService', () => {
       // Simulate incoming event
       // Get the WebSocket instance and simulate message
       // This is a simplified test - in reality we'd need to access the internal WebSocket
+    });
+
+    it('keeps one server subscription for multiple handlers on the same topic', async () => {
+      await unifiedEventService.connect();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const ws = MockWebSocket.instances.at(-1);
+      expect(ws).toBeDefined();
+      if (!ws) return;
+
+      ws.sentMessages = [];
+      vi.useFakeTimers();
+
+      const unsubscribeOne = unifiedEventService.subscribeWorkspace('ws-123', vi.fn());
+      const unsubscribeTwo = unifiedEventService.subscribeWorkspace('ws-123', vi.fn());
+
+      let messageTypes = ws.sentMessages.map((message) => JSON.parse(message).type as string);
+      expect(messageTypes.filter((type) => type === 'subscribe_workspace')).toHaveLength(1);
+
+      unsubscribeOne();
+      await vi.advanceTimersByTimeAsync(300);
+      messageTypes = ws.sentMessages.map((message) => JSON.parse(message).type as string);
+      expect(messageTypes.filter((type) => type === 'unsubscribe_workspace')).toHaveLength(0);
+
+      unsubscribeTwo();
+      await vi.advanceTimersByTimeAsync(300);
+      messageTypes = ws.sentMessages.map((message) => JSON.parse(message).type as string);
+      expect(messageTypes.filter((type) => type === 'unsubscribe_workspace')).toHaveLength(1);
+    });
+
+    it('cancels transient topic unsubscription when remounted immediately', async () => {
+      await unifiedEventService.connect();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const ws = MockWebSocket.instances.at(-1);
+      expect(ws).toBeDefined();
+      if (!ws) return;
+
+      ws.sentMessages = [];
+      vi.useFakeTimers();
+
+      const unsubscribeFirst = unifiedEventService.subscribeWorkspace('ws-123', vi.fn());
+      unsubscribeFirst();
+      const unsubscribeSecond = unifiedEventService.subscribeWorkspace('ws-123', vi.fn());
+
+      await vi.advanceTimersByTimeAsync(300);
+
+      const messageTypes = ws.sentMessages.map((message) => JSON.parse(message).type as string);
+      expect(messageTypes.filter((type) => type === 'subscribe_workspace')).toHaveLength(1);
+      expect(messageTypes.filter((type) => type === 'unsubscribe_workspace')).toHaveLength(0);
+
+      unsubscribeSecond();
     });
   });
 
@@ -328,6 +389,11 @@ describe('unifiedEventService - Topic Management', () => {
     };
 
     unifiedEventService.unsubscribe('project:proj-idle', handler);
+
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(closeSpy).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(300);
 
     expect(sendSpy).toHaveBeenCalledWith(
       JSON.stringify({ type: 'unsubscribe_project_events', project_id: 'proj-idle' })

@@ -4,17 +4,18 @@ import { unifiedEventService } from '@/services/unifiedEventService';
 
 describe('unifiedEventService workspace routing', () => {
   it('subscribeWorkspace delegates to workspace topic subscription', () => {
+    const unsubscribeStub = vi.fn();
     const subscribeSpy = vi.spyOn(
       unifiedEventService as unknown as {
         subscribe: (topic: string, handler: () => void) => () => void;
       },
       'subscribe'
-    );
+    ).mockReturnValue(unsubscribeStub);
 
     const noop = () => {};
     const unsubscribe = unifiedEventService.subscribeWorkspace('ws-123', noop);
 
-    expect(typeof unsubscribe).toBe('function');
+    expect(unsubscribe).toBe(unsubscribeStub);
     expect(subscribeSpy).toHaveBeenCalledWith('workspace:ws-123', noop);
     subscribeSpy.mockRestore();
   });
@@ -43,14 +44,20 @@ describe('unifiedEventService workspace routing', () => {
 
   it('subscribeProject registers a project topic handler', () => {
     const noop = () => {};
-    const unsubscribe = unifiedEventService.subscribeProject('proj-123', noop);
     const internal = unifiedEventService as unknown as {
+      ensureConnected: () => void;
       subscriptions: Map<string, Set<(event: unknown) => void>>;
     };
+    const ensureConnectedSpy = vi.spyOn(internal, 'ensureConnected').mockImplementation(() => {
+      // Registration behavior is independent from the socket lifecycle.
+    });
+
+    const unsubscribe = unifiedEventService.subscribeProject('proj-123', noop);
 
     expect(typeof unsubscribe).toBe('function');
     expect(internal.subscriptions.has('project:proj-123')).toBe(true);
     unsubscribe();
+    ensureConnectedSpy.mockRestore();
   });
 
   it('dispatches project routing_key events to project topic handlers', () => {

@@ -79,6 +79,7 @@ interface ServerMessage {
 
 const CONTROL_EVENT_TYPES = new Set<string>(['connected', 'pong', 'ack']);
 const IDLE_DISCONNECT_DELAY_MS = 5000;
+const TOPIC_UNSUBSCRIBE_GRACE_MS = 250;
 
 // =============================================================================
 // Unified Event Service
@@ -130,6 +131,7 @@ class UnifiedEventServiceImpl {
   // Pending subscribe/unsubscribe messages (sent after connection)
   private pendingMessages: Array<Record<string, unknown>> = [];
   private idleDisconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pendingTopicUnsubscribes: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   /**
    * Get the session ID
@@ -262,6 +264,7 @@ class UnifiedEventServiceImpl {
   disconnect(): void {
     this.isManualClose = true;
     this.cancelIdleDisconnect();
+    this.cancelAllPendingTopicUnsubscribes();
     this.stopHeartbeat();
     this.stopWatchdog();
 
@@ -300,6 +303,9 @@ class UnifiedEventServiceImpl {
    */
   subscribe(topic: string, handler: EventHandler): () => void {
     this.cancelIdleDisconnect();
+    const hadPendingUnsubscribe = this.cancelPendingTopicUnsubscribe(topic);
+    const hadTopic = this.subscriptions.has(topic);
+
     // Add to local subscriptions
     if (!this.subscriptions.has(topic)) {
       this.subscriptions.set(topic, new Set());
@@ -311,11 +317,12 @@ class UnifiedEventServiceImpl {
 
     this.ensureConnected();
 
-    // Send subscribe message to server
-    const topicType = topic.split(':')[0] ?? '';
-    this.sendSubscribeMessage(topicType, topic);
+    if (!hadTopic && !hadPendingUnsubscribe) {
+      const topicType = topic.split(':')[0] ?? '';
+      this.sendSubscribeMessage(topicType, topic);
+    }
 
-    logger.debug(`[UnifiedWS] Subscribed to ${topic}`);
+    logger.debug(`[UnifiedWS] Handler registered for ${topic}`);
 
     // Return unsubscribe function
     return () => {
@@ -331,14 +338,10 @@ class UnifiedEventServiceImpl {
     if (handlers) {
       handlers.delete(handler);
       if (handlers.size === 0) {
-        this.subscriptions.delete(topic);
-        // Send unsubscribe message to server
-        const topicType = topic.split(':')[0] ?? '';
-        this.sendUnsubscribeMessage(topicType, topic);
+        this.scheduleTopicUnsubscribe(topic);
       }
     }
-    logger.debug(`[UnifiedWS] Unsubscribed from ${topic}`);
-    this.scheduleIdleDisconnectIfUnused();
+    logger.debug(`[UnifiedWS] Handler removed from ${topic}`);
   }
 
   /**
@@ -598,73 +601,81 @@ class UnifiedEventServiceImpl {
 
   private sendSubscribeMessage(topicType: string, topic: string): void {
     const parts = topic.split(':');
+    let sent = false;
     switch (topicType) {
       case 'agent':
-        this.sendOrQueue({
+        sent = this.send({
           type: 'subscribe',
           conversation_id: parts[1],
         });
         break;
       case 'sandbox':
-        this.sendOrQueue({
+        sent = this.send({
           type: 'subscribe_sandbox',
           project_id: parts[1],
         });
         break;
       case 'workspace':
-        this.sendOrQueue({
+        sent = this.send({
           type: 'subscribe_workspace',
           workspace_id: parts[1],
         });
         break;
       case 'project':
-        this.sendOrQueue({
+        sent = this.send({
           type: 'subscribe_project_events',
           project_id: parts[1],
         });
         break;
       case 'lifecycle':
-        this.sendOrQueue({
+        sent = this.send({
           type: 'subscribe_lifecycle_state',
           project_id: parts[1],
         });
         break;
     }
+    if (sent) {
+      logger.debug(`[UnifiedWS] Subscribed to ${topic}`);
+    }
   }
 
   private sendUnsubscribeMessage(topicType: string, topic: string): void {
     const parts = topic.split(':');
+    let sent = false;
     switch (topicType) {
       case 'agent':
-        this.sendOrQueue({
+        sent = this.send({
           type: 'unsubscribe',
           conversation_id: parts[1],
         });
         break;
       case 'sandbox':
-        this.sendOrQueue({
+        sent = this.send({
           type: 'unsubscribe_sandbox',
           project_id: parts[1],
         });
         break;
       case 'workspace':
-        this.sendOrQueue({
+        sent = this.send({
           type: 'unsubscribe_workspace',
           workspace_id: parts[1],
         });
         break;
       case 'project':
-        this.sendOrQueue({
+        sent = this.send({
           type: 'unsubscribe_project_events',
           project_id: parts[1],
         });
         break;
       case 'lifecycle':
-        this.sendOrQueue({
+        sent = this.send({
           type: 'unsubscribe_lifecycle_state',
           project_id: parts[1],
         });
         break;
+    }
+    if (sent) {
+      logger.debug(`[UnifiedWS] Unsubscribed from ${topic}`);
     }
   }
 
@@ -687,7 +698,10 @@ class UnifiedEventServiceImpl {
   }
 
   private resubscribeAll(): void {
-    this.subscriptions.forEach((_, topic) => {
+    this.subscriptions.forEach((handlers, topic) => {
+      if (handlers.size === 0) {
+        return;
+      }
       const topicType = topic.split(':')[0] ?? '';
       this.sendSubscribeMessage(topicType, topic);
     });
@@ -753,6 +767,44 @@ class UnifiedEventServiceImpl {
     this.idleDisconnectTimeout = null;
   }
 
+  private cancelPendingTopicUnsubscribe(topic: string): boolean {
+    const timeout = this.pendingTopicUnsubscribes.get(topic);
+    if (!timeout) {
+      return false;
+    }
+    clearTimeout(timeout);
+    this.pendingTopicUnsubscribes.delete(topic);
+    return true;
+  }
+
+  private cancelAllPendingTopicUnsubscribes(): void {
+    this.pendingTopicUnsubscribes.forEach((timeout) => {
+      clearTimeout(timeout);
+    });
+    this.pendingTopicUnsubscribes.clear();
+  }
+
+  private scheduleTopicUnsubscribe(topic: string): void {
+    if (this.pendingTopicUnsubscribes.has(topic)) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      this.pendingTopicUnsubscribes.delete(topic);
+      const handlers = this.subscriptions.get(topic);
+      if (handlers && handlers.size > 0) {
+        return;
+      }
+
+      this.subscriptions.delete(topic);
+      const topicType = topic.split(':')[0] ?? '';
+      this.sendUnsubscribeMessage(topicType, topic);
+      this.scheduleIdleDisconnectIfUnused();
+    }, TOPIC_UNSUBSCRIBE_GRACE_MS);
+
+    this.pendingTopicUnsubscribes.set(topic, timeout);
+  }
+
   private scheduleIdleDisconnectIfUnused(): void {
     if (
       this.subscriptions.size > 0 ||
@@ -789,6 +841,10 @@ class UnifiedEventServiceImpl {
     };
 
     this.subscriptions.forEach((_, topic) => {
+      const handlers = this.subscriptions.get(topic);
+      if (!handlers || handlers.size === 0) {
+        return;
+      }
       const [type] = topic.split(':');
       if (type && type in topicsByType) {
         const key = type;
