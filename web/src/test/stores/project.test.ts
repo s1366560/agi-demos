@@ -16,6 +16,7 @@ vi.mock('../../services/api', () => ({
 describe('ProjectStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useProjectStore.getState().clearProjects();
     useProjectStore.setState({
       projects: [],
       currentProject: null,
@@ -106,6 +107,110 @@ describe('ProjectStore', () => {
 
     expect(projectAPI.delete).toHaveBeenCalledWith('tenant-1', '1');
     expect(useProjectStore.getState().projects).toHaveLength(0);
+  });
+
+  it('getProject should return the current project without fetching', async () => {
+    const currentProject = {
+      id: 'project-1',
+      tenant_id: 'tenant-1',
+      name: 'Current Project',
+    } as any;
+    useProjectStore.setState({ currentProject });
+
+    const result = await useProjectStore.getState().getProject('tenant-1', 'project-1');
+
+    expect(result).toBe(currentProject);
+    expect(projectAPI.get).not.toHaveBeenCalled();
+  });
+
+  it('getProject should not return a matching current project from another tenant', async () => {
+    const currentProject = {
+      id: 'project-1',
+      tenant_id: 'tenant-2',
+      name: 'Other Tenant Project',
+    } as any;
+    const fetchedProject = {
+      id: 'project-1',
+      tenant_id: 'tenant-1',
+      name: 'Fetched Project',
+    } as any;
+    useProjectStore.setState({ currentProject });
+    (projectAPI.get as any).mockResolvedValue(fetchedProject);
+
+    const result = await useProjectStore.getState().getProject('tenant-1', 'project-1');
+
+    expect(result).toBe(fetchedProject);
+    expect(projectAPI.get).toHaveBeenCalledWith('tenant-1', 'project-1');
+  });
+
+  it('getProject should return an existing list project without fetching', async () => {
+    const existingProject = {
+      id: 'project-1',
+      tenant_id: 'tenant-1',
+      name: 'Listed Project',
+    } as any;
+    useProjectStore.setState({ projects: [existingProject] });
+
+    const result = await useProjectStore.getState().getProject('tenant-1', 'project-1');
+
+    expect(result).toBe(existingProject);
+    expect(projectAPI.get).not.toHaveBeenCalled();
+  });
+
+  it('getProject should not return a matching list project from another tenant', async () => {
+    const existingProject = {
+      id: 'project-1',
+      tenant_id: 'tenant-2',
+      name: 'Other Tenant Listed Project',
+    } as any;
+    const fetchedProject = {
+      id: 'project-1',
+      tenant_id: 'tenant-1',
+      name: 'Fetched Project',
+    } as any;
+    useProjectStore.setState({ projects: [existingProject] });
+    (projectAPI.get as any).mockResolvedValue(fetchedProject);
+
+    const result = await useProjectStore.getState().getProject('tenant-1', 'project-1');
+
+    expect(result).toBe(fetchedProject);
+    expect(projectAPI.get).toHaveBeenCalledWith('tenant-1', 'project-1');
+  });
+
+  it('getProject should dedupe concurrent identical requests and merge the result', async () => {
+    let resolveGet: (value: any) => void = () => {};
+    const projectRequest = new Promise((resolve) => {
+      resolveGet = resolve;
+    });
+    const fetchedProject = { id: 'project-1', name: 'Fetched Project' } as any;
+    (projectAPI.get as any).mockReturnValue(projectRequest);
+
+    const firstRequest = useProjectStore.getState().getProject('tenant-1', 'project-1');
+    const secondRequest = useProjectStore.getState().getProject('tenant-1', 'project-1');
+
+    expect(projectAPI.get).toHaveBeenCalledTimes(1);
+    expect(projectAPI.get).toHaveBeenCalledWith('tenant-1', 'project-1');
+
+    resolveGet(fetchedProject);
+
+    await expect(firstRequest).resolves.toBe(fetchedProject);
+    await expect(secondRequest).resolves.toBe(fetchedProject);
+    expect(useProjectStore.getState().projects).toEqual([fetchedProject]);
+  });
+
+  it('getProject should reuse a recent fetched detail without a second fetch', async () => {
+    const fetchedProject = { id: 'project-1', name: 'Fetched Project' } as any;
+    (projectAPI.get as any).mockResolvedValue(fetchedProject);
+
+    await expect(useProjectStore.getState().getProject('tenant-1', 'project-1')).resolves.toBe(
+      fetchedProject
+    );
+    useProjectStore.setState({ projects: [], currentProject: null });
+
+    await expect(useProjectStore.getState().getProject('tenant-1', 'project-1')).resolves.toBe(
+      fetchedProject
+    );
+    expect(projectAPI.get).toHaveBeenCalledTimes(1);
   });
 
   it('setCurrentProject should update state', () => {

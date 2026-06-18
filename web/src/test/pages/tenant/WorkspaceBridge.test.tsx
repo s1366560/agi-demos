@@ -220,6 +220,46 @@ describe('workspace/agent workspace bridge', () => {
     });
   });
 
+  it('does not refetch a URL project that already matches the current project id', async () => {
+    projectState.projects = [];
+    projectState.currentProject = {
+      id: 'project-2',
+      tenant_id: 'tenant-1',
+      name: 'Project 2',
+    };
+
+    render(<AgentWorkspace />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-2',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-chat-content')).toBeInTheDocument();
+    });
+    expect(projectState.getProject).not.toHaveBeenCalled();
+    expect(agentChatContentProps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        externalProjectId: 'project-2',
+      })
+    );
+  });
+
+  it('refetches a URL project when the matching current project belongs to another tenant', async () => {
+    projectState.projects = [];
+    projectState.currentProject = {
+      id: 'project-2',
+      tenant_id: 'tenant-2',
+      name: 'Project 2 from another tenant',
+    };
+
+    render(<AgentWorkspace />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-2',
+    });
+
+    await waitFor(() => {
+      expect(projectState.getProject).toHaveBeenCalledWith('tenant-1', 'project-2');
+    });
+  });
+
   it('ignores stale stored project context from another tenant', async () => {
     projectState.projects = [{ id: 'project-stale', tenant_id: 'tenant-2', name: 'Stale Project' }];
     projectState.currentProject = {

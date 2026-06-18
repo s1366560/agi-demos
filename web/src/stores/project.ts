@@ -19,6 +19,41 @@ import { projectAPI } from '../services/api';
 import type { Project, ProjectCreate, ProjectUpdate, ProjectListResponse } from '../types/memory';
 
 let latestListProjectsRequest = 0;
+let projectStateGeneration = 0;
+const pendingGetProjectRequests = new Map<string, Promise<Project>>();
+const recentGetProjectResponses = new Map<string, { project: Project; fetchedAt: number }>();
+const PROJECT_DETAIL_CACHE_TTL_MS = 10_000;
+
+function getProjectRequestKey(tenantId: string, projectId: string): string {
+  return `${tenantId}:${projectId}`;
+}
+
+function getRecentProjectResponse(requestKey: string): Project | null {
+  const cached = recentGetProjectResponses.get(requestKey);
+  if (!cached) {
+    return null;
+  }
+  if (Date.now() - cached.fetchedAt > PROJECT_DETAIL_CACHE_TTL_MS) {
+    recentGetProjectResponses.delete(requestKey);
+    return null;
+  }
+  return cached.project;
+}
+
+function cacheProjectResponse(requestKey: string, project: Project): void {
+  recentGetProjectResponses.set(requestKey, {
+    project,
+    fetchedAt: Date.now(),
+  });
+}
+
+function deleteCachedProjectResponses(projectId: string): void {
+  for (const [requestKey, cached] of recentGetProjectResponses) {
+    if (cached.project.id === projectId || requestKey.endsWith(`:${projectId}`)) {
+      recentGetProjectResponses.delete(requestKey);
+    }
+  }
+}
 
 interface ApiError {
   response?:
@@ -132,6 +167,7 @@ export const useProjectStore = create<ProjectState>()(
         try {
           const response: Project = await projectAPI.create(tenantId, data);
           const { projects } = get();
+          cacheProjectResponse(getProjectRequestKey(tenantId, response.id), response);
           set({
             projects: [...projects, response],
             isLoading: false,
@@ -160,6 +196,7 @@ export const useProjectStore = create<ProjectState>()(
         try {
           const response: Project = await projectAPI.update(tenantId, projectId, data);
           const { projects } = get();
+          cacheProjectResponse(getProjectRequestKey(tenantId, projectId), response);
           set({
             projects: projects.map((project) => (project.id === projectId ? response : project)),
             currentProject:
@@ -189,6 +226,7 @@ export const useProjectStore = create<ProjectState>()(
         try {
           await projectAPI.delete(tenantId, projectId);
           const { projects } = get();
+          deleteCachedProjectResponses(projectId);
           set({
             projects: projects.filter((project) => project.id !== projectId),
             currentProject: get().currentProject?.id === projectId ? null : get().currentProject,
@@ -222,6 +260,9 @@ export const useProjectStore = create<ProjectState>()(
        */
       clearProjects: () => {
         latestListProjectsRequest += 1;
+        projectStateGeneration += 1;
+        pendingGetProjectRequests.clear();
+        recentGetProjectResponses.clear();
         set({
           projects: [],
           currentProject: null,
@@ -245,18 +286,72 @@ export const useProjectStore = create<ProjectState>()(
        * const project = await getProject('tenant-1', 'proj-1');
        */
       getProject: async (tenantId: string, projectId: string) => {
-        set({ isLoading: true, error: null });
-        try {
-          const response: Project = await projectAPI.get(tenantId, projectId);
-          set({ isLoading: false });
-          return response;
-        } catch (error: unknown) {
-          set({
-            error: getErrorMessage(error),
-            isLoading: false,
-          });
-          throw error;
+        const { currentProject, projects } = get();
+        if (currentProject?.id === projectId && currentProject.tenant_id === tenantId) {
+          return currentProject;
         }
+
+        const existingProject = projects.find(
+          (project) => project.id === projectId && project.tenant_id === tenantId
+        );
+        if (existingProject) {
+          return existingProject;
+        }
+
+        const requestKey = getProjectRequestKey(tenantId, projectId);
+        const recentResponse = getRecentProjectResponse(requestKey);
+        if (recentResponse) {
+          return recentResponse;
+        }
+
+        const pendingRequest = pendingGetProjectRequests.get(requestKey);
+        if (pendingRequest) {
+          return pendingRequest;
+        }
+
+        const requestGeneration = projectStateGeneration;
+        set({ isLoading: true, error: null });
+
+        const request = projectAPI
+          .get(tenantId, projectId)
+          .then((response: Project) => {
+            if (requestGeneration === projectStateGeneration) {
+              cacheProjectResponse(requestKey, response);
+              const { currentProject: latestCurrentProject, projects: latestProjects } = get();
+              const projectExists = latestProjects.some((project) => project.id === response.id);
+
+              set({
+                projects: projectExists
+                  ? latestProjects.map((project) =>
+                      project.id === response.id ? response : project
+                    )
+                  : [...latestProjects, response],
+                currentProject:
+                  latestCurrentProject?.id === response.id ? response : latestCurrentProject,
+                isLoading: false,
+              });
+            }
+
+            return response;
+          })
+          .catch((error: unknown) => {
+            if (requestGeneration === projectStateGeneration) {
+              set({
+                error: getErrorMessage(error),
+                isLoading: false,
+              });
+            }
+            throw error;
+          })
+          .finally(() => {
+            if (pendingGetProjectRequests.get(requestKey) === request) {
+              pendingGetProjectRequests.delete(requestKey);
+            }
+          });
+
+        pendingGetProjectRequests.set(requestKey, request);
+
+        return request;
       },
 
       clearError: () => {
