@@ -56,9 +56,6 @@ class ChatUseCase:
         Raises:
             ValueError: if required parameters are missing
         """
-        logger.info(
-            f"[DEBUG-CHAT-0] execute() called with conversation_id={conversation_id}, user_message={user_message[:20]}"
-        )
         if not conversation_id:
             raise ValueError("conversation_id is required")
         if not user_message:
@@ -71,8 +68,10 @@ class ChatUseCase:
             raise ValueError("tenant_id is required")
 
         logger.info(
-            f"Starting chat for conversation {conversation_id} "
-            f"(user: {user_id}, project: {project_id})"
+            "Starting chat for conversation %s (user: %s, project: %s)",
+            conversation_id,
+            user_id,
+            project_id,
         )
 
         # Use self-developed ReAct core (v2) for all queries
@@ -86,4 +85,4 @@ class ChatUseCase:
         ):
             yield event
 
-        logger.info(f"Completed chat for conversation {conversation_id}")
+        logger.info("Completed chat for conversation %s", conversation_id)
