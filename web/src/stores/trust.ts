@@ -47,28 +47,44 @@ const initialState = {
   error: null,
 };
 
+let latestFetchPoliciesRequest = 0;
+let latestFetchDecisionsRequest = 0;
+
+function invalidateTrustReadRequests(): void {
+  latestFetchPoliciesRequest += 1;
+  latestFetchDecisionsRequest += 1;
+}
+
 export const useTrustStore = create<TrustState>()(
   devtools(
     (set) => ({
       ...initialState,
 
       fetchPolicies: async (tenantId, params) => {
+        const requestId = latestFetchPoliciesRequest + 1;
+        latestFetchPoliciesRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await trustService.listPolicies(tenantId, params);
+          if (requestId !== latestFetchPoliciesRequest) return;
           set({ policies: response.items, isLoading: false });
         } catch (error) {
+          if (requestId !== latestFetchPoliciesRequest) return;
           set({ error: getErrorMessage(error), isLoading: false });
           throw error;
         }
       },
 
       fetchDecisions: async (tenantId, params) => {
+        const requestId = latestFetchDecisionsRequest + 1;
+        latestFetchDecisionsRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await trustService.listDecisions(tenantId, params);
+          if (requestId !== latestFetchDecisionsRequest) return;
           set({ decisions: response.items, isLoading: false });
         } catch (error) {
+          if (requestId !== latestFetchDecisionsRequest) return;
           set({ error: getErrorMessage(error), isLoading: false });
           throw error;
         }
@@ -104,6 +120,7 @@ export const useTrustStore = create<TrustState>()(
         set({ error: null });
       },
       reset: () => {
+        invalidateTrustReadRequests();
         set(initialState);
       },
     }),
