@@ -61,6 +61,8 @@ const commonTranslations: Record<string, string> = {
   'tenant.evolution.types.installed_genome': 'Genome installed',
   'tenant.evolution.types.uninstalled_genome': 'Genome uninstalled',
   'tenant.evolution.types.simplified': 'Simplified',
+  'tenant.genes.installError': 'Failed to install gene',
+  'tenant.genes.invalidJson': 'Invalid JSON format',
   'common.showPassword': 'Show password',
   'common.hidePassword': 'Hide password',
   'common.actions.viewAll': 'View All',

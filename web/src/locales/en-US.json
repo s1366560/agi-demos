@@ -3156,6 +3156,7 @@
       "genesCount": "genes",
       "fetchError": "Failed to fetch gene details",
       "installSuccess": "Gene installed successfully",
+      "installError": "Failed to install gene",
       "invalidJson": "Invalid JSON format",
       "rateSuccess": "Rating submitted successfully",
       "rateError": "Failed to submit rating",

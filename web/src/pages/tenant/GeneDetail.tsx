@@ -167,13 +167,18 @@ export const GeneDetail: FC = () => {
   }, [searchParams, setSearchParams, shouldOpenInstallModal, shouldOpenRateModal]);
 
   const handleInstallSubmit = async () => {
-    try {
-      const values = await installForm.validateFields();
-      let configOverride: Record<string, unknown> = {};
-      if (values.config_override) {
+    const values = await installForm.validateFields();
+    let configOverride: Record<string, unknown> = {};
+    if (values.config_override) {
+      try {
         configOverride = JSON.parse(values.config_override) as Record<string, unknown>;
+      } catch {
+        message.error(t('tenant.genes.invalidJson'));
+        return;
       }
+    }
 
+    try {
       await installGene(
         values.instance_id,
         {
@@ -185,12 +190,8 @@ export const GeneDetail: FC = () => {
       message.success(t('tenant.genes.installSuccess'));
       setIsInstallModalVisible(false);
       installForm.resetFields();
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('Unexpected token')) {
-        message.error(t('tenant.genes.invalidJson'));
-      } else if (err instanceof Error) {
-        message.error(err.message);
-      }
+    } catch {
+      showActionError(t('tenant.genes.installError'));
     }
   };
 

@@ -3320,6 +3320,7 @@
       "genesCount": "个基因",
       "fetchError": "获取基因详情失败",
       "installSuccess": "基因安装成功",
+      "installError": "安装基因失败",
       "invalidJson": "无效的 JSON 格式",
       "rateSuccess": "评分提交成功",
       "rateError": "评分提交失败",

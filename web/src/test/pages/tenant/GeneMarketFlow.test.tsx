@@ -401,6 +401,59 @@ describe('Gene marketplace rating flow', () => {
     });
   });
 
+  it('surfaces install failures from the gene store', async () => {
+    const messageErrorSpy = vi.spyOn(message, 'error').mockImplementation(vi.fn());
+    stateMock.currentGene = gene();
+    stateMock.error = 'Install API failed';
+    actionsMock.installGene.mockRejectedValue(new Error('Network Error'));
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'tenant.genes.installAction' }));
+    fireEvent.change(screen.getByLabelText('tenant.genes.instanceId'), {
+      target: { value: 'instance-1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await waitFor(() => {
+      expect(actionsMock.installGene).toHaveBeenCalledWith(
+        'instance-1',
+        { gene_id: 'gene-1', config: {} },
+        { tenant_id: 'tenant-1' }
+      );
+    });
+    expect(messageErrorSpy).toHaveBeenCalledWith('Install API failed');
+  });
+
+  it('does not submit install requests with invalid JSON config', async () => {
+    const messageErrorSpy = vi.spyOn(message, 'error').mockImplementation(vi.fn());
+    stateMock.currentGene = gene();
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'tenant.genes.installAction' }));
+    fireEvent.change(screen.getByLabelText('tenant.genes.instanceId'), {
+      target: { value: 'instance-1' },
+    });
+    fireEvent.change(screen.getByLabelText('tenant.genes.configOverride'), {
+      target: { value: '{not-json' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await waitFor(() => {
+      expect(messageErrorSpy).toHaveBeenCalledWith('Invalid JSON format');
+    });
+    expect(actionsMock.installGene).not.toHaveBeenCalled();
+  });
+
   it('surfaces review submission failures from the gene store', async () => {
     const messageErrorSpy = vi.spyOn(message, 'error').mockImplementation(vi.fn());
     stateMock.currentGene = gene();
