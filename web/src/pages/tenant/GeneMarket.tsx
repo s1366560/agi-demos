@@ -34,7 +34,10 @@ import {
 } from '../../stores/geneMarket';
 import { useCurrentTenant } from '../../stores/tenant';
 
+import { visibilityLabel, visibilityOptions, visibilityTagColor } from './geneVisibility';
+
 import type {
+  ContentVisibilityValue,
   GeneCreate,
   GeneListParams,
   GeneResponse,
@@ -46,7 +49,6 @@ import type {
 const { Search } = Input;
 const { Option } = Select;
 type PublishStatusFilter = 'all' | 'published' | 'draft';
-type ContentVisibilityValue = 'public' | 'org_private' | 'unlisted';
 type VisibilityFilter = 'all' | ContentVisibilityValue;
 
 interface PublishGeneFormValues {
@@ -313,14 +315,9 @@ export const GeneMarket: FC = () => {
     );
   };
 
-  const getVisibilityBadge = (visibility: string) => {
-    const colors: Record<string, string> = {
-      public: 'green',
-      org_private: 'red',
-      unlisted: 'default',
-    };
-    return <Tag color={colors[visibility] || 'default'}>{visibility}</Tag>;
-  };
+  const getVisibilityBadge = (visibility: ContentVisibilityValue) => (
+    <Tag color={visibilityTagColor(visibility)}>{visibilityLabel(visibility, t)}</Tag>
+  );
 
   const getPublishStatusBadge = (isPublished: boolean) => (
     <Tag color={isPublished ? 'green' : 'default'}>
@@ -549,9 +546,11 @@ export const GeneMarket: FC = () => {
                 className="w-full sm:w-36"
               >
                 <Option value="all">{t('tenant.genes.filters.allVisibility')}</Option>
-                <Option value="public">{t('tenant.genes.filters.visPublic')}</Option>
-                <Option value="org_private">{t('tenant.genes.filters.visPrivate')}</Option>
-                <Option value="unlisted">{t('tenant.genes.filters.visUnlisted')}</Option>
+                {visibilityOptions(t).map((option) => (
+                  <Option key={option.value} value={option.value}>
+                    {option.label}
+                  </Option>
+                ))}
               </Select>
             </>
           )}
@@ -566,9 +565,11 @@ export const GeneMarket: FC = () => {
               className="w-full sm:w-36"
             >
               <Option value="all">{t('tenant.genes.filters.allVisibility')}</Option>
-              <Option value="public">{t('tenant.genes.filters.visPublic')}</Option>
-              <Option value="org_private">{t('tenant.genes.filters.visPrivate')}</Option>
-              <Option value="unlisted">{t('tenant.genes.filters.visUnlisted')}</Option>
+              {visibilityOptions(t).map((option) => (
+                <Option key={option.value} value={option.value}>
+                  {option.label}
+                </Option>
+              ))}
             </Select>
           )}
           <Select
@@ -688,9 +689,11 @@ export const GeneMarket: FC = () => {
           </Form.Item>
           <Form.Item name="visibility" label={t('tenant.genes.publish.visibility')}>
             <Select>
-              <Option value="public">{t('tenant.genes.filters.visPublic')}</Option>
-              <Option value="org_private">{t('tenant.genes.filters.visPrivate')}</Option>
-              <Option value="unlisted">{t('tenant.genes.filters.visUnlisted')}</Option>
+              {visibilityOptions(t).map((option) => (
+                <Option key={option.value} value={option.value}>
+                  {option.label}
+                </Option>
+              ))}
             </Select>
           </Form.Item>
           {activeTab === 'genomes' ? (

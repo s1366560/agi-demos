@@ -419,6 +419,47 @@ describe('Gene marketplace rating flow', () => {
     });
   });
 
+  it('renders marketplace visibility badges with user-facing labels', () => {
+    stateMock.genes = [gene({ visibility: 'org_private' })];
+    stateMock.geneTotal = 1;
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes']}>
+        <GeneMarket />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Private')).toBeInTheDocument();
+    expect(screen.queryByText('org_private')).not.toBeInTheDocument();
+  });
+
+  it('renders gene detail visibility with user-facing labels', async () => {
+    stateMock.currentGene = gene({ visibility: 'org_private' });
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Private')).toBeInTheDocument();
+    expect(screen.queryByText('org_private')).not.toBeInTheDocument();
+  });
+
+  it('renders genome detail visibility with user-facing labels', async () => {
+    stateMock.currentGenome = genome({ visibility: 'unlisted' });
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/genomes/genome-1']}>
+        <GenomeDetail />
+      </MemoryRouter>
+    );
+
+    const labels = await screen.findAllByText('Unlisted');
+    expect(labels.length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('unlisted')).not.toBeInTheDocument();
+  });
+
   it('opens the rating modal from the rate query parameter', async () => {
     stateMock.currentGene = gene();
 

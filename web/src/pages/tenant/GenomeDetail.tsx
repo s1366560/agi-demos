@@ -33,7 +33,9 @@ import {
 } from '../../stores/geneMarket';
 import { useCurrentTenant } from '../../stores/tenant';
 
-import type { GenomeUpdate } from '../../services/geneMarketService';
+import { visibilityLabel, visibilityOptions, visibilityTagColor } from './geneVisibility';
+
+import type { ContentVisibilityValue, GenomeUpdate } from '../../services/geneMarketService';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -52,7 +54,7 @@ interface EditGenomeFormValues {
   slug: string;
   short_description?: string;
   description?: string;
-  visibility?: string;
+  visibility?: ContentVisibilityValue;
   gene_slugs?: string;
   config_override?: string;
 }
@@ -375,8 +377,8 @@ export const GenomeDetail: React.FC = () => {
                 ? t('tenant.genes.statusPublished', 'Published')
                 : t('tenant.genes.statusDraft', 'Draft')}
             </Tag>
-            <Tag color={genome.visibility === 'public' ? 'green' : 'default'}>
-              {genome.visibility}
+            <Tag color={visibilityTagColor(genome.visibility)}>
+              {visibilityLabel(genome.visibility, t)}
             </Tag>
           </Space>
         </div>
@@ -440,7 +442,7 @@ export const GenomeDetail: React.FC = () => {
             </Paragraph>
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.genomeDetail.fields.visibility', 'Visibility')}>
-            {genome.visibility}
+            {visibilityLabel(genome.visibility, t)}
           </Descriptions.Item>
           <Descriptions.Item label={t('tenant.genomeDetail.fields.status', 'Status')}>
             {genome.is_published
@@ -622,13 +624,7 @@ export const GenomeDetail: React.FC = () => {
             />
           </Form.Item>
           <Form.Item name="visibility" label={t('tenant.genes.publish.visibility', 'Visibility')}>
-            <Select
-              options={[
-                { value: 'public', label: t('tenant.genes.filters.visPublic', 'Public') },
-                { value: 'org_private', label: t('tenant.genes.filters.visPrivate', 'Private') },
-                { value: 'unlisted', label: t('tenant.genes.filters.visUnlisted', 'Unlisted') },
-              ]}
-            />
+            <Select options={[...visibilityOptions(t)]} />
           </Form.Item>
           <Form.Item
             name="gene_slugs"

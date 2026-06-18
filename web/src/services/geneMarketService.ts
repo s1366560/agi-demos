@@ -13,6 +13,7 @@ export interface TenantScopedPaginationOptions extends TenantScopedOptions {
 }
 
 export type GeneSourceValue = 'official' | 'community' | 'self_created' | 'forked' | 'emerged';
+export type ContentVisibilityValue = 'public' | 'org_private' | 'unlisted';
 
 const tenantParams = (options: TenantScopedOptions = {}): { tenant_id?: string } =>
   options.tenant_id ? { tenant_id: options.tenant_id } : {};
@@ -57,7 +58,7 @@ export interface GeneCreate {
   dependencies?: string[];
   synergies?: string[];
   parent_gene_id?: string | null;
-  visibility?: string;
+  visibility?: ContentVisibilityValue;
   tags?: string[];
 }
 
@@ -75,7 +76,7 @@ export interface GeneUpdate {
   dependencies?: string[];
   synergies?: string[];
   parent_gene_id?: string | null;
-  visibility?: string;
+  visibility?: ContentVisibilityValue;
   tags?: string[];
 }
 
@@ -95,7 +96,7 @@ export interface GeneResponse {
   dependencies: string[];
   synergies: string[];
   parent_gene_id: string | null;
-  visibility: string;
+  visibility: ContentVisibilityValue;
   tags: string[];
   install_count: number;
   avg_rating: number | null;
@@ -125,7 +126,7 @@ export interface GenomeCreate {
   icon?: string | null;
   gene_slugs?: string[];
   config_override?: Record<string, unknown>;
-  visibility?: string;
+  visibility?: ContentVisibilityValue;
 }
 
 export interface GenomeUpdate {
@@ -136,7 +137,7 @@ export interface GenomeUpdate {
   icon?: string | null;
   gene_slugs?: string[];
   config_override?: Record<string, unknown>;
-  visibility?: string;
+  visibility?: ContentVisibilityValue;
 }
 
 export interface GenomeResponse {
@@ -149,7 +150,7 @@ export interface GenomeResponse {
   icon: string | null;
   gene_slugs: string[];
   config_override: Record<string, unknown>;
-  visibility: string;
+  visibility: ContentVisibilityValue;
   install_count: number;
   avg_rating: number | null;
   is_featured: boolean;
@@ -290,7 +291,7 @@ export interface GeneListParams {
   category?: string;
   search?: string | undefined;
   slugs?: string[];
-  visibility?: string;
+  visibility?: ContentVisibilityValue;
   is_published?: boolean;
   exclude_installed_instance_id?: string | undefined;
   tenant_id?: string | null | undefined;
@@ -310,7 +311,7 @@ export interface GenomeListParams {
   page?: number;
   page_size?: number;
   search?: string | undefined;
-  visibility?: string;
+  visibility?: ContentVisibilityValue;
   is_published?: boolean;
   tenant_id?: string | null | undefined;
 }

@@ -49,7 +49,13 @@ import {
 } from '../../stores/geneMarket';
 import { useCurrentTenant } from '../../stores/tenant';
 
-import type { EvolutionEventType, GeneUpdate } from '../../services/geneMarketService';
+import { visibilityLabel, visibilityOptions, visibilityTagColor } from './geneVisibility';
+
+import type {
+  ContentVisibilityValue,
+  EvolutionEventType,
+  GeneUpdate,
+} from '../../services/geneMarketService';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -89,7 +95,7 @@ interface EditGeneFormValues {
   version: string;
   short_description?: string;
   description?: string;
-  visibility?: string;
+  visibility?: ContentVisibilityValue;
   tags?: string;
 }
 
@@ -461,8 +467,8 @@ export const GeneDetail: FC = () => {
                 ? t('tenant.genes.statusPublished', 'Published')
                 : t('tenant.genes.statusDraft', 'Draft')}
             </Tag>
-            <Tag color={currentGene.visibility === 'public' ? 'green' : 'default'}>
-              {currentGene.visibility}
+            <Tag color={visibilityTagColor(currentGene.visibility)}>
+              {visibilityLabel(currentGene.visibility, t)}
             </Tag>
           </Space>
         </Space>
@@ -828,13 +834,7 @@ export const GeneDetail: FC = () => {
             />
           </Form.Item>
           <Form.Item name="visibility" label={t('tenant.genes.publish.visibility', 'Visibility')}>
-            <Select
-              options={[
-                { value: 'public', label: t('tenant.genes.filters.visPublic', 'Public') },
-                { value: 'org_private', label: t('tenant.genes.filters.visPrivate', 'Private') },
-                { value: 'unlisted', label: t('tenant.genes.filters.visUnlisted', 'Unlisted') },
-              ]}
-            />
+            <Select options={[...visibilityOptions(t)]} />
           </Form.Item>
           <Form.Item name="tags" label={t('tenant.genes.publish.tags', 'Tags')}>
             <Input placeholder={t('tenant.genes.publish.tagsPlaceholder')} />
