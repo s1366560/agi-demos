@@ -328,8 +328,26 @@ describe('TenantHeader', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tenant Two' }));
 
-    expect(setCurrentTenant).toHaveBeenCalledWith({ id: 'tenant-2', name: 'Tenant Two' });
+    expect(setCurrentTenant).not.toHaveBeenCalled();
     expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-2');
+  });
+
+  it('does not reload the current tenant from the user dropdown', () => {
+    render(
+      <TenantHeader
+        tenantId="tenant-1"
+        sidebarCollapsed={false}
+        onSidebarToggle={vi.fn()}
+        onMobileMenuOpen={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'User menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tenant One' }));
+
+    expect(setCurrentTenant).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(screen.queryByText('Tenant')).not.toBeInTheDocument();
   });
 
   it('falls back to /tenant base path when tenantId is empty', () => {

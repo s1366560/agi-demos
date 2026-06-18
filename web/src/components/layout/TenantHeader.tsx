@@ -489,7 +489,6 @@ function HeaderUserMenu({
   const setTheme = useThemeStore((s) => s.setTheme);
   const tenants = useTenantStore((state) => state.tenants);
   const listTenants = useTenantStore((state) => state.listTenants);
-  const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const normalizedTheme = theme as 'light' | 'dark' | 'system';
@@ -530,8 +529,10 @@ function HeaderUserMenu({
   };
 
   const handleTenantSelect = (tenant: Tenant) => {
-    setCurrentTenant(tenant);
     setOpen(false);
+    if (tenant.id === currentTenant?.id) {
+      return;
+    }
     void navigate(`/tenant/${tenant.id}`);
   };
 
