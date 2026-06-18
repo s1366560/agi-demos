@@ -12,8 +12,8 @@ Guidance for AI coding assistants (Copilot, Claude, Cursor, Gemini, ...) working
 - **TDD**: write/adjust tests alongside code; maintain 80%+ coverage.
 - **Security first**: never paste secrets (API keys, tokens, JWTs, passwords). Redact logs.
 - **Code style**: no emojis in code/docs. Prefer immutability. Small files (200–400 lines typical, 800 max). Commit subjects MUST use Conventional Commit syntax with an optional scope, for example `feat(agent): add supervisor verdict tool`, `fix(sandbox): clarify read offset semantics`, `refactor(skills): lift curated lineage into domain`. Keep the first line in that format, then use the Lore protocol trailers below in the body when a body is present.
-- Before editing a symbol: run `gitnexus_impact` (see GitNexus section) and report blast radius.
-- Before committing: run `gitnexus_detect_changes` to verify scope.
+- Before editing a symbol: run `gitnexus impact` (see GitNexus section) and report blast radius.
+- Before committing: run `gitnexus detect-changes` to verify scope.
 - **Agent First (top-level architectural rule)**: every **subjective** decision point — anything that requires semantic understanding, intent inference, quality assessment, appropriateness judgment, categorization by meaning, or resolution of ambiguity — **MUST be made by an agent via a structured tool-call**. Hardcoded heuristics for subjective calls are prohibited: no regex-on-text for routing or classification, no keyword matching for intent, no `dict` lookup tables masquerading as policy engines, no hand-tuned thresholds that produce semantic verdicts on their own. The following stay deterministic because they are **structural / arithmetic / protocol** facts, not judgments:
   - set-membership checks (roster, sender-in-participants, permission allow-lists)
   - pure arithmetic (budget counters: turns, USD, wall-seconds)
@@ -309,7 +309,7 @@ Core groups (see `.env.example` for full list): `API_*` · `SECRET_KEY`, `LLM_EN
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **agi-demos** (70344 symbols, 199393 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **agi-demos** (71126 symbols, 202209 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -348,7 +348,7 @@ This project is indexed by GitNexus as **agi-demos** (70344 symbols, 199393 rela
 | `query` | Find code by concept | `gitnexus_query({query: "auth validation"})` |
 | `context` | 360-degree view of one symbol | `gitnexus_context({name: "validateUser"})` |
 | `impact` | Blast radius before editing | `gitnexus_impact({target: "X", direction: "upstream"})` |
-| `detect_changes` | Pre-commit scope check | `gitnexus_detect_changes({scope: "staged"})` |
+| `detect-changes` | Pre-commit scope check | `gitnexus_detect_changes({scope: "staged"})` |
 | `rename` | Safe multi-file rename | `gitnexus_rename({symbol_name: "old", new_name: "new", dry_run: true})` |
 | `cypher` | Custom graph queries | `gitnexus_cypher({query: "MATCH ..."})` |
 
