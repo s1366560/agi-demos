@@ -15,10 +15,6 @@ import { devtools } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
 import { projectAPI } from '../services/api';
-import {
-  clearCurrentProject as clearCurrentProjectContext,
-  setCurrentProject as setCurrentProjectContext,
-} from '../services/client/currentProject';
 
 import type { Project, ProjectCreate, ProjectUpdate, ProjectListResponse } from '../types/memory';
 
@@ -327,7 +323,6 @@ export const useProjectStore = create<ProjectState>()(
        * setCurrentProject(selectedProject);
        */
       setCurrentProject: (project: Project | null) => {
-        setCurrentProjectContext(project?.id ?? null);
         if (isSameCurrentProject(get().currentProject, project)) {
           return;
         }
@@ -346,7 +341,6 @@ export const useProjectStore = create<ProjectState>()(
         pendingListProjectRequests.clear();
         pendingGetProjectRequests.clear();
         recentGetProjectResponses.clear();
-        clearCurrentProjectContext();
         set({
           projects: [],
           currentProject: null,

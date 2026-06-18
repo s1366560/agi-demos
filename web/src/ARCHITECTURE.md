@@ -30,16 +30,15 @@ hooks/        ─┼──► stores/  ──► services/api  ──► httpCli
 4. **Components never import `services/*` directly.** Always flow
    through a hook (`hooks/queries/*` or `hooks/use*`) or store. Enforced
    as an ESLint warning.
-5. **Current project singleton.** Cross-cutting "which project am I in"
-   reads MUST go through `services/client/currentProject.ts`:
-   - `getCurrentProject()` / `setCurrentProject(id)` /
-     `subscribeCurrentProject(cb)`.
-   - Call `clearCurrentProject()` on logout, project deletion, or
-     project switch **before** fetching the new context. Stale WS
-     events with the old `project_id` will otherwise race.
-6. **httpClient automatically injects `X-Project-Id`** from the
-   singleton. Do NOT pass `project_id` as a query param if the only
-   reason is tenant scoping.
+5. **Project scope is explicit.** Components and stores must derive the
+   active project from tenant-prefixed route params, query params, or the
+   tenant-scoped `useProjectStore.currentProject` value after checking
+   `project.tenant_id`. Do not introduce hidden global project singletons
+   or implicit HTTP headers for tenant/project scoping.
+6. **Tenant/project request scope travels with the API call.** Service
+   methods should pass `tenant_id` / `project_id` in the endpoint or query
+   params required by the backend contract. Do not rely on httpClient to
+   infer project scope.
 
 ## New Hooks Pattern (React Query)
 

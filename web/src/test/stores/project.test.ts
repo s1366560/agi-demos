@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { projectAPI } from '../../services/api';
-import {
-  getCurrentProject,
-  setCurrentProject as setCurrentProjectContext,
-} from '../../services/client/currentProject';
 import { useProjectStore } from '../../stores/project';
 
 function deferred<T>() {
@@ -30,7 +26,6 @@ vi.mock('../../services/api', () => ({
 describe('ProjectStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    setCurrentProjectContext(null);
     useProjectStore.getState().clearProjects();
     useProjectStore.setState({
       projects: [],
@@ -330,15 +325,6 @@ describe('ProjectStore', () => {
     const project = { id: '1', name: 'Project 1' } as any;
     useProjectStore.getState().setCurrentProject(project);
     expect(useProjectStore.getState().currentProject).toEqual(project);
-    expect(getCurrentProject()).toBe('1');
-  });
-
-  it('setCurrentProject should clear the global project context', () => {
-    setCurrentProjectContext('previous-project');
-
-    useProjectStore.getState().setCurrentProject(null);
-
-    expect(getCurrentProject()).toBeNull();
   });
 
   it('setCurrentProject should not notify subscribers for the same current project', () => {
@@ -379,7 +365,6 @@ describe('ProjectStore', () => {
   });
 
   it('clearProjects should reset tenant-scoped state', () => {
-    setCurrentProjectContext('1');
     useProjectStore.setState({
       projects: [{ id: '1', name: 'Project 1' } as any],
       currentProject: { id: '1', name: 'Project 1' } as any,
@@ -403,7 +388,6 @@ describe('ProjectStore', () => {
       pageSize: 20,
       ownerIds: [],
     });
-    expect(getCurrentProject()).toBeNull();
   });
 
   it('clearProjects should ignore stale list responses', async () => {
