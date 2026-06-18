@@ -114,6 +114,7 @@ export const InstanceGenes: React.FC = () => {
       availableGenesRequestId.current = requestId;
       const isLatestRequest = () => availableGenesRequestId.current === requestId;
       setIsGenesLoading(true);
+      setSelectedGeneId(null);
       setAvailableGenesError(null);
       try {
         const response = await geneMarketService.listGenes({

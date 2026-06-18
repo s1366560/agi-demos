@@ -61,10 +61,14 @@ vi.mock('@/components/ui/lazyAntd', () => ({
   LazyEmpty: ({ description }: { description?: ReactNode }) => <div>{description}</div>,
   LazyModal: ({
     children,
+    okButtonProps,
+    onOk,
     open,
     title,
   }: {
     children?: ReactNode;
+    okButtonProps?: { disabled?: boolean };
+    onOk?: () => void;
     open?: boolean;
     title?: ReactNode;
   }) =>
@@ -72,6 +76,14 @@ vi.mock('@/components/ui/lazyAntd', () => ({
       <div role="dialog">
         <h2>{title}</h2>
         {children}
+        <button
+          aria-label="modal-ok"
+          disabled={okButtonProps?.disabled}
+          onClick={onOk}
+          type="button"
+        >
+          OK
+        </button>
       </div>
     ) : null,
   LazyPopconfirm: ({ children }: { children?: ReactNode }) => <>{children}</>,
@@ -91,9 +103,7 @@ function deferred<T>() {
   return { promise, reject, resolve };
 }
 
-const installedGene = (
-  overrides: Partial<InstanceGeneResponse> = {}
-): InstanceGeneResponse => ({
+const installedGene = (overrides: Partial<InstanceGeneResponse> = {}): InstanceGeneResponse => ({
   config_snapshot: {},
   created_at: '2026-06-17T00:00:00Z',
   gene_category: 'qa',
@@ -254,7 +264,9 @@ describe('InstanceGenes', () => {
   it('ignores stale installable gene search responses', async () => {
     const staleRequest = deferred<GeneListResponse>();
     const freshRequest = deferred<GeneListResponse>();
-    mockService.listGenes.mockReturnValueOnce(staleRequest.promise).mockReturnValueOnce(freshRequest.promise);
+    mockService.listGenes
+      .mockReturnValueOnce(staleRequest.promise)
+      .mockReturnValueOnce(freshRequest.promise);
 
     render(<InstanceGenes />);
 
@@ -263,9 +275,12 @@ describe('InstanceGenes', () => {
       expect(mockService.listGenes).toHaveBeenCalledTimes(1);
     });
 
-    fireEvent.change(screen.getByPlaceholderText('tenant.instances.genes.availableSearchPlaceholder'), {
-      target: { value: 'fresh' },
-    });
+    fireEvent.change(
+      screen.getByPlaceholderText('tenant.instances.genes.availableSearchPlaceholder'),
+      {
+        target: { value: 'fresh' },
+      }
+    );
     await waitFor(() => {
       expect(mockService.listGenes).toHaveBeenCalledTimes(2);
     });
@@ -286,5 +301,48 @@ describe('InstanceGenes', () => {
       expect(screen.queryByText('Stale Available Gene')).not.toBeInTheDocument();
     });
     expect(screen.getByText('Fresh Available Gene')).toBeInTheDocument();
+  });
+
+  it('clears the selected installable gene when search results change', async () => {
+    mockService.listGenes
+      .mockResolvedValueOnce(geneList([gene({ id: 'old-gene', name: 'Old Gene' })]))
+      .mockResolvedValueOnce(geneList([gene({ id: 'fresh-gene', name: 'Fresh Gene' })]));
+    mockService.installGene.mockResolvedValue({} as never);
+
+    render(<InstanceGenes />);
+
+    fireEvent.click(screen.getByRole('button', { name: /tenant.instances.genes.installGene/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Old Gene/ }));
+
+    expect(screen.getByRole('button', { name: 'modal-ok' })).toBeEnabled();
+
+    fireEvent.change(
+      screen.getByPlaceholderText('tenant.instances.genes.availableSearchPlaceholder'),
+      {
+        target: { value: 'fresh' },
+      }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'modal-ok' })).toBeDisabled();
+    });
+    expect(await screen.findByRole('button', { name: /Fresh Gene/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'modal-ok' }));
+    expect(mockService.installGene).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Fresh Gene/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'modal-ok' }));
+
+    await waitFor(() => {
+      expect(mockService.installGene).toHaveBeenCalledWith(
+        'instance-1',
+        {
+          config: {},
+          gene_id: 'fresh-gene',
+        },
+        { tenant_id: 'tenant-1' }
+      );
+    });
   });
 });
