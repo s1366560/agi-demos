@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, cast, exists, func, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from src.domain.model.workspace.workspace_message import (
     MessageSenderType,
@@ -68,6 +70,44 @@ class SqlWorkspaceMessageRepository(
         )
         rows = result.scalars().all()
         return [m for row in rows if (m := self._to_domain(row)) is not None]
+
+    async def find_mentions(
+        self,
+        workspace_id: str,
+        target_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[WorkspaceMessage]:
+        query = (
+            select(WorkspaceMessageModel)
+            .where(
+                WorkspaceMessageModel.workspace_id == workspace_id,
+                self._mentions_target_clause(target_id),
+            )
+            .order_by(WorkspaceMessageModel.created_at.asc(), WorkspaceMessageModel.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(
+            refresh_select_statement(self._refresh_statement(query))
+        )
+        rows = result.scalars().all()
+        return [m for row in rows if (m := self._to_domain(row)) is not None]
+
+    def _mentions_target_clause(self, target_id: str) -> ColumnElement[bool]:
+        if self._session.get_bind().dialect.name == "postgresql":
+            return cast(WorkspaceMessageModel.mentions_json, JSONB).contains([target_id])
+
+        mention_values = (
+            func.json_each(WorkspaceMessageModel.mentions_json)
+            .table_valued("value")
+            .alias("mention_values")
+        )
+        return exists(
+            select(1)
+            .select_from(mention_values)
+            .where(mention_values.c.value == target_id)
+        )
 
     async def find_thread(
         self,

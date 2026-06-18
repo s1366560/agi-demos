@@ -294,15 +294,19 @@ class TestListMessages:
 
 @pytest.mark.unit
 class TestGetMentions:
-    async def test_filters_by_target_id(self) -> None:
+    async def test_delegates_to_repo_mentions_query(self) -> None:
         msg_with = MagicMock(spec=WorkspaceMessage)
         msg_with.mentions = ["agent-1"]
-        msg_without = MagicMock(spec=WorkspaceMessage)
-        msg_without.mentions = ["agent-2"]
 
         service, message_repo, *_ = _build_service()
-        message_repo.find_by_workspace = AsyncMock(return_value=[msg_with, msg_without])
+        message_repo.find_mentions = AsyncMock(return_value=[msg_with])
 
-        result = await service.get_mentions("ws-1", "agent-1")
+        result = await service.get_mentions("ws-1", "agent-1", limit=25)
         assert len(result) == 1
         assert result[0] is msg_with
+        message_repo.find_mentions.assert_awaited_once_with(
+            workspace_id="ws-1",
+            target_id="agent-1",
+            limit=25,
+        )
+        message_repo.find_by_workspace.assert_not_called()

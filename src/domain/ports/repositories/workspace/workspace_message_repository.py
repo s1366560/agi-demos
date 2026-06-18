@@ -22,6 +22,15 @@ class WorkspaceMessageRepository(ABC):
     ) -> list[WorkspaceMessage]: ...
 
     @abstractmethod
+    async def find_mentions(
+        self,
+        workspace_id: str,
+        target_id: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[WorkspaceMessage]: ...
+
+    @abstractmethod
     async def find_thread(
         self,
         parent_message_id: str,

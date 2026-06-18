@@ -25,6 +25,7 @@ def make_message(
     workspace_id: str = "workspace-1",
     parent_message_id: str | None = None,
     created_at: datetime | None = None,
+    mentions: list[str] | None = None,
 ) -> WorkspaceMessage:
     return WorkspaceMessage(
         id=message_id,
@@ -32,6 +33,7 @@ def make_message(
         sender_id="user-1",
         sender_type=MessageSenderType.HUMAN,
         content=f"Message {message_id}",
+        mentions=mentions or [],
         parent_message_id=parent_message_id,
         created_at=created_at or datetime.now(UTC),
     )
@@ -92,3 +94,34 @@ class TestSqlWorkspaceMessageRepository:
         messages = await v2_workspace_message_repo.find_thread("msg-parent")
 
         assert [message.id for message in messages] == ["msg-child-a", "msg-child-b"]
+
+    @pytest.mark.asyncio
+    async def test_find_mentions_filters_exact_target_with_limit(
+        self, v2_workspace_message_repo: SqlWorkspaceMessageRepository
+    ) -> None:
+        created_at = datetime(2026, 1, 1, tzinfo=UTC)
+        await v2_workspace_message_repo.save(
+            make_message("msg-b", created_at=created_at, mentions=["agent-1"])
+        )
+        await v2_workspace_message_repo.save(
+            make_message("msg-a", created_at=created_at, mentions=["agent-1", "user-1"])
+        )
+        await v2_workspace_message_repo.save(
+            make_message("msg-prefix", created_at=created_at, mentions=["agent-10"])
+        )
+        await v2_workspace_message_repo.save(
+            make_message(
+                "msg-other-workspace",
+                workspace_id="workspace-other",
+                created_at=created_at,
+                mentions=["agent-1"],
+            )
+        )
+
+        messages = await v2_workspace_message_repo.find_mentions(
+            "workspace-1",
+            "agent-1",
+            limit=1,
+        )
+
+        assert [message.id for message in messages] == ["msg-a"]

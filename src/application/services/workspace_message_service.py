@@ -134,8 +134,11 @@ class WorkspaceMessageService:
         target_id: str,
         limit: int = 50,
     ) -> list[WorkspaceMessage]:
-        all_messages = await self._message_repo.find_by_workspace(workspace_id, limit=500)
-        return [m for m in all_messages if target_id in m.mentions][:limit]
+        return await self._message_repo.find_mentions(
+            workspace_id=workspace_id,
+            target_id=target_id,
+            limit=limit,
+        )
 
     async def _resolve_structured_mentions(
         self,
