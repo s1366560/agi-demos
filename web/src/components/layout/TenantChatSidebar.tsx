@@ -532,6 +532,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const [isDragging, setIsDragging] = useState(false);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projectSearchResults, setProjectSearchResults] = useState<Project[]>([]);
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
   const [isProjectSearchLoading, setIsProjectSearchLoading] = useState(false);
@@ -611,11 +612,20 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   );
   const projectSwitcherSourceProjects = useMemo(() => {
     const sourceProjects = [...tenantScopedProjects, ...projectSearchResults];
+    if (projectBelongsToTenant(selectedProject, resolvedTenantId)) {
+      sourceProjects.push(selectedProject);
+    }
     if (currentProject && (!resolvedTenantId || currentProject.tenant_id === resolvedTenantId)) {
       sourceProjects.push(currentProject);
     }
     return sourceProjects;
-  }, [currentProject, projectSearchResults, resolvedTenantId, tenantScopedProjects]);
+  }, [
+    currentProject,
+    projectSearchResults,
+    resolvedTenantId,
+    selectedProject,
+    tenantScopedProjects,
+  ]);
   const uniqueProjects = useMemo(() => {
     const seenProjectIds = new Set<string>();
     return projectSwitcherSourceProjects.filter((project) => {
@@ -749,6 +759,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     const tenantChanged = previousTenantIdRef.current !== resolvedTenantId;
     previousTenantIdRef.current = resolvedTenantId;
     setSelectedProjectId(null);
+    setSelectedProject(null);
     clearProjectSearchState();
     loadedProjectIdRef.current = null;
     loadedSidebarWorkspaceSurfaceRef.current = null;
@@ -769,12 +780,16 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     if (selectedProjectId) {
       setSelectedProjectId(null);
     }
+    if (selectedProject) {
+      setSelectedProject(null);
+    }
     resetConversations();
     setActiveConversation(null);
   }, [
     clearProjectSearchState,
     isAgentWorkspaceRoute,
     resetConversations,
+    selectedProject,
     selectedProjectId,
     setActiveConversation,
   ]);
@@ -819,6 +834,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       persistLastProjectId(resolvedTenantId, queryProjectId);
       const project = projectById.get(queryProjectId);
       if (project) {
+        setSelectedProject(project);
         setCurrentProject(project);
       }
     } else if (!selectedProjectId && uniqueProjects.length > 0) {
@@ -826,6 +842,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         (currentProject ? projectById.get(currentProject.id) : undefined) ?? uniqueProjects[0];
       if (!project) return;
       setSelectedProjectId(project.id);
+      setSelectedProject(project);
       setCurrentProject(project);
       persistLastProjectId(resolvedTenantId, project.id);
     }
@@ -1197,6 +1214,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       persistLastProjectId(resolvedTenantId, projectId);
       const project = projectById.get(projectId);
       if (project) {
+        setSelectedProject(project);
         setCurrentProject(project);
       }
       // NOTE: loadConversations is called by useEffect when selectedProjectId changes

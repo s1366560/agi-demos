@@ -454,6 +454,51 @@ describe('TenantChatSidebar', () => {
     });
   });
 
+  it('keeps a searched project selectable after the search query is cleared', async () => {
+    const hiddenProject = {
+      id: 'project-hidden',
+      name: 'Hidden Authorized Project',
+      tenant_id: 'tenant-1',
+    };
+    (projectAPI.list as any).mockResolvedValue({
+      projects: [hiddenProject],
+      total: 1,
+      page: 1,
+      page_size: 100,
+    });
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search projects' }), {
+      target: { value: 'Hidden Authorized' },
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 300));
+    });
+
+    const hiddenOption = await screen.findByRole('option', {
+      name: 'Hidden Authorized Project',
+    });
+    expect(hiddenOption).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Project switcher' }), {
+      target: { value: 'project-hidden' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Search projects' })).toHaveValue('');
+      expect(screen.getByRole('combobox', { name: 'Project switcher' })).toHaveValue(
+        'project-hidden'
+      );
+      expect(screen.getByRole('option', { name: 'Hidden Authorized Project' })).toBeInTheDocument();
+    });
+    expect(projectState.setCurrentProject).toHaveBeenCalledWith(hiddenProject);
+    expect(screen.getAllByText('Hidden Authorized Project').length).toBeGreaterThanOrEqual(2);
+  });
+
   it('preloads the project switcher window on agent workspace pages', async () => {
     projectState.projects = [];
     projectState.currentProject = null;
