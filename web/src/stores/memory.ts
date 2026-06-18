@@ -72,26 +72,46 @@ interface MemoryState {
 
   clearError: () => void;
   setCurrentMemory: (memory: Memory | null) => void;
+  reset: () => void;
+}
+
+const initialState = {
+  memories: [] as Memory[],
+  currentMemory: null as Memory | null,
+  isLoading: false,
+  error: null as string | null,
+  total: 0,
+  page: 1,
+  pageSize: 20,
+  graphData: null as GraphData | null,
+  entities: [] as Entity[],
+  relationships: [] as Relationship[],
+};
+
+let latestListMemoriesRequest = 0;
+let latestGraphDataRequest = 0;
+let latestExtractEntitiesRequest = 0;
+let latestExtractRelationshipsRequest = 0;
+
+function invalidateMemoryReadRequests(): void {
+  latestListMemoriesRequest += 1;
+  latestGraphDataRequest += 1;
+  latestExtractEntitiesRequest += 1;
+  latestExtractRelationshipsRequest += 1;
 }
 
 export const useMemoryStore = create<MemoryState>()(
   devtools(
     (set, get) => ({
-      memories: [],
-      currentMemory: null,
-      isLoading: false,
-      error: null,
-      total: 0,
-      page: 1,
-      pageSize: 20,
-      graphData: null,
-      entities: [],
-      relationships: [],
+      ...initialState,
 
       listMemories: async (projectId: string, params = {}) => {
+        const requestId = latestListMemoriesRequest + 1;
+        latestListMemoriesRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await memoryAPI.list(projectId, params);
+          if (requestId !== latestListMemoriesRequest) return;
           set({
             memories: response.memories,
             total: response.total,
@@ -100,6 +120,7 @@ export const useMemoryStore = create<MemoryState>()(
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (requestId !== latestListMemoriesRequest) return;
           set({
             error: getErrorMessage(error, 'Failed to list memories'),
             isLoading: false,
@@ -195,9 +216,12 @@ export const useMemoryStore = create<MemoryState>()(
       },
 
       getGraphData: async (projectId: string, options = {}) => {
+        const requestId = latestGraphDataRequest + 1;
+        latestGraphDataRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await memoryAPI.getGraphData(projectId, options);
+          if (requestId !== latestGraphDataRequest) return response;
           set({
             graphData: response,
             entities: response.entities,
@@ -206,6 +230,7 @@ export const useMemoryStore = create<MemoryState>()(
           });
           return response;
         } catch (error: unknown) {
+          if (requestId !== latestGraphDataRequest) throw error;
           set({
             error: getErrorMessage(error, 'Failed to get graph data'),
             isLoading: false,
@@ -215,15 +240,19 @@ export const useMemoryStore = create<MemoryState>()(
       },
 
       extractEntities: async (projectId: string, text: string) => {
+        const requestId = latestExtractEntitiesRequest + 1;
+        latestExtractEntitiesRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await memoryAPI.extractEntities(projectId, text);
+          if (requestId !== latestExtractEntitiesRequest) return response;
           set({
             entities: response,
             isLoading: false,
           });
           return response;
         } catch (error: unknown) {
+          if (requestId !== latestExtractEntitiesRequest) throw error;
           set({
             error: getErrorMessage(error, 'Failed to extract entities'),
             isLoading: false,
@@ -233,15 +262,19 @@ export const useMemoryStore = create<MemoryState>()(
       },
 
       extractRelationships: async (projectId: string, text: string) => {
+        const requestId = latestExtractRelationshipsRequest + 1;
+        latestExtractRelationshipsRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await memoryAPI.extractRelationships(projectId, text);
+          if (requestId !== latestExtractRelationshipsRequest) return response;
           set({
             relationships: response,
             isLoading: false,
           });
           return response;
         } catch (error: unknown) {
+          if (requestId !== latestExtractRelationshipsRequest) throw error;
           set({
             error: getErrorMessage(error, 'Failed to extract relationships'),
             isLoading: false,
@@ -255,6 +288,10 @@ export const useMemoryStore = create<MemoryState>()(
       },
       setCurrentMemory: (memory: Memory | null) => {
         set({ currentMemory: memory });
+      },
+      reset: () => {
+        invalidateMemoryReadRequests();
+        set(initialState);
       },
     }),
     {
@@ -299,5 +336,6 @@ export const useMemoryActions = () =>
       extractRelationships: state.extractRelationships,
       clearError: state.clearError,
       setCurrentMemory: state.setCurrentMemory,
+      reset: state.reset,
     }))
   );

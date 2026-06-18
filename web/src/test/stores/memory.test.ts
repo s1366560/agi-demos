@@ -17,21 +17,18 @@ vi.mock('../../services/api', () => ({
   },
 }));
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 describe('MemoryStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useMemoryStore.setState({
-      memories: [],
-      currentMemory: null,
-      isLoading: false,
-      error: null,
-      total: 0,
-      page: 1,
-      pageSize: 20,
-      graphData: null,
-      entities: [],
-      relationships: [],
-    });
+    useMemoryStore.getState().reset();
   });
 
   it('listMemories should update state on success', async () => {
@@ -48,6 +45,36 @@ describe('MemoryStore', () => {
     expect(memoryAPI.list).toHaveBeenCalledWith('project-1', {});
     expect(useMemoryStore.getState().memories).toEqual(mockResponse.memories);
     expect(useMemoryStore.getState().total).toBe(1);
+  });
+
+  it('listMemories should ignore stale responses from older project requests', async () => {
+    const oldProjectResponse = deferred<Awaited<ReturnType<typeof memoryAPI.list>>>();
+    const newProjectResponse = {
+      memories: [{ id: 'new-memory', title: 'New Project Memory' }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    };
+
+    vi.mocked(memoryAPI.list)
+      .mockReturnValueOnce(oldProjectResponse.promise)
+      .mockResolvedValueOnce(newProjectResponse as never);
+
+    const oldLoad = useMemoryStore.getState().listMemories('project-old');
+    const newLoad = useMemoryStore.getState().listMemories('project-new');
+
+    await newLoad;
+    oldProjectResponse.resolve({
+      memories: [{ id: 'old-memory', title: 'Old Project Memory' }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    });
+    await oldLoad;
+
+    expect(useMemoryStore.getState().memories).toEqual(newProjectResponse.memories);
+    expect(useMemoryStore.getState().total).toBe(1);
+    expect(useMemoryStore.getState().isLoading).toBe(false);
   });
 
   it('createMemory should add memory to list', async () => {
@@ -89,5 +116,31 @@ describe('MemoryStore', () => {
 
     expect(memoryAPI.getGraphData).toHaveBeenCalledWith('project-1', {});
     expect(useMemoryStore.getState().graphData).toEqual(mockGraph);
+  });
+
+  it('getGraphData should ignore stale responses from older project requests', async () => {
+    const oldGraphResponse = deferred<Awaited<ReturnType<typeof memoryAPI.getGraphData>>>();
+    const newGraph = {
+      entities: [{ id: 'new-entity', name: 'New', type: 'topic', properties: {}, confidence: 1 }],
+      relationships: [],
+    };
+
+    vi.mocked(memoryAPI.getGraphData)
+      .mockReturnValueOnce(oldGraphResponse.promise)
+      .mockResolvedValueOnce(newGraph);
+
+    const oldLoad = useMemoryStore.getState().getGraphData('project-old');
+    const newLoad = useMemoryStore.getState().getGraphData('project-new');
+
+    await newLoad;
+    oldGraphResponse.resolve({
+      entities: [{ id: 'old-entity', name: 'Old', type: 'topic', properties: {}, confidence: 1 }],
+      relationships: [],
+    });
+    await oldLoad;
+
+    expect(useMemoryStore.getState().graphData).toEqual(newGraph);
+    expect(useMemoryStore.getState().entities).toEqual(newGraph.entities);
+    expect(useMemoryStore.getState().isLoading).toBe(false);
   });
 });
