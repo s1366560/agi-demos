@@ -73,6 +73,16 @@ const initialState = {
   error: null as string | null,
 };
 
+let latestListDeploysRequest = 0;
+let latestGetDeployRequest = 0;
+let latestGetLatestDeployRequest = 0;
+
+function invalidateDeployReadRequests(): void {
+  latestListDeploysRequest += 1;
+  latestGetDeployRequest += 1;
+  latestGetLatestDeployRequest += 1;
+}
+
 // ============================================================================
 // STORE
 // ============================================================================
@@ -83,27 +93,35 @@ export const useDeployStore = create<DeployState>()(
       ...initialState,
 
       listDeploys: async (params = {}) => {
+        const requestId = latestListDeploysRequest + 1;
+        latestListDeploysRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await deployService.list(params);
+          if (requestId !== latestListDeploysRequest) return;
           set({
             deploys: response.deployments,
             total: response.total,
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (requestId !== latestListDeploysRequest) return;
           set({ error: getErrorMessage(error, 'Failed to list deploys'), isLoading: false });
           throw error;
         }
       },
 
       getDeploy: async (id: string) => {
+        const requestId = latestGetDeployRequest + 1;
+        latestGetDeployRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await deployService.getById(id);
+          if (requestId !== latestGetDeployRequest) return response;
           set({ currentDeploy: response, isLoading: false });
           return response;
         } catch (error: unknown) {
+          if (requestId !== latestGetDeployRequest) throw error;
           set({ error: getErrorMessage(error, 'Failed to get deploy'), isLoading: false });
           throw error;
         }
@@ -190,12 +208,16 @@ export const useDeployStore = create<DeployState>()(
       },
 
       getLatestDeploy: async (instanceId: string) => {
+        const requestId = latestGetLatestDeployRequest + 1;
+        latestGetLatestDeployRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await deployService.getLatestForInstance(instanceId);
+          if (requestId !== latestGetLatestDeployRequest) return response;
           set({ isLoading: false });
           return response;
         } catch (error: unknown) {
+          if (requestId !== latestGetLatestDeployRequest) throw error;
           set({
             error: getErrorMessage(error, 'Failed to get latest deploy'),
             isLoading: false,
@@ -213,6 +235,7 @@ export const useDeployStore = create<DeployState>()(
       },
 
       reset: () => {
+        invalidateDeployReadRequests();
         set(initialState);
       },
     }),
