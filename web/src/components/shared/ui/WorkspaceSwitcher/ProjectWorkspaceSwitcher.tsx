@@ -4,7 +4,7 @@
  * Pre-configured WorkspaceSwitcher for project mode.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -21,6 +21,8 @@ import { ProjectList } from './ProjectList';
 import type { Project } from '@/types/memory';
 
 import type { ProjectWorkspaceSwitcherProps } from './types';
+
+const PROJECT_SWITCHER_PAGE_SIZE = 25;
 
 export const ProjectWorkspaceSwitcher: React.FC<ProjectWorkspaceSwitcherProps> = ({
   currentProjectId: propProjectId,
@@ -40,19 +42,26 @@ export const ProjectWorkspaceSwitcher: React.FC<ProjectWorkspaceSwitcherProps> =
   const currentProject = useProjectStore((state) => state.currentProject);
   const listProjects = useProjectStore((state) => state.listProjects);
   const currentTenant = useTenantStore((state) => state.currentTenant);
+  const currentTenantId = currentTenant?.id;
+  const tenantProjects = useMemo(
+    () =>
+      currentTenantId ? projects.filter((project) => project.tenant_id === currentTenantId) : [],
+    [currentTenantId, projects]
+  );
 
   // Load data if missing
   useEffect(() => {
-    if (currentTenant && projects.length === 0) {
-      void listProjects(currentTenant.id);
+    if (currentTenantId && tenantProjects.length === 0) {
+      void listProjects(currentTenantId, { page: 1, page_size: PROJECT_SWITCHER_PAGE_SIZE });
     }
-  }, [currentTenant, projects.length, listProjects]);
+  }, [currentTenantId, listProjects, tenantProjects.length]);
 
   // Get current project object
   const displayProject =
-    currentProject?.id === currentProjectId
+    currentProject?.id === currentProjectId &&
+    (!currentTenantId || currentProject.tenant_id === currentTenantId)
       ? currentProject
-      : projects.find((p) => p.id === currentProjectId);
+      : tenantProjects.find((p) => p.id === currentProjectId);
 
   const handleProjectSelect = (project: Project) => {
     onProjectSelect?.(project);
@@ -100,7 +109,7 @@ export const ProjectWorkspaceSwitcher: React.FC<ProjectWorkspaceSwitcherProps> =
 
       <WorkspaceSwitcherMenu label="Switch Project" className={menuClassName}>
         <ProjectList
-          projects={projects}
+          projects={tenantProjects}
           currentProjectId={currentProjectId}
           onProjectSelect={handleProjectSelect}
           onBackToTenant={handleBackToTenantClick}

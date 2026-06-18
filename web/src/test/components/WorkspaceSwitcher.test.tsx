@@ -48,10 +48,17 @@ describe('WorkspaceSwitcher', () => {
         return state;
       });
 
-      vi.mocked(useProjectStore).mockReturnValue({
-        projects: [],
-        listProjects: vi.fn(),
-      } as any);
+      vi.mocked(useProjectStore).mockImplementation((selector) => {
+        const state = {
+          projects: [],
+          currentProject: null,
+          listProjects: vi.fn(),
+        };
+        if (typeof selector === 'function') {
+          return selector(state);
+        }
+        return state;
+      });
 
       renderWithRouter(<WorkspaceSwitcher mode="tenant" />);
 
@@ -72,10 +79,17 @@ describe('WorkspaceSwitcher', () => {
         return state;
       });
 
-      vi.mocked(useProjectStore).mockReturnValue({
-        projects: [],
-        listProjects: vi.fn(),
-      } as any);
+      vi.mocked(useProjectStore).mockImplementation((selector) => {
+        const state = {
+          projects: [],
+          currentProject: null,
+          listProjects: vi.fn(),
+        };
+        if (typeof selector === 'function') {
+          return selector(state);
+        }
+        return state;
+      });
 
       renderWithRouter(<WorkspaceSwitcher mode="tenant" />);
 
@@ -86,7 +100,7 @@ describe('WorkspaceSwitcher', () => {
 
   describe('Project Mode', () => {
     it('renders current project name', () => {
-      const mockCurrentProject = { id: 'p1', name: 'Test Project' };
+      const mockCurrentProject = { id: 'p1', tenant_id: 't1', name: 'Test Project' };
       vi.mocked(useProjectStore).mockImplementation((selector) => {
         const state = {
           projects: [mockCurrentProject],

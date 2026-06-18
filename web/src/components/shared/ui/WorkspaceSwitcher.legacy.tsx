@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -13,6 +13,8 @@ import { Tenant, Project } from '@/types/memory';
 interface WorkspaceSwitcherProps {
   mode: 'tenant' | 'project';
 }
+
+const PROJECT_SWITCHER_PAGE_SIZE = 25;
 
 export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) => {
   const { t } = useTranslation();
@@ -34,6 +36,12 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
   const projects = useProjectStore((state) => state.projects);
   const listProjects = useProjectStore((state) => state.listProjects);
   const storeProject = useProjectStore((state) => state.currentProject);
+  const currentTenantId = currentTenant?.id;
+  const tenantProjects = useMemo(
+    () =>
+      currentTenantId ? projects.filter((project) => project.tenant_id === currentTenantId) : [],
+    [currentTenantId, projects]
+  );
 
   // Load data if missing
   useEffect(() => {
@@ -41,10 +49,10 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
   }, [tenants.length, listTenants]);
 
   useEffect(() => {
-    if (mode === 'project' && currentTenant && projects.length === 0) {
-      void listProjects(currentTenant.id);
+    if (mode === 'project' && currentTenantId && tenantProjects.length === 0) {
+      void listProjects(currentTenantId, { page: 1, page_size: PROJECT_SWITCHER_PAGE_SIZE });
     }
-  }, [mode, currentTenant, projects.length, listProjects]);
+  }, [mode, currentTenantId, listProjects, tenantProjects.length]);
 
   // Reset focused index when dropdown closes
   const wasOpenRef = useRef(false);
@@ -77,7 +85,7 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
   const menuItemsCount =
     mode === 'tenant'
       ? tenants.length + 1 // tenants + "Create Tenant" button
-      : projects.length + 1; // projects + "Back to Tenant" button
+      : tenantProjects.length + 1; // projects + "Back to Tenant" button
 
   // Handle keyboard navigation on trigger button
   const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -188,11 +196,15 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
   };
 
   // Get current project object if in project mode
+  const storeProjectBelongsToCurrentTenant =
+    storeProject &&
+    storeProject.id === projectId &&
+    (!currentTenantId || storeProject.tenant_id === currentTenantId);
   const displayProject =
     mode === 'project'
-      ? storeProject?.id === projectId
+      ? storeProjectBelongsToCurrentTenant
         ? storeProject
-        : projects.find((p) => p.id === projectId)
+        : tenantProjects.find((p) => p.id === projectId)
       : null;
 
   return (
@@ -329,7 +341,7 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                     defaultValue: 'Switch Project',
                   })}
                 </div>
-                {projects.map((project, index) => (
+                {tenantProjects.map((project, index) => (
                   <button
                     key={project.id}
                     ref={(el) => {
@@ -360,14 +372,14 @@ export const WorkspaceSwitcher: React.FC<WorkspaceSwitcherProps> = ({ mode }) =>
                 <div className="h-px bg-slate-100 dark:bg-slate-700 my-2"></div>
                 <button
                   ref={(el) => {
-                    menuItemRefs.current[projects.length] = el;
+                    menuItemRefs.current[tenantProjects.length] = el;
                   }}
                   onClick={handleBackToTenant}
                   onKeyDown={(e) => {
-                    handleMenuKeyDown(e, projects.length);
+                    handleMenuKeyDown(e, tenantProjects.length);
                   }}
                   role="option"
-                  tabIndex={focusedIndex === projects.length ? 0 : -1}
+                  tabIndex={focusedIndex === tenantProjects.length ? 0 : -1}
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50"
                 >
                   <span className="material-symbols-outlined text-[18px]">arrow_back</span>

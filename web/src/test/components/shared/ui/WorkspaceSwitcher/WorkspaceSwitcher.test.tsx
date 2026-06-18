@@ -148,7 +148,7 @@ const setupProjectMock = (projects: Project[] = [], currentProject: Project | nu
   const state = {
     projects,
     currentProject,
-    listProjects: vi.fn(),
+    listProjects: vi.fn().mockResolvedValue(undefined),
   };
   vi.mocked(useProjectStore).mockImplementation((selector) => {
     if (typeof selector === 'function') {
@@ -156,6 +156,7 @@ const setupProjectMock = (projects: Project[] = [], currentProject: Project | nu
     }
     return state as any;
   });
+  return state;
 };
 
 describe('WorkspaceSwitcher - Compound Component', () => {
@@ -554,6 +555,49 @@ describe('WorkspaceSwitcher - Compound Component', () => {
       expect(screen.getByText('Select Project')).toBeInTheDocument();
     });
 
+    it('loads current tenant projects when only another tenant is cached', async () => {
+      const cachedOtherTenantProject: Project = {
+        ...mockProject,
+        id: 'project-old-tenant',
+        tenant_id: 'tenant-old',
+        name: 'Old Tenant Project',
+      };
+      const projectState = setupProjectMock([cachedOtherTenantProject], cachedOtherTenantProject);
+
+      renderWithRouter(<ProjectWorkspaceSwitcher currentProjectId="project-old-tenant" />, {
+        route: '/project/project-old-tenant',
+      });
+
+      await waitFor(() => {
+        expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1', {
+          page: 1,
+          page_size: 25,
+        });
+      });
+      expect(screen.getByText('Select Project')).toBeInTheDocument();
+    });
+
+    it('does not show projects from a stale tenant cache', async () => {
+      const cachedOtherTenantProject: Project = {
+        ...mockProject,
+        id: 'project-old-tenant',
+        tenant_id: 'tenant-old',
+        name: 'Old Tenant Project',
+      };
+      setupProjectMock([cachedOtherTenantProject], cachedOtherTenantProject);
+
+      renderWithRouter(<ProjectWorkspaceSwitcher currentProjectId="project-old-tenant" />, {
+        route: '/project/project-old-tenant',
+      });
+
+      fireEvent.click(screen.getByText('Select Project'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Back to Tenant')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Old Tenant Project')).not.toBeInTheDocument();
+    });
+
     it('should open dropdown on click', async () => {
       renderWithRouter(<ProjectWorkspaceSwitcher currentProjectId="project-1" />, {
         route: '/project/project-1',
@@ -828,6 +872,40 @@ describe('WorkspaceSwitcher - Compound Component', () => {
       );
 
       expect(screen.getByText('Test Project')).toBeInTheDocument();
+    });
+
+    it('loads and filters current tenant projects for legacy project mode', async () => {
+      const cachedOtherTenantProject: Project = {
+        ...mockProject,
+        id: 'project-old-tenant',
+        tenant_id: 'tenant-old',
+        name: 'Old Tenant Project',
+      };
+      const projectState = setupProjectMock([cachedOtherTenantProject], cachedOtherTenantProject);
+
+      render(
+        <MemoryRouter initialEntries={['/project/project-old-tenant']}>
+          <Routes>
+            <Route path="/project/:projectId" element={<WorkspaceSwitcher mode="project" />} />
+            <Route path="*" element={<WorkspaceSwitcher mode="project" />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1', {
+          page: 1,
+          page_size: 25,
+        });
+      });
+      expect(screen.getByText('Select Project')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('Select Project'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Back to Tenant')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Old Tenant Project')).not.toBeInTheDocument();
     });
   });
 
