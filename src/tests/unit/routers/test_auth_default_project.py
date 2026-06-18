@@ -2,11 +2,15 @@
 Tests for automatic default project creation on first login.
 """
 
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import select
 
+from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
+    get_current_user_tenant,
+)
 from src.infrastructure.adapters.primary.web.routers.auth import _ensure_default_project
 from src.infrastructure.adapters.secondary.persistence.models import (
     Project,
@@ -64,6 +68,55 @@ class TestEnsureDefaultProject:
         assert project.name == "Default project"
         assert project.owner_id == user.id
         assert project.tenant_id == tenant.id
+
+    async def test_creates_default_project_in_oldest_membership_tenant(self, db_session):
+        """Default project creation uses deterministic oldest membership tenant ordering."""
+        user = MagicMock()
+        user.id = "user-multi-tenant"
+        user.full_name = "Multi Tenant User"
+        user.email = "multi@example.com"
+
+        newest_tenant = Tenant(
+            id="tenant-newest",
+            name="Newest Tenant",
+            slug="tenant-newest",
+            owner_id=user.id,
+        )
+        oldest_tenant = Tenant(
+            id="tenant-oldest",
+            name="Oldest Tenant",
+            slug="tenant-oldest",
+            owner_id=user.id,
+        )
+        db_session.add_all([newest_tenant, oldest_tenant])
+        await db_session.flush()
+
+        db_session.add_all(
+            [
+                UserTenant(
+                    id="ut-newest",
+                    user_id=user.id,
+                    tenant_id=newest_tenant.id,
+                    role="owner",
+                    created_at=datetime(2026, 1, 2, tzinfo=UTC),
+                ),
+                UserTenant(
+                    id="ut-oldest",
+                    user_id=user.id,
+                    tenant_id=oldest_tenant.id,
+                    role="member",
+                    created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        await _ensure_default_project(db_session, user)
+        await db_session.commit()
+
+        result = await db_session.execute(select(Project).where(Project.owner_id == user.id))
+        project = result.scalar_one()
+        assert project.tenant_id == oldest_tenant.id
 
     async def test_does_not_create_project_if_user_already_has_projects(self, db_session):
         """Test that no project is created if user already has projects."""
@@ -174,3 +227,49 @@ class TestEnsureDefaultProject:
         result = await db_session.execute(select(Project).where(Project.owner_id == user.id))
         project = result.scalar_one()
         assert user.email in project.description
+
+
+@pytest.mark.unit
+async def test_get_current_user_tenant_uses_oldest_membership_tenant(db_session) -> None:
+    """Fallback tenant dependency returns a stable oldest membership tenant."""
+    user = MagicMock()
+    user.id = "user-default-tenant"
+
+    newest_tenant = Tenant(
+        id="tenant-default-newest",
+        name="Default Newest",
+        slug="tenant-default-newest",
+        owner_id=user.id,
+    )
+    oldest_tenant = Tenant(
+        id="tenant-default-oldest",
+        name="Default Oldest",
+        slug="tenant-default-oldest",
+        owner_id=user.id,
+    )
+    db_session.add_all([newest_tenant, oldest_tenant])
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            UserTenant(
+                id="ut-default-newest",
+                user_id=user.id,
+                tenant_id=newest_tenant.id,
+                role="owner",
+                created_at=datetime(2026, 2, 2, tzinfo=UTC),
+            ),
+            UserTenant(
+                id="ut-default-oldest",
+                user_id=user.id,
+                tenant_id=oldest_tenant.id,
+                role="member",
+                created_at=datetime(2026, 2, 1, tzinfo=UTC),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    tenant_id = await get_current_user_tenant(current_user=user, db=db_session)
+
+    assert tenant_id == oldest_tenant.id

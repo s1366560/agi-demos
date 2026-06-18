@@ -80,7 +80,12 @@ async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
 
     # Get user's first tenant (should exist from initialization)
     result = await db.execute(
-        refresh_select_statement(select(UserTenant).where(UserTenant.user_id == user.id).limit(1))
+        refresh_select_statement(
+            select(UserTenant)
+            .where(UserTenant.user_id == user.id)
+            .order_by(UserTenant.created_at.asc(), UserTenant.id.asc())
+            .limit(1)
+        )
     )
     user_tenant = result.scalar_one_or_none()
 

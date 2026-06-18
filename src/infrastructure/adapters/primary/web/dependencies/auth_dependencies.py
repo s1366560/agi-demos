@@ -456,7 +456,10 @@ async def get_current_user_tenant(
     """
     result = await db.execute(
         refresh_select_statement(
-            select(UserTenant.tenant_id).where(UserTenant.user_id == current_user.id).limit(1)
+            select(UserTenant.tenant_id)
+            .where(UserTenant.user_id == current_user.id)
+            .order_by(UserTenant.created_at.asc(), UserTenant.id.asc())
+            .limit(1)
         )
     )
     tenant_id = result.scalar_one_or_none()
