@@ -1,7 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
+import { clearAuthState, getAuthToken } from '@/utils/tokenResolver';
+
 import { httpClient } from '../../services/client/httpClient';
 import { attachmentService, type AttachmentResponse } from '../../services/attachmentService';
+
+vi.mock('@/utils/tokenResolver', () => ({
+  getAuthToken: vi.fn(),
+  clearAuthState: vi.fn(),
+}));
 
 vi.mock('../../services/client/httpClient', () => ({
   httpClient: {
@@ -16,6 +23,8 @@ describe('attachmentService', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    vi.mocked(getAuthToken).mockReturnValue('token-1');
   });
 
   const completedAttachment: AttachmentResponse = {
@@ -41,6 +50,122 @@ describe('attachmentService', () => {
     expect(formData).toBeInstanceOf(FormData);
     expect(formData.get('attachment_id')).toBe('attachment-1');
     expect(httpClient.post).not.toHaveBeenCalled();
+  });
+
+  it('uses centralized API URL and locale-aware auth headers for part uploads', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ part_number: 1, etag: 'etag-1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await attachmentService.uploadPart(
+      'attachment-1',
+      1,
+      new Blob(['chunk'], { type: 'application/octet-stream' })
+    );
+
+    expect(result).toEqual({ part_number: 1, etag: 'etag-1' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/v1/attachments/upload/part');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual(
+      expect.objectContaining({
+        Authorization: 'Bearer token-1',
+        'Accept-Language': expect.any(String),
+        'X-Language': expect.any(String),
+      })
+    );
+    expect(init.body).toBeInstanceOf(FormData);
+    expect((init.body as FormData).get('attachment_id')).toBe('attachment-1');
+  });
+
+  it('clears auth state when part uploads receive unauthorized responses', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: 'Token expired' }), {
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      attachmentService.uploadPart(
+        'attachment-1',
+        1,
+        new Blob(['chunk'], { type: 'application/octet-stream' })
+      )
+    ).rejects.toThrow('Token expired');
+
+    expect(clearAuthState).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses centralized API URL and clears auth state for simple uploads', async () => {
+    const requests: MockUploadRequest[] = [];
+
+    class MockUploadRequest {
+      readonly upload = { addEventListener: vi.fn() };
+      readonly headers = new Map<string, string>();
+      private readonly listeners = new Map<string, EventListenerOrEventListenerObject>();
+      method = '';
+      url = '';
+      status = 401;
+      statusText = 'Unauthorized';
+      responseText = JSON.stringify({ detail: 'Upload token expired' });
+
+      constructor() {
+        requests.push(this);
+      }
+
+      addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+        this.listeners.set(type, listener);
+      }
+
+      open(method: string, url: string): void {
+        this.method = method;
+        this.url = url;
+      }
+
+      setRequestHeader(key: string, value: string): void {
+        this.headers.set(key, value);
+      }
+
+      send(_body: FormData): void {
+        const loadListener = this.listeners.get('load');
+        const event = new Event('load');
+        if (typeof loadListener === 'function') {
+          loadListener(event);
+        } else {
+          loadListener?.handleEvent(event);
+        }
+      }
+    }
+
+    vi.stubGlobal('XMLHttpRequest', MockUploadRequest);
+
+    await expect(
+      attachmentService.uploadSimple(
+        'conversation-1',
+        'project-1',
+        new File(['hello'], 'hello.txt', { type: 'text/plain' })
+      )
+    ).rejects.toThrow('Upload token expired');
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].method).toBe('POST');
+    expect(requests[0].url).toBe('/api/v1/attachments/upload/simple');
+    expect(Object.fromEntries(requests[0].headers)).toEqual(
+      expect.objectContaining({
+        Authorization: 'Bearer token-1',
+        'Accept-Language': expect.any(String),
+        'X-Language': expect.any(String),
+      })
+    );
+    expect(clearAuthState).toHaveBeenCalledTimes(1);
   });
 
   it('uses the backend-provided multipart part size when slicing files', async () => {
@@ -114,5 +239,11 @@ describe('attachmentService', () => {
 
     expect(abortSpy).toHaveBeenCalledWith('attachment-1');
     expect(uploadPartSpy).not.toHaveBeenCalled();
+  });
+
+  it('builds download URLs through the shared API URL helper', () => {
+    expect(attachmentService.getDownloadUrl('attachment-1')).toBe(
+      '/api/v1/attachments/attachment-1/download'
+    );
   });
 });

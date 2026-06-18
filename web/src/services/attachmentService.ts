@@ -13,20 +13,29 @@
  *   and would buffer multipart bodies in memory at 200MB.
  */
 
+import i18n from '@/i18n/config';
 import { getAuthToken } from '@/utils/tokenResolver';
 
 import { httpClient } from './client/httpClient';
+import { createApiUrl, handleUnauthorized } from './client/urlUtils';
 
-const API_BASE = '/api/v1/attachments';
 // httpClient already prepends ``/api/v1`` via its baseURL.
 const HTTP_PATH = '/attachments';
 
 /**
- * Get authorization headers with bearer token
+ * Get request headers for byte uploads without forcing a multipart content type.
  */
 function getAuthHeaders(): Record<string, string> {
+  const language = (i18n.language || 'en-US').replace('_', '-');
+  const headers: Record<string, string> = {
+    'Accept-Language': language,
+    'X-Language': language,
+  };
   const token = getAuthToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
 }
 
 // Part size for multipart upload (5MB, S3 minimum)
@@ -177,6 +186,9 @@ class AttachmentServiceClass {
             reject(new Error('Invalid response'));
           }
         } else {
+          if (xhr.status === 401) {
+            handleUnauthorized();
+          }
           try {
             const error = JSON.parse(xhr.responseText) as ApiErrorResponse;
             reject(new Error(error.detail || 'Upload failed'));
@@ -190,7 +202,7 @@ class AttachmentServiceClass {
         reject(new Error('Network error'));
       });
 
-      xhr.open('POST', `${API_BASE}/upload/simple`);
+      xhr.open('POST', createApiUrl(`${HTTP_PATH}/upload/simple`));
 
       // Add auth headers
       const headers = getAuthHeaders();
@@ -300,12 +312,15 @@ class AttachmentServiceClass {
     formData.append('part_number', partNumber.toString());
     formData.append('file', data);
 
-    const response = await fetch(`${API_BASE}/upload/part`, {
+    const response = await fetch(createApiUrl(`${HTTP_PATH}/upload/part`), {
       method: 'POST',
       headers: getAuthHeaders(),
       body: formData,
     });
 
+    if (response.status === 401) {
+      handleUnauthorized();
+    }
     if (!response.ok) {
       const detail = await getErrorDetail(response);
       throw new Error(detail || 'Failed to upload part');
@@ -361,7 +376,7 @@ class AttachmentServiceClass {
    * Get download URL for attachment
    */
   getDownloadUrl(attachmentId: string): string {
-    return `${API_BASE}/${attachmentId}/download`;
+    return createApiUrl(`${HTTP_PATH}/${attachmentId}/download`);
   }
 
   /**
