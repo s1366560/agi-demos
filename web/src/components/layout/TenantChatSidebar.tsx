@@ -40,6 +40,8 @@ import {
   useWorkspaces,
 } from '@/stores/workspace';
 
+import { projectAPI } from '@/services/api';
+
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { formatDistanceToNow } from '@/utils/date';
 
@@ -52,6 +54,7 @@ import { LazyButton, LazyDropdown, LazySelect, LazyInput } from '@/components/ui
 import { Resizer } from '../agent/Resizer';
 
 import type { Conversation } from '@/types/agent';
+import type { Project } from '@/types/memory';
 
 import type { MenuProps } from 'antd';
 
@@ -88,6 +91,8 @@ const SIDEBAR_MAX_WIDTH = 400;
 const SIDEBAR_DEFAULT_WIDTH = 256;
 const SIDEBAR_COLLAPSED_WIDTH = 80;
 const COLLAPSE_THRESHOLD = 120; // Width below which sidebar collapses
+const PROJECT_SWITCHER_PAGE_SIZE = 100;
+const PROJECT_SEARCH_DEBOUNCE_MS = 250;
 const LEGACY_LAST_PROJECT_ID_KEY = 'agent:lastProjectId';
 
 function lastProjectIdStorageKey(tenantId: string | undefined): string | null {
@@ -528,8 +533,13 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const [isDragging, setIsDragging] = useState(false);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [projectSearchResults, setProjectSearchResults] = useState<Project[]>([]);
+  const [projectSearchQuery, setProjectSearchQuery] = useState('');
+  const [isProjectSearchLoading, setIsProjectSearchLoading] = useState(false);
   const loadedProjectIdRef = useRef<string | null>(null);
   const loadedSidebarWorkspaceSurfaceRef = useRef<string | null>(null);
+  const projectSearchRequestRef = useRef(0);
+  const projectSearchDebounceRef = useRef<number | null>(null);
 
   // Use controlled or internal state
   const collapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
@@ -582,20 +592,46 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         : projects,
     [projects, resolvedTenantId]
   );
+  const projectSwitcherSourceProjects = useMemo(() => {
+    const sourceProjects = [...tenantScopedProjects, ...projectSearchResults];
+    if (currentProject && (!resolvedTenantId || currentProject.tenant_id === resolvedTenantId)) {
+      sourceProjects.push(currentProject);
+    }
+    return sourceProjects;
+  }, [currentProject, projectSearchResults, resolvedTenantId, tenantScopedProjects]);
   const uniqueProjects = useMemo(() => {
     const seenProjectIds = new Set<string>();
-    return tenantScopedProjects.filter((project) => {
+    return projectSwitcherSourceProjects.filter((project) => {
       if (seenProjectIds.has(project.id)) {
         return false;
       }
       seenProjectIds.add(project.id);
       return true;
     });
-  }, [tenantScopedProjects]);
+  }, [projectSwitcherSourceProjects]);
   const projectById = useMemo(
     () => new Map(uniqueProjects.map((project) => [project.id, project])),
     [uniqueProjects]
   );
+  const selectableProjects = useMemo(() => {
+    if (!projectSearchQuery.trim()) {
+      return uniqueProjects;
+    }
+
+    const sourceProjects = [...projectSearchResults];
+    if (currentProject && (!resolvedTenantId || currentProject.tenant_id === resolvedTenantId)) {
+      sourceProjects.push(currentProject);
+    }
+
+    const seenProjectIds = new Set<string>();
+    return sourceProjects.filter((project) => {
+      if (seenProjectIds.has(project.id)) {
+        return false;
+      }
+      seenProjectIds.add(project.id);
+      return true;
+    });
+  }, [currentProject, projectSearchQuery, projectSearchResults, resolvedTenantId, uniqueProjects]);
   const tenantBasePath = normalizedTenantId ? `/tenant/${normalizedTenantId}` : '/tenant';
   const queryProjectId = useMemo(
     () => new URLSearchParams(location.search).get('projectId'),
@@ -649,9 +685,27 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   useEffect(() => {
     setSelectedProjectId(null);
+    setProjectSearchResults([]);
+    setProjectSearchQuery('');
+    setIsProjectSearchLoading(false);
+    projectSearchRequestRef.current += 1;
+    if (projectSearchDebounceRef.current) {
+      window.clearTimeout(projectSearchDebounceRef.current);
+      projectSearchDebounceRef.current = null;
+    }
     loadedProjectIdRef.current = null;
     loadedSidebarWorkspaceSurfaceRef.current = null;
   }, [resolvedTenantId]);
+
+  useEffect(
+    () => () => {
+      if (projectSearchDebounceRef.current) {
+        window.clearTimeout(projectSearchDebounceRef.current);
+      }
+      projectSearchRequestRef.current += 1;
+    },
+    []
+  );
 
   // Sync ref with state when not dragging
   useEffect(() => {
@@ -662,12 +716,14 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   // Load projects on mount
   useEffect(() => {
-    if (tenantId && projects.length === 0) {
-      void Promise.resolve(listProjects(tenantId)).catch((error: unknown) => {
+    if (tenantId && tenantScopedProjects.length === 0) {
+      void Promise.resolve(
+        listProjects(tenantId, { page: 1, page_size: PROJECT_SWITCHER_PAGE_SIZE })
+      ).catch((error: unknown) => {
         console.error('Failed to load projects:', error);
       });
     }
-  }, [tenantId, projects.length, listProjects]);
+  }, [tenantId, tenantScopedProjects.length, listProjects]);
 
   // Set default selected project
   useEffect(() => {
@@ -997,6 +1053,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const handleProjectChange = useCallback(
     (projectId: string) => {
       setSelectedProjectId(projectId);
+      setProjectSearchQuery('');
+      setProjectSearchResults([]);
       persistLastProjectId(resolvedTenantId, projectId);
       const project = projectById.get(projectId);
       if (project) {
@@ -1006,6 +1064,55 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       // Do NOT call it here to avoid duplicate requests
     },
     [projectById, resolvedTenantId, setCurrentProject]
+  );
+
+  const handleProjectSearch = useCallback(
+    (value: string) => {
+      setProjectSearchQuery(value);
+      if (projectSearchDebounceRef.current) {
+        window.clearTimeout(projectSearchDebounceRef.current);
+        projectSearchDebounceRef.current = null;
+      }
+
+      const search = value.trim();
+      const requestId = projectSearchRequestRef.current + 1;
+      projectSearchRequestRef.current = requestId;
+
+      if (!resolvedTenantId || !search) {
+        setProjectSearchResults([]);
+        setIsProjectSearchLoading(false);
+        return;
+      }
+
+      setIsProjectSearchLoading(true);
+      projectSearchDebounceRef.current = window.setTimeout(() => {
+        void projectAPI
+          .list(resolvedTenantId, {
+            page: 1,
+            page_size: PROJECT_SWITCHER_PAGE_SIZE,
+            search,
+          })
+          .then((response) => {
+            if (projectSearchRequestRef.current !== requestId) {
+              return;
+            }
+            setProjectSearchResults(response.projects);
+          })
+          .catch((error: unknown) => {
+            if (projectSearchRequestRef.current !== requestId) {
+              return;
+            }
+            console.error('Failed to search projects:', error);
+            setProjectSearchResults([]);
+          })
+          .finally(() => {
+            if (projectSearchRequestRef.current === requestId) {
+              setIsProjectSearchLoading(false);
+            }
+          });
+      }, PROJECT_SEARCH_DEBOUNCE_MS);
+    },
+    [resolvedTenantId]
   );
 
   // Get current width for render
@@ -1098,9 +1205,39 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             onChange={handleProjectChange}
             className="w-full"
             placeholder={t('agent.sidebar.selectProject', 'Select a project')}
-            disabled={uniqueProjects.length === 0}
+            disabled={!resolvedTenantId}
+            loading={isProjectSearchLoading}
+            notFoundContent={
+              isProjectSearchLoading
+                ? t('agent.sidebar.searchingProjects', 'Searching projects...')
+                : t('agent.sidebar.noProjectsFound', 'No projects found')
+            }
+            popupRender={(menu: React.ReactNode) => (
+              <div>
+                <div
+                  className="border-b border-slate-100 p-2 dark:border-slate-800/50"
+                  onMouseDown={(event) => {
+                    event.stopPropagation();
+                  }}
+                >
+                  <LazyInput
+                    aria-label={t('agent.sidebar.searchProjects', 'Search projects')}
+                    className="w-full"
+                    placeholder={t(
+                      'agent.sidebar.searchProjectsPlaceholder',
+                      'Search all authorized projects'
+                    )}
+                    value={projectSearchQuery}
+                    onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                      handleProjectSearch(event.target.value);
+                    }}
+                  />
+                </div>
+                {menu}
+              </div>
+            )}
             suffixIcon={<ChevronDown size={16} />}
-            options={uniqueProjects.map((p) => ({
+            options={selectableProjects.map((p) => ({
               value: p.id,
               label: (
                 <div className="flex items-center gap-2">

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
+import { projectAPI } from '@/services/api';
 
 import { act, fireEvent, render, screen, waitFor } from '../../utils';
 
@@ -61,6 +62,12 @@ vi.mock('@/stores/agent/conversationsStore', () => ({
 vi.mock('@/stores/project', () => ({
   useProjectStore: (selector?: (state: typeof projectState) => unknown) =>
     selector ? selector(projectState) : projectState,
+}));
+
+vi.mock('@/services/api', () => ({
+  projectAPI: {
+    list: vi.fn(),
+  },
 }));
 
 vi.mock('@/stores/workspace', () => ({
@@ -139,27 +146,75 @@ vi.mock('@/components/ui/lazyAntd', () => ({
     onChange,
     options = [],
     disabled,
+    loading,
+    notFoundContent,
+    onSearch,
+    searchValue,
+    showSearch,
+    popupRender,
   }: {
     value?: string;
     onChange?: (value: string) => void;
+    onSearch?: (value: string) => void;
     options?: Array<{ value: string; label: ReactNode }>;
     disabled?: boolean;
-  }) => (
-    <select
-      aria-label="Project switcher"
-      value={value ?? ''}
-      disabled={disabled}
-      onChange={(event) => {
-        onChange?.(event.target.value);
-      }}
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.value}
-        </option>
-      ))}
-    </select>
-  ),
+    loading?: boolean;
+    notFoundContent?: ReactNode;
+    searchValue?: string;
+    showSearch?:
+      | boolean
+      | {
+          onSearch?: ((value: string) => void) | undefined;
+          searchValue?: string | undefined;
+        };
+    popupRender?: (menu: ReactNode) => ReactNode;
+  }) => {
+    const searchHandler =
+      onSearch ??
+      (typeof showSearch === 'object' && showSearch !== null ? showSearch.onSearch : undefined);
+    const resolvedSearchValue =
+      searchValue ??
+      (typeof showSearch === 'object' && showSearch !== null ? showSearch.searchValue : undefined);
+    const menu = (
+      <select
+        aria-label="Project switcher"
+        value={value ?? ''}
+        disabled={disabled}
+        onChange={(event) => {
+          onChange?.(event.target.value);
+        }}
+      >
+        {options.length > 0 ? (
+          options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.value}
+            </option>
+          ))
+        ) : (
+          <option value="" disabled>
+            {notFoundContent}
+          </option>
+        )}
+      </select>
+    );
+
+    return (
+      <div>
+        {showSearch ? (
+          <input
+            aria-label="Project switcher search"
+            value={resolvedSearchValue ?? ''}
+            disabled={disabled}
+            onChange={(event) => {
+              searchHandler?.(event.target.value);
+            }}
+          />
+        ) : null}
+        {loading ? <span>Searching projects...</span> : null}
+        {popupRender ? popupRender(menu) : menu}
+      </div>
+    );
+  },
   LazyInput: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 }));
 
@@ -266,6 +321,54 @@ describe('TenantChatSidebar', () => {
 
     expect(options).toHaveLength(1);
     expect(options[0]).toHaveValue('Project Aurora');
+  });
+
+  it('searches authorized projects that are not in the loaded switcher list', async () => {
+    const hiddenProject = {
+      id: 'project-hidden',
+      name: 'Hidden Authorized Project',
+      tenant_id: 'tenant-1',
+    };
+    projectState.projects = [{ id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' }];
+    projectState.currentProject = {
+      id: 'project-1',
+      name: 'Project One',
+      tenant_id: 'tenant-1',
+    };
+    (projectAPI.list as any).mockResolvedValue({
+      projects: [hiddenProject],
+      total: 1,
+      page: 1,
+      page_size: 100,
+    });
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search projects' }), {
+      target: { value: 'Hidden Authorized' },
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 300));
+    });
+
+    await waitFor(() => {
+      expect(projectAPI.list).toHaveBeenCalledWith('tenant-1', {
+        page: 1,
+        page_size: 100,
+        search: 'Hidden Authorized',
+      });
+    });
+    expect(screen.getByRole('option', { name: 'project-hidden' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Project switcher' }), {
+      target: { value: 'project-hidden' },
+    });
+
+    expect(projectState.setCurrentProject).toHaveBeenCalledWith(hiddenProject);
+    expect(localStorage.getItem('agent:tenant-1:lastProjectId')).toBe('project-hidden');
   });
 
   it('keeps the conversation list visible while switching session history', () => {
