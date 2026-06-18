@@ -50,11 +50,7 @@ interface AgentBindingState {
     options?: BindingActionOptions
   ) => Promise<AgentBinding>;
   deleteBinding: (id: string, options?: BindingActionOptions) => Promise<void>;
-  toggleBinding: (
-    id: string,
-    enabled: boolean,
-    options?: BindingActionOptions
-  ) => Promise<void>;
+  toggleBinding: (id: string, enabled: boolean, options?: BindingActionOptions) => Promise<void>;
 
   setFilters: (filters: Partial<BindingFilters>) => void;
   resetFilters: () => void;
@@ -79,6 +75,8 @@ const initialState = {
   filters: initialFilters,
 };
 
+let bindingListRequestSequence = 0;
+
 // ============================================================================
 // STORE CREATION
 // ============================================================================
@@ -89,6 +87,7 @@ export const useAgentBindingStore = create<AgentBindingState>()(
       ...initialState,
 
       listBindings: async (params = {}) => {
+        const requestId = ++bindingListRequestSequence;
         set({ isLoading: true, error: null });
         try {
           const { filters } = get();
@@ -99,8 +98,14 @@ export const useAgentBindingStore = create<AgentBindingState>()(
             enabled_only: params.enabled_only ?? (filters.enabledOnly || undefined),
           };
           const bindings = await bindingsService.list(queryParams);
+          if (bindingListRequestSequence !== requestId) {
+            return;
+          }
           set({ bindings, isLoading: false });
         } catch (error: unknown) {
+          if (bindingListRequestSequence !== requestId) {
+            return;
+          }
           const msg = getErrorMessage(error, 'Failed to list bindings');
           set({ error: msg, isLoading: false });
           throw error;
@@ -173,6 +178,7 @@ export const useAgentBindingStore = create<AgentBindingState>()(
       },
 
       reset: () => {
+        bindingListRequestSequence += 1;
         set(initialState);
       },
     }),
