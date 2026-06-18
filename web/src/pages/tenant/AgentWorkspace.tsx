@@ -116,27 +116,48 @@ export const AgentWorkspace: FC = () => {
     null
   );
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [resolvedStoredProject, setResolvedStoredProject] = useState<Project | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [projectLoadError, setProjectLoadError] = useState<string | null>(null);
   const queryProjectId = searchParams.get('projectId');
   const queryWorkspaceId = searchParams.get('workspaceId');
   const tenantCurrentProjectId = tenantCurrentProject?.id ?? null;
+  const tenantProjectsWithResolvedStoredProject = useMemo(() => {
+    if (!tenantId || resolvedStoredProject?.tenant_id !== tenantId) {
+      return tenantProjects;
+    }
+    if (tenantProjects.some((project) => project.id === resolvedStoredProject.id)) {
+      return tenantProjects;
+    }
+    return [...tenantProjects, resolvedStoredProject];
+  }, [resolvedStoredProject, tenantId, tenantProjects]);
   const queryProjectInTenant = queryProjectId
-    ? tenantProjects.some((project) => project.id === queryProjectId)
+    ? tenantProjectsWithResolvedStoredProject.some((project) => project.id === queryProjectId)
     : false;
-  const storedProjectIdInTenant =
-    lastProjectSelectionSource === MANUAL_PROJECT_SELECTION_SOURCE &&
-    lastProjectId &&
-    tenantProjects.some((project) => project.id === lastProjectId)
+  const storedManualProjectId =
+    lastProjectSelectionSource === MANUAL_PROJECT_SELECTION_SOURCE && lastProjectId
       ? lastProjectId
       : null;
-  const defaultTenantProjectId = getDefaultProject(tenantProjects)?.id ?? null;
-  const firstTenantProjectId = defaultTenantProjectId ?? tenantProjects[0]?.id ?? null;
-  const tenantProjectCount = tenantProjects.length;
+  const storedProjectIdInTenant =
+    storedManualProjectId &&
+    tenantProjectsWithResolvedStoredProject.some((project) => project.id === storedManualProjectId)
+      ? storedManualProjectId
+      : null;
+  const storedProjectIdNeedsFetch =
+    storedManualProjectId && !storedProjectIdInTenant ? storedManualProjectId : null;
+  const shouldResolveStoredProject =
+    !queryProjectId &&
+    !!storedProjectIdNeedsFetch &&
+    resolvedStoredProject?.id !== storedProjectIdNeedsFetch;
+  const defaultTenantProjectId =
+    getDefaultProject(tenantProjectsWithResolvedStoredProject)?.id ?? null;
+  const firstTenantProjectId =
+    defaultTenantProjectId ?? tenantProjectsWithResolvedStoredProject[0]?.id ?? null;
+  const tenantProjectCount = tenantProjectsWithResolvedStoredProject.length;
   const activeSelectedProjectId =
     selectedProjectId &&
     (selectedProjectId === queryProjectId ||
-      tenantProjects.some((project) => project.id === selectedProjectId))
+      tenantProjectsWithResolvedStoredProject.some((project) => project.id === selectedProjectId))
       ? selectedProjectId
       : null;
   const effectiveWorkspaceId = queryWorkspaceId || (routeConversationId ? null : lastWorkspaceId);
@@ -156,6 +177,10 @@ export const AgentWorkspace: FC = () => {
   // Subscribe to workspace SSE events for real-time group chat updates
   useBlackboardSSE(effectiveWorkspaceId);
   useConversationListAutoRefresh(activeSelectedProjectId);
+
+  useEffect(() => {
+    setResolvedStoredProject((project) => (project?.tenant_id === tenantId ? project : null));
+  }, [tenantId]);
 
   // Calculate base path for conversation navigation - memoized
   const basePath = useMemo(
@@ -230,6 +255,29 @@ export const AgentWorkspace: FC = () => {
         if (selectedProjectId !== storedProjectIdInTenant) {
           setSelectedProjectId(storedProjectIdInTenant);
         }
+      } else if (storedProjectIdNeedsFetch && tenantId) {
+        try {
+          const project = await getProject(tenantId, storedProjectIdNeedsFetch);
+          if (isCancelled()) return;
+          if (project.tenant_id !== tenantId) {
+            throw new Error('Stored project belongs to another tenant');
+          }
+          setResolvedStoredProject(project);
+          if (selectedProjectId !== project.id) {
+            setSelectedProjectId(project.id);
+          }
+          if (tenantCurrentProjectId !== project.id) {
+            setCurrentProject(project);
+          }
+        } catch (error) {
+          if (isCancelled()) return;
+          console.warn('AgentWorkspace: failed to restore stored project', error);
+          if (selectedProjectId === storedProjectIdNeedsFetch) {
+            setSelectedProjectId(null);
+          }
+          setLastProjectId(null);
+          setLastProjectSelectionSource(null);
+        }
       } else if (tenantCurrentProjectId) {
         if (isCancelled()) return;
         if (selectedProjectId !== tenantCurrentProjectId) {
@@ -256,7 +304,10 @@ export const AgentWorkspace: FC = () => {
     queryProjectInTenant,
     queryProjectId,
     setCurrentProject,
+    setLastProjectId,
+    setLastProjectSelectionSource,
     selectedProjectId,
+    storedProjectIdNeedsFetch,
     storedProjectIdInTenant,
     initializing,
     tenantId,
@@ -276,7 +327,9 @@ export const AgentWorkspace: FC = () => {
       setLastProjectSelectionSource(MANUAL_PROJECT_SELECTION_SOURCE);
     }
     // Update global current project for consistency
-    const project = tenantProjects.find((p: Project) => p.id === activeSelectedProjectId);
+    const project = tenantProjectsWithResolvedStoredProject.find(
+      (p: Project) => p.id === activeSelectedProjectId
+    );
     if (project && tenantCurrentProjectId !== project.id) {
       setCurrentProject(project);
     }
@@ -285,7 +338,7 @@ export const AgentWorkspace: FC = () => {
     lastProjectId,
     queryProjectId,
     tenantCurrentProjectId,
-    tenantProjects,
+    tenantProjectsWithResolvedStoredProject,
     setCurrentProject,
     setLastProjectId,
     setLastProjectSelectionSource,
@@ -295,10 +348,12 @@ export const AgentWorkspace: FC = () => {
     queryProjectId ||
     activeSelectedProjectId ||
     tenantCurrentProject?.id ||
-    (tenantProjects.length > 0 ? (tenantProjects[0]?.id ?? null) : null);
+    (tenantProjectsWithResolvedStoredProject.length > 0
+      ? (tenantProjectsWithResolvedStoredProject[0]?.id ?? null)
+      : null);
 
   // Show loading while initializing projects
-  if (initializing) {
+  if (initializing || shouldResolveStoredProject) {
     return (
       <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
         <div className="text-center">
@@ -311,7 +366,11 @@ export const AgentWorkspace: FC = () => {
     );
   }
 
-  if (projectLoadError && tenantProjects.length === 0 && !effectiveProjectId) {
+  if (
+    projectLoadError &&
+    tenantProjectsWithResolvedStoredProject.length === 0 &&
+    !effectiveProjectId
+  ) {
     return (
       <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
         <div
@@ -338,7 +397,7 @@ export const AgentWorkspace: FC = () => {
     );
   }
 
-  if (tenantProjects.length === 0 && !effectiveProjectId) {
+  if (tenantProjectsWithResolvedStoredProject.length === 0 && !effectiveProjectId) {
     return (
       <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
         <div className="bg-white dark:bg-surface-dark rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-12 max-w-lg">

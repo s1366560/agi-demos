@@ -99,6 +99,36 @@ describe('conversation lifecycle refresh', () => {
     });
   });
 
+  it('does not rewrite agent state when the cached conversation snapshot already matches', async () => {
+    const cachedConversation = conversation('cached-conversation', 'project-1');
+    useConversationsStore.setState({
+      conversations: [cachedConversation],
+      conversationListProjectId: 'project-1',
+      hasMoreConversations: false,
+      conversationsTotal: 1,
+    });
+    const state = {
+      activeConversationId: null,
+      conversations: [cachedConversation],
+      conversationStates: new Map<string, ConversationState>(),
+      hasMoreConversations: false,
+      conversationsTotal: 1,
+    };
+    const set = vi.fn();
+    const actions = createConversationLifecycleActions({
+      get: () => state,
+      set,
+      resetCanvasForConversationScope: vi.fn(),
+    });
+
+    await act(async () => {
+      await actions.loadConversations('project-1');
+    });
+
+    expect(mockListConversations).not.toHaveBeenCalled();
+    expect(set).not.toHaveBeenCalled();
+  });
+
   it('reloads when only legacy agent state still has same-project conversations', async () => {
     let state = {
       activeConversationId: null,

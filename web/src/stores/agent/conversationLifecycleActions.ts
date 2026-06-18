@@ -62,6 +62,27 @@ function conversationLoadKey(projectId: string, options: LoadConversationsOption
   ].join(':');
 }
 
+function sameConversationSnapshot(
+  left: AgentV3State['conversations'],
+  right: AgentV3State['conversations']
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((conversation, index) => {
+    const other = right[index];
+    return (
+      other?.id === conversation.id &&
+      other.project_id === conversation.project_id &&
+      other.updated_at === conversation.updated_at &&
+      other.status === conversation.status
+    );
+  });
+}
+
 export function createConversationLifecycleActions(deps: ConversationLifecycleDeps) {
   const { get, set, resetCanvasForConversationScope } = deps;
 
@@ -86,12 +107,24 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
       const currentConvos = get().conversations;
       const conversationListState = useConversationsStore.getState();
       if (!options.force && conversationListState.conversationListProjectId === projectId) {
+        const currentState = get() as ReturnType<ConversationLifecycleDeps['get']> & {
+          conversationsTotal?: number | undefined;
+        };
+        if (
+          sameConversationSnapshot(
+            currentState.conversations,
+            conversationListState.conversations
+          ) &&
+          currentState.hasMoreConversations === conversationListState.hasMoreConversations &&
+          currentState.conversationsTotal === conversationListState.conversationsTotal
+        ) {
+          return;
+        }
         set({
           conversations: conversationListState.conversations,
           hasMoreConversations: conversationListState.hasMoreConversations,
           conversationsTotal: conversationListState.conversationsTotal,
         });
-        logger.debug(`[agentV3] Conversations already loaded for project ${projectId}, skipping`);
         return;
       }
 

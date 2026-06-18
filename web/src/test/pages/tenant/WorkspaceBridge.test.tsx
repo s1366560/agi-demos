@@ -52,7 +52,14 @@ vi.mock('../../../hooks/useLocalStorage', () => ({
     value: (localStorageMock.values.has(key)
       ? localStorageMock.values.get(key)
       : initialValue) as T,
-    setValue: localStorageMock.setValue,
+    setValue: (value: T) => {
+      if (value === null) {
+        localStorageMock.values.delete(key);
+      } else {
+        localStorageMock.values.set(key, value as string);
+      }
+      localStorageMock.setValue(value);
+    },
   }),
 }));
 
@@ -334,6 +341,41 @@ describe('workspace/agent workspace bridge', () => {
       expect.objectContaining({
         externalProjectId: 'project-2',
       })
+    );
+  });
+
+  it('restores a manually selected project outside the default project window', async () => {
+    const hiddenProject = {
+      id: 'project-hidden',
+      tenant_id: 'tenant-1',
+      name: 'Hidden Project',
+    };
+    projectState.projects = [{ id: 'project-1', tenant_id: 'tenant-1', name: 'Project 1' }];
+    projectState.currentProject = null;
+    projectState.getProject = vi.fn().mockResolvedValue(hiddenProject);
+    localStorageMock.values.set('agent:tenant-1:lastProjectId', 'project-hidden');
+    localStorageMock.values.set('agent:tenant-1:lastProjectSelectionSource', 'manual');
+
+    render(<AgentWorkspace />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    expect(screen.getByText('agent.workspace.loading')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(projectState.getProject).toHaveBeenCalledWith('tenant-1', 'project-hidden');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-chat-content')).toBeInTheDocument();
+      expect(agentChatContentProps).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          externalProjectId: 'project-hidden',
+        })
+      );
+    });
+    expect(projectState.setCurrentProject).toHaveBeenCalledWith(hiddenProject);
+    expect(autoRefreshMock.useConversationListAutoRefresh).toHaveBeenLastCalledWith(
+      'project-hidden'
     );
   });
 
