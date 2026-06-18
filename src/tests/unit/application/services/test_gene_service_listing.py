@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.configuration.di_container import DIContainer
-from src.domain.model.gene.enums import EvolutionEventType, InstanceGeneStatus
+from src.domain.model.gene.enums import ContentVisibility, EvolutionEventType, InstanceGeneStatus
 from src.infrastructure.adapters.secondary.persistence.models import (
     InstanceModel,
     Project,
@@ -125,6 +125,49 @@ async def test_list_genes_with_total_filters_by_search_and_visibility(
 
     assert total == 1
     assert [gene.name for gene in genes] == ["Needle Public Gene"]
+
+
+@pytest.mark.unit
+async def test_list_genes_with_total_rejects_invalid_visibility_filter(
+    test_db: AsyncSession,
+    test_project_db: Project,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+
+    with pytest.raises(ValueError, match="Invalid visibility filter"):
+        await service.list_genes_with_total(
+            tenant_id=test_project_db.tenant_id,
+            visibility="not-a-visibility",
+            limit=10,
+            offset=0,
+        )
+
+
+@pytest.mark.unit
+async def test_list_genes_with_total_accepts_visibility_enum_filter(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+
+    gene = await service.create_gene(
+        name="Enum Visibility Gene",
+        slug=_slug("enum-visibility-gene"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        visibility=ContentVisibility.unlisted.value,
+    )
+
+    genes, total = await service.list_genes_with_total(
+        tenant_id=test_project_db.tenant_id,
+        visibility=ContentVisibility.unlisted,
+        limit=10,
+        offset=0,
+    )
+
+    assert total == 1
+    assert [item.id for item in genes] == [gene.id]
 
 
 @pytest.mark.unit
@@ -358,6 +401,22 @@ async def test_list_genomes_with_total_filters_by_search_and_visibility(
 
     assert total == 1
     assert [genome.id for genome in genomes] == [public_match.id]
+
+
+@pytest.mark.unit
+async def test_list_genomes_with_total_rejects_invalid_visibility_filter(
+    test_db: AsyncSession,
+    test_project_db: Project,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+
+    with pytest.raises(ValueError, match="Invalid visibility filter"):
+        await service.list_genomes_with_total(
+            tenant_id=test_project_db.tenant_id,
+            visibility="not-a-visibility",
+            limit=10,
+            offset=0,
+        )
 
 
 @pytest.mark.unit

@@ -155,7 +155,7 @@ class GeneService:
         category: str | None = None,
         search: str | None = None,
         slugs: list[str] | None = None,
-        visibility: str | None = None,
+        visibility: str | ContentVisibility | None = None,
         is_published: bool | None = None,
         exclude_installed_instance_id: str | None = None,
         limit: int = 50,
@@ -183,7 +183,7 @@ class GeneService:
         category: str | None = None,
         search: str | None = None,
         slugs: list[str] | None = None,
-        visibility: str | None = None,
+        visibility: str | ContentVisibility | None = None,
         is_published: bool | None = None,
         exclude_installed_instance_id: str | None = None,
         limit: int = 50,
@@ -207,6 +207,7 @@ class GeneService:
         Returns:
             Page of genes and total matching count.
         """
+        visibility_filter = self._normalize_visibility_filter(visibility)
         effective_is_published = (
             True if tenant_id is None and is_published is None else is_published
         )
@@ -216,7 +217,7 @@ class GeneService:
             category=category,
             search=search,
             slugs=slugs,
-            visibility=visibility,
+            visibility=visibility_filter,
             is_published=effective_is_published,
             exclude_installed_instance_id=exclude_installed_instance_id,
             limit=limit,
@@ -228,7 +229,7 @@ class GeneService:
             category=category,
             search=search,
             slugs=slugs,
-            visibility=visibility,
+            visibility=visibility_filter,
             is_published=effective_is_published,
             exclude_installed_instance_id=exclude_installed_instance_id,
         )
@@ -482,7 +483,7 @@ class GeneService:
         tenant_id: str | None = None,
         include_global: bool = False,
         search: str | None = None,
-        visibility: str | None = None,
+        visibility: str | ContentVisibility | None = None,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -504,7 +505,7 @@ class GeneService:
         tenant_id: str | None = None,
         include_global: bool = False,
         search: str | None = None,
-        visibility: str | None = None,
+        visibility: str | ContentVisibility | None = None,
         is_published: bool | None = None,
         limit: int = 50,
         offset: int = 0,
@@ -527,11 +528,12 @@ class GeneService:
         if not tenant_id:
             raise ValueError("tenant_id is required to list genomes")
 
+        visibility_filter = self._normalize_visibility_filter(visibility)
         genomes = await self._genome_repo.find_by_filters(
             tenant_id=tenant_id,
             include_global=include_global,
             search=search,
-            visibility=visibility,
+            visibility=visibility_filter,
             is_published=is_published,
             limit=limit,
             offset=offset,
@@ -540,10 +542,21 @@ class GeneService:
             tenant_id=tenant_id,
             include_global=include_global,
             search=search,
-            visibility=visibility,
+            visibility=visibility_filter,
             is_published=is_published,
         )
         return genomes, total
+
+    @staticmethod
+    def _normalize_visibility_filter(
+        visibility: str | ContentVisibility | None,
+    ) -> str | None:
+        if visibility is None:
+            return None
+        try:
+            return ContentVisibility(visibility).value
+        except ValueError as exc:
+            raise ValueError("Invalid visibility filter") from exc
 
     async def update_genome(
         self,

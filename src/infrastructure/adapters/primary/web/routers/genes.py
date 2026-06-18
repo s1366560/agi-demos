@@ -588,18 +588,21 @@ async def list_genes(
             tenant_id=tenant_id,
         )
     offset = (page - 1) * page_size
-    genes, total = await service.list_genes_with_total(
-        tenant_id=tenant_id,
-        include_global=True,
-        category=category,
-        search=search,
-        slugs=_split_slug_query(slugs),
-        visibility=visibility,
-        is_published=is_published,
-        exclude_installed_instance_id=exclude_installed_instance_id,
-        limit=page_size,
-        offset=offset,
-    )
+    try:
+        genes, total = await service.list_genes_with_total(
+            tenant_id=tenant_id,
+            include_global=True,
+            category=category,
+            search=search,
+            slugs=_split_slug_query(slugs),
+            visibility=visibility,
+            is_published=is_published,
+            exclude_installed_instance_id=exclude_installed_instance_id,
+            limit=page_size,
+            offset=offset,
+        )
+    except ValueError as e:
+        raise _invalid_gene_request_error() from e
     items = [GeneResponse.model_validate(g, from_attributes=True) for g in genes]
     return GeneListResponse(
         genes=items,
@@ -745,15 +748,18 @@ async def list_genomes(
     container = get_container_with_db(request, db)
     service = container.gene_service()
     offset = (page - 1) * page_size
-    genomes, total = await service.list_genomes_with_total(
-        tenant_id=tenant_id,
-        include_global=True,
-        search=search,
-        visibility=visibility,
-        is_published=is_published,
-        limit=page_size,
-        offset=offset,
-    )
+    try:
+        genomes, total = await service.list_genomes_with_total(
+            tenant_id=tenant_id,
+            include_global=True,
+            search=search,
+            visibility=visibility,
+            is_published=is_published,
+            limit=page_size,
+            offset=offset,
+        )
+    except ValueError as e:
+        raise _invalid_gene_request_error() from e
     items = [GenomeResponse.model_validate(g, from_attributes=True) for g in genomes]
     return GenomeListResponse(
         genomes=items,

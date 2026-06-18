@@ -238,6 +238,19 @@ class _GeneListContainer(_Container):
         return _GeneListService()
 
 
+class _InvalidVisibilityListService(_FailingGeneService):
+    async def list_genes_with_total(self, **_kwargs: object) -> tuple[list[SimpleNamespace], int]:
+        raise ValueError("invalid visibility secret")
+
+    async def list_genomes_with_total(self, **_kwargs: object) -> tuple[list[SimpleNamespace], int]:
+        raise ValueError("invalid visibility secret")
+
+
+class _InvalidVisibilityListContainer(_Container):
+    def gene_service(self) -> _InvalidVisibilityListService:
+        return _InvalidVisibilityListService()
+
+
 class _GenomeListService(_FailingGeneService):
     async def list_genomes_with_total(self, **kwargs: object) -> tuple[list[SimpleNamespace], int]:
         assert kwargs["tenant_id"] == "tenant-1"
@@ -707,6 +720,35 @@ async def test_list_genes_splits_comma_separated_slug_filter(
 
 
 @pytest.mark.unit
+async def test_list_genes_sanitizes_invalid_visibility_filter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _InvalidVisibilityListContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.list_genes(
+            request=SimpleNamespace(),
+            page=1,
+            page_size=20,
+            category=None,
+            search=None,
+            slugs=None,
+            visibility="not-a-visibility",
+            is_published=None,
+            exclude_installed_instance_id=None,
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid gene request"
+
+
+@pytest.mark.unit
 async def test_list_genomes_passes_global_inclusion_to_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -729,6 +771,32 @@ async def test_list_genomes_passes_global_inclusion_to_service(
 
     assert response.total == 1
     assert response.genomes[0].id == "global-genome"
+
+
+@pytest.mark.unit
+async def test_list_genomes_sanitizes_invalid_visibility_filter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _InvalidVisibilityListContainer(),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await genes.list_genomes(
+            request=SimpleNamespace(),
+            page=1,
+            page_size=20,
+            search=None,
+            visibility="not-a-visibility",
+            is_published=None,
+            tenant_id="tenant-1",
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid gene request"
 
 
 @pytest.mark.unit
