@@ -401,8 +401,10 @@ function HeaderUserMenu({
   const { logout, setUser } = useAuthActions();
   const theme = useThemeStore((s) => s.theme);
   const setTheme = useThemeStore((s) => s.setTheme);
+  const clearProjects = useProjectStore((state) => state.clearProjects);
   const tenants = useTenantStore((state) => state.tenants);
   const listTenants = useTenantStore((state) => state.listTenants);
+  const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const normalizedTheme = theme as 'light' | 'dark' | 'system';
@@ -447,6 +449,8 @@ function HeaderUserMenu({
     if (tenant.id === normalizedTenantId) {
       return;
     }
+    setCurrentTenant(tenant);
+    clearProjects();
     void navigate(`/tenant/${tenant.id}/overview`);
   };
 

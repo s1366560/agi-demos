@@ -9,6 +9,7 @@ const setTheme = vi.fn();
 const logout = vi.fn();
 const listTenants = vi.fn().mockResolvedValue(undefined);
 const setCurrentTenant = vi.fn();
+const clearProjects = vi.fn();
 const mockNavigate = vi.fn();
 const fetchNotifications = vi.fn().mockResolvedValue(undefined);
 const markAsRead = vi.fn().mockResolvedValue(undefined);
@@ -27,8 +28,10 @@ const tenantState = {
 
 const projectState: {
   currentProject: { id: string; name: string; tenant_id: string } | null;
+  clearProjects: typeof clearProjects;
 } = {
   currentProject: { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' },
+  clearProjects,
 };
 
 vi.mock('react-i18next', () => ({
@@ -71,7 +74,10 @@ vi.mock('@/stores/theme', () => ({
 
 vi.mock('@/stores/project', () => ({
   useProjectStore: (
-    selector: (state: { currentProject: typeof projectState.currentProject | null }) => unknown
+    selector: (state: {
+      currentProject: typeof projectState.currentProject | null;
+      clearProjects: typeof clearProjects;
+    }) => unknown
   ) => selector(projectState),
 }));
 
@@ -116,6 +122,7 @@ describe('TenantHeader', () => {
       { id: 'tenant-2', name: 'Tenant Two' },
     ];
     projectState.currentProject = { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' };
+    projectState.clearProjects = clearProjects;
   });
 
   it('renders tenant-level navigation from derived tenant config', () => {
@@ -328,7 +335,8 @@ describe('TenantHeader', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tenant Two' }));
 
-    expect(setCurrentTenant).not.toHaveBeenCalled();
+    expect(setCurrentTenant).toHaveBeenCalledWith({ id: 'tenant-2', name: 'Tenant Two' });
+    expect(clearProjects).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-2/overview');
   });
 
@@ -346,6 +354,7 @@ describe('TenantHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tenant One' }));
 
     expect(setCurrentTenant).not.toHaveBeenCalled();
+    expect(clearProjects).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(screen.queryByText('Tenant')).not.toBeInTheDocument();
   });
