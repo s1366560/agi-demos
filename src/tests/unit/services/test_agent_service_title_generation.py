@@ -6,6 +6,7 @@ These tests follow TDD principles:
 3. Code is refactored for quality (REFACTOR)
 """
 
+import logging
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock
 
@@ -249,6 +250,49 @@ class TestConversationTitleGeneration:
         assert "Python" in title or "write" in title or len(title) > 10
 
     @pytest.mark.asyncio
+    async def test_title_generation_logs_do_not_include_message_or_title_content(
+        self, agent_service, caplog
+    ):
+        """Title generation logs must not expose user message or generated title text."""
+        secret_message = "please summarize customer secret token alpha-12345"
+        generated_title = "customer secret token"
+        agent_service._llm.set_response(generated_title)
+        caplog.set_level(
+            logging.INFO,
+            logger="src.application.services.agent.conversation_manager",
+        )
+
+        title = await agent_service.generate_conversation_title(
+            first_message=secret_message,
+            llm=agent_service._llm,
+        )
+
+        assert title == generated_title
+        assert secret_message not in caplog.text
+        assert generated_title not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_fallback_title_logs_do_not_include_message_or_exception_content(
+        self, agent_service, caplog
+    ):
+        """Fallback title logs must not expose message text or provider exception messages."""
+        secret_message = "incident contains private database password beta-98765"
+        failing_llm = MockLLMClient(should_fail=True)
+        caplog.set_level(
+            logging.INFO,
+            logger="src.application.services.agent.conversation_manager",
+        )
+
+        title = await agent_service.generate_conversation_title(
+            first_message=secret_message,
+            llm=failing_llm,
+        )
+
+        assert "private" in title
+        assert secret_message not in caplog.text
+        assert "LLM service unavailable" not in caplog.text
+
+    @pytest.mark.asyncio
     async def test_update_title_updates_conversation(
         self,
         agent_service,
@@ -268,6 +312,33 @@ class TestConversationTitleGeneration:
         assert result is not None
         assert result.title == "Updated Title"
         mock_conversation_repo.save_and_commit.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_update_title_logs_do_not_include_title_content(
+        self,
+        agent_service,
+        mock_conversation_repo,
+        sample_conversation,
+        caplog,
+    ):
+        """Manual title update logs must not expose title text."""
+        secret_title = "Customer secret escalation alpha-456"
+        mock_conversation_repo.find_by_id.return_value = sample_conversation
+        caplog.set_level(
+            logging.INFO,
+            logger="src.application.services.agent.conversation_manager",
+        )
+
+        result = await agent_service.update_conversation_title(
+            conversation_id="conv-1",
+            project_id="proj-1",
+            user_id="user-1",
+            title=secret_title,
+        )
+
+        assert result is not None
+        assert result.title == secret_title
+        assert secret_title not in caplog.text
 
     @pytest.mark.asyncio
     async def test_update_title_unauthorized_returns_none(

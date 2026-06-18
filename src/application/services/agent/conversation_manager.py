@@ -146,14 +146,22 @@ class ConversationManager:
         self, conversation_id: str, project_id: str, user_id: str, title: str
     ) -> Conversation | None:
         """Update conversation title."""
-        logger.info(f"[update_conversation_title] START: id={conversation_id}, title='{title}'")
+        logger.info(
+            "[update_conversation_title] START: id=%s, title_len=%d",
+            conversation_id,
+            len(title),
+        )
         conversation = await self._conversation_repo.find_by_id(conversation_id)
         if not conversation:
             logger.warning(f"Attempted to update non-existent conversation {conversation_id}")
             return None
 
         logger.info(
-            f"[update_conversation_title] Found conversation: project_id={conversation.project_id}, user_id={conversation.user_id}, current_title='{conversation.title}'"
+            "[update_conversation_title] Found conversation: project_id=%s, user_id=%s, "
+            "current_title_len=%d",
+            conversation.project_id,
+            conversation.user_id,
+            len(conversation.title),
         )
         logger.info(
             f"[update_conversation_title] Authorization check: expected project_id={project_id}, user_id={user_id}"
@@ -166,12 +174,16 @@ class ConversationManager:
             )
             return None
 
-        logger.info(f"[update_conversation_title] Calling conversation.update_title('{title}')")
+        logger.info("[update_conversation_title] Calling conversation.update_title")
         conversation.update_title(title)
         logger.info("[update_conversation_title] Title updated in domain model, now saving...")
         await self._conversation_repo.save_and_commit(conversation)  # type: ignore[attr-defined]
 
-        logger.info(f"Updated title for conversation {conversation_id} to: {title}")
+        logger.info(
+            "Updated title for conversation %s title_len=%d",
+            conversation_id,
+            len(title),
+        )
         return conversation
 
     async def generate_conversation_title(
@@ -219,12 +231,15 @@ Title:"""
                 if not title:
                     title = self._generate_fallback_title(first_message)
 
-                logger.info(f"Generated conversation title: {title}")
+                logger.info("Generated conversation title title_len=%d", len(title))
                 return title
 
             except Exception as e:
                 logger.warning(
-                    f"[generate_conversation_title] Attempt {attempt + 1}/{max_retries} failed: {e}"
+                    "[generate_conversation_title] Attempt %d/%d failed: error_type=%s",
+                    attempt + 1,
+                    max_retries,
+                    type(e).__name__,
                 )
 
                 if attempt < max_retries - 1:
@@ -258,7 +273,7 @@ Title:"""
                 truncated = truncated[:last_space]
             content = truncated + "..."
 
-        logger.info(f"Using fallback title: '{content}'")
+        logger.info("Using fallback title title_len=%d", len(content))
         return content or "New Conversation"
 
     async def get_conversation_messages(
