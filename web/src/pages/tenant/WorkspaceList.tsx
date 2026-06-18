@@ -56,6 +56,7 @@ const EMPTY_SUMMARY: ObjectiveSummary = {
   completed: 0,
   loading: true,
 };
+const WORKSPACE_SUMMARY_BATCH_SIZE = 6;
 
 // Domain validates CyberObjective.progress in [0.0, 1.0], but some
 // UIs send 0-100. Auto-detect scale: if any value > 1, assume the
@@ -121,6 +122,47 @@ function summarizePlanSnapshot(snapshot: WorkspacePlanSnapshot | null): Objectiv
   };
 }
 
+async function loadWorkspaceSummary(
+  tenantId: string,
+  projectId: string,
+  workspaceId: string
+): Promise<ObjectiveSummary> {
+  try {
+    const [items, planSnapshot] = await Promise.all([
+      workspaceObjectiveService.list(tenantId, projectId, workspaceId).catch(() => []),
+      workspacePlanService
+        .getSnapshot(workspaceId, {
+          outboxLimit: 0,
+          eventLimit: 0,
+          includeDetails: false,
+          recoverStaleAttempts: false,
+        })
+        .catch(() => null),
+    ]);
+    const fromObjectives = summarizeObjectives(items);
+    const fromPlan = summarizePlanSnapshot(planSnapshot);
+    // Prefer objectives when they exist AND have any progress. Otherwise use
+    // current plan nodes before falling back to historical task projections.
+    const useObjectives = fromObjectives !== null && fromObjectives.avgProgress > 0;
+    return useObjectives
+      ? fromObjectives
+      : fromPlan
+        ? fromPlan
+        : fromObjectives
+          ? fromObjectives
+          : summarizeTasks(await workspaceTaskService.list(workspaceId).catch(() => []));
+  } catch {
+    return {
+      source: 'empty',
+      total: 0,
+      objectives: 0,
+      avgProgress: 0,
+      completed: 0,
+      loading: false,
+    };
+  }
+}
+
 export function WorkspaceList() {
   const { t } = useTranslation();
   const params = useParams<{ tenantId?: string; projectId?: string }>();
@@ -176,70 +218,43 @@ export function WorkspaceList() {
     void loadWorkspaces(tenantId, projectId);
   }, [tenantId, projectId, loadWorkspaces]);
 
-  // Fetch objective summaries in parallel for all visible workspaces.
+  // Fetch summaries in bounded batches. Default tenants can have many
+  // historical workspaces; unbounded fan-out can freeze the browser.
   useEffect(() => {
     if (!tenantId || !projectId || workspaces.length === 0) return;
-    let cancelled = false;
+    const cancellation = { current: false };
     const ids = workspaces.map((w) => w.id);
 
     void (async () => {
       setSummaries((prev) => {
-        const next = { ...prev };
+        const next: Record<string, ObjectiveSummary> = {};
         for (const id of ids) {
-          if (!next[id]) next[id] = EMPTY_SUMMARY;
+          next[id] = prev[id] ?? EMPTY_SUMMARY;
         }
         return next;
       });
 
-      await Promise.all(
-        ids.map(async (id) => {
-          try {
-            const [items, planSnapshot] = await Promise.all([
-              workspaceObjectiveService.list(tenantId, projectId, id).catch(() => []),
-              workspacePlanService
-                .getSnapshot(id, {
-                  outboxLimit: 0,
-                  eventLimit: 0,
-                  includeDetails: false,
-                  recoverStaleAttempts: false,
-                })
-                .catch(() => null),
-            ]);
-            if (cancelled) return;
-            const fromObjectives = summarizeObjectives(items);
-            const fromPlan = summarizePlanSnapshot(planSnapshot);
-            // Prefer objectives when they exist AND have any progress.
-            // Otherwise use current plan nodes before falling back to historical
-            // workspace task projections.
-            const useObjectives = fromObjectives !== null && fromObjectives.avgProgress > 0;
-            const summary = useObjectives
-              ? fromObjectives
-              : fromPlan
-                ? fromPlan
-                : fromObjectives
-                  ? fromObjectives
-                  : summarizeTasks(await workspaceTaskService.list(id).catch(() => []));
-            setSummaries((prev) => ({ ...prev, [id]: summary }));
-          } catch {
-            if (cancelled) return;
-            setSummaries((prev) => ({
-              ...prev,
-              [id]: {
-                source: 'empty',
-                total: 0,
-                objectives: 0,
-                avgProgress: 0,
-                completed: 0,
-                loading: false,
-              },
-            }));
+      for (let index = 0; index < ids.length; index += WORKSPACE_SUMMARY_BATCH_SIZE) {
+        const batchIds = ids.slice(index, index + WORKSPACE_SUMMARY_BATCH_SIZE);
+        const batchSummaries = await Promise.all(
+          batchIds.map(async (id) => ({
+            id,
+            summary: await loadWorkspaceSummary(tenantId, projectId, id),
+          }))
+        );
+        if (cancellation.current) return;
+        setSummaries((prev) => {
+          const next = { ...prev };
+          for (const { id, summary } of batchSummaries) {
+            next[id] = summary;
           }
-        })
-      );
+          return next;
+        });
+      }
     })();
 
     return () => {
-      cancelled = true;
+      cancellation.current = true;
     };
   }, [tenantId, projectId, workspaces]);
 

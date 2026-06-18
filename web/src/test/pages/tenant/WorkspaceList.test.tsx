@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
 
-import { render, screen, waitFor } from '../../utils';
+import { act, render, screen, waitFor } from '../../utils';
 
 import { WorkspaceList } from '../../../pages/tenant/WorkspaceList';
 // eslint-disable-next-line no-restricted-imports
@@ -220,5 +220,45 @@ describe('WorkspaceList', () => {
       recoverStaleAttempts: false,
     });
     expect(workspaceTaskService.list).not.toHaveBeenCalled();
+  });
+
+  it('loads workspace summaries in bounded batches', async () => {
+    workspaceState.workspaces = Array.from({ length: 8 }, (_, index) => ({
+      id: `ws-${String(index + 1)}`,
+      name: `Workspace ${String(index + 1)}`,
+      description: 'Workspace description',
+      created_at: '2026-05-01T00:00:00Z',
+    }));
+
+    const planResolvers: Array<(value: null) => void> = [];
+    vi.mocked(workspacePlanService.getSnapshot).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          planResolvers.push(resolve);
+        })
+    );
+    vi.mocked(workspaceTaskService.list).mockResolvedValue([]);
+
+    render(
+      <Routes>
+        <Route path="/tenant/workspaces" element={<WorkspaceList />} />
+      </Routes>,
+      { route: '/tenant/workspaces' }
+    );
+
+    await waitFor(() => {
+      expect(workspacePlanService.getSnapshot).toHaveBeenCalledTimes(6);
+    });
+    expect(workspaceTaskService.list).not.toHaveBeenCalled();
+
+    await act(async () => {
+      for (const resolve of planResolvers.splice(0)) {
+        resolve(null);
+      }
+    });
+
+    await waitFor(() => {
+      expect(workspacePlanService.getSnapshot).toHaveBeenCalledTimes(8);
+    });
   });
 });
