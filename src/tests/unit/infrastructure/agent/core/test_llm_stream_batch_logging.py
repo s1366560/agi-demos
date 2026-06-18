@@ -9,6 +9,7 @@ TDD Approach: Tests written first to ensure:
 This is P0-2: Batch logging and token delta sampling in llm_stream.py
 """
 
+import logging
 import time
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -280,6 +281,18 @@ class TestLLMStreamWithBatchLogging:
 
         # With default sampling, should have fewer than 100 samples
         assert sample_count < 100
+
+    def test_llm_stream_text_delta_log_redacts_content(self, llm_stream, caplog):
+        """Sampled text-delta logs must not include generated content."""
+        secret_delta = "customer secret token alpha-12345"
+        caplog.set_level(logging.DEBUG, logger="src.infrastructure.agent.llm.token_sampler")
+
+        events = list(llm_stream._handle_content_delta(secret_delta))
+        llm_stream._log_buffer.flush()
+
+        assert events
+        assert "TEXT_DELTA content_len=" in caplog.text
+        assert secret_delta not in caplog.text
 
     @pytest.mark.asyncio
     async def test_llm_stream_handles_logging_gracefully(self, llm_stream):

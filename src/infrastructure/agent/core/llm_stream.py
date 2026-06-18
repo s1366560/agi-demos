@@ -702,7 +702,10 @@ class LLMStream:
 
     def _handle_content_delta(self, content: str) -> Iterator[StreamEvent]:
         """Handle a text content delta, intercepting <think> tags as reasoning."""
-        logger.info(f"[LLMStream] TEXT_DELTA: {content[:50]}...")
+        if self._token_sampler.should_sample(content):
+            self._log_buffer.add("debug", f"[LLMStream] TEXT_DELTA content_len={len(content)}")
+            if self._log_buffer.should_flush():
+                self._log_buffer.flush()
         # Route through think-tag parser which splits content into
         # text vs reasoning segments
         for is_reasoning, segment in self._parse_think_tags(content):
