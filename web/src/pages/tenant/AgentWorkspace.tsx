@@ -140,7 +140,7 @@ export const AgentWorkspace: FC = () => {
 
   // Subscribe to workspace SSE events for real-time group chat updates
   useBlackboardSSE(effectiveWorkspaceId);
-  useConversationListAutoRefresh(selectedProjectId);
+  useConversationListAutoRefresh(activeSelectedProjectId);
 
   // Calculate base path for conversation navigation - memoized
   const basePath = useMemo(

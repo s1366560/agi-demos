@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Route, Routes, useLocation } from 'react-router-dom';
+import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 import { fireEvent, render, screen, waitFor } from '../../utils';
 
@@ -14,6 +14,9 @@ const localStorageMock = vi.hoisted(() => ({
 }));
 const agentStoreMock = vi.hoisted(() => ({
   loadConversations: vi.fn(),
+}));
+const autoRefreshMock = vi.hoisted(() => ({
+  useConversationListAutoRefresh: vi.fn(),
 }));
 
 let projectState: any;
@@ -51,6 +54,10 @@ vi.mock('../../../hooks/useLocalStorage', () => ({
       : initialValue) as T,
     setValue: localStorageMock.setValue,
   }),
+}));
+
+vi.mock('../../../hooks/useConversationListAutoRefresh', () => ({
+  useConversationListAutoRefresh: autoRefreshMock.useConversationListAutoRefresh,
 }));
 
 vi.mock('../../../stores/auth', () => ({
@@ -114,6 +121,7 @@ describe('workspace/agent workspace bridge', () => {
     localStorageMock.values.clear();
     localStorageMock.setValue.mockReset();
     agentStoreMock.loadConversations.mockReset();
+    autoRefreshMock.useConversationListAutoRefresh.mockReset();
 
     authState = {
       user: { tenant_id: 'tenant-1' },
@@ -173,6 +181,50 @@ describe('workspace/agent workspace bridge', () => {
     });
 
     expect(agentStoreMock.loadConversations).not.toHaveBeenCalled();
+  });
+
+  it('does not auto-refresh a stale project after switching to a tenant with no projects', async () => {
+    const SwitchTenantButton = () => {
+      const navigate = useNavigate();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            tenantState.currentTenant = { id: 'tenant-2', name: 'Tenant Two' };
+            authState.user = { tenant_id: 'tenant-2' };
+            projectState.projects = [];
+            projectState.currentProject = null;
+            void navigate('/tenant/tenant-2/agent-workspace');
+          }}
+        >
+          switch tenant
+        </button>
+      );
+    };
+
+    render(
+      <>
+        <SwitchTenantButton />
+        <Routes>
+          <Route path="/tenant/:tenantId/agent-workspace" element={<AgentWorkspace />} />
+        </Routes>
+      </>,
+      {
+        route: '/tenant/tenant-1/agent-workspace',
+      }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-chat-content')).toBeInTheDocument();
+    });
+    expect(autoRefreshMock.useConversationListAutoRefresh).toHaveBeenLastCalledWith('project-1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'switch tenant' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('agent.workspace.noProjects')).toBeInTheDocument();
+    });
+    expect(autoRefreshMock.useConversationListAutoRefresh).toHaveBeenLastCalledWith(null);
   });
 
   it('restores saved workspace context on base agent workspace URLs', () => {
