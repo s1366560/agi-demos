@@ -1323,6 +1323,21 @@ class GeneService:
     # Reviews
     # ------------------------------------------------------------------
 
+    async def _ensure_reviewable_gene(self, gene_id: str, tenant_id: str) -> Gene:
+        gene = await self._gene_repo.find_by_id(gene_id)
+        if not gene:
+            raise ValueError(f"Gene {gene_id} not found")
+        if gene.tenant_id == tenant_id:
+            return gene
+        visibility_value = getattr(gene.visibility, "value", gene.visibility)
+        if (
+            gene.tenant_id is None
+            and gene.is_published is True
+            and visibility_value == ContentVisibility.public.value
+        ):
+            return gene
+        raise ValueError(f"Gene {gene_id} not found")
+
     async def create_gene_review(
         self,
         gene_id: str,
@@ -1331,9 +1346,7 @@ class GeneService:
         content: str,
         tenant_id: str,
     ) -> GeneReview:
-        gene = await self._gene_repo.find_by_id(gene_id)
-        if not gene:
-            raise ValueError(f"Gene {gene_id} not found")
+        await self._ensure_reviewable_gene(gene_id, tenant_id)
 
         review = GeneReview(
             gene_id=gene_id,
@@ -1352,6 +1365,7 @@ class GeneService:
         page_size: int,
         tenant_id: str,
     ) -> tuple[list[GeneReview], int]:
+        await self._ensure_reviewable_gene(gene_id, tenant_id)
         return await self._gene_review_repo.find_by_gene_id(gene_id, page, page_size)
 
     async def delete_gene_review(
@@ -1361,6 +1375,7 @@ class GeneService:
         user_id: str,
         tenant_id: str,
     ) -> None:
+        await self._ensure_reviewable_gene(gene_id, tenant_id)
         review = await self._gene_review_repo.find_by_id(review_id)
         if not review:
             raise ValueError(f"Review {review_id} not found")
