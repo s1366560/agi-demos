@@ -60,6 +60,28 @@ const SILENT_AGENT_EVENT_TYPES = new Set<string>([
 const CONTROL_AGENT_EVENT_TYPES = new Set<string>(['connected', 'pong', 'ack']);
 const IDLE_DISCONNECT_DELAY_MS = 5000;
 
+function getAgentErrorMessage(data: unknown): string {
+  if (data instanceof Error && data.message.trim()) {
+    return data.message;
+  }
+
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>;
+    for (const key of ['message', 'error', 'detail']) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+    }
+  }
+
+  if (typeof data === 'string' && data.trim()) {
+    return data;
+  }
+
+  return 'Agent stream error';
+}
+
 class AgentServiceImpl implements AgentService {
   private sessionId: string = generateSessionId();
   private wsConnection: WebSocketConnection;
@@ -191,6 +213,14 @@ class AgentServiceImpl implements AgentService {
 
     if (type === 'subagent_lifecycle') {
       routeSubagentLifecycleMessage(message, (id) => this.handlers.get(id));
+      return;
+    }
+
+    if (type === 'error' && !conversation_id) {
+      logger.warn('[AgentWS] Global error event:', {
+        message: getAgentErrorMessage(data),
+        hasData: !!data,
+      });
       return;
     }
 

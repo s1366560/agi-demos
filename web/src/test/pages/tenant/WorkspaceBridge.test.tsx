@@ -321,6 +321,45 @@ describe('workspace/agent workspace bridge', () => {
     });
   });
 
+  it('clears an inaccessible URL project before mounting chat content', async () => {
+    projectState.projects = [];
+    projectState.currentProject = null;
+    projectState.getProject = vi.fn().mockRejectedValue(new Error('Access denied to project'));
+
+    const LocationProbe = () => {
+      const location = useLocation();
+      return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
+    };
+
+    render(
+      <Routes>
+        <Route
+          path="/tenant/:tenantId/agent-workspace"
+          element={
+            <>
+              <AgentWorkspace />
+              <LocationProbe />
+            </>
+          }
+        />
+      </Routes>,
+      {
+        route: '/tenant/tenant-1/agent-workspace?projectId=project-denied&workspaceId=ws-denied',
+      }
+    );
+
+    await waitFor(() => {
+      expect(projectState.getProject).toHaveBeenCalledWith('tenant-1', 'project-denied');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(
+        '/tenant/tenant-1/agent-workspace'
+      );
+    });
+    expect(await screen.findByText('agent.workspace.noProjects')).toBeInTheDocument();
+    expect(agentChatContentProps).not.toHaveBeenCalled();
+  });
+
   it('does not refetch a URL project that already matches the current project id', async () => {
     projectState.projects = [];
     projectState.currentProject = {

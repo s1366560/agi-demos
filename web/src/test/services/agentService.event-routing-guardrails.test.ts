@@ -5,7 +5,7 @@ import { routeToHandler } from '@/services/agent/messageRouter';
 import type { AgentStreamHandler } from '@/types/agent';
 
 describe('agentService event routing guardrails', () => {
-  const route = (eventType: string, data: Record<string, unknown>, handler: AgentStreamHandler) => {
+  const route = (eventType: string, data: unknown, handler: AgentStreamHandler) => {
     routeToHandler(eventType as any, data, handler);
   };
 
@@ -110,6 +110,16 @@ describe('agentService event routing guardrails', () => {
   it('ignores unknown event types without throwing', () => {
     const handler: AgentStreamHandler = {};
     expect(() => route('unknown_event_type', {}, handler)).not.toThrow();
+  });
+
+  it('isolates handler exceptions from malformed stream events', () => {
+    const onError = vi.fn(() => {
+      throw new Error('bad handler');
+    });
+    const handler: AgentStreamHandler = { onError };
+
+    expect(() => route('error', undefined, handler)).not.toThrow();
+    expect(onError).toHaveBeenCalledTimes(1);
   });
 
   it('routes thought_start to the thought start handler', () => {

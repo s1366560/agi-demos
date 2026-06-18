@@ -87,6 +87,28 @@ const clearPendingA2UIRequestIds = (conversationId: string): void => {
   }
 };
 
+function getStreamErrorMessage(data: unknown): string {
+  if (data instanceof Error && data.message.trim()) {
+    return data.message;
+  }
+
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>;
+    for (const key of ['message', 'error', 'detail']) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+    }
+  }
+
+  if (typeof data === 'string' && data.trim()) {
+    return data;
+  }
+
+  return 'Agent stream error';
+}
+
 // Re-export DeltaBufferState from canonical source for backward compatibility
 export type { DeltaBufferState } from './deltaBuffers';
 
@@ -2428,7 +2450,7 @@ export function createStreamEventHandlers(
       const convState = getConversationState(handlerConversationId);
 
       updateConversationState(handlerConversationId, {
-        error: event.data.message,
+        error: getStreamErrorMessage(event.data),
         isStreaming: false,
         streamStatus: 'error',
         pendingToolsStack: [],

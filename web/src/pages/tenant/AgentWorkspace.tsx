@@ -117,6 +117,7 @@ export const AgentWorkspace: FC = () => {
   );
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [resolvedStoredProject, setResolvedStoredProject] = useState<Project | null>(null);
+  const [invalidQueryProjectId, setInvalidQueryProjectId] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [projectLoadError, setProjectLoadError] = useState<string | null>(null);
   const previousTenantIdRef = useRef<string | undefined>(tenantId);
@@ -124,17 +125,32 @@ export const AgentWorkspace: FC = () => {
   const queryWorkspaceId = searchParams.get('workspaceId');
   const tenantCurrentProjectId = tenantCurrentProject?.id ?? null;
   const tenantProjectsWithResolvedStoredProject = useMemo(() => {
-    if (!tenantId || resolvedStoredProject?.tenant_id !== tenantId) {
+    if (!tenantId) {
       return tenantProjects;
     }
-    if (tenantProjects.some((project) => project.id === resolvedStoredProject.id)) {
-      return tenantProjects;
+
+    let resolvedProjects = tenantProjects;
+    if (
+      tenantCurrentProject?.tenant_id === tenantId &&
+      !resolvedProjects.some((project) => project.id === tenantCurrentProject.id)
+    ) {
+      resolvedProjects = [...resolvedProjects, tenantCurrentProject];
     }
-    return [...tenantProjects, resolvedStoredProject];
-  }, [resolvedStoredProject, tenantId, tenantProjects]);
-  const queryProjectInTenant = queryProjectId
-    ? tenantProjectsWithResolvedStoredProject.some((project) => project.id === queryProjectId)
-    : false;
+    if (
+      resolvedStoredProject?.tenant_id === tenantId &&
+      !resolvedProjects.some((project) => project.id === resolvedStoredProject.id)
+    ) {
+      resolvedProjects = [...resolvedProjects, resolvedStoredProject];
+    }
+    return resolvedProjects;
+  }, [resolvedStoredProject, tenantCurrentProject, tenantId, tenantProjects]);
+  const isQueryProjectInvalid = !!queryProjectId && invalidQueryProjectId === queryProjectId;
+  const queryProjectInTenant =
+    queryProjectId && !isQueryProjectInvalid
+      ? tenantProjectsWithResolvedStoredProject.some((project) => project.id === queryProjectId)
+      : false;
+  const shouldResolveQueryProject =
+    !!queryProjectId && !isQueryProjectInvalid && !queryProjectInTenant && !!tenantId;
   const storedManualProjectId =
     lastProjectSelectionSource === MANUAL_PROJECT_SELECTION_SOURCE && lastProjectId
       ? lastProjectId
@@ -157,23 +173,29 @@ export const AgentWorkspace: FC = () => {
   const tenantProjectCount = tenantProjectsWithResolvedStoredProject.length;
   const activeSelectedProjectId =
     selectedProjectId &&
-    (selectedProjectId === queryProjectId ||
-      tenantProjectsWithResolvedStoredProject.some((project) => project.id === selectedProjectId))
+    tenantProjectsWithResolvedStoredProject.some((project) => project.id === selectedProjectId)
       ? selectedProjectId
       : null;
-  const effectiveWorkspaceId = queryWorkspaceId || (routeConversationId ? null : lastWorkspaceId);
+  const effectiveWorkspaceId =
+    queryProjectId && !queryProjectInTenant
+      ? null
+      : queryWorkspaceId
+        ? queryWorkspaceId
+        : routeConversationId
+          ? null
+          : lastWorkspaceId;
   useEffect(() => {
-    if (queryWorkspaceId) {
+    if (queryWorkspaceId && queryProjectInTenant) {
       setLastWorkspaceId(queryWorkspaceId);
     }
-  }, [queryWorkspaceId, setLastWorkspaceId]);
+  }, [queryProjectInTenant, queryWorkspaceId, setLastWorkspaceId]);
   const navigationQuery = useMemo(() => {
     const params = new URLSearchParams();
-    if (queryProjectId) params.set('projectId', queryProjectId);
+    if (queryProjectId && queryProjectInTenant) params.set('projectId', queryProjectId);
     if (effectiveWorkspaceId) params.set('workspaceId', effectiveWorkspaceId);
     const serialized = params.toString();
     return serialized.length > 0 ? serialized : undefined;
-  }, [queryProjectId, effectiveWorkspaceId]);
+  }, [effectiveWorkspaceId, queryProjectId, queryProjectInTenant]);
 
   // Subscribe to workspace SSE events for real-time group chat updates
   useBlackboardSSE(effectiveWorkspaceId);
@@ -188,6 +210,7 @@ export const AgentWorkspace: FC = () => {
 
     setSelectedProjectId(null);
     setResolvedStoredProject(null);
+    setInvalidQueryProjectId(null);
     setProjectLoadError(null);
     setInitializing(true);
   }, [tenantId]);
@@ -195,6 +218,10 @@ export const AgentWorkspace: FC = () => {
   useEffect(() => {
     setResolvedStoredProject((project) => (project?.tenant_id === tenantId ? project : null));
   }, [tenantId]);
+
+  useEffect(() => {
+    setInvalidQueryProjectId((projectId) => (projectId === queryProjectId ? projectId : null));
+  }, [queryProjectId]);
 
   // Calculate base path for conversation navigation - memoized
   const basePath = useMemo(
@@ -230,6 +257,20 @@ export const AgentWorkspace: FC = () => {
     void loadProjectsForTenant();
   }, [loadProjectsForTenant]);
 
+  const clearRouteProjectSelection = useCallback(() => {
+    const params = new URLSearchParams(searchParams);
+    params.delete('projectId');
+    params.delete('workspaceId');
+    const serialized = params.toString();
+    void navigate(
+      {
+        pathname: basePath,
+        search: serialized ? `?${serialized}` : '',
+      },
+      { replace: true }
+    );
+  }, [basePath, navigate, searchParams]);
+
   // Load projects on mount - optimized with removed function dependency
   useEffect(() => {
     if (tenantId && tenantProjects.length === 0) {
@@ -244,24 +285,60 @@ export const AgentWorkspace: FC = () => {
 
     const init = async () => {
       if (queryProjectId) {
-        if (isCancelled()) return;
-        if (selectedProjectId !== queryProjectId) {
-          setSelectedProjectId(queryProjectId);
-        }
-        if (initializing) {
-          setInitializing(false);
+        if (isQueryProjectInvalid) {
+          if (selectedProjectId === queryProjectId) {
+            setSelectedProjectId(null);
+          }
+          if (initializing) {
+            setInitializing(false);
+          }
+          return;
         }
 
-        if (tenantId && tenantCurrentProjectId !== queryProjectId && !queryProjectInTenant) {
+        if (isCancelled()) return;
+        if (queryProjectInTenant) {
+          if (selectedProjectId !== queryProjectId) {
+            setSelectedProjectId(queryProjectId);
+          }
+          if (initializing) {
+            setInitializing(false);
+          }
+        } else if (tenantId) {
           try {
             const project = await getProject(tenantId, queryProjectId);
             if (isCancelled()) return;
+            if (project.tenant_id !== tenantId) {
+              throw new Error('URL project belongs to another tenant');
+            }
+            setResolvedStoredProject(project);
+            if (selectedProjectId !== project.id) {
+              setSelectedProjectId(project.id);
+            }
             if (project.id !== tenantCurrentProjectId) {
               setCurrentProject(project);
             }
           } catch (error) {
+            if (isCancelled()) return;
             console.warn('AgentWorkspace: failed to load project from URL', error);
+            setInvalidQueryProjectId(queryProjectId);
+            if (selectedProjectId === queryProjectId) {
+              setSelectedProjectId(null);
+            }
+            if (lastProjectId === queryProjectId) {
+              setLastProjectId(null);
+              setLastProjectSelectionSource(null);
+            }
+            if (queryWorkspaceId) {
+              setLastWorkspaceId(null);
+            }
+            clearRouteProjectSelection();
+          } finally {
+            if (!isCancelled() && initializing) {
+              setInitializing(false);
+            }
           }
+        } else if (initializing) {
+          setInitializing(false);
         }
       } else if (storedProjectIdInTenant) {
         // Try to restore last selected project from localStorage (now using cached hook)
@@ -313,17 +390,22 @@ export const AgentWorkspace: FC = () => {
       cancellation.current = true;
     };
   }, [
+    clearRouteProjectSelection,
     firstTenantProjectId,
     getProject,
+    initializing,
+    isQueryProjectInvalid,
+    lastProjectId,
     queryProjectInTenant,
     queryProjectId,
+    queryWorkspaceId,
     setCurrentProject,
     setLastProjectId,
     setLastProjectSelectionSource,
+    setLastWorkspaceId,
     selectedProjectId,
     storedProjectIdNeedsFetch,
     storedProjectIdInTenant,
-    initializing,
     tenantId,
     tenantCurrentProjectId,
     tenantProjectCount,
@@ -359,7 +441,6 @@ export const AgentWorkspace: FC = () => {
   ]);
 
   const effectiveProjectId =
-    queryProjectId ||
     activeSelectedProjectId ||
     tenantCurrentProject?.id ||
     (tenantProjectsWithResolvedStoredProject.length > 0
@@ -367,7 +448,7 @@ export const AgentWorkspace: FC = () => {
       : null);
 
   // Show loading while initializing projects
-  if (initializing || shouldResolveStoredProject) {
+  if (initializing || shouldResolveStoredProject || shouldResolveQueryProject) {
     return (
       <div className="max-w-full mx-auto w-full h-full flex items-center justify-center">
         <div className="text-center">

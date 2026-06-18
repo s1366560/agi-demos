@@ -69,6 +69,20 @@ describe('agentService project-scoped subagent lifecycle routing', () => {
     handlers().clear();
   });
 
+  it('does not route global error events without a conversation id to conversation handlers', () => {
+    const onError = vi.fn();
+    handlers().set('conv-1', { onError });
+
+    expect(() => {
+      handleMessage({
+        type: 'error',
+        data: { message: 'project stream failed' },
+      });
+    }).not.toThrow();
+
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it('routes subagent_lifecycle spawned payload to onSubAgentSessionSpawned by data.conversation_id', () => {
     const onSubAgentSessionSpawned = vi.fn();
     handlers().set('conv-1', { onSubAgentSessionSpawned });
