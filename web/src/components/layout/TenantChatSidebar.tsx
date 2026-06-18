@@ -87,7 +87,8 @@ const SIDEBAR_MAX_WIDTH = 400;
 const SIDEBAR_DEFAULT_WIDTH = 256;
 const SIDEBAR_COLLAPSED_WIDTH = 80;
 const COLLAPSE_THRESHOLD = 120; // Width below which sidebar collapses
-const PROJECT_SWITCHER_PAGE_SIZE = 100;
+const PROJECT_SWITCHER_PAGE_SIZE = 25;
+const PROJECT_SEARCH_PAGE_SIZE = 100;
 const PROJECT_SEARCH_DEBOUNCE_MS = 250;
 const LEGACY_LAST_PROJECT_ID_KEY = 'agent:lastProjectId';
 
@@ -106,6 +107,13 @@ function persistLastProjectId(tenantId: string | undefined, projectId: string): 
   } catch {
     // Storage may be unavailable in private mode or restricted browser contexts.
   }
+}
+
+function projectBelongsToTenant(
+  project: Project | null | undefined,
+  tenantId: string | undefined
+): project is Project {
+  return !!project && (!tenantId || project.tenant_id === tenantId);
 }
 
 function readMetadataString(
@@ -556,15 +564,19 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const workspaces = useWorkspaces();
   const { loadWorkspaceSurface } = useWorkspaceActions();
 
-  const { conversations, conversationsLoading, hasMoreConversations, reset: resetConversations } =
-    useConversationsStore(
-      useShallow((state) => ({
-        conversations: state.conversations,
-        conversationsLoading: state.conversationsLoading,
-        hasMoreConversations: state.hasMoreConversations,
-        reset: state.reset,
-      }))
-    );
+  const {
+    conversations,
+    conversationsLoading,
+    hasMoreConversations,
+    reset: resetConversations,
+  } = useConversationsStore(
+    useShallow((state) => ({
+      conversations: state.conversations,
+      conversationsLoading: state.conversationsLoading,
+      hasMoreConversations: state.hasMoreConversations,
+      reset: state.reset,
+    }))
+  );
 
   const { projects, currentProject, listProjects, setCurrentProject } = useProjectStore();
   const preferredWorkspaceId = currentWorkspace?.id ?? workspaces[0]?.id ?? null;
@@ -598,14 +610,46 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     () => new Map(uniqueProjects.map((project) => [project.id, project])),
     [uniqueProjects]
   );
-  const selectableProjects = useMemo(() => {
-    if (!projectSearchQuery.trim()) {
-      return uniqueProjects;
+  const defaultSelectableProjects = useMemo(() => {
+    const seenProjectIds = new Set<string>();
+    const limitedProjects: Project[] = [];
+    const addProject = (project: Project | null | undefined) => {
+      if (!project || seenProjectIds.has(project.id)) {
+        return;
+      }
+      seenProjectIds.add(project.id);
+      limitedProjects.push(project);
+    };
+
+    addProject(selectedProjectId ? projectById.get(selectedProjectId) : null);
+    if (projectBelongsToTenant(currentProject, resolvedTenantId)) {
+      addProject(currentProject);
     }
 
-    const sourceProjects = [...projectSearchResults];
-    if (currentProject && (!resolvedTenantId || currentProject.tenant_id === resolvedTenantId)) {
-      sourceProjects.push(currentProject);
+    for (const project of uniqueProjects) {
+      if (limitedProjects.length >= PROJECT_SWITCHER_PAGE_SIZE) {
+        break;
+      }
+      addProject(project);
+    }
+
+    return limitedProjects;
+  }, [currentProject, projectById, resolvedTenantId, selectedProjectId, uniqueProjects]);
+  const selectableProjects = useMemo(() => {
+    if (!projectSearchQuery.trim()) {
+      return defaultSelectableProjects;
+    }
+
+    const sourceProjects: Project[] = [];
+    const scopedCurrentProject = currentProject;
+    if (projectBelongsToTenant(scopedCurrentProject, resolvedTenantId)) {
+      sourceProjects.push(scopedCurrentProject);
+    }
+    for (const project of projectSearchResults) {
+      if (sourceProjects.length >= PROJECT_SEARCH_PAGE_SIZE) {
+        break;
+      }
+      sourceProjects.push(project);
     }
 
     const seenProjectIds = new Set<string>();
@@ -616,7 +660,13 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       seenProjectIds.add(project.id);
       return true;
     });
-  }, [currentProject, projectSearchQuery, projectSearchResults, resolvedTenantId, uniqueProjects]);
+  }, [
+    currentProject,
+    defaultSelectableProjects,
+    projectSearchQuery,
+    projectSearchResults,
+    resolvedTenantId,
+  ]);
   const tenantBasePath = normalizedTenantId ? `/tenant/${normalizedTenantId}` : '/tenant';
   const queryProjectId = useMemo(
     () => new URLSearchParams(location.search).get('projectId'),
@@ -1107,7 +1157,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         void projectAPI
           .list(resolvedTenantId, {
             page: 1,
-            page_size: PROJECT_SWITCHER_PAGE_SIZE,
+            page_size: PROJECT_SEARCH_PAGE_SIZE,
             search,
           })
           .then((response) => {

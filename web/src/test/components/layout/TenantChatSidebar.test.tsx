@@ -332,6 +332,30 @@ describe('TenantChatSidebar', () => {
     expect(options[0]).toHaveValue('Project Aurora');
   });
 
+  it('limits default project options while preserving the active project', () => {
+    const projects = Array.from({ length: 60 }, (_, index) => ({
+      id: `project-${String(index + 1)}`,
+      name: `Project ${String(index + 1)}`,
+      tenant_id: 'tenant-1',
+    }));
+    const activeProject = projects[59];
+    if (!activeProject) throw new Error('Expected active project fixture');
+
+    projectState.projects = projects;
+    projectState.currentProject = activeProject;
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    const options = screen.getAllByRole('option');
+
+    expect(options).toHaveLength(25);
+    expect(options[0]).toHaveValue('project-60');
+    expect(screen.getByRole('option', { name: 'Project 60' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Project 59' })).not.toBeInTheDocument();
+  });
+
   it('searches authorized projects that are not in the loaded switcher list', async () => {
     const hiddenProject = {
       id: 'project-hidden',
