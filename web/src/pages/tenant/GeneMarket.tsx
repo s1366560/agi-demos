@@ -231,7 +231,7 @@ export const GeneMarket: FC = () => {
         version: normalizeOptionalText(values.version) ?? '1.0.0',
         visibility: values.visibility ?? 'public',
         tags: splitTags(values.tags),
-        source: 'manual',
+        source: 'self_created',
       };
       const category = normalizeOptionalText(values.category);
       if (category) {

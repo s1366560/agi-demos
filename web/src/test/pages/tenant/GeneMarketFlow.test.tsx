@@ -126,7 +126,7 @@ const gene = (overrides: Partial<GeneResponse> = {}): GeneResponse => ({
   review_status: null,
   short_description: 'Review code',
   slug: 'code-review',
-  source: 'manual',
+  source: 'self_created',
   source_ref: null,
   synergies: [],
   tags: ['quality'],
@@ -322,7 +322,7 @@ describe('Gene marketplace rating flow', () => {
           description: 'Automates code review checks for tenant agents.',
           visibility: 'public',
           tags: ['review', 'quality'],
-          source: 'manual',
+          source: 'self_created',
         },
         { tenant_id: 'tenant-1' }
       );

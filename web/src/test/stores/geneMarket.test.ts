@@ -53,7 +53,7 @@ const gene = (overrides: Partial<GeneResponse> = {}): GeneResponse => ({
   review_status: null,
   short_description: null,
   slug: 'code-review',
-  source: 'manual',
+  source: 'self_created',
   source_ref: null,
   synergies: [],
   tags: [],

@@ -12,6 +12,8 @@ export interface TenantScopedPaginationOptions extends TenantScopedOptions {
   search?: string | undefined;
 }
 
+export type GeneSourceValue = 'official' | 'community' | 'self_created' | 'forked' | 'emerged';
+
 const tenantParams = (options: TenantScopedOptions = {}): { tenant_id?: string } =>
   options.tenant_id ? { tenant_id: options.tenant_id } : {};
 
@@ -48,7 +50,7 @@ export interface GeneCreate {
   short_description?: string | null;
   category?: string | null;
   version?: string;
-  source?: string;
+  source?: GeneSourceValue;
   source_ref?: string | null;
   icon?: string | null;
   manifest?: Record<string, unknown>;
@@ -66,7 +68,7 @@ export interface GeneUpdate {
   short_description?: string | null;
   category?: string | null;
   version?: string;
-  source?: string;
+  source?: GeneSourceValue;
   source_ref?: string | null;
   icon?: string | null;
   manifest?: Record<string, unknown>;
@@ -86,7 +88,7 @@ export interface GeneResponse {
   short_description: string | null;
   category: string | null;
   version: string;
-  source: string;
+  source: GeneSourceValue;
   source_ref: string | null;
   icon: string | null;
   manifest: Record<string, unknown>;
