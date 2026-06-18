@@ -120,6 +120,18 @@ const initialState = {
 };
 
 let definitionListRequestSequence = 0;
+const pendingDefinitionListRequests = new Map<string, Promise<void>>();
+
+function stableRequestKey(params: Record<string, unknown>): string {
+  return JSON.stringify(
+    Object.keys(params)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = params[key];
+        return acc;
+      }, {})
+  );
+}
 
 // ============================================================================
 // STORE CREATION
@@ -133,39 +145,56 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
       // ========== CRUD ==========
 
       listDefinitions: async (params = {}) => {
+        const { filters } = get();
+        const enabledOnlyFilter =
+          params.enabled_only ??
+          (params.enabled !== undefined ? undefined : filters.enabled === true ? true : undefined);
+        const queryParams = {
+          ...params,
+          tenant_id: params.tenant_id ?? undefined,
+          project_id:
+            params.project_id === null
+              ? undefined
+              : (params.project_id ?? filters.projectId ?? undefined),
+          enabled_only: enabledOnlyFilter,
+        };
+        const requestKey = stableRequestKey(queryParams);
+        const pendingRequest = pendingDefinitionListRequests.get(requestKey);
+        if (pendingRequest) {
+          await pendingRequest;
+          return;
+        }
+
         const requestId = ++definitionListRequestSequence;
         set({ isLoading: true, error: null });
-        try {
-          const { filters } = get();
-          const enabledOnlyFilter =
-            params.enabled_only ??
-            (params.enabled !== undefined
-              ? undefined
-              : filters.enabled === true
-                ? true
-                : undefined);
-          const queryParams = {
-            ...params,
-            tenant_id: params.tenant_id ?? undefined,
-            project_id:
-              params.project_id === null
-                ? undefined
-                : (params.project_id ?? filters.projectId ?? undefined),
-            enabled_only: enabledOnlyFilter,
-          };
-          const definitions = await definitionsService.list(queryParams);
-          if (definitionListRequestSequence !== requestId) {
-            return;
+        const runRequest = async () => {
+          try {
+            const definitions = await definitionsService.list(queryParams);
+            if (definitionListRequestSequence !== requestId) {
+              return;
+            }
+            set({ definitions, total: definitions.length, page: 1, isLoading: false });
+          } catch (error: unknown) {
+            if (definitionListRequestSequence !== requestId) {
+              return;
+            }
+            const msg = getErrorMessage(error, 'Failed to list agent definitions');
+            set({ error: msg, isLoading: false });
+            throw error;
           }
-          set({ definitions, total: definitions.length, page: 1, isLoading: false });
-        } catch (error: unknown) {
-          if (definitionListRequestSequence !== requestId) {
-            return;
+        };
+        const requestRef: { current?: Promise<void> } = {};
+        const request = runRequest().finally(() => {
+          if (
+            requestRef.current &&
+            pendingDefinitionListRequests.get(requestKey) === requestRef.current
+          ) {
+            pendingDefinitionListRequests.delete(requestKey);
           }
-          const msg = getErrorMessage(error, 'Failed to list agent definitions');
-          set({ error: msg, isLoading: false });
-          throw error;
-        }
+        });
+        requestRef.current = request;
+        pendingDefinitionListRequests.set(requestKey, request);
+        await request;
       },
 
       listDefinitionsPage: async (params = {}) => {
@@ -319,6 +348,7 @@ export const useAgentDefinitionStore = create<AgentDefinitionState>()(
 
       reset: () => {
         definitionListRequestSequence += 1;
+        pendingDefinitionListRequests.clear();
         set(initialState);
       },
     }),

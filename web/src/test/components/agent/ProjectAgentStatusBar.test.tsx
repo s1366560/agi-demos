@@ -249,6 +249,67 @@ describe('ProjectAgentStatusBar polling behavior', () => {
     expect(poolService.getStatus).toHaveBeenCalledTimes(1);
   });
 
+  it('coalesces pool status requests while first same-project mount is still pending', async () => {
+    const statusDeferred = createDeferred<PoolStatus>();
+    mockedGetStatus.mockReturnValue(statusDeferred.promise);
+    mockedListInstances.mockResolvedValue({
+      instances: [],
+      total: 0,
+      page: 1,
+      page_size: 100,
+    });
+
+    render(
+      <>
+        <ProjectAgentStatusBar
+          projectId="proj-inflight-cache"
+          tenantId="tenant-1"
+          messageCount={0}
+          enablePoolManagement
+        />
+        <ProjectAgentStatusBar
+          projectId="proj-inflight-cache"
+          tenantId="tenant-1"
+          messageCount={0}
+          enablePoolManagement
+        />
+      </>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(poolService.getStatus).toHaveBeenCalledTimes(1);
+
+    statusDeferred.resolve({
+      enabled: false,
+      status: 'ok',
+      total_instances: 0,
+      hot_instances: 0,
+      warm_instances: 0,
+      cold_instances: 0,
+      ready_instances: 0,
+      executing_instances: 0,
+      unhealthy_instances: 0,
+      prewarm_pool: { l1: 0, l2: 0, l3: 0 },
+      resource_usage: {
+        total_memory_mb: 0,
+        used_memory_mb: 0,
+        total_cpu_cores: 0,
+        used_cpu_cores: 0,
+      },
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(poolService.listInstances).not.toHaveBeenCalled();
+  });
+
   it('can hide the embedded sandbox indicator when sandbox is rendered in the merged status bar', () => {
     render(
       <ProjectAgentStatusBar

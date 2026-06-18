@@ -136,6 +136,20 @@ const initialState = {
   error: null,
 };
 
+let subAgentListRequestSequence = 0;
+const pendingSubAgentListRequests = new Map<string, Promise<void>>();
+
+function stableRequestKey(params: Record<string, unknown>): string {
+  return JSON.stringify(
+    Object.keys(params)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = params[key];
+        return acc;
+      }, {})
+  );
+}
+
 // ============================================================================
 // STORE CREATION
 // ============================================================================
@@ -148,52 +162,80 @@ export const useSubAgentStore = create<SubAgentState>()(
       // ========== SubAgent CRUD ==========
 
       listSubAgents: async (params = {}) => {
-        set({ isLoading: true, error: null });
-        try {
-          const { filters } = get();
-          const limit = params.limit ?? get().pageSize;
-          const offset = params.offset ?? params.skip ?? 0;
-          const queryParams = {
-            ...params,
-            limit,
-            offset,
-            enabled_only:
-              params.enabled_only !== undefined
-                ? params.enabled_only
-                : filters.enabled === true
-                  ? true
-                  : undefined,
-          };
-          const response = await subagentAPI.list(queryParams);
-          const subagents = response.subagents;
-          set({
-            subagents,
-            total: response.total,
-            enabledTotal:
-              response.enabled_total ?? subagents.filter((subagent) => subagent.enabled).length,
-            averageSuccessRate:
-              response.average_success_rate ??
-              (() => {
-                const ratedSubagents = subagents.filter(
-                  (subagent) => subagent.enabled && subagent.total_invocations > 0
-                );
-                return ratedSubagents.length > 0
-                  ? ratedSubagents.reduce((sum, subagent) => sum + subagent.success_rate, 0) /
-                      ratedSubagents.length
-                  : 0;
-              })(),
-            totalInvocations:
-              response.total_invocations ??
-              subagents.reduce((sum, subagent) => sum + subagent.total_invocations, 0),
-            page: Math.floor(offset / Math.max(limit, 1)) + 1,
-            pageSize: limit,
-            isLoading: false,
-          });
-        } catch (error: unknown) {
-          const errorMessage = getErrorMessage(error, 'Failed to list subagents');
-          set({ error: errorMessage, isLoading: false });
-          throw error;
+        const { filters } = get();
+        const limit = params.limit ?? get().pageSize;
+        const offset = params.offset ?? params.skip ?? 0;
+        const queryParams = {
+          ...params,
+          limit,
+          offset,
+          enabled_only:
+            params.enabled_only !== undefined
+              ? params.enabled_only
+              : filters.enabled === true
+                ? true
+                : undefined,
+        };
+        const requestKey = stableRequestKey(queryParams);
+        const pendingRequest = pendingSubAgentListRequests.get(requestKey);
+        if (pendingRequest) {
+          await pendingRequest;
+          return;
         }
+
+        const requestId = ++subAgentListRequestSequence;
+        set({ isLoading: true, error: null });
+        const runRequest = async () => {
+          try {
+            const response = await subagentAPI.list(queryParams);
+            if (subAgentListRequestSequence !== requestId) {
+              return;
+            }
+            const subagents = response.subagents;
+            set({
+              subagents,
+              total: response.total,
+              enabledTotal:
+                response.enabled_total ?? subagents.filter((subagent) => subagent.enabled).length,
+              averageSuccessRate:
+                response.average_success_rate ??
+                (() => {
+                  const ratedSubagents = subagents.filter(
+                    (subagent) => subagent.enabled && subagent.total_invocations > 0
+                  );
+                  return ratedSubagents.length > 0
+                    ? ratedSubagents.reduce((sum, subagent) => sum + subagent.success_rate, 0) /
+                        ratedSubagents.length
+                    : 0;
+                })(),
+              totalInvocations:
+                response.total_invocations ??
+                subagents.reduce((sum, subagent) => sum + subagent.total_invocations, 0),
+              page: Math.floor(offset / Math.max(limit, 1)) + 1,
+              pageSize: limit,
+              isLoading: false,
+            });
+          } catch (error: unknown) {
+            if (subAgentListRequestSequence !== requestId) {
+              return;
+            }
+            const errorMessage = getErrorMessage(error, 'Failed to list subagents');
+            set({ error: errorMessage, isLoading: false });
+            throw error;
+          }
+        };
+        const requestRef: { current?: Promise<void> } = {};
+        const request = runRequest().finally(() => {
+          if (
+            requestRef.current &&
+            pendingSubAgentListRequests.get(requestKey) === requestRef.current
+          ) {
+            pendingSubAgentListRequests.delete(requestKey);
+          }
+        });
+        requestRef.current = request;
+        pendingSubAgentListRequests.set(requestKey, request);
+        await request;
       },
 
       getSubAgent: async (id: string, options = {}) => {
@@ -362,6 +404,8 @@ export const useSubAgentStore = create<SubAgentState>()(
       },
 
       reset: () => {
+        subAgentListRequestSequence += 1;
+        pendingSubAgentListRequests.clear();
         set(initialState);
       },
     }),

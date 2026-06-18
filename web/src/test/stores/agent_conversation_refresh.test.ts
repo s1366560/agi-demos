@@ -54,6 +54,12 @@ describe('conversation lifecycle refresh', () => {
   });
 
   it('keeps same-project loads cached unless force is requested', async () => {
+    useConversationsStore.setState({
+      conversations: [conversation('old-conversation', 'project-1')],
+      conversationListProjectId: 'project-1',
+      hasMoreConversations: false,
+      conversationsTotal: 1,
+    });
     let state = {
       activeConversationId: null,
       conversations: [conversation('old-conversation', 'project-1')],
@@ -84,6 +90,36 @@ describe('conversation lifecycle refresh', () => {
     });
 
     expect(mockListConversations).toHaveBeenCalledWith('project-1', undefined, 20, 0, undefined, {
+      groupByWorkspace: true,
+    });
+    expect(set).toHaveBeenLastCalledWith({
+      conversations: [conversation('new-conversation', 'project-1')],
+      hasMoreConversations: false,
+      conversationsTotal: 1,
+    });
+  });
+
+  it('reloads when only legacy agent state still has same-project conversations', async () => {
+    let state = {
+      activeConversationId: null,
+      conversations: [conversation('stale-conversation', 'project-1')],
+      conversationStates: new Map<string, ConversationState>(),
+      hasMoreConversations: false,
+    };
+    const set = vi.fn((updates: Partial<typeof state>) => {
+      state = { ...state, ...updates };
+    });
+    const actions = createConversationLifecycleActions({
+      get: () => state,
+      set,
+      resetCanvasForConversationScope: vi.fn(),
+    });
+
+    await act(async () => {
+      await actions.loadConversations('project-1');
+    });
+
+    expect(mockListConversations).toHaveBeenCalledWith('project-1', undefined, 10, 0, undefined, {
       groupByWorkspace: true,
     });
     expect(set).toHaveBeenLastCalledWith({

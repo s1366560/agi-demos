@@ -95,12 +95,6 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
         return;
       }
 
-      const firstConvoProject = currentConvos[0]?.project_id;
-      if (!options.force && currentConvos.length > 0 && firstConvoProject === projectId) {
-        logger.debug(`[agentV3] Conversations already loaded for project ${projectId}, skipping`);
-        return;
-      }
-
       logger.debug(`[agentV3] loadConversations called for project: ${projectId}`);
 
       const loadPromise = (async () => {

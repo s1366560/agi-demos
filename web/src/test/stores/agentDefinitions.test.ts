@@ -131,6 +131,28 @@ describe('agent definition store', () => {
     expect(state.isLoading).toBe(false);
   });
 
+  it('coalesces concurrent definition list requests with matching params', async () => {
+    const request = deferred<AgentDefinition[]>();
+    vi.mocked(definitionsService.list).mockReturnValueOnce(request.promise);
+
+    const firstLoad = useAgentDefinitionStore
+      .getState()
+      .listDefinitions({ tenant_id: 'tenant-1', enabled_only: true });
+    const secondLoad = useAgentDefinitionStore
+      .getState()
+      .listDefinitions({ enabled_only: true, tenant_id: 'tenant-1' });
+
+    expect(definitionsService.list).toHaveBeenCalledTimes(1);
+
+    request.resolve([definition('definition-1', 'Definition 1')]);
+    await Promise.all([firstLoad, secondLoad]);
+
+    const state = useAgentDefinitionStore.getState();
+    expect(state.definitions).toEqual([expect.objectContaining({ id: 'definition-1' })]);
+    expect(state.total).toBe(1);
+    expect(state.isLoading).toBe(false);
+  });
+
   it('ignores definition list responses that resolve after reset', async () => {
     const request = deferred<AgentDefinition[]>();
     vi.mocked(definitionsService.list).mockReturnValueOnce(request.promise);

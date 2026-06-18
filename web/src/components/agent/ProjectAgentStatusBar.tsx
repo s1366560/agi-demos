@@ -322,6 +322,7 @@ interface PoolStatusSnapshot {
 }
 
 const poolStatusSnapshotCache = new Map<string, PoolStatusSnapshot>();
+const poolStatusSnapshotInFlight = new Map<string, Promise<PoolStatusSnapshot>>();
 
 /**
  * ProjectAgentStatusBar - Refactored to use unified status hook
@@ -421,12 +422,44 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
       }, delayMs);
     };
 
-    const updateSnapshot = (enabled: boolean, instance: PoolInstance | null) => {
-      poolStatusSnapshotCache.set(cacheKey, {
-        enabled,
-        instance,
+    const loadPoolSnapshot = async (
+      reason: 'initial' | 'timer' | 'manual'
+    ): Promise<PoolStatusSnapshot> => {
+      const statusResponse = await poolService.getStatus();
+
+      if (!statusResponse.enabled) {
+        return {
+          enabled: false,
+          instance: null,
+          fetchedAt: Date.now(),
+        };
+      }
+
+      let nextInstance = poolStatusSnapshotCache.get(cacheKey)?.instance ?? null;
+      const now = Date.now();
+      const shouldRefreshInstance =
+        reason !== 'timer' || now - lastPoolInstanceFetchAtRef.current >= POOL_INSTANCE_REFRESH_MS;
+
+      if (shouldRefreshInstance) {
+        const instanceKey = `${tenantId}:${projectId}:chat`;
+        const instances = await poolService.listInstances({ page: 1, page_size: 100 });
+
+        nextInstance =
+          instances.instances.find((i: PoolInstance) => i.instance_key === instanceKey) || null;
+      }
+
+      return {
+        enabled: true,
+        instance: nextInstance,
         fetchedAt: Date.now(),
-      });
+      };
+    };
+
+    const applyPoolSnapshot = (snapshot: PoolStatusSnapshot) => {
+      poolStatusSnapshotCache.set(cacheKey, snapshot);
+      setPoolEnabled(snapshot.enabled);
+      setPoolInstance(snapshot.instance);
+      lastPoolInstanceFetchAtRef.current = snapshot.enabled ? snapshot.fetchedAt : 0;
     };
 
     const fetchPoolInstance = async (reason: 'initial' | 'timer' | 'manual') => {
@@ -438,44 +471,31 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
       setPoolLoading(true);
       setPoolError(null);
       try {
-        // First check if pool is enabled
-        const statusResponse = await poolService.getStatus();
+        let sharedRequest = poolStatusSnapshotInFlight.get(cacheKey);
+        if (!sharedRequest) {
+          sharedRequest = loadPoolSnapshot(reason).finally(() => {
+            if (poolStatusSnapshotInFlight.get(cacheKey) === sharedRequest) {
+              poolStatusSnapshotInFlight.delete(cacheKey);
+            }
+          });
+          poolStatusSnapshotInFlight.set(cacheKey, sharedRequest);
+        }
+
+        const snapshot = await sharedRequest;
         if (!isEffectActive()) return;
-
-        setPoolEnabled(statusResponse.enabled);
-        if (!statusResponse.enabled) {
-          lastPoolInstanceFetchAtRef.current = 0;
-          setPoolInstance(null);
-          updateSnapshot(false, null);
-          return;
-        }
-
-        let nextInstance = poolStatusSnapshotCache.get(cacheKey)?.instance ?? null;
-        const now = Date.now();
-        const shouldRefreshInstance =
-          reason !== 'timer' ||
-          now - lastPoolInstanceFetchAtRef.current >= POOL_INSTANCE_REFRESH_MS;
-
-        if (shouldRefreshInstance) {
-          // Fetch instance for this project
-          const instanceKey = `${tenantId}:${projectId}:chat`;
-          const instances = await poolService.listInstances({ page: 1, page_size: 100 });
-          if (!isEffectActive()) return;
-
-          nextInstance =
-            instances.instances.find((i: PoolInstance) => i.instance_key === instanceKey) || null;
-          lastPoolInstanceFetchAtRef.current = now;
-        }
-
-        setPoolInstance(nextInstance);
-        updateSnapshot(true, nextInstance);
+        applyPoolSnapshot(snapshot);
       } catch (err) {
         // Pool service might not be available
         if (isEffectActive()) {
           setPoolEnabled(false);
           setPoolInstance(null);
           setPoolError(err instanceof Error ? err.message : 'Pool service unavailable');
-          updateSnapshot(false, null);
+          const snapshot = {
+            enabled: false,
+            instance: null,
+            fetchedAt: Date.now(),
+          };
+          poolStatusSnapshotCache.set(cacheKey, snapshot);
         }
       } finally {
         inFlight = false;
