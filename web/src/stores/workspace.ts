@@ -625,8 +625,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             projectId
           );
           const workspaceChanged = previousWorkspace?.id !== currentWorkspace?.id;
+          const nextSurfaceRequestId = workspaceChanged
+            ? ++workspaceSurfaceRequestSequence
+            : undefined;
           set({
             ...(workspaceChanged ? createEmptySurfaceState() : {}),
+            ...(nextSurfaceRequestId !== undefined
+              ? { activeSurfaceRequestId: nextSurfaceRequestId }
+              : {}),
             workspaces,
             currentWorkspace,
             isLoading: false,

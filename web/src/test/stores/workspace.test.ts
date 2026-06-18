@@ -19,6 +19,16 @@ import {
 } from '@/components/blackboard/blackboardSurfaceContract';
 import { useWorkspaceReplies, useWorkspaceStore } from '@/stores/workspace';
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 vi.mock('@/services/workspaceService', () => ({
   workspaceService: {
     listByProject: vi.fn(),
@@ -215,6 +225,56 @@ describe('workspace store', () => {
     const state = useWorkspaceStore.getState();
     expect(state.workspaces).toEqual([expect.objectContaining({ id: 'ws-new' })]);
     expect(state.currentWorkspace?.id).toBe('ws-new');
+    expect(state.isLoading).toBe(false);
+  });
+
+  it('loadWorkspaces invalidates a stale surface load when selected workspace changes', async () => {
+    const staleWorkspaceRequest = deferred<any>();
+    vi.mocked(workspaceService.getById).mockReturnValueOnce(staleWorkspaceRequest.promise);
+    vi.mocked(workspaceService.listMembers).mockResolvedValueOnce([{ id: 'old-member' }] as any);
+    vi.mocked(workspaceService.listAgents).mockResolvedValueOnce([]);
+    vi.mocked(workspaceBlackboardService.listPosts).mockResolvedValueOnce([
+      { id: 'old-post', title: 'Old post' },
+    ] as any);
+    vi.mocked(workspaceTaskService.list).mockResolvedValueOnce([{ id: 'old-task' }] as any);
+    vi.mocked(workspaceTopologyService.listNodes).mockResolvedValueOnce([]);
+    vi.mocked(workspaceTopologyService.listEdges).mockResolvedValueOnce([]);
+    vi.mocked(workspaceObjectiveService.list).mockResolvedValueOnce([]);
+    vi.mocked(workspaceGeneService.list).mockResolvedValueOnce([]);
+    vi.mocked(workspaceChatService.listMessages).mockResolvedValueOnce([]);
+
+    const surfaceLoad = useWorkspaceStore
+      .getState()
+      .loadWorkspaceSurface('t-1', 'old-project', 'old-ws');
+
+    vi.mocked(workspaceService.listByProject).mockResolvedValueOnce([
+      {
+        id: 'new-ws',
+        tenant_id: 't-1',
+        project_id: 'new-project',
+        name: 'New Workspace',
+        created_by: 'u-1',
+        created_at: '',
+      },
+    ] as any);
+
+    await useWorkspaceStore.getState().loadWorkspaces('t-1', 'new-project');
+
+    staleWorkspaceRequest.resolve({
+      id: 'old-ws',
+      tenant_id: 't-1',
+      project_id: 'old-project',
+      name: 'Old Workspace',
+      created_by: 'u-1',
+      created_at: '',
+    });
+    await surfaceLoad;
+
+    const state = useWorkspaceStore.getState();
+    expect(state.currentWorkspace?.id).toBe('new-ws');
+    expect(state.members).toEqual([]);
+    expect(state.posts).toEqual([]);
+    expect(state.tasks).toEqual([]);
     expect(state.isLoading).toBe(false);
   });
 
