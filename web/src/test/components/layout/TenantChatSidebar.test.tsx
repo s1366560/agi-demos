@@ -54,7 +54,18 @@ const projectState = {
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, fallback?: string) => fallback || _key,
+    t: (key: string, fallback?: string | Record<string, unknown>) => {
+      if (typeof fallback === 'string') {
+        return fallback || key;
+      }
+      if (fallback && typeof fallback.defaultValue === 'string') {
+        return fallback.defaultValue.replace(/{{(.*?)}}/g, (_match, rawKey: string) => {
+          const value = fallback[rawKey.trim()];
+          return value === undefined || value === null ? '' : String(value);
+        });
+      }
+      return key;
+    },
   }),
 }));
 
@@ -244,6 +255,7 @@ function TenantChatSidebarRouteHarness({ route, tenantId }: { route: string; ten
 describe('TenantChatSidebar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (projectAPI.list as any).mockReset();
     formatDistanceToNowMock.mockReturnValue('just now');
     agentState.activeConversationId = 'conv-1';
     agentState.setActiveConversation.mockReset();
@@ -608,6 +620,67 @@ describe('TenantChatSidebar', () => {
     expect(localStorage.getItem('agent:tenant-1:lastProjectId')).toBe(
       JSON.stringify('project-hidden')
     );
+  });
+
+  it('loads additional authorized project search pages', async () => {
+    const firstPageProjects = Array.from({ length: 100 }, (_, index) => ({
+      id: `search-project-${index.toString()}`,
+      name: `Search Project ${index.toString()}`,
+      tenant_id: 'tenant-1',
+    }));
+    const secondPageProject = {
+      id: 'search-project-100',
+      name: 'Search Project 100',
+      tenant_id: 'tenant-1',
+    };
+    (projectAPI.list as any)
+      .mockResolvedValueOnce({
+        projects: firstPageProjects,
+        total: 101,
+        page: 1,
+        page_size: 100,
+      })
+      .mockResolvedValueOnce({
+        projects: [secondPageProject],
+        total: 101,
+        page: 2,
+        page_size: 100,
+      });
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search projects' }), {
+      target: { value: 'Search Project' },
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 300));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Showing 100 of 101 projects')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Load more' })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+
+    await waitFor(() => {
+      expect(projectAPI.list).toHaveBeenLastCalledWith('tenant-1', {
+        page: 2,
+        page_size: 100,
+        search: 'Search Project',
+      });
+      expect(screen.getByRole('option', { name: 'Search Project 100' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Project switcher' }), {
+      target: { value: 'search-project-100' },
+    });
+
+    expect(projectState.setCurrentProject).toHaveBeenCalledWith(secondPageProject);
   });
 
   it('keeps the conversation list visible while switching session history', () => {

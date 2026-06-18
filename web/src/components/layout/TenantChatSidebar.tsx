@@ -517,16 +517,22 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projectSearchResults, setProjectSearchResults] = useState<Project[]>([]);
+  const [projectSearchTotal, setProjectSearchTotal] = useState(0);
+  const [projectSearchPage, setProjectSearchPage] = useState(0);
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
   const [isProjectSearchLoading, setIsProjectSearchLoading] = useState(false);
+  const [isProjectSearchLoadingMore, setIsProjectSearchLoadingMore] = useState(false);
   const loadedProjectIdRef = useRef<string | null>(null);
   const loadedSidebarWorkspaceSurfaceRef = useRef<string | null>(null);
   const projectSearchRequestRef = useRef(0);
   const projectSearchDebounceRef = useRef<number | null>(null);
   const clearProjectSearchState = useCallback(() => {
     setProjectSearchResults([]);
+    setProjectSearchTotal(0);
+    setProjectSearchPage(0);
     setProjectSearchQuery('');
     setIsProjectSearchLoading(false);
+    setIsProjectSearchLoadingMore(false);
     projectSearchRequestRef.current += 1;
     if (projectSearchDebounceRef.current) {
       window.clearTimeout(projectSearchDebounceRef.current);
@@ -659,9 +665,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       sourceProjects.push(scopedCurrentProject);
     }
     for (const project of projectSearchResults) {
-      if (sourceProjects.length >= PROJECT_SEARCH_PAGE_SIZE) {
-        break;
-      }
       sourceProjects.push(project);
     }
 
@@ -1208,6 +1211,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const handleProjectSearch = useCallback(
     (value: string) => {
       setProjectSearchQuery(value);
+      setProjectSearchResults([]);
+      setProjectSearchTotal(0);
+      setProjectSearchPage(0);
+      setIsProjectSearchLoadingMore(false);
       if (projectSearchDebounceRef.current) {
         window.clearTimeout(projectSearchDebounceRef.current);
         projectSearchDebounceRef.current = null;
@@ -1218,7 +1225,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       projectSearchRequestRef.current = requestId;
 
       if (!resolvedTenantId || !search) {
-        setProjectSearchResults([]);
         setIsProjectSearchLoading(false);
         return;
       }
@@ -1236,6 +1242,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               return;
             }
             setProjectSearchResults(response.projects);
+            setProjectSearchTotal(response.total);
+            setProjectSearchPage(response.page);
           })
           .catch((error: unknown) => {
             if (projectSearchRequestRef.current !== requestId) {
@@ -1243,6 +1251,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             }
             console.error('Failed to search projects:', error);
             setProjectSearchResults([]);
+            setProjectSearchTotal(0);
+            setProjectSearchPage(0);
           })
           .finally(() => {
             if (projectSearchRequestRef.current === requestId) {
@@ -1253,6 +1263,71 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     },
     [resolvedTenantId]
   );
+
+  const hasMoreProjectSearchResults =
+    !!projectSearchQuery.trim() && projectSearchResults.length < projectSearchTotal;
+
+  const handleLoadMoreProjectSearchResults = useCallback(() => {
+    const search = projectSearchQuery.trim();
+    if (
+      !resolvedTenantId ||
+      !search ||
+      isProjectSearchLoading ||
+      isProjectSearchLoadingMore ||
+      !hasMoreProjectSearchResults
+    ) {
+      return;
+    }
+
+    const requestId = projectSearchRequestRef.current + 1;
+    projectSearchRequestRef.current = requestId;
+    const nextPage = projectSearchPage + 1;
+    setIsProjectSearchLoadingMore(true);
+
+    void projectAPI
+      .list(resolvedTenantId, {
+        page: nextPage,
+        page_size: PROJECT_SEARCH_PAGE_SIZE,
+        search,
+      })
+      .then((response) => {
+        if (projectSearchRequestRef.current !== requestId) {
+          return;
+        }
+
+        setProjectSearchResults((currentResults) => {
+          const seenProjectIds = new Set(currentResults.map((project) => project.id));
+          const nextProjects = response.projects.filter((project) => {
+            if (seenProjectIds.has(project.id)) {
+              return false;
+            }
+            seenProjectIds.add(project.id);
+            return true;
+          });
+          return [...currentResults, ...nextProjects];
+        });
+        setProjectSearchTotal(response.total);
+        setProjectSearchPage(response.page);
+      })
+      .catch((error: unknown) => {
+        if (projectSearchRequestRef.current !== requestId) {
+          return;
+        }
+        console.error('Failed to load more projects:', error);
+      })
+      .finally(() => {
+        if (projectSearchRequestRef.current === requestId) {
+          setIsProjectSearchLoadingMore(false);
+        }
+      });
+  }, [
+    hasMoreProjectSearchResults,
+    isProjectSearchLoading,
+    isProjectSearchLoadingMore,
+    projectSearchPage,
+    projectSearchQuery,
+    resolvedTenantId,
+  ]);
 
   // Get current width for render
   const currentWidth = collapsed ? SIDEBAR_COLLAPSED_WIDTH : sidebarWidth;
@@ -1267,6 +1342,15 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
           'agent.sidebar.conversations',
           'conversations'
         )}`;
+  const projectSearchCountLabel = t('agent.sidebar.projectSearchCount', {
+    count: projectSearchResults.length,
+    total: projectSearchTotal,
+    defaultValue: 'Showing {{count}} of {{total}} projects',
+  });
+  const projectSearchCountText =
+    typeof projectSearchCountLabel === 'string'
+      ? projectSearchCountLabel
+      : `${projectSearchResults.length.toString()} / ${projectSearchTotal.toString()}`;
 
   return (
     <aside
@@ -1395,6 +1479,30 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               </span>
             ) : null}
           </div>
+          {projectSearchQuery.trim() && projectSearchTotal > 0 ? (
+            <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span>{projectSearchCountText}</span>
+              {hasMoreProjectSearchResults ? (
+                <button
+                  type="button"
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-200 px-2 text-xs font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+                  disabled={isProjectSearchLoading || isProjectSearchLoadingMore}
+                  onClick={handleLoadMoreProjectSearchResults}
+                >
+                  <ChevronDown
+                    size={14}
+                    className={
+                      isProjectSearchLoadingMore ? 'animate-spin motion-reduce:animate-none' : ''
+                    }
+                    aria-hidden="true"
+                  />
+                  {isProjectSearchLoadingMore
+                    ? t('agent.sidebar.loadingMoreProjects', 'Loading...')
+                    : t('agent.sidebar.loadMoreProjects', 'Load more')}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
 
