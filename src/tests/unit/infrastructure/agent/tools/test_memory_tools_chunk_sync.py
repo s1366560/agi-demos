@@ -10,12 +10,43 @@ from src.infrastructure.agent.tools.memory_tools import (
     _background_sync_created_memory,
     _execute_memory_create,
     _execute_memory_delete,
+    _execute_memory_get,
     _execute_memory_update,
 )
 
 
 @pytest.mark.unit
 class TestMemoryToolsChunkSync:
+    @pytest.mark.asyncio
+    async def test_memory_get_reports_processing_when_chunks_are_pending(self) -> None:
+        session = AsyncMock()
+        session_factory = MagicMock(return_value=session)
+
+        chunk_result = MagicMock()
+        chunk_result.scalars.return_value.all.return_value = []
+        memory_result = MagicMock()
+        memory_result.scalar_one_or_none.return_value = SimpleNamespace(
+            id="mem-1",
+            project_id="proj-1",
+            processing_status="PENDING",
+            content="remember this",
+            meta={"category": "fact"},
+            created_at=None,
+        )
+        session.execute = AsyncMock(side_effect=[chunk_result, memory_result])
+
+        result = await _execute_memory_get(
+            session_factory=session_factory,
+            project_id="proj-1",
+            source_id="mem-1",
+        )
+
+        assert result["status"] == "processing"
+        assert result["processing_status"] == "PENDING"
+        assert "error" not in result
+        assert session.execute.await_count == 2
+        session.close.assert_awaited_once()
+
     @pytest.mark.asyncio
     async def test_create_returns_after_commit_and_schedules_background_sync(self) -> None:
         session = AsyncMock()

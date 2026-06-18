@@ -39,7 +39,7 @@ async def _execute_memory_get(
     try:
         from sqlalchemy import select
 
-        from src.infrastructure.adapters.secondary.persistence.models import MemoryChunk
+        from src.infrastructure.adapters.secondary.persistence.models import Memory, MemoryChunk
 
         query = (
             select(MemoryChunk)
@@ -53,7 +53,49 @@ async def _execute_memory_get(
         chunks = list(result.scalars().all())
 
         if not chunks:
-            return {"error": f"No memory found for source_id: {source_id}"}
+            memory_query = select(Memory).where(
+                Memory.id == source_id,
+                Memory.project_id == project_id,
+            )
+            memory_result = await session.execute(memory_query)
+            memory = memory_result.scalar_one_or_none()
+            if memory is None:
+                return {"error": f"No memory found for source_id: {source_id}"}
+
+            processing_status = str(getattr(memory, "processing_status", "") or "").upper()
+            if processing_status in {"PENDING", "PROCESSING"}:
+                return {
+                    "source_id": source_id,
+                    "status": "processing",
+                    "processing_status": processing_status,
+                    "message": "Memory exists but indexing has not completed yet.",
+                }
+
+            if processing_status == "FAILED":
+                return {
+                    "source_id": source_id,
+                    "status": "failed",
+                    "processing_status": processing_status,
+                    "error": "Memory indexing failed before chunks were created.",
+                }
+
+            metadata = getattr(memory, "meta", None) or {}
+            return {
+                "source_id": source_id,
+                "status": "available_without_chunks",
+                "processing_status": processing_status or None,
+                "chunks": [
+                    {
+                        "content": getattr(memory, "content", ""),
+                        "category": metadata.get("category") or "other",
+                        "chunk_index": 0,
+                        "created_at": str(memory.created_at)
+                        if getattr(memory, "created_at", None)
+                        else "",
+                    }
+                ],
+                "total": 1,
+            }
 
         items = [
             {
