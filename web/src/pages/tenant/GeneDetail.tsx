@@ -108,11 +108,13 @@ export const GeneDetail: FC = () => {
     deleteGeneReview,
     publishGene,
     unpublishGene,
+    deleteGene,
   } = useGeneMarketActions();
 
   const [isInstallModalVisible, setIsInstallModalVisible] = useState(shouldOpenInstallModal);
   const [isRateModalVisible, setIsRateModalVisible] = useState(shouldOpenRateModal);
   const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
+  const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
   const [installForm] = Form.useForm<InstallFormValues>();
   const [rateForm] = Form.useForm<RateFormValues>();
   const [isReviewModalVisible, setIsReviewModalVisible] = useState(false);
@@ -264,6 +266,38 @@ export const GeneDetail: FC = () => {
     }
   };
 
+  const handleDeleteGene = () => {
+    if (!geneId || !tenantId || !currentGene) {
+      return;
+    }
+
+    Modal.confirm({
+      title: t('tenant.genes.deleteConfirmTitle', {
+        name: currentGene.name,
+        defaultValue: 'Delete {{name}}?',
+      }),
+      content: t(
+        'tenant.genes.deleteConfirmContent',
+        'This removes the gene from the marketplace and cannot be undone.'
+      ),
+      okText: t('common.delete', 'Delete'),
+      okType: 'danger',
+      cancelText: t('common.cancel', 'Cancel'),
+      onOk: async () => {
+        setIsDeleteSubmitting(true);
+        try {
+          await deleteGene(geneId, { tenant_id: tenantId });
+          message.success(t('tenant.genes.deleteSuccess', 'Gene deleted successfully'));
+          setIsDeleteSubmitting(false);
+          void navigate(-1);
+        } catch {
+          showActionError(t('tenant.genes.deleteError', 'Failed to delete gene'));
+          setIsDeleteSubmitting(false);
+        }
+      },
+    });
+  };
+
   const handleDeleteReview = (reviewId: string) => {
     Modal.confirm({
       title: t('gene.deleteReview'),
@@ -385,6 +419,14 @@ export const GeneDetail: FC = () => {
             icon={<Download className="w-4 h-4" />}
           >
             {t('tenant.genes.installAction')}
+          </Button>
+          <Button
+            danger
+            loading={isDeleteSubmitting}
+            onClick={handleDeleteGene}
+            icon={<Trash2 className="w-4 h-4" />}
+          >
+            {t('tenant.genes.deleteAction', 'Delete')}
           </Button>
         </Space>
       </div>

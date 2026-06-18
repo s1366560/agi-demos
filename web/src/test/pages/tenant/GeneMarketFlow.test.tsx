@@ -27,6 +27,8 @@ const actionsMock = vi.hoisted(() => ({
   createGene: vi.fn(),
   createGenome: vi.fn(),
   createGeneReview: vi.fn(),
+  deleteGene: vi.fn(),
+  deleteGenome: vi.fn(),
   deleteGeneReview: vi.fn(),
   fetchGeneReviews: vi.fn(),
   fetchGenomeGenes: vi.fn(),
@@ -215,6 +217,8 @@ describe('Gene marketplace rating flow', () => {
     actionsMock.createGeneReview.mockResolvedValue(undefined);
     actionsMock.createGene.mockResolvedValue(gene({ id: 'gene-new' }));
     actionsMock.createGenome.mockResolvedValue(genome({ id: 'genome-new' }));
+    actionsMock.deleteGene.mockResolvedValue(undefined);
+    actionsMock.deleteGenome.mockResolvedValue(undefined);
     actionsMock.deleteGeneReview.mockResolvedValue(undefined);
     actionsMock.publishGene.mockResolvedValue(gene({ is_published: true }));
     actionsMock.publishGenome.mockResolvedValue(genome({ is_published: true }));
@@ -659,6 +663,32 @@ describe('Gene marketplace rating flow', () => {
     expect(messageSuccessSpy).toHaveBeenCalledWith('Gene published successfully');
   });
 
+  it('deletes genes from the detail action bar after confirmation', async () => {
+    const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
+    vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
+      void config.onOk?.();
+      return {
+        destroy: vi.fn(),
+        update: vi.fn(),
+      };
+    });
+    stateMock.currentGene = gene();
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(actionsMock.deleteGene).toHaveBeenCalledWith('gene-1', { tenant_id: 'tenant-1' });
+    });
+    expect(messageSuccessSpy).toHaveBeenCalledWith('Gene deleted successfully');
+    expect(navigateMock).toHaveBeenCalledWith(-1);
+  });
+
   it('unpublishes published genomes from the detail action bar', async () => {
     const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
     stateMock.currentGenome = genome({ is_published: true });
@@ -680,6 +710,34 @@ describe('Gene marketplace rating flow', () => {
       tenant_id: 'tenant-1',
     });
     expect(messageSuccessSpy).toHaveBeenCalledWith('Genome unpublished successfully');
+  });
+
+  it('deletes genomes from the detail action bar after confirmation', async () => {
+    const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
+    vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
+      void config.onOk?.();
+      return {
+        destroy: vi.fn(),
+        update: vi.fn(),
+      };
+    });
+    stateMock.currentGenome = genome({ is_published: true });
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/genomes/genome-1']}>
+        <GenomeDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(actionsMock.deleteGenome).toHaveBeenCalledWith('genome-1', {
+        tenant_id: 'tenant-1',
+      });
+    });
+    expect(messageSuccessSpy).toHaveBeenCalledWith('Genome deleted successfully');
+    expect(navigateMock).toHaveBeenCalledWith(-1);
   });
 
   it('rates genomes from the detail action bar', async () => {

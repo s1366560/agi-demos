@@ -19,7 +19,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { ArchiveX, ArrowLeft, Star, UploadCloud } from 'lucide-react';
+import { ArchiveX, ArrowLeft, Star, Trash2, UploadCloud } from 'lucide-react';
 
 import {
   useCurrentGenome,
@@ -62,10 +62,12 @@ export const GenomeDetail: React.FC = () => {
     publishGenome,
     unpublishGenome,
     rateGenome,
+    deleteGenome,
   } = useGeneMarketActions();
   const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
   const [isRateModalVisible, setIsRateModalVisible] = useState(false);
   const [isRateSubmitting, setIsRateSubmitting] = useState(false);
+  const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
   const [rateForm] = Form.useForm<RateFormValues>();
   const genomeGeneSlugKey = genome ? genome.gene_slugs.join('\n') : null;
   const genomeGeneSlugs = useMemo(() => {
@@ -157,6 +159,38 @@ export const GenomeDetail: React.FC = () => {
     }
   };
 
+  const handleDeleteGenome = () => {
+    if (!genomeId || !tenantId || !genome) {
+      return;
+    }
+
+    Modal.confirm({
+      title: t('tenant.genomeDetail.deleteConfirmTitle', {
+        name: genome.name,
+        defaultValue: 'Delete {{name}}?',
+      }),
+      content: t(
+        'tenant.genomeDetail.deleteConfirmContent',
+        'This removes the genome from the marketplace and cannot be undone.'
+      ),
+      okText: t('common.delete', 'Delete'),
+      okType: 'danger',
+      cancelText: t('common.cancel', 'Cancel'),
+      onOk: async () => {
+        setIsDeleteSubmitting(true);
+        try {
+          await deleteGenome(genomeId, { tenant_id: tenantId });
+          message.success(t('tenant.genomeDetail.deleteSuccess', 'Genome deleted successfully'));
+          setIsDeleteSubmitting(false);
+          void navigate(-1);
+        } catch {
+          showActionError(t('tenant.genomeDetail.deleteError', 'Failed to delete genome'));
+          setIsDeleteSubmitting(false);
+        }
+      },
+    });
+  };
+
   if (loading && !genome) {
     return (
       <div className="flex justify-center p-12">
@@ -229,6 +263,14 @@ export const GenomeDetail: React.FC = () => {
             icon={<Star className="w-4 h-4" />}
           >
             {t('tenant.genomeDetail.rateAction', 'Rate')}
+          </Button>
+          <Button
+            danger
+            loading={isDeleteSubmitting}
+            onClick={handleDeleteGenome}
+            icon={<Trash2 className="w-4 h-4" />}
+          >
+            {t('tenant.genomeDetail.deleteAction', 'Delete')}
           </Button>
         </Space>
       </div>
