@@ -134,27 +134,31 @@ async def _ensure_project_access(
     db: AsyncSession,
     *,
     current_user: User,
-    tenant_id: str,
     project_id: str,
-) -> None:
+    tenant_id: str | None = None,
+) -> str:
+    conditions = [
+        UserProject.user_id == current_user.id,
+        UserProject.project_id == project_id,
+    ]
+    if tenant_id is not None:
+        conditions.append(Project.tenant_id == tenant_id)
+
     result = await db.execute(
         refresh_select_statement(
-            select(UserProject.id)
+            select(Project.tenant_id)
+            .select_from(UserProject)
             .join(Project, UserProject.project_id == Project.id)
-            .where(
-                and_(
-                    UserProject.user_id == current_user.id,
-                    UserProject.project_id == project_id,
-                    Project.tenant_id == tenant_id,
-                )
-            )
+            .where(and_(*conditions))
         )
     )
-    if result.scalar_one_or_none() is None:
+    project_tenant_id = result.scalar_one_or_none()
+    if project_tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Access denied"),
         )
+    return str(project_tenant_id)
 
 
 async def _ensure_selected_agent_access(
@@ -191,15 +195,13 @@ async def _load_owned_conversation_row(
     conversation = await db.get(ConversationModel, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail=_("Conversation not found"))
-    if conversation.tenant_id != tenant_id:
-        raise HTTPException(status_code=404, detail=_("Conversation not found"))
     if conversation.user_id != current_user.id:
         raise HTTPException(status_code=403, detail=_("Access denied"))
     await _ensure_project_access(
         db,
         current_user=current_user,
-        tenant_id=tenant_id,
         project_id=conversation.project_id,
+        tenant_id=conversation.tenant_id,
     )
     return conversation
 
@@ -444,10 +446,9 @@ async def create_conversation(
     """Create a new conversation."""
     try:
         assert request is not None
-        await _ensure_project_access(
+        tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
-            tenant_id=tenant_id,
             project_id=data.project_id,
         )
         container = get_container_with_db(request, db)
@@ -534,10 +535,9 @@ async def list_conversations(
     """List conversations for a project with pagination."""
     try:
         assert request is not None
-        await _ensure_project_access(
+        tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
-            tenant_id=tenant_id,
             project_id=project_id,
         )
 
@@ -662,10 +662,9 @@ async def get_conversation(
     """Get a conversation by ID."""
     try:
         assert request is not None
-        await _ensure_project_access(
+        tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
-            tenant_id=tenant_id,
             project_id=project_id,
         )
         container = get_container_with_db(request, db)
@@ -707,10 +706,9 @@ async def get_context_status(
     """
     try:
         assert request is not None
-        await _ensure_project_access(
+        tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
-            tenant_id=tenant_id,
             project_id=project_id,
         )
         container = get_container_with_db(request, db)
@@ -775,10 +773,9 @@ async def delete_conversation(
     """Delete a conversation and all its messages."""
     try:
         assert request is not None
-        await _ensure_project_access(
+        tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
-            tenant_id=tenant_id,
             project_id=project_id,
         )
         container = get_container_with_db(request, db)
@@ -820,10 +817,9 @@ async def update_conversation_title(
     """Update conversation title."""
     try:
         assert request is not None
-        await _ensure_project_access(
+        tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
-            tenant_id=tenant_id,
             project_id=project_id,
         )
         container = get_container_with_db(request, db)
@@ -871,10 +867,9 @@ async def update_conversation_config(
     """Update conversation-level LLM configuration (model override, LLM params)."""
     try:
         assert request is not None
-        await _ensure_project_access(
+        tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
-            tenant_id=tenant_id,
             project_id=project_id,
         )
         container = get_container_with_db(request, db)
@@ -934,10 +929,9 @@ async def update_conversation_mode(
 
     try:
         assert request is not None
-        await _ensure_project_access(
+        tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
-            tenant_id=tenant_id,
             project_id=project_id,
         )
         container = get_container_with_db(request, db)
@@ -1020,10 +1014,9 @@ async def generate_conversation_title(
     """
     try:
         assert request is not None
-        await _ensure_project_access(
+        tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
-            tenant_id=tenant_id,
             project_id=project_id,
         )
         container = get_container_with_db(request, db)
@@ -1100,10 +1093,9 @@ async def generate_summary(
     """Generate an AI summary of the conversation."""
     try:
         assert request is not None
-        await _ensure_project_access(
+        tenant_id = await _ensure_project_access(
             db,
             current_user=current_user,
-            tenant_id=tenant_id,
             project_id=project_id,
         )
         container = get_container_with_db(request, db)

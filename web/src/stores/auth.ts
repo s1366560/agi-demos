@@ -20,6 +20,7 @@ import { httpClient } from '../services/client/httpClient';
 import { setFeatures } from '../utils/featureCheck';
 import { registerAuthStateClearer } from '../utils/tokenResolver';
 
+import { useProjectStore } from './project';
 import { useTenantStore } from './tenant';
 
 import type { User } from '../types/memory';
@@ -29,6 +30,11 @@ function syncLanguageFromUser(user: User | null | undefined) {
   if (pref && pref !== i18n.language) {
     void i18n.changeLanguage(pref);
   }
+}
+
+function clearScopedSessionState() {
+  useTenantStore.getState().setCurrentTenant(null);
+  useProjectStore.getState().clearProjects();
 }
 
 interface AuthState {
@@ -90,6 +96,7 @@ export const useAuthStore = create<AuthState>()(
             const response = await authAPI.login(email, password);
             const { user, token } = response;
 
+            clearScopedSessionState();
             set({
               user,
               token,
@@ -132,8 +139,7 @@ export const useAuthStore = create<AuthState>()(
             error: null,
           });
 
-          // Clear tenant state as well
-          useTenantStore.getState().setCurrentTenant(null);
+          clearScopedSessionState();
         },
 
         /**
@@ -149,6 +155,7 @@ export const useAuthStore = create<AuthState>()(
           const { token } = get();
           if (!token) {
             set({ isAuthenticated: false });
+            clearScopedSessionState();
             return;
           }
 
@@ -156,6 +163,10 @@ export const useAuthStore = create<AuthState>()(
 
           try {
             const verifiedUser = await authAPI.verifyToken(token);
+            const previousUserId = get().user?.id;
+            if (previousUserId && verifiedUser.id !== previousUserId) {
+              clearScopedSessionState();
+            }
 
             set({
               user: verifiedUser,
@@ -173,6 +184,7 @@ export const useAuthStore = create<AuthState>()(
               isAuthenticated: false,
               isLoading: false,
             });
+            clearScopedSessionState();
           }
         },
 
@@ -244,7 +256,7 @@ registerAuthStateClearer(() => {
     isAuthenticated: false,
     isLoading: false,
   });
-  useTenantStore.getState().setCurrentTenant(null);
+  clearScopedSessionState();
 });
 
 // ============================================================================

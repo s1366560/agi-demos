@@ -477,6 +477,26 @@ describe('workspace/agent workspace bridge', () => {
     expect(agentChatContentProps).not.toHaveBeenCalled();
   });
 
+  it('clears an inaccessible manually stored project for the current tenant', async () => {
+    projectState.projects = [];
+    projectState.currentProject = null;
+    projectState.getProject = vi.fn().mockRejectedValue(new Error('Access denied to project'));
+    localStorageMock.values.set('agent:tenant-1:lastProjectId', 'project-inaccessible');
+    localStorageMock.values.set('agent:tenant-1:lastProjectSelectionSource', 'manual');
+
+    render(<AgentWorkspace />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    await waitFor(() => {
+      expect(projectState.getProject).toHaveBeenCalledWith('tenant-1', 'project-inaccessible');
+    });
+    expect(await screen.findByText('agent.workspace.noProjects')).toBeInTheDocument();
+    expect(localStorageMock.values.has('agent:tenant-1:lastProjectId')).toBe(false);
+    expect(localStorageMock.values.has('agent:tenant-1:lastProjectSelectionSource')).toBe(false);
+    expect(agentChatContentProps).not.toHaveBeenCalled();
+  });
+
   it('shows a retryable error when tenant projects fail to load', async () => {
     projectState.projects = [];
     projectState.currentProject = null;

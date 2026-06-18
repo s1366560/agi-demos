@@ -422,7 +422,7 @@ const ConversationItem: React.FC<ConversationItemProps> = memo(
               type="button"
               aria-label={t('agent.sidebar.delete', 'Delete')}
               title={t('agent.sidebar.delete', 'Delete')}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-red-500/70 transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40 dark:text-red-300/70 dark:hover:bg-red-950/30 dark:hover:text-red-200 dark:focus-visible:text-red-200"
               onClick={(event) => {
                 event.stopPropagation();
                 onDelete(event);

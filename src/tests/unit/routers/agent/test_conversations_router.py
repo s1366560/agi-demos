@@ -69,12 +69,12 @@ def _request_with_container(container: object) -> MagicMock:
     return request
 
 
-def _db_with_project_access(*, allowed: bool = True) -> SimpleNamespace:
+def _db_with_project_access(
+    *, allowed: bool = True, tenant_id: str = "tenant-1"
+) -> SimpleNamespace:
     return SimpleNamespace(
         execute=AsyncMock(
-            return_value=SimpleNamespace(
-                scalar_one_or_none=lambda: "membership" if allowed else None
-            )
+            return_value=SimpleNamespace(scalar_one_or_none=lambda: tenant_id if allowed else None)
         ),
         commit=AsyncMock(),
         rollback=AsyncMock(),
@@ -261,7 +261,9 @@ async def test_list_conversations_expands_workspace_group_and_names(
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
-    monkeypatch.setattr(conversations_router, "_ensure_project_access", AsyncMock())
+    monkeypatch.setattr(
+        conversations_router, "_ensure_project_access", AsyncMock(return_value="tenant-1")
+    )
 
     response = await conversations_router.list_conversations(
         request=request,
@@ -395,7 +397,9 @@ async def test_grouped_workspace_conversations_use_stable_activity_order(
     monkeypatch.setattr(
         conversations_router, "get_container_with_db", lambda _request, _db: container
     )
-    monkeypatch.setattr(conversations_router, "_ensure_project_access", AsyncMock())
+    monkeypatch.setattr(
+        conversations_router, "_ensure_project_access", AsyncMock(return_value="tenant-1")
+    )
 
     response = await conversations_router.list_conversations(
         request=_request_with_container(container),
@@ -670,7 +674,7 @@ async def test_create_conversation_validation_errors_are_sanitized() -> None:
     container = SimpleNamespace(
         create_conversation_use_case=lambda _llm: FailingCreateUseCase(),
     )
-    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    db = _db_with_project_access()
 
     with pytest.raises(HTTPException) as exc_info:
         await conversations_router.create_conversation(
@@ -751,6 +755,52 @@ async def test_create_conversation_rejects_inaccessible_selected_agent(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_create_conversation_uses_authorized_project_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class CapturingCreateUseCase:
+        def __init__(self) -> None:
+            self.kwargs: dict[str, Any] | None = None
+
+        async def execute(self, **kwargs: Any) -> Conversation:
+            self.kwargs = kwargs
+            return Conversation(
+                id="conversation-cross-tenant",
+                project_id=kwargs["project_id"],
+                tenant_id=kwargs["tenant_id"],
+                user_id=kwargs["user_id"],
+                title=kwargs["title"] or "Cross tenant",
+                status=ConversationStatus.ACTIVE,
+                created_at=datetime.now(UTC),
+            )
+
+    create_use_case = CapturingCreateUseCase()
+    container = SimpleNamespace(
+        create_conversation_use_case=lambda _llm: create_use_case,
+        redis=lambda: None,
+    )
+    monkeypatch.setattr(
+        conversations_router, "get_container_with_db", lambda _request, _db: container
+    )
+    db = _db_with_project_access(tenant_id="tenant-project")
+
+    response = await conversations_router.create_conversation(
+        data=CreateConversationRequest(project_id="project-1", title="Cross tenant"),
+        request=_request_with_container(container),
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-fallback",
+        db=db,
+    )
+
+    conversations_router.create_llm_client.assert_awaited_once_with("tenant-project")
+    assert create_use_case.kwargs is not None
+    assert create_use_case.kwargs["tenant_id"] == "tenant-project"
+    assert response.tenant_id == "tenant-project"
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_list_conversations_requires_project_access() -> None:
     db = _db_with_project_access(allowed=False)
     container = SimpleNamespace(list_conversations_use_case=lambda _llm: object())
@@ -771,6 +821,83 @@ async def test_list_conversations_requires_project_access() -> None:
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Access denied"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_list_conversations_uses_authorized_project_tenant(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class CapturingListUseCase:
+        def __init__(self) -> None:
+            self.execute_kwargs: dict[str, Any] | None = None
+            self.count_kwargs: dict[str, Any] | None = None
+
+        async def execute(self, **kwargs: Any) -> list[Conversation]:
+            self.execute_kwargs = kwargs
+            return []
+
+        async def count(self, **kwargs: Any) -> int:
+            self.count_kwargs = kwargs
+            return 0
+
+    project = Project(
+        id="project-cross-tenant-list",
+        tenant_id="tenant-project",
+        name="Cross tenant list project",
+        description="Conversation list tenant resolution test",
+        owner_id="owner-user",
+        memory_rules={},
+        graph_config={},
+    )
+    db_session.add_all(
+        [
+            project,
+            UserProject(
+                id="up-cross-tenant-list",
+                user_id="user-1",
+                project_id=project.id,
+                role="viewer",
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    list_use_case = CapturingListUseCase()
+    container = SimpleNamespace(list_conversations_use_case=lambda _llm: list_use_case)
+    monkeypatch.setattr(
+        conversations_router, "get_container_with_db", lambda _request, _db: container
+    )
+
+    response = await conversations_router.list_conversations(
+        request=_request_with_container(container),
+        project_id=project.id,
+        status=None,
+        limit=50,
+        offset=0,
+        workspace_id=None,
+        group_by_workspace=False,
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-fallback",
+        db=db_session,
+    )
+
+    conversations_router.create_llm_client.assert_awaited_once_with("tenant-project")
+    assert list_use_case.execute_kwargs == {
+        "project_id": project.id,
+        "user_id": "user-1",
+        "limit": 50,
+        "offset": 0,
+        "status": None,
+    }
+    assert list_use_case.count_kwargs == {
+        "project_id": project.id,
+        "user_id": "user-1",
+        "status": None,
+    }
+    assert response.items == []
+    assert response.total == 0
 
 
 @pytest.mark.unit

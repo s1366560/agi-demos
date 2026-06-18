@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { httpClient } from '../../services/client/httpClient';
 import { authAPI, tenantAPI } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
+import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 import { clearAuthState } from '../../utils/tokenResolver';
 
@@ -72,6 +73,7 @@ describe('AuthStore', () => {
       page: 1,
       pageSize: 20,
     });
+    useProjectStore.getState().clearProjects();
   });
 
   it('login should set user and token on success', async () => {
@@ -109,6 +111,28 @@ describe('AuthStore', () => {
     expect(useTenantStore.getState().tenants).toEqual([mockTenant]);
     expect(useTenantStore.getState().currentTenant).toEqual(mockTenant);
     expect(useAuthStore.getState().orgSetupComplete).toBe(true);
+  });
+
+  it('login should clear project state from the previous user session', async () => {
+    const mockUser = { id: '2', email: 'next@example.com' };
+    const mockToken = 'next-token';
+
+    useProjectStore.setState({
+      projects: [{ id: 'admin-project', tenant_id: 'tenant-admin', name: 'Admin Project' } as any],
+      currentProject: {
+        id: 'admin-project',
+        tenant_id: 'tenant-admin',
+        name: 'Admin Project',
+      } as any,
+      total: 1,
+    });
+    vi.mocked(authAPI.login).mockResolvedValue({ user: mockUser, token: mockToken } as any);
+
+    await useAuthStore.getState().login('next@example.com', 'password');
+
+    expect(useProjectStore.getState().projects).toEqual([]);
+    expect(useProjectStore.getState().currentProject).toBeNull();
+    expect(useProjectStore.getState().total).toBe(0);
   });
 
   it('login should initialize tenants even when feature flags fail', async () => {
@@ -156,15 +180,22 @@ describe('AuthStore', () => {
       })
     );
     useAuthStore.setState({ token: 't', isAuthenticated: true });
+    useProjectStore.setState({
+      projects: [{ id: 'project-1', tenant_id: 'tenant-1', name: 'Project 1' } as any],
+      currentProject: { id: 'project-1', tenant_id: 'tenant-1', name: 'Project 1' } as any,
+      total: 1,
+    });
 
     useAuthStore.getState().logout();
 
     expect(useAuthStore.getState().token).toBeNull();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(getTokenFromStorage()).toBeNull();
+    expect(useProjectStore.getState().projects).toEqual([]);
+    expect(useProjectStore.getState().currentProject).toBeNull();
   });
 
-  it('central auth clearing should clear tenant state', () => {
+  it('central auth clearing should clear tenant and project state', () => {
     const tenant = { id: 'tenant-1', name: 'Tenant One' };
     localStorage.setItem(
       'memstack-auth-storage',
@@ -185,6 +216,11 @@ describe('AuthStore', () => {
       page: 1,
       pageSize: 20,
     });
+    useProjectStore.setState({
+      projects: [{ id: 'project-1', tenant_id: tenant.id, name: 'Project 1' } as any],
+      currentProject: { id: 'project-1', tenant_id: tenant.id, name: 'Project 1' } as any,
+      total: 1,
+    });
 
     clearAuthState();
 
@@ -192,6 +228,8 @@ describe('AuthStore', () => {
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(useTenantStore.getState().currentTenant).toBeNull();
     expect(useTenantStore.getState().tenants).toEqual([]);
+    expect(useProjectStore.getState().currentProject).toBeNull();
+    expect(useProjectStore.getState().projects).toEqual([]);
     expect(getTokenFromStorage()).toBeNull();
   });
 
