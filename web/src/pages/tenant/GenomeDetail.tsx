@@ -14,12 +14,13 @@ import {
   message,
   Modal,
   Rate,
+  Select,
   Space,
   Spin,
   Tag,
   Typography,
 } from 'antd';
-import { ArchiveX, ArrowLeft, Star, Trash2, UploadCloud } from 'lucide-react';
+import { ArchiveX, ArrowLeft, Edit2, Star, Trash2, UploadCloud } from 'lucide-react';
 
 import {
   useCurrentGenome,
@@ -32,12 +33,42 @@ import {
 } from '../../stores/geneMarket';
 import { useCurrentTenant } from '../../stores/tenant';
 
+import type { GenomeUpdate } from '../../services/geneMarketService';
+
 const { Title, Text, Paragraph } = Typography;
 
 interface RateFormValues {
   score: number;
   comment?: string;
 }
+
+interface EditGenomeFormValues {
+  name: string;
+  slug: string;
+  short_description?: string;
+  description?: string;
+  visibility?: string;
+  gene_slugs?: string;
+  config_override?: string;
+}
+
+const normalizeNullableText = (value: string | undefined): string | null => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+};
+
+const splitCsv = (value: string | undefined): string[] =>
+  Array.from(
+    new Set(
+      (value ?? '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  );
+
+const isFormValidationError = (error: unknown): boolean =>
+  typeof error === 'object' && error !== null && 'errorFields' in error;
 
 export const GenomeDetail: React.FC = () => {
   const { t } = useTranslation();
@@ -63,12 +94,16 @@ export const GenomeDetail: React.FC = () => {
     unpublishGenome,
     rateGenome,
     deleteGenome,
+    updateGenome,
   } = useGeneMarketActions();
   const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [isRateModalVisible, setIsRateModalVisible] = useState(false);
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
   const [isRateSubmitting, setIsRateSubmitting] = useState(false);
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
   const [rateForm] = Form.useForm<RateFormValues>();
+  const [editForm] = Form.useForm<EditGenomeFormValues>();
   const genomeGeneSlugKey = genome ? genome.gene_slugs.join('\n') : null;
   const genomeGeneSlugs = useMemo(() => {
     if (genomeGeneSlugKey === null || genomeGeneSlugKey === '') {
@@ -191,6 +226,71 @@ export const GenomeDetail: React.FC = () => {
     });
   };
 
+  const openEditModal = () => {
+    if (!genome) {
+      return;
+    }
+    editForm.setFieldsValue({
+      name: genome.name,
+      slug: genome.slug,
+      short_description: genome.short_description ?? '',
+      description: genome.description ?? '',
+      visibility: genome.visibility,
+      gene_slugs: genome.gene_slugs.join(', '),
+      config_override: JSON.stringify(genome.config_override, null, 2),
+    });
+    setIsEditModalVisible(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!genomeId || !tenantId) {
+      return;
+    }
+
+    try {
+      const values = await editForm.validateFields();
+      let configOverride: Record<string, unknown> = {};
+      const configText = values.config_override?.trim();
+      if (configText) {
+        const parsedConfig = JSON.parse(configText) as unknown;
+        if (
+          typeof parsedConfig !== 'object' ||
+          parsedConfig === null ||
+          Array.isArray(parsedConfig)
+        ) {
+          message.error(t('tenant.genes.invalidJson', 'Invalid JSON format'));
+          return;
+        }
+        configOverride = parsedConfig as Record<string, unknown>;
+      }
+
+      const payload: GenomeUpdate = {
+        name: values.name.trim(),
+        slug: values.slug.trim(),
+        short_description: normalizeNullableText(values.short_description),
+        description: normalizeNullableText(values.description),
+        visibility: values.visibility ?? 'public',
+        gene_slugs: splitCsv(values.gene_slugs),
+        config_override: configOverride,
+      };
+      setIsEditSubmitting(true);
+      await updateGenome(genomeId, payload, { tenant_id: tenantId });
+      message.success(t('tenant.genomeDetail.updateSuccess', 'Genome updated successfully'));
+      setIsEditModalVisible(false);
+      editForm.resetFields();
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        message.error(t('tenant.genes.invalidJson', 'Invalid JSON format'));
+        return;
+      }
+      if (!isFormValidationError(error)) {
+        showActionError(t('tenant.genomeDetail.updateError', 'Failed to update genome'));
+      }
+    } finally {
+      setIsEditSubmitting(false);
+    }
+  };
+
   if (loading && !genome) {
     return (
       <div className="flex justify-center p-12">
@@ -238,6 +338,9 @@ export const GenomeDetail: React.FC = () => {
           </Space>
         </div>
         <Space wrap>
+          <Button onClick={openEditModal} icon={<Edit2 className="w-4 h-4" />}>
+            {t('tenant.genomeDetail.editAction', 'Edit')}
+          </Button>
           <Button
             onClick={() => {
               void handlePublishToggle();
@@ -379,6 +482,77 @@ export const GenomeDetail: React.FC = () => {
           </pre>
         </Card>
       )}
+
+      <Modal
+        title={t('tenant.genomeDetail.editGenome', 'Edit Genome')}
+        open={isEditModalVisible}
+        onOk={() => {
+          void handleEditSubmit();
+        }}
+        onCancel={() => {
+          setIsEditModalVisible(false);
+          editForm.resetFields();
+        }}
+        confirmLoading={isEditSubmitting}
+        destroyOnHidden
+      >
+        <Form form={editForm} layout="vertical" className="mt-4">
+          <Form.Item
+            name="name"
+            label={t('tenant.genes.publish.name', 'Name')}
+            rules={[{ required: true, message: t('tenant.genes.publish.nameRequired') }]}
+          >
+            <Input placeholder={t('tenant.genes.publish.namePlaceholder')} />
+          </Form.Item>
+          <Form.Item
+            name="slug"
+            label={t('tenant.genes.publish.slug', 'Slug')}
+            rules={[{ required: true, message: t('tenant.genes.publish.slugRequired') }]}
+          >
+            <Input placeholder={t('tenant.genes.publish.slugPlaceholder')} />
+          </Form.Item>
+          <Form.Item
+            name="short_description"
+            label={t('tenant.genes.publish.shortDescription', 'Short description')}
+          >
+            <Input placeholder={t('tenant.genes.publish.shortDescriptionPlaceholder')} />
+          </Form.Item>
+          <Form.Item
+            name="description"
+            label={t('tenant.genomeDetail.fields.description', 'Description')}
+          >
+            <Input.TextArea
+              rows={4}
+              placeholder={t('tenant.genes.publish.descriptionPlaceholder')}
+            />
+          </Form.Item>
+          <Form.Item name="visibility" label={t('tenant.genes.publish.visibility', 'Visibility')}>
+            <Select
+              options={[
+                { value: 'public', label: t('tenant.genes.filters.visPublic', 'Public') },
+                { value: 'org_private', label: t('tenant.genes.filters.visPrivate', 'Private') },
+                { value: 'unlisted', label: t('tenant.genes.filters.visUnlisted', 'Unlisted') },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            name="gene_slugs"
+            label={t('tenant.genes.publish.geneSlugs', 'Included gene slugs')}
+          >
+            <Input placeholder={t('tenant.genes.publish.geneSlugsPlaceholder')} />
+          </Form.Item>
+          <Form.Item
+            name="config_override"
+            label={t('tenant.genomeDetail.configOverride', 'Configuration Override (JSON)')}
+          >
+            <Input.TextArea
+              rows={4}
+              className="font-mono text-sm"
+              placeholder={t('tenant.genomeDetail.configOverridePlaceholder', '{"key": "value"}')}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Modal
         title={t('tenant.genomeDetail.rateGenome', 'Rate Genome')}

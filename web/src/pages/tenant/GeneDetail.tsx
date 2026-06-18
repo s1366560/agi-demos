@@ -14,6 +14,7 @@ import {
   Form,
   Input,
   Rate,
+  Select,
   Timeline,
   Typography,
   Space,
@@ -27,6 +28,7 @@ import {
   ArchiveX,
   ArrowLeft,
   Download,
+  Edit2,
   GitCommit,
   Star,
   Tag as TagIcon,
@@ -47,7 +49,7 @@ import {
 } from '../../stores/geneMarket';
 import { useCurrentTenant } from '../../stores/tenant';
 
-import type { EvolutionEventType } from '../../services/geneMarketService';
+import type { EvolutionEventType, GeneUpdate } from '../../services/geneMarketService';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -80,6 +82,35 @@ interface ReviewFormValues {
   content: string;
 }
 
+interface EditGeneFormValues {
+  name: string;
+  slug: string;
+  category?: string;
+  version: string;
+  short_description?: string;
+  description?: string;
+  visibility?: string;
+  tags?: string;
+}
+
+const normalizeNullableText = (value: string | undefined): string | null => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+};
+
+const splitCsv = (value: string | undefined): string[] =>
+  Array.from(
+    new Set(
+      (value ?? '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  );
+
+const isFormValidationError = (error: unknown): boolean =>
+  typeof error === 'object' && error !== null && 'errorFields' in error;
+
 export const GeneDetail: FC = () => {
   const { tenantId: routeTenantId, geneId } = useParams<{ tenantId?: string; geneId: string }>();
   const navigate = useNavigate();
@@ -109,14 +140,18 @@ export const GeneDetail: FC = () => {
     publishGene,
     unpublishGene,
     deleteGene,
+    updateGene,
   } = useGeneMarketActions();
 
   const [isInstallModalVisible, setIsInstallModalVisible] = useState(shouldOpenInstallModal);
   const [isRateModalVisible, setIsRateModalVisible] = useState(shouldOpenRateModal);
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
   const [installForm] = Form.useForm<InstallFormValues>();
   const [rateForm] = Form.useForm<RateFormValues>();
+  const [editForm] = Form.useForm<EditGeneFormValues>();
   const [isReviewModalVisible, setIsReviewModalVisible] = useState(false);
   const [reviewForm] = Form.useForm<ReviewFormValues>();
   const [reviewPage, setReviewPage] = useState(1);
@@ -298,6 +333,54 @@ export const GeneDetail: FC = () => {
     });
   };
 
+  const openEditModal = () => {
+    if (!currentGene) {
+      return;
+    }
+    editForm.setFieldsValue({
+      name: currentGene.name,
+      slug: currentGene.slug,
+      category: currentGene.category ?? '',
+      version: currentGene.version,
+      short_description: currentGene.short_description ?? '',
+      description: currentGene.description ?? '',
+      visibility: currentGene.visibility,
+      tags: currentGene.tags.join(', '),
+    });
+    setIsEditModalVisible(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!geneId || !tenantId) {
+      return;
+    }
+
+    try {
+      const values = await editForm.validateFields();
+      const payload: GeneUpdate = {
+        name: values.name.trim(),
+        slug: values.slug.trim(),
+        category: normalizeNullableText(values.category),
+        version: values.version.trim(),
+        short_description: normalizeNullableText(values.short_description),
+        description: normalizeNullableText(values.description),
+        visibility: values.visibility ?? 'public',
+        tags: splitCsv(values.tags),
+      };
+      setIsEditSubmitting(true);
+      await updateGene(geneId, payload, { tenant_id: tenantId });
+      message.success(t('tenant.genes.updateSuccess', 'Gene updated successfully'));
+      setIsEditModalVisible(false);
+      editForm.resetFields();
+    } catch (error) {
+      if (!isFormValidationError(error)) {
+        showActionError(t('tenant.genes.updateError', 'Failed to update gene'));
+      }
+    } finally {
+      setIsEditSubmitting(false);
+    }
+  };
+
   const handleDeleteReview = (reviewId: string) => {
     Modal.confirm({
       title: t('gene.deleteReview'),
@@ -385,6 +468,9 @@ export const GeneDetail: FC = () => {
         </Space>
 
         <Space>
+          <Button onClick={openEditModal} icon={<Edit2 className="w-4 h-4" />}>
+            {t('tenant.genes.editAction', 'Edit')}
+          </Button>
           <Button
             onClick={() => {
               void handlePublishToggle();
@@ -685,6 +771,73 @@ export const GeneDetail: FC = () => {
               placeholder={t('tenant.genes.configOverridePlaceholder')}
               className="font-mono text-sm"
             />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t('tenant.genes.editGene', 'Edit Gene')}
+        open={isEditModalVisible}
+        onOk={() => {
+          void handleEditSubmit();
+        }}
+        onCancel={() => {
+          setIsEditModalVisible(false);
+          editForm.resetFields();
+        }}
+        confirmLoading={isEditSubmitting}
+        destroyOnHidden
+      >
+        <Form form={editForm} layout="vertical" className="mt-4">
+          <Form.Item
+            name="name"
+            label={t('tenant.genes.publish.name', 'Name')}
+            rules={[{ required: true, message: t('tenant.genes.publish.nameRequired') }]}
+          >
+            <Input placeholder={t('tenant.genes.publish.namePlaceholder')} />
+          </Form.Item>
+          <Form.Item
+            name="slug"
+            label={t('tenant.genes.publish.slug', 'Slug')}
+            rules={[{ required: true, message: t('tenant.genes.publish.slugRequired') }]}
+          >
+            <Input placeholder={t('tenant.genes.publish.slugPlaceholder')} />
+          </Form.Item>
+          <Form.Item
+            name="version"
+            label={t('tenant.genes.publish.version', 'Version')}
+            rules={[
+              { required: true, message: t('tenant.genes.versionRequired', 'Version is required') },
+            ]}
+          >
+            <Input placeholder="1.0.0" />
+          </Form.Item>
+          <Form.Item name="category" label={t('tenant.genes.publish.category', 'Category')}>
+            <Input placeholder={t('tenant.genes.publish.categoryPlaceholder')} />
+          </Form.Item>
+          <Form.Item
+            name="short_description"
+            label={t('tenant.genes.publish.shortDescription', 'Short description')}
+          >
+            <Input placeholder={t('tenant.genes.publish.shortDescriptionPlaceholder')} />
+          </Form.Item>
+          <Form.Item name="description" label={t('tenant.genes.description', 'Description')}>
+            <Input.TextArea
+              rows={4}
+              placeholder={t('tenant.genes.publish.descriptionPlaceholder')}
+            />
+          </Form.Item>
+          <Form.Item name="visibility" label={t('tenant.genes.publish.visibility', 'Visibility')}>
+            <Select
+              options={[
+                { value: 'public', label: t('tenant.genes.filters.visPublic', 'Public') },
+                { value: 'org_private', label: t('tenant.genes.filters.visPrivate', 'Private') },
+                { value: 'unlisted', label: t('tenant.genes.filters.visUnlisted', 'Unlisted') },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="tags" label={t('tenant.genes.publish.tags', 'Tags')}>
+            <Input placeholder={t('tenant.genes.publish.tagsPlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>

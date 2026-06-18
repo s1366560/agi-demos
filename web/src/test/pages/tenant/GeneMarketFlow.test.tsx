@@ -48,6 +48,8 @@ const actionsMock = vi.hoisted(() => ({
   setCurrentGenome: vi.fn(),
   unpublishGene: vi.fn(),
   unpublishGenome: vi.fn(),
+  updateGene: vi.fn(),
+  updateGenome: vi.fn(),
 }));
 
 const stateMock = vi.hoisted(() => ({
@@ -226,6 +228,8 @@ describe('Gene marketplace rating flow', () => {
     actionsMock.rateGenome.mockResolvedValue(undefined);
     actionsMock.unpublishGene.mockResolvedValue(gene({ is_published: false }));
     actionsMock.unpublishGenome.mockResolvedValue(genome({ is_published: false }));
+    actionsMock.updateGene.mockResolvedValue(gene({ name: 'Code Review Pro' }));
+    actionsMock.updateGenome.mockResolvedValue(genome({ name: 'Review Pack Pro' }));
   });
 
   it('routes card rating to the detail rating dialog instead of submitting a default rating', async () => {
@@ -663,6 +667,50 @@ describe('Gene marketplace rating flow', () => {
     expect(messageSuccessSpy).toHaveBeenCalledWith('Gene published successfully');
   });
 
+  it('updates genes from the detail edit dialog', async () => {
+    const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
+    stateMock.currentGene = gene();
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/gene-1']}>
+        <GeneDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'Code Review Pro' },
+    });
+    fireEvent.change(screen.getByLabelText('Slug'), {
+      target: { value: 'code-review-pro' },
+    });
+    fireEvent.change(screen.getByLabelText('Version'), {
+      target: { value: '1.1.0' },
+    });
+    fireEvent.change(screen.getByLabelText('Tags'), {
+      target: { value: 'review, quality, review' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await waitFor(() => {
+      expect(actionsMock.updateGene).toHaveBeenCalledWith(
+        'gene-1',
+        {
+          name: 'Code Review Pro',
+          slug: 'code-review-pro',
+          category: 'tool',
+          version: '1.1.0',
+          short_description: 'Review code',
+          description: 'Automates code review checks',
+          visibility: 'public',
+          tags: ['review', 'quality'],
+        },
+        { tenant_id: 'tenant-1' }
+      );
+    });
+    expect(messageSuccessSpy).toHaveBeenCalledWith('Gene updated successfully');
+  });
+
   it('deletes genes from the detail action bar after confirmation', async () => {
     const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
     vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
@@ -738,6 +786,52 @@ describe('Gene marketplace rating flow', () => {
     });
     expect(messageSuccessSpy).toHaveBeenCalledWith('Genome deleted successfully');
     expect(navigateMock).toHaveBeenCalledWith(-1);
+  });
+
+  it('updates genomes from the detail edit dialog', async () => {
+    const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
+    stateMock.currentGenome = genome({
+      config_override: { mode: 'balanced' },
+      gene_slugs: ['code-review', 'test-writer'],
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/genomes/genome-1']}>
+        <GenomeDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'Review Pack Pro' },
+    });
+    fireEvent.change(screen.getByLabelText('Slug'), {
+      target: { value: 'review-pack-pro' },
+    });
+    fireEvent.change(screen.getByLabelText('Included gene slugs'), {
+      target: { value: 'code-review, deploy-check, code-review' },
+    });
+    fireEvent.change(screen.getByLabelText('Configuration Override (JSON)'), {
+      target: { value: '{"mode":"strict"}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await waitFor(() => {
+      expect(actionsMock.updateGenome).toHaveBeenCalledWith(
+        'genome-1',
+        {
+          name: 'Review Pack Pro',
+          slug: 'review-pack-pro',
+          short_description: 'Review workflow',
+          description: 'Review workflow bundle',
+          visibility: 'public',
+          gene_slugs: ['code-review', 'deploy-check'],
+          config_override: { mode: 'strict' },
+        },
+        { tenant_id: 'tenant-1' }
+      );
+    });
+    expect(messageSuccessSpy).toHaveBeenCalledWith('Genome updated successfully');
   });
 
   it('rates genomes from the detail action bar', async () => {
