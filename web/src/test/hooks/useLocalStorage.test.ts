@@ -77,6 +77,32 @@ describe('useLocalStorage', () => {
       expect(localStorage.getItem(key)).toBe(JSON.stringify('existing'));
     });
 
+    it('should read the new storage value when the key changes', async () => {
+      const firstKey = uniqueKey('tenant-1');
+      const secondKey = uniqueKey('tenant-2');
+      const renderValues: Array<string | null> = [];
+      localStorage.setItem(firstKey, JSON.stringify('workspace-1'));
+      localStorage.setItem(secondKey, JSON.stringify('workspace-2'));
+
+      const { result, rerender } = renderHook(
+        ({ key }) => {
+          const storage = useLocalStorage<string | null>(key, null);
+          renderValues.push(storage.value);
+          return storage;
+        },
+        { initialProps: { key: firstKey } }
+      );
+
+      expect(result.current.value).toBe('workspace-1');
+
+      renderValues.length = 0;
+      rerender({ key: secondKey });
+
+      expect(renderValues[0]).toBe('workspace-2');
+      expect(renderValues).not.toContain('workspace-1');
+      expect(result.current.value).toBe('workspace-2');
+    });
+
     it('should migrate legacy raw last project ids without warning', () => {
       const key = 'agent:tenant-1:lastProjectId';
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);

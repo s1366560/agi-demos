@@ -87,16 +87,21 @@ export function useLocalStorage<T>(key: string, initialValue: T): UseLocalStorag
     }
   }, [initialValue, key]);
 
-  const [storedValue, setStoredValue] = useState<T>(readValue);
+  const [storedEntry, setStoredEntry] = useState<{ key: string; value: T }>(() => ({
+    key,
+    value: readValue(),
+  }));
+  const valueForCurrentKey = storedEntry.key === key ? storedEntry.value : readValue();
 
   // Set value to localStorage and state
   // Use functional setState to avoid depending on storedValue
   // This prevents callback recreation on every state change (rerender-functional-setstate)
   const setValue = useCallback(
     (value: T | ((prev: T) => T)) => {
-      setStoredValue((prevValue) => {
+      setStoredEntry((prevEntry) => {
         try {
-          const valueToStore = value instanceof Function ? value(prevValue) : value;
+          const baseValue = prevEntry.key === key ? prevEntry.value : readValue();
+          const valueToStore = value instanceof Function ? value(baseValue) : value;
 
           // Update cache first (fastest for subsequent reads)
           localStorageCache.set(key, valueToStore);
@@ -109,14 +114,14 @@ export function useLocalStorage<T>(key: string, initialValue: T): UseLocalStorag
               window.localStorage.setItem(key, serialized);
             }
           }
-          return valueToStore;
+          return { key, value: valueToStore };
         } catch (error) {
           console.warn(`Error setting localStorage key "${key}":`, error);
-          return prevValue;
+          return prevEntry;
         }
       });
     },
-    [key]
+    [key, readValue]
   );
 
   // Remove value from localStorage and reset to initial
@@ -124,7 +129,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): UseLocalStorag
     // Update cache
     localStorageCache.delete(key);
     try {
-      setStoredValue(initialValue);
+      setStoredEntry({ key, value: initialValue });
 
       if (typeof window !== 'undefined') {
         window.localStorage.removeItem(key);
@@ -148,10 +153,10 @@ export function useLocalStorage<T>(key: string, initialValue: T): UseLocalStorag
         } else {
           localStorageCache.set(key, newValue);
         }
-        setStoredValue(newValue);
+        setStoredEntry({ key, value: newValue });
       } catch (error) {
         console.warn(`Error parsing storage event for key "${key}":`, error);
-        setStoredValue(initialValue);
+        setStoredEntry({ key, value: initialValue });
       }
     };
 
@@ -182,7 +187,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): UseLocalStorag
   }, [key, initialValue]);
 
   return {
-    value: storedValue,
+    value: valueForCurrentKey,
     setValue,
     removeValue,
   };
