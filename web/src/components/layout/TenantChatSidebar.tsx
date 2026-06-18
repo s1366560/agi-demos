@@ -42,6 +42,7 @@ import { projectAPI } from '@/services/api';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { formatDistanceToNow } from '@/utils/date';
+import { persistLastProjectId } from '@/utils/projectSelectionPersistence';
 
 import {
   getContextualTopNavItems,
@@ -90,24 +91,6 @@ const COLLAPSE_THRESHOLD = 120; // Width below which sidebar collapses
 const PROJECT_SWITCHER_PAGE_SIZE = 25;
 const PROJECT_SEARCH_PAGE_SIZE = 100;
 const PROJECT_SEARCH_DEBOUNCE_MS = 250;
-const LEGACY_LAST_PROJECT_ID_KEY = 'agent:lastProjectId';
-
-function lastProjectIdStorageKey(tenantId: string | undefined): string | null {
-  return tenantId ? `agent:${tenantId}:lastProjectId` : null;
-}
-
-function persistLastProjectId(tenantId: string | undefined, projectId: string): void {
-  const storageKey = lastProjectIdStorageKey(tenantId);
-  if (!storageKey) {
-    return;
-  }
-  try {
-    localStorage.setItem(storageKey, JSON.stringify(projectId));
-    localStorage.removeItem(LEGACY_LAST_PROJECT_ID_KEY);
-  } catch {
-    // Storage may be unavailable in private mode or restricted browser contexts.
-  }
-}
 
 function projectBelongsToTenant(
   project: Project | null | undefined,
@@ -844,7 +827,6 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       setSelectedProjectId(project.id);
       setSelectedProject(project);
       setCurrentProject(project);
-      persistLastProjectId(resolvedTenantId, project.id);
     }
   }, [
     currentProject,

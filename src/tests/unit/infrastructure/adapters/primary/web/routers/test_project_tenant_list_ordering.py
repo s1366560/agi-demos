@@ -10,7 +10,11 @@ from src.infrastructure.adapters.secondary.persistence.models import Project, Te
 def test_project_list_router_query_declares_deterministic_order_by() -> None:
     statement = _order_project_list_query(select(Project))
 
-    assert "ORDER BY projects.created_at DESC, projects.id ASC" in str(statement)
+    rendered_statement = str(statement)
+
+    assert "CASE WHEN (projects.name IN" in rendered_statement
+    assert "ORDER BY CASE WHEN" in rendered_statement
+    assert "projects.created_at DESC, projects.id ASC" in rendered_statement
 
 
 def test_tenant_list_router_query_declares_deterministic_order_by() -> None:

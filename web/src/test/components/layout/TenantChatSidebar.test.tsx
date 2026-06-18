@@ -686,6 +686,9 @@ describe('TenantChatSidebar', () => {
     fireEvent.change(projectSwitcher, { target: { value: 'project-2' } });
 
     expect(localStorage.getItem('agent:tenant-1:lastProjectId')).toBe(JSON.stringify('project-2'));
+    expect(localStorage.getItem('agent:tenant-1:lastProjectSelectionSource')).toBe(
+      JSON.stringify('manual')
+    );
     expect(localStorage.getItem('agent:lastProjectId')).toBeNull();
   });
 
@@ -735,7 +738,8 @@ describe('TenantChatSidebar', () => {
       name: 'Project Two',
       tenant_id: 'tenant-2',
     });
-    expect(localStorage.getItem('agent:tenant-2:lastProjectId')).toBe(JSON.stringify('project-2'));
+    expect(localStorage.getItem('agent:tenant-2:lastProjectId')).toBeNull();
+    expect(localStorage.getItem('agent:tenant-2:lastProjectSelectionSource')).toBeNull();
   });
 
   it('clears stale conversations when the new tenant has no valid projects', async () => {

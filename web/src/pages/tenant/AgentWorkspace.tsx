@@ -23,6 +23,11 @@ import { useAuthStore } from '../../stores/auth';
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 import { getErrorMessage } from '../../types/common';
+import {
+  getDefaultProject,
+  lastProjectSelectionSourceStorageKey,
+  MANUAL_PROJECT_SELECTION_SOURCE,
+} from '../../utils/projectSelectionPersistence';
 
 import type { Project } from '../../types/memory';
 
@@ -94,6 +99,8 @@ export const AgentWorkspace: FC = () => {
   // is not yet known so the hook receives a stable key.
   const tenantScope = tenantId ?? 'global';
   const lastProjectIdKey = `agent:${tenantScope}:lastProjectId`;
+  const lastProjectSelectionSourceKey =
+    lastProjectSelectionSourceStorageKey(tenantId) ?? `agent:${tenantScope}:lastProjectSelectionSource`;
   const lastWorkspaceIdKey = `agent:${tenantScope}:lastWorkspaceId`;
 
   // Track selected project for this session - using useLocalStorage for better performance
@@ -101,6 +108,8 @@ export const AgentWorkspace: FC = () => {
     lastProjectIdKey,
     null
   );
+  const { value: lastProjectSelectionSource, setValue: setLastProjectSelectionSource } =
+    useLocalStorage<string | null>(lastProjectSelectionSourceKey, null);
   const { value: lastWorkspaceId, setValue: setLastWorkspaceId } = useLocalStorage<string | null>(
     lastWorkspaceIdKey,
     null
@@ -115,10 +124,13 @@ export const AgentWorkspace: FC = () => {
     ? tenantProjects.some((project) => project.id === queryProjectId)
     : false;
   const storedProjectIdInTenant =
-    lastProjectId && tenantProjects.some((project) => project.id === lastProjectId)
+    lastProjectSelectionSource === MANUAL_PROJECT_SELECTION_SOURCE &&
+    lastProjectId &&
+    tenantProjects.some((project) => project.id === lastProjectId)
       ? lastProjectId
       : null;
-  const firstTenantProjectId = tenantProjects[0]?.id ?? null;
+  const defaultTenantProjectId = getDefaultProject(tenantProjects)?.id ?? null;
+  const firstTenantProjectId = defaultTenantProjectId ?? tenantProjects[0]?.id ?? null;
   const tenantProjectCount = tenantProjects.length;
   const activeSelectedProjectId =
     selectedProjectId &&
@@ -251,16 +263,16 @@ export const AgentWorkspace: FC = () => {
     tenantProjectCount,
   ]);
 
-  // Persist project selection and keep the global project scope aligned.
+  // Persist explicit route project selection and keep the global project scope aligned.
   // Conversation list loading is owned by the sidebar/chat surfaces and
   // deduplicated in the agent store so tenant switches do not fan out requests.
   useEffect(() => {
     if (!activeSelectedProjectId) {
       return;
     }
-    // Persist selection using cached hook
-    if (lastProjectId !== activeSelectedProjectId) {
+    if (queryProjectId && lastProjectId !== activeSelectedProjectId) {
       setLastProjectId(activeSelectedProjectId);
+      setLastProjectSelectionSource(MANUAL_PROJECT_SELECTION_SOURCE);
     }
     // Update global current project for consistency
     const project = tenantProjects.find((p: Project) => p.id === activeSelectedProjectId);
@@ -270,10 +282,12 @@ export const AgentWorkspace: FC = () => {
   }, [
     activeSelectedProjectId,
     lastProjectId,
+    queryProjectId,
     tenantCurrentProjectId,
     tenantProjects,
     setCurrentProject,
     setLastProjectId,
+    setLastProjectSelectionSource,
   ]);
 
   const effectiveProjectId =

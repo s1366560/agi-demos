@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import and_, delete, func, inspect, or_, select, update
+from sqlalchemy import and_, case, delete, func, inspect, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
@@ -45,6 +45,7 @@ from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 logger = logging.getLogger(__name__)
+DEFAULT_PROJECT_NAMES = ("Default project", "默认项目")
 
 
 class AddProjectMemberRequest(BaseModel):
@@ -53,8 +54,9 @@ class AddProjectMemberRequest(BaseModel):
 
 
 def _order_project_list_query(query: Select[Any]) -> Select[Any]:
-    """Return projects newest-first with a stable ID tie-breaker."""
-    return query.order_by(Project.created_at.desc(), Project.id.asc())
+    """Return default project first, then newest-first with a stable ID tie-breaker."""
+    default_project_rank = case((Project.name.in_(DEFAULT_PROJECT_NAMES), 0), else_=1)
+    return query.order_by(default_project_rank.asc(), Project.created_at.desc(), Project.id.asc())
 
 
 async def _delete_rows_referencing(
