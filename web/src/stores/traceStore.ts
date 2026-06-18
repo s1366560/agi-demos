@@ -218,21 +218,5 @@ export const useSetTraceConversationId = () => useTraceStore((state) => state.se
 export const useClearTraceError = () => useTraceStore((state) => state.clearError);
 export const useResetTraceStore = () => useTraceStore((state) => state.reset);
 
-// Computed selectors
-export const useRunsByTraceId = () =>
-  useTraceStore((state) => {
-    const grouped = new Map<string, SubAgentRunDTO[]>();
-    for (const run of state.runs) {
-      const key = run.trace_id ?? 'no-trace';
-      const list = grouped.get(key);
-      if (list) {
-        list.push(run);
-      } else {
-        grouped.set(key, [run]);
-      }
-    }
-    return grouped;
-  });
-
 export const useRunningRunsCount = () =>
   useTraceStore((state) => state.runs.filter((r) => r.status === 'running').length);
