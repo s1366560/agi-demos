@@ -30,6 +30,8 @@ interface NotificationsResponse {
   notifications: Notification[];
 }
 
+let latestFetchNotificationsRequest = 0;
+
 export const useNotificationStore = create<NotificationState>()(
   devtools(
     (set, get) => ({
@@ -38,11 +40,14 @@ export const useNotificationStore = create<NotificationState>()(
       isLoading: false,
 
       fetchNotifications: async (unreadOnly = false) => {
+        const requestId = latestFetchNotificationsRequest + 1;
+        latestFetchNotificationsRequest = requestId;
         set({ isLoading: true });
         try {
           const response = await api.get<NotificationsResponse>('/notifications/', {
             params: { unread_only: unreadOnly },
           });
+          if (requestId !== latestFetchNotificationsRequest) return;
           const notificationsList = response.notifications;
 
           set({
@@ -51,6 +56,7 @@ export const useNotificationStore = create<NotificationState>()(
             isLoading: false,
           });
         } catch (error) {
+          if (requestId !== latestFetchNotificationsRequest) return;
           console.error('Failed to fetch notifications:', error);
           set({ isLoading: false });
         }

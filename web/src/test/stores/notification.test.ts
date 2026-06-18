@@ -12,6 +12,14 @@ vi.mock('../../services/api', () => ({
   },
 }));
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 describe('Notification Store', () => {
   beforeEach(() => {
     // Reset store state before each test
@@ -99,6 +107,60 @@ describe('Notification Store', () => {
       expect(api.get).toHaveBeenCalledWith('/notifications/', {
         params: { unread_only: true },
       });
+    });
+
+    it('should ignore stale fetch responses from older requests', async () => {
+      const api = (await import('../../services/api')).default;
+      const oldRequest = deferred<{
+        notifications: Array<{
+          id: string;
+          type: string;
+          title: string;
+          message: string;
+          data: Record<string, unknown>;
+          is_read: boolean;
+          created_at: string;
+        }>;
+      }>();
+      const latestNotifications = [
+        {
+          id: 'latest',
+          type: 'info',
+          title: 'Latest',
+          message: 'Latest message',
+          data: {},
+          is_read: false,
+          created_at: '2024-01-01T00:01:00Z',
+        },
+      ];
+
+      vi.mocked(api.get)
+        .mockReturnValueOnce(oldRequest.promise)
+        .mockResolvedValueOnce({ notifications: latestNotifications });
+
+      const oldFetch = useNotificationStore.getState().fetchNotifications(false);
+      const latestFetch = useNotificationStore.getState().fetchNotifications(true);
+
+      await latestFetch;
+      oldRequest.resolve({
+        notifications: [
+          {
+            id: 'old',
+            type: 'warning',
+            title: 'Old',
+            message: 'Old message',
+            data: {},
+            is_read: true,
+            created_at: '2024-01-01T00:00:00Z',
+          },
+        ],
+      });
+      await oldFetch;
+
+      const state = useNotificationStore.getState();
+      expect(state.notifications).toEqual(latestNotifications);
+      expect(state.unreadCount).toBe(1);
+      expect(state.isLoading).toBe(false);
     });
 
     it('should handle fetch errors gracefully', async () => {
