@@ -368,7 +368,9 @@ describe('TenantChatSidebar', () => {
     });
 
     expect(projectState.setCurrentProject).toHaveBeenCalledWith(hiddenProject);
-    expect(localStorage.getItem('agent:tenant-1:lastProjectId')).toBe('project-hidden');
+    expect(localStorage.getItem('agent:tenant-1:lastProjectId')).toBe(
+      JSON.stringify('project-hidden')
+    );
   });
 
   it('keeps the conversation list visible while switching session history', () => {
@@ -446,7 +448,7 @@ describe('TenantChatSidebar', () => {
 
     fireEvent.change(projectSwitcher, { target: { value: 'project-2' } });
 
-    expect(localStorage.getItem('agent:tenant-1:lastProjectId')).toBe('project-2');
+    expect(localStorage.getItem('agent:tenant-1:lastProjectId')).toBe(JSON.stringify('project-2'));
     expect(localStorage.getItem('agent:lastProjectId')).toBeNull();
   });
 
@@ -484,7 +486,7 @@ describe('TenantChatSidebar', () => {
       name: 'Project Two',
       tenant_id: 'tenant-2',
     });
-    expect(localStorage.getItem('agent:tenant-2:lastProjectId')).toBe('project-2');
+    expect(localStorage.getItem('agent:tenant-2:lastProjectId')).toBe(JSON.stringify('project-2'));
   });
 
   it('does not carry workspace context when creating a new conversation', async () => {

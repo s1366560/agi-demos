@@ -105,7 +105,7 @@ function persistLastProjectId(tenantId: string | undefined, projectId: string): 
     return;
   }
   try {
-    localStorage.setItem(storageKey, projectId);
+    localStorage.setItem(storageKey, JSON.stringify(projectId));
     localStorage.removeItem(LEGACY_LAST_PROJECT_ID_KEY);
   } catch {
     // Storage may be unavailable in private mode or restricted browser contexts.

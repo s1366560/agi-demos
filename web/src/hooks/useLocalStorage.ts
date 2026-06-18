@@ -30,6 +30,33 @@ const serializeForLocalStorage = (value: unknown): string | null => {
   return JSON.stringify(value);
 };
 
+const LEGACY_RAW_STRING_KEY_PATTERN = /^agent(?::[^:]+)?:lastProjectId$/;
+
+function readStoredValue<T>(key: string, item: string | null, initialValue: T): T {
+  if (item === null) {
+    return initialValue;
+  }
+
+  try {
+    return JSON.parse(item) as T;
+  } catch (error) {
+    if (LEGACY_RAW_STRING_KEY_PATTERN.test(key) && item.trim().length > 0) {
+      const migratedValue = item as T;
+      const serialized = serializeForLocalStorage(migratedValue);
+      if (serialized !== null) {
+        try {
+          window.localStorage.setItem(key, serialized);
+        } catch {
+          // The in-memory value is still usable even when storage write-back is unavailable.
+        }
+      }
+      return migratedValue;
+    }
+    console.warn(`Error reading localStorage key "${key}":`, error);
+    return initialValue;
+  }
+}
+
 export interface UseLocalStorageReturn<T> {
   value: T;
   setValue: (value: T | ((prev: T) => T)) => void;
@@ -50,7 +77,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): UseLocalStorag
 
     try {
       const item = window.localStorage.getItem(key);
-      const value = item ? (JSON.parse(item) as T) : initialValue;
+      const value = readStoredValue(key, item, initialValue);
       // Cache the value for future reads
       localStorageCache.set(key, value);
       return value;
@@ -115,7 +142,12 @@ export function useLocalStorage<T>(key: string, initialValue: T): UseLocalStorag
       }
 
       try {
-        const newValue = e.newValue ? (JSON.parse(e.newValue) as T) : initialValue;
+        const newValue = readStoredValue(key, e.newValue, initialValue);
+        if (e.newValue === null) {
+          localStorageCache.delete(key);
+        } else {
+          localStorageCache.set(key, newValue);
+        }
         setStoredValue(newValue);
       } catch (error) {
         console.warn(`Error parsing storage event for key "${key}":`, error);

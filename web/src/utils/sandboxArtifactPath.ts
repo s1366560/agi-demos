@@ -39,23 +39,36 @@ export function pathMatchesArtifact(path: string, artifact: Artifact): boolean {
 }
 
 /** Read the last active project id persisted in localStorage (survives refresh). */
+function decodePersistedProjectId(rawValue: string | null): string | null {
+  if (!rawValue) return null;
+
+  try {
+    const parsed = JSON.parse(rawValue) as unknown;
+    return typeof parsed === 'string' && parsed.trim().length > 0 ? parsed : null;
+  } catch {
+    return rawValue.trim().length > 0 ? rawValue : null;
+  }
+}
+
 function getPersistedProjectId(): string | null {
   if (typeof window === 'undefined') return null;
   try {
     const tenantId = getTenantIdFromPath();
     if (tenantId) {
-      const scoped = window.localStorage.getItem(`agent:${tenantId}:lastProjectId`);
+      const scoped = decodePersistedProjectId(
+        window.localStorage.getItem(`agent:${tenantId}:lastProjectId`)
+      );
       if (scoped) return scoped;
       return null;
     }
 
-    const legacy = window.localStorage.getItem('agent:lastProjectId');
+    const legacy = decodePersistedProjectId(window.localStorage.getItem('agent:lastProjectId'));
     if (legacy) return legacy;
 
     for (let i = 0; i < window.localStorage.length; i += 1) {
       const key = window.localStorage.key(i);
       if (key && key.endsWith(':lastProjectId')) {
-        const value = window.localStorage.getItem(key);
+        const value = decodePersistedProjectId(window.localStorage.getItem(key));
         if (value) return value;
       }
     }

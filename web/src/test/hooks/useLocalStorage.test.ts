@@ -76,6 +76,18 @@ describe('useLocalStorage', () => {
       expect(result.current.value).toBe('existing');
       expect(localStorage.getItem(key)).toBe(JSON.stringify('existing'));
     });
+
+    it('should migrate legacy raw last project ids without warning', () => {
+      const key = 'agent:tenant-1:lastProjectId';
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      localStorage.setItem(key, 'project-legacy');
+
+      const { result } = renderHook(() => useLocalStorage<string | null>(key, null));
+
+      expect(result.current.value).toBe('project-legacy');
+      expect(localStorage.getItem(key)).toBe(JSON.stringify('project-legacy'));
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('setValue', () => {
@@ -306,6 +318,9 @@ describe('useLocalStorage', () => {
       });
 
       expect(result.current.value).toBe('from other tab');
+
+      const { result: nextResult } = renderHook(() => useLocalStorage(key, 'initial'));
+      expect(nextResult.current.value).toBe('from other tab');
     });
 
     it('should handle storage event when key is removed in another tab', () => {
@@ -330,6 +345,28 @@ describe('useLocalStorage', () => {
       });
 
       expect(result.current.value).toBe('default');
+
+      const { result: nextResult } = renderHook(() => useLocalStorage(key, 'default'));
+      expect(nextResult.current.value).toBe('default');
+    });
+
+    it('should handle legacy raw last project ids from storage events', () => {
+      const key = 'agent:tenant-2:lastProjectId';
+      const { result } = renderHook(() => useLocalStorage<string | null>(key, null));
+
+      act(() => {
+        window.dispatchEvent(
+          new StorageEvent('storage', {
+            key: key,
+            newValue: 'project-from-other-tab',
+            oldValue: null,
+            storageArea: window.localStorage,
+            url: window.location.href,
+          })
+        );
+      });
+
+      expect(result.current.value).toBe('project-from-other-tab');
     });
 
     it('should ignore storage events for different keys', () => {

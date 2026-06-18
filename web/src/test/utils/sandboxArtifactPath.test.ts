@@ -163,6 +163,25 @@ describe('findArtifactForSandboxPath', () => {
     expect(artifactService.list).toHaveBeenCalledWith('tenant-project', { limit: 500 });
   });
 
+  it('decodes JSON encoded persisted project ids', async () => {
+    const artifact = makeArtifact({
+      id: 'remote-json-tenant',
+      sourcePath: '/workspace/output/chart.png',
+    });
+    vi.mocked(useSandboxStore.getState).mockReturnValue({
+      activeProjectId: null,
+      artifacts: new Map<string, Artifact>(),
+    } as never);
+    localStorage.setItem('agent:tenant-1:lastProjectId', JSON.stringify('tenant-project-json'));
+    window.history.pushState({}, '', '/tenant/tenant-1/agent-workspace');
+    vi.mocked(artifactService.list).mockResolvedValue({ artifacts: [artifact], total: 1 });
+
+    const result = await findArtifactForSandboxPath('/workspace/output/chart.png');
+
+    expect(result?.id).toBe('remote-json-tenant');
+    expect(artifactService.list).toHaveBeenCalledWith('tenant-project-json', { limit: 500 });
+  });
+
   it('does not use unrelated tenant project keys on tenant routes', async () => {
     vi.mocked(useSandboxStore.getState).mockReturnValue({
       activeProjectId: null,
