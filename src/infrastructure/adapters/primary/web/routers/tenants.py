@@ -607,12 +607,14 @@ async def get_tenant_stats(
     if not tenant:
         raise HTTPException(status_code=404, detail=_("Tenant not found"))
 
-    # Get active projects count
-    projects_result = await db.execute(
-        refresh_select_statement(select(Project).where(Project.tenant_id == tenant_id))
+    # Projects do not have a lifecycle status column today; every existing
+    # project is counted as active for overview compatibility.
+    active_projects_result = await db.execute(
+        refresh_select_statement(
+            select(func.count(Project.id)).where(Project.tenant_id == tenant_id)
+        )
     )
-    projects = projects_result.scalars().all()
-    active_projects_count = len(projects)
+    active_projects_count = active_projects_result.scalar() or 0
 
     # Get team members count
     members_result = await db.execute(
@@ -653,9 +655,45 @@ async def get_tenant_stats(
     )
     new_members_this_week = new_members_result.scalar() or 0
 
-    # Project details with memory usage
-    top_projects = list(projects[:5])
-    owner_ids = {project.owner_id for project in top_projects if project.owner_id}
+    # Project details with memory usage. Use an aggregate subquery so large
+    # tenants do not load every Project entity just to render the top-five list.
+    project_usage_subquery = (
+        select(
+            Memory.project_id.label("project_id"),
+            func.coalesce(func.sum(func.length(Memory.content)), 0).label("storage_bytes"),
+            func.count(Memory.id).label("memory_count"),
+        )
+        .join(Project, Memory.project_id == Project.id)
+        .where(Project.tenant_id == tenant_id)
+        .group_by(Memory.project_id)
+        .subquery()
+    )
+    project_storage_bytes = func.coalesce(project_usage_subquery.c.storage_bytes, 0).label(
+        "storage_bytes"
+    )
+    project_memory_count = func.coalesce(project_usage_subquery.c.memory_count, 0).label(
+        "memory_count"
+    )
+    top_projects_result = await db.execute(
+        refresh_select_statement(
+            select(Project, project_storage_bytes, project_memory_count)
+            .outerjoin(project_usage_subquery, project_usage_subquery.c.project_id == Project.id)
+            .where(Project.tenant_id == tenant_id)
+            .order_by(
+                project_storage_bytes.desc(),
+                project_memory_count.desc(),
+                Project.created_at.desc(),
+                Project.id.asc(),
+            )
+            .limit(5)
+        )
+    )
+    top_project_rows = top_projects_result.all()
+    owner_ids = {
+        project.owner_id
+        for project, _storage_bytes, _memory_count in top_project_rows
+        if project.owner_id
+    }
     owners_by_id: dict[str, User] = {}
     if owner_ids:
         owners_result = await db.execute(
@@ -663,20 +701,12 @@ async def get_tenant_stats(
         )
         owners_by_id = {owner.id: owner for owner in owners_result.scalars().all()}
 
-    project_memory_stats = await _get_project_memory_stats(
-        db,
-        [project.id for project in top_projects],
-    )
     active_projects_list: list[dict[str, Any]] = []
-    for project in top_projects:  # Top 5 projects
+    for project, storage_bytes, _memory_count in top_project_rows:
         owner = owners_by_id.get(project.owner_id)
         owner_name = owner.full_name if owner else "Unknown"
 
-        memory_stats = project_memory_stats.get(
-            project.id,
-            {"storage_bytes": 0, "memory_count": 0},
-        )
-        proj_storage = memory_stats["storage_bytes"]
+        proj_storage = int(storage_bytes or 0)
 
         # Format storage
         if proj_storage > 1024 * 1024 * 1024:
@@ -692,7 +722,7 @@ async def get_tenant_stats(
                 "name": project.name,
                 "owner": owner_name,
                 "memory_consumed": storage_str,
-                "status": None,
+                "status": "active",
             }
         )
 

@@ -223,6 +223,14 @@ export const TenantOverview: React.FC = () => {
   const chartPoints = buildMemoryChartPoints(memoryHistory);
   const chartLinePath = buildLinePath(chartPoints);
   const chartAreaPath = buildAreaPath(chartPoints);
+  const formatProjectStatus = (status?: string | null): string => {
+    if (!hasValue(status)) {
+      return t('common.status.unavailable');
+    }
+
+    const normalizedStatus = status.trim().toLowerCase();
+    return t(`common.status.${normalizedStatus}`, status.trim());
+  };
   const regionLabel = hasValue(stats.tenant_info.region)
     ? stats.tenant_info.region
     : t('common.status.unavailable');
@@ -552,7 +560,7 @@ export const TenantOverview: React.FC = () => {
                               : 'bg-slate-400'
                         }`}
                       ></span>
-                      {hasValue(project.status) ? project.status : t('common.status.unavailable')}
+                      {formatProjectStatus(project.status)}
                     </span>
                   </td>
                   <td className="py-4 px-6 text-right">
