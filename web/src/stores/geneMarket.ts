@@ -59,6 +59,17 @@ const orderGenesBySlugs = (genes: GeneResponse[], slugs: string[]): GeneResponse
   });
 };
 
+const upsertInstalledGenes = (
+  existing: InstanceGeneResponse[],
+  nextItems: InstanceGeneResponse[]
+): InstanceGeneResponse[] => {
+  const installedGenesById = new Map(existing.map((item) => [item.id, item]));
+  nextItems.forEach((item) => {
+    installedGenesById.set(item.id, item);
+  });
+  return Array.from(installedGenesById.values());
+};
+
 const decrementNonNegative = (value: number): number => Math.max(0, value - 1);
 
 type DetailRequestScope = 'currentGene' | 'currentGenome' | 'currentGenomeGenes';
@@ -594,7 +605,10 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         try {
           const response = await geneMarketService.installGene(instanceId, data, options);
           const { installedGenes } = get();
-          set({ installedGenes: [...installedGenes, response], isSubmitting: false });
+          set({
+            installedGenes: upsertInstalledGenes(installedGenes, [response]),
+            isSubmitting: false,
+          });
         } catch (error: unknown) {
           set({ error: getErrorMessage(error, 'Failed to install gene'), isSubmitting: false });
           throw error;
@@ -617,7 +631,7 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           );
           const { installedGenes } = get();
           set({
-            installedGenes: [...installedGenes, ...response.items],
+            installedGenes: upsertInstalledGenes(installedGenes, response.items),
             isSubmitting: false,
           });
           return response;

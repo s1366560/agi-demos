@@ -21,6 +21,7 @@ vi.mock('@/services/geneMarketService', () => ({
     getGene: vi.fn(),
     getGeneReviews: vi.fn(),
     getGenome: vi.fn(),
+    installGene: vi.fn(),
     installGenome: vi.fn(),
     listGenes: vi.fn(),
     listGenomes: vi.fn(),
@@ -217,6 +218,25 @@ describe('gene market store', () => {
     expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
   });
 
+  it('updates an existing installed gene row after reinstalling a gene', async () => {
+    const existing = instanceGene({ usage_count: 1 });
+    const reinstalled = instanceGene({ usage_count: 2 });
+    useGeneMarketStore.setState({ installedGenes: [existing] });
+    vi.mocked(geneMarketService.installGene).mockResolvedValue(reinstalled);
+
+    await useGeneMarketStore
+      .getState()
+      .installGene('instance-1', { gene_id: 'gene-1' }, { tenant_id: 'tenant-2' });
+
+    expect(geneMarketService.installGene).toHaveBeenCalledWith(
+      'instance-1',
+      { gene_id: 'gene-1' },
+      { tenant_id: 'tenant-2' }
+    );
+    expect(useGeneMarketStore.getState().installedGenes).toEqual([reinstalled]);
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+  });
+
   it('appends installed genome genes after installing a genome', async () => {
     const installed = instanceGene();
     vi.mocked(geneMarketService.installGenome).mockResolvedValue(
@@ -240,6 +260,27 @@ describe('gene market store', () => {
       { tenant_id: 'tenant-2' }
     );
     expect(useGeneMarketStore.getState().installedGenes).toEqual([installed]);
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+  });
+
+  it('upserts overlapping installed genes after installing a genome', async () => {
+    const existing = instanceGene({ usage_count: 1 });
+    const updated = instanceGene({ usage_count: 2 });
+    const newInstall = instanceGene({
+      gene_id: 'gene-2',
+      id: 'instance-gene-2',
+      usage_count: 0,
+    });
+    useGeneMarketStore.setState({ installedGenes: [existing] });
+    vi.mocked(geneMarketService.installGenome).mockResolvedValue(
+      genomeInstallResponse([updated, newInstall])
+    );
+
+    await useGeneMarketStore
+      .getState()
+      .installGenome('instance-1', 'genome-1', {}, { tenant_id: 'tenant-2' });
+
+    expect(useGeneMarketStore.getState().installedGenes).toEqual([updated, newInstall]);
     expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
   });
 
