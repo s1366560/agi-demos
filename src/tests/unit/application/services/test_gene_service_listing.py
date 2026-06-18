@@ -317,6 +317,46 @@ async def test_list_genes_with_total_can_include_public_globals_for_tenant_scope
 
 
 @pytest.mark.unit
+async def test_list_genes_with_total_prefers_tenant_slug_over_global_shadow(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    shared_slug = _slug("shadowed-gene")
+    tenant_gene = await service.create_gene(
+        name="Tenant Shadow Gene",
+        slug=shared_slug,
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    unique_gene = await service.create_gene(
+        name="Tenant Unique Gene",
+        slug=_slug("tenant-unique-gene"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    global_gene = await service.create_gene(
+        name="Global Shadow Gene",
+        slug=shared_slug,
+        created_by=test_user.id,
+        tenant_id=None,
+    )
+    await service.publish_gene(global_gene.id)
+
+    genes, total = await service.list_genes_with_total(
+        tenant_id=test_project_db.tenant_id,
+        include_global=True,
+        slugs=[shared_slug, unique_gene.slug],
+        limit=10,
+        offset=0,
+    )
+
+    assert total == 2
+    assert [gene.id for gene in genes] == [tenant_gene.id, unique_gene.id]
+
+
+@pytest.mark.unit
 async def test_list_genomes_with_total_filters_before_pagination(
     test_db: AsyncSession,
     test_project_db: Project,
@@ -684,6 +724,56 @@ async def test_install_genome_installs_all_member_genes_with_genome_context(
     updated_genome = await service.get_genome(genome.id)
     assert updated_genome is not None
     assert updated_genome.install_count == 1
+
+
+@pytest.mark.unit
+async def test_install_genome_prefers_tenant_gene_when_slug_shadows_global(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    await _create_instance(
+        test_db,
+        instance_id="instance-install-shadowed-genome",
+        tenant_id=test_project_db.tenant_id,
+        created_by=test_user.id,
+    )
+    shared_slug = _slug("install-shadowed")
+    tenant_gene = await service.create_gene(
+        name="Install Tenant Shadow Gene",
+        slug=shared_slug,
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    unique_gene = await service.create_gene(
+        name="Install Unique Gene",
+        slug=_slug("install-unique"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+    global_gene = await service.create_gene(
+        name="Install Global Shadow Gene",
+        slug=shared_slug,
+        created_by=test_user.id,
+        tenant_id=None,
+    )
+    await service.publish_gene(global_gene.id)
+    genome = await service.create_genome(
+        name="Shadowed Install Genome",
+        slug=_slug("shadowed-install-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        gene_slugs=[shared_slug, unique_gene.slug],
+    )
+
+    installed = await service.install_genome(
+        "instance-install-shadowed-genome",
+        genome.id,
+        tenant_id=test_project_db.tenant_id,
+    )
+
+    assert [item.gene_id for item in installed] == [tenant_gene.id, unique_gene.id]
 
 
 @pytest.mark.unit

@@ -6,6 +6,7 @@ ratings, and evolution event tracking.
 """
 
 import logging
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -208,6 +209,19 @@ class GeneService:
             Page of genes and total matching count.
         """
         visibility_filter = self._normalize_visibility_filter(visibility)
+        if slugs:
+            resolved_genes = await self._resolve_gene_slugs(
+                tenant_id=tenant_id,
+                include_global=include_global,
+                slugs=slugs,
+                category=category,
+                search=search,
+                visibility=visibility_filter,
+                is_published=is_published,
+                exclude_installed_instance_id=exclude_installed_instance_id,
+            )
+            return resolved_genes[offset : offset + limit], len(resolved_genes)
+
         effective_is_published = (
             True if tenant_id is None and is_published is None else is_published
         )
@@ -452,18 +466,69 @@ class GeneService:
         if not normalized:
             return []
 
-        genes = await self._gene_repo.find_by_filters(
+        genes = await self._resolve_gene_slugs(
             tenant_id=tenant_id,
             include_global=tenant_id is not None,
             slugs=normalized,
-            limit=len(normalized),
-            offset=0,
         )
         found_slugs = {gene.slug for gene in genes}
         missing_slugs = [slug for slug in normalized if slug not in found_slugs]
         if missing_slugs:
             raise ValueError("Genome gene slugs not found")
 
+        return normalized
+
+    async def _resolve_gene_slugs(
+        self,
+        *,
+        tenant_id: str | None,
+        include_global: bool,
+        slugs: Sequence[str],
+        category: str | None = None,
+        search: str | None = None,
+        visibility: str | None = None,
+        is_published: bool | None = None,
+        exclude_installed_instance_id: str | None = None,
+    ) -> list[Gene]:
+        """Resolve exact slug filters with tenant-local genes shadowing global genes."""
+        normalized_slugs = self._normalize_slug_list(slugs)
+        if not normalized_slugs:
+            return []
+
+        candidates = await self._gene_repo.find_by_filters(
+            tenant_id=tenant_id,
+            include_global=include_global,
+            category=category,
+            search=search,
+            slugs=normalized_slugs,
+            visibility=visibility,
+            is_published=is_published,
+            exclude_installed_instance_id=exclude_installed_instance_id,
+            limit=len(normalized_slugs) * 2,
+            offset=0,
+        )
+        genes_by_slug: dict[str, Gene] = {}
+        for gene in candidates:
+            current = genes_by_slug.get(gene.slug)
+            if current is None or (
+                tenant_id is not None
+                and gene.tenant_id == tenant_id
+                and current.tenant_id != tenant_id
+            ):
+                genes_by_slug[gene.slug] = gene
+
+        return [genes_by_slug[slug] for slug in normalized_slugs if slug in genes_by_slug]
+
+    @staticmethod
+    def _normalize_slug_list(slugs: Sequence[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for slug in slugs:
+            normalized_slug = slug.strip()
+            if not normalized_slug or normalized_slug in seen:
+                continue
+            seen.add(normalized_slug)
+            normalized.append(normalized_slug)
         return normalized
 
     async def get_genome(self, genome_id: str) -> Genome | None:
@@ -793,16 +858,13 @@ class GeneService:
         if not genome.gene_slugs:
             raise ValueError("Genome has no genes")
 
-        genes = await self._gene_repo.find_by_filters(
+        ordered_genes = await self._resolve_gene_slugs(
             tenant_id=tenant_id,
             include_global=True,
             slugs=genome.gene_slugs,
-            limit=len(genome.gene_slugs),
-            offset=0,
         )
-        genes_by_slug = {gene.slug: gene for gene in genes}
-        ordered_genes = [genes_by_slug[slug] for slug in genome.gene_slugs if slug in genes_by_slug]
-        missing_slugs = [slug for slug in genome.gene_slugs if slug not in genes_by_slug]
+        found_slugs = {gene.slug for gene in ordered_genes}
+        missing_slugs = [slug for slug in genome.gene_slugs if slug not in found_slugs]
         if missing_slugs:
             raise ValueError("Genome gene slugs not found")
 
