@@ -6,11 +6,9 @@ import { useParams } from 'react-router-dom';
 import { Database, Loader2, TrendingUp } from 'lucide-react';
 
 import { analyticsService } from '../../services/analyticsService';
-import { projectAPI } from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
 
 import type { TenantAnalytics } from '../../types/analytics';
-import type { Project } from '../../types/memory';
 
 // Dynamic imports for chart libraries to reduce initial bundle size
 const ChartComponents = lazy(() => import('./ChartComponents'));
@@ -92,7 +90,6 @@ export const Analytics: FC = memo(() => {
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string | undefined }>();
   const tenantId = routeTenantId ?? currentTenant?.id ?? null;
   const tenantForPlan = currentTenant?.id === tenantId ? currentTenant : null;
-  const [projects, setProjects] = useState<Project[]>([]);
   const [analytics, setAnalytics] = useState<TenantAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const requestIdRef = useRef(0);
@@ -113,18 +110,13 @@ export const Analytics: FC = memo(() => {
       }
 
       setLoading(true);
-      setProjects([]);
       setAnalytics(null);
 
       try {
-        const [projectData, analyticsData] = await Promise.all([
-          projectAPI.list(tenantId),
-          analyticsService.getTenantAnalytics(tenantId, '30d'),
-        ]);
+        const analyticsData = await analyticsService.getTenantAnalytics(tenantId, '30d');
         if (!isCurrentRequest()) {
           return;
         }
-        setProjects(projectData.projects);
         setAnalytics(analyticsData);
       } catch (error: unknown) {
         if (isCurrentRequest()) {
@@ -164,9 +156,7 @@ export const Analytics: FC = memo(() => {
     };
 
     // Use real project storage data
-    const projectStorageLabels = analytics
-      ? analytics.projectStorage.map((p) => p.name)
-      : projects.map((p) => p.name);
+    const projectStorageLabels = analytics ? analytics.projectStorage.map((p) => p.name) : [];
     const projectStorageValues = analytics
       ? analytics.projectStorage.map((p) => p.storage_bytes)
       : [];
@@ -175,7 +165,7 @@ export const Analytics: FC = memo(() => {
       labels: projectStorageLabels,
       datasets: [
         {
-          data: projectStorageValues.length > 0 ? projectStorageValues : projects.map(() => 0),
+          data: projectStorageValues,
           backgroundColor: [
             'rgba(99, 102, 241, 0.8)',
             'rgba(139, 92, 246, 0.8)',
@@ -189,7 +179,7 @@ export const Analytics: FC = memo(() => {
     };
 
     return { memoryGrowthData, projectStorageData };
-  }, [projects, analytics]);
+  }, [analytics]);
 
   // Memoize chart options
   const lineOptions = useMemo(
@@ -271,7 +261,7 @@ export const Analytics: FC = memo(() => {
         />
         <KPICard
           label={t('tenant.analytics.active_projects')}
-          value={analytics ? analytics.summary.total_projects : projects.length}
+          value={analytics ? analytics.summary.total_projects : 0}
           subtext={t('tenant.analytics.project_count')}
         />
         <KPICard
@@ -305,7 +295,7 @@ export const Analytics: FC = memo(() => {
           projectStorageData={chartData.projectStorageData}
           lineOptions={lineOptions}
           pieOptions={pieOptions}
-          projectsLength={projects.length}
+          projectsLength={analytics?.projectStorage.length ?? 0}
           t={t}
         />
       </Suspense>

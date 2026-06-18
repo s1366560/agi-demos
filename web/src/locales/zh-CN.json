@@ -1914,7 +1914,7 @@
       "title": "数据分析",
       "no_workspace": "请先选择一个工作空间",
       "storage_usage": "存储使用",
-      "plan": "{{plan}} 计划",
+      "plan": "计划",
       "used": "已使用 {{percent}}%",
       "total_memories": "记忆总数",
       "growing": "持续增长",

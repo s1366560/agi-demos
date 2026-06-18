@@ -1065,7 +1065,7 @@ const commonTranslations: Record<string, string> = {
   'tenant.analytics.title': 'Analytics',
   'tenant.analytics.no_workspace': 'Please select a workspace first',
   'tenant.analytics.storage_usage': 'Storage Usage',
-  'tenant.analytics.plan': '{{plan}} Plan',
+  'tenant.analytics.plan': 'Plan',
   'tenant.analytics.used': '{{percent}}% Used',
   'tenant.analytics.total_memories': 'Total Memories',
   'tenant.analytics.growing': 'Growing',

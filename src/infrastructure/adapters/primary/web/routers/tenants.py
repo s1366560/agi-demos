@@ -31,6 +31,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.i18n import gettext as _
 
 router = APIRouter(prefix="/api/v1/tenants", tags=["tenants"])
+TENANT_ANALYTICS_PROJECT_STORAGE_LIMIT = 10
 
 
 def _order_tenant_list_query(query: Select[Any]) -> Select[Any]:
@@ -762,6 +763,12 @@ async def get_tenant_stats(
 async def get_tenant_analytics(
     tenant_id: str,
     period: str = Query("30d", description="Time period: 7d, 30d, 90d"),
+    project_storage_limit: int = Query(
+        TENANT_ANALYTICS_PROJECT_STORAGE_LIMIT,
+        ge=1,
+        le=50,
+        description="Maximum number of projects returned for the storage distribution chart",
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -787,86 +794,101 @@ async def get_tenant_analytics(
 
     # Determine time range
     days_map = {"7d": 7, "30d": 30, "90d": 90}
-    days = days_map.get(period, 30)
-    _start_date = datetime.now(UTC) - timedelta(days=days)
-
-    # Get projects for this tenant
-    projects_result = await db.execute(
-        refresh_select_statement(select(Project).where(Project.tenant_id == tenant_id))
+    period_value = period if isinstance(period, str) else "30d"
+    days = days_map.get(period_value, 30)
+    storage_limit = (
+        project_storage_limit
+        if isinstance(project_storage_limit, int)
+        else TENANT_ANALYTICS_PROJECT_STORAGE_LIMIT
     )
-    projects = projects_result.scalars().all()
 
-    project_ids = [project.id for project in projects]
-    project_memory_stats = await _get_project_memory_stats(db, project_ids)
-
-    # Calculate per-project storage
-    project_storage: list[dict[str, Any]] = []
-    for project in projects:
-        memory_stats = project_memory_stats.get(
-            project.id,
-            {"storage_bytes": 0, "memory_count": 0},
-        )
-        project_storage.append(
-            {
-                "name": project.name,
-                "storage_bytes": memory_stats["storage_bytes"],
-                "memory_count": memory_stats["memory_count"],
-            }
-        )
-
-    # Get memory growth by day
-    memory_growth = await _get_memory_growth_by_day(db, project_ids, days)
-
-    # Summary stats
-    total_memories = sum(int(p.get("memory_count", 0)) for p in project_storage)
-    total_storage = sum(int(p.get("storage_bytes", 0)) for p in project_storage)
+    project_storage = await _get_tenant_project_storage(
+        db,
+        tenant_id,
+        limit=storage_limit,
+    )
+    memory_growth = await _get_memory_growth_by_day(db, tenant_id, days)
+    summary = await _get_tenant_memory_summary(db, tenant_id)
 
     return {
         "memoryGrowth": memory_growth,
         "projectStorage": project_storage,
         "summary": {
-            "total_memories": total_memories,
-            "total_storage_bytes": total_storage,
-            "total_projects": len(projects),
+            "total_memories": summary["total_memories"],
+            "total_storage_bytes": summary["total_storage_bytes"],
+            "total_projects": summary["total_projects"],
             "period_days": days,
         },
     }
 
 
-async def _get_project_memory_stats(
-    db: AsyncSession, project_ids: list[str]
-) -> dict[str, dict[str, int]]:
-    """Get memory storage and count totals keyed by project."""
-    if not project_ids:
-        return {}
+async def _get_tenant_memory_summary(db: AsyncSession, tenant_id: str) -> dict[str, int]:
+    """Get tenant-wide project and memory totals without loading project rows."""
+    project_count_result = await db.execute(
+        refresh_select_statement(
+            select(func.count(Project.id)).where(Project.tenant_id == tenant_id)
+        )
+    )
+    project_count = int(project_count_result.scalar() or 0)
+
+    memory_summary_result = await db.execute(
+        refresh_select_statement(
+            select(
+                func.coalesce(func.sum(func.length(Memory.content)), 0).label("storage_bytes"),
+                func.count(Memory.id).label("memory_count"),
+            )
+            .select_from(Memory)
+            .join(Project, Memory.project_id == Project.id)
+            .where(Project.tenant_id == tenant_id)
+        )
+    )
+    storage_bytes, memory_count = memory_summary_result.one()
+
+    return {
+        "total_projects": project_count,
+        "total_memories": int(memory_count or 0),
+        "total_storage_bytes": int(storage_bytes or 0),
+    }
+
+
+async def _get_tenant_project_storage(
+    db: AsyncSession,
+    tenant_id: str,
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Return the top project storage rows needed by the dashboard chart."""
+    storage_expr = func.coalesce(func.sum(func.length(Memory.content)), 0)
+    memory_count_expr = func.count(Memory.id)
 
     result = await db.execute(
         refresh_select_statement(
             select(
-                Memory.project_id,
-                func.coalesce(func.sum(func.length(Memory.content)), 0).label("storage_bytes"),
-                func.count(Memory.id).label("memory_count"),
+                Project.name,
+                storage_expr.label("storage_bytes"),
+                memory_count_expr.label("memory_count"),
             )
-            .where(Memory.project_id.in_(project_ids))
-            .group_by(Memory.project_id)
+            .select_from(Project)
+            .outerjoin(Memory, Memory.project_id == Project.id)
+            .where(Project.tenant_id == tenant_id)
+            .group_by(Project.id, Project.name)
+            .order_by(storage_expr.desc(), Project.name.asc())
+            .limit(limit)
         )
     )
-    return {
-        project_id: {
+
+    return [
+        {
+            "name": name,
             "storage_bytes": int(storage_bytes or 0),
             "memory_count": int(memory_count or 0),
         }
-        for project_id, storage_bytes, memory_count in result.all()
-    }
+        for name, storage_bytes, memory_count in result.all()
+    ]
 
 
-async def _get_memory_growth_by_day(
-    db: AsyncSession, project_ids: list[str], days: int
-) -> list[Any]:
+async def _get_memory_growth_by_day(db: AsyncSession, tenant_id: str, days: int) -> list[Any]:
     """Get memory creation counts by day for the last N days."""
-    if not project_ids:
-        return []
-
     _start_date = datetime.now(UTC) - timedelta(days=days)
 
     # Query memory counts grouped by date
@@ -876,7 +898,9 @@ async def _get_memory_growth_by_day(
                 func.date(Memory.created_at).label("date"),
                 func.count().label("count"),
             )
-            .where(Memory.project_id.in_(project_ids))
+            .select_from(Memory)
+            .join(Project, Memory.project_id == Project.id)
+            .where(Project.tenant_id == tenant_id)
             .where(Memory.created_at >= _start_date)
             .group_by(func.date(Memory.created_at))
             .order_by(func.date(Memory.created_at))

@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { Analytics } from '../../../pages/tenant/Analytics';
 import { analyticsService } from '../../../services/analyticsService';
-import { projectAPI } from '../../../services/api';
 import { useTenantStore } from '../../../stores/tenant';
 
 vi.mock('react-i18next', () => ({
@@ -15,19 +14,6 @@ vi.mock('react-i18next', () => ({
       language: 'en-US',
     },
   }),
-}));
-
-vi.mock('../../../services/api', () => ({
-  projectAPI: {
-    list: vi.fn(() =>
-      Promise.resolve({
-        projects: [
-          { id: '1', name: 'Project 1' },
-          { id: '2', name: 'Project 2' },
-        ],
-      })
-    ),
-  },
 }));
 
 vi.mock('../../../services/analyticsService', () => ({
@@ -127,10 +113,8 @@ describe('Analytics', () => {
       renderAnalytics('/tenant/route-tenant/analytics');
 
       await waitFor(() => {
-        expect(projectAPI.list).toHaveBeenCalledWith('route-tenant');
         expect(analyticsService.getTenantAnalytics).toHaveBeenCalledWith('route-tenant', '30d');
       });
-      expect(projectAPI.list).not.toHaveBeenCalledWith('old-tenant');
       expect(analyticsService.getTenantAnalytics).not.toHaveBeenCalledWith('old-tenant', '30d');
       await waitFor(() => {
         expect(screen.getByText('-')).toBeInTheDocument();
