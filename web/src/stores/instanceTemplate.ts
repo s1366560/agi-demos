@@ -86,6 +86,16 @@ const initialState = {
   error: null as string | null,
 };
 
+let latestListTemplatesRequest = 0;
+let latestGetTemplateRequest = 0;
+let latestListTemplateItemsRequest = 0;
+
+function invalidateTemplateReadRequests(): void {
+  latestListTemplatesRequest += 1;
+  latestGetTemplateRequest += 1;
+  latestListTemplateItemsRequest += 1;
+}
+
 // ============================================================================
 // STORE
 // ============================================================================
@@ -98,9 +108,12 @@ export const useInstanceTemplateStore = create<InstanceTemplateState>()(
       // ========== Template CRUD ==========
 
       listTemplates: async (params = {}) => {
+        const requestId = latestListTemplatesRequest + 1;
+        latestListTemplatesRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await instanceTemplateService.list(params);
+          if (requestId !== latestListTemplatesRequest) return;
           set({
             templates: response.templates,
             total: response.total,
@@ -109,18 +122,23 @@ export const useInstanceTemplateStore = create<InstanceTemplateState>()(
             isLoading: false,
           });
         } catch (error: unknown) {
+          if (requestId !== latestListTemplatesRequest) return;
           set({ error: getErrorMessage(error, 'Failed to list templates'), isLoading: false });
           throw error;
         }
       },
 
       getTemplate: async (id: string) => {
+        const requestId = latestGetTemplateRequest + 1;
+        latestGetTemplateRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await instanceTemplateService.getById(id);
+          if (requestId !== latestGetTemplateRequest) return response;
           set({ currentTemplate: response, isLoading: false });
           return response;
         } catch (error: unknown) {
+          if (requestId !== latestGetTemplateRequest) throw error;
           set({ error: getErrorMessage(error, 'Failed to get template'), isLoading: false });
           throw error;
         }
@@ -221,11 +239,15 @@ export const useInstanceTemplateStore = create<InstanceTemplateState>()(
       // ========== Items ==========
 
       listTemplateItems: async (id: string) => {
+        const requestId = latestListTemplateItemsRequest + 1;
+        latestListTemplateItemsRequest = requestId;
         set({ isLoading: true, error: null });
         try {
           const response = await instanceTemplateService.listItems(id);
+          if (requestId !== latestListTemplateItemsRequest) return;
           set({ templateItems: response, isLoading: false });
         } catch (error: unknown) {
+          if (requestId !== latestListTemplateItemsRequest) return;
           set({
             error: getErrorMessage(error, 'Failed to list template items'),
             isLoading: false,
@@ -279,6 +301,7 @@ export const useInstanceTemplateStore = create<InstanceTemplateState>()(
       },
 
       reset: () => {
+        invalidateTemplateReadRequests();
         set(initialState);
       },
     }),
