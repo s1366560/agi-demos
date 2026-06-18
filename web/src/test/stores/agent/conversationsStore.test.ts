@@ -277,6 +277,48 @@ describe('ConversationsStore', () => {
       expect(useConversationsStore.getState().conversations).toEqual([projectBConversation]);
     });
 
+    it('keeps post-reset list request authoritative when a stale request resolves first', async () => {
+      const staleRequest = deferred<{
+        items: Conversation[];
+        has_more: boolean;
+        total: number;
+      }>();
+      const freshRequest = deferred<{
+        items: Conversation[];
+        has_more: boolean;
+        total: number;
+      }>();
+      const staleConversation = createMockConversation('conv-stale', 'proj-stale', 'Stale');
+      const freshConversation = createMockConversation('conv-fresh', 'proj-fresh', 'Fresh');
+
+      listConversationsMock
+        .mockReturnValueOnce(staleRequest.promise as any)
+        .mockReturnValueOnce(freshRequest.promise as any);
+
+      const staleLoad = useConversationsStore.getState().listConversations('proj-stale');
+      useConversationsStore.getState().reset();
+      const freshLoad = useConversationsStore.getState().listConversations('proj-fresh');
+
+      staleRequest.resolve({
+        items: [staleConversation],
+        has_more: false,
+        total: 1,
+      });
+      await staleLoad;
+      expect(useConversationsStore.getState().conversations).toEqual([]);
+      expect(useConversationsStore.getState().conversationsLoading).toBe(true);
+
+      freshRequest.resolve({
+        items: [freshConversation],
+        has_more: false,
+        total: 1,
+      });
+      await freshLoad;
+
+      expect(useConversationsStore.getState().conversations).toEqual([freshConversation]);
+      expect(useConversationsStore.getState().conversationsLoading).toBe(false);
+    });
+
     it('should handle fetch error', async () => {
       const error = { response: { data: { detail: 'Network error' } } };
       listConversationsMock.mockRejectedValue(error);

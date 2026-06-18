@@ -142,7 +142,7 @@ function finishListConversationsRequest(sequence: number): void {
 
 function resetListConversationsRequestTracking(): void {
   activeListConversationsRequest = null;
-  listConversationsRequestSequence = 0;
+  listConversationsRequestSequence += 1;
 }
 
 function conversationActivityTime(conversation: Conversation): number {
