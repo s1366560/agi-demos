@@ -288,6 +288,15 @@ const initialState: GeneMarketDataState = {
 };
 
 let pendingSubmissionCount = 0;
+let storeGeneration = 0;
+
+const currentStoreGeneration = (): number => storeGeneration;
+
+const isCurrentStoreGeneration = (generation: number): boolean => storeGeneration === generation;
+
+const invalidateStoreGeneration = (): void => {
+  storeGeneration += 1;
+};
 
 const beginSubmitting = (): Pick<GeneMarketDataState, 'error' | 'isSubmitting'> => {
   pendingSubmissionCount += 1;
@@ -352,9 +361,13 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       },
 
       createGene: async (data: GeneCreate, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           const response = await geneMarketService.createGene(data, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return response;
+          }
           const { genes } = get();
           set({
             genes: [response, ...genes],
@@ -363,15 +376,21 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           });
           return response;
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to create gene'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to create gene'), ...endSubmitting() });
+          }
           throw error;
         }
       },
 
       updateGene: async (id: string, data: GeneUpdate, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           const response = await geneMarketService.updateGene(id, data, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return response;
+          }
           const { genes } = get();
           set({
             genes: genes.map((g) => (g.id === id ? response : g)),
@@ -380,15 +399,21 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           });
           return response;
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to update gene'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to update gene'), ...endSubmitting() });
+          }
           throw error;
         }
       },
 
       deleteGene: async (id: string, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           await geneMarketService.deleteGene(id, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return;
+          }
           const { genes } = get();
           set({
             genes: genes.filter((g) => g.id !== id),
@@ -397,15 +422,21 @@ export const useGeneMarketStore = create<GeneMarketState>()(
             ...endSubmitting(),
           });
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to delete gene'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to delete gene'), ...endSubmitting() });
+          }
           throw error;
         }
       },
 
       publishGene: async (id: string, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           const response = await geneMarketService.publishGene(id, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return response;
+          }
           const { genes, currentGene } = get();
           set({
             genes: genes.map((g) => (g.id === id ? response : g)),
@@ -414,15 +445,21 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           });
           return response;
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to publish gene'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to publish gene'), ...endSubmitting() });
+          }
           throw error;
         }
       },
 
       unpublishGene: async (id: string, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           const response = await geneMarketService.unpublishGene(id, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return response;
+          }
           const { genes, currentGene } = get();
           set({
             genes: genes.map((g) => (g.id === id ? response : g)),
@@ -431,7 +468,9 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           });
           return response;
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to unpublish gene'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to unpublish gene'), ...endSubmitting() });
+          }
           throw error;
         }
       },
@@ -523,9 +562,13 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       },
 
       createGenome: async (data: GenomeCreate, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           const response = await geneMarketService.createGenome(data, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return response;
+          }
           const { genomes } = get();
           set({
             genomes: [response, ...genomes],
@@ -534,15 +577,21 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           });
           return response;
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to create genome'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to create genome'), ...endSubmitting() });
+          }
           throw error;
         }
       },
 
       updateGenome: async (id: string, data: GenomeUpdate, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           const response = await geneMarketService.updateGenome(id, data, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return response;
+          }
           const { genomes } = get();
           set({
             genomes: genomes.map((g) => (g.id === id ? response : g)),
@@ -551,15 +600,21 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           });
           return response;
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to update genome'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to update genome'), ...endSubmitting() });
+          }
           throw error;
         }
       },
 
       deleteGenome: async (id: string, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           await geneMarketService.deleteGenome(id, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return;
+          }
           const { genomes } = get();
           set({
             genomes: genomes.filter((g) => g.id !== id),
@@ -568,15 +623,21 @@ export const useGeneMarketStore = create<GeneMarketState>()(
             ...endSubmitting(),
           });
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to delete genome'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to delete genome'), ...endSubmitting() });
+          }
           throw error;
         }
       },
 
       publishGenome: async (id: string, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           const response = await geneMarketService.publishGenome(id, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return response;
+          }
           const { genomes, currentGenome } = get();
           set({
             genomes: genomes.map((g) => (g.id === id ? response : g)),
@@ -585,15 +646,21 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           });
           return response;
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to publish genome'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to publish genome'), ...endSubmitting() });
+          }
           throw error;
         }
       },
 
       unpublishGenome: async (id: string, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           const response = await geneMarketService.unpublishGenome(id, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return response;
+          }
           const { genomes, currentGenome } = get();
           set({
             genomes: genomes.map((g) => (g.id === id ? response : g)),
@@ -602,10 +669,12 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           });
           return response;
         } catch (error: unknown) {
-          set({
-            error: getErrorMessage(error, 'Failed to unpublish genome'),
-            ...endSubmitting(),
-          });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({
+              error: getErrorMessage(error, 'Failed to unpublish genome'),
+              ...endSubmitting(),
+            });
+          }
           throw error;
         }
       },
@@ -617,16 +686,22 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         data: GeneInstallRequest,
         options?: TenantScopedOptions
       ) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           const response = await geneMarketService.installGene(instanceId, data, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return;
+          }
           const { installedGenes } = get();
           set({
             installedGenes: upsertInstalledGenes(installedGenes, [response]),
             ...endSubmitting(),
           });
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to install gene'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to install gene'), ...endSubmitting() });
+          }
           throw error;
         }
       },
@@ -637,6 +712,7 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         data: GenomeInstallRequest,
         options?: TenantScopedOptions
       ) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           const response = await geneMarketService.installGenome(
@@ -645,6 +721,9 @@ export const useGeneMarketStore = create<GeneMarketState>()(
             data,
             options
           );
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return response;
+          }
           const { installedGenes } = get();
           set({
             installedGenes: upsertInstalledGenes(installedGenes, response.items),
@@ -652,7 +731,9 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           });
           return response;
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to install genome'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to install genome'), ...endSubmitting() });
+          }
           throw error;
         }
       },
@@ -662,16 +743,22 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         instanceGeneId: string,
         options?: TenantScopedOptions
       ) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           await geneMarketService.uninstallGene(instanceId, instanceGeneId, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return;
+          }
           const { installedGenes } = get();
           set({
             installedGenes: installedGenes.filter((ig) => ig.id !== instanceGeneId),
             ...endSubmitting(),
           });
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to uninstall gene'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to uninstall gene'), ...endSubmitting() });
+          }
           throw error;
         }
       },
@@ -725,32 +812,46 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         data: CreateReviewRequest,
         options?: TenantScopedOptions
       ) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           await geneMarketService.createGeneReview(geneId, data, options);
-          set(endSubmitting());
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set(endSubmitting());
+          }
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to create review'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to create review'), ...endSubmitting() });
+          }
           throw error;
         }
       },
 
       deleteGeneReview: async (geneId: string, reviewId: string, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           await geneMarketService.deleteGeneReview(geneId, reviewId, options);
-          set(endSubmitting());
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set(endSubmitting());
+          }
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to delete review'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to delete review'), ...endSubmitting() });
+          }
           throw error;
         }
       },
 
       rateGene: async (geneId: string, data: GeneRatingCreate, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           await geneMarketService.rateGene(geneId, data, options);
           const response = await geneMarketService.getGene(geneId, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return;
+          }
           const { genes, currentGene } = get();
           set({
             genes: genes.map((gene) => (gene.id === geneId ? response : gene)),
@@ -758,7 +859,9 @@ export const useGeneMarketStore = create<GeneMarketState>()(
             ...endSubmitting(),
           });
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to rate gene'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to rate gene'), ...endSubmitting() });
+          }
           throw error;
         }
       },
@@ -768,10 +871,14 @@ export const useGeneMarketStore = create<GeneMarketState>()(
         data: GenomeRatingCreate,
         options?: TenantScopedOptions
       ) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           await geneMarketService.rateGenome(genomeId, data, options);
           const response = await geneMarketService.getGenome(genomeId, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return;
+          }
           const { genomes, currentGenome } = get();
           set({
             genomes: genomes.map((genome) => (genome.id === genomeId ? response : genome)),
@@ -779,7 +886,9 @@ export const useGeneMarketStore = create<GeneMarketState>()(
             ...endSubmitting(),
           });
         } catch (error: unknown) {
-          set({ error: getErrorMessage(error, 'Failed to rate genome'), ...endSubmitting() });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({ error: getErrorMessage(error, 'Failed to rate genome'), ...endSubmitting() });
+          }
           throw error;
         }
       },
@@ -848,9 +957,13 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       },
 
       createEvolutionEvent: async (data: EvolutionEventCreate, options?: TenantScopedOptions) => {
+        const requestGeneration = currentStoreGeneration();
         set(beginSubmitting());
         try {
           const response = await geneMarketService.createEvolutionEvent(data, options);
+          if (!isCurrentStoreGeneration(requestGeneration)) {
+            return response;
+          }
           const { evolutionEvents } = get();
           set({
             evolutionEvents: [response, ...evolutionEvents],
@@ -858,10 +971,12 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           });
           return response;
         } catch (error: unknown) {
-          set({
-            error: getErrorMessage(error, 'Failed to create evolution event'),
-            ...endSubmitting(),
-          });
+          if (isCurrentStoreGeneration(requestGeneration)) {
+            set({
+              error: getErrorMessage(error, 'Failed to create evolution event'),
+              ...endSubmitting(),
+            });
+          }
           throw error;
         }
       },
@@ -892,6 +1007,7 @@ export const useGeneMarketStore = create<GeneMarketState>()(
       },
 
       reset: () => {
+        invalidateStoreGeneration();
         invalidateDetailRequests('currentGene', 'currentGenome', 'currentGenomeGenes');
         invalidateListRequests('genes', 'genomes', 'installedGenes', 'reviews', 'evolutionEvents');
         resetSubmitting();

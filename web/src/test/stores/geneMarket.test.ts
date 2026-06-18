@@ -14,6 +14,8 @@ import type {
 
 vi.mock('@/services/geneMarketService', () => ({
   geneMarketService: {
+    createGene: vi.fn(),
+    createGenome: vi.fn(),
     createGeneReview: vi.fn(),
     deleteGene: vi.fn(),
     deleteGeneReview: vi.fn(),
@@ -201,7 +203,9 @@ describe('gene market store', () => {
 
   it('resets pending submission tracking when the store resets', async () => {
     const pendingRequest = deferred<{ id: string }>();
-    vi.mocked(geneMarketService.createGeneReview).mockReturnValueOnce(pendingRequest.promise as any);
+    vi.mocked(geneMarketService.createGeneReview).mockReturnValueOnce(
+      pendingRequest.promise as any
+    );
 
     const submission = useGeneMarketStore
       .getState()
@@ -214,6 +218,43 @@ describe('gene market store', () => {
     pendingRequest.resolve({ id: 'review-1' });
     await expect(submission).resolves.toBeUndefined();
     expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+  });
+
+  it('ignores stale create responses after the store resets', async () => {
+    const pendingRequest = deferred<GeneResponse>();
+    vi.mocked(geneMarketService.createGene).mockReturnValueOnce(pendingRequest.promise);
+
+    const submission = useGeneMarketStore
+      .getState()
+      .createGene({ name: 'New Gene', slug: 'new-gene' }, { tenant_id: 'tenant-2' });
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(true);
+
+    useGeneMarketStore.getState().reset();
+    pendingRequest.resolve(gene({ id: 'gene-new', slug: 'new-gene' }));
+
+    await expect(submission).resolves.toMatchObject({ id: 'gene-new' });
+    expect(useGeneMarketStore.getState().genes).toEqual([]);
+    expect(useGeneMarketStore.getState().geneTotal).toBe(0);
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+    expect(useGeneMarketStore.getState().error).toBeNull();
+  });
+
+  it('ignores stale create failures after the store resets', async () => {
+    const pendingRequest = deferred<GeneResponse>();
+    vi.mocked(geneMarketService.createGene).mockReturnValueOnce(pendingRequest.promise);
+
+    const submission = useGeneMarketStore
+      .getState()
+      .createGene({ name: 'New Gene', slug: 'new-gene' }, { tenant_id: 'tenant-2' });
+
+    useGeneMarketStore.getState().reset();
+    pendingRequest.reject(new Error('stale create failed'));
+
+    await expect(submission).rejects.toThrow('stale create failed');
+    expect(useGeneMarketStore.getState().genes).toEqual([]);
+    expect(useGeneMarketStore.getState().geneTotal).toBe(0);
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+    expect(useGeneMarketStore.getState().error).toBeNull();
   });
 
   it('updates gene list and current gene after publishing', async () => {
