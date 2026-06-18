@@ -133,8 +133,11 @@ describe('useConversationListAutoRefresh', () => {
     expect(mocks.loadConversations).not.toHaveBeenCalled();
   });
 
-  it('uses the visible-tab polling fallback', async () => {
-    const visibilitySpy = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  it('refreshes stale lists when the tab becomes visible again', async () => {
+    let visibilityState: DocumentVisibilityState = 'hidden';
+    const visibilitySpy = vi
+      .spyOn(document, 'visibilityState', 'get')
+      .mockImplementation(() => visibilityState);
     mocks.conversations = Array.from({ length: 12 }, (_, index) => ({
       id: `conversation-${index}`,
       project_id: 'project-1',
@@ -142,7 +145,11 @@ describe('useConversationListAutoRefresh', () => {
 
     renderHook(() => useConversationListAutoRefresh('project-1'));
 
-    await flushTimers(30000);
+    await flushTimers(60000);
+    visibilityState = 'visible';
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
 
     expect(mocks.loadConversations).toHaveBeenCalledWith(
       'project-1',
@@ -157,7 +164,6 @@ describe('useConversationListAutoRefresh', () => {
   });
 
   it('caps auto-refresh requests to the conversations API page limit', async () => {
-    const visibilitySpy = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
     mocks.conversations = Array.from({ length: 314 }, (_, index) => ({
       id: `conversation-${index}`,
       project_id: 'project-1',
@@ -165,7 +171,15 @@ describe('useConversationListAutoRefresh', () => {
 
     renderHook(() => useConversationListAutoRefresh('project-1'));
 
-    await flushTimers(30000);
+    act(() => {
+      projectHandler()({
+        type: 'conversation_created',
+        project_id: 'project-1',
+        data: { conversation_id: 'conversation-new', project_id: 'project-1' },
+      });
+    });
+
+    await flushTimers(300);
 
     expect(mocks.loadConversations).toHaveBeenCalledWith(
       'project-1',
@@ -175,8 +189,6 @@ describe('useConversationListAutoRefresh', () => {
         limit: 100,
       })
     );
-
-    visibilitySpy.mockRestore();
   });
 
   it('clears pending event refresh timers on unmount', async () => {

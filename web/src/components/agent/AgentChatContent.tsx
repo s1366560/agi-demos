@@ -83,6 +83,7 @@ import { Resizer } from './Resizer';
 import { SplitPaneLayout } from './SplitPaneLayout';
 import { LAYOUT_BG_CLASSES } from './styles';
 import { deriveTaskProgress } from './tasks/taskProgressDerivation';
+import { useProjectConversationLoader } from './useProjectConversationLoader';
 
 import type {
   AgentTask,
@@ -500,10 +501,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       };
     }, [inputBarRef]);
 
-    // Load conversations
-    useEffect(() => {
-      if (projectId) void loadConversations(projectId);
-    }, [projectId, loadConversations]);
+    // Load conversations only when the project scope changes. The Zustand
+    // action reference can churn during store/HMR updates; depending on it here
+    // turns streaming and background state updates into repeated list reloads.
+    useProjectConversationLoader(projectId, loadConversations);
 
     useEffect(() => {
       if (!projectId || !conversationId) {

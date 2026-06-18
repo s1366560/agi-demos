@@ -8,7 +8,7 @@ import { unifiedEventService, type UnifiedEvent } from '@/services/unifiedEventS
 import { logger } from '../utils/logger';
 
 const EVENT_REFRESH_DEBOUNCE_MS = 300;
-const POLL_INTERVAL_MS = 30000;
+const VISIBILITY_REFRESH_STALE_MS = 60000;
 const MIN_CONVERSATION_REFRESH_LIMIT = 10;
 const MAX_CONVERSATION_REFRESH_LIMIT = 100;
 
@@ -81,11 +81,13 @@ export function useConversationListAutoRefresh(projectId: string | null): void {
 
     let refreshTimer: number | undefined;
     let refreshController: AbortController | undefined;
+    let lastRefreshAt = Date.now();
 
     const refreshConversations = () => {
       refreshController?.abort();
       const controller = new AbortController();
       refreshController = controller;
+      lastRefreshAt = Date.now();
 
       void useAgentV3Store
         .getState()
@@ -126,18 +128,24 @@ export function useConversationListAutoRefresh(projectId: string | null): void {
       scheduleRefresh();
     });
 
-    const pollInterval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        refreshConversations();
+    const refreshVisibleStaleList = () => {
+      if (document.visibilityState !== 'visible') {
+        return;
       }
-    }, POLL_INTERVAL_MS);
+      if (Date.now() - lastRefreshAt < VISIBILITY_REFRESH_STALE_MS) {
+        return;
+      }
+      refreshConversations();
+    };
+
+    document.addEventListener('visibilitychange', refreshVisibleStaleList);
 
     return () => {
       unsubscribe();
       if (refreshTimer) {
         window.clearTimeout(refreshTimer);
       }
-      window.clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', refreshVisibleStaleList);
       refreshController?.abort();
     };
   }, [projectId]);
