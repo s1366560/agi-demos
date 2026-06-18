@@ -7,6 +7,7 @@
 
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import { SubAgentList } from '../../../pages/tenant/SubAgentList';
 import { useProjectStore } from '../../../stores/project';
@@ -162,6 +163,16 @@ vi.mock('../../../stores/subagent', () => ({
 }));
 
 describe('SubAgentList', () => {
+  function renderSubAgentList(route = '/tenant/tenant-1/subagents') {
+    return render(
+      <MemoryRouter initialEntries={[route]}>
+        <Routes>
+          <Route path="/tenant/:tenantId/subagents" element={<SubAgentList />} />
+        </Routes>
+      </MemoryRouter>
+    );
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     importFilesystemMock.mockResolvedValue(mockSubAgents[0]);
@@ -189,36 +200,36 @@ describe('SubAgentList', () => {
 
   describe('Rendering', () => {
     it('should render header with title', () => {
-      render(<SubAgentList />);
+      renderSubAgentList();
       expect(screen.getByText('tenant.subagents.title')).toBeInTheDocument();
     });
 
     it('should render stats section', () => {
-      render(<SubAgentList />);
+      renderSubAgentList();
       expect(screen.getByTestId('subagent-stats')).toBeInTheDocument();
     });
 
     it('should render subagent names', () => {
-      render(<SubAgentList />);
+      renderSubAgentList();
       expect(screen.getByText('Test Agent')).toBeInTheDocument();
       expect(screen.getByText('Another Agent')).toBeInTheDocument();
     });
 
     it('should render filters section', () => {
-      render(<SubAgentList />);
+      renderSubAgentList();
       expect(screen.getByTestId('subagent-filters')).toBeInTheDocument();
     });
   });
 
   describe('Filtering', () => {
     it('should render search input for filtering', () => {
-      render(<SubAgentList />);
+      renderSubAgentList();
       const searchInput = screen.getByPlaceholderText('Search subagents...');
       expect(searchInput).toBeInTheDocument();
     });
 
     it('should allow typing in search input', async () => {
-      render(<SubAgentList />);
+      renderSubAgentList();
       const searchInput = screen.getByPlaceholderText('Search subagents...');
       fireEvent.change(searchInput, { target: { value: 'Test' } });
 
@@ -230,36 +241,36 @@ describe('SubAgentList', () => {
 
   describe('Component Structure', () => {
     it('should use SubAgentGrid for rendering agents', () => {
-      render(<SubAgentList />);
+      renderSubAgentList();
       expect(screen.getByText('Test Agent')).toBeInTheDocument();
       expect(screen.getByText('Another Agent')).toBeInTheDocument();
     });
 
     it('should render create and template buttons', () => {
-      render(<SubAgentList />);
+      renderSubAgentList();
       expect(screen.getByText('tenant.subagents.createNew')).toBeInTheDocument();
       expect(screen.getByText('tenant.subagents.fromTemplate')).toBeInTheDocument();
     });
 
     it('should load subagents and templates for the selected route tenant', async () => {
       useTenantStore.setState({
-        currentTenant: { id: 'tenant-1', name: 'Tenant One' } as any,
+        currentTenant: { id: 'stale-tenant', name: 'Stale Tenant' } as any,
       });
 
-      render(<SubAgentList />);
+      renderSubAgentList('/tenant/route-tenant/subagents');
 
       await waitFor(() => {
         expect(listSubAgentsMock).toHaveBeenCalledWith(
           expect.objectContaining({
-            tenant_id: 'tenant-1',
+            tenant_id: 'route-tenant',
             limit: 20,
             offset: 0,
             sort: 'name',
           })
         );
-        expect(listTemplatesMock).toHaveBeenCalledWith({ tenant_id: 'tenant-1' });
+        expect(listTemplatesMock).toHaveBeenCalledWith({ tenant_id: 'route-tenant' });
       });
-      expect(listProjectsMock).toHaveBeenCalledWith('tenant-1', { page_size: 100 });
+      expect(listProjectsMock).toHaveBeenCalledWith('route-tenant', { page_size: 100 });
     });
 
     it('should request server-side search from the selected tenant', async () => {
@@ -267,7 +278,7 @@ describe('SubAgentList', () => {
         currentTenant: { id: 'tenant-1', name: 'Tenant One' } as any,
       });
 
-      render(<SubAgentList />);
+      renderSubAgentList();
       fireEvent.change(screen.getByPlaceholderText('Search subagents...'), {
         target: { value: 'Test' },
       });
@@ -290,7 +301,7 @@ describe('SubAgentList', () => {
         currentTenant: { id: 'tenant-1', name: 'Tenant One' } as any,
       });
 
-      render(<SubAgentList />);
+      renderSubAgentList();
       fireEvent.click(screen.getByRole('button', { name: 'tenant.subagents.pagination.nextPage' }));
 
       await waitFor(() => {
@@ -309,7 +320,7 @@ describe('SubAgentList', () => {
         currentTenant: { id: 'tenant-1', name: 'Tenant One' } as any,
       });
 
-      render(<SubAgentList />);
+      renderSubAgentList();
       fireEvent.click(screen.getByRole('button', { name: 'tenant.subagents.createNew' }));
 
       expect(screen.getByTestId('subagent-modal')).toHaveAttribute('data-tenant-id', 'tenant-1');
@@ -345,7 +356,7 @@ describe('SubAgentList', () => {
         ],
       });
 
-      render(<SubAgentList />);
+      renderSubAgentList();
 
       fireEvent.change(screen.getByLabelText('tenant.subagents.importTarget.label'), {
         target: { value: 'project-1' },
@@ -378,20 +389,20 @@ describe('SubAgentList', () => {
     });
 
     it('should use filterSubAgents from store', () => {
-      render(<SubAgentList />);
+      renderSubAgentList();
       expect(screen.getByTestId('subagent-grid')).toBeInTheDocument();
     });
   });
 
   describe('Accessibility', () => {
     it('should have proper heading structure', () => {
-      render(<SubAgentList />);
+      renderSubAgentList();
       const h1 = screen.getByText('tenant.subagents.title');
       expect(h1.tagName).toBe('H1');
     });
 
     it('should have accessible search input', () => {
-      render(<SubAgentList />);
+      renderSubAgentList();
       const searchInput = screen.getByPlaceholderText('Search subagents...');
       expect(searchInput).toBeInTheDocument();
     });

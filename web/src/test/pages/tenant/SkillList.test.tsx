@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Route, Routes } from 'react-router-dom';
 
 import { SkillList } from '@/pages/tenant/SkillList';
 import { useProjectStore } from '@/stores/project';
@@ -39,7 +40,6 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
     ...actual,
-    useLocation: () => ({ pathname: '/tenant/acme/skills' }),
     useNavigate: () => navigateMock,
   };
 });
@@ -119,6 +119,22 @@ function makeTenant(overrides: Partial<Tenant> = {}): Tenant {
   };
 }
 
+function renderSkillList(route = '/tenant/tenant-1/skills') {
+  return render(
+    <Routes>
+      <Route
+        path="/tenant/:tenantId/skills"
+        element={
+          <Suspense fallback={<div>Loading</div>}>
+            <SkillList />
+          </Suspense>
+        }
+      />
+    </Routes>,
+    { route }
+  );
+}
+
 describe('SkillList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -155,16 +171,12 @@ describe('SkillList', () => {
   });
 
   it('routes skill creation to chat instead of the removed manual creation page', async () => {
-    render(
-      <Suspense fallback={<div>Loading</div>}>
-        <SkillList />
-      </Suspense>
-    );
+    renderSkillList();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create in chat' }));
 
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/tenant/acme/agent-workspace', {
+      expect(navigateMock).toHaveBeenCalledWith('/tenant/tenant-1/agent-workspace', {
         state: {
           suggestedPrompt: 'Help me create a new skill.',
         },
@@ -176,11 +188,7 @@ describe('SkillList', () => {
   it('shows tenant-level system skill disable controls', async () => {
     skillStore.skills = [systemSkill()];
 
-    render(
-      <Suspense fallback={<div>Loading</div>}>
-        <SkillList />
-      </Suspense>
-    );
+    renderSkillList();
 
     await waitFor(() => {
       expect(skillStore.listTenantConfigs).toHaveBeenCalled();
@@ -188,6 +196,27 @@ describe('SkillList', () => {
     expect(
       await screen.findByRole('button', { name: 'Disable memory-flush for this tenant' })
     ).toBeInTheDocument();
+  });
+
+  it('uses the route tenant instead of a stale tenant store value for server requests', async () => {
+    useTenantStore.setState({
+      currentTenant: makeTenant({ id: 'stale-tenant' }),
+    });
+    useProjectStore.setState({
+      projects: [makeProject({ tenant_id: 'route-tenant' })],
+    });
+
+    renderSkillList('/tenant/route-tenant/skills');
+
+    await waitFor(() => {
+      expect(skillStore.listSkills).toHaveBeenCalledWith(
+        expect.objectContaining({ tenant_id: 'route-tenant' })
+      );
+      expect(skillStore.listTenantConfigs).toHaveBeenCalledWith({ tenant_id: 'route-tenant' });
+      expect(useProjectStore.getState().listProjects).toHaveBeenCalledWith('route-tenant', {
+        page_size: 100,
+      });
+    });
   });
 
   it('shows tenant-level system skill restore controls for disabled system skills', async () => {
@@ -204,11 +233,7 @@ describe('SkillList', () => {
       },
     ];
 
-    render(
-      <Suspense fallback={<div>Loading</div>}>
-        <SkillList />
-      </Suspense>
-    );
+    renderSkillList();
 
     expect(await screen.findByText('Tenant disabled')).toBeInTheDocument();
     expect(
@@ -230,11 +255,7 @@ describe('SkillList', () => {
       }),
     ];
 
-    render(
-      <Suspense fallback={<div>Loading</div>}>
-        <SkillList />
-      </Suspense>
-    );
+    renderSkillList();
 
     await waitFor(() => {
       expect(skillStore.listSkills).toHaveBeenCalled();
@@ -285,11 +306,7 @@ describe('SkillList', () => {
       }),
     ];
 
-    render(
-      <Suspense fallback={<div>Loading</div>}>
-        <SkillList />
-      </Suspense>
-    );
+    renderSkillList();
 
     expect(await screen.findByRole('button', { name: 'system-skill' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'tenant-skill' })).toBeInTheDocument();
@@ -321,11 +338,7 @@ describe('SkillList', () => {
       })
     );
 
-    render(
-      <Suspense fallback={<div>Loading</div>}>
-        <SkillList />
-      </Suspense>
-    );
+    renderSkillList();
 
     const pageTwo = await screen.findByTitle('2');
     fireEvent.click(pageTwo);
@@ -342,11 +355,7 @@ describe('SkillList', () => {
       projects: [makeProject()],
     });
 
-    render(
-      <Suspense fallback={<div>Loading</div>}>
-        <SkillList />
-      </Suspense>
-    );
+    renderSkillList();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
     fireEvent.change(screen.getByLabelText('Import scope'), {

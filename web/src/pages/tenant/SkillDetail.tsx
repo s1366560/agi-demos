@@ -618,10 +618,10 @@ export const SkillDetail: FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
-  const params = useParams<{ skillId: string }>();
+  const params = useParams<{ tenantId?: string | undefined; skillId: string }>();
   const message = useLazyMessage();
   const currentTenant = useTenantStore((state) => state.currentTenant);
-  const tenantId = currentTenant?.id ?? null;
+  const tenantId = params.tenantId ?? currentTenant?.id ?? null;
   const skillId = params.skillId;
   const translate = useCallback(
     (key: string, options?: Record<string, unknown>) => {

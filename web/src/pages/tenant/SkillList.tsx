@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { Input, Modal, Pagination, Switch } from 'antd';
 import {
@@ -177,6 +177,7 @@ export const SkillList: FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const message = useLazyMessage();
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string | undefined }>();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | SkillStatus>('all');
   const [scopeFilter, setScopeFilter] = useState<SkillScopeFilter>('all');
@@ -202,18 +203,22 @@ export const SkillList: FC = () => {
   const activeCount = useActiveSkillsCount();
   const total = useSkillTotal();
   const currentTenant = useTenantStore((state) => state.currentTenant);
-  const tenantId = currentTenant?.id ?? null;
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
   const projects = useProjectStore((state) => state.projects);
   const listProjects = useProjectStore((state) => state.listProjects);
+  const tenantProjects = useMemo(
+    () => (tenantId ? projects.filter((project) => project.tenant_id === tenantId) : []),
+    [projects, tenantId]
+  );
 
   const projectNameById = useMemo(
-    () => new Map(projects.map((project) => [project.id, project.name])),
-    [projects]
+    () => new Map(tenantProjects.map((project) => [project.id, project.name])),
+    [tenantProjects]
   );
 
   const projectScopeOptions = useMemo(() => {
     const seen = new Set<string>();
-    const options = projects.map((project) => {
+    const options = tenantProjects.map((project) => {
       seen.add(project.id);
       return { id: project.id, name: project.name };
     });
@@ -226,7 +231,7 @@ export const SkillList: FC = () => {
     }
 
     return options;
-  }, [projects, skills]);
+  }, [skills, tenantProjects]);
 
   const getSkillScopeLabel = useCallback(
     (skill: SkillResponse): string => {
@@ -309,14 +314,14 @@ export const SkillList: FC = () => {
   }, [listSkills, listTenantConfigs, tenantId]);
 
   useEffect(() => {
-    if (!currentTenant?.id) {
+    if (!tenantId) {
       return;
     }
 
-    void listProjects(currentTenant.id, { page_size: 100 }).catch(() => {
+    void listProjects(tenantId, { page_size: 100 }).catch(() => {
       message?.error(t('tenant.skills.projectsLoadFailed'));
     });
-  }, [currentTenant?.id, listProjects, message, t]);
+  }, [tenantId, listProjects, message, t]);
 
   // Clear error on unmount
   useEffect(() => {

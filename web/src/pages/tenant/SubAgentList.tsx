@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
 import { Dropdown, message, Spin } from 'antd';
 import { ChevronDown, ChevronLeft, ChevronRight, Copy, Plus } from 'lucide-react';
@@ -54,6 +55,7 @@ const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
 export const SubAgentList: React.FC = () => {
   const { t } = useTranslation();
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string | undefined }>();
 
   // Local UI state
   const [search, setSearch] = useState('');
@@ -78,17 +80,21 @@ export const SubAgentList: React.FC = () => {
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const projects = useProjectStore((state) => state.projects);
   const listProjects = useProjectStore((state) => state.listProjects);
-  const tenantId = currentTenant?.id ?? null;
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
   const tenantOptions = useMemo(() => (tenantId ? { tenant_id: tenantId } : undefined), [tenantId]);
+  const tenantProjects = useMemo(
+    () => (tenantId ? projects.filter((project) => project.tenant_id === tenantId) : []),
+    [projects, tenantId]
+  );
 
   const projectNameById = useMemo(
-    () => new Map(projects.map((project) => [project.id, project.name])),
-    [projects]
+    () => new Map(tenantProjects.map((project) => [project.id, project.name])),
+    [tenantProjects]
   );
 
   const importProjectOptions = useMemo(() => {
     const seen = new Set<string>();
-    const options = projects.map((project) => {
+    const options = tenantProjects.map((project) => {
       seen.add(project.id);
       return { id: project.id, name: project.name };
     });
@@ -104,7 +110,7 @@ export const SubAgentList: React.FC = () => {
     }
 
     return options;
-  }, [projects, subagentsData]);
+  }, [subagentsData, tenantProjects]);
 
   const getSubAgentScopeLabel = useCallback(
     (subagent: SubAgentResponse): string => {

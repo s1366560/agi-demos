@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Route, Routes } from 'react-router-dom';
 
 import { SkillDetail } from '@/pages/tenant/SkillDetail';
 import { useTenantStore } from '@/stores/tenant';
@@ -19,9 +20,7 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
     ...actual,
-    useLocation: () => ({ pathname: '/tenant/acme/skills/skill-1' }),
     useNavigate: () => vi.fn(),
-    useParams: () => ({ skillId: 'skill-1' }),
   };
 });
 
@@ -68,6 +67,15 @@ function makeTenant(overrides: Partial<Tenant> = {}): Tenant {
   };
 }
 
+function renderSkillDetail(route = '/tenant/tenant-1/skills/skill-1') {
+  return render(
+    <Routes>
+      <Route path="/tenant/:tenantId/skills/:skillId" element={<SkillDetail />} />
+    </Routes>,
+    { route }
+  );
+}
+
 describe('SkillDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -102,7 +110,7 @@ describe('SkillDetail', () => {
   });
 
   it('previews bundled skill files alongside SKILL.md', async () => {
-    render(<SkillDetail />);
+    renderSkillDetail();
 
     await waitFor(() => {
       expect(screen.getAllByText('SKILL.md').length).toBeGreaterThan(0);
@@ -128,7 +136,7 @@ describe('SkillDetail', () => {
   });
 
   it('shows the local assessment report from the detail tabs', async () => {
-    render(<SkillDetail />);
+    renderSkillDetail();
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Assessment' })).toBeInTheDocument();
@@ -145,5 +153,18 @@ describe('SkillDetail', () => {
         'This report is a local static check. It does not run an external sandbox security scan or live quality evaluation.'
       )
     ).toBeInTheDocument();
+  });
+
+  it('loads skill detail with the route tenant when the store tenant is stale', async () => {
+    useTenantStore.setState({ currentTenant: makeTenant({ id: 'stale-tenant' }) });
+
+    renderSkillDetail('/tenant/route-tenant/skills/skill-1');
+
+    await waitFor(() => {
+      expect(skillApiMocks.get).toHaveBeenCalledWith('skill-1', { tenant_id: 'route-tenant' });
+    });
+    expect(skillApiMocks.exportPackage).toHaveBeenCalledWith('skill-1', {
+      tenant_id: 'route-tenant',
+    });
   });
 });
