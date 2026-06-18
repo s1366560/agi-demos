@@ -22,7 +22,7 @@ import React, { useEffect, useLayoutEffect, useState, useCallback, memo, useRef 
 import { useTranslation } from 'react-i18next';
 import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
 
-import { Brain } from 'lucide-react';
+import { AlertCircle, Brain, Loader2, RefreshCw } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth';
 import { useProjectStore } from '@/stores/project';
@@ -45,6 +45,8 @@ const HTTP_STATUS = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
 } as const;
+
+type TenantEntryStatus = 'idle' | 'loading' | 'empty' | 'error';
 
 function getResponseStatus(error: unknown): number | undefined {
   if (!error || typeof error !== 'object' || !('response' in error)) return undefined;
@@ -87,7 +89,7 @@ export const TenantLayout: React.FC = memo(() => {
   const logout = useAuthStore((state) => state.logout);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [noTenants, setNoTenants] = useState(false);
+  const [tenantEntryStatus, setTenantEntryStatus] = useState<TenantEntryStatus>('idle');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const projectSyncRequestRef = useRef(0);
@@ -105,7 +107,7 @@ export const TenantLayout: React.FC = memo(() => {
       if (!tenant) return false;
 
       setCurrentTenant(tenant);
-      setNoTenants(false);
+      setTenantEntryStatus('idle');
 
       if (!tenantId && isBareTenantEntryPath(location.pathname)) {
         void navigate(`/tenant/${tenant.id}/overview`, { replace: true });
@@ -138,6 +140,7 @@ export const TenantLayout: React.FC = memo(() => {
         );
 
         try {
+          setTenantEntryStatus('loading');
           await listTenants();
           const tenants = useTenantStore.getState().tenants;
 
@@ -148,11 +151,11 @@ export const TenantLayout: React.FC = memo(() => {
               void navigate(`/tenant/${firstAccessibleTenant.id}/overview`, { replace: true });
             }
           } else {
-            setNoTenants(true);
+            setTenantEntryStatus('empty');
           }
         } catch (listError) {
           console.error('Failed to list accessible tenants:', listError);
-          setNoTenants(true);
+          setTenantEntryStatus('error');
         }
       }
     },
@@ -165,7 +168,7 @@ export const TenantLayout: React.FC = memo(() => {
    */
   const initializeTenantAndProject = useCallback(async () => {
     if (currentTenant && (!tenantId || currentTenant.id === tenantId)) {
-      setNoTenants(false);
+      setTenantEntryStatus('idle');
       if (!tenantId && isBareTenantEntryPath(location.pathname)) {
         void navigate(`/tenant/${currentTenant.id}/overview`, { replace: true });
       }
@@ -181,7 +184,7 @@ export const TenantLayout: React.FC = memo(() => {
 
       try {
         await getTenant(tenantId);
-        setNoTenants(false);
+        setTenantEntryStatus('idle');
       } catch (error) {
         await handleTenantAccessError(error, tenantId);
       }
@@ -190,16 +193,17 @@ export const TenantLayout: React.FC = memo(() => {
         activateTenant(tenants[0] ?? null);
       } else {
         try {
+          setTenantEntryStatus('loading');
           await listTenants();
           const updatedTenants = useTenantStore.getState().tenants;
           if (updatedTenants.length > 0) {
             activateTenant(updatedTenants[0] ?? null);
           } else {
-            setNoTenants(true);
+            setTenantEntryStatus('empty');
           }
         } catch (error) {
           console.error('Failed to list accessible tenants:', error);
-          setNoTenants(true);
+          setTenantEntryStatus('error');
         }
       }
     }
@@ -214,6 +218,22 @@ export const TenantLayout: React.FC = memo(() => {
     activateTenant,
     listTenants,
   ]);
+
+  const handleRetryTenantLoad = useCallback(async () => {
+    setTenantEntryStatus('loading');
+    try {
+      await listTenants();
+      const updatedTenants = useTenantStore.getState().tenants;
+      if (updatedTenants.length > 0) {
+        activateTenant(updatedTenants[0] ?? null);
+      } else {
+        setTenantEntryStatus('empty');
+      }
+    } catch (error) {
+      console.error('Failed to list accessible tenants:', error);
+      setTenantEntryStatus('error');
+    }
+  }, [activateTenant, listTenants]);
 
   // Sync tenant ID from URL with store - flattened for better performance
   useEffect(() => {
@@ -278,14 +298,37 @@ export const TenantLayout: React.FC = memo(() => {
     };
   }, [effectiveProjectId, projectSyncTenantId, currentProject, isAgentWorkspaceRoute]);
 
-  // No tenants state - welcome screen
-  if (noTenants) {
+  // Tenant entry status screen
+  if (tenantEntryStatus !== 'idle') {
+    const isLoadingTenantEntry = tenantEntryStatus === 'loading';
+    const isTenantEntryError = tenantEntryStatus === 'error';
+    const entryTitle = isLoadingTenantEntry
+      ? t('tenant.entry.loadingTitle')
+      : isTenantEntryError
+        ? t('tenant.entry.errorTitle')
+        : t('tenant.welcome');
+    const entryDescription = isLoadingTenantEntry
+      ? t('tenant.entry.loadingDescription')
+      : isTenantEntryError
+        ? t('tenant.entry.errorDescription')
+        : t('tenant.noTenantDescription');
+
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background-light dark:bg-background-dark">
         <div className="mx-auto flex w-full max-w-md flex-col items-center space-y-6 p-6 text-center">
           <div className="flex items-center gap-3">
-            <div className="bg-primary/10 p-3 rounded-xl">
-              <Brain size={36} className="text-primary" />
+            <div className="rounded-lg bg-primary/10 p-3">
+              {isLoadingTenantEntry ? (
+                <Loader2
+                  size={36}
+                  className="animate-spin text-primary motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+              ) : isTenantEntryError ? (
+                <AlertCircle size={36} className="text-error" aria-hidden="true" />
+              ) : (
+                <Brain size={36} className="text-primary" aria-hidden="true" />
+              )}
             </div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
               MemStack<span className="text-primary">.ai</span>
@@ -293,22 +336,34 @@ export const TenantLayout: React.FC = memo(() => {
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-              {t('tenant.welcome')}
-            </h2>
-            <p className="text-slate-500 dark:text-slate-400">{t('tenant.noTenantDescription')}</p>
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{entryTitle}</h2>
+            <p className="text-slate-600 dark:text-slate-300">{entryDescription}</p>
           </div>
 
           <div className="flex flex-col gap-4 w-full">
-            <button
-              type="button"
-              onClick={() => {
-                setIsCreateModalOpen(true);
-              }}
-              className="btn-primary w-full py-3"
-            >
-              {t('tenant.create.action')}
-            </button>
+            {isTenantEntryError ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void handleRetryTenantLoad();
+                }}
+                className="btn-primary flex w-full items-center justify-center gap-2 py-3"
+              >
+                <RefreshCw size={16} aria-hidden="true" />
+                {t('common.retry')}
+              </button>
+            ) : null}
+            {!isLoadingTenantEntry && !isTenantEntryError ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCreateModalOpen(true);
+                }}
+                className="btn-primary w-full py-3"
+              >
+                {t('tenant.create.action')}
+              </button>
+            ) : null}
             <button type="button" onClick={handleLogout} className="btn-secondary w-full py-3">
               {t('common.logout')}
             </button>

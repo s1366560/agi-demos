@@ -925,6 +925,12 @@
     },
     "welcome": "欢迎来到 MemStack",
     "noTenantDescription": "您还没有加入任何租户空间。请联系管理员邀请您加入，或者创建一个新的租户空间。",
+    "entry": {
+      "loadingTitle": "正在检查租户权限",
+      "loadingDescription": "正在加载您账号可访问的租户空间。",
+      "errorTitle": "无法加载租户空间",
+      "errorDescription": "当前无法获取您的租户空间。请先重试，再决定是否创建新租户。"
+    },
     "create": {
       "title": "创建工作空间",
       "nameLabel": "工作空间名称",

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { TenantLayout } from '../../layouts/TenantLayout';
-import { screen, render, waitFor, act } from '../utils';
+import { screen, render, waitFor, act, fireEvent } from '../utils';
 
 let mockTenantState: any = {
   tenants: [{ id: 't1', name: 'Test Tenant' }],
@@ -98,8 +98,13 @@ vi.mock('react-i18next', () => ({
         'nav.settings': 'Settings',
         'tenant.welcome': 'Welcome',
         'tenant.noTenantDescription': 'Create a workspace to get started',
+        'tenant.entry.loadingTitle': 'Checking tenant access',
+        'tenant.entry.loadingDescription': 'Loading tenant spaces',
+        'tenant.entry.errorTitle': 'Tenant spaces unavailable',
+        'tenant.entry.errorDescription': 'Retry before creating a new tenant',
         'tenant.create': 'Create Workspace',
         'common.logout': 'Logout',
+        'common.retry': 'Retry',
         'common.search': 'Search',
       };
       return translations[key] || key;
@@ -349,6 +354,64 @@ describe('TenantLayout', () => {
     });
     expect(mockTenantState.createTenant).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('shows a retryable error instead of the empty state when tenant loading fails', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    setMockRouteParams({});
+    mockLocationPathname = '/tenant';
+    mockTenantState.currentTenant = null;
+    mockTenantState.tenants = [];
+    mockTenantState.listTenants = vi.fn().mockRejectedValue(new Error('network unavailable'));
+
+    render(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Tenant spaces unavailable')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Welcome')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to list accessible tenants:',
+      expect.any(Error)
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('activates an existing tenant after retrying a failed tenant entry load', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const tenant = { id: 'retry-tenant', name: 'Retry Tenant' };
+    setMockRouteParams({});
+    mockLocationPathname = '/tenant';
+    mockTenantState.currentTenant = null;
+    mockTenantState.tenants = [];
+    mockTenantState.listTenants = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('network unavailable'))
+      .mockImplementationOnce(async () => {
+        mockTenantState.tenants = [tenant];
+      });
+
+    render(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Tenant spaces unavailable')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => {
+      expect(mockTenantState.setCurrentTenant).toHaveBeenCalledWith(tenant);
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/retry-tenant/overview', {
+      replace: true,
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to list accessible tenants:',
+      expect.any(Error)
+    );
+    consoleErrorSpy.mockRestore();
   });
 
   it('activates tenants that arrive after an initially stale tenant list read', async () => {

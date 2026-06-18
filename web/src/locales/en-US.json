@@ -3935,6 +3935,12 @@
       "subtitle": "Create a tenant workspace for projects, members, and memory resources.",
       "title": "Create organization"
     },
+    "entry": {
+      "loadingTitle": "Checking tenant access",
+      "loadingDescription": "Loading the tenant spaces available to your account.",
+      "errorTitle": "Tenant spaces unavailable",
+      "errorDescription": "We could not load your tenant spaces. Retry before creating a new tenant."
+    },
     "noTenantDescription": "Select or create a tenant to continue.",
     "tasks": {
       "charts": {
