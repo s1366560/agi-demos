@@ -149,3 +149,8 @@ local-sandbox-app/
 .omx/
 .memstack/git-remotes/
 .memstack/worktrees/
+
+# Runtime project workspace manifests created by sandbox lifecycle hooks.
+# Keep tracked plugin/persona assets under .memstack/, but do not track
+# root-level <project-id>/.memstack/workspace-manifest.json files.
+/*/.memstack/workspace-manifest.json
