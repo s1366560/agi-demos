@@ -244,6 +244,7 @@ registerAuthStateClearer(() => {
     isAuthenticated: false,
     isLoading: false,
   });
+  useTenantStore.getState().setCurrentTenant(null);
 });
 
 // ============================================================================

@@ -126,6 +126,44 @@ export const TenantLayout: React.FC = memo(() => {
     }
   }, [activateTenant, listTenants]);
 
+  const activateAccessibleTenant = useCallback(
+    async (requestedTenantId?: string) => {
+      try {
+        setTenantEntryStatus('loading');
+        await listTenants();
+        const tenantState = useTenantStore.getState();
+        const requestedTenant = requestedTenantId
+          ? (tenantState.tenants.find((tenant) => tenant.id === requestedTenantId) ?? null)
+          : null;
+        const currentTenantFromList = tenantState.currentTenant
+          ? (tenantState.tenants.find((tenant) => tenant.id === tenantState.currentTenant?.id) ??
+            null)
+          : null;
+        const fallbackTenant = requestedTenant ?? currentTenantFromList ?? tenantState.tenants[0];
+
+        if (fallbackTenant) {
+          activateTenant(fallbackTenant);
+          if (
+            !tenantId ||
+            fallbackTenant.id !== tenantId ||
+            isBareTenantEntryPath(location.pathname)
+          ) {
+            void navigate(`/tenant/${fallbackTenant.id}/overview`, { replace: true });
+          }
+          return true;
+        }
+
+        setTenantEntryStatus('empty');
+        return false;
+      } catch (listError) {
+        console.error('Failed to list accessible tenants:', listError);
+        setTenantEntryStatus('error');
+        return false;
+      }
+    },
+    [activateTenant, listTenants, location.pathname, navigate, tenantId]
+  );
+
   /**
    * Handle 403/404 errors when accessing unauthorized tenant
    * Falls back to first accessible tenant
@@ -139,27 +177,10 @@ export const TenantLayout: React.FC = memo(() => {
           `Access denied to tenant ${requestedTenantId}, falling back to accessible tenant`
         );
 
-        try {
-          setTenantEntryStatus('loading');
-          await listTenants();
-          const tenants = useTenantStore.getState().tenants;
-
-          if (tenants.length > 0) {
-            const firstAccessibleTenant = tenants[0] ?? null;
-            activateTenant(firstAccessibleTenant);
-            if (firstAccessibleTenant) {
-              void navigate(`/tenant/${firstAccessibleTenant.id}/overview`, { replace: true });
-            }
-          } else {
-            setTenantEntryStatus('empty');
-          }
-        } catch (listError) {
-          console.error('Failed to list accessible tenants:', listError);
-          setTenantEntryStatus('error');
-        }
+        await activateAccessibleTenant(requestedTenantId);
       }
     },
-    [activateTenant, listTenants, navigate]
+    [activateAccessibleTenant]
   );
 
   /**
@@ -184,7 +205,11 @@ export const TenantLayout: React.FC = memo(() => {
 
       try {
         await getTenant(tenantId);
-        setTenantEntryStatus('idle');
+        if (useTenantStore.getState().currentTenant?.id === tenantId) {
+          setTenantEntryStatus('idle');
+        } else {
+          await activateAccessibleTenant(tenantId);
+        }
       } catch (error) {
         await handleTenantAccessError(error, tenantId);
       }
@@ -192,19 +217,7 @@ export const TenantLayout: React.FC = memo(() => {
       if (tenants.length > 0) {
         activateTenant(tenants[0] ?? null);
       } else {
-        try {
-          setTenantEntryStatus('loading');
-          await listTenants();
-          const updatedTenants = useTenantStore.getState().tenants;
-          if (updatedTenants.length > 0) {
-            activateTenant(updatedTenants[0] ?? null);
-          } else {
-            setTenantEntryStatus('empty');
-          }
-        } catch (error) {
-          console.error('Failed to list accessible tenants:', error);
-          setTenantEntryStatus('error');
-        }
+        await activateAccessibleTenant();
       }
     }
   }, [
@@ -216,24 +229,12 @@ export const TenantLayout: React.FC = memo(() => {
     getTenant,
     handleTenantAccessError,
     activateTenant,
-    listTenants,
+    activateAccessibleTenant,
   ]);
 
   const handleRetryTenantLoad = useCallback(async () => {
-    setTenantEntryStatus('loading');
-    try {
-      await listTenants();
-      const updatedTenants = useTenantStore.getState().tenants;
-      if (updatedTenants.length > 0) {
-        activateTenant(updatedTenants[0] ?? null);
-      } else {
-        setTenantEntryStatus('empty');
-      }
-    } catch (error) {
-      console.error('Failed to list accessible tenants:', error);
-      setTenantEntryStatus('error');
-    }
-  }, [activateTenant, listTenants]);
+    await activateAccessibleTenant();
+  }, [activateAccessibleTenant]);
 
   // Sync tenant ID from URL with store - flattened for better performance
   useEffect(() => {

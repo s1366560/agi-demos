@@ -4,6 +4,7 @@ import { httpClient } from '../../services/client/httpClient';
 import { authAPI, tenantAPI } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
 import { useTenantStore } from '../../stores/tenant';
+import { clearAuthState } from '../../utils/tokenResolver';
 
 vi.mock('../../services/client/httpClient', () => ({
   httpClient: {
@@ -160,6 +161,37 @@ describe('AuthStore', () => {
 
     expect(useAuthStore.getState().token).toBeNull();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(getTokenFromStorage()).toBeNull();
+  });
+
+  it('central auth clearing should clear tenant state', () => {
+    const tenant = { id: 'tenant-1', name: 'Tenant One' };
+    localStorage.setItem(
+      'memstack-auth-storage',
+      JSON.stringify({
+        state: { token: 'expired-token', user: { id: '1' }, isAuthenticated: true },
+        version: 0,
+      })
+    );
+    useAuthStore.setState({
+      user: { id: '1', email: 'test@example.com' } as any,
+      token: 'expired-token',
+      isAuthenticated: true,
+    });
+    useTenantStore.setState({
+      tenants: [tenant as any],
+      currentTenant: tenant as any,
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    });
+
+    clearAuthState();
+
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(useTenantStore.getState().currentTenant).toBeNull();
+    expect(useTenantStore.getState().tenants).toEqual([]);
     expect(getTokenFromStorage()).toBeNull();
   });
 

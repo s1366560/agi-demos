@@ -414,6 +414,30 @@ describe('TenantLayout', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('falls back when a route tenant fetch is superseded by post-auth tenant recovery', async () => {
+    const tenant = { id: 'current-tenant', name: 'Current Tenant' };
+    setMockRouteParams({ tenantId: 'stale-tenant' });
+    mockLocationPathname = '/tenant/stale-tenant/overview';
+    mockTenantState.currentTenant = tenant;
+    mockTenantState.tenants = [tenant];
+    mockTenantState.getTenant = vi.fn().mockResolvedValue(undefined);
+    mockTenantState.listTenants = vi.fn().mockResolvedValue(undefined);
+
+    render(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(mockTenantState.getTenant).toHaveBeenCalledWith('stale-tenant');
+    });
+    await waitFor(() => {
+      expect(mockTenantState.listTenants).toHaveBeenCalled();
+    });
+    expect(mockTenantState.setCurrentTenant).toHaveBeenCalledWith(tenant);
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/current-tenant/overview', {
+      replace: true,
+    });
+    expect(screen.queryByText('Welcome')).not.toBeInTheDocument();
+  });
+
   it('activates tenants that arrive after an initially stale tenant list read', async () => {
     const tenant = { id: 'late-tenant', name: 'Late Tenant' };
     setMockRouteParams({});
