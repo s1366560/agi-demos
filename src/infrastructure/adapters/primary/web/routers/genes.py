@@ -368,6 +368,14 @@ def _evolution_event_response(event: EvolutionEvent) -> EvolutionEventResponse:
 _GeneMetadata = dict[str, str | None]
 
 
+def _gene_metadata_from_entity(entity: _TenantScopedEntity) -> _GeneMetadata:
+    return {
+        "name": _optional_str(getattr(entity, "name", None)),
+        "description": _optional_str(getattr(entity, "description", None)),
+        "category": _optional_str(getattr(entity, "category", None)),
+    }
+
+
 async def _get_gene_metadata_by_id(
     db: AsyncSession,
     gene_ids: set[str],
@@ -902,7 +910,7 @@ async def install_gene(
         await _ensure_instance_tenant_access(
             container, instance_id=instance_id, tenant_id=tenant_id
         )
-        await _ensure_gene_tenant_access(
+        gene = await _ensure_gene_tenant_access(
             service,
             gene_id=data.gene_id,
             tenant_id=tenant_id,
@@ -914,7 +922,10 @@ async def install_gene(
             config_snapshot=data.config,
         )
         await db.commit()
-        return _instance_gene_response(instance_gene)
+        return _instance_gene_response(
+            instance_gene,
+            gene_metadata=_gene_metadata_from_entity(gene),
+        )
     except ValueError as e:
         raise _invalid_gene_request_error() from e
 
@@ -951,8 +962,19 @@ async def install_genome(
             tenant_id=tenant_id,
             config_snapshot=data.config,
         )
+        gene_metadata_by_id = await _get_gene_metadata_by_id(
+            db,
+            {instance_gene.gene_id for instance_gene in installed_genes},
+            tenant_id=tenant_id,
+        )
         await db.commit()
-        items = [_instance_gene_response(instance_gene) for instance_gene in installed_genes]
+        items = [
+            _instance_gene_response(
+                instance_gene,
+                gene_metadata=gene_metadata_by_id.get(instance_gene.gene_id),
+            )
+            for instance_gene in installed_genes
+        ]
         return InstallGenomeResponse(
             instance_id=instance_id,
             genome_id=genome_id,

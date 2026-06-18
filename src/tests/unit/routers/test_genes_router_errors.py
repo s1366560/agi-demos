@@ -299,6 +299,44 @@ class _GenomeInstallContainer(_Container):
         return _GenomeInstallService()
 
 
+class _GeneInstallService(_FailingGeneService):
+    async def get_gene(self, gene_id: str, *_args: object, **_kwargs: object) -> object | None:
+        return SimpleNamespace(
+            id=gene_id,
+            tenant_id="tenant-1",
+            name="Code Review",
+            description="Reviews code changes",
+            category="tool",
+            visibility="public",
+            is_published=True,
+        )
+
+    async def install_gene(self, **kwargs: object) -> SimpleNamespace:
+        assert kwargs == {
+            "instance_id": "instance-1",
+            "gene_id": "gene-1",
+            "config_snapshot": {"mode": "strict"},
+        }
+        return SimpleNamespace(
+            id="instance-gene-1",
+            instance_id="instance-1",
+            gene_id="gene-1",
+            genome_id=None,
+            status=InstanceGeneStatus.installed,
+            installed_version="1.0.0",
+            config_snapshot={"mode": "strict"},
+            usage_count=0,
+            installed_at=datetime(2026, 1, 1, tzinfo=UTC),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            deleted_at=None,
+        )
+
+
+class _GeneInstallContainer(_Container):
+    def gene_service(self) -> _GeneInstallService:
+        return _GeneInstallService()
+
+
 class _EvolutionAccessGeneService(_FailingGeneService):
     async def get_gene(self, gene_id: str, *_args: object, **_kwargs: object) -> object | None:
         if gene_id == "missing-gene":
@@ -774,6 +812,32 @@ async def test_list_genomes_passes_global_inclusion_to_service(
 
 
 @pytest.mark.unit
+async def test_install_gene_includes_access_checked_gene_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commit = AsyncMock()
+    monkeypatch.setattr(
+        genes,
+        "get_container_with_db",
+        lambda _request, _db: _GeneInstallContainer(),
+    )
+
+    response = await genes.install_gene(
+        request=SimpleNamespace(),
+        instance_id="instance-1",
+        data=genes.InstallGeneRequest(gene_id="gene-1", config={"mode": "strict"}),
+        tenant_id="tenant-1",
+        db=SimpleNamespace(commit=commit),
+    )
+
+    assert response.gene_id == "gene-1"
+    assert response.gene_name == "Code Review"
+    assert response.gene_description == "Reviews code changes"
+    assert response.gene_category == "tool"
+    commit.assert_awaited_once()
+
+
+@pytest.mark.unit
 async def test_list_genomes_sanitizes_invalid_visibility_filter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -809,6 +873,9 @@ async def test_install_genome_allows_published_global_genome(
         "get_container_with_db",
         lambda _request, _db: _GenomeInstallContainer(),
     )
+    metadata_result = Mock()
+    metadata_result.all.return_value = [("gene-1", "Code Review", "Reviews code changes", "tool")]
+    db = SimpleNamespace(commit=commit, execute=AsyncMock(return_value=metadata_result))
 
     response = await genes.install_genome(
         request=SimpleNamespace(),
@@ -816,13 +883,17 @@ async def test_install_genome_allows_published_global_genome(
         genome_id="global-genome",
         data=genes.InstallGenomeRequest(config={"code-review": {"mode": "strict"}}),
         tenant_id="tenant-1",
-        db=SimpleNamespace(commit=commit),
+        db=db,
     )
 
     assert response.instance_id == "instance-1"
     assert response.genome_id == "global-genome"
     assert response.total == 1
     assert response.items[0].genome_id == "global-genome"
+    assert response.items[0].gene_name == "Code Review"
+    assert response.items[0].gene_description == "Reviews code changes"
+    assert response.items[0].gene_category == "tool"
+    db.execute.assert_awaited_once()
     commit.assert_awaited_once()
 
 
