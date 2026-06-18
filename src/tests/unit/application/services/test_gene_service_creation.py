@@ -115,6 +115,38 @@ async def test_update_gene_applies_slug_and_metadata_fields(
 
 
 @pytest.mark.unit
+async def test_update_gene_normalizes_nullable_collection_fields(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    gene = await service.create_gene(
+        name="Configurable Gene",
+        slug=_slug("configurable-gene"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        tags=["review"],
+        manifest={"mode": "strict"},
+        dependencies=["base-gene"],
+        synergies=["helper-gene"],
+    )
+
+    updated = await service.update_gene(
+        gene.id,
+        tags=None,
+        manifest=None,
+        dependencies=None,
+        synergies=None,
+    )
+
+    assert updated.tags == []
+    assert updated.manifest == {}
+    assert updated.dependencies == []
+    assert updated.synergies == []
+
+
+@pytest.mark.unit
 async def test_update_gene_rejects_duplicate_slug(
     test_db: AsyncSession,
     test_project_db: Project,
@@ -310,6 +342,26 @@ async def test_update_genome_applies_slug(
     updated = await service.update_genome(genome.id, slug=new_slug)
 
     assert updated.slug == new_slug
+
+
+@pytest.mark.unit
+async def test_update_genome_normalizes_nullable_config_override(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    service = DIContainer().with_db(test_db).gene_service()
+    genome = await service.create_genome(
+        name="Configurable Genome",
+        slug=_slug("configurable-genome"),
+        created_by=test_user.id,
+        tenant_id=test_project_db.tenant_id,
+        config_override={"mode": "strict"},
+    )
+
+    updated = await service.update_genome(genome.id, config_override=None)
+
+    assert updated.config_override == {}
 
 
 @pytest.mark.unit

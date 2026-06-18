@@ -286,6 +286,10 @@ class GeneService:
                 value = ContentVisibility(value)
             if key == "source":
                 value = GeneSource(value)
+            if key in {"tags", "dependencies", "synergies"} and value is None:
+                value = []
+            if key == "manifest" and value is None:
+                value = {}
             setattr(gene, key, value)
 
         gene.updated_at = datetime.now(UTC)
@@ -576,6 +580,8 @@ class GeneService:
                 value = ContentVisibility(value)
             elif key == "gene_slugs":
                 value = await self._validate_genome_gene_slugs(value, tenant_id=genome.tenant_id)
+            elif key == "config_override" and value is None:
+                value = {}
             setattr(genome, key, value)
 
         genome.updated_at = datetime.now(UTC)
