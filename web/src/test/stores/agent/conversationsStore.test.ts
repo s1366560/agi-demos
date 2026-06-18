@@ -402,6 +402,42 @@ describe('ConversationsStore', () => {
         useConversationsStore.getState().conversations.map((conversation) => conversation.id)
       ).toEqual(['conv-refresh', 'conv-old', 'conv-next-page']);
     });
+
+    it('ignores stale older pages after conversation scope reset', async () => {
+      const existingConversation = createMockConversation('conv-existing', 'proj-stale', 'Current');
+      const staleConversation = createMockConversation('conv-stale-page', 'proj-stale', 'Stale');
+      const stalePage = deferred<{
+        items: Conversation[];
+        has_more: boolean;
+        total: number;
+        offset: number;
+      }>();
+
+      useConversationsStore.setState({
+        conversations: [existingConversation],
+        hasMoreConversations: true,
+        conversationsNextOffset: 1,
+        conversationListProjectId: 'proj-stale',
+      });
+      listConversationsMock.mockReturnValueOnce(stalePage.promise as any);
+
+      const loadPromise = useConversationsStore.getState().loadMoreConversations('proj-stale');
+      expect(useConversationsStore.getState().conversationsLoadingMore).toBe(true);
+
+      useConversationsStore.getState().reset();
+      stalePage.resolve({
+        items: [staleConversation],
+        has_more: false,
+        total: 2,
+        offset: 1,
+      });
+
+      await loadPromise;
+
+      expect(useConversationsStore.getState().conversations).toEqual([]);
+      expect(useConversationsStore.getState().conversationListProjectId).toBe(null);
+      expect(useConversationsStore.getState().conversationsLoadingMore).toBe(false);
+    });
   });
 
   describe('createConversation', () => {

@@ -309,6 +309,7 @@ export const useConversationsStore = create<ConversationsState>()(
           return;
         }
 
+        const requestSequence = listConversationsRequestSequence;
         set({ conversationsLoadingMore: true, conversationsError: null });
         try {
           const offset = state.conversationsNextOffset || state.conversations.length;
@@ -320,8 +321,17 @@ export const useConversationsStore = create<ConversationsState>()(
             undefined,
             groupedConversationListOptions
           );
+          const latestState = get();
+          if (
+            requestSequence !== listConversationsRequestSequence ||
+            (latestState.conversationListProjectId !== null &&
+              latestState.conversationListProjectId !== projectId)
+          ) {
+            set({ conversationsLoadingMore: false });
+            return;
+          }
           set({
-            conversations: appendUniqueConversations(state.conversations, response.items),
+            conversations: appendUniqueConversations(latestState.conversations, response.items),
             hasMoreConversations: response.has_more,
             conversationsTotal: response.total,
             conversationsNextOffset: responseNextOffset(response, offset),
@@ -329,6 +339,10 @@ export const useConversationsStore = create<ConversationsState>()(
             conversationsLoadingMore: false,
           });
         } catch (error: unknown) {
+          if (requestSequence !== listConversationsRequestSequence) {
+            set({ conversationsLoadingMore: false });
+            return;
+          }
           const err = error as {
             response?: { data?: { detail?: string | undefined } | undefined } | undefined;
             message?: string | undefined;

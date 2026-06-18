@@ -256,23 +256,23 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
       const firstCounter = response.first_counter ?? null;
       const lastTimeUs = response.last_time_us ?? null;
 
-      // DEBUG: Log assistant_message events
+      // DEBUG: Log event summaries only. Logging full timeline/event arrays is
+      // expensive in DevTools and can stall tenant switches with large histories.
       const assistantMsgs = mergedTimeline.filter(
         (e: TimelineEvent) => e.type === 'assistant_message'
       );
-      logger.debug(
-        `[AgentV3] loadMessages: Found ${String(assistantMsgs.length)} assistant_message events`,
-        assistantMsgs
-      );
+      logger.debug(`[AgentV3] loadMessages assistant_message count`, {
+        conversationId,
+        count: assistantMsgs.length,
+      });
 
-      // DEBUG: Log artifact events in timeline
       const artifactEvents = mergedTimeline.filter(
         (e: TimelineEvent) => e.type === 'artifact_created'
       );
-      logger.debug(
-        `[AgentV3] loadMessages: Found ${String(artifactEvents.length)} artifact_created events in timeline`,
-        artifactEvents
-      );
+      logger.debug(`[AgentV3] loadMessages artifact_created count`, {
+        conversationId,
+        count: artifactEvents.length,
+      });
 
       // Update localStorage with latest time
       if (lastTimeUs && lastTimeUs > 0) {
@@ -338,14 +338,17 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
       // Replay canvas_updated events to rebuild canvas tabs from server history.
       replayCanvasEventsFromTimeline(finalTimeline);
 
+      const recoveredExecStatus = execStatus as ExecutionStatusWithCursor | null;
+
       // DEBUG: Log execution status for recovery debugging
       logger.debug(`[AgentV3] execStatus for ${conversationId}:`, {
-        execStatus,
-        is_running: execStatus?.is_running,
+        is_running: recoveredExecStatus?.is_running,
+        last_event_time_us: recoveredExecStatus?.last_event_time_us,
+        last_event_counter: recoveredExecStatus?.last_event_counter,
+        current_message_id: recoveredExecStatus?.current_message_id,
         lastKnownTimeUs,
         lastTimeUs,
       });
-      const recoveredExecStatus = execStatus as ExecutionStatusWithCursor | null;
 
       // If agent is already running, recover streaming state before subscribing.
       if (recoveredExecStatus?.is_running) {

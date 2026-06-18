@@ -181,6 +181,9 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
       try {
         await useConversationsStore.getState().loadMoreConversations(projectId);
         const convState = useConversationsStore.getState();
+        if (convState.conversationListProjectId !== projectId) {
+          return;
+        }
         set({
           conversations: convState.conversations,
           hasMoreConversations: convState.hasMoreConversations,
