@@ -73,7 +73,17 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   className,
 }) => {
   const text = useProjectSelectorText();
-  const { projects, currentProject, isLoading: projectsLoading } = useProjectStore();
+  const {
+    projects,
+    currentProject,
+    isLoading: projectsLoading,
+  } = useProjectStore(
+    useShallow((state) => ({
+      projects: state.projects,
+      currentProject: state.currentProject,
+      isLoading: state.isLoading,
+    }))
+  );
   const { activeConversationId, setActiveConversation, loadConversations } = useAgentV3Store(
     useShallow((state) => ({
       activeConversationId: state.activeConversationId,
@@ -84,7 +94,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const isLoadingHistory = useIsLoadingHistory();
   const error = useAgentError();
   const conversations = useConversationsStore((state) => state.conversations);
-  const { currentTenant } = useTenantStore();
+  const currentTenant = useTenantStore((state) => state.currentTenant);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);

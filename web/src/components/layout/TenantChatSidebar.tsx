@@ -588,7 +588,14 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     }))
   );
 
-  const { projects, currentProject, listProjects, setCurrentProject } = useProjectStore();
+  const { projects, currentProject, listProjects, setCurrentProject } = useProjectStore(
+    useShallow((state) => ({
+      projects: state.projects,
+      currentProject: state.currentProject,
+      listProjects: state.listProjects,
+      setCurrentProject: state.setCurrentProject,
+    }))
+  );
   const preferredWorkspaceId = currentWorkspace?.id ?? workspaces[0]?.id ?? null;
   const normalizedTenantId = tenantId?.trim() ?? '';
   const resolvedTenantId = normalizedTenantId || undefined;
