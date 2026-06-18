@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import enUS from '../../../locales/en-US.json';
@@ -99,10 +100,18 @@ vi.mock('../../../stores/tenant', () => ({
   ),
 }));
 
+function mockCurrentTenant(id = 'tenant-1', name = 'Test Tenant'): void {
+  vi.mocked(useTenantStore).mockImplementation(
+    (selector?: (state: { currentTenant: { id: string; name: string } | null }) => unknown) =>
+      selector ? selector({ currentTenant: { id, name } }) : { currentTenant: { id, name } }
+  );
+}
+
 describe('AuditLogs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setMockLanguage('en-US');
+    mockCurrentTenant();
     useAuditStore.getState().reset();
 
     mockList.mockResolvedValue({
@@ -201,6 +210,26 @@ describe('AuditLogs', () => {
       expect(screen.getAllByText('Runtime Hook').length).toBeGreaterThan(0);
       expect(screen.getByText(/"executor_kind": "Script"/)).toBeInTheDocument();
     });
+  });
+
+  it('uses the route tenant id when the tenant store is still stale', async () => {
+    mockCurrentTenant('tenant-store-old', 'Old Tenant');
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-route-new/audit-logs']}>
+        <Routes>
+          <Route path="/tenant/:tenantId/audit-logs" element={<AuditLogs />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mockList).toHaveBeenCalledWith(
+        'tenant-route-new',
+        expect.objectContaining({ page: 1, page_size: 20 })
+      );
+    });
+    expect(mockList).not.toHaveBeenCalledWith('tenant-store-old', expect.anything());
   });
 
   it('passes runtime hook filters to both summary and list queries', async () => {

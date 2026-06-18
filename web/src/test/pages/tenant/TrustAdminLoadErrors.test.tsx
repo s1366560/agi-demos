@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Route, Routes } from 'react-router-dom';
 
 import { DecisionRecords } from '@/pages/tenant/DecisionRecords';
 import { TrustPolicies } from '@/pages/tenant/TrustPolicies';
@@ -31,13 +32,15 @@ vi.mock('@/components/ui/lazyAntd', () => ({
     action,
     description,
     message,
+    title,
   }: {
     action?: React.ReactNode;
     description?: React.ReactNode;
     message?: React.ReactNode;
+    title?: React.ReactNode;
   }) => (
     <div role="alert">
-      <div>{message}</div>
+      <div>{title ?? message}</div>
       <div>{description}</div>
       {action}
     </div>
@@ -131,6 +134,29 @@ describe('trust admin load errors', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('loads decision records using the route tenant while tenant store is stale', async () => {
+    useTenantStore.setState({ currentTenant: makeTenant({ id: 'tenant-store-old' }) });
+    trustServiceMocks.listDecisions.mockResolvedValue({ items: [makeDecision()] });
+
+    render(
+      <Routes>
+        <Route path="/tenant/:tenantId/decision-records" element={<DecisionRecords />} />
+      </Routes>,
+      { route: '/tenant/tenant-route-new/decision-records' }
+    );
+
+    await waitFor(() => {
+      expect(trustServiceMocks.listDecisions).toHaveBeenCalledWith(
+        'tenant-route-new',
+        expect.objectContaining({ workspace_id: 'default' })
+      );
+    });
+    expect(trustServiceMocks.listDecisions).not.toHaveBeenCalledWith(
+      'tenant-store-old',
+      expect.anything()
+    );
+  });
+
   it('shows a retryable trust-policy load error instead of an empty state', async () => {
     trustServiceMocks.listPolicies
       .mockRejectedValueOnce(new Error('policy service unavailable'))
@@ -150,5 +176,28 @@ describe('trust admin load errors', () => {
       expect(screen.getByText('terminal.execute')).toBeInTheDocument();
     });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('loads trust policies using the route tenant while tenant store is stale', async () => {
+    useTenantStore.setState({ currentTenant: makeTenant({ id: 'tenant-store-old' }) });
+    trustServiceMocks.listPolicies.mockResolvedValue({ items: [makePolicy()] });
+
+    render(
+      <Routes>
+        <Route path="/tenant/:tenantId/trust-policies" element={<TrustPolicies />} />
+      </Routes>,
+      { route: '/tenant/tenant-route-new/trust-policies' }
+    );
+
+    await waitFor(() => {
+      expect(trustServiceMocks.listPolicies).toHaveBeenCalledWith(
+        'tenant-route-new',
+        expect.objectContaining({ workspace_id: 'default' })
+      );
+    });
+    expect(trustServiceMocks.listPolicies).not.toHaveBeenCalledWith(
+      'tenant-store-old',
+      expect.anything()
+    );
   });
 });

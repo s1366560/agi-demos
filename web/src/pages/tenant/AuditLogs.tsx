@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
 import { DatePicker, Input } from 'antd';
 import {
@@ -300,7 +301,9 @@ const RuntimeHookTimeline: React.FC<RuntimeHookTimelineProps> = ({
 export const AuditLogs: React.FC = () => {
   const { t } = useTranslation();
   const message = useLazyMessage();
-  const tenantId = useTenantStore((s) => s.currentTenant?.id ?? null);
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
+  const storeTenantId = useTenantStore((s) => s.currentTenant?.id ?? null);
+  const tenantId = routeTenantId ?? storeTenantId;
 
   const logs = useAuditLogs();
   const total = useAuditTotal();

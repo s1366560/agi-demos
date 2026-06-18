@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
 import { Input, Modal, Select } from 'antd';
 import { RefreshCw, Search as SearchIcon } from 'lucide-react';
@@ -34,7 +35,9 @@ function getErrorMessage(error: unknown): string {
 export const DecisionRecords: React.FC = () => {
   const { t } = useTranslation();
   const message = useLazyMessage();
-  const tenantId = useTenantStore((s) => s.currentTenant?.id ?? null);
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
+  const storeTenantId = useTenantStore((s) => s.currentTenant?.id ?? null);
+  const tenantId = routeTenantId ?? storeTenantId;
 
   const decisions = useTrustDecisions();
   const isLoading = useTrustLoading();
@@ -69,8 +72,9 @@ export const DecisionRecords: React.FC = () => {
       setLoadError(null);
     } catch (error) {
       setLoadError(getErrorMessage(error));
+      clearError();
     }
-  }, [tenantId, fetchDecisions, buildParams]);
+  }, [tenantId, fetchDecisions, buildParams, clearError]);
 
   useEffect(() => {
     void loadDecisions();
@@ -78,10 +82,12 @@ export const DecisionRecords: React.FC = () => {
 
   useEffect(() => {
     if (error) {
-      message?.error(error);
+      if (error !== loadError) {
+        message?.error(error);
+      }
       clearError();
     }
-  }, [error, message, clearError]);
+  }, [error, loadError, message, clearError]);
 
   const handleRefresh = useCallback(() => {
     void loadDecisions();
@@ -222,7 +228,7 @@ export const DecisionRecords: React.FC = () => {
         <LazyAlert
           type="error"
           showIcon
-          message={t('tenant.decisionRecords.loadError')}
+          title={t('tenant.decisionRecords.loadError')}
           description={loadError}
           action={
             <button

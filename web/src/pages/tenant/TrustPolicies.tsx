@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
 import { Input, Button, Form, Select } from 'antd';
 import { Plus, RefreshCw, Search as SearchIcon } from 'lucide-react';
@@ -35,7 +36,9 @@ function getErrorMessage(error: unknown): string {
 export const TrustPolicies: React.FC = () => {
   const { t } = useTranslation();
   const message = useLazyMessage();
-  const tenantId = useTenantStore((s) => s.currentTenant?.id ?? null);
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>();
+  const storeTenantId = useTenantStore((s) => s.currentTenant?.id ?? null);
+  const tenantId = routeTenantId ?? storeTenantId;
 
   const policies = useTrustPolicies();
   const isLoading = useTrustLoading();
@@ -67,8 +70,9 @@ export const TrustPolicies: React.FC = () => {
       setLoadError(null);
     } catch (error) {
       setLoadError(getErrorMessage(error));
+      clearError();
     }
-  }, [tenantId, fetchPolicies, buildParams]);
+  }, [tenantId, fetchPolicies, buildParams, clearError]);
 
   useEffect(() => {
     void loadPolicies();
@@ -76,10 +80,12 @@ export const TrustPolicies: React.FC = () => {
 
   useEffect(() => {
     if (error) {
-      message?.error(error);
+      if (error !== loadError) {
+        message?.error(error);
+      }
       clearError();
     }
-  }, [error, message, clearError]);
+  }, [error, loadError, message, clearError]);
 
   const handleRefresh = useCallback(() => {
     void loadPolicies();
@@ -195,7 +201,7 @@ export const TrustPolicies: React.FC = () => {
         <LazyAlert
           type="error"
           showIcon
-          message={t('tenant.trustPolicies.loadError')}
+          title={t('tenant.trustPolicies.loadError')}
           description={loadError}
           action={
             <button
@@ -385,7 +391,7 @@ export const TrustPolicies: React.FC = () => {
           createForm.resetFields();
         }}
         footer={null}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form
           form={createForm}
