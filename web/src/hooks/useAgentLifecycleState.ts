@@ -65,43 +65,51 @@ export function useAgentLifecycleState({
 
   useEffect(() => {
     if (!enabled || !projectId) {
-      // Unsubscribe if disabled or project changed
-      if (globalSubscriptionLock.has(lockKey)) {
-        agentService.unsubscribeLifecycleState();
-        globalSubscriptionLock.delete(lockKey);
-      }
       return;
     }
 
-    // Update connection status in a separate effect to avoid sync setState
-    // setIsConnected(false) - handled by cleanup
+    let isCancelled = false;
+    let ownsSubscription = false;
 
-    // GLOBAL LOCK: Prevent duplicate subscriptions in React StrictMode
     if (globalSubscriptionLock.has(lockKey)) {
       logger.debug('[useAgentLifecycleState] Already subscribed globally, skipping');
-      return;
+      return () => {
+        isCancelled = true;
+      };
     }
 
     const connectAndSubscribe = async () => {
       try {
-        // Connect agentService if needed
         if (!agentService.isConnected()) {
           await agentService.connect();
         }
+
+        if (isCancelled) {
+          return;
+        }
+
         setIsConnected(agentService.isConnected());
 
-        // Subscribe to lifecycle state updates (with global lock check)
         if (!globalSubscriptionLock.has(lockKey)) {
           globalSubscriptionLock.add(lockKey);
+          ownsSubscription = true;
           agentService.subscribeLifecycleState(projectId, tenantId, (state) => {
-            setLifecycleState(state);
+            if (!isCancelled) {
+              setLifecycleState(state);
+            }
           });
           logger.info('[useAgentLifecycleState] Subscribed to lifecycle state updates');
         }
       } catch (err) {
+        if (isCancelled) {
+          return;
+        }
         logger.error('[useAgentLifecycleState] Failed to connect:', err);
         setError('Failed to connect');
-        globalSubscriptionLock.delete(lockKey);
+        if (ownsSubscription) {
+          globalSubscriptionLock.delete(lockKey);
+          ownsSubscription = false;
+        }
       }
     };
 
@@ -114,10 +122,12 @@ export function useAgentLifecycleState({
 
     // Cleanup on unmount or when dependencies change
     return () => {
+      isCancelled = true;
       unsubscribeStatusListener();
-      if (globalSubscriptionLock.has(lockKey)) {
+      if (ownsSubscription) {
         agentService.unsubscribeLifecycleState();
         globalSubscriptionLock.delete(lockKey);
+        ownsSubscription = false;
       }
     };
   }, [enabled, projectId, tenantId, lockKey]);

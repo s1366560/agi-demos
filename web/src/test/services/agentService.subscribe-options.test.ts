@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { agentService } from '@/services/agentService';
 
-import type { AgentStreamHandler } from '@/types/agent';
+import type { AgentStreamHandler, SandboxStateData } from '@/types/agent';
 
 describe('agentService subscribe recovery options', () => {
   const service = agentService as any;
@@ -165,5 +165,85 @@ describe('agentService subscribe recovery options', () => {
 
     expect(disconnectSpy).not.toHaveBeenCalled();
     expect(service.subscriptions.has('conv-new')).toBe(true);
+  });
+
+  it('does not resend lifecycle subscribe for the same project and tenant', () => {
+    const sendSpy = vi.spyOn(service, 'send').mockReturnValue(true);
+    vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
+    const firstCallback = vi.fn();
+    const secondCallback = vi.fn();
+
+    agentService.subscribeLifecycleState('proj-1', 'tenant-1', firstCallback);
+    agentService.subscribeLifecycleState('proj-1', 'tenant-1', secondCallback);
+
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy).toHaveBeenCalledWith({
+      type: 'subscribe_lifecycle_state',
+      project_id: 'proj-1',
+      tenant_id: 'tenant-1',
+    });
+    expect(service.lifecycleStateSubscriber.callback).toBe(secondCallback);
+  });
+
+  it('unsubscribes the previous lifecycle key before subscribing to a new one', () => {
+    const sendSpy = vi.spyOn(service, 'send').mockReturnValue(true);
+    vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
+    const callback = vi.fn();
+
+    agentService.subscribeLifecycleState('proj-1', 'tenant-1', callback);
+    agentService.subscribeLifecycleState('proj-2', 'tenant-2', callback);
+
+    expect(sendSpy).toHaveBeenNthCalledWith(1, {
+      type: 'subscribe_lifecycle_state',
+      project_id: 'proj-1',
+      tenant_id: 'tenant-1',
+    });
+    expect(sendSpy).toHaveBeenNthCalledWith(2, {
+      type: 'unsubscribe_lifecycle_state',
+      project_id: 'proj-1',
+      tenant_id: 'tenant-1',
+    });
+    expect(sendSpy).toHaveBeenNthCalledWith(3, {
+      type: 'subscribe_lifecycle_state',
+      project_id: 'proj-2',
+      tenant_id: 'tenant-2',
+    });
+  });
+
+  it('does not resend sandbox subscribe for the same project and tenant', () => {
+    const sendSpy = vi.spyOn(service, 'send').mockReturnValue(true);
+    vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
+    const firstCallback = vi.fn();
+    const secondCallback = vi.fn();
+
+    agentService.subscribeSandboxState('proj-1', 'tenant-1', firstCallback);
+    agentService.subscribeSandboxState('proj-1', 'tenant-1', secondCallback);
+
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy).toHaveBeenCalledWith({
+      type: 'subscribe_sandbox',
+      project_id: 'proj-1',
+      tenant_id: 'tenant-1',
+    });
+    expect(service.sandboxStateSubscriber.callback).toBe(secondCallback);
+  });
+
+  it('includes tenant scope when unsubscribing sandbox state', () => {
+    const sendSpy = vi.spyOn(service, 'send').mockReturnValue(true);
+    vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
+    service.sandboxStateSubscriber = {
+      projectId: 'proj-1',
+      tenantId: 'tenant-1',
+      callback: (_state: SandboxStateData) => undefined,
+    };
+
+    agentService.unsubscribeSandboxState();
+
+    expect(sendSpy).toHaveBeenCalledWith({
+      type: 'unsubscribe_sandbox',
+      project_id: 'proj-1',
+      tenant_id: 'tenant-1',
+    });
+    expect(service.sandboxStateSubscriber).toBeNull();
   });
 });

@@ -432,6 +432,41 @@ describe('useAgentLifecycleState', () => {
     expect(agentService.unsubscribeLifecycleState).toHaveBeenCalled();
   });
 
+  it('should not subscribe after unmount while websocket connect is pending', async () => {
+    let resolveConnect: (() => void) | null = null;
+    const statusUnsubscribe = vi.fn();
+    vi.mocked(agentService.isConnected).mockReturnValue(false);
+    vi.mocked(agentService.connect).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveConnect = resolve;
+      })
+    );
+    vi.mocked(agentService.onStatusChange).mockReturnValue(statusUnsubscribe);
+
+    const { unmount } = renderHook(() =>
+      useAgentLifecycleState({
+        projectId: mockProjectId,
+        tenantId: mockTenantId,
+        enabled: true,
+      })
+    );
+
+    await waitFor(() => {
+      expect(agentService.connect).toHaveBeenCalled();
+    });
+
+    unmount();
+
+    await act(async () => {
+      resolveConnect?.();
+      await Promise.resolve();
+    });
+
+    expect(agentService.subscribeLifecycleState).not.toHaveBeenCalled();
+    expect(agentService.unsubscribeLifecycleState).not.toHaveBeenCalled();
+    expect(statusUnsubscribe).toHaveBeenCalled();
+  });
+
   it('should not subscribe when disabled', () => {
     const { result } = renderHook(() =>
       useAgentLifecycleState({

@@ -697,9 +697,21 @@ class AgentServiceImpl implements AgentService {
     callback: (state: LifecycleStateData) => void
   ): void {
     this.cancelIdleDisconnect();
+    const previousSubscriber = this.lifecycleStateSubscriber;
+    const isSameSubscription =
+      previousSubscriber?.projectId === projectId && previousSubscriber.tenantId === tenantId;
+
+    if (previousSubscriber && !isSameSubscription && this.isConnected()) {
+      this.send({
+        type: 'unsubscribe_lifecycle_state',
+        project_id: previousSubscriber.projectId,
+        tenant_id: previousSubscriber.tenantId,
+      });
+    }
+
     this.lifecycleStateSubscriber = { projectId, tenantId, callback };
 
-    if (this.isConnected()) {
+    if (this.isConnected() && !isSameSubscription) {
       this.send({
         type: 'subscribe_lifecycle_state',
         project_id: projectId,
@@ -726,9 +738,21 @@ class AgentServiceImpl implements AgentService {
     callback: (state: SandboxStateData) => void
   ): void {
     this.cancelIdleDisconnect();
+    const previousSubscriber = this.sandboxStateSubscriber;
+    const isSameSubscription =
+      previousSubscriber?.projectId === projectId && previousSubscriber.tenantId === tenantId;
+
+    if (previousSubscriber && !isSameSubscription && this.isConnected()) {
+      this.send({
+        type: 'unsubscribe_sandbox',
+        project_id: previousSubscriber.projectId,
+        tenant_id: previousSubscriber.tenantId,
+      });
+    }
+
     this.sandboxStateSubscriber = { projectId, tenantId, callback };
 
-    if (this.isConnected()) {
+    if (this.isConnected() && !isSameSubscription) {
       this.send({
         type: 'subscribe_sandbox',
         project_id: projectId,
@@ -743,6 +767,7 @@ class AgentServiceImpl implements AgentService {
         this.send({
           type: 'unsubscribe_sandbox',
           project_id: this.sandboxStateSubscriber.projectId,
+          tenant_id: this.sandboxStateSubscriber.tenantId,
         });
       }
     }
