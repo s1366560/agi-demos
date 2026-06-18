@@ -39,6 +39,7 @@ const actionsMock = vi.hoisted(() => ({
   publishGene: vi.fn(),
   publishGenome: vi.fn(),
   rateGene: vi.fn(),
+  rateGenome: vi.fn(),
   reset: vi.fn(),
   setActiveTab: vi.fn(),
   setCurrentGene: vi.fn(),
@@ -218,6 +219,7 @@ describe('Gene marketplace rating flow', () => {
     actionsMock.publishGene.mockResolvedValue(gene({ is_published: true }));
     actionsMock.publishGenome.mockResolvedValue(genome({ is_published: true }));
     actionsMock.rateGene.mockResolvedValue(undefined);
+    actionsMock.rateGenome.mockResolvedValue(undefined);
     actionsMock.unpublishGene.mockResolvedValue(gene({ is_published: false }));
     actionsMock.unpublishGenome.mockResolvedValue(genome({ is_published: false }));
   });
@@ -678,6 +680,52 @@ describe('Gene marketplace rating flow', () => {
       tenant_id: 'tenant-1',
     });
     expect(messageSuccessSpy).toHaveBeenCalledWith('Genome unpublished successfully');
+  });
+
+  it('rates genomes from the detail action bar', async () => {
+    const messageSuccessSpy = vi.spyOn(message, 'success').mockImplementation(vi.fn());
+    stateMock.currentGenome = genome({ is_published: true });
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/genomes/genome-1']}>
+        <GenomeDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Rate' }));
+    fireEvent.change(screen.getByLabelText('tenant.genes.comment'), {
+      target: { value: 'Useful bundle.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await waitFor(() => {
+      expect(actionsMock.rateGenome).toHaveBeenCalledWith(
+        'genome-1',
+        { rating: 5, comment: 'Useful bundle.' },
+        { tenant_id: 'tenant-1' }
+      );
+    });
+    expect(messageSuccessSpy).toHaveBeenCalledWith('Genome rating submitted successfully');
+  });
+
+  it('surfaces genome rating failures from the store', async () => {
+    const messageErrorSpy = vi.spyOn(message, 'error').mockImplementation(vi.fn());
+    stateMock.currentGenome = genome({ is_published: true });
+    stateMock.error = 'Genome rating API failed';
+    actionsMock.rateGenome.mockRejectedValue(new Error('Network Error'));
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/genes/genomes/genome-1']}>
+        <GenomeDetail />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Rate' }));
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+
+    await waitFor(() => {
+      expect(messageErrorSpy).toHaveBeenCalledWith('Genome rating API failed');
+    });
   });
 
   it('does not refetch genome genes when only genome metadata changes', async () => {

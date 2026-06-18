@@ -9,14 +9,17 @@ import {
   Card,
   Descriptions,
   Empty,
+  Form,
+  Input,
   message,
+  Modal,
   Rate,
   Space,
   Spin,
   Tag,
   Typography,
 } from 'antd';
-import { ArchiveX, ArrowLeft, UploadCloud } from 'lucide-react';
+import { ArchiveX, ArrowLeft, Star, UploadCloud } from 'lucide-react';
 
 import {
   useCurrentGenome,
@@ -24,11 +27,17 @@ import {
   useCurrentGenomeGenesLoading,
   useGeneMarketLoading,
   useGeneMarketError,
+  useGeneMarketStore,
   useGeneMarketActions,
 } from '../../stores/geneMarket';
 import { useCurrentTenant } from '../../stores/tenant';
 
 const { Title, Text, Paragraph } = Typography;
+
+interface RateFormValues {
+  score: number;
+  comment?: string;
+}
 
 export const GenomeDetail: React.FC = () => {
   const { t } = useTranslation();
@@ -52,8 +61,12 @@ export const GenomeDetail: React.FC = () => {
     setCurrentGenome,
     publishGenome,
     unpublishGenome,
+    rateGenome,
   } = useGeneMarketActions();
   const [isPublishSubmitting, setIsPublishSubmitting] = useState(false);
+  const [isRateModalVisible, setIsRateModalVisible] = useState(false);
+  const [isRateSubmitting, setIsRateSubmitting] = useState(false);
+  const [rateForm] = Form.useForm<RateFormValues>();
   const genomeGeneSlugKey = genome ? genome.gene_slugs.join('\n') : null;
   const genomeGeneSlugs = useMemo(() => {
     if (genomeGeneSlugKey === null || genomeGeneSlugKey === '') {
@@ -88,6 +101,10 @@ export const GenomeDetail: React.FC = () => {
     return genomeGeneSlugs.filter((slug) => !availableSlugs.has(slug));
   }, [genomeGeneSlugKey, genomeGeneSlugs, genomeGenes]);
 
+  const showActionError = (fallbackMessage: string) => {
+    message.error(useGeneMarketStore.getState().error ?? fallbackMessage);
+  };
+
   const handlePublishToggle = async () => {
     if (!genomeId || !tenantId || !genome) {
       return;
@@ -104,14 +121,39 @@ export const GenomeDetail: React.FC = () => {
         message.success(t('tenant.genomeDetail.publishSuccess', 'Genome published successfully'));
       }
     } catch {
-      message.error(
-        error ??
-          (genome.is_published
-            ? t('tenant.genomeDetail.unpublishError', 'Failed to unpublish genome')
-            : t('tenant.genomeDetail.publishError', 'Failed to publish genome'))
+      showActionError(
+        genome.is_published
+          ? t('tenant.genomeDetail.unpublishError', 'Failed to unpublish genome')
+          : t('tenant.genomeDetail.publishError', 'Failed to publish genome')
       );
     } finally {
       setIsPublishSubmitting(false);
+    }
+  };
+
+  const handleRateSubmit = async () => {
+    const values = await rateForm.validateFields();
+    if (!genomeId || !tenantId) {
+      return;
+    }
+
+    setIsRateSubmitting(true);
+    try {
+      await rateGenome(
+        genomeId,
+        {
+          rating: values.score,
+          comment: values.comment ?? null,
+        },
+        { tenant_id: tenantId }
+      );
+      message.success(t('tenant.genomeDetail.rateSuccess', 'Genome rating submitted successfully'));
+      setIsRateModalVisible(false);
+      rateForm.resetFields();
+    } catch {
+      showActionError(t('tenant.genomeDetail.rateError', 'Failed to submit genome rating'));
+    } finally {
+      setIsRateSubmitting(false);
     }
   };
 
@@ -161,24 +203,34 @@ export const GenomeDetail: React.FC = () => {
             </Tag>
           </Space>
         </div>
-        <Button
-          onClick={() => {
-            void handlePublishToggle();
-          }}
-          loading={isPublishSubmitting}
-          danger={genome.is_published}
-          icon={
-            genome.is_published ? (
-              <ArchiveX className="w-4 h-4" />
-            ) : (
-              <UploadCloud className="w-4 h-4" />
-            )
-          }
-        >
-          {genome.is_published
-            ? t('tenant.genes.unpublishAction', 'Unpublish')
-            : t('tenant.genes.publishAction', 'Publish')}
-        </Button>
+        <Space wrap>
+          <Button
+            onClick={() => {
+              void handlePublishToggle();
+            }}
+            loading={isPublishSubmitting}
+            danger={genome.is_published}
+            icon={
+              genome.is_published ? (
+                <ArchiveX className="w-4 h-4" />
+              ) : (
+                <UploadCloud className="w-4 h-4" />
+              )
+            }
+          >
+            {genome.is_published
+              ? t('tenant.genes.unpublishAction', 'Unpublish')
+              : t('tenant.genes.publishAction', 'Publish')}
+          </Button>
+          <Button
+            onClick={() => {
+              setIsRateModalVisible(true);
+            }}
+            icon={<Star className="w-4 h-4" />}
+          >
+            {t('tenant.genomeDetail.rateAction', 'Rate')}
+          </Button>
+        </Space>
       </div>
 
       {error && <Alert type="error" title={error} closable={{ onClose: clearError }} />}
@@ -285,6 +337,33 @@ export const GenomeDetail: React.FC = () => {
           </pre>
         </Card>
       )}
+
+      <Modal
+        title={t('tenant.genomeDetail.rateGenome', 'Rate Genome')}
+        open={isRateModalVisible}
+        onOk={() => {
+          void handleRateSubmit();
+        }}
+        onCancel={() => {
+          setIsRateModalVisible(false);
+          rateForm.resetFields();
+        }}
+        confirmLoading={isRateSubmitting}
+      >
+        <Form form={rateForm} layout="vertical" className="mt-4" initialValues={{ score: 5 }}>
+          <Form.Item
+            name="score"
+            label={t('tenant.genes.rating')}
+            rules={[{ required: true, message: t('tenant.genes.ratingRequired') }]}
+          >
+            <Rate allowHalf />
+          </Form.Item>
+
+          <Form.Item name="comment" label={t('tenant.genes.comment')}>
+            <Input.TextArea rows={4} placeholder={t('tenant.genes.commentPlaceholder')} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };
