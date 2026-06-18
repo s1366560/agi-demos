@@ -406,6 +406,54 @@ describe('TenantChatSidebar', () => {
     expect(agentState.setActiveConversation).toHaveBeenCalledWith(null);
   });
 
+  it('clears project search state after leaving the agent workspace route', async () => {
+    const hiddenProject = {
+      id: 'project-hidden',
+      name: 'Hidden Authorized Project',
+      tenant_id: 'tenant-1',
+    };
+    (projectAPI.list as any).mockResolvedValue({
+      projects: [hiddenProject],
+      total: 1,
+      page: 1,
+      page_size: 100,
+    });
+
+    const { rerender } = rtlRender(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/agent-workspace']}>
+        <TenantChatSidebarRouteHarness
+          tenantId="tenant-1"
+          route="/tenant/tenant-1/agent-workspace"
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search projects' }), {
+      target: { value: 'Hidden Authorized' },
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 300));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Hidden Authorized Project' })).toBeInTheDocument();
+    });
+
+    rerender(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/agent-workspace']}>
+        <TenantChatSidebarRouteHarness tenantId="tenant-1" route="/tenant/tenant-1/overview" />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Search projects' })).toHaveValue('');
+      expect(
+        screen.queryByRole('option', { name: 'Hidden Authorized Project' })
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it('preloads the project switcher window on agent workspace pages', async () => {
     projectState.projects = [];
     projectState.currentProject = null;

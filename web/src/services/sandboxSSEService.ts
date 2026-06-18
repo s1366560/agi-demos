@@ -79,6 +79,7 @@ class SandboxSSEService {
   private projectId: string | null = null;
   private handlers: Set<SandboxEventHandler> = new Set();
   private unsubscribeFn: (() => void) | null = null;
+  private connectionToken = 0;
 
   /**
    * Subscribe to sandbox events for a project.
@@ -96,8 +97,8 @@ class SandboxSSEService {
     this.projectId = projectId;
     this.handlers.add(handler);
 
-    // Start WebSocket connection if not already connected
-    if (!this.unsubscribeFn) {
+    // Start WebSocket connection if not already connected or connecting.
+    if (!this.unsubscribeFn && this.status !== 'connecting') {
       this.connect();
     }
 
@@ -121,6 +122,7 @@ class SandboxSSEService {
 
     this.status = 'connecting';
     const projectId = this.projectId;
+    const connectionToken = (this.connectionToken += 1);
 
     // Ensure agentService WebSocket is connected with timeout
     const connectPromise = agentService.isConnected() ? Promise.resolve() : agentService.connect();
@@ -134,7 +136,13 @@ class SandboxSSEService {
     Promise.race([connectPromise, timeoutPromise])
       .then(() => {
         // Guard: project may have changed during async connect
-        if (this.projectId !== projectId) return;
+        if (
+          this.projectId !== projectId ||
+          this.connectionToken !== connectionToken ||
+          this.handlers.size === 0
+        ) {
+          return;
+        }
 
         // Subscribe to sandbox events via agentService WebSocket
         agentService.subscribeSandboxState(projectId, '', (state: SandboxStateData) => {
@@ -150,6 +158,9 @@ class SandboxSSEService {
         logger.debug(`[SandboxWS] Connected to project ${projectId} via agentService`);
       })
       .catch((err: unknown) => {
+        if (this.connectionToken !== connectionToken) {
+          return;
+        }
         logger.error('[SandboxWS] Failed to connect:', err);
         this.status = 'error';
         this.notifyHandlers('onError', err instanceof Error ? err : new Error(String(err)));
@@ -265,6 +276,7 @@ class SandboxSSEService {
    * Disconnect from WebSocket stream
    */
   disconnect(): void {
+    this.connectionToken += 1;
     if (this.unsubscribeFn) {
       this.unsubscribeFn();
       this.unsubscribeFn = null;

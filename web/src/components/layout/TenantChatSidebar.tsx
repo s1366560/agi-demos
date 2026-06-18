@@ -539,6 +539,16 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const loadedSidebarWorkspaceSurfaceRef = useRef<string | null>(null);
   const projectSearchRequestRef = useRef(0);
   const projectSearchDebounceRef = useRef<number | null>(null);
+  const clearProjectSearchState = useCallback(() => {
+    setProjectSearchResults([]);
+    setProjectSearchQuery('');
+    setIsProjectSearchLoading(false);
+    projectSearchRequestRef.current += 1;
+    if (projectSearchDebounceRef.current) {
+      window.clearTimeout(projectSearchDebounceRef.current);
+      projectSearchDebounceRef.current = null;
+    }
+  }, []);
 
   // Use controlled or internal state
   const collapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
@@ -739,21 +749,14 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     const tenantChanged = previousTenantIdRef.current !== resolvedTenantId;
     previousTenantIdRef.current = resolvedTenantId;
     setSelectedProjectId(null);
-    setProjectSearchResults([]);
-    setProjectSearchQuery('');
-    setIsProjectSearchLoading(false);
-    projectSearchRequestRef.current += 1;
-    if (projectSearchDebounceRef.current) {
-      window.clearTimeout(projectSearchDebounceRef.current);
-      projectSearchDebounceRef.current = null;
-    }
+    clearProjectSearchState();
     loadedProjectIdRef.current = null;
     loadedSidebarWorkspaceSurfaceRef.current = null;
     if (tenantChanged) {
       resetConversations();
       setActiveConversation(null);
     }
-  }, [resetConversations, resolvedTenantId, setActiveConversation]);
+  }, [clearProjectSearchState, resetConversations, resolvedTenantId, setActiveConversation]);
 
   useEffect(() => {
     if (isAgentWorkspaceRoute) {
@@ -762,12 +765,19 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
     loadedProjectIdRef.current = null;
     loadedSidebarWorkspaceSurfaceRef.current = null;
+    clearProjectSearchState();
     if (selectedProjectId) {
       setSelectedProjectId(null);
     }
     resetConversations();
     setActiveConversation(null);
-  }, [isAgentWorkspaceRoute, resetConversations, selectedProjectId, setActiveConversation]);
+  }, [
+    clearProjectSearchState,
+    isAgentWorkspaceRoute,
+    resetConversations,
+    selectedProjectId,
+    setActiveConversation,
+  ]);
 
   useEffect(
     () => () => {

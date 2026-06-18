@@ -41,6 +41,7 @@ describe('sandboxSSEService', () => {
     (sandboxSSEService as any).projectId = null;
     (sandboxSSEService as any).handlers.clear();
     (sandboxSSEService as any).unsubscribeFn = null;
+    (sandboxSSEService as any).connectionToken = 0;
   });
 
   afterEach(() => {
@@ -70,6 +71,31 @@ describe('sandboxSSEService', () => {
       expect(agentService.connect).not.toHaveBeenCalled();
       expect(agentService.subscribeSandboxState).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('coalesces duplicate subscribers while websocket connect is pending', async () => {
+    let resolveConnect: (() => void) | null = null;
+    vi.mocked(agentService.connect).mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveConnect = resolve;
+      })
+    );
+
+    const unsubscribeA = sandboxSSEService.subscribe('proj-1', { onStatusUpdate: vi.fn() });
+    const unsubscribeB = sandboxSSEService.subscribe('proj-1', { onSandboxCreated: vi.fn() });
+
+    expect(agentService.connect).toHaveBeenCalledTimes(1);
+    expect(agentService.subscribeSandboxState).not.toHaveBeenCalled();
+
+    resolveConnect?.();
+
+    await vi.waitFor(() => {
+      expect(agentService.subscribeSandboxState).toHaveBeenCalledTimes(1);
+      expect(sandboxSSEService.getStatus()).toBe('connected');
+    });
+
+    unsubscribeA();
+    unsubscribeB();
   });
 
   it('routes desktop_started to onDesktopStarted handler', async () => {
