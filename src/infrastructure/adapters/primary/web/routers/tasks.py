@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import and_, desc, false, func, or_, select
+from sqlalchemy import and_, case, desc, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
@@ -297,81 +297,69 @@ async def get_task_stats(
     one_hour_ago = now - timedelta(hours=1)
     scope_filter = _task_project_scope_filter(await _task_access_project_ids(db, current_user))
 
-    total = await db.scalar(_apply_task_scope(select(func.count(DBTaskLog.id)), scope_filter)) or 0
+    stats_query = select(
+        func.count(DBTaskLog.id).label("total"),
+        func.coalesce(
+            func.sum(case((DBTaskLog.status == "COMPLETED", 1), else_=0)),
+            0,
+        ).label("completed"),
+        func.coalesce(
+            func.sum(case((DBTaskLog.status == "FAILED", 1), else_=0)),
+            0,
+        ).label("failed"),
+        func.coalesce(
+            func.sum(case((DBTaskLog.status == "PENDING", 1), else_=0)),
+            0,
+        ).label("pending"),
+        func.coalesce(
+            func.sum(case((DBTaskLog.status == "PROCESSING", 1), else_=0)),
+            0,
+        ).label("processing"),
+        func.coalesce(
+            func.sum(
+                case(
+                    (
+                        and_(
+                            DBTaskLog.status == "COMPLETED",
+                            DBTaskLog.completed_at >= one_hour_ago,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("completed_1h"),
+        func.coalesce(
+            func.sum(case((DBTaskLog.created_at >= one_day_ago, 1), else_=0)),
+            0,
+        ).label("total_24h"),
+        func.coalesce(
+            func.sum(
+                case(
+                    (
+                        and_(DBTaskLog.status == "FAILED", DBTaskLog.created_at >= one_day_ago),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("failed_24h"),
+    )
+    stats = (
+        await db.execute(refresh_select_statement(_apply_task_scope(stats_query, scope_filter)))
+    ).one()
 
-    completed = (
-        await db.scalar(
-            _apply_task_scope(
-                select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "COMPLETED"),
-                scope_filter,
-            )
-        )
-        or 0
-    )
-
-    failed = (
-        await db.scalar(
-            _apply_task_scope(
-                select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "FAILED"),
-                scope_filter,
-            )
-        )
-        or 0
-    )
-
-    pending = (
-        await db.scalar(
-            _apply_task_scope(
-                select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "PENDING"),
-                scope_filter,
-            )
-        )
-        or 0
-    )
-    processing = (
-        await db.scalar(
-            _apply_task_scope(
-                select(func.count(DBTaskLog.id)).where(DBTaskLog.status == "PROCESSING"),
-                scope_filter,
-            )
-        )
-        or 0
-    )
-
-    # Throughput (completed per minute in last hour)
-    completed_1h = (
-        await db.scalar(
-            _apply_task_scope(
-                select(func.count(DBTaskLog.id)).where(
-                    DBTaskLog.status == "COMPLETED", DBTaskLog.completed_at >= one_hour_ago
-                ),
-                scope_filter,
-            )
-        )
-        or 0
-    )
+    total = int(stats.total or 0)
+    completed = int(stats.completed or 0)
+    failed = int(stats.failed or 0)
+    pending = int(stats.pending or 0)
+    processing = int(stats.processing or 0)
+    completed_1h = int(stats.completed_1h or 0)
     throughput = completed_1h / 60
-
-    total_24h = (
-        await db.scalar(
-            _apply_task_scope(
-                select(func.count(DBTaskLog.id)).where(DBTaskLog.created_at >= one_day_ago),
-                scope_filter,
-            )
-        )
-        or 0
-    )
-    failed_24h = (
-        await db.scalar(
-            _apply_task_scope(
-                select(func.count(DBTaskLog.id)).where(
-                    DBTaskLog.status == "FAILED", DBTaskLog.created_at >= one_day_ago
-                ),
-                scope_filter,
-            )
-        )
-        or 0
-    )
+    total_24h = int(stats.total_24h or 0)
+    failed_24h = int(stats.failed_24h or 0)
     error_rate = (failed_24h / total_24h * 100) if total_24h > 0 else 0.0
 
     return TaskStatsResponse(
@@ -401,21 +389,37 @@ async def get_queue_depth(
         t = now - timedelta(hours=i * 3)
         times.append(t)
 
-    for t in times:
-        # Count tasks that were created <= t AND (completed > t OR completed is NULL)
-        count = (
-            await db.scalar(
-                _apply_task_scope(
-                    select(func.count(DBTaskLog.id)).where(
-                        DBTaskLog.created_at <= t,
-                        (DBTaskLog.completed_at > t) | (DBTaskLog.completed_at.is_(None)),
-                    ),
-                    scope_filter,
-                )
-            )
-            or 0
+    depth_columns: list[Any] = []
+    for index, t in enumerate(times):
+        depth_columns.append(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                DBTaskLog.created_at <= t,
+                                or_(
+                                    DBTaskLog.completed_at > t,
+                                    DBTaskLog.completed_at.is_(None),
+                                ),
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
+            ).label(f"depth_{index}")
         )
 
+    depth_row = (
+        await db.execute(
+            refresh_select_statement(_apply_task_scope(select(*depth_columns), scope_filter))
+        )
+    ).one()
+
+    for index, t in enumerate(times):
+        count = int(getattr(depth_row, f"depth_{index}") or 0)
         points.append(QueueDepthPoint(timestamp=t.strftime("%H:%M"), depth=count))
 
     return points
