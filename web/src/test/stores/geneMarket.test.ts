@@ -13,7 +13,9 @@ import type {
 vi.mock('@/services/geneMarketService', () => ({
   geneMarketService: {
     createGeneReview: vi.fn(),
+    deleteGene: vi.fn(),
     deleteGeneReview: vi.fn(),
+    deleteGenome: vi.fn(),
     getGene: vi.fn(),
     getGeneReviews: vi.fn(),
     getGenome: vi.fn(),
@@ -188,6 +190,42 @@ describe('gene market store', () => {
     });
     expect(useGeneMarketStore.getState().genomes[0]?.is_published).toBe(false);
     expect(useGeneMarketStore.getState().currentGenome?.is_published).toBe(false);
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+  });
+
+  it('does not underflow gene totals when deleting from detail state', async () => {
+    useGeneMarketStore.setState({
+      currentGene: gene(),
+      geneTotal: 0,
+      genes: [],
+    });
+    vi.mocked(geneMarketService.deleteGene).mockResolvedValue(undefined);
+
+    await useGeneMarketStore.getState().deleteGene('gene-1', { tenant_id: 'tenant-2' });
+
+    expect(geneMarketService.deleteGene).toHaveBeenCalledWith('gene-1', {
+      tenant_id: 'tenant-2',
+    });
+    expect(useGeneMarketStore.getState().currentGene).toBeNull();
+    expect(useGeneMarketStore.getState().geneTotal).toBe(0);
+    expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
+  });
+
+  it('does not underflow genome totals when deleting from detail state', async () => {
+    useGeneMarketStore.setState({
+      currentGenome: genome(),
+      genomeTotal: 0,
+      genomes: [],
+    });
+    vi.mocked(geneMarketService.deleteGenome).mockResolvedValue(undefined);
+
+    await useGeneMarketStore.getState().deleteGenome('genome-1', { tenant_id: 'tenant-2' });
+
+    expect(geneMarketService.deleteGenome).toHaveBeenCalledWith('genome-1', {
+      tenant_id: 'tenant-2',
+    });
+    expect(useGeneMarketStore.getState().currentGenome).toBeNull();
+    expect(useGeneMarketStore.getState().genomeTotal).toBe(0);
     expect(useGeneMarketStore.getState().isSubmitting).toBe(false);
   });
 

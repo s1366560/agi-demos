@@ -57,6 +57,8 @@ const orderGenesBySlugs = (genes: GeneResponse[], slugs: string[]): GeneResponse
   });
 };
 
+const decrementNonNegative = (value: number): number => Math.max(0, value - 1);
+
 type DetailRequestScope = 'currentGene' | 'currentGenome' | 'currentGenomeGenes';
 type ListRequestScope = 'genes' | 'genomes' | 'installedGenes' | 'reviews' | 'evolutionEvents';
 
@@ -356,7 +358,7 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           set({
             genes: genes.filter((g) => g.id !== id),
             currentGene: get().currentGene?.id === id ? null : get().currentGene,
-            geneTotal: get().geneTotal - 1,
+            geneTotal: decrementNonNegative(get().geneTotal),
             isSubmitting: false,
           });
         } catch (error: unknown) {
@@ -527,7 +529,7 @@ export const useGeneMarketStore = create<GeneMarketState>()(
           set({
             genomes: genomes.filter((g) => g.id !== id),
             currentGenome: get().currentGenome?.id === id ? null : get().currentGenome,
-            genomeTotal: get().genomeTotal - 1,
+            genomeTotal: decrementNonNegative(get().genomeTotal),
             isSubmitting: false,
           });
         } catch (error: unknown) {
