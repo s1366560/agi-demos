@@ -75,8 +75,10 @@ class MessageRouter:
             await context.send_error("Missing message type")
             return
 
-        # Handle heartbeat directly (no handler needed)
-        if msg_type == "heartbeat":
+        # Handle heartbeat directly (no handler needed). Older frontend bundles
+        # sent "ping"; keep it as a protocol alias so stale tabs do not log
+        # global websocket errors until they reload.
+        if msg_type in {"heartbeat", "ping"}:
             await context.send_json(
                 {
                     "type": "pong",

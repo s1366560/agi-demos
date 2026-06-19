@@ -80,4 +80,24 @@ describe('WebSocketConnection reconnect recovery', () => {
 
     connection.disconnect();
   });
+
+  it('sends the server-supported heartbeat message while connected', async () => {
+    const connection = new WebSocketConnection({
+      sessionId: 'session-heartbeat',
+    });
+
+    const connectPromise = connection.connect();
+    const socket = ManualWebSocket.instances[0];
+    expect(socket).toBeDefined();
+    socket?.open();
+    await expect(connectPromise).resolves.toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(30000);
+
+    expect(socket?.sentMessages.map((message) => JSON.parse(message))).toContainEqual({
+      type: 'heartbeat',
+    });
+
+    connection.disconnect();
+  });
 });

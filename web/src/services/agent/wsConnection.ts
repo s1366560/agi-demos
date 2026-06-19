@@ -222,7 +222,7 @@ export class WebSocketConnection {
     }
     this.heartbeatInterval = setInterval(() => {
       if (this.isConnected()) {
-        this.send({ type: 'ping' });
+        this.send({ type: 'heartbeat' });
       }
     }, this.HEARTBEAT_INTERVAL_MS);
   }
