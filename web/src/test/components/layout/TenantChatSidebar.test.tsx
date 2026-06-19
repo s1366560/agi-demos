@@ -339,6 +339,34 @@ describe('TenantChatSidebar', () => {
     );
   });
 
+  it('does not load or persist a route project from another tenant', async () => {
+    localStorage.removeItem('agent:tenant-2:lastProjectId');
+    localStorage.removeItem('agent:tenant-2:lastProjectSelectionSource');
+    projectState.projects = [
+      { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' },
+      { id: 'project-2', name: 'Project Two', tenant_id: 'tenant-2' },
+    ];
+    projectState.currentProject = {
+      id: 'project-2',
+      name: 'Project Two',
+      tenant_id: 'tenant-2',
+    };
+
+    render(<TenantChatSidebar tenantId="tenant-2" mobile />, {
+      route: '/tenant/tenant-2/agent-workspace?projectId=project-1',
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    });
+
+    expect(screen.getByRole('combobox', { name: 'Project switcher' })).toHaveValue('');
+    expect(agentState.loadConversations).not.toHaveBeenCalled();
+    expect(projectState.setCurrentProject).not.toHaveBeenCalled();
+    expect(localStorage.getItem('agent:tenant-2:lastProjectId')).toBeNull();
+    expect(localStorage.getItem('agent:tenant-2:lastProjectSelectionSource')).toBeNull();
+  });
+
   it('keeps the project switcher above conversation history', () => {
     render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
       route: '/tenant/tenant-1/agent-workspace',

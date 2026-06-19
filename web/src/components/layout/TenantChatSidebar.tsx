@@ -823,14 +823,18 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       return;
     }
 
-    if (queryProjectId && selectedProjectId !== queryProjectId) {
+    if (queryProjectId) {
+      const project = projectById.get(queryProjectId);
+      if (!project) {
+        return;
+      }
+      if (selectedProjectId === queryProjectId) {
+        return;
+      }
       setSelectedProjectId(queryProjectId);
       persistLastProjectId(resolvedTenantId, queryProjectId);
-      const project = projectById.get(queryProjectId);
-      if (project) {
-        setSelectedProject(project);
-        setCurrentProject(project);
-      }
+      setSelectedProject(project);
+      setCurrentProject(project);
     } else if (!selectedProjectId && uniqueProjects.length > 0) {
       const project =
         (currentProject ? projectById.get(currentProject.id) : undefined) ?? uniqueProjects[0];
