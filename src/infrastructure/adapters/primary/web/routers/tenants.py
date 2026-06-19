@@ -37,8 +37,8 @@ TENANT_ANALYTICS_PROJECT_STORAGE_LIMIT = 10
 
 
 def _order_tenant_list_query(query: Select[Any]) -> Select[Any]:
-    """Return tenants newest-first with a stable ID tie-breaker."""
-    return query.order_by(Tenant.created_at.desc(), Tenant.id.asc())
+    """Return current-user tenants in default membership order."""
+    return query.order_by(UserTenant.created_at.asc(), UserTenant.id.asc(), Tenant.id.asc())
 
 
 def _coerce_history_day(value: object) -> date:
@@ -190,19 +190,10 @@ async def list_tenants(
     db: AsyncSession = Depends(get_db),
 ) -> TenantListResponse:
     """List tenants for the current user."""
-    # Get tenant IDs user has access to
-    user_tenants_result = await db.execute(
-        refresh_select_statement(
-            select(UserTenant.tenant_id).where(UserTenant.user_id == current_user.id)
-        )
-    )
-    tenant_ids = [row[0] for row in user_tenants_result.fetchall()]
-
-    if not tenant_ids:
-        return TenantListResponse(tenants=[], total=0, page=page, page_size=page_size)
-
-    # Build query
-    query = select(Tenant).where(Tenant.id.in_(tenant_ids))
+    # Build query from the membership table so the first item matches the backend
+    # default-tenant dependency used by auth and project initialization.
+    membership_scope = UserTenant.user_id == current_user.id
+    query = select(Tenant).join(UserTenant, UserTenant.tenant_id == Tenant.id).where(membership_scope)
 
     if search:
         query = query.where(
@@ -213,7 +204,11 @@ async def list_tenants(
         )
 
     # Get total count
-    count_query = select(func.count(Tenant.id)).where(Tenant.id.in_(tenant_ids))
+    count_query = (
+        select(func.count(Tenant.id))
+        .join(UserTenant, UserTenant.tenant_id == Tenant.id)
+        .where(membership_scope)
+    )
     if search:
         count_query = count_query.where(
             or_(

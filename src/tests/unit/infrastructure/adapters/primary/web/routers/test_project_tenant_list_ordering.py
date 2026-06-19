@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from src.infrastructure.adapters.primary.web.routers.projects import _order_project_list_query
 from src.infrastructure.adapters.primary.web.routers.tenants import _order_tenant_list_query
-from src.infrastructure.adapters.secondary.persistence.models import Project, Tenant
+from src.infrastructure.adapters.secondary.persistence.models import Project, Tenant, UserTenant
 
 
 def test_project_list_router_query_declares_deterministic_order_by() -> None:
@@ -17,7 +17,13 @@ def test_project_list_router_query_declares_deterministic_order_by() -> None:
     assert "projects.created_at DESC, projects.id ASC" in rendered_statement
 
 
-def test_tenant_list_router_query_declares_deterministic_order_by() -> None:
-    statement = _order_tenant_list_query(select(Tenant))
+def test_tenant_list_router_query_uses_membership_default_order() -> None:
+    statement = _order_tenant_list_query(
+        select(Tenant).join(UserTenant, UserTenant.tenant_id == Tenant.id)
+    )
 
-    assert "ORDER BY tenants.created_at DESC, tenants.id ASC" in str(statement)
+    rendered_statement = str(statement)
+
+    assert "ORDER BY user_tenants.created_at ASC" in rendered_statement
+    assert "user_tenants.id ASC" in rendered_statement
+    assert "tenants.id ASC" in rendered_statement
