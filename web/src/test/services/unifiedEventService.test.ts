@@ -46,6 +46,9 @@ class MockWebSocket {
     MockWebSocket.instances.push(this);
     // Simulate async connection
     setTimeout(() => {
+      if (this.readyState !== MockWebSocket.CONNECTING) {
+        return;
+      }
       this.readyState = MockWebSocket.OPEN;
       if (this.onopen) {
         this.onopen(new Event('open'));
@@ -60,10 +63,10 @@ class MockWebSocket {
     this.sentMessages.push(data);
   }
 
-  close(): void {
+  close(code = 1000, reason = ''): void {
     this.readyState = MockWebSocket.CLOSED;
     if (this.onclose) {
-      this.onclose(new CloseEvent('close'));
+      this.onclose({ code, reason } as CloseEvent);
     }
   }
 
@@ -120,6 +123,23 @@ describe('unifiedEventService', () => {
       const startTime = Date.now();
       await unifiedEventService.connect();
       expect(Date.now() - startTime).toBeLessThan(50);
+    });
+
+    it('should reconnect after the socket closes before opening', async () => {
+      vi.useFakeTimers();
+
+      const firstConnect = unifiedEventService.connect();
+      expect(MockWebSocket.instances).toHaveLength(1);
+
+      MockWebSocket.instances[0]?.close(1006, 'network-reset');
+      await expect(firstConnect).rejects.toThrow('WebSocket closed before connection opened: 1006');
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(MockWebSocket.instances).toHaveLength(2);
+
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(unifiedEventService.connect()).resolves.toBeUndefined();
+      expect(unifiedEventService.isConnected()).toBe(true);
     });
   });
 
