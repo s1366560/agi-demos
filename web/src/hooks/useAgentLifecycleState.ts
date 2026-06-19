@@ -27,6 +27,8 @@ import { useState, useEffect, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { useAuthStore } from '@/stores/auth';
+
 import { agentService } from '../services/agentService';
 import { logger } from '../utils/logger';
 
@@ -60,11 +62,12 @@ export function useAgentLifecycleState({
   const [lifecycleState, setLifecycleState] = useState<LifecycleStateData | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const token = useAuthStore((state) => state.token);
 
   const lockKey = `lifecycle-state-${tenantId}:${projectId}`;
 
   useEffect(() => {
-    if (!enabled || !projectId) {
+    if (!enabled || !projectId || !token) {
       return;
     }
 
@@ -130,7 +133,7 @@ export function useAgentLifecycleState({
         ownsSubscription = false;
       }
     };
-  }, [enabled, projectId, tenantId, lockKey]);
+  }, [enabled, projectId, tenantId, lockKey, token]);
 
   // Compute detailed status based on lifecycle state
   const status = useMemo<LifecycleStatus>(() => {

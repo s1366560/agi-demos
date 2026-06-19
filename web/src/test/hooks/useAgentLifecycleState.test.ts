@@ -7,6 +7,15 @@
 import { renderHook, waitFor, act, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+const authState = vi.hoisted(() => ({
+  token: 'token-1' as string | null,
+}));
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: (selector: (state: { token: string | null }) => unknown) =>
+    selector({ token: authState.token }),
+}));
+
 // Mock agentService module with inline mocks (vitest hoisting requirement)
 vi.mock('../../services/agentService', () => ({
   agentService: {
@@ -33,6 +42,7 @@ describe('useAgentLifecycleState', () => {
     vi.mocked(agentService.connect).mockResolvedValue(undefined);
     vi.mocked(agentService.onStatusChange).mockReturnValue(vi.fn());
     vi.mocked(agentService.subscribeLifecycleState).mockReturnValue(vi.fn());
+    authState.token = 'token-1';
     localStorage.clear();
   });
 
@@ -478,6 +488,24 @@ describe('useAgentLifecycleState', () => {
 
     expect(agentService.subscribeLifecycleState).not.toHaveBeenCalled();
     expect(result.current.lifecycleState).toBeNull();
+  });
+
+  it('should not connect or subscribe before an auth token is available', () => {
+    authState.token = null;
+
+    const { result } = renderHook(() =>
+      useAgentLifecycleState({
+        projectId: mockProjectId,
+        tenantId: mockTenantId,
+        enabled: true,
+      })
+    );
+
+    expect(agentService.connect).not.toHaveBeenCalled();
+    expect(agentService.subscribeLifecycleState).not.toHaveBeenCalled();
+    expect(agentService.onStatusChange).not.toHaveBeenCalled();
+    expect(result.current.lifecycleState).toBeNull();
+    expect(result.current.isConnected).toBe(false);
   });
 
   it('should handle connection status changes', async () => {
