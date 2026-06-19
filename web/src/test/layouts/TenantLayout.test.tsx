@@ -430,6 +430,39 @@ describe('TenantLayout', () => {
     expect(screen.queryByText('Welcome')).not.toBeInTheDocument();
   });
 
+  it('keeps bare tenant entry in loading state until accessible tenants resolve', async () => {
+    const tenant = { id: 'slow-tenant', name: 'Slow Tenant' };
+    const tenantsRequest = createDeferred<void>();
+    setMockRouteParams({});
+    mockLocationPathname = '/tenant';
+    mockTenantState.currentTenant = null;
+    mockTenantState.tenants = [];
+    mockTenantState.listTenants = vi.fn().mockImplementation(async () => {
+      await tenantsRequest.promise;
+      mockTenantState.tenants = [tenant];
+    });
+
+    render(<TenantLayout />);
+
+    expect(screen.getByText('Checking tenant access')).toBeInTheDocument();
+    expect(screen.getByText('Loading tenant spaces')).toBeInTheDocument();
+    expect(screen.queryByTestId('outlet')).not.toBeInTheDocument();
+    expect(screen.queryByText('Welcome')).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    await act(async () => {
+      tenantsRequest.resolve();
+      await tenantsRequest.promise;
+    });
+
+    await waitFor(() => {
+      expect(mockTenantState.setCurrentTenant).toHaveBeenCalledWith(tenant);
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('/tenant/slow-tenant/overview', {
+      replace: true,
+    });
+  });
+
   it('shows the create-tenant empty state only when no accessible tenants exist', async () => {
     setMockRouteParams({});
     mockLocationPathname = '/tenant';

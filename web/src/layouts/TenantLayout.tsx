@@ -137,6 +137,10 @@ export const TenantLayout: React.FC = memo(() => {
   const tenantProjectScopeRef = useRef<string | null | undefined>(undefined);
   const tenantProjectScope = tenantId ?? currentTenant?.id ?? null;
   const projectSyncTenantId = tenantId ?? currentTenant?.id ?? null;
+  const shouldResolveBareTenantEntry =
+    !tenantId && isBareTenantEntryPath(location.pathname) && !currentTenant && tenants.length === 0;
+  const effectiveTenantEntryStatus =
+    tenantEntryStatus === 'idle' && shouldResolveBareTenantEntry ? 'loading' : tenantEntryStatus;
 
   const handleLogout = useCallback(() => {
     logout();
@@ -342,9 +346,9 @@ export const TenantLayout: React.FC = memo(() => {
   }, [effectiveProjectId, projectSyncTenantId, currentProject, isAgentWorkspaceRoute]);
 
   // Tenant entry status screen
-  if (tenantEntryStatus !== 'idle') {
-    const isLoadingTenantEntry = tenantEntryStatus === 'loading';
-    const isTenantEntryError = tenantEntryStatus === 'error';
+  if (effectiveTenantEntryStatus !== 'idle') {
+    const isLoadingTenantEntry = effectiveTenantEntryStatus === 'loading';
+    const isTenantEntryError = effectiveTenantEntryStatus === 'error';
     const entryTitle = isLoadingTenantEntry
       ? t('tenant.entry.loadingTitle')
       : isTenantEntryError
