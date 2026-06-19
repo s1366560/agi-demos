@@ -577,6 +577,9 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
   }, [scale, reset, zoomTo]);
 
   const zoomPercent = Math.round(scale * 100);
+  const imageTransform = `translate(${String(offset.x)}px, ${String(offset.y)}px) scale(${String(
+    scale
+  )}) rotate(${String(rotation)}deg)`;
 
   const buttonClass =
     'flex items-center justify-center w-7 h-7 rounded-md text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors';
@@ -605,7 +608,7 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
             maxWidth: '100%',
             maxHeight: '100%',
             objectFit: 'contain',
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale}) rotate(${rotation}deg)`,
+            transform: imageTransform,
             transition: dragging ? 'none' : 'transform 0.15s ease-out',
           }}
         />
@@ -704,16 +707,15 @@ const CanvasMediaPreview = memo<{
   useEffect(() => {
     if (!needsResolution) return;
 
-    let cancelled = false;
+    const status = { cancelled: false };
     void (async () => {
       const url = await resolveSandboxArtifactUrl(src);
-      if (!cancelled && url && isSafeArtifactUrl(url)) {
-        setResolved({ key: src, url });
-      }
+      if (!url || status.cancelled || !isSafeArtifactUrl(url)) return;
+      setResolved({ key: src, url });
     })();
 
     return () => {
-      cancelled = true;
+      status.cancelled = true;
     };
   }, [src, needsResolution]);
 
