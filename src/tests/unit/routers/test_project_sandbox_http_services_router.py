@@ -17,8 +17,8 @@ from src.infrastructure.adapters.primary.web.routers import project_sandbox as r
 def allow_project_access_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep focused route tests on their target behavior unless they override access."""
 
-    async def _allow_access(*_args, **_kwargs) -> None:
-        return None
+    async def _allow_access(*_args, **_kwargs) -> str:
+        return "tenant-1"
 
     monkeypatch.setattr(router_mod, "verify_project_access", _allow_access)
 
@@ -166,6 +166,52 @@ def test_ensure_project_sandbox_sanitizes_internal_errors(
 
 
 @pytest.mark.unit
+def test_ensure_project_sandbox_uses_project_tenant_from_access_check(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sandbox creation must use the accessed project's tenant, not the user's active tenant."""
+
+    async def allow_access(*_args, **_kwargs) -> str:
+        return "tenant-project"
+
+    monkeypatch.setattr(router_mod, "verify_project_access", allow_access)
+
+    lifecycle_service = AsyncMock()
+    lifecycle_service.get_or_create_sandbox = AsyncMock(
+        return_value=router_mod.SandboxInfo(
+            sandbox_id="sandbox-1",
+            project_id="proj-1",
+            tenant_id="tenant-project",
+            status="running",
+        )
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    manager = AsyncMock()
+    manager.broadcast_sandbox_state = AsyncMock()
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
+        lambda: manager,
+    )
+
+    response = sandbox_http_client.post(
+        "/api/v1/projects/proj-1/sandbox",
+        json={"profile": "standard"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    lifecycle_service.get_or_create_sandbox.assert_awaited_once()
+    assert lifecycle_service.get_or_create_sandbox.await_args.kwargs["tenant_id"] == (
+        "tenant-project"
+    )
+    manager.broadcast_sandbox_state.assert_awaited_once()
+    assert manager.broadcast_sandbox_state.await_args.kwargs["tenant_id"] == "tenant-project"
+
+
+@pytest.mark.unit
 def test_get_project_sandbox_missing_sandbox_is_sanitized(
     sandbox_http_client: TestClient,
 ) -> None:
@@ -246,6 +292,46 @@ def test_terminate_project_sandbox_missing_sandbox_is_sanitized(
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.json()["detail"] == "Sandbox not found"
     assert "proj-1" not in response.text
+
+
+@pytest.mark.unit
+def test_restart_project_sandbox_broadcasts_project_tenant_from_access_check(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Restart events must be delivered to the project tenant channel."""
+
+    async def allow_access(*_args, **_kwargs) -> str:
+        return "tenant-project"
+
+    monkeypatch.setattr(router_mod, "verify_project_access", allow_access)
+
+    lifecycle_service = AsyncMock()
+    lifecycle_service.restart_project_sandbox = AsyncMock(
+        return_value=router_mod.SandboxInfo(
+            sandbox_id="sandbox-1",
+            project_id="proj-1",
+            tenant_id="tenant-project",
+            status="running",
+        )
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    manager = AsyncMock()
+    manager.broadcast_sandbox_state = AsyncMock()
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
+        lambda: manager,
+    )
+
+    response = sandbox_http_client.post("/api/v1/projects/proj-1/sandbox/restart")
+
+    assert response.status_code == status.HTTP_200_OK
+    lifecycle_service.restart_project_sandbox.assert_awaited_once_with("proj-1")
+    manager.broadcast_sandbox_state.assert_awaited_once()
+    assert manager.broadcast_sandbox_state.await_args.kwargs["tenant_id"] == "tenant-project"
 
 
 @pytest.mark.unit
@@ -833,6 +919,55 @@ def test_register_internal_requires_internal_port(sandbox_http_client: TestClien
     )
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "internal_port is required" in response.json()["detail"]
+
+
+@pytest.mark.unit
+def test_register_internal_http_service_uses_project_tenant_from_access_check(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Internal preview registration must resolve sandboxes under the project tenant."""
+
+    async def allow_access(*_args, **_kwargs) -> str:
+        return "tenant-project"
+
+    monkeypatch.setattr(router_mod, "verify_project_access", allow_access)
+
+    lifecycle_service = AsyncMock()
+    lifecycle_service.ensure_sandbox_running = AsyncMock(
+        return_value=SimpleNamespace(sandbox_id="sandbox-1")
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    manager = AsyncMock()
+    manager.broadcast_sandbox_state = AsyncMock()
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
+        lambda: manager,
+    )
+    monkeypatch.setattr(
+        router_mod, "_resolve_sandbox_container_ip", AsyncMock(return_value="10.0.0.2")
+    )
+
+    response = sandbox_http_client.post(
+        "/api/v1/projects/proj-1/sandbox/http-services",
+        json={
+            "service_id": "vite",
+            "name": "Vite",
+            "source_type": "sandbox_internal",
+            "internal_port": 5173,
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    lifecycle_service.ensure_sandbox_running.assert_awaited_once()
+    assert lifecycle_service.ensure_sandbox_running.await_args.kwargs["tenant_id"] == (
+        "tenant-project"
+    )
+    manager.broadcast_sandbox_state.assert_awaited_once()
+    assert manager.broadcast_sandbox_state.await_args.kwargs["tenant_id"] == "tenant-project"
 
 
 @pytest.mark.unit

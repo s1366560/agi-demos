@@ -62,7 +62,7 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
 from src.infrastructure.adapters.primary.web.websocket.auth import select_websocket_auth_subprotocol
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
+from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
 )
@@ -99,19 +99,23 @@ async def verify_project_access(
     user: User,
     db: AsyncSession,
     required_roles: list[str] | None = None,
-) -> None:
-    """Verify user has access to the project. Raises 403 if not."""
-    query = select(UserProject).where(
-        and_(UserProject.user_id == user.id, UserProject.project_id == project_id)
+) -> str:
+    """Verify user has access to the project and return the project's tenant ID."""
+    query = (
+        select(Project.tenant_id)
+        .join(UserProject, UserProject.project_id == Project.id)
+        .where(and_(UserProject.user_id == user.id, Project.id == project_id))
     )
     if required_roles:
         query = query.where(UserProject.role.in_(required_roles))
     result = await db.execute(refresh_select_statement(query))
-    if not result.scalar_one_or_none():
+    project_tenant_id = result.scalar_one_or_none()
+    if project_tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Access denied to project"),
         )
+    return str(project_tenant_id)
 
 
 async def _verify_project_access_or_close(
@@ -1362,7 +1366,6 @@ async def ensure_project_sandbox(
     project_id: str,
     request: EnsureSandboxRequest,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
@@ -1372,7 +1375,9 @@ async def ensure_project_sandbox(
     Creates a new sandbox if one doesn't exist, or returns the existing one.
     Performs health checks and auto-recovery if needed.
     """
-    await verify_project_access(project_id, current_user, db, ["owner", "admin", "member"])
+    project_tenant_id = await verify_project_access(
+        project_id, current_user, db, ["owner", "admin", "member"]
+    )
 
     # Parse profile
     profile = None
@@ -1388,7 +1393,7 @@ async def ensure_project_sandbox(
     try:
         info = await service.get_or_create_sandbox(
             project_id=project_id,
-            tenant_id=tenant_id,
+            tenant_id=project_tenant_id,
             profile=profile,
         )
 
@@ -1413,7 +1418,7 @@ async def ensure_project_sandbox(
 
             manager = get_connection_manager()
             await manager.broadcast_sandbox_state(
-                tenant_id=tenant_id,
+                tenant_id=project_tenant_id,
                 project_id=project_id,
                 state={
                     "event_type": "created",
@@ -1577,7 +1582,9 @@ async def restart_project_sandbox(
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ) -> SandboxActionResponse:
     """Restart the sandbox for a project."""
-    await verify_project_access(project_id, current_user, db, ["owner", "admin"])
+    project_tenant_id = await verify_project_access(
+        project_id, current_user, db, ["owner", "admin"]
+    )
 
     try:
         info = await service.restart_project_sandbox(project_id)
@@ -1600,9 +1607,8 @@ async def restart_project_sandbox(
             )
 
             manager = get_connection_manager()
-            # Get tenant_id from current user context
             await manager.broadcast_sandbox_state(
-                tenant_id=current_user.current_tenant_id or "",  # type: ignore[attr-defined]
+                tenant_id=project_tenant_id,
                 project_id=project_id,
                 state={
                     "event_type": "restarted",
@@ -1638,7 +1644,9 @@ async def terminate_project_sandbox(
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ) -> SandboxActionResponse:
     """Terminate the sandbox for a project."""
-    await verify_project_access(project_id, current_user, db, ["owner", "admin"])
+    project_tenant_id = await verify_project_access(
+        project_id, current_user, db, ["owner", "admin"]
+    )
 
     try:
         success = await service.terminate_project_sandbox(project_id)
@@ -1667,7 +1675,7 @@ async def terminate_project_sandbox(
 
             manager = get_connection_manager()
             await manager.broadcast_sandbox_state(
-                tenant_id=current_user.current_tenant_id or "",  # type: ignore[attr-defined]
+                tenant_id=project_tenant_id,
                 project_id=project_id,
                 state={
                     "event_type": "terminated",
@@ -1791,18 +1799,19 @@ async def start_project_desktop(
     project_id: str,
     resolution: str = Query("1920x1080", description="Screen resolution"),
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
 ) -> dict[str, Any]:
     """Start desktop service (KasmVNC) for the project's sandbox."""
-    await verify_project_access(project_id, current_user, db, _SANDBOX_INTERACTIVE_ACCESS_ROLES)
+    project_tenant_id = await verify_project_access(
+        project_id, current_user, db, _SANDBOX_INTERACTIVE_ACCESS_ROLES
+    )
 
     # Ensure sandbox exists and is running
     info = await service.ensure_sandbox_running(
         project_id=project_id,
-        tenant_id=tenant_id,
+        tenant_id=project_tenant_id,
     )
 
     try:
@@ -1859,17 +1868,18 @@ async def stop_project_desktop(
 async def start_project_terminal(
     project_id: str,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
 ) -> dict[str, Any]:
     """Start terminal service for the project's sandbox."""
-    await verify_project_access(project_id, current_user, db, _SANDBOX_INTERACTIVE_ACCESS_ROLES)
+    project_tenant_id = await verify_project_access(
+        project_id, current_user, db, _SANDBOX_INTERACTIVE_ACCESS_ROLES
+    )
 
     info = await service.ensure_sandbox_running(
         project_id=project_id,
-        tenant_id=tenant_id,
+        tenant_id=project_tenant_id,
     )
 
     try:
@@ -1928,7 +1938,6 @@ async def register_project_http_service(
     project_id: str,
     request: RegisterHttpServiceRequest,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
@@ -1936,7 +1945,9 @@ async def register_project_http_service(
     redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
 ) -> HttpServiceResponse:
     """Register or update an HTTP service preview for a project sandbox."""
-    await verify_project_access(project_id, current_user, db, ["owner", "admin", "member"])
+    project_tenant_id = await verify_project_access(
+        project_id, current_user, db, ["owner", "admin", "member"]
+    )
 
     service_id = _normalize_http_service_id(request.service_id)
     now_iso = datetime.now(UTC).isoformat()
@@ -1955,7 +1966,9 @@ async def register_project_http_service(
                     detail=_("internal_port is required for sandbox_internal services"),
                 )
 
-            info = await service.ensure_sandbox_running(project_id=project_id, tenant_id=tenant_id)
+            info = await service.ensure_sandbox_running(
+                project_id=project_id, tenant_id=project_tenant_id
+            )
             sandbox_id = info.sandbox_id
             sandbox_ip = await _resolve_sandbox_container_ip(adapter, sandbox_id)
             path_prefix = _normalize_path_prefix(request.path_prefix)
@@ -2049,7 +2062,7 @@ async def register_project_http_service(
 
         manager = get_connection_manager()
         await manager.broadcast_sandbox_state(
-            tenant_id=tenant_id,
+            tenant_id=project_tenant_id,
             project_id=project_id,
             state={
                 "event_type": event_type,
@@ -2157,13 +2170,14 @@ async def stop_project_http_service(
     project_id: str,
     service_id: str,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
     redis_client: redis.Redis | None = Depends(get_http_service_redis_client),
 ) -> HttpServiceActionResponse:
     """Stop/unregister an HTTP service preview for a project."""
-    await verify_project_access(project_id, current_user, db, ["owner", "admin", "member"])
+    project_tenant_id = await verify_project_access(
+        project_id, current_user, db, ["owner", "admin", "member"]
+    )
 
     removed = await _pop_http_service(project_id, service_id, redis_client)
     if not removed:
@@ -2191,7 +2205,7 @@ async def stop_project_http_service(
 
         manager = get_connection_manager()
         await manager.broadcast_sandbox_state(
-            tenant_id=tenant_id,
+            tenant_id=project_tenant_id,
             project_id=project_id,
             state={
                 "event_type": "http_service_stopped",
