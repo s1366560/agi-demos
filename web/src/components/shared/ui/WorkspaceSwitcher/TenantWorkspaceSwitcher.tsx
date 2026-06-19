@@ -7,7 +7,7 @@
 import { useEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Brain, ChevronsUpDown } from 'lucide-react';
 
@@ -28,6 +28,7 @@ export const TenantWorkspaceSwitcher: React.FC<TenantWorkspaceSwitcherProps> = (
   menuClassName = '',
 }) => {
   const { t } = useTranslation();
+  const location = useLocation();
   const navigate = useNavigate();
 
   // Store hooks - use selective selectors to prevent unnecessary re-renders
@@ -44,9 +45,14 @@ export const TenantWorkspaceSwitcher: React.FC<TenantWorkspaceSwitcherProps> = (
   }, [tenants.length, listTenants]);
 
   const handleTenantSelect = (tenant: Tenant) => {
-    setCurrentTenant(tenant);
+    if (currentTenant?.id !== tenant.id) {
+      setCurrentTenant(tenant);
+    }
     onTenantSelect?.(tenant);
-    void navigate(`/tenant/${tenant.id}`);
+    const targetPath = `/tenant/${tenant.id}/overview`;
+    if (location.pathname !== targetPath) {
+      void navigate(targetPath);
+    }
   };
 
   const handleCreateTenant = () => {

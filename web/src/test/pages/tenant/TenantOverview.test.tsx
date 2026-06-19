@@ -172,7 +172,7 @@ describe('TenantOverview', () => {
       expect(tenantAPI.getStats).toHaveBeenCalledWith('route-tenant');
     });
     expect(tenantAPI.getStats).not.toHaveBeenCalledWith('old-tenant');
-    expect(setCurrentTenant).toHaveBeenCalledWith({ id: 'route-tenant', name: 'Route Tenant' });
+    expect(setCurrentTenant).not.toHaveBeenCalled();
     expect(screen.getByRole('link', { name: 'View All' })).toHaveAttribute(
       'href',
       '/tenant/route-tenant/projects'

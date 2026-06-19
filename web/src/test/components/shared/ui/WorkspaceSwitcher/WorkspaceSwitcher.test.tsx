@@ -13,7 +13,7 @@
  * 7. Edge cases
  */
 
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 import { screen, fireEvent, waitFor, cleanup, render } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -141,6 +141,7 @@ const setupTenantMock = (tenants: Tenant[] = [], currentTenant: Tenant | null = 
     }
     return state as any;
   });
+  return state;
 };
 
 // Helper to setup project mock
@@ -488,6 +489,35 @@ describe('WorkspaceSwitcher - Compound Component', () => {
       await waitFor(() => {
         expect(screen.getByText('Another Tenant')).toBeInTheDocument();
       });
+    });
+
+    it('should navigate directly to the selected tenant overview', async () => {
+      const tenantState = setupTenantMock([mockTenant, mockTenant2], mockTenant);
+
+      const LocationProbe = () => {
+        const location = useLocation();
+        return <span data-testid="location">{location.pathname}</span>;
+      };
+
+      render(
+        <MemoryRouter initialEntries={['/tenant/tenant-1/overview']}>
+          <TenantWorkspaceSwitcher />
+          <LocationProbe />
+        </MemoryRouter>
+      );
+
+      fireEvent.click(screen.getByText('Test Tenant'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Another Tenant')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole('option', { name: /Another Tenant/ }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('location')).toHaveTextContent('/tenant/tenant-2/overview');
+      });
+      expect(tenantState.setCurrentTenant).toHaveBeenCalledWith(mockTenant2);
     });
 
     it('should show create tenant button', async () => {
