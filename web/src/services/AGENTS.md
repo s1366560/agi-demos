@@ -1,18 +1,18 @@
 # web/src/services/
 
-Frontend service layer. Current top-level service files: 60, plus `client/`, `agent/`, and
+Frontend service layer. Current top-level service files: 59, plus `client/`, `agent/`, and
 `mcp/` subdirectories.
 
 Last checked against code: 2026-05-18.
 
 ## HTTP Client
 
-| File | Purpose |
-|---|---|
-| `client/httpClient.ts` | Axios instance, `baseURL = "/api/v1"`, auth and locale interceptors. |
-| `client/ApiError.ts` | Typed API error parsing. |
-| `client/urlUtils.ts` | HTTP/WS URL helpers. |
-| `client/queryClient.ts` | TanStack Query client setup. |
+| File                                                           | Purpose                                                                   |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `client/httpClient.ts`                                         | Axios instance, `baseURL = "/api/v1"`, auth and locale interceptors.      |
+| `client/ApiError.ts`                                           | Typed API error parsing.                                                  |
+| `client/urlUtils.ts`                                           | HTTP/WS URL helpers.                                                      |
+| `client/queryClient.ts`                                        | TanStack Query client setup.                                              |
 | `client/requestCache.ts`, `requestDeduplicator.ts`, `retry.ts` | Legacy helpers; HTTP-layer dedupe/retry is not active in `httpClient.ts`. |
 
 ## Path Convention
@@ -20,7 +20,7 @@ Last checked against code: 2026-05-18.
 `httpClient` already prefixes `/api/v1`.
 
 ```ts
-httpClient.get('/mcp/apps');        // correct
+httpClient.get('/mcp/apps'); // correct
 httpClient.get('/api/v1/mcp/apps'); // wrong
 ```
 
@@ -28,17 +28,17 @@ Preserve trailing slashes for collection endpoints that FastAPI defines with tra
 
 ## Key Services
 
-| Service | Purpose | Transport |
-|---|---|---|
-| `agentService.ts` | Agent WebSocket connection, conversation metadata, event routing. | WebSocket + REST |
-| `projectService.ts`, `tenantService` equivalents | Project/tenant CRUD and stats. | REST |
-| `memoryService.ts`, `clusterService.ts`, `graphService.ts` | Memory, communities, graph/search APIs. | REST |
-| `sandboxService.ts`, `projectSandboxService.ts`, `sandboxSSEService.ts` | Sandbox lifecycle, project sandbox, service events. | REST + SSE/WS |
-| `mcpService.ts`, `mcpAppService.ts` | MCP servers, tools, apps. | REST |
-| `hitlService.unified.ts` | HITL pending/respond/cancel REST paths. | REST |
-| `artifactService.ts`, `instanceFileService.ts` | Artifacts and files. | REST |
-| `workspaceService.ts`, `workspaceTaskProjection.ts` utilities | Workspace/workspace-task data flows. | REST/events |
-| `eventBusClient.ts`, `unifiedEventService.ts`, `eventQueue.ts` | Project/domain event subscriptions and ordered handling. | WebSocket/REST |
+| Service                                                                 | Purpose                                                           | Transport        |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------- |
+| `agentService.ts`                                                       | Agent WebSocket connection, conversation metadata, event routing. | WebSocket + REST |
+| `projectService.ts`, `tenantService` equivalents                        | Project/tenant CRUD and stats.                                    | REST             |
+| `memoryService.ts`, `clusterService.ts`, `graphService.ts`              | Memory, communities, graph/search APIs.                           | REST             |
+| `sandboxService.ts`, `projectSandboxService.ts`, `sandboxSSEService.ts` | Sandbox lifecycle, project sandbox, service events.               | REST + SSE/WS    |
+| `mcpService.ts`, `mcpAppService.ts`                                     | MCP servers, tools, apps.                                         | REST             |
+| `hitlService.unified.ts`                                                | HITL pending/respond/cancel REST paths.                           | REST             |
+| `artifactService.ts`, `instanceFileService.ts`                          | Artifacts and files.                                              | REST             |
+| `workspaceService.ts`, `workspaceTaskProjection.ts` utilities           | Workspace/workspace-task data flows.                              | REST/events      |
+| `unifiedEventService.ts`, `eventQueue.ts`                               | Project/domain event subscriptions and ordered handling.          | WebSocket/REST   |
 
 ## Agent Event Flow
 

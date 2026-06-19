@@ -72,9 +72,9 @@ grandfathered via `scripts/check-route-naming.mjs`'s allowlist.
 
 ## WebSocket Resilience
 
-All WS clients (`services/agent/wsConnection.ts`,
-`services/unifiedEventService.ts`, `services/eventBusClient.ts`) attach
-a **half-open watchdog** via `services/client/wsWatchdog.ts`. If the
+All app-owned WS clients (`services/agent/wsConnection.ts`,
+`services/unifiedEventService.ts`) attach a **half-open watchdog** via
+`services/client/wsWatchdog.ts`. If the
 socket receives no inbound frames for `staleAfterMs`, it force-closes
 with code `4000` so the reconnect logic runs. Browsers do not surface
 TCP-level pong, so this inbound-staleness check is the only reliable
