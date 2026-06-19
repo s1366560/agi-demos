@@ -290,6 +290,88 @@ async def test_list_conversations_expands_workspace_group_and_names(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_list_conversations_caps_workspace_group_expansion(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = WorkspaceModel(
+        id="ws-large-group",
+        tenant_id="tenant-1",
+        project_id="project-1",
+        name="Large Workspace",
+        created_by="user-1",
+    )
+    db_session.add(workspace)
+    db_session.add(
+        WorkspaceMemberModel(
+            id="wm-ws-large-group-user-1",
+            workspace_id="ws-large-group",
+            user_id="user-1",
+            role="viewer",
+            invited_by="user-1",
+        )
+    )
+    db_session.add_all(
+        [
+            DBConversation(
+                id=f"workspace-worker:ws-large-group:task-{index}:agent-1:attempt-1",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                title=f"Workspace Worker - task-{index}",
+                status=ConversationStatus.ACTIVE.value,
+                agent_config={},
+                meta={},
+                message_count=0,
+                created_at=datetime.now(UTC) - timedelta(minutes=index),
+                current_mode="build",
+                participant_agents=[],
+            )
+            for index in range(80)
+        ]
+    )
+    await db_session.flush()
+
+    base_conversation = Conversation(
+        id="workspace-verifier:ws-large-group:task-base:agent-1:attempt-1",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        user_id="user-1",
+        title="Workspace Verification Gate - task-base",
+        status=ConversationStatus.ACTIVE,
+        created_at=datetime.now(UTC),
+    )
+    use_case = ListUseCase([base_conversation], total=81)
+    container = SimpleNamespace(list_conversations_use_case=lambda _llm: use_case)
+    monkeypatch.setattr(
+        conversations_router, "get_container_with_db", lambda _request, _db: container
+    )
+    monkeypatch.setattr(
+        conversations_router, "_ensure_project_access", AsyncMock(return_value="tenant-1")
+    )
+
+    response = await conversations_router.list_conversations(
+        request=_request_with_container(container),
+        project_id="project-1",
+        status="active",
+        limit=5,
+        offset=0,
+        workspace_id=None,
+        group_by_workspace=True,
+        current_user=SimpleNamespace(id="user-1"),
+        tenant_id="tenant-1",
+        db=db_session,
+    )
+
+    assert len(response.items) == 1 + conversations_router._workspace_group_expansion_limit(5)
+    assert len(response.items) < 81
+    assert response.items[0].id == "workspace-verifier:ws-large-group:task-base:agent-1:attempt-1"
+    assert {item.workspace_id for item in response.items} == {"ws-large-group"}
+    assert response.has_more is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_grouped_workspace_conversations_use_stable_activity_order(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,

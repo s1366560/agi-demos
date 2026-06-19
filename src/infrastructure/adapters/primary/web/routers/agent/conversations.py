@@ -58,6 +58,11 @@ if TYPE_CHECKING:
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+WORKSPACE_GROUP_EXPANSION_HARD_LIMIT = 50
+
+
+def _workspace_group_expansion_limit(page_limit: int) -> int:
+    return min(max(page_limit * 2, page_limit + 10), WORKSPACE_GROUP_EXPANSION_HARD_LIMIT)
 
 
 def _workspace_id_from_conversation_id(conversation_id: str) -> str | None:
@@ -615,6 +620,7 @@ async def list_conversations(
                     tenant_id=tenant_id,
                     workspace_ids=workspace_ids,
                     status=conv_status,
+                    limit=_workspace_group_expansion_limit(limit),
                 )
                 conversations = _merge_workspace_groups(conversations, workspace_conversations)
 
