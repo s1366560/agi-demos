@@ -49,6 +49,7 @@ export interface MessageLoadActionDeps {
     activeConversationId: string | null;
     conversations: AgentV3State['conversations'];
     conversationStates: Map<string, ConversationState>;
+    conversationScopeGeneration: number;
     getConversationState: (conversationId: string) => ConversationState;
     updateConversationState: (conversationId: string, updates: Partial<ConversationState>) => void;
     setLlmModelOverride: (conversationId: string, modelName: string | null) => void;
@@ -81,7 +82,14 @@ export function createMessageLoadActions(deps: MessageLoadActionDeps) {
     conversationId: string,
     projectId: string
   ): Promise<boolean> => {
-    const isStillActive = () => get().activeConversationId === conversationId;
+    const scopeGeneration = get().conversationScopeGeneration;
+    const isStillActive = () => {
+      const state = get();
+      return (
+        state.activeConversationId === conversationId &&
+        state.conversationScopeGeneration === scopeGeneration
+      );
+    };
     // Get last known time from localStorage for recovery
     const lastKnownTimeUs = parseInt(
       localStorage.getItem(`agent_time_us_${conversationId}`) || '0',

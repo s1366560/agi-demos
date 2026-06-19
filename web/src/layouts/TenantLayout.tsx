@@ -71,14 +71,15 @@ function isBareTenantEntryPath(pathname: string): boolean {
 }
 
 function resetTenantScopedRuntimeState(): void {
-  useAgentV3Store.setState({
+  useAgentV3Store.setState((state) => ({
     conversations: [],
     activeConversationId: null,
     isCreatingConversation: false,
     hasMoreConversations: false,
     conversationsTotal: 0,
     conversationStates: new Map(),
-  });
+    conversationScopeGeneration: state.conversationScopeGeneration + 1,
+  }));
   useConversationsStore.getState().reset();
   useTimelineStore.getState().reset();
   useStreamingStore.getState().reset();

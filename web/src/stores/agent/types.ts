@@ -45,6 +45,7 @@ export interface AgentV3State {
 
   // Per-conversation state (isolated for multi-conversation support)
   conversationStates: Map<string, ConversationState>;
+  conversationScopeGeneration: number;
 
   // Multi-conversation state helpers
   getConversationState: (conversationId: string) => ConversationState;

@@ -51,6 +51,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
     // Per-conversation state map
     conversationStates: new Map<string, ConversationState>(),
+    conversationScopeGeneration: 0,
 
     // ===== Multi-conversation state helpers =====
 

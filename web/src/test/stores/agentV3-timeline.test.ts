@@ -89,6 +89,7 @@ describe('agentV3 Store - Timeline Field', () => {
       conversations: [],
       activeConversationId: null,
       conversationStates: new Map(),
+      conversationScopeGeneration: 0,
     });
 
     useTimelineStore.getState().resetAgentTimeline();
@@ -272,6 +273,85 @@ describe('agentV3 Store - Timeline Field', () => {
 
       expect(getTimeline()).toEqual(currentTimeline);
       expect(agentServiceMock.getConversationMessages).not.toHaveBeenCalled();
+    });
+
+    it('ignores server history when the tenant conversation scope resets during load', async () => {
+      const { result } = renderHook(() => useAgentV3Store());
+      const staleTimeline: TimelineEvent[] = [
+        {
+          id: 'stale-server-1',
+          type: 'user_message',
+          eventTimeUs: Date.now() * 1000,
+          eventCounter: 1,
+          timestamp: Date.now(),
+          content: 'Stale server message',
+          role: 'user',
+        } as TimelineEvent,
+      ];
+      const currentTimeline: TimelineEvent[] = [
+        {
+          id: 'current-server-1',
+          type: 'user_message',
+          eventTimeUs: Date.now() * 1000 + 1,
+          eventCounter: 1,
+          timestamp: Date.now(),
+          content: 'Current scoped message',
+          role: 'user',
+        } as TimelineEvent,
+      ];
+      const responseRequest = deferred<{
+        conversationId: string;
+        timeline: TimelineEvent[];
+        total: number;
+        has_more: boolean;
+        first_time_us: number | null;
+        first_counter: number | null;
+        last_time_us: number | null;
+        last_counter: number | null;
+      }>();
+      const agentServiceMock = vi.mocked(
+        (await import('../../services/agentService')).agentService
+      );
+      agentServiceMock.getConversationMessages.mockReturnValueOnce(responseRequest.promise as any);
+
+      act(() => {
+        useAgentV3Store.setState({
+          activeConversationId: 'conv-scoped',
+          conversationScopeGeneration: 0,
+        });
+      });
+
+      const loadPromise = result.current.loadMessages('conv-scoped', 'proj-123');
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      act(() => {
+        useAgentV3Store.setState({
+          activeConversationId: 'conv-scoped',
+          conversationScopeGeneration: 1,
+        });
+        useTimelineStore.getState().setAgentTimeline(currentTimeline);
+      });
+
+      responseRequest.resolve({
+        conversationId: 'conv-scoped',
+        timeline: staleTimeline,
+        total: 1,
+        has_more: false,
+        first_time_us: staleTimeline[0].eventTimeUs,
+        first_counter: 1,
+        last_time_us: staleTimeline[0].eventTimeUs,
+        last_counter: 1,
+      });
+
+      await act(async () => {
+        await loadPromise;
+      });
+
+      expect(getTimeline()).toEqual(currentTimeline);
+      expect(agentServiceMock.subscribe).not.toHaveBeenCalled();
     });
 
     it('keeps a fresh blank conversation interactive while history hydrates', async () => {
