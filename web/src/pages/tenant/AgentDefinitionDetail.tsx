@@ -191,12 +191,14 @@ export const AgentDefinitionDetail: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const params = useParams<{ definitionId: string }>();
+  const params = useParams<{ tenantId?: string | undefined; definitionId: string }>();
   const definitionId = params.definitionId;
+  const routeTenantId = params.tenantId;
 
   const user = useUser();
   const currentTenant = useCurrentTenant();
-  const tenantId = currentTenant?.id ?? null;
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
+  const tenantForPermissions = currentTenant?.id === tenantId ? currentTenant : null;
   const [definition, setDefinition] = useState<AgentDefinition | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -205,7 +207,7 @@ export const AgentDefinitionDetail: React.FC = () => {
 
   const listPath = useMemo(() => getDefinitionListPath(location.pathname), [location.pathname]);
   const rawDefinition = useMemo(() => jsonBlock(definition), [definition]);
-  const canManageAgents = canManageTenantAgents(user, currentTenant);
+  const canManageAgents = canManageTenantAgents(user, tenantForPermissions);
 
   const loadDefinition = useCallback(async () => {
     if (!definitionId) {

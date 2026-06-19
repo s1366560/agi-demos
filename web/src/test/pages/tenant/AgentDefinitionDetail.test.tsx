@@ -211,6 +211,50 @@ describe('AgentDefinitionDetail', () => {
     expect(screen.getByText(/"fallback_models"/)).toBeInTheDocument();
   });
 
+  it('uses the route tenant id for detail actions when the tenant store is stale', async () => {
+    useAuthStore.setState({
+      user: {
+        id: 'admin-1',
+        email: 'admin@example.com',
+        name: 'Admin',
+        roles: ['admin'],
+        is_active: true,
+        created_at: '2026-06-03T05:00:00Z',
+      },
+      isAuthenticated: true,
+    });
+    useTenantStore.setState({
+      currentTenant: { ...makeTenant(), id: 'tenant-store-old' },
+    });
+    vi.mocked(definitionsService.getById).mockResolvedValue(
+      makeDefinition({ tenant_id: 'tenant-route-new' })
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/tenant/tenant-route-new/agent-definitions/agent-1']}>
+        <Routes>
+          <Route
+            path="/tenant/:tenantId/agent-definitions/:definitionId"
+            element={<AgentDefinitionDetail />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(definitionsService.getById).toHaveBeenCalledWith('agent-1', {
+        tenant_id: 'tenant-route-new',
+      });
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByTestId('agent-definition-modal')).toHaveAttribute(
+      'data-tenant-id',
+      'tenant-route-new'
+    );
+  });
+
   it('links definition cards to the detail route', async () => {
     vi.mocked(definitionsService.listPage).mockResolvedValue(
       makeDefinitionPage([makeDefinition()])
