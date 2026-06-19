@@ -419,7 +419,10 @@ describe('PluginHub', () => {
     render(<PluginHub />, { route: '/tenant/tenant-1/plugins?projectId=stale-project' });
 
     await waitFor(() => {
-      expect(listProjectsMock).toHaveBeenCalledWith('tenant-1');
+      expect(listProjectsMock).toHaveBeenCalledWith('tenant-1', {
+        page: 1,
+        page_size: 100,
+      });
       expect(channelService.listTenantPlugins).toHaveBeenCalledWith('tenant-1');
     });
 

@@ -65,7 +65,10 @@ describe('WorkspaceCreate', () => {
 
     expect(await screen.findByText('Pick a tenant and project')).toBeInTheDocument();
     await waitFor(() => {
-      expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1');
+      expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1', {
+        page: 1,
+        page_size: 25,
+      });
     });
     expect(screen.queryByRole('button', { name: /Create Workspace/i })).not.toBeInTheDocument();
     expect(workspaceState.actions.createWorkspace).not.toHaveBeenCalled();

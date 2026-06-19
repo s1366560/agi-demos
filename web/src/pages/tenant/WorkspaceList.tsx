@@ -56,6 +56,7 @@ const EMPTY_SUMMARY: ObjectiveSummary = {
   completed: 0,
   loading: true,
 };
+const PROJECT_CONTEXT_PAGE_SIZE = 25;
 const WORKSPACE_SUMMARY_BATCH_SIZE = 6;
 
 // Domain validates CyberObjective.progress in [0.0, 1.0], but some
@@ -208,7 +209,7 @@ export function WorkspaceList() {
   );
   useEffect(() => {
     if (!tenantId || params.projectId || tenantCurrentProject || tenantProjects.length > 0) return;
-    void listProjects(tenantId).catch(() => {
+    void listProjects(tenantId, { page: 1, page_size: PROJECT_CONTEXT_PAGE_SIZE }).catch(() => {
       // ignore and keep empty-state guidance visible
     });
   }, [tenantId, params.projectId, tenantCurrentProject, tenantProjects.length, listProjects]);

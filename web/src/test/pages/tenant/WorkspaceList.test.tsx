@@ -82,7 +82,10 @@ describe('WorkspaceList', () => {
 
     expect(await screen.findByText('Pick a tenant and project')).toBeInTheDocument();
     await waitFor(() => {
-      expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1');
+      expect(projectState.listProjects).toHaveBeenCalledWith('tenant-1', {
+        page: 1,
+        page_size: 25,
+      });
     });
     expect(workspaceState.actions.loadWorkspaces).not.toHaveBeenCalled();
   });

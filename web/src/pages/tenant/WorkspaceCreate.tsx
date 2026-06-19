@@ -41,6 +41,8 @@ interface CreationOption<T extends string> {
   icon: ReactNode;
 }
 
+const PROJECT_CONTEXT_PAGE_SIZE = 25;
+
 export function WorkspaceCreate() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -163,7 +165,7 @@ export function WorkspaceCreate() {
 
   useEffect(() => {
     if (!tenantId || params.projectId || tenantCurrentProject || tenantProjects.length > 0) return;
-    void listProjects(tenantId).catch(() => {
+    void listProjects(tenantId, { page: 1, page_size: PROJECT_CONTEXT_PAGE_SIZE }).catch(() => {
       // Keep the empty-state guidance visible when project loading fails.
     });
   }, [tenantId, params.projectId, tenantCurrentProject, tenantProjects.length, listProjects]);

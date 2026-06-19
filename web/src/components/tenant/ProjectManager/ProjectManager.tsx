@@ -26,6 +26,8 @@ import type { Project } from '@/types/memory';
 
 import type { ProjectManagerProps } from './types';
 
+const PROJECT_MANAGER_PAGE_SIZE = 100;
+
 export const Root: React.FC<ProjectManagerProps> = ({
   children,
   variant = 'controlled',
@@ -59,7 +61,7 @@ export const Root: React.FC<ProjectManagerProps> = ({
   // Load projects when tenant changes
   useEffect(() => {
     if (currentTenant) {
-      void listProjects(currentTenant.id);
+      void listProjects(currentTenant.id, { page: 1, page_size: PROJECT_MANAGER_PAGE_SIZE });
     }
   }, [currentTenant, listProjects]);
 
@@ -106,7 +108,10 @@ export const Root: React.FC<ProjectManagerProps> = ({
         });
         // Refresh project list
         if (currentTenant) {
-          await listProjects(currentTenant.id);
+          await listProjects(currentTenant.id, {
+            page: 1,
+            page_size: PROJECT_MANAGER_PAGE_SIZE,
+          });
         }
         setIsSettingsModalOpen(false);
       } catch (err) {

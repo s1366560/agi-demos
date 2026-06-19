@@ -99,6 +99,8 @@ interface PluginActionTimelineEntry {
   details: PluginActionDetails | null;
 }
 
+const PROJECT_PICKER_PAGE_SIZE = 100;
+
 export const PluginHub: React.FC = () => {
   const { tenantId: urlTenantId } = useParams<{ tenantId?: string | undefined }>();
   const { t } = useTranslation();
@@ -218,7 +220,7 @@ export const PluginHub: React.FC = () => {
 
   useEffect(() => {
     if (!tenantId) return;
-    listProjects(tenantId).catch(() => {
+    listProjects(tenantId, { page: 1, page_size: PROJECT_PICKER_PAGE_SIZE }).catch(() => {
       message.error(t('tenant.pluginHub.messages.loadProjectsFailed'));
     });
   }, [listProjects, tenantId, t]);
