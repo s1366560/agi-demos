@@ -42,7 +42,12 @@ import { projectAPI } from '@/services/api';
 
 import { buildAgentWorkspacePath } from '@/utils/agentWorkspacePath';
 import { formatDistanceToNow } from '@/utils/date';
-import { persistLastProjectId } from '@/utils/projectSelectionPersistence';
+import {
+  lastProjectIdStorageKey,
+  lastProjectSelectionSourceStorageKey,
+  MANUAL_PROJECT_SELECTION_SOURCE,
+  persistLastProjectId,
+} from '@/utils/projectSelectionPersistence';
 
 import {
   getContextualTopNavItems,
@@ -98,6 +103,37 @@ function projectBelongsToTenant(
   tenantId: string | undefined
 ): project is Project {
   return !!project && (!tenantId || project.tenant_id === tenantId);
+}
+
+function readStoredProjectSelectionValue(key: string | null): string | null {
+  if (!key || typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(key);
+    if (!rawValue) {
+      return null;
+    }
+    try {
+      const parsedValue: unknown = JSON.parse(rawValue);
+      return typeof parsedValue === 'string' ? parsedValue : null;
+    } catch {
+      return rawValue;
+    }
+  } catch {
+    return null;
+  }
+}
+
+function readManualStoredProjectId(tenantId: string | undefined): string | null {
+  const selectionSource = readStoredProjectSelectionValue(
+    lastProjectSelectionSourceStorageKey(tenantId)
+  );
+  if (selectionSource !== MANUAL_PROJECT_SELECTION_SOURCE) {
+    return null;
+  }
+  return readStoredProjectSelectionValue(lastProjectIdStorageKey(tenantId));
 }
 
 function conversationBelongsToProject(
@@ -525,6 +561,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   const [isProjectSearchLoadingMore, setIsProjectSearchLoadingMore] = useState(false);
   const loadedProjectIdRef = useRef<string | null>(null);
   const loadedSidebarWorkspaceSurfaceRef = useRef<string | null>(null);
+  const autoSelectedProjectIdRef = useRef<string | null>(null);
   const projectSearchRequestRef = useRef(0);
   const projectSearchDebounceRef = useRef<number | null>(null);
   const clearProjectSearchState = useCallback(() => {
@@ -755,12 +792,17 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     ]
   );
   const previousTenantIdRef = useRef<string | undefined>(resolvedTenantId);
+  const storedManualProjectId = useMemo(
+    () => readManualStoredProjectId(resolvedTenantId),
+    [resolvedTenantId]
+  );
 
   useEffect(() => {
     const tenantChanged = previousTenantIdRef.current !== resolvedTenantId;
     previousTenantIdRef.current = resolvedTenantId;
     setSelectedProjectId(null);
     setSelectedProject(null);
+    autoSelectedProjectIdRef.current = null;
     clearProjectSearchState();
     loadedProjectIdRef.current = null;
     loadedSidebarWorkspaceSurfaceRef.current = null;
@@ -777,6 +819,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
     loadedProjectIdRef.current = null;
     loadedSidebarWorkspaceSurfaceRef.current = null;
+    autoSelectedProjectIdRef.current = null;
     clearProjectSearchState();
     if (selectedProjectId) {
       setSelectedProjectId(null);
@@ -838,14 +881,24 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       if (selectedProjectId === queryProjectId) {
         return;
       }
+      autoSelectedProjectIdRef.current = null;
       setSelectedProjectId(queryProjectId);
       persistLastProjectId(resolvedTenantId, queryProjectId);
       setSelectedProject(project);
       setCurrentProject(project);
-    } else if (!selectedProjectId && uniqueProjects.length > 0) {
+    } else if (
+      uniqueProjects.length > 0 &&
+      (!selectedProjectId || selectedProjectId === autoSelectedProjectIdRef.current)
+    ) {
       const project =
-        (currentProject ? projectById.get(currentProject.id) : undefined) ?? uniqueProjects[0];
+        (storedManualProjectId ? projectById.get(storedManualProjectId) : undefined) ??
+        (currentProject ? projectById.get(currentProject.id) : undefined) ??
+        uniqueProjects[0];
       if (!project) return;
+      if (selectedProjectId === project.id) {
+        return;
+      }
+      autoSelectedProjectIdRef.current = project.id;
       setSelectedProjectId(project.id);
       setSelectedProject(project);
       setCurrentProject(project);
@@ -858,6 +911,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     resolvedTenantId,
     selectedProjectId,
     setCurrentProject,
+    storedManualProjectId,
     uniqueProjects,
   ]);
 
@@ -1227,6 +1281,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   const handleProjectChange = useCallback(
     (projectId: string) => {
+      autoSelectedProjectIdRef.current = null;
       setSelectedProjectId(projectId);
       setProjectSearchQuery('');
       setProjectSearchResults([]);

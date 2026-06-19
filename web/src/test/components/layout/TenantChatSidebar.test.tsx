@@ -857,6 +857,67 @@ describe('TenantChatSidebar', () => {
     expect(localStorage.getItem('agent:lastProjectId')).toBeNull();
   });
 
+  it('restores the manual tenant project selection before defaulting to the first project', async () => {
+    localStorage.setItem('agent:tenant-1:lastProjectId', JSON.stringify('project-2'));
+    localStorage.setItem(
+      'agent:tenant-1:lastProjectSelectionSource',
+      JSON.stringify('manual')
+    );
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    const projectSwitcher = await screen.findByRole('combobox', { name: 'Project switcher' });
+    await waitFor(() => {
+      expect(projectSwitcher).toHaveValue('project-2');
+      expect(agentState.loadConversations).toHaveBeenCalledWith(
+        'project-2',
+        expect.any(AbortSignal)
+      );
+    });
+    expect(projectState.setCurrentProject).toHaveBeenLastCalledWith({
+      id: 'project-2',
+      name: 'Project Two',
+      tenant_id: 'tenant-1',
+    });
+  });
+
+  it('does not overwrite a sidebar project choice when current project changes later', async () => {
+    const { rerender } = rtlRender(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/agent-workspace']}>
+        <TenantChatSidebarRouteHarness
+          tenantId="tenant-1"
+          route="/tenant/tenant-1/agent-workspace"
+        />
+      </MemoryRouter>
+    );
+
+    const projectSwitcher = await screen.findByRole('combobox', { name: 'Project switcher' });
+    await waitFor(() => {
+      expect(projectSwitcher).toHaveValue('project-1');
+    });
+
+    fireEvent.change(projectSwitcher, { target: { value: 'project-2' } });
+    await waitFor(() => {
+      expect(projectSwitcher).toHaveValue('project-2');
+    });
+    projectState.currentProject = { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' };
+
+    rerender(
+      <MemoryRouter initialEntries={['/tenant/tenant-1/agent-workspace']}>
+        <TenantChatSidebarRouteHarness
+          tenantId="tenant-1"
+          route="/tenant/tenant-1/agent-workspace"
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(projectSwitcher).toHaveValue('project-2');
+    });
+  });
+
   it('resets selected project when the tenant scope changes', async () => {
     projectState.projects = [
       { id: 'project-1', name: 'Project One', tenant_id: 'tenant-1' },
