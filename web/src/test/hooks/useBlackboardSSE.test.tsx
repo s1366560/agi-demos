@@ -15,6 +15,14 @@ const handlers = {
 };
 
 const subscribeWorkspace = vi.fn();
+const authState = vi.hoisted(() => ({
+  token: 'token-1' as string | null,
+}));
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: (selector: (state: { token: string | null }) => unknown) =>
+    selector({ token: authState.token }),
+}));
 
 vi.mock('@/stores/workspace', () => ({
   useWorkspaceStore: {
@@ -39,6 +47,7 @@ function HookHarness({ workspaceId }: { workspaceId: string | null }) {
 describe('useBlackboardSSE', () => {
   afterEach(() => {
     vi.clearAllMocks();
+    authState.token = 'token-1';
   });
 
   it('classifies workspace event channels explicitly', () => {
@@ -99,5 +108,13 @@ describe('useBlackboardSSE', () => {
 
     unmount();
     expect(unsubscribe).toHaveBeenCalled();
+  });
+
+  it('does not subscribe before an auth token is available', () => {
+    authState.token = null;
+
+    render(<HookHarness workspaceId="ws-1" />);
+
+    expect(subscribeWorkspace).not.toHaveBeenCalled();
   });
 });

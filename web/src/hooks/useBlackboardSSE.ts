@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 
+import { useAuthStore } from '@/stores/auth';
 import { useWorkspaceStore } from '@/stores/workspace';
 
 import { unifiedEventService } from '@/services/unifiedEventService';
@@ -11,8 +12,10 @@ import { classifyWorkspaceEventType } from '@/components/blackboard/blackboardSu
  * to the appropriate workspace store handlers.
  */
 export function useBlackboardSSE(workspaceId: string | null): void {
+  const token = useAuthStore((state) => state.token);
+
   useEffect(() => {
-    if (!workspaceId) {
+    if (!workspaceId || !token) {
       return;
     }
 
@@ -61,5 +64,5 @@ export function useBlackboardSSE(workspaceId: string | null): void {
     return () => {
       unsubscribe();
     };
-  }, [workspaceId]);
+  }, [workspaceId, token]);
 }
