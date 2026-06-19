@@ -290,7 +290,11 @@ describe('ProjectStore', () => {
     const projectRequest = new Promise((resolve) => {
       resolveGet = resolve;
     });
-    const fetchedProject = { id: 'project-1', name: 'Fetched Project' } as any;
+    const fetchedProject = {
+      id: 'project-1',
+      tenant_id: 'tenant-1',
+      name: 'Fetched Project',
+    } as any;
     (projectAPI.get as any).mockReturnValue(projectRequest);
 
     const firstRequest = useProjectStore.getState().getProject('tenant-1', 'project-1');
@@ -307,7 +311,11 @@ describe('ProjectStore', () => {
   });
 
   it('getProject should reuse a recent fetched detail without a second fetch', async () => {
-    const fetchedProject = { id: 'project-1', name: 'Fetched Project' } as any;
+    const fetchedProject = {
+      id: 'project-1',
+      tenant_id: 'tenant-1',
+      name: 'Fetched Project',
+    } as any;
     (projectAPI.get as any).mockResolvedValue(fetchedProject);
 
     await expect(useProjectStore.getState().getProject('tenant-1', 'project-1')).resolves.toBe(
@@ -319,6 +327,23 @@ describe('ProjectStore', () => {
       fetchedProject
     );
     expect(projectAPI.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('getProject should reject and ignore a project response from another tenant', async () => {
+    const mismatchedProject = {
+      id: 'project-1',
+      tenant_id: 'tenant-2',
+      name: 'Wrong Tenant Project',
+    } as any;
+    (projectAPI.get as any).mockResolvedValue(mismatchedProject);
+
+    await expect(useProjectStore.getState().getProject('tenant-1', 'project-1')).rejects.toThrow(
+      'does not belong to tenant tenant-1'
+    );
+
+    expect(useProjectStore.getState().projects).toEqual([]);
+    expect(useProjectStore.getState().currentProject).toBeNull();
+    expect(useProjectStore.getState().isLoading).toBe(false);
   });
 
   it('setCurrentProject should update state', () => {

@@ -25,6 +25,12 @@ const pendingGetProjectRequests = new Map<string, Promise<Project>>();
 const recentGetProjectResponses = new Map<string, { project: Project; fetchedAt: number }>();
 const PROJECT_DETAIL_CACHE_TTL_MS = 10_000;
 
+function assertProjectTenant(project: Project, tenantId: string): void {
+  if (project.tenant_id !== tenantId) {
+    throw new Error(`Project ${project.id} does not belong to tenant ${tenantId}`);
+  }
+}
+
 function isSameCurrentProject(left: Project | null, right: Project | null): boolean {
   if (left === right) {
     return true;
@@ -393,6 +399,8 @@ export const useProjectStore = create<ProjectState>()(
         const request = projectAPI
           .get(tenantId, projectId)
           .then((response: Project) => {
+            assertProjectTenant(response, tenantId);
+
             if (requestGeneration === projectStateGeneration) {
               cacheProjectResponse(requestKey, response);
               const { currentProject: latestCurrentProject, projects: latestProjects } = get();

@@ -417,6 +417,7 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
     project_id: str,
+    tenant_id: str | None = Query(None, description="Expected tenant scope"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectResponse:
@@ -444,6 +445,11 @@ async def get_project(
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_("Project not found"))
+    if tenant_id and project.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_("Project not found in requested tenant"),
+        )
 
     return ProjectResponse.model_validate(project)
 

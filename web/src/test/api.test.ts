@@ -259,7 +259,9 @@ describe('API Services', () => {
       const mockData = { id: '1' };
       mockApiInstance.get.mockResolvedValue({ data: mockData });
       const result = await projectAPI.get('t1', 'p1');
-      expect(mockApiInstance.get).toHaveBeenCalledWith('/projects/p1', undefined);
+      expect(mockApiInstance.get).toHaveBeenCalledWith('/projects/p1', {
+        params: { tenant_id: 't1' },
+      });
       expect(result).toEqual(mockData);
     });
   });

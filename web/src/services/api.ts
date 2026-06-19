@@ -268,8 +268,8 @@ export const projectAPI = {
   delete: async (_tenantId: string, projectId: string): Promise<void> => {
     await api.delete(`/projects/${projectId}`);
   },
-  get: async (_tenantId: string, projectId: string): Promise<Project> => {
-    return await api.get(`/projects/${projectId}`);
+  get: async (tenantId: string, projectId: string): Promise<Project> => {
+    return await api.get(`/projects/${projectId}`, { params: { tenant_id: tenantId } });
   },
   getStats: async (projectId: string): Promise<unknown> => {
     return await api.get(`/projects/${projectId}/stats`);
