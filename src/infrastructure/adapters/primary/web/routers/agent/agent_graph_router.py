@@ -160,30 +160,34 @@ async def _ensure_project_graph_access(
     db: AsyncSession,
     *,
     current_user: User,
-    tenant_id: str,
+    tenant_id: str | None = None,
     project_id: str,
     required_roles: tuple[str, ...] | None = None,
-) -> None:
+) -> str:
+    conditions = [
+        UserProject.user_id == current_user.id,
+        UserProject.project_id == project_id,
+    ]
+    if tenant_id is not None:
+        conditions.append(Project.tenant_id == tenant_id)
+
     query = (
-        select(UserProject.id)
+        select(Project.tenant_id)
+        .select_from(UserProject)
         .join(Project, UserProject.project_id == Project.id)
-        .where(
-            and_(
-                UserProject.user_id == current_user.id,
-                UserProject.project_id == project_id,
-                Project.tenant_id == tenant_id,
-            )
-        )
+        .where(and_(*conditions))
     )
     if required_roles is not None:
         query = query.where(UserProject.role.in_(required_roles))
 
     result = await db.execute(refresh_select_statement(query))
-    if result.scalar_one_or_none() is None:
+    project_tenant_id = result.scalar_one_or_none()
+    if project_tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_("Access denied to project"),
         )
+    return str(project_tenant_id)
 
 
 def _graph_to_response(graph: AgentGraph) -> GraphResponse:
@@ -264,44 +268,46 @@ def _run_to_response(run: GraphRun, *, include_executions: bool = False) -> Grap
 async def _get_accessible_graph(
     repo: _GraphRepository,
     graph_id: str,
-    user_tenant_id: str,
     *,
     db: AsyncSession,
     current_user: User,
     require_write: bool = False,
 ) -> AgentGraph:
     graph = await repo.find_by_id(graph_id)
-    if graph is None or graph.tenant_id != user_tenant_id:
+    if graph is None:
         raise HTTPException(status_code=404, detail=_("Graph not found"))
-    await _ensure_project_graph_access(
+    validated_tenant_id = await _ensure_project_graph_access(
         db,
         current_user=current_user,
-        tenant_id=user_tenant_id,
+        tenant_id=graph.tenant_id,
         project_id=graph.project_id,
         required_roles=_PROJECT_GRAPH_WRITE_ROLES if require_write else None,
     )
+    if validated_tenant_id and validated_tenant_id != graph.tenant_id:
+        raise HTTPException(status_code=404, detail=_("Graph not found"))
     return graph
 
 
 async def _get_accessible_graph_run(
     orchestrator: _GraphOrchestrator,
     run_id: str,
-    user_tenant_id: str,
     *,
     db: AsyncSession,
     current_user: User,
     require_write: bool = False,
 ) -> GraphRun:
     run = await orchestrator.get_run_status(run_id)
-    if run is None or run.tenant_id != user_tenant_id:
+    if run is None:
         raise HTTPException(status_code=404, detail=_("Graph run not found"))
-    await _ensure_project_graph_access(
+    validated_tenant_id = await _ensure_project_graph_access(
         db,
         current_user=current_user,
-        tenant_id=user_tenant_id,
+        tenant_id=run.tenant_id,
         project_id=run.project_id,
         required_roles=_PROJECT_GRAPH_WRITE_ROLES if require_write else None,
     )
+    if validated_tenant_id and validated_tenant_id != run.tenant_id:
+        raise HTTPException(status_code=404, detail=_("Graph run not found"))
     return run
 
 
@@ -362,13 +368,12 @@ async def list_graphs(
     container = get_container_with_db(request, db)
     repo = container.graph_repository()
     try:
-        await _ensure_project_graph_access(
+        project_tenant_id = await _ensure_project_graph_access(
             db,
             current_user=current_user,
-            tenant_id=user_tenant_id,
             project_id=project_id,
         )
-        graphs = await repo.list_by_project(tenant_id=user_tenant_id, project_id=project_id)
+        graphs = await repo.list_by_project(tenant_id=project_tenant_id, project_id=project_id)
         return GraphListResponse(
             graphs=[_graph_to_response(g) for g in graphs],
             total=len(graphs),
@@ -392,10 +397,9 @@ async def create_graph(
     from src.domain.model.agent.graph.agent_edge import AgentEdge
     from src.domain.model.agent.graph.agent_node import AgentNode
 
-    await _ensure_project_graph_access(
+    project_tenant_id = await _ensure_project_graph_access(
         db,
         current_user=current_user,
-        tenant_id=user_tenant_id,
         project_id=project_id,
         required_roles=_PROJECT_GRAPH_WRITE_ROLES,
     )
@@ -430,7 +434,7 @@ async def create_graph(
     ]
 
     graph = AgentGraph(
-        tenant_id=user_tenant_id,
+        tenant_id=project_tenant_id,
         project_id=project_id,
         name=body.name,
         description=body.description,
@@ -473,7 +477,6 @@ async def get_graph(
         graph = await _get_accessible_graph(
             repo,
             graph_id,
-            user_tenant_id,
             db=db,
             current_user=current_user,
         )
@@ -500,7 +503,6 @@ async def update_graph(
         graph = await _get_accessible_graph(
             repo,
             graph_id,
-            user_tenant_id,
             db=db,
             current_user=current_user,
             require_write=True,
@@ -542,7 +544,6 @@ async def delete_graph(
         graph = await _get_accessible_graph(
             repo,
             graph_id,
-            user_tenant_id,
             db=db,
             current_user=current_user,
             require_write=True,
@@ -585,7 +586,6 @@ async def start_graph_run(
         graph = await _get_accessible_graph(
             repo,
             graph_id,
-            user_tenant_id,
             db=db,
             current_user=current_user,
             require_write=True,
@@ -595,7 +595,7 @@ async def start_graph_run(
         run, _events = await orchestrator.start_run(
             graph_id=graph_id,
             conversation_id=body.conversation_id,
-            tenant_id=user_tenant_id,
+            tenant_id=graph.tenant_id,
             project_id=project_id,
             initial_context=body.initial_context,
             parent_session_id=body.parent_session_id,
@@ -627,7 +627,6 @@ async def list_graph_runs(
         access_checked_graph = await _get_accessible_graph(
             repo,
             graph_id,
-            user_tenant_id,
             db=db,
             current_user=current_user,
         )
@@ -657,7 +656,6 @@ async def get_graph_run(
         run = await _get_accessible_graph_run(
             orchestrator,
             run_id,
-            user_tenant_id,
             db=db,
             current_user=current_user,
         )
@@ -685,14 +683,13 @@ async def cancel_graph_run(
         access_checked_run = await _get_accessible_graph_run(
             orchestrator,
             run_id,
-            user_tenant_id,
             db=db,
             current_user=current_user,
             require_write=True,
         )
         run, _events = await orchestrator.cancel_run(access_checked_run.id, reason=reason)
         await db.commit()
-        if run.tenant_id != user_tenant_id:
+        if run.tenant_id != access_checked_run.tenant_id:
             raise HTTPException(status_code=404, detail=_("Graph run not found"))
         return _run_to_response(run, include_executions=True)
     except ValueError as exc:

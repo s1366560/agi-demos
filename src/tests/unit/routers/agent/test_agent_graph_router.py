@@ -25,12 +25,14 @@ from src.infrastructure.adapters.primary.web.routers.agent.agent_graph_router im
     start_graph_run,
     update_graph,
 )
-from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
+from src.infrastructure.adapters.secondary.persistence.models import Project, User as DBUser
 
 
 @pytest.mark.unit
 class TestAgentGraphRouter:
-    def _request_with_container(self, container: object, monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    def _request_with_container(
+        self, container: object, monkeypatch: pytest.MonkeyPatch
+    ) -> MagicMock:
         monkeypatch.setattr(
             "src.infrastructure.adapters.primary.web.routers.agent.agent_graph_router.get_container_with_db",
             lambda _request, _db: container,
@@ -48,14 +50,12 @@ class TestAgentGraphRouter:
 
     def _denied_project_db(self) -> MagicMock:
         db = MagicMock()
-        db.execute = AsyncMock(
-            return_value=SimpleNamespace(scalar_one_or_none=lambda: None)
-        )
+        db.execute = AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: None))
         db.commit = AsyncMock()
         return db
 
     @pytest.mark.asyncio
-    async def test_list_graph_runs_rejects_cross_tenant_before_listing(
+    async def test_list_graph_runs_rejects_inaccessible_graph_before_listing(
         self,
         test_db: AsyncSession,
         test_user: DBUser,
@@ -84,11 +84,11 @@ class TestAgentGraphRouter:
                 db=test_db,
             )
 
-        assert exc_info.value.status_code == 404
+        assert exc_info.value.status_code == 403
         orchestrator.list_runs_for_graph.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_cancel_graph_run_rejects_cross_tenant_before_side_effect(
+    async def test_cancel_graph_run_rejects_inaccessible_run_before_side_effect(
         self,
         test_db: AsyncSession,
         test_user: DBUser,
@@ -117,8 +117,105 @@ class TestAgentGraphRouter:
                 db=test_db,
             )
 
-        assert exc_info.value.status_code == 404
+        assert exc_info.value.status_code == 403
         orchestrator.cancel_run.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_list_graphs_uses_authorized_project_tenant(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: DBUser,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        graph_repo = SimpleNamespace(list_by_project=AsyncMock(return_value=[]))
+        container = SimpleNamespace(graph_repository=lambda: graph_repo)
+
+        response = await list_graphs(
+            self._request_with_container(container, monkeypatch),
+            project_id=test_project_db.id,
+            current_user=cast(AuthUser, test_user),
+            user_tenant_id="fallback-tenant",
+            db=test_db,
+        )
+
+        assert response.total == 0
+        graph_repo.list_by_project.assert_awaited_once_with(
+            tenant_id=test_project_db.tenant_id,
+            project_id=test_project_db.id,
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_graph_allows_authorized_graph_from_non_fallback_tenant(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: DBUser,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        graph = AgentGraph(
+            id="graph-project-tenant",
+            tenant_id=test_project_db.tenant_id,
+            project_id=test_project_db.id,
+            name="Project tenant graph",
+            pattern=GraphPattern.SUPERVISOR,
+        )
+        graph_repo = SimpleNamespace(find_by_id=AsyncMock(return_value=graph))
+        container = SimpleNamespace(graph_repository=lambda: graph_repo)
+
+        response = await get_graph(
+            self._request_with_container(container, monkeypatch),
+            graph.id,
+            current_user=cast(AuthUser, test_user),
+            user_tenant_id="fallback-tenant",
+            db=test_db,
+        )
+
+        assert response.id == graph.id
+        assert response.tenant_id == test_project_db.tenant_id
+
+    @pytest.mark.asyncio
+    async def test_start_graph_run_uses_graph_project_tenant(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: DBUser,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        graph = AgentGraph(
+            id="graph-project-run",
+            tenant_id=test_project_db.tenant_id,
+            project_id=test_project_db.id,
+            name="Project run graph",
+            pattern=GraphPattern.SUPERVISOR,
+        )
+        run = GraphRun(
+            id="run-project-tenant",
+            graph_id=graph.id,
+            conversation_id="conversation-1",
+            tenant_id=test_project_db.tenant_id,
+            project_id=test_project_db.id,
+        )
+        graph_repo = SimpleNamespace(find_by_id=AsyncMock(return_value=graph))
+        orchestrator = SimpleNamespace(start_run=AsyncMock(return_value=(run, [])))
+        container = SimpleNamespace(
+            graph_repository=lambda: graph_repo,
+            graph_orchestrator=lambda: orchestrator,
+        )
+
+        response = await start_graph_run(
+            self._request_with_container(container, monkeypatch),
+            graph_id=graph.id,
+            body=StartRunRequest(conversation_id="conversation-1"),
+            project_id=test_project_db.id,
+            current_user=cast(AuthUser, test_user),
+            user_tenant_id="fallback-tenant",
+            db=test_db,
+        )
+
+        assert response.tenant_id == test_project_db.tenant_id
+        orchestrator.start_run.assert_awaited_once()
+        assert orchestrator.start_run.await_args.kwargs["tenant_id"] == test_project_db.tenant_id
 
     @pytest.mark.asyncio
     async def test_start_graph_run_value_errors_are_sanitized(
