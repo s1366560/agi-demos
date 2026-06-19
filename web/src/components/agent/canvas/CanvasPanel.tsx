@@ -72,7 +72,8 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { StandardMCPAppRenderer } from '@/components/mcp-app/StandardMCPAppRenderer';
 import type { StandardMCPAppRendererHandle } from '@/components/mcp-app/StandardMCPAppRenderer';
 
-import { useMarkdownPlugins, safeMarkdownComponents } from '../chat/markdownPlugins';
+import { useMarkdownPlugins } from '../chat/markdownPlugins';
+import { safeMarkdownComponents } from '../chat/safeMarkdownComponents';
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import { A2UISurfaceRenderer } from './A2UISurfaceRenderer';
@@ -92,7 +93,12 @@ function getRenderableCanvasType(tab: CanvasTab): CanvasContentType {
   const extension = getCanvasTitleExtension(tab.title);
   const language = tab.language?.toLowerCase();
   const mimeType = tab.mimeType?.toLowerCase();
-  if (extension === 'md' || extension === 'markdown' || language === 'md' || language === 'markdown') {
+  if (
+    extension === 'md' ||
+    extension === 'markdown' ||
+    language === 'md' ||
+    language === 'markdown'
+  ) {
     return 'markdown';
   }
   if (mimeType?.includes('markdown')) return 'markdown';
@@ -460,8 +466,7 @@ const IMAGE_MIN_SCALE = 0.1;
 const IMAGE_MAX_SCALE = 8;
 const IMAGE_ZOOM_STEP = 1.2;
 
-const clampScale = (value: number) =>
-  Math.min(IMAGE_MAX_SCALE, Math.max(IMAGE_MIN_SCALE, value));
+const clampScale = (value: number) => Math.min(IMAGE_MAX_SCALE, Math.max(IMAGE_MIN_SCALE, value));
 
 /**
  * Interactive image viewer for the canvas preview.
@@ -476,9 +481,12 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(
-    null,
-  );
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
   const [dragging, setDragging] = useState(false);
 
   const reset = useCallback(() => {
@@ -531,7 +539,7 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
       e.preventDefault();
       zoomTo(scale * (e.deltaY < 0 ? IMAGE_ZOOM_STEP : 1 / IMAGE_ZOOM_STEP));
     },
-    [scale, zoomTo],
+    [scale, zoomTo]
   );
 
   const handlePointerDown = useCallback(
@@ -546,7 +554,7 @@ const CanvasImageViewer = memo<{ src: string; title: string }>(({ src, title }) 
       setDragging(true);
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     },
-    [scale, offset],
+    [scale, offset]
   );
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {

@@ -20,7 +20,8 @@ import { formatDateOnly } from '@/utils/date';
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import { CodeBlock } from './CodeBlock';
-import { useMarkdownPlugins, safeMarkdownComponents } from './markdownPlugins';
+import { useMarkdownPlugins } from './markdownPlugins';
+import { safeMarkdownComponents } from './safeMarkdownComponents';
 
 const MARKDOWN_COMPONENTS: Components = {
   ...safeMarkdownComponents,

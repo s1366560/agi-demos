@@ -43,10 +43,8 @@ import { skillAPI } from '@/services/skillService';
 import { SkillModal } from '@/components/skill/SkillModal';
 import { LazyEmpty, LazyPopconfirm, LazySpin, useLazyMessage } from '@/components/ui/lazyAntd';
 
-import {
-  safeMarkdownComponents,
-  useMarkdownPlugins,
-} from '../../components/agent/chat/markdownPlugins';
+import { useMarkdownPlugins } from '../../components/agent/chat/markdownPlugins';
+import { safeMarkdownComponents } from '../../components/agent/chat/safeMarkdownComponents';
 import { MARKDOWN_PROSE_CLASSES } from '../../components/agent/styles';
 
 import type {

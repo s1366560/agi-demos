@@ -53,7 +53,8 @@ import {
   useIsThinkingStreaming,
 } from '../../stores/agent/streamingStore';
 
-import { useMarkdownPlugins, safeMarkdownComponents } from './chat/markdownPlugins';
+import { useMarkdownPlugins } from './chat/markdownPlugins';
+import { safeMarkdownComponents } from './chat/safeMarkdownComponents';
 import { SuggestionChips } from './chat/SuggestionChips';
 import { ThinkingBlock } from './chat/ThinkingBlock';
 import { ConversationSummaryCardWrapper } from './message/ConversationSummaryCardWrapper';

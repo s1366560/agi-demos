@@ -15,7 +15,7 @@ import { Code, Copy, Download, FileText, Table } from 'lucide-react';
 
 import { LazyCard, LazyButton, Typography } from '@/components/ui/lazyAntd';
 
-import { safeMarkdownComponents } from './chat/markdownPlugins';
+import { safeMarkdownComponents } from './chat/safeMarkdownComponents';
 
 const { Text, Paragraph } = Typography;
 

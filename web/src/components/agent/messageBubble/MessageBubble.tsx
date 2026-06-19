@@ -56,8 +56,9 @@ import {
 } from '@/utils/sandboxArtifactPath';
 
 import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
-import { safeMarkdownComponents, useMarkdownPlugins } from '../chat/markdownPlugins';
+import { useMarkdownPlugins } from '../chat/markdownPlugins';
 import { MessageActionBar } from '../chat/MessageActionBar';
+import { safeMarkdownComponents } from '../chat/safeMarkdownComponents';
 import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 import { InlineHITLCard } from '../InlineHITLCard';
 import {
@@ -316,8 +317,6 @@ function isSandboxFilePathText(value: string): boolean {
     padded.replace(SANDBOX_FILE_PATH_PATTERN, '').trim().length === 0
   );
 }
-
-
 
 async function openArtifactInCanvas(artifact: Artifact, requestedPath: string): Promise<boolean> {
   const url = artifact.url || artifact.previewUrl;

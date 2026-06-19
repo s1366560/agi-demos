@@ -21,20 +21,6 @@ import { TimeBadge } from './shared';
 
 import type { ActEvent, ObserveEvent } from '../../../types/agent';
 
-const AGENT_TOOL_NAMES = new Set([
-  'agent_spawn',
-  'agent_stop',
-  'agent_send',
-  'agent_list',
-  'agent_sessions',
-  'agent_history',
-]);
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function isAgentTool(toolName: string): boolean {
-  return AGENT_TOOL_NAMES.has(toolName);
-}
-
 interface StatusBadgeProps {
   status: 'running' | 'success' | 'error';
   label?: string | undefined;

@@ -6,7 +6,8 @@ import { memo } from 'react';
 
 import { AgentSection, ToolExecutionCardDisplay } from '../chat/MessageStream';
 
-import { isAgentTool, AgentToolCard } from './AgentToolCards';
+import { AgentToolCard } from './AgentToolCards';
+import { isAgentTool } from './agentToolNames';
 import { TimeBadge } from './shared';
 
 import type { ActEvent, ObserveEvent, TimelineEvent } from '../../../types/agent';

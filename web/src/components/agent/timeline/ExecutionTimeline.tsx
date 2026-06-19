@@ -27,8 +27,10 @@ import {
 
 import { formatDuration } from '../../../utils/date';
 import { MultiSourceResultsCard } from '../results/MultiSourceResultsCard';
-import { isAgentTool, AgentToolStepCard } from '../timeline-items/AgentToolCards';
+import { AgentToolStepCard } from '../timeline-items/AgentToolCards';
+import { isAgentTool } from '../timeline-items/agentToolNames';
 
+import { getToolLabel } from './toolLabels';
 import { useMCPAppOpen } from './useMCPAppOpen';
 
 export interface TimelineStep {
@@ -86,18 +88,7 @@ const getToolIcon = (toolName: string, size = 13, className = '') => {
   return <Wrench size={size} className={className} />;
 };
 
-const getToolLabel = (toolName: string): string => {
-  return toolName
-    .replace(/_/g, ' ')
-    .replace(/([A-Z])/g, ' $1')
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-};
-
 const toSafeDomId = (value: string): string => value.replace(/[^A-Za-z0-9_-]/g, '-');
-
-// eslint-disable-next-line react-refresh/only-export-components -- Utility function exported for reuse in related components
-export { getToolLabel };
 
 const getPathName = (path: string): string => {
   const segments = path.split(/[\\/]/).filter(Boolean);

@@ -6,7 +6,7 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
 import { useProjectStore } from '@/stores/project';
 
-import { getToolLabel } from './ExecutionTimeline';
+import { getToolLabel } from './toolLabels';
 
 import type { TimelineStep } from './ExecutionTimeline';
 

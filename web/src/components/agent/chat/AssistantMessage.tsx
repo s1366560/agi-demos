@@ -23,7 +23,8 @@ import {
 
 import { CodeBlock } from './CodeBlock';
 import { FinalResponseDisplay } from './FinalResponseDisplay';
-import { useMarkdownPlugins, safeMarkdownComponents } from './markdownPlugins';
+import { useMarkdownPlugins } from './markdownPlugins';
+import { safeMarkdownComponents } from './safeMarkdownComponents';
 
 const MARKDOWN_COMPONENTS: Components = {
   ...safeMarkdownComponents,

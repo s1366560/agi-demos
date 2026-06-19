@@ -1,41 +1,18 @@
 /**
  * Shared components for timeline event items.
  *
- * Contains TimeBadge, MarkdownRenderer (lazy), and OptionButton
+ * Contains TimeBadge, MarkdownWithSuspense, and OptionButton
  * used across multiple timeline item sub-components.
  */
 
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown from 'react-markdown';
-
-import remarkGfm from 'remark-gfm';
 
 import { formatDateTime, formatDistanceToNow, formatTimeOnly } from '../../../utils/date';
 import { getOptionDescriptionText, getOptionLabelText } from '../../../utils/hitlOptionDisplay';
-import { safeMarkdownComponents } from '../chat/markdownPlugins';
 
-// Lazy load math-only markdown extras to reduce initial bundle size.
-export const MarkdownRenderer = lazy(async () => {
-  const [{ default: remarkMath }, { default: rehypeKatex }] = await Promise.all([
-    import('remark-math'),
-    import('rehype-katex'),
-  ]);
-  await import('katex/dist/katex.min.css');
-
-  const MarkdownWrapper = ({ children }: { children: string }) => (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
-      components={safeMarkdownComponents}
-    >
-      {children}
-    </ReactMarkdown>
-  );
-
-  return { default: MarkdownWrapper };
-});
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 /**
  * Suspense wrapper for MarkdownRenderer

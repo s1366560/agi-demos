@@ -18,10 +18,10 @@ vi.mock('../../vendor/kasmvnc/core/websock.js', () => ({ default: vi.fn() }));
 // Mock markdownPlugins to avoid katex CSS import chain
 vi.mock('../../components/agent/chat/markdownPlugins', () => ({
   useMarkdownPlugins: () => ({ remarkPlugins: [], rehypePlugins: [] }),
-  remarkPlugins: [],
-  rehypePlugins: [],
+}));
+
+vi.mock('../../components/agent/chat/safeMarkdownComponents', () => ({
   safeMarkdownComponents: {},
-  loadMathPlugins: vi.fn(),
 }));
 
 // Mock agent barrel -- importing from it triggers katex CSS via TimelineEventItem -> shared.tsx
