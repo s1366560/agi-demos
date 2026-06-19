@@ -650,6 +650,49 @@ describe('TenantChatSidebar', () => {
     );
   });
 
+  it('opens the agent workspace when selecting a searched project from a tenant page', async () => {
+    const hiddenProject = {
+      id: 'project-hidden',
+      name: 'Hidden Authorized Project',
+      tenant_id: 'tenant-1',
+    };
+    (projectAPI.list as any).mockResolvedValue({
+      projects: [hiddenProject],
+      total: 1,
+      page: 1,
+      page_size: 100,
+    });
+
+    render(
+      <>
+        <TenantChatSidebar tenantId="tenant-1" mobile />
+        <LocationProbe />
+      </>,
+      {
+        route: '/tenant/tenant-1/overview',
+      }
+    );
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search projects' }), {
+      target: { value: 'Hidden Authorized' },
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 300));
+    });
+
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Project switcher' }), {
+      target: { value: 'project-hidden' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(
+        '/tenant/tenant-1/agent-workspace?projectId=project-hidden'
+      );
+    });
+    expect(projectState.setCurrentProject).toHaveBeenCalledWith(hiddenProject);
+  });
+
   it('loads additional authorized project search pages', async () => {
     const firstPageProjects = Array.from({ length: 100 }, (_, index) => ({
       id: `search-project-${index.toString()}`,

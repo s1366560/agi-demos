@@ -1229,10 +1229,13 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
         setSelectedProject(project);
         setCurrentProject(project);
       }
+      if (!isAgentWorkspaceRoute) {
+        void navigate(buildAgentWorkspacePath({ tenantId, projectId }));
+      }
       // NOTE: loadConversations is called by useEffect when selectedProjectId changes
       // Do NOT call it here to avoid duplicate requests
     },
-    [projectById, resolvedTenantId, setCurrentProject]
+    [isAgentWorkspaceRoute, navigate, projectById, resolvedTenantId, setCurrentProject, tenantId]
   );
 
   const handleProjectSearch = useCallback(
