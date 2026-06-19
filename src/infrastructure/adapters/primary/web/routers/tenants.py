@@ -123,13 +123,9 @@ def _tenant_project_scope_condition(
     *,
     current_user: User,
     tenant_id: str,
-    user_tenant: UserTenant,
 ) -> ColumnElement[bool]:
     """Return the project scope used by tenant overview project-derived stats."""
     tenant_scope = Project.tenant_id == tenant_id
-    if user_tenant.role in {"owner", "admin"}:
-        return tenant_scope
-
     user_project_ids = select(UserProject.project_id).where(UserProject.user_id == current_user.id)
     return and_(
         tenant_scope,
@@ -633,7 +629,6 @@ async def get_tenant_stats(
     project_scope_condition = _tenant_project_scope_condition(
         current_user=current_user,
         tenant_id=tenant_id,
-        user_tenant=user_tenant,
     )
 
     # Get tenant details

@@ -207,6 +207,73 @@ async def test_get_tenant_stats_scopes_member_project_list_to_accessible_project
 
 
 @pytest.mark.unit
+async def test_get_tenant_stats_does_not_treat_tenant_admin_role_as_project_access(
+    test_db: AsyncSession,
+    test_tenant_db: Tenant,
+    another_user: User,
+    test_user: User,
+) -> None:
+    accessible_project = Project(
+        id=str(uuid4()),
+        tenant_id=test_tenant_db.id,
+        name="Admin Joined Project",
+        owner_id=test_user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    inaccessible_project = Project(
+        id=str(uuid4()),
+        tenant_id=test_tenant_db.id,
+        name="Admin Hidden Project",
+        owner_id=test_user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    test_db.add_all(
+        [
+            UserTenant(
+                id=str(uuid4()),
+                user_id=another_user.id,
+                tenant_id=test_tenant_db.id,
+                role="admin",
+                permissions={"read": True, "manage_users": True},
+            ),
+            accessible_project,
+            inaccessible_project,
+            UserProject(
+                id=str(uuid4()),
+                user_id=another_user.id,
+                project_id=accessible_project.id,
+                role="admin",
+                permissions={"read": True, "write": True},
+            ),
+            Memory(
+                id=str(uuid4()),
+                project_id=accessible_project.id,
+                title="Visible memory",
+                content="x" * 512,
+                author_id=another_user.id,
+            ),
+            Memory(
+                id=str(uuid4()),
+                project_id=inaccessible_project.id,
+                title="Hidden memory",
+                content="x" * 2048,
+                author_id=test_user.id,
+            ),
+        ]
+    )
+    await test_db.commit()
+
+    stats = await get_tenant_stats(test_tenant_db.id, current_user=another_user, db=test_db)
+
+    assert stats["projects"]["active"] == 1
+    assert stats["storage"]["used"] == 512
+    assert [item["id"] for item in stats["projects"]["list"]] == [accessible_project.id]
+    assert stats["projects"]["list"][0]["name"] == "Admin Joined Project"
+
+
+@pytest.mark.unit
 async def test_get_tenant_analytics_returns_project_storage_and_summary(
     test_db: AsyncSession,
     test_tenant_db: Tenant,
