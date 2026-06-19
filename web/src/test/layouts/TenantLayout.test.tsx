@@ -36,6 +36,29 @@ const mockRouteParamListeners = new Set<() => void>();
 let mockLocationPathname = '/tenant/t1/overview';
 let mockLocationSearch = '';
 const mockNavigate = vi.fn();
+const {
+  mockAgentV3SetState,
+  mockConversationReset,
+  mockTimelineReset,
+  mockStreamingReset,
+  mockExecutionReset,
+  mockHITLSyncFromConversation,
+  mockSandboxUnsubscribeSSE,
+  mockSandboxReset,
+  mockAgentDisconnect,
+  mockUnifiedDisconnect,
+} = vi.hoisted(() => ({
+  mockAgentV3SetState: vi.fn(),
+  mockConversationReset: vi.fn(),
+  mockTimelineReset: vi.fn(),
+  mockStreamingReset: vi.fn(),
+  mockExecutionReset: vi.fn(),
+  mockHITLSyncFromConversation: vi.fn(),
+  mockSandboxUnsubscribeSSE: vi.fn(),
+  mockSandboxReset: vi.fn(),
+  mockAgentDisconnect: vi.fn(),
+  mockUnifiedDisconnect: vi.fn(),
+}));
 
 function setMockRouteParams(params: Record<string, string | undefined>) {
   mockRouteParams = params;
@@ -142,6 +165,73 @@ vi.mock('../../stores/project', () => {
 
 vi.mock('../../stores/tenant', () => ({
   useTenantStore: createMockStore(),
+}));
+
+vi.mock('@/stores/agent/conversationsStore', () => ({
+  useConversationsStore: {
+    getState: () => ({
+      reset: mockConversationReset,
+    }),
+  },
+}));
+
+vi.mock('@/stores/agent/executionStore', () => ({
+  useExecutionStore: {
+    getState: () => ({
+      reset: mockExecutionReset,
+    }),
+  },
+}));
+
+vi.mock('@/stores/agent/hitlStore', () => ({
+  useAgentHITLStore: {
+    getState: () => ({
+      syncFromConversation: mockHITLSyncFromConversation,
+    }),
+  },
+}));
+
+vi.mock('@/stores/agent/streamingStore', () => ({
+  useStreamingStore: {
+    getState: () => ({
+      reset: mockStreamingReset,
+    }),
+  },
+}));
+
+vi.mock('@/stores/agent/timelineStore', () => ({
+  useTimelineStore: {
+    getState: () => ({
+      reset: mockTimelineReset,
+    }),
+  },
+}));
+
+vi.mock('@/stores/agentV3', () => ({
+  useAgentV3Store: {
+    setState: mockAgentV3SetState,
+  },
+}));
+
+vi.mock('@/stores/sandbox', () => ({
+  useSandboxStore: {
+    getState: () => ({
+      unsubscribeSSE: mockSandboxUnsubscribeSSE,
+      reset: mockSandboxReset,
+    }),
+  },
+}));
+
+vi.mock('@/services/agentService', () => ({
+  agentService: {
+    disconnect: mockAgentDisconnect,
+  },
+}));
+
+vi.mock('@/services/unifiedEventService', () => ({
+  unifiedEventService: {
+    disconnect: mockUnifiedDisconnect,
+  },
 }));
 
 vi.mock('@/components/layout/TenantChatSidebar', () => ({
@@ -573,6 +663,9 @@ describe('TenantLayout', () => {
       expect(screen.getByText('MemStack')).toBeInTheDocument();
     });
     expect(mockProjectState.clearProjects).not.toHaveBeenCalled();
+    expect(mockAgentV3SetState).not.toHaveBeenCalled();
+    expect(mockAgentDisconnect).not.toHaveBeenCalled();
+    expect(mockUnifiedDisconnect).not.toHaveBeenCalled();
 
     await act(async () => {
       mockTenantState.currentTenant = { id: 't2', name: 'Second Tenant' };
@@ -584,5 +677,31 @@ describe('TenantLayout', () => {
     });
     expect(mockProjectState.projects).toEqual([]);
     expect(mockProjectState.currentProject).toBeNull();
+    expect(mockAgentV3SetState).toHaveBeenCalledWith({
+      conversations: [],
+      activeConversationId: null,
+      isCreatingConversation: false,
+      hasMoreConversations: false,
+      conversationsTotal: 0,
+      conversationStates: expect.any(Map),
+    });
+    expect(mockConversationReset).toHaveBeenCalledTimes(1);
+    expect(mockTimelineReset).toHaveBeenCalledTimes(1);
+    expect(mockStreamingReset).toHaveBeenCalledTimes(1);
+    expect(mockExecutionReset).toHaveBeenCalledTimes(1);
+    expect(mockHITLSyncFromConversation).toHaveBeenCalledWith({
+      pendingClarification: null,
+      pendingDecision: null,
+      pendingEnvVarRequest: null,
+      pendingPermission: null,
+      doomLoopDetected: null,
+      costTracking: null,
+      suggestions: [],
+      pinnedEventIds: expect.any(Set),
+    });
+    expect(mockSandboxUnsubscribeSSE).toHaveBeenCalledTimes(1);
+    expect(mockSandboxReset).toHaveBeenCalledTimes(1);
+    expect(mockAgentDisconnect).toHaveBeenCalledTimes(1);
+    expect(mockUnifiedDisconnect).toHaveBeenCalledTimes(1);
   });
 });

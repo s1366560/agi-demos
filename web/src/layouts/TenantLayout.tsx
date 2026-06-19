@@ -24,9 +24,19 @@ import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom';
 
 import { AlertCircle, Brain, Loader2, RefreshCw } from 'lucide-react';
 
+import { useConversationsStore } from '@/stores/agent/conversationsStore';
+import { useExecutionStore } from '@/stores/agent/executionStore';
+import { useAgentHITLStore } from '@/stores/agent/hitlStore';
+import { useStreamingStore } from '@/stores/agent/streamingStore';
+import { useTimelineStore } from '@/stores/agent/timelineStore';
+import { useAgentV3Store } from '@/stores/agentV3';
 import { useAuthStore } from '@/stores/auth';
 import { useProjectStore } from '@/stores/project';
+import { useSandboxStore } from '@/stores/sandbox';
 import { useTenantStore } from '@/stores/tenant';
+
+import { agentService } from '@/services/agentService';
+import { unifiedEventService } from '@/services/unifiedEventService';
 
 import { TenantCreateModal } from '@/pages/tenant/TenantCreate';
 
@@ -58,6 +68,37 @@ function getResponseStatus(error: unknown): number | undefined {
 
 function isBareTenantEntryPath(pathname: string): boolean {
   return pathname === '/tenant' || pathname === '/tenant/';
+}
+
+function resetTenantScopedRuntimeState(): void {
+  useAgentV3Store.setState({
+    conversations: [],
+    activeConversationId: null,
+    isCreatingConversation: false,
+    hasMoreConversations: false,
+    conversationsTotal: 0,
+    conversationStates: new Map(),
+  });
+  useConversationsStore.getState().reset();
+  useTimelineStore.getState().reset();
+  useStreamingStore.getState().reset();
+  useExecutionStore.getState().reset();
+  useAgentHITLStore.getState().syncFromConversation({
+    pendingClarification: null,
+    pendingDecision: null,
+    pendingEnvVarRequest: null,
+    pendingPermission: null,
+    doomLoopDetected: null,
+    costTracking: null,
+    suggestions: [],
+    pinnedEventIds: new Set(),
+  });
+
+  const sandboxStore = useSandboxStore.getState();
+  sandboxStore.unsubscribeSSE();
+  sandboxStore.reset();
+  agentService.disconnect();
+  unifiedEventService.disconnect();
 }
 
 /**
@@ -252,6 +293,7 @@ export const TenantLayout: React.FC = memo(() => {
     ) {
       projectSyncRequestRef.current += 1;
       clearProjects();
+      resetTenantScopedRuntimeState();
     }
   }, [tenantProjectScope, clearProjects]);
 
