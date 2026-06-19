@@ -439,7 +439,10 @@ describe('useAgentLifecycleState', () => {
 
     unmount();
 
-    expect(agentService.unsubscribeLifecycleState).toHaveBeenCalled();
+    expect(agentService.unsubscribeLifecycleState).toHaveBeenCalledWith({
+      projectId: mockProjectId,
+      tenantId: mockTenantId,
+    });
   });
 
   it('should not subscribe after unmount while websocket connect is pending', async () => {

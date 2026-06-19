@@ -151,7 +151,7 @@ class SandboxSSEService {
 
         // Track that we have an active subscription so we can clean up
         this.unsubscribeFn = () => {
-          agentService.unsubscribeSandboxState();
+          agentService.unsubscribeSandboxState({ projectId, tenantId: '' });
         };
 
         this.status = 'connected';

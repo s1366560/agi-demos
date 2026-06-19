@@ -60,6 +60,21 @@ const SILENT_AGENT_EVENT_TYPES = new Set<string>([
 const CONTROL_AGENT_EVENT_TYPES = new Set<string>(['connected', 'pong', 'ack']);
 const IDLE_DISCONNECT_DELAY_MS = 5000;
 
+interface ProjectTenantSubscriptionKey {
+  projectId: string;
+  tenantId: string;
+}
+
+function matchesProjectTenantSubscription(
+  subscriber: ProjectTenantSubscriptionKey,
+  expected?: ProjectTenantSubscriptionKey
+): boolean {
+  return (
+    !expected ||
+    (subscriber.projectId === expected.projectId && subscriber.tenantId === expected.tenantId)
+  );
+}
+
 function getAgentErrorMessage(data: unknown): string {
   if (data instanceof Error && data.message.trim()) {
     return data.message;
@@ -750,12 +765,20 @@ class AgentServiceImpl implements AgentService {
     }
   }
 
-  unsubscribeLifecycleState(): void {
-    if (this.lifecycleStateSubscriber && this.isConnected()) {
+  unsubscribeLifecycleState(expected?: ProjectTenantSubscriptionKey): void {
+    const subscriber = this.lifecycleStateSubscriber;
+    if (!subscriber) {
+      return;
+    }
+    if (!matchesProjectTenantSubscription(subscriber, expected)) {
+      return;
+    }
+
+    if (this.isConnected()) {
       this.send({
         type: 'unsubscribe_lifecycle_state',
-        project_id: this.lifecycleStateSubscriber.projectId,
-        tenant_id: this.lifecycleStateSubscriber.tenantId,
+        project_id: subscriber.projectId,
+        tenant_id: subscriber.tenantId,
       });
     }
     this.lifecycleStateSubscriber = null;
@@ -791,15 +814,21 @@ class AgentServiceImpl implements AgentService {
     }
   }
 
-  unsubscribeSandboxState(): void {
-    if (this.sandboxStateSubscriber) {
-      if (this.isConnected()) {
-        this.send({
-          type: 'unsubscribe_sandbox',
-          project_id: this.sandboxStateSubscriber.projectId,
-          tenant_id: this.sandboxStateSubscriber.tenantId,
-        });
-      }
+  unsubscribeSandboxState(expected?: ProjectTenantSubscriptionKey): void {
+    const subscriber = this.sandboxStateSubscriber;
+    if (!subscriber) {
+      return;
+    }
+    if (!matchesProjectTenantSubscription(subscriber, expected)) {
+      return;
+    }
+
+    if (this.isConnected()) {
+      this.send({
+        type: 'unsubscribe_sandbox',
+        project_id: subscriber.projectId,
+        tenant_id: subscriber.tenantId,
+      });
     }
     this.sandboxStateSubscriber = null;
     this.scheduleIdleDisconnectIfUnused();

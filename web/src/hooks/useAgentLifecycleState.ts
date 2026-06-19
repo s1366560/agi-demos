@@ -128,7 +128,7 @@ export function useAgentLifecycleState({
       isCancelled = true;
       unsubscribeStatusListener();
       if (ownsSubscription) {
-        agentService.unsubscribeLifecycleState();
+        agentService.unsubscribeLifecycleState({ projectId, tenantId });
         globalSubscriptionLock.delete(lockKey);
         ownsSubscription = false;
       }

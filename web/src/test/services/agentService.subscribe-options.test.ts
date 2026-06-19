@@ -210,6 +210,29 @@ describe('agentService subscribe recovery options', () => {
     });
   });
 
+  it('ignores stale lifecycle unsubscribe requests after the subscription changes', () => {
+    const sendSpy = vi.spyOn(service, 'send').mockReturnValue(true);
+    vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
+    service.lifecycleStateSubscriber = {
+      projectId: 'proj-new',
+      tenantId: 'tenant-new',
+      callback: vi.fn(),
+    };
+
+    agentService.unsubscribeLifecycleState({
+      projectId: 'proj-old',
+      tenantId: 'tenant-old',
+    });
+
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(service.lifecycleStateSubscriber).toEqual(
+      expect.objectContaining({
+        projectId: 'proj-new',
+        tenantId: 'tenant-new',
+      })
+    );
+  });
+
   it('does not resend sandbox subscribe for the same project and tenant', () => {
     const sendSpy = vi.spyOn(service, 'send').mockReturnValue(true);
     vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
@@ -245,5 +268,28 @@ describe('agentService subscribe recovery options', () => {
       tenant_id: 'tenant-1',
     });
     expect(service.sandboxStateSubscriber).toBeNull();
+  });
+
+  it('ignores stale sandbox unsubscribe requests after the subscription changes', () => {
+    const sendSpy = vi.spyOn(service, 'send').mockReturnValue(true);
+    vi.spyOn(agentService, 'isConnected').mockReturnValue(true);
+    service.sandboxStateSubscriber = {
+      projectId: 'proj-new',
+      tenantId: 'tenant-new',
+      callback: vi.fn(),
+    };
+
+    agentService.unsubscribeSandboxState({
+      projectId: 'proj-old',
+      tenantId: 'tenant-old',
+    });
+
+    expect(sendSpy).not.toHaveBeenCalled();
+    expect(service.sandboxStateSubscriber).toEqual(
+      expect.objectContaining({
+        projectId: 'proj-new',
+        tenantId: 'tenant-new',
+      })
+    );
   });
 });

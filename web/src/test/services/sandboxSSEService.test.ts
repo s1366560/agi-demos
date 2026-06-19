@@ -191,7 +191,10 @@ describe('sandboxSSEService', () => {
 
     unsubscribe();
 
-    expect(agentService.unsubscribeSandboxState).toHaveBeenCalledTimes(1);
+    expect(agentService.unsubscribeSandboxState).toHaveBeenCalledWith({
+      projectId: 'proj-1',
+      tenantId: '',
+    });
     expect(sandboxSSEService.getStatus()).toBe('disconnected');
   });
 
