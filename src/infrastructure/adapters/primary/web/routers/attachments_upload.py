@@ -34,11 +34,10 @@ from src.domain.model.agent.attachment import (
 from src.domain.ports.services.storage_service_port import PartUploadResult, StorageServicePort
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
+from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
 from src.infrastructure.adapters.secondary.persistence.sql_attachment_repository import (
     SqlAttachmentRepository,
 )
@@ -192,56 +191,52 @@ def _parse_purpose(purpose: str) -> AttachmentPurpose:
         ) from None
 
 
-async def _verify_project_access(project_id: str, user: User, db: AsyncSession) -> None:
-    """Verify the current user can access the attachment's project."""
-    if user.is_superuser:
-        return
-
-    result = await db.execute(
-        refresh_select_statement(
-            select(UserProject).where(
-                and_(
-                    UserProject.user_id == user.id,
-                    UserProject.project_id == project_id,
-                )
-            )
-        )
-    )
-    if not result.scalar_one_or_none():
+async def _verify_project_access(project_id: str, user: User, db: AsyncSession) -> str:
+    """Verify project access and return the project's tenant ID."""
+    project_tenants = await _get_accessible_attachment_project_tenants({project_id}, user, db)
+    tenant_id = project_tenants.get(project_id)
+    if tenant_id is None:
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,
             detail=_("Access denied to project"),
         )
+    return tenant_id
 
 
-async def _get_accessible_attachment_project_ids(
+async def _get_accessible_attachment_project_tenants(
     project_ids: set[str],
     user: User,
     db: AsyncSession,
-) -> set[str]:
-    """Return project IDs the current user can access for attachment listing."""
-    if user.is_superuser:
-        return project_ids
+) -> dict[str, str]:
+    """Return accessible project IDs mapped to their authoritative tenant IDs."""
     if not project_ids:
-        return set()
+        return {}
 
-    result = await db.execute(
-        refresh_select_statement(
-            select(UserProject.project_id).where(
-                and_(
-                    UserProject.user_id == user.id,
-                    UserProject.project_id.in_(project_ids),
+    if user.is_superuser:
+        result = await db.execute(
+            refresh_select_statement(
+                select(Project.id, Project.tenant_id).where(Project.id.in_(project_ids))
+            )
+        )
+    else:
+        result = await db.execute(
+            refresh_select_statement(
+                select(Project.id, Project.tenant_id)
+                .join(UserProject, UserProject.project_id == Project.id)
+                .where(
+                    and_(
+                        UserProject.user_id == user.id,
+                        Project.id.in_(project_ids),
+                    )
                 )
             )
         )
-    )
-    return set(result.scalars().all())
+    return {str(project_id): str(tenant_id) for project_id, tenant_id in result.all()}
 
 
 async def _get_authorized_attachment(
     attachment_id: str,
     user: User,
-    tenant_id: str,
     db: AsyncSession,
     attachment_service: AttachmentService,
 ) -> Attachment:
@@ -253,13 +248,12 @@ async def _get_authorized_attachment(
             detail=_("Attachment not found"),
         )
 
-    if not user.is_superuser and attachment.tenant_id != tenant_id:
+    project_tenant_id = await _verify_project_access(attachment.project_id, user, db)
+    if attachment.tenant_id != project_tenant_id:
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,
             detail=_("Access denied to attachment"),
         )
-
-    await _verify_project_access(attachment.project_id, user, db)
     return attachment
 
 
@@ -294,7 +288,6 @@ def _validate_complete_upload(attachment: Attachment, parts: list[CompleteUpload
 async def initiate_multipart_upload(
     request: InitiateUploadRequest,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> InitiateUploadResponse:
@@ -306,10 +299,10 @@ async def initiate_multipart_upload(
     """
     try:
         purpose = _parse_purpose(request.purpose)
-        await _verify_project_access(request.project_id, current_user, db)
+        project_tenant_id = await _verify_project_access(request.project_id, current_user, db)
 
         attachment = await attachment_service.initiate_multipart_upload(
-            tenant_id=tenant_id,
+            tenant_id=project_tenant_id,
             project_id=request.project_id,
             conversation_id=request.conversation_id,
             filename=request.filename,
@@ -340,7 +333,6 @@ async def upload_part(
     part_number: int = Form(..., ge=1, description="Part number (1-indexed)"),
     file: UploadFile = File(..., description="Part data"),
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> UploadPartResponse:
@@ -354,7 +346,6 @@ async def upload_part(
         attachment = await _get_authorized_attachment(
             attachment_id=attachment_id,
             user=current_user,
-            tenant_id=tenant_id,
             db=db,
             attachment_service=attachment_service,
         )
@@ -385,7 +376,6 @@ async def upload_part(
 async def complete_multipart_upload(
     request: CompleteUploadRequest,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> AttachmentResponse:
@@ -399,7 +389,6 @@ async def complete_multipart_upload(
         attachment = await _get_authorized_attachment(
             attachment_id=request.attachment_id,
             user=current_user,
-            tenant_id=tenant_id,
             db=db,
             attachment_service=attachment_service,
         )
@@ -434,7 +423,6 @@ async def complete_multipart_upload(
 async def abort_multipart_upload(
     attachment_id: str = Form(..., description="ID of the attachment"),
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> dict[str, Any]:
@@ -447,7 +435,6 @@ async def abort_multipart_upload(
         authorized_attachment = await _get_authorized_attachment(
             attachment_id=attachment_id,
             user=current_user,
-            tenant_id=tenant_id,
             db=db,
             attachment_service=attachment_service,
         )
@@ -472,7 +459,6 @@ async def upload_simple(
     purpose: str = Form(default="both", description="Purpose of the attachment"),
     file: UploadFile = File(..., description="File to upload"),
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> AttachmentResponse:
@@ -483,11 +469,11 @@ async def upload_simple(
     """
     try:
         purpose_enum = _parse_purpose(purpose)
-        await _verify_project_access(project_id, current_user, db)
+        project_tenant_id = await _verify_project_access(project_id, current_user, db)
         data = await file.read()
 
         attachment = await attachment_service.upload_simple(
-            tenant_id=tenant_id,
+            tenant_id=project_tenant_id,
             project_id=project_id,
             conversation_id=conversation_id,
             filename=file.filename or "unnamed",
@@ -512,7 +498,6 @@ async def list_attachments(
     conversation_id: str = Query(..., description="Conversation ID to list attachments for"),
     status: str | None = Query(None, description="Filter by status"),
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> AttachmentListResponse:
@@ -528,20 +513,15 @@ async def list_attachments(
         conversation_id=conversation_id,
         status=status_enum,
     )
-    tenant_visible_attachments = (
-        attachments
-        if current_user.is_superuser
-        else [attachment for attachment in attachments if attachment.tenant_id == tenant_id]
-    )
-    accessible_project_ids = await _get_accessible_attachment_project_ids(
-        {attachment.project_id for attachment in tenant_visible_attachments},
+    accessible_project_tenants = await _get_accessible_attachment_project_tenants(
+        {attachment.project_id for attachment in attachments},
         current_user,
         db,
     )
     visible_attachments = [
         attachment
-        for attachment in tenant_visible_attachments
-        if attachment.project_id in accessible_project_ids
+        for attachment in attachments
+        if accessible_project_tenants.get(attachment.project_id) == attachment.tenant_id
     ]
 
     return AttachmentListResponse(
@@ -554,7 +534,6 @@ async def list_attachments(
 async def get_attachment(
     attachment_id: str,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> AttachmentResponse:
@@ -564,7 +543,6 @@ async def get_attachment(
     attachment = await _get_authorized_attachment(
         attachment_id=attachment_id,
         user=current_user,
-        tenant_id=tenant_id,
         db=db,
         attachment_service=attachment_service,
     )
@@ -576,7 +554,6 @@ async def get_attachment(
 async def download_attachment(
     attachment_id: str,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> RedirectResponse:
@@ -586,7 +563,6 @@ async def download_attachment(
     authorized_attachment = await _get_authorized_attachment(
         attachment_id=attachment_id,
         user=current_user,
-        tenant_id=tenant_id,
         db=db,
         attachment_service=attachment_service,
     )
@@ -602,7 +578,6 @@ async def download_attachment(
 async def delete_attachment(
     attachment_id: str,
     current_user: User = Depends(get_current_user),
-    tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ) -> dict[str, Any]:
@@ -612,7 +587,6 @@ async def delete_attachment(
     authorized_attachment = await _get_authorized_attachment(
         attachment_id=attachment_id,
         user=current_user,
-        tenant_id=tenant_id,
         db=db,
         attachment_service=attachment_service,
     )

@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from io import BytesIO
+from typing import Any
 
 import pytest
 from fastapi import HTTPException, UploadFile, status
@@ -52,6 +53,8 @@ def _make_attachment(
 class FakeAttachmentService:
     def __init__(self, attachments: Sequence[Attachment]) -> None:
         self._attachments = {attachment.id: attachment for attachment in attachments}
+        self.initiate_calls: list[dict[str, Any]] = []
+        self.simple_upload_calls: list[dict[str, Any]] = []
         self.upload_part_calls: list[tuple[str, int, bytes]] = []
         self.complete_calls: list[tuple[str, list[PartUploadResult]]] = []
 
@@ -73,6 +76,30 @@ class FakeAttachmentService:
                 attachment for attachment in attachments if attachment.status == status
             ]
         return attachments
+
+    async def initiate_multipart_upload(self, **kwargs: Any) -> Attachment:
+        self.initiate_calls.append(kwargs)
+        attachment = _make_attachment(
+            "attachment-initiated",
+            project_id=str(kwargs["project_id"]),
+            tenant_id=str(kwargs["tenant_id"]),
+            conversation_id=str(kwargs["conversation_id"]),
+            status=AttachmentStatus.PENDING,
+            total_parts=1,
+        )
+        self._attachments[attachment.id] = attachment
+        return attachment
+
+    async def upload_simple(self, **kwargs: Any) -> Attachment:
+        self.simple_upload_calls.append(kwargs)
+        attachment = _make_attachment(
+            "attachment-simple",
+            project_id=str(kwargs["project_id"]),
+            tenant_id=str(kwargs["tenant_id"]),
+            conversation_id=str(kwargs["conversation_id"]),
+        )
+        self._attachments[attachment.id] = attachment
+        return attachment
 
     async def upload_part(
         self,
@@ -114,7 +141,9 @@ class TestAttachmentRouteAuthorization:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        await _verify_project_access(test_project_db.id, test_user, test_db)
+        tenant_id = await _verify_project_access(test_project_db.id, test_user, test_db)
+
+        assert tenant_id == test_project_db.tenant_id
 
     @pytest.mark.asyncio
     async def test_project_access_rejects_non_member(
@@ -146,7 +175,6 @@ class TestAttachmentRouteAuthorization:
             await _get_authorized_attachment(
                 attachment.id,
                 test_user,
-                test_project_db.tenant_id,
                 test_db,
                 service,
             )
@@ -171,7 +199,6 @@ class TestAttachmentRouteAuthorization:
             await _get_authorized_attachment(
                 attachment.id,
                 another_user,
-                test_project_db.tenant_id,
                 test_db,
                 service,
             )
@@ -206,7 +233,6 @@ class TestAttachmentRouteAuthorization:
             conversation_id="conversation-1",
             status=None,
             current_user=test_user,
-            tenant_id=test_project_db.tenant_id,
             db=test_db,
             attachment_service=service,
         )
@@ -252,13 +278,61 @@ class TestAttachmentRouteAuthorization:
             conversation_id="conversation-1",
             status=None,
             current_user=test_user,
-            tenant_id=test_project_db.tenant_id,
             db=test_db,
             attachment_service=service,
         )
 
         assert response.total == 2
         assert [attachment.id for attachment in response.attachments] == [first.id, second.id]
+
+    @pytest.mark.asyncio
+    async def test_initiate_upload_uses_authorized_project_tenant(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        service = FakeAttachmentService([])
+
+        response = await initiate_multipart_upload(
+            request=InitiateUploadRequest(
+                conversation_id="conversation-1",
+                project_id=test_project_db.id,
+                filename="example.txt",
+                mime_type="text/plain",
+                size_bytes=12,
+            ),
+            current_user=test_user,
+            db=test_db,
+            attachment_service=service,
+        )
+
+        assert response.attachment_id == "attachment-initiated"
+        assert service.initiate_calls[0]["tenant_id"] == test_project_db.tenant_id
+        assert service.initiate_calls[0]["project_id"] == test_project_db.id
+
+    @pytest.mark.asyncio
+    async def test_simple_upload_uses_authorized_project_tenant(
+        self,
+        test_db: AsyncSession,
+        test_project_db: Project,
+        test_user: User,
+    ) -> None:
+        service = FakeAttachmentService([])
+
+        response = await upload_simple(
+            conversation_id="conversation-1",
+            project_id=test_project_db.id,
+            purpose="both",
+            file=UploadFile(BytesIO(b"file-data"), filename="example.txt"),
+            current_user=test_user,
+            db=test_db,
+            attachment_service=service,
+        )
+
+        assert response.id == "attachment-simple"
+        assert service.simple_upload_calls[0]["tenant_id"] == test_project_db.tenant_id
+        assert service.simple_upload_calls[0]["project_id"] == test_project_db.id
 
     @pytest.mark.asyncio
     async def test_upload_part_rejects_part_number_beyond_expected_total(
@@ -282,7 +356,6 @@ class TestAttachmentRouteAuthorization:
                 part_number=3,
                 file=UploadFile(BytesIO(b"part-data"), filename="part.bin"),
                 current_user=test_user,
-                tenant_id=test_project_db.tenant_id,
                 db=test_db,
                 attachment_service=service,
             )
@@ -313,7 +386,6 @@ class TestAttachmentRouteAuthorization:
                 part_number=1,
                 file=UploadFile(BytesIO(b""), filename="part.bin"),
                 current_user=test_user,
-                tenant_id=test_project_db.tenant_id,
                 db=test_db,
                 attachment_service=service,
             )
@@ -355,7 +427,6 @@ class TestAttachmentRouteAuthorization:
                     parts=[CompleteUploadPart(part_number=1, etag="etag-1")],
                 ),
                 current_user=test_user,
-                tenant_id=test_project_db.tenant_id,
                 db=test_db,
                 attachment_service=service,
             )
@@ -389,7 +460,6 @@ class TestAttachmentRouteAuthorization:
                 ],
             ),
             current_user=test_user,
-            tenant_id=test_project_db.tenant_id,
             db=test_db,
             attachment_service=service,
         )
@@ -416,7 +486,6 @@ class TestAttachmentRouteAuthorization:
                     size_bytes=12,
                 ),
                 current_user=test_user,
-                tenant_id=test_project_db.tenant_id,
                 db=test_db,
                 attachment_service=FailingAttachmentService(),
             )
@@ -439,7 +508,6 @@ class TestAttachmentRouteAuthorization:
                 purpose="both",
                 file=UploadFile(BytesIO(b"file-data"), filename="example.txt"),
                 current_user=test_user,
-                tenant_id=test_project_db.tenant_id,
                 db=test_db,
                 attachment_service=FailingAttachmentService(),
             )
