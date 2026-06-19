@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 
 import { useConversationsStore } from '@/stores/agent/conversationsStore';
 import { useAgentV3Store } from '@/stores/agentV3';
+import { useAuthStore } from '@/stores/auth';
 
 import { unifiedEventService, type UnifiedEvent } from '@/services/unifiedEventService';
 
@@ -71,8 +72,10 @@ function getRefreshLimit(): number {
  * create sessions in the selected project.
  */
 export function useConversationListAutoRefresh(projectId: string | null): void {
+  const token = useAuthStore((state) => state.token);
+
   useEffect(() => {
-    if (!projectId) {
+    if (!projectId || !token) {
       return;
     }
 
@@ -145,5 +148,5 @@ export function useConversationListAutoRefresh(projectId: string | null): void {
       document.removeEventListener('visibilitychange', refreshVisibleStaleList);
       refreshController?.abort();
     };
-  }, [projectId]);
+  }, [projectId, token]);
 }

@@ -6,6 +6,12 @@ const mocks = vi.hoisted(() => ({
   unsubscribeProject: vi.fn(),
   loadConversations: vi.fn(),
   conversations: [] as Array<{ id: string; project_id?: string }>,
+  token: 'token-1' as string | null,
+}));
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: (selector: (state: { token: string | null }) => unknown) =>
+    selector({ token: mocks.token }),
 }));
 
 vi.mock('@/services/unifiedEventService', () => ({
@@ -58,6 +64,7 @@ describe('useConversationListAutoRefresh', () => {
     mocks.loadConversations.mockReset();
     mocks.subscribeProject.mockReturnValue(mocks.unsubscribeProject);
     mocks.loadConversations.mockResolvedValue(undefined);
+    mocks.token = 'token-1';
   });
 
   afterEach(() => {
@@ -72,6 +79,14 @@ describe('useConversationListAutoRefresh', () => {
     unmount();
 
     expect(mocks.unsubscribeProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not subscribe before an auth token is available', () => {
+    mocks.token = null;
+
+    renderHook(() => useConversationListAutoRefresh('project-1'));
+
+    expect(mocks.subscribeProject).not.toHaveBeenCalled();
   });
 
   it('debounces conversation_created events and forces a silent refresh', async () => {
@@ -163,7 +178,7 @@ describe('useConversationListAutoRefresh', () => {
     visibilitySpy.mockRestore();
   });
 
-  it('caps auto-refresh requests to the conversations API page limit', async () => {
+  it('caps auto-refresh requests to the background refresh limit', async () => {
     mocks.conversations = Array.from({ length: 314 }, (_, index) => ({
       id: `conversation-${index}`,
       project_id: 'project-1',
@@ -186,7 +201,7 @@ describe('useConversationListAutoRefresh', () => {
       expect.objectContaining({
         force: true,
         silent: true,
-        limit: 100,
+        limit: 25,
       })
     );
   });
