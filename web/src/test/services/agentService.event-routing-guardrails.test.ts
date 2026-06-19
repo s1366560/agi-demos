@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { routeToHandler } from '@/services/agent/messageRouter';
 
@@ -8,6 +8,11 @@ describe('agentService event routing guardrails', () => {
   const route = (eventType: string, data: unknown, handler: AgentStreamHandler) => {
     routeToHandler(eventType as any, data, handler);
   };
+
+  afterEach(() => {
+    localStorage.removeItem('memstack:debugLogs');
+    vi.restoreAllMocks();
+  });
 
   it('routes task synchronization events to task handlers', () => {
     const onTaskListUpdated = vi.fn();
@@ -133,5 +138,28 @@ describe('agentService event routing guardrails', () => {
       type: 'thought_start',
       data: { thought_level: 'reasoning' },
     });
+  });
+
+  it('does not debug-log high-frequency streaming deltas even when debug logs are enabled', () => {
+    localStorage.setItem('memstack:debugLogs', 'true');
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const handler: AgentStreamHandler = {
+      onTextDelta: vi.fn(),
+      onThoughtDelta: vi.fn(),
+      onActDelta: vi.fn(),
+    };
+
+    route('text_delta', { text: 'token' }, handler);
+    route('thought_delta', { text: 'thinking' }, handler);
+    route('act_delta', { text: 'running' }, handler);
+
+    expect(handler.onTextDelta).toHaveBeenCalledTimes(1);
+    expect(handler.onThoughtDelta).toHaveBeenCalledTimes(1);
+    expect(handler.onActDelta).toHaveBeenCalledTimes(1);
+    expect(logSpy).not.toHaveBeenCalledWith(
+      '[DEBUG]',
+      '[AgentWS] routeToHandler:',
+      expect.anything()
+    );
   });
 });

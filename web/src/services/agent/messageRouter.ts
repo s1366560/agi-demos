@@ -103,6 +103,12 @@ import type {
   GraphHandoffEventData,
 } from '../../types/agent';
 
+const HIGH_FREQUENCY_ROUTE_EVENTS = new Set<AgentEventType>([
+  'text_delta',
+  'thought_delta',
+  'act_delta',
+]);
+
 export function routeSubagentLifecycleMessage(
   message: ServerMessage,
   getHandler: (conversationId: string) => AgentStreamHandler | undefined
@@ -195,7 +201,9 @@ export function routeToHandler(
   data: unknown,
   handler: AgentStreamHandler
 ): void {
-  logger.debug('[AgentWS] routeToHandler:', { eventType, hasData: !!data });
+  if (!HIGH_FREQUENCY_ROUTE_EVENTS.has(eventType)) {
+    logger.debug('[AgentWS] routeToHandler:', { eventType, hasData: !!data });
+  }
   const event = { type: eventType, data };
 
   try {
