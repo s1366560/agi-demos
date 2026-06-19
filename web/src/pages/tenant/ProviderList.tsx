@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
 import { App } from 'antd';
 import {
@@ -95,7 +96,9 @@ type SortOrder = 'asc' | 'desc';
 export const ProviderList: React.FC = () => {
   const { t } = useTranslation();
   const { message } = App.useApp();
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string | undefined }>();
   const currentTenant = useTenantStore((state) => state.currentTenant);
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
 
   const { providers, isLoading, error } = useProviderStore(
     useShallow((state) => ({
@@ -790,7 +793,13 @@ export const ProviderList: React.FC = () => {
       )}
 
       {activeTab === 'assignments' && (
-        <ModelAssignment tenantId={currentTenant?.id ?? ''} providers={providers} />
+        tenantId ? (
+          <ModelAssignment tenantId={tenantId} providers={providers} />
+        ) : (
+          <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+            {t('common.noTenant')}
+          </div>
+        )
       )}
 
       {/* Modals */}
@@ -811,7 +820,7 @@ export const ProviderList: React.FC = () => {
         />
       )}
 
-      {assigningProvider && currentTenant && (
+      {assigningProvider && tenantId && (
         <AssignProviderModal
           isOpen={!!assigningProvider}
           onClose={() => {
@@ -822,7 +831,7 @@ export const ProviderList: React.FC = () => {
             void loadProviders();
           }}
           provider={assigningProvider}
-          tenantId={currentTenant.id}
+          tenantId={tenantId}
         />
       )}
     </div>
