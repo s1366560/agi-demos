@@ -638,6 +638,24 @@ describe('TenantLayout', () => {
     expect(mockProjectState.getProject).not.toHaveBeenCalled();
   });
 
+  it('lets AgentWorkspace resolve query projects that are outside the layout project window', async () => {
+    setMockRouteParams({ tenantId: 't1' });
+    mockLocationPathname = '/tenant/t1/agent-workspace';
+    mockLocationSearch = '?projectId=query-project';
+    mockProjectState.projects = [];
+    mockProjectState.currentProject = null;
+
+    render(<TenantLayout />);
+
+    await waitFor(() => {
+      expect(screen.getByText('MemStack')).toBeInTheDocument();
+    });
+    expect(mockProjectState.getProject).not.toHaveBeenCalled();
+    expect(mockProjectState.setCurrentProject).not.toHaveBeenCalledWith({
+      id: 'query-project',
+    });
+  });
+
   it('keeps workspace-selected project on base agent workspace routes', async () => {
     const currentProject = { id: 'workspace-project', tenant_id: 't1', name: 'Workspace Project' };
     setMockRouteParams({ tenantId: 't1' });

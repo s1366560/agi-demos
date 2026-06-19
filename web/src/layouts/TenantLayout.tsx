@@ -317,7 +317,7 @@ export const TenantLayout: React.FC = memo(() => {
         if (isCurrentProjectRequest()) {
           setCurrentProject(project);
         }
-      } else {
+      } else if (!isAgentWorkspaceRoute) {
         getProject(projectSyncTenantId, requestProjectId)
           .then((p) => {
             if (isCurrentProjectRequest()) {
