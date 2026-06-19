@@ -341,6 +341,13 @@ async def test_get_tenant_analytics_returns_project_storage_and_summary(
     test_db.add(empty_project)
     test_db.add_all(
         [
+            UserProject(
+                id=str(uuid4()),
+                user_id=test_user.id,
+                project_id=empty_project.id,
+                role="owner",
+                permissions={"admin": True, "read": True, "write": True},
+            ),
             Memory(
                 id=str(uuid4()),
                 project_id=test_project_db.id,
@@ -376,6 +383,86 @@ async def test_get_tenant_analytics_returns_project_storage_and_summary(
 
 
 @pytest.mark.unit
+async def test_get_tenant_analytics_scopes_project_metrics_to_accessible_projects(
+    test_db: AsyncSession,
+    test_tenant_db: Tenant,
+    another_user: User,
+    test_user: User,
+) -> None:
+    accessible_project = Project(
+        id=str(uuid4()),
+        tenant_id=test_tenant_db.id,
+        name="Visible Analytics Project",
+        owner_id=test_user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    inaccessible_project = Project(
+        id=str(uuid4()),
+        tenant_id=test_tenant_db.id,
+        name="Hidden Analytics Project",
+        owner_id=test_user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    test_db.add_all(
+        [
+            UserTenant(
+                id=str(uuid4()),
+                user_id=another_user.id,
+                tenant_id=test_tenant_db.id,
+                role="member",
+                permissions={"read": True},
+            ),
+            accessible_project,
+            inaccessible_project,
+            UserProject(
+                id=str(uuid4()),
+                user_id=another_user.id,
+                project_id=accessible_project.id,
+                role="member",
+                permissions={"read": True},
+            ),
+            Memory(
+                id=str(uuid4()),
+                project_id=accessible_project.id,
+                title="Visible analytics memory",
+                content="x" * 256,
+                author_id=another_user.id,
+                created_at=datetime.now(UTC),
+            ),
+            Memory(
+                id=str(uuid4()),
+                project_id=inaccessible_project.id,
+                title="Hidden analytics memory",
+                content="x" * 1024,
+                author_id=test_user.id,
+                created_at=datetime.now(UTC),
+            ),
+        ]
+    )
+    await test_db.commit()
+
+    analytics = await get_tenant_analytics(
+        test_tenant_db.id,
+        current_user=another_user,
+        db=test_db,
+    )
+
+    assert analytics["projectStorage"] == [
+        {
+            "name": "Visible Analytics Project",
+            "storage_bytes": 256,
+            "memory_count": 1,
+        }
+    ]
+    assert analytics["summary"]["total_projects"] == 1
+    assert analytics["summary"]["total_memories"] == 1
+    assert analytics["summary"]["total_storage_bytes"] == 256
+    assert sum(point["count"] for point in analytics["memoryGrowth"]) == 1
+
+
+@pytest.mark.unit
 async def test_get_tenant_analytics_limits_project_storage_without_truncating_summary(
     test_db: AsyncSession,
     test_tenant_db: Tenant,
@@ -393,6 +480,13 @@ async def test_get_tenant_analytics_limits_project_storage_without_truncating_su
     test_db.add(empty_project)
     test_db.add_all(
         [
+            UserProject(
+                id=str(uuid4()),
+                user_id=test_user.id,
+                project_id=empty_project.id,
+                role="owner",
+                permissions={"admin": True, "read": True, "write": True},
+            ),
             Memory(
                 id=str(uuid4()),
                 project_id=test_project_db.id,

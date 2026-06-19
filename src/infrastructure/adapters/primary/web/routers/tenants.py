@@ -828,14 +828,25 @@ async def get_tenant_analytics(
         if isinstance(project_storage_limit, int)
         else TENANT_ANALYTICS_PROJECT_STORAGE_LIMIT
     )
+    project_scope_condition = _tenant_project_scope_condition(
+        current_user=current_user,
+        tenant_id=tenant_id,
+    )
 
     project_storage = await _get_tenant_project_storage(
         db,
-        tenant_id,
+        project_scope_condition=project_scope_condition,
         limit=storage_limit,
     )
-    memory_growth = await _get_memory_growth_by_day(db, tenant_id, days)
-    summary = await _get_tenant_memory_summary(db, tenant_id)
+    memory_growth = await _get_memory_growth_by_day(
+        db,
+        days,
+        project_scope_condition=project_scope_condition,
+    )
+    summary = await _get_tenant_memory_summary(
+        db,
+        project_scope_condition=project_scope_condition,
+    )
 
     return {
         "memoryGrowth": memory_growth,
@@ -849,12 +860,14 @@ async def get_tenant_analytics(
     }
 
 
-async def _get_tenant_memory_summary(db: AsyncSession, tenant_id: str) -> dict[str, int]:
-    """Get tenant-wide project and memory totals without loading project rows."""
+async def _get_tenant_memory_summary(
+    db: AsyncSession,
+    *,
+    project_scope_condition: ColumnElement[bool],
+) -> dict[str, int]:
+    """Get accessible project and memory totals without loading project rows."""
     project_count_result = await db.execute(
-        refresh_select_statement(
-            select(func.count(Project.id)).where(Project.tenant_id == tenant_id)
-        )
+        refresh_select_statement(select(func.count(Project.id)).where(project_scope_condition))
     )
     project_count = int(project_count_result.scalar() or 0)
 
@@ -866,7 +879,7 @@ async def _get_tenant_memory_summary(db: AsyncSession, tenant_id: str) -> dict[s
             )
             .select_from(Memory)
             .join(Project, Memory.project_id == Project.id)
-            .where(Project.tenant_id == tenant_id)
+            .where(project_scope_condition)
         )
     )
     storage_bytes, memory_count = memory_summary_result.one()
@@ -880,11 +893,11 @@ async def _get_tenant_memory_summary(db: AsyncSession, tenant_id: str) -> dict[s
 
 async def _get_tenant_project_storage(
     db: AsyncSession,
-    tenant_id: str,
     *,
+    project_scope_condition: ColumnElement[bool],
     limit: int,
 ) -> list[dict[str, Any]]:
-    """Return the top project storage rows needed by the dashboard chart."""
+    """Return accessible project storage rows needed by the dashboard chart."""
     storage_expr = func.coalesce(func.sum(func.length(Memory.content)), 0)
     memory_count_expr = func.count(Memory.id)
 
@@ -897,7 +910,7 @@ async def _get_tenant_project_storage(
             )
             .select_from(Project)
             .outerjoin(Memory, Memory.project_id == Project.id)
-            .where(Project.tenant_id == tenant_id)
+            .where(project_scope_condition)
             .group_by(Project.id, Project.name)
             .order_by(storage_expr.desc(), Project.name.asc())
             .limit(limit)
@@ -914,8 +927,13 @@ async def _get_tenant_project_storage(
     ]
 
 
-async def _get_memory_growth_by_day(db: AsyncSession, tenant_id: str, days: int) -> list[Any]:
-    """Get memory creation counts by day for the last N days."""
+async def _get_memory_growth_by_day(
+    db: AsyncSession,
+    days: int,
+    *,
+    project_scope_condition: ColumnElement[bool],
+) -> list[Any]:
+    """Get accessible memory creation counts by day for the last N days."""
     _start_date = datetime.now(UTC) - timedelta(days=days)
 
     # Query memory counts grouped by date
@@ -927,7 +945,7 @@ async def _get_memory_growth_by_day(db: AsyncSession, tenant_id: str, days: int)
             )
             .select_from(Memory)
             .join(Project, Memory.project_id == Project.id)
-            .where(Project.tenant_id == tenant_id)
+            .where(project_scope_condition)
             .where(Memory.created_at >= _start_date)
             .group_by(func.date(Memory.created_at))
             .order_by(func.date(Memory.created_at))
