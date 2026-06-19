@@ -6530,6 +6530,8 @@
       "searchProjects": "搜索项目",
       "searchProjectsPlaceholder": "搜索所有有权限的项目",
       "searchingProjects": "正在搜索项目...",
+      "projectSearchResults": "有权限的项目搜索结果",
+      "selectedProjectBadge": "已选择",
       "projectSearchCount": "已显示 {{count}} / {{total}} 个项目",
       "loadMoreProjects": "加载更多",
       "loadingMoreProjects": "加载中...",

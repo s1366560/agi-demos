@@ -640,9 +640,7 @@ describe('TenantChatSidebar', () => {
     });
     expect(screen.getByRole('option', { name: 'Hidden Authorized Project' })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Project switcher' }), {
-      target: { value: 'project-hidden' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Hidden Authorized Project' }));
 
     expect(projectState.setCurrentProject).toHaveBeenCalledWith(hiddenProject);
     expect(localStorage.getItem('agent:tenant-1:lastProjectId')).toBe(
@@ -681,9 +679,7 @@ describe('TenantChatSidebar', () => {
       await new Promise((resolve) => window.setTimeout(resolve, 300));
     });
 
-    fireEvent.change(await screen.findByRole('combobox', { name: 'Project switcher' }), {
-      target: { value: 'project-hidden' },
-    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Hidden Authorized Project' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('location-probe')).toHaveTextContent(
@@ -744,14 +740,39 @@ describe('TenantChatSidebar', () => {
         search: 'Search Project',
       });
       expect(screen.getByRole('option', { name: 'Search Project 100' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Search Project 100' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Project switcher' }), {
-      target: { value: 'search-project-100' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Search Project 100' }));
 
     expect(projectState.setCurrentProject).toHaveBeenCalledWith(secondPageProject);
+  });
+
+  it('shows an empty search result state without hiding the selected project', async () => {
+    (projectAPI.list as any).mockResolvedValue({
+      projects: [],
+      total: 0,
+      page: 1,
+      page_size: 100,
+    });
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace',
+    });
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search projects' }), {
+      target: { value: 'No Match' },
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 300));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('No projects found')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('combobox', { name: 'Project switcher' })).toHaveValue('project-1');
   });
 
   it('keeps the conversation list visible while switching session history', () => {

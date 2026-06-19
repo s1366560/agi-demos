@@ -691,6 +691,13 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     projectSearchResults,
     resolvedTenantId,
   ]);
+  const hasProjectSearchQuery = projectSearchQuery.trim().length > 0;
+  const hasProjectSearchResults = projectSearchResults.length > 0;
+  const showProjectSearchEmpty =
+    hasProjectSearchQuery &&
+    !isProjectSearchLoading &&
+    projectSearchPage > 0 &&
+    projectSearchTotal === 0;
   const tenantBasePath = normalizedTenantId ? `/tenant/${normalizedTenantId}` : '/tenant';
   const isAgentWorkspaceRoute =
     location.pathname === `${tenantBasePath}/agent-workspace` ||
@@ -1295,7 +1302,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   );
 
   const hasMoreProjectSearchResults =
-    !!projectSearchQuery.trim() && projectSearchResults.length < projectSearchTotal;
+    hasProjectSearchQuery && projectSearchResults.length < projectSearchTotal;
 
   const handleLoadMoreProjectSearchResults = useCallback(() => {
     const search = projectSearchQuery.trim();
@@ -1381,6 +1388,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     typeof projectSearchCountLabel === 'string'
       ? projectSearchCountLabel
       : `${projectSearchResults.length.toString()} / ${projectSearchTotal.toString()}`;
+  const projectSearchResultsLabel = t(
+    'agent.sidebar.projectSearchResults',
+    'Authorized project search results'
+  );
+  const selectedProjectBadge = t('agent.sidebar.selectedProjectBadge', 'Selected');
 
   return (
     <aside
@@ -1509,7 +1521,45 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
               </span>
             ) : null}
           </div>
-          {projectSearchQuery.trim() && projectSearchTotal > 0 ? (
+          {hasProjectSearchQuery && hasProjectSearchResults ? (
+            <div
+              role="list"
+              aria-label={projectSearchResultsLabel}
+              className="max-h-44 overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+            >
+              {projectSearchResults.map((project) => {
+                const isSelectedProject = selectedProjectId === project.id;
+                return (
+                  <div key={project.id} role="listitem">
+                    <button
+                      type="button"
+                      aria-current={isSelectedProject ? 'true' : undefined}
+                      className="flex min-h-8 w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:text-slate-200 dark:hover:bg-slate-800"
+                      onClick={() => {
+                        handleProjectChange(project.id);
+                      }}
+                    >
+                      <span className="truncate">{project.name}</span>
+                      {isSelectedProject ? (
+                        <span
+                          aria-hidden="true"
+                          className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary"
+                        >
+                          {selectedProjectBadge}
+                        </span>
+                      ) : null}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+          {showProjectSearchEmpty ? (
+            <div className="rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+              {t('agent.sidebar.noProjectsFound', 'No projects found')}
+            </div>
+          ) : null}
+          {hasProjectSearchQuery && projectSearchTotal > 0 ? (
             <div className="flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
               <span>{projectSearchCountText}</span>
               {hasMoreProjectSearchResults ? (

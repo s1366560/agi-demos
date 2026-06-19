@@ -6507,6 +6507,8 @@
       "searchProjects": "Search projects",
       "searchProjectsPlaceholder": "Search all authorized projects",
       "searchingProjects": "Searching projects...",
+      "projectSearchResults": "Authorized project search results",
+      "selectedProjectBadge": "Selected",
       "projectSearchCount": "Showing {{count}} of {{total}} projects",
       "loadMoreProjects": "Load more",
       "loadingMoreProjects": "Loading...",
