@@ -363,6 +363,7 @@ async def test_list_conversations_caps_workspace_group_expansion(
         db=db_session,
     )
 
+    assert conversations_router._workspace_group_expansion_limit(5) == 5
     assert len(response.items) == 1 + conversations_router._workspace_group_expansion_limit(5)
     assert len(response.items) < 81
     assert response.items[0].id == "workspace-verifier:ws-large-group:task-base:agent-1:attempt-1"
@@ -568,6 +569,15 @@ def test_list_conversations_accepts_large_workspace_refresh_pages() -> None:
     )
 
     assert any(getattr(metadata, "le", None) == 500 for metadata in limit_param.metadata)
+
+
+def test_list_conversations_defaults_to_sidebar_sized_page() -> None:
+    limit_param = (
+        inspect.signature(conversations_router.list_conversations).parameters["limit"].default
+    )
+
+    assert limit_param.default == conversations_router.CONVERSATION_LIST_DEFAULT_LIMIT
+    assert limit_param.default == 10
 
 
 @pytest.mark.unit

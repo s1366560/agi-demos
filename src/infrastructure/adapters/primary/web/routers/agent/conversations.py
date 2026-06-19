@@ -58,11 +58,12 @@ if TYPE_CHECKING:
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-WORKSPACE_GROUP_EXPANSION_HARD_LIMIT = 50
+CONVERSATION_LIST_DEFAULT_LIMIT = 10
+WORKSPACE_GROUP_EXPANSION_HARD_LIMIT = 25
 
 
 def _workspace_group_expansion_limit(page_limit: int) -> int:
-    return min(max(page_limit * 2, page_limit + 10), WORKSPACE_GROUP_EXPANSION_HARD_LIMIT)
+    return min(page_limit, WORKSPACE_GROUP_EXPANSION_HARD_LIMIT)
 
 
 def _workspace_id_from_conversation_id(conversation_id: str) -> str | None:
@@ -526,7 +527,12 @@ async def list_conversations(
     request: Request,
     project_id: str = Query(..., description="Project ID to filter by"),
     status: str | None = Query(None, description="Filter by status"),
-    limit: int = Query(50, ge=1, le=500, description="Maximum number to return"),
+    limit: int = Query(
+        CONVERSATION_LIST_DEFAULT_LIMIT,
+        ge=1,
+        le=500,
+        description="Maximum number to return",
+    ),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
     workspace_id: str | None = Query(None, description="Filter by workspace ID"),
     group_by_workspace: bool = Query(
