@@ -31,7 +31,11 @@ vi.mock('../../../services/api', () => ({
 
 // Mock hooks and lazy components
 vi.mock('@/hooks/useProjectBasePath', () => ({
-  useProjectBasePath: () => ({ projectBasePath: '/project/p1' }),
+  useProjectBasePath: () => ({
+    projectBasePath: '/project/p1',
+    tenantBasePath: '/tenant/tenant-1',
+    tenantId: 'tenant-1',
+  }),
 }));
 
 vi.mock('@/utils/date', () => ({
@@ -172,6 +176,7 @@ describe('ProjectOverview - Performance Optimizations', () => {
         expect(screen.getByText('150')).toBeInTheDocument();
       });
 
+      expect(projectAPI.get).toHaveBeenCalledWith('tenant-1', 'p1');
       expect(screen.getByText('42')).toBeInTheDocument();
       expect(screen.getByText('5')).toBeInTheDocument();
     });
@@ -317,6 +322,19 @@ describe('ProjectOverview - Performance Optimizations', () => {
         expect(screen.getByText('Current Memory')).toBeInTheDocument();
         expect(screen.getByText('7')).toBeInTheDocument();
       });
+    });
+
+    it('shows an error state instead of staying in loading when project access fails', async () => {
+      vi.mocked(projectAPI.getStats).mockRejectedValue(new Error('Access denied to project'));
+
+      renderWithRouter(<ProjectOverview />);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Access denied to project');
+      expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Back to projects' })).toHaveAttribute(
+        'href',
+        '/tenant/tenant-1/projects'
+      );
     });
   });
 

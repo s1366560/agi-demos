@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 
 import {
+  AlertCircle,
   Bot,
   Brain,
   CheckCircle,
@@ -70,11 +71,13 @@ export const ProjectOverview: React.FC = () => {
   const { t } = useTranslation();
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const { projectBasePath } = useProjectBasePath();
+  const { projectBasePath, tenantBasePath, tenantId } = useProjectBasePath();
   const [stats, setStats] = useState<ProjectOverviewStats | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const loadRequestRef = useRef(0);
 
   // Action states
@@ -89,12 +92,12 @@ export const ProjectOverview: React.FC = () => {
         loadRequestRef.current = requestId;
         const requestedProjectId = projectId;
         setIsLoading(true);
+        setLoadError(null);
         try {
-          // Pass projectId as tenantId since it's ignored by the API wrapper currently,
-          // or we could get the tenantId from context/url if available.
+          const requestedTenantId = tenantId ?? requestedProjectId;
           const [statsData, projectData, memoriesData] = await Promise.all([
             projectAPI.getStats(requestedProjectId),
-            projectAPI.get(requestedProjectId, requestedProjectId),
+            projectAPI.get(requestedTenantId, requestedProjectId),
             memoryAPI.list(requestedProjectId, { page: 1, page_size: 5 }),
           ]);
           if (loadRequestRef.current !== requestId) return;
@@ -104,6 +107,13 @@ export const ProjectOverview: React.FC = () => {
         } catch (error) {
           if (loadRequestRef.current !== requestId) return;
           console.error('Failed to fetch project data:', error);
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : t('project.overview.loadFailed', {
+                  defaultValue: 'Unable to load this project.',
+                })
+          );
         } finally {
           if (loadRequestRef.current === requestId) {
             setIsLoading(false);
@@ -115,7 +125,7 @@ export const ProjectOverview: React.FC = () => {
     return () => {
       loadRequestRef.current += 1;
     };
-  }, [projectId]);
+  }, [projectId, reloadToken, tenantId, t]);
 
   const handleReprocess = async (memoryId: string) => {
     if (!projectId) return;
@@ -162,8 +172,58 @@ export const ProjectOverview: React.FC = () => {
     return <div className="p-8 text-center text-slate-500">{t('project.overview.not_found')}</div>;
   }
 
-  if (isLoading || !stats) {
+  if (isLoading) {
     return <div className="p-8 text-center text-slate-500">{t('common.loading')}</div>;
+  }
+
+  if (loadError || !stats) {
+    return (
+      <div className="mx-auto flex h-full max-w-xl items-center justify-center px-6 py-10">
+        <div
+          role="alert"
+          className="w-full rounded-md bg-white p-6 shadow-[0_0_0_1px_rgba(0,0,0,0.08)] dark:bg-neutral-950 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12)]"
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300">
+              <AlertCircle size={18} aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-neutral-950 dark:text-neutral-50">
+                {t('project.overview.loadFailed', {
+                  defaultValue: 'Unable to load this project',
+                })}
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-neutral-600 dark:text-neutral-400">
+                {loadError ||
+                  t('project.overview.loadFailedDescription', {
+                    defaultValue:
+                      'The project may have moved, or your account may not have access.',
+                  })}
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Link
+              to={`${tenantBasePath}/projects`}
+              className="inline-flex h-9 items-center justify-center rounded-md bg-neutral-950 px-3 text-sm font-medium text-white transition-colors hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 dark:bg-neutral-50 dark:text-neutral-950 dark:hover:bg-neutral-200 dark:focus:ring-neutral-600 dark:focus:ring-offset-neutral-950"
+            >
+              {t('project.overview.backToProjects', {
+                defaultValue: 'Back to projects',
+              })}
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setReloadToken((value) => value + 1);
+              }}
+              className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-200 px-3 text-sm font-medium text-neutral-900 transition-colors hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 dark:border-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-900 dark:focus:ring-neutral-600 dark:focus:ring-offset-neutral-950"
+            >
+              {t('common.retry')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const formatDate = (dateString: string) => {

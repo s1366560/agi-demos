@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
+from sqlalchemy.sql.elements import ColumnElement
 
 from src.application.schemas.tenant import (
     TenantCreate,
@@ -26,6 +27,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     RegistryConfigModel,
     Tenant,
     User,
+    UserProject,
     UserTenant,
 )
 from src.infrastructure.i18n import gettext as _
@@ -53,9 +55,15 @@ async def _build_memory_usage_history(
     tenant_id: str,
     *,
     storage_limit: int,
+    project_scope_condition: ColumnElement[bool] | None = None,
     days: int = 30,
 ) -> list[dict[str, Any]]:
     """Return cumulative tenant memory usage for the trailing window."""
+    project_scope = (
+        project_scope_condition
+        if project_scope_condition is not None
+        else Project.tenant_id == tenant_id
+    )
     today = datetime.now(UTC).date()
     start_date = today - timedelta(days=days - 1)
     start_at = datetime.combine(start_date, time.min, tzinfo=UTC)
@@ -64,7 +72,7 @@ async def _build_memory_usage_history(
         refresh_select_statement(
             select(func.coalesce(func.sum(func.length(Memory.content)), 0))
             .join(Project, Memory.project_id == Project.id)
-            .where(and_(Project.tenant_id == tenant_id, Memory.created_at < start_at))
+            .where(and_(project_scope, Memory.created_at < start_at))
         )
     )
     running_total = int(initial_usage_result.scalar() or 0)
@@ -78,7 +86,7 @@ async def _build_memory_usage_history(
                 func.count(Memory.id).label("memory_count"),
             )
             .join(Project, Memory.project_id == Project.id)
-            .where(and_(Project.tenant_id == tenant_id, Memory.created_at >= start_at))
+            .where(and_(project_scope, Memory.created_at >= start_at))
             .group_by(history_day)
             .order_by(history_day)
         )
@@ -109,6 +117,27 @@ async def _build_memory_usage_history(
         )
 
     return history
+
+
+def _tenant_project_scope_condition(
+    *,
+    current_user: User,
+    tenant_id: str,
+    user_tenant: UserTenant,
+) -> ColumnElement[bool]:
+    """Return the project scope used by tenant overview project-derived stats."""
+    tenant_scope = Project.tenant_id == tenant_id
+    if user_tenant.role in {"owner", "admin"}:
+        return tenant_scope
+
+    user_project_ids = select(UserProject.project_id).where(UserProject.user_id == current_user.id)
+    return and_(
+        tenant_scope,
+        or_(
+            Project.owner_id == current_user.id,
+            Project.id.in_(user_project_ids),
+        ),
+    )
 
 
 class AddMemberRequest(BaseModel):
@@ -544,7 +573,8 @@ async def list_tenant_members(
             )
         )
     )
-    if not user_tenant_result.scalar_one_or_none():
+    user_tenant = user_tenant_result.scalar_one_or_none()
+    if not user_tenant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to tenant")
         )
@@ -595,10 +625,16 @@ async def get_tenant_stats(
             )
         )
     )
-    if not user_tenant_result.scalar_one_or_none():
+    user_tenant = user_tenant_result.scalar_one_or_none()
+    if not user_tenant:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=_("Access denied to tenant")
         )
+    project_scope_condition = _tenant_project_scope_condition(
+        current_user=current_user,
+        tenant_id=tenant_id,
+        user_tenant=user_tenant,
+    )
 
     # Get tenant details
     tenant_result = await db.execute(
@@ -611,9 +647,7 @@ async def get_tenant_stats(
     # Projects do not have a lifecycle status column today; every existing
     # project is counted as active for overview compatibility.
     active_projects_result = await db.execute(
-        refresh_select_statement(
-            select(func.count(Project.id)).where(Project.tenant_id == tenant_id)
-        )
+        refresh_select_statement(select(func.count(Project.id)).where(project_scope_condition))
     )
     active_projects_count = active_projects_result.scalar() or 0
 
@@ -630,7 +664,7 @@ async def get_tenant_stats(
         refresh_select_statement(
             select(func.sum(func.length(Memory.content)))
             .join(Project, Memory.project_id == Project.id)
-            .where(Project.tenant_id == tenant_id)
+            .where(project_scope_condition)
         )
     )
     storage_used = storage_result.scalar() or 0
@@ -640,7 +674,7 @@ async def get_tenant_stats(
     new_projects_result = await db.execute(
         refresh_select_statement(
             select(func.count(Project.id)).where(
-                and_(Project.tenant_id == tenant_id, Project.created_at >= one_week_ago)
+                and_(project_scope_condition, Project.created_at >= one_week_ago)
             )
         )
     )
@@ -665,7 +699,7 @@ async def get_tenant_stats(
             func.count(Memory.id).label("memory_count"),
         )
         .join(Project, Memory.project_id == Project.id)
-        .where(Project.tenant_id == tenant_id)
+        .where(project_scope_condition)
         .group_by(Memory.project_id)
         .subquery()
     )
@@ -679,7 +713,7 @@ async def get_tenant_stats(
         refresh_select_statement(
             select(Project, project_storage_bytes, project_memory_count)
             .outerjoin(project_usage_subquery, project_usage_subquery.c.project_id == Project.id)
-            .where(Project.tenant_id == tenant_id)
+            .where(project_scope_condition)
             .order_by(
                 project_storage_bytes.desc(),
                 project_memory_count.desc(),
@@ -732,6 +766,7 @@ async def get_tenant_stats(
         db,
         tenant_id,
         storage_limit=storage_limit,
+        project_scope_condition=project_scope_condition,
     )
 
     return {

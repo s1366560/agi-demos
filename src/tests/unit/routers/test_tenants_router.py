@@ -8,7 +8,14 @@ from src.infrastructure.adapters.primary.web.routers.tenants import (
     get_tenant_analytics,
     get_tenant_stats,
 )
-from src.infrastructure.adapters.secondary.persistence.models import Memory, Project, Tenant, User
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Memory,
+    Project,
+    Tenant,
+    User,
+    UserProject,
+    UserTenant,
+)
 
 
 @pytest.mark.unit
@@ -130,6 +137,73 @@ async def test_get_tenant_stats_returns_top_projects_by_memory_usage(
     assert projects_by_id[test_project_db.id]["memory_consumed"] == "2.0 KB"
     assert projects_by_id[empty_project.id]["memory_consumed"] == "0.0 KB"
     assert all(item["status"] == "active" for item in stats["projects"]["list"])
+
+
+@pytest.mark.unit
+async def test_get_tenant_stats_scopes_member_project_list_to_accessible_projects(
+    test_db: AsyncSession,
+    test_tenant_db: Tenant,
+    another_user: User,
+    test_user: User,
+) -> None:
+    member_project = Project(
+        id=str(uuid4()),
+        tenant_id=test_tenant_db.id,
+        name="Member Project",
+        owner_id=another_user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    inaccessible_project = Project(
+        id=str(uuid4()),
+        tenant_id=test_tenant_db.id,
+        name="Inaccessible Project",
+        owner_id=test_user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    test_db.add_all(
+        [
+            UserTenant(
+                id=str(uuid4()),
+                user_id=another_user.id,
+                tenant_id=test_tenant_db.id,
+                role="member",
+                permissions={"read": True},
+            ),
+            member_project,
+            inaccessible_project,
+            UserProject(
+                id=str(uuid4()),
+                user_id=another_user.id,
+                project_id=member_project.id,
+                role="member",
+                permissions={"read": True},
+            ),
+            Memory(
+                id=str(uuid4()),
+                project_id=member_project.id,
+                title="Member memory",
+                content="x" * 1024,
+                author_id=another_user.id,
+            ),
+            Memory(
+                id=str(uuid4()),
+                project_id=inaccessible_project.id,
+                title="Hidden memory",
+                content="x" * 4096,
+                author_id=test_user.id,
+            ),
+        ]
+    )
+    await test_db.commit()
+
+    stats = await get_tenant_stats(test_tenant_db.id, current_user=another_user, db=test_db)
+
+    assert stats["projects"]["active"] == 1
+    assert stats["storage"]["used"] == 1024
+    assert [item["id"] for item in stats["projects"]["list"]] == [member_project.id]
+    assert stats["projects"]["list"][0]["name"] == "Member Project"
 
 
 @pytest.mark.unit
