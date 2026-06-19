@@ -9,7 +9,7 @@
  * 5. Run tests to verify
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { logger } from '../../utils/logger';
 
@@ -50,6 +50,7 @@ describe('logger', () => {
     console.info = originalConsole.info;
     console.warn = originalConsole.warn;
     console.error = originalConsole.error;
+    vi.useRealTimers();
   });
 
   describe('logger types', () => {
@@ -93,6 +94,23 @@ describe('logger', () => {
       expect(mockCalls.info).toHaveLength(1);
       expect(mockCalls.info[0]).toContain('[INFO]');
       expect(mockCalls.info[0]).toContain('test info message');
+    });
+
+    it('should rate limit verbose logs to keep browser consoles responsive', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(2_000_000_000_000);
+      localStorage.setItem('memstack:debugLogs', 'true');
+
+      for (let index = 0; index < 130; index += 1) {
+        logger.debug('burst debug message', index);
+      }
+
+      expect(mockCalls.log).toHaveLength(120);
+
+      vi.advanceTimersByTime(1000);
+      logger.debug('next window debug message');
+
+      expect(mockCalls.log).toHaveLength(121);
     });
 
     it('should output warn messages with [WARN] prefix', () => {

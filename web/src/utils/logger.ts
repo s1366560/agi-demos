@@ -13,6 +13,12 @@
  */
 type LogMethod = (...args: unknown[]) => void;
 
+const VERBOSE_LOG_LIMIT_PER_WINDOW = 120;
+const VERBOSE_LOG_WINDOW_MS = 1000;
+
+let verboseLogWindowStartedAt = 0;
+let verboseLogCount = 0;
+
 /**
  * Logger interface with all log levels
  */
@@ -51,6 +57,22 @@ const isVerboseLoggingEnabled = (): boolean => {
   }
 };
 
+const shouldEmitVerboseLog = (): boolean => {
+  const now = Date.now();
+
+  if (now - verboseLogWindowStartedAt >= VERBOSE_LOG_WINDOW_MS) {
+    verboseLogWindowStartedAt = now;
+    verboseLogCount = 0;
+  }
+
+  if (verboseLogCount >= VERBOSE_LOG_LIMIT_PER_WINDOW) {
+    return false;
+  }
+
+  verboseLogCount += 1;
+  return true;
+};
+
 /**
  * Logger implementation
  */
@@ -59,7 +81,7 @@ export const logger: Logger = {
    * Debug level - opt-in only
    */
   debug: (...args: unknown[]): void => {
-    if (isVerboseLoggingEnabled()) {
+    if (isVerboseLoggingEnabled() && shouldEmitVerboseLog()) {
       console.log('[DEBUG]', ...args);
     }
   },
@@ -68,7 +90,7 @@ export const logger: Logger = {
    * Info level - opt-in only
    */
   info: (...args: unknown[]): void => {
-    if (isVerboseLoggingEnabled()) {
+    if (isVerboseLoggingEnabled() && shouldEmitVerboseLog()) {
       console.info('[INFO]', ...args);
     }
   },
