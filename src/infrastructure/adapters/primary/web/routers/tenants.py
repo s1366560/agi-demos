@@ -129,10 +129,7 @@ def _tenant_project_scope_condition(
     user_project_ids = select(UserProject.project_id).where(UserProject.user_id == current_user.id)
     return and_(
         tenant_scope,
-        or_(
-            Project.owner_id == current_user.id,
-            Project.id.in_(user_project_ids),
-        ),
+        Project.id.in_(user_project_ids),
     )
 
 

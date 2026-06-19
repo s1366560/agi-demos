@@ -105,6 +105,20 @@ async def test_get_tenant_stats_returns_top_projects_by_memory_usage(
         [
             busy_project,
             empty_project,
+            UserProject(
+                id=str(uuid4()),
+                user_id=test_user.id,
+                project_id=busy_project.id,
+                role="owner",
+                permissions={"admin": True, "read": True, "write": True},
+            ),
+            UserProject(
+                id=str(uuid4()),
+                user_id=test_user.id,
+                project_id=empty_project.id,
+                role="owner",
+                permissions={"admin": True, "read": True, "write": True},
+            ),
             Memory(
                 id=str(uuid4()),
                 project_id=busy_project.id,
@@ -137,6 +151,42 @@ async def test_get_tenant_stats_returns_top_projects_by_memory_usage(
     assert projects_by_id[test_project_db.id]["memory_consumed"] == "2.0 KB"
     assert projects_by_id[empty_project.id]["memory_consumed"] == "0.0 KB"
     assert all(item["status"] == "active" for item in stats["projects"]["list"])
+
+
+@pytest.mark.unit
+async def test_get_tenant_stats_does_not_treat_owner_id_without_membership_as_project_access(
+    test_db: AsyncSession,
+    test_tenant_db: Tenant,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    orphan_owned_project = Project(
+        id=str(uuid4()),
+        tenant_id=test_tenant_db.id,
+        name="Orphan Owned Project",
+        owner_id=test_user.id,
+        memory_rules={},
+        graph_config={},
+    )
+    test_db.add_all(
+        [
+            orphan_owned_project,
+            Memory(
+                id=str(uuid4()),
+                project_id=orphan_owned_project.id,
+                title="Hidden orphan memory",
+                content="x" * 4096,
+                author_id=test_user.id,
+            ),
+        ]
+    )
+    await test_db.commit()
+
+    stats = await get_tenant_stats(test_tenant_db.id, current_user=test_user, db=test_db)
+
+    project_ids = [item["id"] for item in stats["projects"]["list"]]
+    assert test_project_db.id in project_ids
+    assert orphan_owned_project.id not in project_ids
 
 
 @pytest.mark.unit
