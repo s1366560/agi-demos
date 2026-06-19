@@ -1174,4 +1174,31 @@ describe('TenantChatSidebar', () => {
       expect(agentState.loadMoreConversations).toHaveBeenCalledTimes(2);
     });
   });
+
+  it('caps automatic underfilled-list loading per project', async () => {
+    conversationsState.hasMoreConversations = true;
+    conversationsState.conversations = [
+      {
+        id: 'conv-visible',
+        title: 'Visible Conversation',
+        created_at: '2026-04-17T00:00:00.000Z',
+        status: 'idle',
+      },
+    ];
+    agentState.loadMoreConversations.mockResolvedValue(undefined);
+
+    render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
+      route: '/tenant/tenant-1/agent-workspace?projectId=project-1',
+    });
+
+    await waitFor(() => {
+      expect(agentState.loadMoreConversations).toHaveBeenCalledTimes(2);
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
+    });
+
+    expect(agentState.loadMoreConversations).toHaveBeenCalledTimes(2);
+  });
 });

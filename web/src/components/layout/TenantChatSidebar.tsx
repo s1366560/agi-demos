@@ -91,6 +91,7 @@ const COLLAPSE_THRESHOLD = 120; // Width below which sidebar collapses
 const PROJECT_SWITCHER_PAGE_SIZE = 25;
 const PROJECT_SEARCH_PAGE_SIZE = 100;
 const PROJECT_SEARCH_DEBOUNCE_MS = 250;
+const CONVERSATION_AUTO_FILL_PAGE_LIMIT = 2;
 
 function projectBelongsToTenant(
   project: Project | null | undefined,
@@ -1010,6 +1011,8 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   }, []);
 
   const isLoadingMoreRef = useRef(false);
+  const autoFillProjectIdRef = useRef<string | null>(null);
+  const autoFillLoadCountRef = useRef(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadMore = useCallback(async () => {
     if (!hasMoreConversations || isLoadingMoreRef.current || !selectedProjectId) return;
@@ -1037,6 +1040,11 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     },
     [hasMoreConversations, selectedProjectId, loadMore]
   );
+
+  useEffect(() => {
+    autoFillProjectIdRef.current = selectedProjectId;
+    autoFillLoadCountRef.current = 0;
+  }, [selectedProjectId]);
 
   const handleSelectConversation = useCallback(
     (id: string, projectId: string) => {
@@ -1089,12 +1097,20 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
     ) {
       return;
     }
+    if (autoFillProjectIdRef.current !== selectedProjectId) {
+      autoFillProjectIdRef.current = selectedProjectId;
+      autoFillLoadCountRef.current = 0;
+    }
+    if (autoFillLoadCountRef.current >= CONVERSATION_AUTO_FILL_PAGE_LIMIT) {
+      return;
+    }
 
     // Check if content fills the container
     const contentFillsContainer = container.scrollHeight > container.clientHeight + 10;
 
     // If content doesn't fill container and there are more conversations, load more
     if (!contentFillsContainer && visibleConversations.length > 0) {
+      autoFillLoadCountRef.current += 1;
       void loadMore().catch((error: unknown) => {
         console.error('Failed to auto-load more conversations:', error);
       });
