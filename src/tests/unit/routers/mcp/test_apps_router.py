@@ -6,8 +6,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.routers.mcp import apps as apps_router
+from src.infrastructure.adapters.secondary.persistence.models import Project, User
 
 
 class EmptyAppService:
@@ -65,6 +67,11 @@ async def test_proxy_resource_read_sanitizes_mcp_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(apps_router, "ensure_project_access", _allow_project_access)
+    monkeypatch.setattr(
+        apps_router,
+        "resolve_project_tenant_id_for_access",
+        AsyncMock(return_value="tenant-1"),
+    )
     monkeypatch.setattr(apps_router, "get_container_with_db", lambda _request, _db: FakeContainer())
 
     with pytest.raises(HTTPException) as exc_info:
@@ -101,6 +108,11 @@ async def test_proxy_resource_read_sanitizes_missing_resource_after_retry(
             return TimeoutMCPManager()
 
     monkeypatch.setattr(apps_router, "ensure_project_access", _allow_project_access)
+    monkeypatch.setattr(
+        apps_router,
+        "resolve_project_tenant_id_for_access",
+        AsyncMock(return_value="tenant-1"),
+    )
     monkeypatch.setattr(apps_router, "get_container_with_db", lambda _request, _db: Container())
     monkeypatch.setattr(repo_module, "SqlMCPServerRepository", MissingMCPServerRepository)
 
@@ -128,6 +140,11 @@ async def test_proxy_resource_read_sanitizes_missing_server_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(apps_router, "ensure_project_access", _allow_project_access)
+    monkeypatch.setattr(
+        apps_router,
+        "resolve_project_tenant_id_for_access",
+        AsyncMock(return_value="tenant-1"),
+    )
     monkeypatch.setattr(apps_router, "get_container_with_db", lambda _request, _db: FakeContainer())
 
     with pytest.raises(HTTPException) as exc_info:
@@ -175,6 +192,11 @@ async def test_proxy_resource_list_sanitizes_mcp_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(apps_router, "ensure_project_access", _allow_project_access)
+    monkeypatch.setattr(
+        apps_router,
+        "resolve_project_tenant_id_for_access",
+        AsyncMock(return_value="tenant-1"),
+    )
     monkeypatch.setattr(apps_router, "get_container_with_db", lambda _request, _db: FakeContainer())
 
     with pytest.raises(HTTPException) as exc_info:
@@ -193,11 +215,48 @@ async def test_proxy_resource_list_sanitizes_mcp_errors(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_proxy_resource_list_uses_authorized_project_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    calls: list[dict[str, str]] = []
+
+    class CapturingMCPManager:
+        async def list_resources(self, *, project_id: str, tenant_id: str) -> list[dict[str, str]]:
+            calls.append({"project_id": project_id, "tenant_id": tenant_id})
+            return [{"uri": "ui://server/index.html"}]
+
+    class Container(FakeContainer):
+        def sandbox_mcp_server_manager(self) -> CapturingMCPManager:
+            return CapturingMCPManager()
+
+    monkeypatch.setattr(apps_router, "get_container_with_db", lambda _request, _db: Container())
+
+    response = await apps_router.proxy_resource_list(
+        request=SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace())),
+        body=apps_router.MCPResourceListRequest(project_id=test_project_db.id),
+        db=test_db,
+        tenant_id="fallback-tenant",
+        current_user=test_user,
+    )
+
+    assert response.resources == [{"uri": "ui://server/index.html"}]
+    assert calls == [{"project_id": test_project_db.id, "tenant_id": test_project_db.tenant_id}]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_delete_mcp_app_sanitizes_missing_app(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(apps_router, "_get_mcp_app_service", lambda _request, _db: EmptyAppService())
-    monkeypatch.setattr(apps_router, "_get_mcp_runtime_service", AsyncMock(return_value=FailingRuntime()))
+    monkeypatch.setattr(
+        apps_router, "_get_mcp_app_service", lambda _request, _db: EmptyAppService()
+    )
+    monkeypatch.setattr(
+        apps_router, "_get_mcp_runtime_service", AsyncMock(return_value=FailingRuntime())
+    )
     db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
 
     with pytest.raises(HTTPException) as exc_info:
@@ -220,9 +279,13 @@ async def test_delete_mcp_app_sanitizes_missing_app(
 async def test_refresh_mcp_app_resource_sanitizes_permission_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(apps_router, "_get_mcp_app_service", lambda _request, _db: ExistingAppService())
+    monkeypatch.setattr(
+        apps_router, "_get_mcp_app_service", lambda _request, _db: ExistingAppService()
+    )
     monkeypatch.setattr(apps_router, "ensure_project_access", _allow_project_access)
-    monkeypatch.setattr(apps_router, "_get_mcp_runtime_service", AsyncMock(return_value=FailingRuntime()))
+    monkeypatch.setattr(
+        apps_router, "_get_mcp_runtime_service", AsyncMock(return_value=FailingRuntime())
+    )
     db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
 
     with pytest.raises(HTTPException) as exc_info:

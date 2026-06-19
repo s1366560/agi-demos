@@ -8,6 +8,7 @@ from src.infrastructure.adapters.primary.web.routers.mcp.utils import (
     MCP_PROJECT_WRITE_ROLES,
     ensure_project_access,
     list_accessible_project_ids,
+    resolve_project_tenant_id_for_access,
 )
 from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
 
@@ -79,8 +80,28 @@ async def test_list_accessible_project_ids_returns_user_memberships_only(
         test_project_db.tenant_id,
         test_user.id,
     ) == {test_project_db.id}
-    assert await list_accessible_project_ids(
-        test_db,
-        test_project_db.tenant_id,
-        another_user.id,
-    ) == set()
+    assert (
+        await list_accessible_project_ids(
+            test_db,
+            test_project_db.tenant_id,
+            another_user.id,
+        )
+        == set()
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_resolve_project_tenant_id_for_access_returns_authorized_project_tenant(
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    assert (
+        await resolve_project_tenant_id_for_access(
+            test_db,
+            test_project_db.id,
+            test_user.id,
+        )
+        == test_project_db.tenant_id
+    )

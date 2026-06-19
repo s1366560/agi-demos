@@ -65,6 +65,36 @@ async def list_accessible_project_ids(
     return set(result.scalars().all())
 
 
+async def resolve_project_tenant_id_for_access(
+    db: AsyncSession,
+    project_id: str,
+    user_id: str,
+    required_roles: Collection[str] | None = None,
+) -> str:
+    """Return the project's tenant when the user is allowed to access the project."""
+    allowed_roles = list(required_roles) if required_roles is not None else None
+    if allowed_roles is not None and not allowed_roles:
+        raise _access_denied()
+
+    query = (
+        select(Project.tenant_id)
+        .join(UserProject, UserProject.project_id == Project.id)
+        .where(
+            Project.id == project_id,
+            UserProject.user_id == user_id,
+            UserProject.project_id == project_id,
+        )
+    )
+    if allowed_roles is not None:
+        query = query.where(UserProject.role.in_(allowed_roles))
+
+    result = await db.execute(refresh_select_statement(query))
+    tenant_id = result.scalar_one_or_none()
+    if tenant_id is None:
+        raise _access_denied()
+    return str(tenant_id)
+
+
 async def ensure_project_access(
     db: AsyncSession,
     project_id: str,
@@ -104,10 +134,12 @@ async def ensure_project_access(
         return
 
     result = await db.execute(
-        refresh_select_statement(select(Project.id).where(
-            Project.id == project_id,
-            Project.tenant_id == tenant_id,
-        ))
+        refresh_select_statement(
+            select(Project.id).where(
+                Project.id == project_id,
+                Project.tenant_id == tenant_id,
+            )
+        )
     )
     if result.scalar_one_or_none() is None:
         raise _access_denied()

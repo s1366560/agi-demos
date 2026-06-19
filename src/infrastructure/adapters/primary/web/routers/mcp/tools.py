@@ -24,7 +24,12 @@ from .schemas import (
     MCPToolListResponse,
     MCPToolResponse,
 )
-from .utils import MCP_PROJECT_WRITE_ROLES, ensure_project_access, list_accessible_project_ids
+from .utils import (
+    MCP_PROJECT_WRITE_ROLES,
+    ensure_project_access,
+    list_accessible_project_ids,
+    resolve_project_tenant_id_for_access,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +56,16 @@ async def list_all_mcp_tools(
     repository = SqlMCPServerRepository(db)
 
     if project_id:
-        await ensure_project_access(db, project_id, tenant_id, current_user.id)
-        servers = await repository.get_enabled_servers(tenant_id, project_id=project_id)
+        project_tenant_id = await resolve_project_tenant_id_for_access(
+            db, project_id, current_user.id
+        )
+        servers = await repository.get_enabled_servers(project_tenant_id, project_id=project_id)
     else:
         accessible_project_ids = await list_accessible_project_ids(db, tenant_id, current_user.id)
         if not accessible_project_ids:
-            return MCPToolListResponse(items=[], total=0, page=page, per_page=per_page, total_pages=1)
+            return MCPToolListResponse(
+                items=[], total=0, page=page, per_page=per_page, total_pages=1
+            )
         servers = [
             server
             for server in await repository.get_enabled_servers(tenant_id)
@@ -127,11 +136,6 @@ async def call_mcp_tool(
             detail=_("MCP server not found"),
         )
 
-    if server.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=_("Access denied"),
-        )
     if not server.project_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -140,7 +144,7 @@ async def call_mcp_tool(
     await ensure_project_access(
         db,
         server.project_id,
-        tenant_id,
+        server.tenant_id,
         current_user.id,
         MCP_PROJECT_WRITE_ROLES,
     )

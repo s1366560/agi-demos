@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -36,6 +36,7 @@ from .utils import (
     ensure_project_access,
     get_container_with_db,
     list_accessible_project_ids,
+    resolve_project_tenant_id_for_access,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,9 +104,6 @@ def _reject_if_not_app_visible(
     )
 
 
-if TYPE_CHECKING:
-    from src.domain.model.mcp.app import MCPApp
-
 router = APIRouter(prefix="/apps", tags=["MCP Apps"])
 
 
@@ -122,12 +120,6 @@ async def _get_mcp_runtime_service(request: Request, db: AsyncSession) -> MCPRun
     """Get MCP runtime service from DI container (H2 fix)."""
     container = request.app.state.container.with_db(db)
     return cast(MCPRuntimeService, container.mcp_runtime_service())
-
-
-def _validate_tenant(app: MCPApp, tenant_id: str) -> None:
-    """Ensure app belongs to the requesting tenant."""
-    if app.tenant_id != tenant_id:
-        raise HTTPException(status_code=404, detail=_("MCP App not found"))
 
 
 def _mcp_app_not_found_error() -> HTTPException:
@@ -153,7 +145,7 @@ async def list_mcp_apps(
     """List MCP Apps. If project_id is provided, scopes to that project; otherwise lists all tenant apps."""
     service = _get_mcp_app_service(request, db)
     if project_id:
-        await ensure_project_access(db, project_id, tenant_id, current_user.id)
+        _ = await resolve_project_tenant_id_for_access(db, project_id, current_user.id)
         apps = await service.list_apps(project_id, include_disabled=include_disabled)
     else:
         accessible_project_ids = await list_accessible_project_ids(db, tenant_id, current_user.id)
@@ -212,10 +204,9 @@ async def proxy_tool_call_direct(
     and has no persistent DB record (synthetic app_id like ``_synthetic_<tool>``).
     """
     try:
-        await ensure_project_access(
+        _ = await resolve_project_tenant_id_for_access(
             db,
             body.project_id,
-            tenant_id,
             current_user.id,
             MCP_PROJECT_WRITE_ROLES,
         )
@@ -276,8 +267,7 @@ async def get_mcp_app(
     app = await service.get_app(app_id)
     if not app:
         raise HTTPException(status_code=404, detail=_("MCP App not found"))
-    _validate_tenant(app, tenant_id)
-    await ensure_project_access(db, app.project_id, tenant_id, current_user.id)
+    await ensure_project_access(db, app.project_id, app.tenant_id, current_user.id)
 
     return MCPAppResponse(
         id=app.id,
@@ -315,8 +305,7 @@ async def get_mcp_app_resource(
     app = await service.get_app(app_id)
     if not app:
         raise HTTPException(status_code=404, detail=_("MCP App not found"))
-    _validate_tenant(app, tenant_id)
-    await ensure_project_access(db, app.project_id, tenant_id, current_user.id)
+    await ensure_project_access(db, app.project_id, app.tenant_id, current_user.id)
 
     if not app.resource:
         raise HTTPException(
@@ -352,11 +341,10 @@ async def proxy_tool_call(
     app = await service.get_app(app_id)
     if not app:
         raise HTTPException(status_code=404, detail=_("MCP App not found"))
-    _validate_tenant(app, tenant_id)
     await ensure_project_access(
         db,
         app.project_id,
-        tenant_id,
+        app.tenant_id,
         current_user.id,
         MCP_PROJECT_WRITE_ROLES,
     )
@@ -418,16 +406,15 @@ async def delete_mcp_app(
         app = await service.get_app(app_id)
         if not app:
             raise ValueError(f"MCP App not found: {app_id}")
-        _validate_tenant(app, tenant_id)
         await ensure_project_access(
             db,
             app.project_id,
-            tenant_id,
+            app.tenant_id,
             current_user.id,
             MCP_PROJECT_WRITE_ROLES,
         )
         runtime = await _get_mcp_runtime_service(request, db)
-        deleted = await runtime.delete_app(app_id, tenant_id)
+        deleted = await runtime.delete_app(app_id, app.tenant_id)
         if not deleted:
             raise ValueError(f"MCP App not found: {app_id}")
         await db.commit()
@@ -465,16 +452,15 @@ async def refresh_mcp_app_resource(
         app = await service.get_app(app_id)
         if not app:
             raise ValueError(f"MCP App not found: {app_id}")
-        _validate_tenant(app, tenant_id)
         await ensure_project_access(
             db,
             app.project_id,
-            tenant_id,
+            app.tenant_id,
             current_user.id,
             MCP_PROJECT_WRITE_ROLES,
         )
         runtime = await _get_mcp_runtime_service(request, db)
-        app = await runtime.refresh_app_resource(app_id, tenant_id)
+        app = await runtime.refresh_app_resource(app_id, app.tenant_id)
         await db.commit()
         return MCPAppResponse(
             id=app.id,
@@ -651,7 +637,9 @@ async def proxy_resource_read(
     The resources/read is proxied through the sandbox management server's
     mcp_server_call_tool to reach the correct child MCP server.
     """
-    await ensure_project_access(db, body.project_id, tenant_id, current_user.id)
+    project_tenant_id = await resolve_project_tenant_id_for_access(
+        db, body.project_id, current_user.id
+    )
     service = _get_mcp_app_service(request, db)
 
     # Path 1: Check if any registered app owns this URI
@@ -712,7 +700,7 @@ async def proxy_resource_read(
 
         if need_retry:
             result = await _retry_resource_after_reinstall(
-                body, server_name, tenant_id, db, mcp_manager, _read_resource
+                body, server_name, project_tenant_id, db, mcp_manager, _read_resource
             )
 
         html_content = _extract_html_from_result(result, body.uri)
@@ -761,12 +749,14 @@ async def proxy_resource_list(
     servers in the project's sandbox.
     """
     try:
-        await ensure_project_access(db, body.project_id, tenant_id, current_user.id)
+        project_tenant_id = await resolve_project_tenant_id_for_access(
+            db, body.project_id, current_user.id
+        )
         container = get_container_with_db(request, db)
         mcp_manager = container.sandbox_mcp_server_manager()
         resources = await mcp_manager.list_resources(
             project_id=body.project_id,
-            tenant_id=tenant_id,
+            tenant_id=project_tenant_id,
         )
         return MCPResourceListResponse(resources=resources)
     except HTTPException:

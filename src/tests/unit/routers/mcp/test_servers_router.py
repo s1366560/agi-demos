@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.model.mcp.server import MCPServer, MCPServerConfig
+from src.domain.model.mcp.transport import TransportType
 from src.infrastructure.adapters.primary.web.routers.mcp import servers as servers_router
 from src.infrastructure.adapters.primary.web.routers.mcp.schemas import (
     MCPServerCreate,
     MCPServerUpdate,
 )
+from src.infrastructure.adapters.secondary.persistence.models import Project, User
 
 
 class _FailingMCPRuntime:
@@ -79,6 +84,33 @@ class _ValueErrorMCPRuntime:
         raise ValueError(self.message)
 
 
+class _SuccessfulMCPRuntime:
+    def __init__(self) -> None:
+        self.create_server = AsyncMock(side_effect=self._create_server)
+
+    async def _create_server(self, **kwargs: object) -> MCPServer:
+        tenant_id = str(kwargs["tenant_id"])
+        project_id = str(kwargs["project_id"])
+        return MCPServer(
+            id="srv-1",
+            tenant_id=tenant_id,
+            project_id=project_id,
+            name=str(kwargs["name"]),
+            description=kwargs.get("description")
+            if isinstance(kwargs.get("description"), str)
+            else None,
+            enabled=bool(kwargs["enabled"]),
+            discovered_tools=[],
+            config=MCPServerConfig(
+                server_name=str(kwargs["name"]),
+                tenant_id=tenant_id,
+                transport_type=TransportType.HTTP,
+                url="http://mcp.example.test",
+            ),
+            created_at=datetime(2026, 6, 19, tzinfo=UTC),
+        )
+
+
 class _MCPServerRepository:
     def __init__(self, _db: object) -> None:
         pass
@@ -112,6 +144,10 @@ async def _allow_project_access(*_args: object, **_kwargs: object) -> None:
     return None
 
 
+async def _deny_project_access(*_args: object, **_kwargs: object) -> None:
+    raise HTTPException(status_code=403, detail="Access denied")
+
+
 @pytest.fixture
 def db() -> SimpleNamespace:
     return SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
@@ -129,7 +165,16 @@ def failing_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.unit
-async def test_create_mcp_server_sanitizes_internal_errors(db: SimpleNamespace) -> None:
+async def test_create_mcp_server_sanitizes_internal_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    db: SimpleNamespace,
+) -> None:
+    monkeypatch.setattr(
+        servers_router,
+        "resolve_project_tenant_id_for_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+
     with pytest.raises(HTTPException) as exc_info:
         await servers_router.create_mcp_server(
             server_data=MCPServerCreate(
@@ -148,6 +193,38 @@ async def test_create_mcp_server_sanitizes_internal_errors(db: SimpleNamespace) 
     assert exc_info.value.detail == "Failed to create MCP server"
     assert "internal" not in exc_info.value.detail
     db.rollback.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_create_mcp_server_uses_authorized_project_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    runtime = _SuccessfulMCPRuntime()
+    monkeypatch.setattr(
+        servers_router,
+        "_get_runtime_service",
+        AsyncMock(return_value=runtime),
+    )
+
+    response = await servers_router.create_mcp_server(
+        server_data=MCPServerCreate(
+            name="Local",
+            server_type="http",
+            transport_config={"url": "http://mcp.example.test"},
+            project_id=test_project_db.id,
+        ),
+        request=SimpleNamespace(),
+        db=test_db,
+        tenant_id="fallback-tenant",
+        current_user=test_user,
+    )
+
+    assert response.tenant_id == test_project_db.tenant_id
+    runtime.create_server.assert_awaited_once()
+    assert runtime.create_server.await_args.kwargs["tenant_id"] == test_project_db.tenant_id
 
 
 @pytest.mark.unit
@@ -233,6 +310,11 @@ async def test_create_mcp_server_sanitizes_permission_errors(
 ) -> None:
     monkeypatch.setattr(
         servers_router,
+        "resolve_project_tenant_id_for_access",
+        AsyncMock(return_value="tenant-1"),
+    )
+    monkeypatch.setattr(
+        servers_router,
         "_get_runtime_service",
         AsyncMock(return_value=_PermissionMCPRuntime()),
     )
@@ -278,11 +360,12 @@ async def test_get_mcp_server_missing_id_is_sanitized(
 
 
 @pytest.mark.unit
-async def test_get_mcp_server_foreign_tenant_is_sanitized(
+async def test_get_mcp_server_foreign_project_access_is_sanitized(
     monkeypatch: pytest.MonkeyPatch,
     db: SimpleNamespace,
 ) -> None:
     monkeypatch.setattr(servers_router, "SqlMCPServerRepository", _ForeignMCPServerRepository)
+    monkeypatch.setattr(servers_router, "ensure_project_access", _deny_project_access)
 
     with pytest.raises(HTTPException) as exc_info:
         await servers_router.get_mcp_server(
@@ -294,6 +377,30 @@ async def test_get_mcp_server_foreign_tenant_is_sanitized(
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Access denied"
+
+
+@pytest.mark.unit
+async def test_get_mcp_server_for_tenant_checks_access_with_server_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+    db: SimpleNamespace,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    async def capture_project_access(*args: object, **kwargs: object) -> None:
+        calls.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(servers_router, "SqlMCPServerRepository", _MCPServerRepository)
+    monkeypatch.setattr(servers_router, "ensure_project_access", capture_project_access)
+
+    server = await servers_router._get_mcp_server_for_tenant(
+        db=db,
+        server_id="srv-1",
+        tenant_id="fallback-tenant",
+        user_id="user-1",
+    )
+
+    assert server.tenant_id == "tenant-1"
+    assert calls[0]["args"][2] == "tenant-1"
 
 
 @pytest.mark.unit
@@ -380,6 +487,11 @@ async def test_reconcile_mcp_project_sanitizes_permission_errors(
     monkeypatch: pytest.MonkeyPatch,
     db: SimpleNamespace,
 ) -> None:
+    monkeypatch.setattr(
+        servers_router,
+        "resolve_project_tenant_id_for_access",
+        AsyncMock(return_value="tenant-1"),
+    )
     monkeypatch.setattr(
         servers_router,
         "_get_runtime_service",

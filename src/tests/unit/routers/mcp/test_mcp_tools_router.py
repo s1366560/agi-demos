@@ -1,6 +1,7 @@
 """Tests for MCP tool route hardening."""
 
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from fastapi import HTTPException
@@ -166,7 +167,9 @@ async def test_call_mcp_tool_rejects_same_tenant_project_non_member(
                 ),
             )
 
-    monkeypatch.setattr(repo_module, "SqlMCPServerRepository", lambda _db: ProjectServerRepository())
+    monkeypatch.setattr(
+        repo_module, "SqlMCPServerRepository", lambda _db: ProjectServerRepository()
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         await tools_router.call_mcp_tool(
@@ -181,3 +184,54 @@ async def test_call_mcp_tool_rejects_same_tenant_project_non_member(
         )
 
     assert exc_info.value.status_code == 403
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_list_all_mcp_tools_uses_authorized_project_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+    test_db: AsyncSession,
+    test_project_db: Project,
+    test_user: User,
+) -> None:
+    import src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository as repo_module
+
+    calls: list[dict[str, Any]] = []
+
+    class ProjectServerRepository:
+        def __init__(self, _db: object) -> None:
+            pass
+
+        async def get_enabled_servers(
+            self, tenant_id: str, project_id: str | None = None
+        ) -> list[SimpleNamespace]:
+            calls.append({"tenant_id": tenant_id, "project_id": project_id})
+            return [
+                SimpleNamespace(
+                    id="server-1",
+                    name="Project Server",
+                    project_id=project_id,
+                    discovered_tools=[
+                        {
+                            "name": "project_tool",
+                            "description": "Project-scoped tool",
+                            "inputSchema": {"type": "object"},
+                        }
+                    ],
+                )
+            ]
+
+    monkeypatch.setattr(repo_module, "SqlMCPServerRepository", ProjectServerRepository)
+
+    response = await tools_router.list_all_mcp_tools(
+        project_id=test_project_db.id,
+        page=1,
+        per_page=50,
+        db=test_db,
+        tenant_id="fallback-tenant",
+        current_user=test_user,
+    )
+
+    assert response.total == 1
+    assert response.items[0].name == "project_tool"
+    assert calls == [{"tenant_id": test_project_db.tenant_id, "project_id": test_project_db.id}]

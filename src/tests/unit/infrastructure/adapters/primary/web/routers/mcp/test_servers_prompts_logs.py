@@ -21,15 +21,22 @@ class TestMCPServerPromptsAndLogs:
             list_server_prompts=AsyncMock(return_value=[{"name": "review"}]),
         )
 
-        with patch(
-            "src.infrastructure.adapters.primary.web.routers.mcp.servers._get_runtime_service",
-            new=AsyncMock(return_value=runtime),
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.mcp.servers._get_runtime_service",
+                new=AsyncMock(return_value=runtime),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.mcp.servers._get_mcp_server_for_tenant",
+                new=AsyncMock(return_value=SimpleNamespace(id="srv-1", tenant_id="tenant-1")),
+            ),
         ):
             response = await list_mcp_server_prompts(
                 server_id="srv-1",
                 request=SimpleNamespace(),
                 db=AsyncMock(),
                 tenant_id="tenant-1",
+                current_user=SimpleNamespace(id="user-1"),
             )
 
         assert response == {"prompts": [{"name": "review"}]}
@@ -40,15 +47,22 @@ class TestMCPServerPromptsAndLogs:
         request = SimpleNamespace(json=AsyncMock(return_value={"level": "DEBUG"}))
         db = AsyncMock()
 
-        with patch(
-            "src.infrastructure.adapters.primary.web.routers.mcp.servers._get_runtime_service",
-            new=AsyncMock(return_value=runtime),
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.mcp.servers._get_runtime_service",
+                new=AsyncMock(return_value=runtime),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.mcp.servers._get_mcp_server_for_tenant",
+                new=AsyncMock(return_value=SimpleNamespace(id="srv-1", tenant_id="tenant-1")),
+            ),
         ):
             response = await set_mcp_server_log_level(
                 server_id="srv-1",
                 request=request,
                 db=db,
                 tenant_id="tenant-1",
+                current_user=SimpleNamespace(id="user-1"),
             )
 
         assert response == {"status": "ok", "level": "debug"}
@@ -64,6 +78,7 @@ class TestMCPServerPromptsAndLogs:
                 request=request,
                 db=AsyncMock(),
                 tenant_id="tenant-1",
+                current_user=SimpleNamespace(id="user-1"),
             )
 
         assert exc_info.value.status_code == 400
@@ -82,20 +97,16 @@ class TestMCPServerPromptsAndLogs:
         query_result.scalars.return_value = scalar_result
         db = AsyncMock()
         db.execute = AsyncMock(return_value=query_result)
-        repo = MagicMock()
-        repo.get_by_id = AsyncMock(
-            return_value=SimpleNamespace(id="srv-1", tenant_id="tenant-1")
-        )
-
         with patch(
-            "src.infrastructure.adapters.primary.web.routers.mcp.servers.SqlMCPServerRepository",
-            return_value=repo,
+            "src.infrastructure.adapters.primary.web.routers.mcp.servers._get_mcp_server_for_tenant",
+            new=AsyncMock(return_value=SimpleNamespace(id="srv-1", tenant_id="tenant-1")),
         ):
             response = await list_mcp_server_logs(
                 server_id="srv-1",
                 limit=100,
                 db=db,
                 tenant_id="tenant-1",
+                current_user=SimpleNamespace(id="user-1"),
             )
 
         assert response == {
