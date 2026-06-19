@@ -335,7 +335,7 @@ describe('TenantHeader', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Tenant Two' }));
 
-    expect(setCurrentTenant).toHaveBeenCalledWith({ id: 'tenant-2', name: 'Tenant Two' });
+    expect(setCurrentTenant).not.toHaveBeenCalled();
     expect(clearProjects).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith('/tenant/tenant-2/overview');
   });

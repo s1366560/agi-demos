@@ -42,10 +42,7 @@ import { useCurrentWorkspace, useWorkspaces } from '@/stores/workspace';
 import { authAPI } from '@/services/api';
 
 import { NotificationDropdown } from './AppHeader/NotificationDropdown';
-import {
-  getContextualTopNavItems,
-  isContextualTopNavItemActive,
-} from './tenantNavigation';
+import { getContextualTopNavItems, isContextualTopNavItemActive } from './tenantNavigation';
 
 import type { Tenant } from '@/types/memory';
 
@@ -404,7 +401,6 @@ function HeaderUserMenu({
   const clearProjects = useProjectStore((state) => state.clearProjects);
   const tenants = useTenantStore((state) => state.tenants);
   const listTenants = useTenantStore((state) => state.listTenants);
-  const setCurrentTenant = useTenantStore((state) => state.setCurrentTenant);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const normalizedTheme = theme as 'light' | 'dark' | 'system';
@@ -449,7 +445,6 @@ function HeaderUserMenu({
     if (tenant.id === normalizedTenantId) {
       return;
     }
-    setCurrentTenant(tenant);
     clearProjects();
     void navigate(`/tenant/${tenant.id}/overview`);
   };
