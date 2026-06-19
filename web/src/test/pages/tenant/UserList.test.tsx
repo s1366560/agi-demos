@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { Route, Routes } from 'react-router-dom';
+
 import { invitationService } from '@/services/invitationService';
 import { useTenantStore } from '@/stores/tenant';
 
@@ -23,6 +25,8 @@ const tenant = {
   created_at: '2026-01-01T00:00:00',
 };
 
+let currentTenant = tenant;
+
 const member = {
   id: 'ut1',
   user_id: 'u-1',
@@ -40,7 +44,7 @@ let removeMember: ReturnType<typeof vi.fn>;
 function mockTenantStore() {
   vi.mocked(useTenantStore).mockImplementation((selector: unknown) => {
     const state = {
-      currentTenant: tenant,
+      currentTenant,
       listMembers,
       removeMember,
       isLoading: false,
@@ -51,9 +55,20 @@ function mockTenantStore() {
   });
 }
 
+function renderUserList(route = '/tenant/t1/users') {
+  return render(
+    <Routes>
+      <Route path="/tenant/:tenantId/users" element={<UserList />} />
+      <Route path="/tenant/users" element={<UserList />} />
+    </Routes>,
+    { route }
+  );
+}
+
 describe('UserList', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    currentTenant = tenant;
     listMembers = vi.fn().mockResolvedValue({ members: [member], total: 1 });
     removeMember = vi.fn().mockResolvedValue(undefined);
     mockTenantStore();
@@ -76,7 +91,7 @@ describe('UserList', () => {
   });
 
   it('renders backend member identity and no fake active status', async () => {
-    render(<UserList />);
+    renderUserList();
 
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
     expect(screen.getByText('ada@example.com')).toBeInTheDocument();
@@ -86,7 +101,7 @@ describe('UserList', () => {
   });
 
   it('sends invitations through the invitation service', async () => {
-    render(<UserList />);
+    renderUserList();
 
     fireEvent.click(screen.getByRole('button', { name: 'Invite Member' }));
     fireEvent.change(screen.getByLabelText('Email Address'), {
@@ -105,7 +120,7 @@ describe('UserList', () => {
   });
 
   it('removes members from the row action menu', async () => {
-    render(<UserList />);
+    renderUserList();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open actions for Ada Lovelace' }));
     fireEvent.click(screen.getByRole('button', { name: 'Remove User' }));
@@ -127,7 +142,7 @@ describe('UserList', () => {
       total: 11,
     });
 
-    render(<UserList />);
+    renderUserList();
 
     expect(await screen.findByText('User 1')).toBeInTheDocument();
     expect(screen.queryByText('User 11')).not.toBeInTheDocument();
@@ -136,5 +151,29 @@ describe('UserList', () => {
 
     expect(await screen.findByText('User 11')).toBeInTheDocument();
     expect(screen.queryByText('User 1')).not.toBeInTheDocument();
+  });
+
+  it('uses the route tenant when the tenant store has stale state', async () => {
+    currentTenant = { ...tenant, id: 'store-tenant', max_users: 50 };
+
+    renderUserList('/tenant/route-tenant/users');
+
+    await waitFor(() => {
+      expect(listMembers).toHaveBeenCalledWith('route-tenant');
+      expect(invitationService.listPending).toHaveBeenCalledWith('route-tenant');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Invite Member' }));
+    fireEvent.change(screen.getByLabelText('Email Address'), {
+      target: { value: 'route@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send Invitation' }));
+
+    await waitFor(() => {
+      expect(invitationService.create).toHaveBeenCalledWith('route-tenant', {
+        email: 'route@example.com',
+        role: 'member',
+      });
+    });
   });
 });

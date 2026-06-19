@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
 import {
   BadgeCheck,
@@ -82,6 +83,7 @@ function formatFallbackRole(role: string): string {
 
 export const UserList: React.FC = () => {
   const { t } = useTranslation();
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string | undefined }>();
   const { currentTenant, listMembers, removeMember, isLoading } = useTenantStore(
     useShallow((state) => ({
       currentTenant: state.currentTenant,
@@ -90,7 +92,8 @@ export const UserList: React.FC = () => {
       isLoading: state.isLoading,
     }))
   );
-  const tenantId = currentTenant?.id;
+  const tenantId = routeTenantId ?? currentTenant?.id ?? null;
+  const tenantForLimits = currentTenant?.id === tenantId ? currentTenant : null;
   const [members, setMembers] = useState<TenantMember[]>([]);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -233,11 +236,11 @@ export const UserList: React.FC = () => {
     }
   };
 
-  if (!currentTenant) {
+  if (!tenantId) {
     return <div className="p-8 text-center text-slate-500">{t('tenant.overview.loading')}</div>;
   }
 
-  const maxUsers = Math.max(currentTenant.max_users || members.length || 1, 1);
+  const maxUsers = Math.max(tenantForLimits?.max_users || members.length || 1, 1);
   const usagePercent = Math.min((members.length / maxUsers) * 100, 100);
 
   return (
