@@ -161,6 +161,9 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
         }
         // Sync back to agentV3 state (strangler fig dual-write)
         const convState = useConversationsStore.getState();
+        if (convState.conversationListProjectId !== projectId) {
+          return;
+        }
         set({
           conversations: convState.conversations,
           hasMoreConversations: convState.hasMoreConversations,

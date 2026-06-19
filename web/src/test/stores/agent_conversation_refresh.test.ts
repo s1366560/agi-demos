@@ -235,6 +235,53 @@ describe('conversation lifecycle refresh', () => {
     });
   });
 
+  it('does not sync a stale project load after a newer project request wins', async () => {
+    useConversationsStore.getState().reset();
+    const staleResponse = createDeferred<{
+      items: Conversation[];
+      has_more: boolean;
+      total: number;
+    }>();
+    mockListConversations
+      .mockReturnValueOnce(staleResponse.promise)
+      .mockResolvedValueOnce({
+        items: [conversation('project-2-conversation', 'project-2')],
+        has_more: false,
+        total: 1,
+      });
+    let state = {
+      activeConversationId: null,
+      conversations: [],
+      conversationStates: new Map<string, ConversationState>(),
+      hasMoreConversations: false,
+    };
+    const set = vi.fn((updates: Partial<typeof state>) => {
+      state = { ...state, ...updates };
+    });
+    const actions = createConversationLifecycleActions({
+      get: () => state,
+      set,
+      resetCanvasForConversationScope: vi.fn(),
+    });
+
+    const staleLoad = actions.loadConversations('project-1');
+    await act(async () => {
+      await useConversationsStore.getState().listConversations('project-2');
+    });
+
+    await act(async () => {
+      staleResponse.resolve({
+        items: [conversation('project-1-conversation', 'project-1')],
+        has_more: false,
+        total: 1,
+      });
+      await staleLoad;
+    });
+
+    expect(useConversationsStore.getState().conversationListProjectId).toBe('project-2');
+    expect(set).not.toHaveBeenCalled();
+  });
+
   it('caches an empty project conversation list without refetching', async () => {
     mockListConversations.mockResolvedValueOnce({
       items: [],
