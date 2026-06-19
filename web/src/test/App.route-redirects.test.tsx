@@ -195,9 +195,9 @@ describe('App route redirects', () => {
     });
   });
 
-  it('redirects a single tenant segment to the tenant overview', async () => {
+  it('redirects a single tenant segment to the tenant overview without stale project scope', async () => {
     render(
-      <MemoryRouter initialEntries={['/tenant/tenant-1?projectId=project-1']}>
+      <MemoryRouter initialEntries={['/tenant/tenant-1?projectId=project-1&workspaceId=ws-1']}>
         <Routes>
           <Route path="/tenant/:segment" element={<LegacyTenantSingleSegmentRedirect />} />
           <Route path="*" element={<LocationDisplay />} />
@@ -206,9 +206,7 @@ describe('App route redirects', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('location')).toHaveTextContent(
-        '/tenant/tenant-1/overview?projectId=project-1'
-      );
+      expect(screen.getByTestId('location')).toHaveTextContent('/tenant/tenant-1/overview');
     });
   });
 

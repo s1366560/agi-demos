@@ -550,7 +550,7 @@ export const LegacyTenantSingleSegmentRedirect: React.FC = () => {
   }
 
   if (isAccessibleTenant) {
-    return <Navigate to={`/tenant/${segment}/overview${location.search || ''}`} replace />;
+    return <Navigate to={`/tenant/${segment}/overview`} replace />;
   }
 
   return (
