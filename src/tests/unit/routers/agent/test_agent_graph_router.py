@@ -1,5 +1,6 @@
 """Tests for agent graph API access control."""
 
+import inspect
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
@@ -19,7 +20,9 @@ from src.infrastructure.adapters.primary.web.routers.agent.agent_graph_router im
     UpdateGraphRequest,
     cancel_graph_run,
     create_graph,
+    delete_graph,
     get_graph,
+    get_graph_run,
     list_graph_runs,
     list_graphs,
     start_graph_run,
@@ -30,6 +33,22 @@ from src.infrastructure.adapters.secondary.persistence.models import Project, Us
 
 @pytest.mark.unit
 class TestAgentGraphRouter:
+    def test_graph_endpoints_do_not_require_default_tenant_dependency(self) -> None:
+        endpoints = (
+            list_graphs,
+            create_graph,
+            get_graph,
+            update_graph,
+            delete_graph,
+            start_graph_run,
+            list_graph_runs,
+            get_graph_run,
+            cancel_graph_run,
+        )
+
+        for endpoint in endpoints:
+            assert "user_tenant_id" not in inspect.signature(endpoint).parameters
+
     def _request_with_container(
         self, container: object, monkeypatch: pytest.MonkeyPatch
     ) -> MagicMock:
@@ -80,7 +99,6 @@ class TestAgentGraphRouter:
                 self._request_with_container(container, monkeypatch),
                 graph.id,
                 current_user=cast(AuthUser, test_user),
-                user_tenant_id="tenant-current",
                 db=test_db,
             )
 
@@ -113,7 +131,6 @@ class TestAgentGraphRouter:
                 run.id,
                 body=CancelRunRequest(reason="stop"),
                 current_user=cast(AuthUser, test_user),
-                user_tenant_id="tenant-current",
                 db=test_db,
             )
 
@@ -135,7 +152,6 @@ class TestAgentGraphRouter:
             self._request_with_container(container, monkeypatch),
             project_id=test_project_db.id,
             current_user=cast(AuthUser, test_user),
-            user_tenant_id="fallback-tenant",
             db=test_db,
         )
 
@@ -167,7 +183,6 @@ class TestAgentGraphRouter:
             self._request_with_container(container, monkeypatch),
             graph.id,
             current_user=cast(AuthUser, test_user),
-            user_tenant_id="fallback-tenant",
             db=test_db,
         )
 
@@ -209,7 +224,6 @@ class TestAgentGraphRouter:
             body=StartRunRequest(conversation_id="conversation-1"),
             project_id=test_project_db.id,
             current_user=cast(AuthUser, test_user),
-            user_tenant_id="fallback-tenant",
             db=test_db,
         )
 
@@ -248,7 +262,6 @@ class TestAgentGraphRouter:
                 body=StartRunRequest(conversation_id="conversation-1"),
                 project_id="project-1",
                 current_user=cast(AuthUser, test_user),
-                user_tenant_id="tenant-current",
                 db=test_db,
             )
 
@@ -275,7 +288,6 @@ class TestAgentGraphRouter:
                 ),
                 project_id="project-1",
                 current_user=cast(AuthUser, test_user),
-                user_tenant_id="tenant-current",
                 db=test_db,
             )
 
@@ -310,7 +322,6 @@ class TestAgentGraphRouter:
                 run.id,
                 body=CancelRunRequest(reason="stop"),
                 current_user=cast(AuthUser, test_user),
-                user_tenant_id="tenant-current",
                 db=test_db,
             )
 
@@ -332,7 +343,6 @@ class TestAgentGraphRouter:
                 self._request_with_container(container, monkeypatch),
                 project_id="project-denied",
                 current_user=cast(AuthUser, test_user),
-                user_tenant_id="tenant-current",
                 db=cast(AsyncSession, self._denied_project_db()),
             )
 
@@ -360,7 +370,6 @@ class TestAgentGraphRouter:
                 self._request_with_container(container, monkeypatch),
                 graph.id,
                 current_user=cast(AuthUser, test_user),
-                user_tenant_id="tenant-current",
                 db=cast(AsyncSession, self._denied_project_db()),
             )
 
@@ -391,7 +400,6 @@ class TestAgentGraphRouter:
                 graph.id,
                 body=UpdateGraphRequest(name="Updated"),
                 current_user=cast(AuthUser, test_user),
-                user_tenant_id="tenant-current",
                 db=cast(AsyncSession, self._denied_project_db()),
             )
 
@@ -425,7 +433,6 @@ class TestAgentGraphRouter:
                 body=StartRunRequest(conversation_id="conversation-1"),
                 project_id="project-denied",
                 current_user=cast(AuthUser, test_user),
-                user_tenant_id="tenant-current",
                 db=cast(AsyncSession, self._denied_project_db()),
             )
 

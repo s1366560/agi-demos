@@ -16,7 +16,6 @@ from src.domain.model.agent.graph.graph_run import GraphRun
 from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_current_user_tenant,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -362,7 +361,6 @@ async def list_graphs(
     request: Request,
     project_id: str = Query(...),
     current_user: User = Depends(get_current_user),
-    user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> GraphListResponse:
     container = get_container_with_db(request, db)
@@ -391,7 +389,6 @@ async def create_graph(
     body: CreateGraphRequest,
     project_id: str = Query(...),
     current_user: User = Depends(get_current_user),
-    user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> GraphResponse:
     from src.domain.model.agent.graph.agent_edge import AgentEdge
@@ -468,7 +465,6 @@ async def get_graph(
     request: Request,
     graph_id: str,
     current_user: User = Depends(get_current_user),
-    user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> GraphResponse:
     container = get_container_with_db(request, db)
@@ -494,7 +490,6 @@ async def update_graph(
     graph_id: str,
     body: UpdateGraphRequest,
     current_user: User = Depends(get_current_user),
-    user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> GraphResponse:
     container = get_container_with_db(request, db)
@@ -535,7 +530,6 @@ async def delete_graph(
     request: Request,
     graph_id: str,
     current_user: User = Depends(get_current_user),
-    user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     container = get_container_with_db(request, db)
@@ -576,7 +570,6 @@ async def start_graph_run(
     body: StartRunRequest,
     project_id: str = Query(...),
     current_user: User = Depends(get_current_user),
-    user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> GraphRunResponse:
     container = get_container_with_db(request, db)
@@ -617,7 +610,6 @@ async def list_graph_runs(
     request: Request,
     graph_id: str,
     current_user: User = Depends(get_current_user),
-    user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> GraphRunListResponse:
     container = get_container_with_db(request, db)
@@ -647,7 +639,6 @@ async def get_graph_run(
     request: Request,
     run_id: str,
     current_user: User = Depends(get_current_user),
-    user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> GraphRunResponse:
     container = get_container_with_db(request, db)
@@ -673,7 +664,6 @@ async def cancel_graph_run(
     run_id: str,
     body: CancelRunRequest | None = None,
     current_user: User = Depends(get_current_user),
-    user_tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ) -> GraphRunResponse:
     container = get_container_with_db(request, db)
