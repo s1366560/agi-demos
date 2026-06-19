@@ -231,8 +231,8 @@ export const AgentWorkspace: FC = () => {
 
   // Navigate to create project - memoized callback
   const handleCreateProject = useCallback(() => {
-    void navigate('/tenant/projects/new');
-  }, [navigate]);
+    void navigate(tenantId ? `/tenant/${tenantId}/projects/new` : '/tenant/projects/new');
+  }, [navigate, tenantId]);
 
   const loadProjectsForTenant = useCallback(async () => {
     if (!tenantId) return;

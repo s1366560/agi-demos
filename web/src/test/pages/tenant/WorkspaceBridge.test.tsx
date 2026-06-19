@@ -260,6 +260,41 @@ describe('workspace/agent workspace bridge', () => {
     expect(autoRefreshMock.useConversationListAutoRefresh).toHaveBeenLastCalledWith(null);
   });
 
+  it('keeps create project navigation tenant-scoped from the empty-project state', async () => {
+    projectState.projects = [];
+    projectState.currentProject = null;
+
+    const LocationProbe = () => {
+      const location = useLocation();
+      return <div data-testid="location-probe">{`${location.pathname}${location.search}`}</div>;
+    };
+
+    render(
+      <Routes>
+        <Route path="/tenant/:tenantId/agent-workspace" element={<AgentWorkspace />} />
+        <Route path="/tenant/:tenantId/projects/new" element={<LocationProbe />} />
+        <Route
+          path="/tenant/projects/new"
+          element={<div data-testid="legacy-project-create-route" />}
+        />
+      </Routes>,
+      {
+        route: '/tenant/tenant-1/agent-workspace',
+      }
+    );
+
+    expect(await screen.findByText('agent.workspace.noProjects')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'agent.workspace.createProject' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(
+        '/tenant/tenant-1/projects/new'
+      );
+    });
+    expect(screen.queryByTestId('legacy-project-create-route')).not.toBeInTheDocument();
+  });
+
   it('restores saved workspace context on base agent workspace URLs', () => {
     localStorageMock.values.set('agent:tenant-1:lastWorkspaceId', 'ws-remembered');
 
