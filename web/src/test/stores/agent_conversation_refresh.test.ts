@@ -99,6 +99,37 @@ describe('conversation lifecycle refresh', () => {
     });
   });
 
+  it('caps implicit forced refreshes for large conversation lists', async () => {
+    const existingConversations = Array.from({ length: 80 }, (_, index) =>
+      conversation(`conversation-${String(index)}`, 'project-1')
+    );
+    let state = {
+      activeConversationId: null,
+      conversations: existingConversations,
+      conversationStates: new Map<string, ConversationState>(),
+      hasMoreConversations: true,
+    };
+    const set = vi.fn((updates: Partial<typeof state>) => {
+      state = { ...state, ...updates };
+    });
+    const actions = createConversationLifecycleActions({
+      get: () => state,
+      set,
+      resetCanvasForConversationScope: vi.fn(),
+    });
+
+    await act(async () => {
+      await actions.loadConversations('project-1', {
+        force: true,
+        silent: true,
+      });
+    });
+
+    expect(mockListConversations).toHaveBeenCalledWith('project-1', undefined, 25, 0, undefined, {
+      groupByWorkspace: true,
+    });
+  });
+
   it('does not rewrite agent state when the cached conversation snapshot already matches', async () => {
     const cachedConversation = conversation('cached-conversation', 'project-1');
     useConversationsStore.setState({

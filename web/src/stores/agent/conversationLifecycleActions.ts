@@ -52,6 +52,24 @@ export interface ConversationLifecycleDeps {
 }
 
 const inFlightConversationLoads = new Map<string, Promise<void>>();
+const DEFAULT_CONVERSATION_REFRESH_LIMIT = 10;
+const MAX_IMPLICIT_FORCE_REFRESH_LIMIT = 25;
+
+function resolveConversationRefreshLimit(
+  currentConversations: AgentV3State['conversations'],
+  options: LoadConversationsOptions
+): number | undefined {
+  if (options.limit !== undefined) {
+    return options.limit;
+  }
+  if (!options.force) {
+    return undefined;
+  }
+  return Math.min(
+    Math.max(currentConversations.length, DEFAULT_CONVERSATION_REFRESH_LIMIT),
+    MAX_IMPLICIT_FORCE_REFRESH_LIMIT
+  );
+}
 
 function conversationLoadKey(projectId: string, options: LoadConversationsOptions): string {
   return [
@@ -132,8 +150,7 @@ export function createConversationLifecycleActions(deps: ConversationLifecycleDe
 
       const loadPromise = (async () => {
         // Delegate to conversationsStore for API call + list management
-        const limit =
-          options.limit ?? (options.force ? Math.max(currentConvos.length, 10) : undefined);
+        const limit = resolveConversationRefreshLimit(currentConvos, options);
         await useConversationsStore.getState().listConversations(projectId, undefined, limit, {
           signal: options.signal,
           silent: options.silent,
