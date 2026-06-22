@@ -1,0 +1,16 @@
+MemStack has been installed.
+
+Services:
+  API: {{ include "memstack.fullname" . }}-api:{{ .Values.api.service.port }}
+  Web: {{ include "memstack.fullname" . }}-web:{{ .Values.web.service.port }}
+  Neo4j: {{ include "memstack.fullname" . }}-neo4j:{{ .Values.neo4j.service.httpPort }}
+  MinIO: {{ include "memstack.fullname" . }}-minio:{{ .Values.minio.service.apiPort }}
+
+Check the deployment:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Port-forward the web UI:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "memstack.fullname" . }}-web 3000:{{ .Values.web.service.port }}
+
+Port-forward the API:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "memstack.fullname" . }}-api 8000:{{ .Values.api.service.port }}

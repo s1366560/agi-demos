@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
 
@@ -31,6 +32,14 @@ async def initialize_docker_services(container: DIContainer) -> DockerEventMonit
         The Docker event monitor instance, or None if initialization fails.
     """
     global _docker_event_monitor
+
+    docker_services_enabled = (
+        os.getenv("SANDBOX_DOCKER_SERVICES_ENABLED", "true").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
+    if not docker_services_enabled:
+        logger.info("Docker sandbox services disabled by SANDBOX_DOCKER_SERVICES_ENABLED")
+        return None
 
     # Sync existing sandbox containers from Docker
     logger.info("Syncing existing sandbox containers from Docker...")
