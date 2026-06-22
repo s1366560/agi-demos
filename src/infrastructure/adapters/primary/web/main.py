@@ -217,21 +217,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     await initialize_autonomy_idle_waker()
 
     # Initialize Workspace Supervisor (WTP fan-in consumer, Phase 2).
-    try:
-        from src.infrastructure.agent.workspace.workspace_supervisor import (
-            WorkspaceSupervisor,
-            configure_wtp_publisher,
-            set_workspace_supervisor,
-        )
+    workspace_supervisor_enabled = (
+        os.getenv("WORKSPACE_SUPERVISOR_ENABLED", "true").strip().lower()
+        in {"1", "true", "yes", "on"}
+    )
+    if workspace_supervisor_enabled:
+        try:
+            from src.infrastructure.agent.workspace.workspace_supervisor import (
+                WorkspaceSupervisor,
+                configure_wtp_publisher,
+                set_workspace_supervisor,
+            )
 
-        redis_for_wtp: Any = redis_client
-        configure_wtp_publisher(redis_for_wtp)
-        workspace_supervisor = WorkspaceSupervisor(redis_for_wtp)
-        await workspace_supervisor.start()
-        set_workspace_supervisor(workspace_supervisor)
-        app.state.workspace_supervisor = workspace_supervisor
-    except Exception:
-        logger.exception("Failed to start WorkspaceSupervisor -- WTP fan-in disabled")
+            redis_for_wtp: Any = redis_client
+            configure_wtp_publisher(redis_for_wtp)
+            workspace_supervisor = WorkspaceSupervisor(redis_for_wtp)
+            await workspace_supervisor.start()
+            set_workspace_supervisor(workspace_supervisor)
+            app.state.workspace_supervisor = workspace_supervisor
+        except Exception:
+            logger.exception("Failed to start WorkspaceSupervisor -- WTP fan-in disabled")
+    else:
+        logger.info("WorkspaceSupervisor startup disabled by WORKSPACE_SUPERVISOR_ENABLED")
 
     # Start Skill Evolution Plugin scheduler (periodic pipeline for SKILL.md improvement)
     try:

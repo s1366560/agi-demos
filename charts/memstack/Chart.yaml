@@ -1,0 +1,17 @@
+apiVersion: v2
+name: memstack
+description: Helm chart for the MemStack AI memory platform.
+type: application
+version: 0.1.0
+appVersion: "0.2.0"
+keywords:
+  - memstack
+  - ai
+  - memory
+  - fastapi
+  - react
+home: https://memstack.ai
+sources:
+  - https://github.com/memstack/memstack
+maintainers:
+  - name: MemStack

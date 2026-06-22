@@ -1,0 +1,221 @@
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+
+waitImage:
+  repository: busybox
+  tag: "1.36"
+  pullPolicy: IfNotPresent
+
+config:
+  apiAllowedOrigins: "*"
+  logLevel: INFO
+  logFormat: json
+  llmProvider: gemini
+  agentRuntimeMode: local
+  runBackgroundWorkers: "false"
+  workspaceSupervisorEnabled: "false"
+  sandboxDockerServicesEnabled: "false"
+  skillEvolutionEnabled: "false"
+  enableTelemetry: "false"
+  langfuseEnabled: "false"
+  requireApiKey: "true"
+  queueBatchSize: "1"
+  s3NoProxy: "true"
+  extraEnv: {}
+
+secrets:
+  existingSecret: ""
+  secretKey: 2a0237a3dbd413a52f04f0c4a0e6b183f16694229e8dca3a9b8eb9e33c7d3419
+  llmEncryptionKey: 2a0237a3dbd413a52f04f0c4a0e6b183f16694229e8dca3a9b8eb9e33c7d3419
+  providerApiKeys: {}
+  # Example:
+  # providerApiKeys:
+  #   OPENAI_API_KEY: sk-...
+  #   GEMINI_API_KEY: ...
+
+api:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: memstack-api
+    tag: latest
+    pullPolicy: IfNotPresent
+  command: []
+  args: []
+  waitForDependencies: true
+  podAnnotations: {}
+  podSecurityContext: {}
+  securityContext: {}
+  service:
+    type: ClusterIP
+    port: 8000
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  extraEnv: {}
+  extraEnvFrom: []
+
+web:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: memstack-web
+    tag: latest
+    pullPolicy: IfNotPresent
+  podAnnotations: {}
+  podSecurityContext: {}
+  securityContext: {}
+  service:
+    type: ClusterIP
+    port: 80
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  extraEnv: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: memstack.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+postgres:
+  enabled: true
+  image:
+    repository: pgvector/pgvector
+    tag: pg16
+    pullPolicy: IfNotPresent
+  auth:
+    username: postgres
+    password: password
+    database: memstack
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+  resources: {}
+  external:
+    host: ""
+    port: 5432
+
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: 7-alpine
+    pullPolicy: IfNotPresent
+  command:
+    - redis-server
+    - --maxmemory
+    - 384mb
+    - --maxmemory-policy
+    - allkeys-lru
+  service:
+    port: 6379
+  persistence:
+    enabled: true
+    size: 2Gi
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+  resources: {}
+  external:
+    host: ""
+    port: 6379
+
+neo4j:
+  enabled: true
+  image:
+    repository: neo4j
+    tag: 5.26-community
+    pullPolicy: IfNotPresent
+  auth:
+    username: neo4j
+    password: password
+  plugins: '["apoc"]'
+  unrestrictedProcedures: apoc.*
+  heapMaxSize: 1G
+  pageCacheSize: 512M
+  service:
+    httpPort: 7474
+    boltPort: 7687
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+  resources: {}
+  external:
+    host: ""
+    boltPort: 7687
+
+minio:
+  enabled: true
+  image:
+    repository: minio/minio
+    tag: latest
+    pullPolicy: IfNotPresent
+  mcImage:
+    repository: minio/mc
+    tag: latest
+    pullPolicy: IfNotPresent
+  auth:
+    rootUser: minioadmin
+    rootPassword: minioadmin
+  bucket: memstack-files
+  service:
+    apiPort: 9000
+    consolePort: 9001
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+  resources: {}
+  external:
+    endpointUrl: ""
+
+ray:
+  enabled: false
+  head:
+    image:
+      repository: agi-demos-ray-head
+      tag: latest
+      pullPolicy: IfNotPresent
+    resources: {}
+  worker:
+    replicaCount: 1
+    image:
+      repository: agi-demos-ray-worker
+      tag: latest
+      pullPolicy: IfNotPresent
+    resources: {}
+
+agentActor:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: agi-demos-ray-head
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources: {}

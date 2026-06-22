@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "memstack.fullname" . }}-config
+  labels:
+    {{- include "memstack.labels" . | nindent 4 }}
+data:
+  API_ALLOWED_ORIGINS: {{ .Values.config.apiAllowedOrigins | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.config.logFormat | quote }}
+  LLM_PROVIDER: {{ .Values.config.llmProvider | quote }}
+  AGENT_RUNTIME_MODE: {{ .Values.config.agentRuntimeMode | quote }}
+  RUN_BACKGROUND_WORKERS: {{ .Values.config.runBackgroundWorkers | quote }}
+  WORKSPACE_SUPERVISOR_ENABLED: {{ .Values.config.workspaceSupervisorEnabled | quote }}
+  SANDBOX_DOCKER_SERVICES_ENABLED: {{ .Values.config.sandboxDockerServicesEnabled | quote }}
+  SKILL_EVOLUTION_ENABLED: {{ .Values.config.skillEvolutionEnabled | quote }}
+  ENABLE_TELEMETRY: {{ .Values.config.enableTelemetry | quote }}
+  LANGFUSE_ENABLED: {{ .Values.config.langfuseEnabled | quote }}
+  REQUIRE_API_KEY: {{ .Values.config.requireApiKey | quote }}
+  QUEUE_BATCH_SIZE: {{ .Values.config.queueBatchSize | quote }}
+  S3_NO_PROXY: {{ .Values.config.s3NoProxy | quote }}
+  {{- range $key, $value := .Values.config.extraEnv }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

@@ -1,0 +1,132 @@
+{{- if .Values.ray.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "memstack.fullname" . }}-ray-head
+  labels:
+    {{- include "memstack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ray-head
+spec:
+  ports:
+    - name: gcs
+      port: 6379
+      targetPort: gcs
+    - name: dashboard
+      port: 8265
+      targetPort: dashboard
+    - name: client
+      port: 10001
+      targetPort: client
+  selector:
+    {{- include "memstack.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ray-head
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "memstack.fullname" . }}-ray-head
+  labels:
+    {{- include "memstack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ray-head
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "memstack.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ray-head
+  template:
+    metadata:
+      labels:
+        {{- include "memstack.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ray-head
+    spec:
+      containers:
+        - name: ray-head
+          image: "{{ .Values.ray.head.image.repository }}:{{ .Values.ray.head.image.tag }}"
+          imagePullPolicy: {{ .Values.ray.head.image.pullPolicy }}
+          command:
+            - /bin/bash
+            - -c
+            - >
+              ray start --head --port=6379 --dashboard-host=0.0.0.0
+              --dashboard-port=8265 --ray-client-server-port=10001
+              --object-store-memory=1073741824 --memory=4294967296
+              --disable-usage-stats --block
+          env:
+            - name: PYTHONPATH
+              value: /app
+            - name: REDIS_HOST
+              value: {{ include "memstack.redisHost" . | quote }}
+            - name: POSTGRES_HOST
+              value: {{ include "memstack.postgresHost" . | quote }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.postgres.service.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.auth.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.auth.username | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "memstack.secretName" . }}
+                  key: postgres-password
+            - name: NEO4J_URI
+              value: bolt://{{ include "memstack.neo4jHost" . }}:{{ .Values.neo4j.service.boltPort }}
+            - name: NEO4J_USER
+              value: {{ .Values.neo4j.auth.username | quote }}
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "memstack.secretName" . }}
+                  key: neo4j-password
+          ports:
+            - name: gcs
+              containerPort: 6379
+            - name: dashboard
+              containerPort: 8265
+            - name: client
+              containerPort: 10001
+          {{- with .Values.ray.head.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "memstack.fullname" . }}-ray-worker
+  labels:
+    {{- include "memstack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ray-worker
+spec:
+  replicas: {{ .Values.ray.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "memstack.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ray-worker
+  template:
+    metadata:
+      labels:
+        {{- include "memstack.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ray-worker
+    spec:
+      initContainers:
+        {{- include "memstack.waitForPort" (dict "name" "ray-head" "host" (printf "%s-ray-head" (include "memstack.fullname" .)) "port" 6379 "Values" .Values) | nindent 8 }}
+      containers:
+        - name: ray-worker
+          image: "{{ .Values.ray.worker.image.repository }}:{{ .Values.ray.worker.image.tag }}"
+          imagePullPolicy: {{ .Values.ray.worker.image.pullPolicy }}
+          command:
+            - /bin/bash
+            - -c
+            - >
+              ray start --address={{ include "memstack.fullname" . }}-ray-head:6379
+              --object-store-memory=1073741824 --memory=4294967296 --block
+          env:
+            - name: PYTHONPATH
+              value: /app
+          {{- with .Values.ray.worker.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
