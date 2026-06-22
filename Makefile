@@ -23,6 +23,7 @@
 .PHONY: sandbox-build sandbox-run sandbox-stop sandbox-restart sandbox-status sandbox-logs sandbox-shell sandbox-clean sandbox-reset sandbox-test
 .PHONY: ray-up ray-up-dev ray-down ray-reload agent-actor-up
 .PHONY: plugin-template-build plugin-feishu-validate plugin-build-all
+.PHONY: helm-build-images helm-lint helm-package helm-install-dev helm-test-dev helm-verify-dev helm-uninstall-dev
 
 # =============================================================================
 # Default Target
@@ -39,6 +40,11 @@ COMPOSE_RAY_DEV_CMD ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(
 COMPOSE_DRONE ?= docker compose -f $(COMPOSE_BASE) -f .memstack/plugins/drone/docker-compose.yml
 OBS_SHARED_SERVICES ?= postgres redis minio minio-setup
 OBS_STACK_SERVICES ?= langfuse-db-init langfuse-storage-setup langfuse-clickhouse langfuse-web langfuse-worker prometheus grafana otel-collector jaeger
+HELM_CHART ?= charts/memstack
+HELM_RELEASE ?= memstack
+HELM_NAMESPACE ?= memstack
+HELM_TIMEOUT ?= 15m
+HELM_PACKAGE_DIR ?= dist/helm
 
 help: ## Show this help message
 	@echo "MemStack Development Commands"
@@ -185,6 +191,7 @@ help-full: ## Show all available commands
 	@echo " Production:"
 	@echo "  build            - Build all for production"
 	@echo "  serve            - Start production server"
+	@echo "  helm-verify-dev  - Build images, package chart, install, and run Helm tests"
 	@echo ""
 	@echo " Utilities:"
 	@echo "  clean            - Remove generated files"
@@ -923,6 +930,40 @@ build-web: ## Build web frontend for production
 serve: ## Start production server
 	@echo " Starting production server..."
 	uv run uvicorn src.infrastructure.adapters.primary.web.main:app --host 0.0.0.0 --port 8000 --workers 4
+
+# =============================================================================
+# Helm
+# =============================================================================
+
+helm-build-images: ## Build local Docker images for Docker Desktop Kubernetes
+	@echo " Building Helm validation images..."
+	docker build -t memstack-api:latest .
+	docker build -t memstack-web:latest ./web
+	docker build -t memstack-ray:latest -f Dockerfile.ray .
+	@echo " Helm validation images built"
+
+helm-lint: ## Lint the Helm chart
+	helm lint $(HELM_CHART)
+
+helm-package: helm-lint ## Package the Helm chart
+	@mkdir -p $(HELM_PACKAGE_DIR)
+	helm package $(HELM_CHART) --destination $(HELM_PACKAGE_DIR)
+
+helm-install-dev: ## Install/upgrade the chart into the current Kubernetes context
+	helm upgrade --install $(HELM_RELEASE) $(HELM_CHART) \
+		--namespace $(HELM_NAMESPACE) \
+		--create-namespace \
+		--wait \
+		--timeout $(HELM_TIMEOUT)
+
+helm-test-dev: ## Run Helm tests for the dev release
+	helm test $(HELM_RELEASE) --namespace $(HELM_NAMESPACE) --logs --timeout $(HELM_TIMEOUT)
+
+helm-verify-dev: helm-build-images helm-package helm-install-dev helm-test-dev ## Full local Helm verification
+	@echo " Helm package verified in Kubernetes"
+
+helm-uninstall-dev: ## Uninstall the dev Helm release
+	helm uninstall $(HELM_RELEASE) --namespace $(HELM_NAMESPACE) || true
 
 # =============================================================================
 # Utilities
