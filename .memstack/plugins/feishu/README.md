@@ -136,5 +136,5 @@ plugin_manager(action="reload")
 
 - [飞书开放平台](https://open.feishu.cn/)
 - [Channels 模块文档](../../../../src/infrastructure/adapters/secondary/channels/README.md)
-- [插件系统架构](../../../../docs/architecture/PLUGIN_TOOL_SUBSYSTEM_REFACTORING_PROPOSAL.md)
+- [插件系统架构](../../../../docs/archive/architecture/PLUGIN_TOOL_SUBSYSTEM_REFACTORING_PROPOSAL.md)
 - [迁移计划](../../../../docs/architecture/FEISHU_PLUGIN_MIGRATION_PLAN.md)

@@ -43,7 +43,7 @@ Completed a major refactoring of the sandbox lifecycle management system to supp
 3. **Migration documentation**
 
 #### Migration Guide
-See `docs/frontend-sandbox-migration.md` for detailed migration steps.
+See `docs/archive/frontend/frontend-sandbox-migration.md` for detailed migration steps.
 
 ## API Comparison
 
@@ -176,8 +176,8 @@ uv run pytest src/tests/unit/services/test_project_sandbox_lifecycle_service.py 
 
 ### Documentation (4)
 1. `docs/project_sandbox_refactor.md`
-2. `docs/frontend-sandbox-migration.md`
-3. `docs/frontend-integration-analysis.md`
+2. `docs/archive/frontend/frontend-sandbox-migration.md`
+3. `docs/archive/sandbox/frontend-integration-analysis.md`
 4. `docs/frontend-quick-migration.md`
 
 ## Next Steps

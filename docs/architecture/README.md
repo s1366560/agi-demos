@@ -12,10 +12,14 @@ are explicitly linked from the maintained map.
 
 ## Historical Or Focused Notes
 
-- [MULTI_AGENT.md](MULTI_AGENT.md) - multi-agent design notes.
 - [AGENT_POOL.md](AGENT_POOL.md) - agent pool architecture notes.
-- [SANDBOX_FIRST_ARCHITECTURE.md](SANDBOX_FIRST_ARCHITECTURE.md) - sandbox-first design.
 - [CYBER_WORKSPACE_ARCHITECTURE.md](CYBER_WORKSPACE_ARCHITECTURE.md) - workspace/cyber-office design.
 - [event-system-timeline.md](event-system-timeline.md) - event timeline history.
-- `*-proposal.md`, `*-plan.md`, and `*_FIX.md` files - historical planning and migration
-  records.
+- [plan-mode.md](plan-mode.md) - plan mode design notes.
+
+Historical proposals and migration records that used to live in this directory
+(`MULTI_AGENT.md`, `SANDBOX_FIRST_ARCHITECTURE.md`, `PLUGIN_TOOL_*.md`,
+`plan_mode_optimization_proposal.md`, `plugin-architecture-evolution-plan.md`,
+`multi-agent-proposal.md`) have been archived under
+[../archive/architecture/](../archive/architecture/). See
+[../archive/README.md](../archive/README.md) for the grouped archive index.

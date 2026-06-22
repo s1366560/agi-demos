@@ -4,7 +4,7 @@ This directory contains both maintained documentation and historical design/plan
 artifacts. Current code is the source of truth when a historical document disagrees with
 the repository.
 
-Last checked against code: 2026-05-18.
+Last checked against code: 2026-06-22.
 
 ## Maintained Entry Points
 
@@ -26,8 +26,8 @@ Last checked against code: 2026-05-18.
 | Area | Current docs |
 |---|---|
 | Architecture | [architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md), [architecture/README.md](architecture/README.md) |
-| Multi-agent and pool notes | [architecture/MULTI_AGENT.md](architecture/MULTI_AGENT.md), [architecture/AGENT_POOL.md](architecture/AGENT_POOL.md) |
-| Plan mode and workspace planning | [plan-mode.md](plan-mode.md), [architecture/plan-mode.md](architecture/plan-mode.md), [plan-mode-integration.md](plan-mode-integration.md) |
+| Multi-agent and pool notes | [architecture/AGENT_POOL.md](architecture/AGENT_POOL.md) (see [archive/architecture/MULTI_AGENT.md](archive/architecture/MULTI_AGENT.md) for history) |
+| Plan mode and workspace planning | [architecture/plan-mode.md](architecture/plan-mode.md) (history in [archive/plan-mode/](archive/plan-mode/)) |
 | Sandbox | [sandbox-unified-architecture.md](sandbox-unified-architecture.md), [sandbox-mcp-server/README.md](../sandbox-mcp-server/README.md) |
 | MCP | [mcp_protocol_implementation.md](mcp_protocol_implementation.md), [mcp_protocol_quick_reference.md](mcp_protocol_quick_reference.md) |
 | Events | [agent-event-types.md](agent-event-types.md), [architecture/event-system-timeline.md](architecture/event-system-timeline.md) |
@@ -40,21 +40,30 @@ Files with names such as `*-plan.md`, `*-proposal.md`, `*-summary.md`, `*-report
 useful for rationale and migration history, but they should not be treated as current
 implementation references unless this index links to them as maintained docs.
 
-Historical files are intentionally left at their original paths to avoid breaking inbound
-links. Use [archive/README.md](archive/README.md) for the grouped archive index.
+Historical files have been moved under [archive/](archive/) and grouped by topic. Use
+[archive/README.md](archive/README.md) for the grouped archive index. The top level of
+`docs/` now holds only maintained reference documents.
 
-Examples:
+Archived clusters (see [archive/README.md](archive/README.md) for the full list):
 
-- Planning records: [PLAN.md](PLAN.md), [frontend-refactor-plan.md](frontend-refactor-plan.md),
-  [sandbox-refactor-plan.md](sandbox-refactor-plan.md)
-- Migration/status summaries:
-  [MCP_UI_MIGRATION_SUMMARY.md](MCP_UI_MIGRATION_SUMMARY.md),
-  [REACT_AGENT_REFACTOR_SUMMARY.md](REACT_AGENT_REFACTOR_SUMMARY.md),
-  [INTEGRATION_COMPLETE.md](INTEGRATION_COMPLETE.md)
-- Reviews/audits:
-  [frontend-backend-interface-review.md](frontend-backend-interface-review.md),
-  [opencode-tools-audit.md](opencode-tools-audit.md),
-  [web/AGENT_COMPONENT_AUDIT.md](web/AGENT_COMPONENT_AUDIT.md)
+- Agent framework history: [archive/agent-framework/](archive/agent-framework/)
+  (e.g. [archive/agent-framework/PLAN.md](archive/agent-framework/PLAN.md),
+  [archive/agent-framework/REACT_AGENT_REFACTOR_SUMMARY.md](archive/agent-framework/REACT_AGENT_REFACTOR_SUMMARY.md))
+- Sandbox integration/refactor: [archive/sandbox/](archive/sandbox/)
+  (e.g. [archive/sandbox/sandbox-refactor-plan.md](archive/sandbox/sandbox-refactor-plan.md),
+  [archive/sandbox/INTEGRATION_COMPLETE.md](archive/sandbox/INTEGRATION_COMPLETE.md))
+- Plan-mode records: [archive/plan-mode/](archive/plan-mode/)
+  (e.g. [archive/plan-mode/plan-mode-integration.md](archive/plan-mode/plan-mode-integration.md),
+  [archive/plan-mode/plan-mode.md](archive/plan-mode/plan-mode.md))
+- MCP summaries: [archive/mcp/](archive/mcp/)
+  ([archive/mcp/MCP_UI_MIGRATION_SUMMARY.md](archive/mcp/MCP_UI_MIGRATION_SUMMARY.md),
+  [archive/mcp/MCP_PROTOCOL_IMPLEMENTATION_SUMMARY.md](archive/mcp/MCP_PROTOCOL_IMPLEMENTATION_SUMMARY.md))
+- Architecture proposals: [archive/architecture/](archive/architecture/)
+  ([archive/architecture/MULTI_AGENT.md](archive/architecture/MULTI_AGENT.md),
+  [archive/architecture/SANDBOX_FIRST_ARCHITECTURE.md](archive/architecture/SANDBOX_FIRST_ARCHITECTURE.md))
+- Frontend plans: [archive/frontend/](archive/frontend/)
+  ([archive/frontend/frontend-refactor-plan.md](archive/frontend/frontend-refactor-plan.md),
+  [archive/frontend/frontend-sandbox-migration.md](archive/frontend/frontend-sandbox-migration.md))
 
 ## Documentation Maintenance Rules
 

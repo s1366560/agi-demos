@@ -1,11 +1,20 @@
 # Agent 聊天时间线渲染改进计划
 
+> 历史计划：本文描述的时间线渲染模式切换功能（`VirtualTimelineEventList` / `RenderModeSwitch` / `agentV3` store 中的 `renderMode`-`setRenderMode`）已不再存在于当前代码库，功能被重构/回退。该计划仅作历史记录保留。
+>
+> 归档日期：2026-06-22。核实依据（2026-06-22）：
+> - `web/src/components/agent/VirtualTimelineEventList.tsx` — 不存在
+> - `web/src/components/agent/RenderModeSwitch.tsx` — 不存在
+> - `web/src/stores/agentV3.ts` — 无 `renderMode` / `setRenderMode`
+> - `web/src/pages/project/AgentChat.tsx` — 路径无效（tenant 化后聊天承载于 `web/src/pages/tenant/AgentWorkspace.tsx`，结构与本计划描述完全不同）
+> - `web/src/components/agent/TimelineEventItem.tsx` — 文件仍存在，但当前 Agent 聊天主路径 `AgentChatContent.tsx` 未按本文描述的方式集成它
+
 ## 概述
 
 将 Agent 聊天内容从分组渲染模式改为按自然时间线渲染，并修复打字机效果。
 
 **创建日期**: 2026-01-28
-**状态**: ✅ 全部完成
+**状态**: 历史计划（功能已回退/重构，组件不再存在）
 
 ---
 
