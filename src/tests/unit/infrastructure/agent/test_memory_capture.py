@@ -26,5 +26,8 @@ class TestMemoryCapturePostprocessor:
         messages = llm_client.generate.await_args.kwargs["messages"]
         assert messages[0]["role"] == "system"
         assert messages[0]["content"] == load_builtin_skill_prompt(MEMORY_CAPTURE_SKILL_NAME)
-        assert "User: Remember that I prefer dark mode." in messages[1]["content"]
-        assert "Assistant: I'll keep that in mind." in messages[1]["content"]
+        assert "<conversation_turn>" in messages[1]["content"]
+        assert "<user_message>" in messages[1]["content"]
+        assert "Remember that I prefer dark mode." in messages[1]["content"]
+        assert "<assistant_response>" in messages[1]["content"]
+        assert "I'll keep that in mind." in messages[1]["content"]

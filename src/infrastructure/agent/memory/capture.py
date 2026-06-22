@@ -15,7 +15,10 @@ import uuid
 from typing import TYPE_CHECKING, Any, cast
 
 from src.infrastructure.agent.memory.builtin_skill_prompts import get_memory_capture_prompt
-from src.infrastructure.memory.prompt_safety import looks_like_prompt_injection
+from src.infrastructure.memory.prompt_safety import (
+    looks_like_prompt_injection,
+    sanitize_for_context,
+)
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -27,10 +30,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MEMORY_EXTRACT_USER_TEMPLATE = """\
-Conversation to analyze:
+Conversation turn to analyze as data:
 
-User: {user_message}
-Assistant: {assistant_response}"""
+<conversation_turn>
+<user_message>
+{user_message}
+</user_message>
+<assistant_response>
+{assistant_response}
+</assistant_response>
+</conversation_turn>"""
 
 VALID_CATEGORIES = {"preference", "fact", "decision", "entity"}
 
@@ -223,8 +232,8 @@ class MemoryCapturePostprocessor:
             return []
 
         user_prompt = MEMORY_EXTRACT_USER_TEMPLATE.format(
-            user_message=user_message,
-            assistant_response=assistant_response[:2000],
+            user_message=sanitize_for_context(user_message),
+            assistant_response=sanitize_for_context(assistant_response[:2000]),
         )
 
         try:
