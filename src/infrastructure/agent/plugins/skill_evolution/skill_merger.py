@@ -5,13 +5,16 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import yaml
 
-from src.domain.model.agent.skill import Skill, SkillScope
+from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
 from src.domain.model.agent.skill.skill_version import SkillVersion
+from src.infrastructure.skill.markdown_parser import MarkdownParseError, MarkdownParser
+from src.infrastructure.skill.validator import AgentSkillsValidator, AllowedTool
 
 if TYPE_CHECKING:
     from src.application.services.skill_service import SkillService
@@ -22,6 +25,20 @@ if TYPE_CHECKING:
     )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _ParsedSkillCandidate:
+    name: str
+    description: str
+    tools: list[str]
+    metadata: dict[str, Any]
+    agent_modes: list[str]
+    license: str | None
+    compatibility: str | None
+    allowed_tools_raw: str | None
+    allowed_tools_parsed: list[AllowedTool]
+    version_label: str | None
 
 
 class SkillMerger:
@@ -52,6 +69,19 @@ class SkillMerger:
             logger.info("Skipping evolution for skill '%s' (action=skip)", job.skill_name)
             return None
 
+        if job.action == "create_skill" and job.candidate_content:
+            try:
+                return await self._persist_created_skill(
+                    job,
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    skill_repository=skill_repository,
+                    skill_version_repository=skill_version_repository,
+                )
+            except Exception:
+                logger.exception("Failed to create skill '%s' from evolution", job.skill_name)
+                return None
+
         try:
             skill = await self._load_skill_for_apply(
                 job.skill_name,
@@ -67,6 +97,25 @@ class SkillMerger:
             logger.warning("Skill '%s' not found — cannot apply evolution", job.skill_name)
             return None
 
+        return await self._apply_existing_skill_update(
+            skill,
+            job=job,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            skill_repository=skill_repository,
+            skill_version_repository=skill_version_repository,
+        )
+
+    async def _apply_existing_skill_update(
+        self,
+        skill: Skill,
+        *,
+        job: SkillEvolutionJob,
+        tenant_id: str,
+        project_id: str | None,
+        skill_repository: SkillRepositoryPort | None,
+        skill_version_repository: SkillVersionRepositoryPort | None,
+    ) -> str | None:
         if job.action == "optimize_description" and job.candidate_content:
             previous_version = skill.current_version
             updated_content = _replace_frontmatter_description(
@@ -109,13 +158,95 @@ class SkillMerger:
             )
             return version_id
 
-        if job.action == "create_skill" and job.candidate_content:
-            logger.info(
-                "Skill creation requested for '%s' — manual review needed",
+        return None
+
+    async def _persist_created_skill(
+        self,
+        job: SkillEvolutionJob,
+        *,
+        tenant_id: str,
+        project_id: str | None,
+        skill_repository: SkillRepositoryPort | None,
+        skill_version_repository: SkillVersionRepositoryPort | None,
+    ) -> str | None:
+        if not job.candidate_content:
+            return None
+
+        parsed = _parse_skill_candidate(job.candidate_content)
+        if parsed.name != job.skill_name:
+            logger.warning(
+                "Evolution create_skill candidate name '%s' does not match job skill '%s'",
+                parsed.name,
                 job.skill_name,
             )
+            return None
 
-        return None
+        scope = SkillScope.PROJECT if project_id else SkillScope.TENANT
+        if skill_repository is None or skill_version_repository is None:
+            await self._skill_service.create_skill(
+                tenant_id=tenant_id,
+                name=parsed.name,
+                description=parsed.description,
+                tools=parsed.tools,
+                project_id=project_id,
+                full_content=job.candidate_content,
+                scope=scope,
+            )
+            return None
+
+        existing = await _find_database_skill(
+            skill_repository,
+            tenant_id=tenant_id,
+            name=parsed.name,
+            scope=scope,
+            project_id=project_id,
+        )
+        if existing is not None:
+            logger.warning(
+                "Skill '%s' already exists in scope '%s' — cannot create from evolution",
+                parsed.name,
+                scope.value,
+            )
+            return None
+
+        skill = Skill.create(
+            tenant_id=tenant_id,
+            name=parsed.name,
+            description=parsed.description,
+            tools=parsed.tools,
+            project_id=project_id,
+            full_content=job.candidate_content,
+            metadata=parsed.metadata,
+            agent_modes=parsed.agent_modes,
+            scope=scope,
+            is_system_skill=False,
+            license=parsed.license,
+            compatibility=parsed.compatibility,
+            allowed_tools_raw=parsed.allowed_tools_raw,
+            allowed_tools_parsed=list(parsed.allowed_tools_parsed),
+        )
+        skill.status = SkillStatus.ACTIVE
+        skill.version_label = parsed.version_label
+        created_skill = await skill_repository.create(skill)
+
+        version = SkillVersion(
+            id=str(uuid.uuid4()),
+            skill_id=created_skill.id,
+            version_number=1,
+            version_label=parsed.version_label or "1",
+            skill_md_content=job.candidate_content,
+            resource_files={},
+            change_summary=job.rationale or "Evolution create_skill",
+            created_by="evolution",
+        )
+        await skill_version_repository.create(version)
+
+        created_skill.current_version = version.version_number
+        created_skill.version_label = version.version_label
+        created_skill.updated_at = datetime.now(UTC)
+        await skill_repository.update(created_skill)
+        logger.info("Created skill '%s' from evolution job %s", parsed.name, job.id)
+        return version.id
 
     async def _load_skill_for_apply(
         self,
@@ -280,3 +411,70 @@ def _replace_frontmatter_description(content: str, description: str) -> str:
     frontmatter["description"] = description
     yaml_text = yaml.safe_dump(frontmatter, sort_keys=False, allow_unicode=True).strip()
     return f"---\n{yaml_text}\n---{body}"
+
+
+def _parse_skill_candidate(content: str) -> _ParsedSkillCandidate:
+    validation = AgentSkillsValidator(strict=False).validate_content(content)
+    if not validation.is_valid:
+        raise ValueError("Invalid Agent Skill package")
+
+    try:
+        parsed = MarkdownParser().parse(content)
+    except MarkdownParseError as exc:
+        raise ValueError("Invalid SKILL.md candidate") from exc
+
+    tools = parsed.tools or parsed.allowed_tools or ["*"]
+    metadata = dict(parsed.metadata or {})
+    metadata["agentskills"] = {
+        "license": parsed.license,
+        "compatibility": parsed.compatibility,
+        "allowed_tools": parsed.allowed_tools_raw,
+        "validation": validation.to_dict(),
+    }
+    allowed_tools_parsed = (
+        AllowedTool.parse_many(parsed.allowed_tools_raw) if parsed.allowed_tools_raw else []
+    )
+    version_label = _extract_version_label(parsed.version, metadata)
+    return _ParsedSkillCandidate(
+        name=parsed.name,
+        description=parsed.description,
+        tools=tools,
+        metadata=metadata,
+        agent_modes=parsed.agent,
+        license=parsed.license,
+        compatibility=parsed.compatibility,
+        allowed_tools_raw=parsed.allowed_tools_raw,
+        allowed_tools_parsed=allowed_tools_parsed,
+        version_label=version_label,
+    )
+
+
+def _extract_version_label(version: str | None, metadata: dict[str, Any]) -> str | None:
+    if version:
+        return str(version)
+    metadata_version = metadata.get("version")
+    return str(metadata_version) if metadata_version is not None else None
+
+
+async def _find_database_skill(
+    skill_repository: SkillRepositoryPort,
+    *,
+    tenant_id: str,
+    name: str,
+    scope: SkillScope,
+    project_id: str | None,
+) -> Skill | None:
+    if scope == SkillScope.PROJECT and project_id:
+        list_by_project = getattr(skill_repository, "list_by_project", None)
+        if callable(list_by_project):
+            typed_list_by_project = cast(
+                Callable[..., Awaitable[list[Skill]]],
+                list_by_project,
+            )
+            project_skills = await typed_list_by_project(
+                project_id=project_id,
+                tenant_id=tenant_id,
+                scope=SkillScope.PROJECT,
+            )
+            return next((skill for skill in project_skills if skill.name == name), None)
+    return await skill_repository.get_by_name(tenant_id, name, scope)

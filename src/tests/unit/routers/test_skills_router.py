@@ -246,6 +246,9 @@ class _MemorySqlSkillRepository:
     def __init__(self, db: SimpleNamespace) -> None:
         self._repo = db.skill_repo
 
+    async def create(self, skill: Skill) -> Skill:
+        return await self._repo.create(skill)
+
     async def get_by_id(self, skill_id: str) -> Skill | None:
         return await self._repo.get_by_id(skill_id)
 
@@ -1571,6 +1574,79 @@ async def test_apply_skill_evolution_job_creates_version(
     assert db.versions[0].created_by == "evolution"
     assert skill.full_content == "# Improved Alpha Skill"
     assert skill.current_version == 1
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_apply_create_skill_evolution_job_creates_skill_and_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _MemorySkillRepository()
+    created_at = datetime.now(UTC)
+    candidate_content = """---
+name: new-review-skill
+description: Reviews pull requests with a structured checklist.
+allowed-tools: Read Bash(git:*)
+metadata:
+  version: "0.1.0"
+---
+
+# New Review Skill
+
+Use this when a reusable review workflow is needed.
+"""
+    db = SimpleNamespace(
+        skill_repo=repo,
+        versions=[],
+        evolution_jobs=[
+            SimpleNamespace(
+                id="job-create",
+                tenant_id="tenant-1",
+                project_id=None,
+                skill_name="new-review-skill",
+                action="create_skill",
+                status="pending_review",
+                rationale="Session evidence showed a reusable review workflow",
+                candidate_content=candidate_content,
+                session_ids=["s1", "s2"],
+                skill_version_id=None,
+                created_at=created_at,
+                applied_at=None,
+            )
+        ],
+        commit=AsyncMock(),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_repository.SqlSkillRepository",
+        _MemorySqlSkillRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository."
+        "SqlSkillVersionRepository",
+        _MemoryVersionRepository,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.skill_evolution.repository.SkillEvolutionRepository",
+        _MemoryEvolutionRepository,
+    )
+
+    response = await router.apply_skill_evolution_job(
+        job_id="job-create",
+        db=db,
+        tenant={"id": "tenant-1"},
+    )
+
+    created_skill = await repo.get_by_name("tenant-1", "new-review-skill", SkillScope.TENANT)
+    assert created_skill is not None
+    assert response.status == "applied"
+    assert response.skill_version_id == db.versions[0].id
+    assert created_skill.description == "Reviews pull requests with a structured checklist."
+    assert created_skill.full_content == candidate_content
+    assert created_skill.current_version == 1
+    assert created_skill.version_label == "0.1.0"
+    assert created_skill.allowed_tools_raw == "Read Bash(git:*)"
+    assert db.versions[0].created_by == "evolution"
+    assert db.versions[0].skill_id == created_skill.id
     db.commit.assert_awaited_once()
 
 
