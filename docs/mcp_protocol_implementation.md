@@ -1,25 +1,33 @@
 # MCP Protocol Capabilities Implementation
 
+> 模块说明文档。如需方法速查与代码片段，请参阅 `mcp_protocol_quick_reference.md`（活速查）。
+> 本文聚焦三个客户端实现的职责划分与能力清单。
+
 ## Summary
 
-Successfully implemented missing MCP protocol capabilities following TDD methodology (RED-GREEN-REFACTOR cycle).
+MCP 协议能力的客户端实现位于 `src/infrastructure/mcp/clients/`，覆盖 WebSocket、Subprocess、HTTP/SSE 三种传输方式。Protocol capabilities（ping、prompts、resource subscriptions、logging 等）目前仅在 WebSocket 客户端中完整实现，遵循 TDD（RED-GREEN-REFACTOR）流程交付。
 
-## Implementation Date
+## Client Responsibilities
 
-2026-02-16
+| Client | Class | Transport | Capabilities |
+|--------|-------|-----------|--------------|
+| `websocket_client.py` | `MCPWebSocketClient` | WebSocket | Full protocol: `list_tools`, `call_tool`, `read_resource`, `list_resources`, `ping`, `list_prompts`, `get_prompt`, `subscribe_resource`, `unsubscribe_resource`, `set_logging_level`, `complete`, `set_roots` |
+| `subprocess_client.py` | `MCPSubprocessClient` | stdio (子进程) | `list_tools`, `call_tool`, `ping` |
+| `http_client.py` | `MCPHttpClient` | HTTP / SSE | `list_tools`, `call_tool`, `ping`（通过 `transport_type="http"` 或 `"sse"` 选择传输） |
 
-## Phase 1 - High Priority Features (COMPLETED)
+## Implemented Protocol Capabilities (WebSocket client)
 
 ### 1. Ping Mechanism
 
 **Purpose**: Connection health check
 
-**Methods**:
-- `ping(timeout: Optional[float] = None) -> bool`
+**Method**:
+- `ping(timeout: float | None = None) -> bool`
 
-**Implementation**:
-- WebSocket client: `/src/infrastructure/mcp/clients/websocket_client.py`
-- Subprocess client: `/src/infrastructure/mcp/clients/subprocess_client.py`
+**Implementation**（三个客户端均提供）:
+- WebSocket client: `src/infrastructure/mcp/clients/websocket_client.py`
+- Subprocess client: `src/infrastructure/mcp/clients/subprocess_client.py`
+- HTTP client: `src/infrastructure/mcp/clients/http_client.py`
 
 **Tests**: 5 tests covering success, timeout, not connected, and exception cases
 
@@ -30,8 +38,8 @@ Successfully implemented missing MCP protocol capabilities following TDD methodo
 **Purpose**: List and retrieve prompt templates
 
 **Methods**:
-- `list_prompts(timeout: Optional[float] = None) -> List[Dict[str, Any]]`
-- `get_prompt(name: str, arguments: Optional[Dict[str, Any]] = None, timeout: Optional[float] = None) -> Optional[Dict[str, Any]]`
+- `list_prompts(timeout: float | None = None) -> list[dict[str, Any]]`
+- `get_prompt(name: str, arguments: dict[str, Any] | None = None, timeout: float | None = None) -> dict[str, Any] | None`
 
 **Features**:
 - List available prompt templates
@@ -48,8 +56,8 @@ Successfully implemented missing MCP protocol capabilities following TDD methodo
 **Purpose**: Subscribe/unsubscribe to resource updates
 
 **Methods**:
-- `subscribe_resource(uri: str, timeout: Optional[float] = None) -> bool`
-- `unsubscribe_resource(uri: str, timeout: Optional[float] = None) -> bool`
+- `subscribe_resource(uri: str, timeout: float | None = None) -> bool`
+- `unsubscribe_resource(uri: str, timeout: float | None = None) -> bool`
 
 **Notification Handlers**:
 - `on_resource_updated`: Handles `notifications/resources/updated`
@@ -75,7 +83,7 @@ Successfully implemented missing MCP protocol capabilities following TDD methodo
 **Purpose**: Control server-side logging level
 
 **Methods**:
-- `set_logging_level(level: str, timeout: Optional[float] = None) -> bool`
+- `set_logging_level(level: str, timeout: float | None = None) -> bool`
 
 **Supported Levels**: debug, info, notice, warning, error, critical, alert, emergency
 
@@ -108,7 +116,7 @@ Successfully implemented missing MCP protocol capabilities following TDD methodo
 **Statistics**:
 - Total tests: 29
 - Test classes: 8
-- All tests passing: ✅
+- All tests passing at time of writing
 - Coverage: 23% overall (focused on new functionality)
 
 **Test Categories**:
@@ -222,12 +230,12 @@ if success:
     print("Logging level set to debug")
 ```
 
-## TDD Process Followed
+## Implementation Notes
 
-1. **RED Phase**: Wrote 17 failing tests first
-2. **GREEN Phase**: Implemented minimal code to pass all tests
-3. **REFACTOR Phase**: Applied code formatting and linting
-4. **Verification**: All 202 existing MCP tests still pass
+1. **RED Phase**: 17 failing tests written first
+2. **GREEN Phase**: minimal implementation to pass all tests
+3. **REFACTOR Phase**: formatting and linting applied
+4. **Verification**: existing MCP tests remained green
 
 ## Remaining Work (Future Phases)
 
@@ -244,17 +252,17 @@ if success:
 - Add type-safe dataclasses for MCP protocol messages
 - Add retry logic for transient failures
 
-## Files Modified
+## Files
 
 ### Implementation
 
-- `/src/infrastructure/mcp/clients/websocket_client.py`
-  - Added 7 new public methods
-  - Added 5 notification handler attributes
-  - Enhanced `_handle_message` for notification dispatch
-
-- `/src/infrastructure/mcp/clients/subprocess_client.py`
-  - Added `ping` method
+- `src/infrastructure/mcp/clients/websocket_client.py` — `MCPWebSocketClient`
+  - Full protocol capability surface（ping、prompts、resources、logging、completion、roots）
+  - 5 notification handler 属性，`_handle_message` 负责通知分发
+- `src/infrastructure/mcp/clients/subprocess_client.py` — `MCPSubprocessClient`
+  - `list_tools`、`call_tool`、`ping`
+- `src/infrastructure/mcp/clients/http_client.py` — `MCPHttpClient`
+  - `list_tools`、`call_tool`、`ping`，支持 `http` 与 `sse` 两种 `transport_type`
 
 ### Tests
 

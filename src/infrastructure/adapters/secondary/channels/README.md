@@ -1,5 +1,7 @@
 # Channels Module
 
+> Last checked: 2026-06-22
+
 多渠道通信模块，支持飞书、钉钉、企业微信等 IM 平台集成。
 
 ## 架构
@@ -11,7 +13,12 @@ src/
 ├── domain/model/channels/          # 领域层
 │   └── message.py                  # 消息实体、适配器接口 (Port)
 ├── application/services/channels/  # 应用层
-│   └── channel_service.py          # 渠道服务编排
+│   ├── channel_service.py          # 渠道服务编排
+│   ├── channel_service_factory.py  # 渠道服务工厂
+│   ├── channel_message_router.py   # 渠道消息路由
+│   ├── event_bridge.py             # 事件桥接
+│   ├── hitl_responder.py           # HITL 响应器
+│   └── media_import_service.py     # 媒体导入服务
 └── infrastructure/adapters/secondary/channels/  # 基础设施层
     └── channel_plugin_loader.py    # 通用渠道插件加载器
 

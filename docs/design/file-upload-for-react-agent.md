@@ -1,8 +1,9 @@
 # ReActAgent 文件上传功能 - 技术设计文档
 
-> 创建日期: 2026-02-01  
-> 作者: AI Assistant  
-> 状态: 实现中
+> 创建日期: 2026-02-01
+> 作者: AI Assistant
+> 状态: 已实现（详见第 13 节「实现落地与设计偏差」）
+> Last checked against code: 2026-06-22
 
 ## 1. 概述
 
@@ -353,3 +354,30 @@ CREATE INDEX ix_attachments_expires_at ON attachments(expires_at);
 3. **路径遍历防护**: 沙箱导入时验证目标路径
 4. **过期清理**: 24小时后自动清理未完成上传
 5. **权限检查**: 验证用户对conversation/project的访问权限
+
+## 13. 实现落地与设计偏差
+
+> 本节 2026-06-22 对照当前代码补写，用于说明实际实现与上文设计的差异。未在此列出的设计点按原文落实。
+
+### 13.1 已实现的关键组件
+
+| 设计目标 | 实际位置 | 状态 |
+|----------|----------|------|
+| 领域模型 `Attachment` | `src/domain/model/agent/conversation/attachment.py`（旧路径 `src/domain/model/agent/attachment.py` 现为向后兼容的 re-export shim） | Done |
+| Application service | `src/application/services/attachment_service.py`（`AttachmentService`） | Done |
+| 存储层扩展 | `src/domain/ports/services/storage_service_port.py`（`create_multipart_upload` / `upload_part` / `complete_multipart_upload` / `abort_multipart_upload` / `generate_presigned_upload_url`） | Done |
+| HTTP 路由 | `src/infrastructure/adapters/primary/web/routers/attachments_upload.py` | Done |
+
+`AttachmentService` 实现的方法（对照第 4 节）：`initiate_multipart_upload`、`upload_part`、`complete_multipart_upload`、`abort_multipart_upload`、`upload_simple`、`prepare_for_llm` / `prepare_for_llm_batch`、`prepare_for_sandbox` / `prepare_for_sandbox_batch`、`mark_sandbox_imported`、`delete`、`cleanup_expired`、`get_download_url`、`should_use_multipart`、`get_part_size`、以及 `get` / `get_by_ids` / `get_by_conversation`。
+
+实际暴露的端点（`attachments_upload.py`）：
+- `POST /upload/initiate` / `POST /upload/part` / `POST /upload/complete` / `POST /upload/abort` / `POST /upload/simple`（与设计一致，另增 `/upload/abort`）
+- `GET /attachments`（list）、`GET /{attachment_id}`、`GET /{attachment_id}/download`、`DELETE /{attachment_id}`（查询/删除能力，原设计未全部列出）
+
+### 13.2 设计偏差
+
+1. **LLM 上限放宽**：第 4.2 / 8 节原设计 `10MB (LLM 上下文)`。实际 `DEFAULT_MAX_SIZE_LLM_MB = 100`，与 `DEFAULT_MAX_SIZE_SANDBOX_MB` 均为 100 MB（见 `src/domain/model/agent/conversation/attachment.py`）。实际限制由 `build_file_size_limits(...)` + `FILE_SIZE_LIMITS` 决定，并可经 `AttachmentService.__init__(upload_max_size_llm_mb=..., upload_max_size_sandbox_mb=...)` 覆盖。
+2. **领域模型结构**：第 3.1 节原设计把所有元数据扁平放在 `Attachment` 上。实际拆为 `@dataclass(frozen=True) AttachmentMetadata` + `@dataclass(kw_only=True) Attachment`，`upload_id` / `total_parts` / `uploaded_parts` / `sandbox_path` / `expires_at` 等字段移入 `AttachmentMetadata`（部分）或保留于 `Attachment`。
+3. **状态机**：`AttachmentStatus` 与设计一致（`PENDING` / `UPLOADED` / `PROCESSING` / `READY` / `FAILED` / `EXPIRED`）。
+4. **`import_file` 工具**：原第 6 节设想的「沙箱 `import_file` MCP 工具」当前由 `src/application/services/channels/media_import_service.py` + `custom_tool_loader.py` 承担；具体导入路径与工具命名以代码为准，不要沿用第 6.1 节的函数签名。
+5. **数据库迁移**：原第 9 节 SQL 未在 `migrations/versions/*attachment*` 找到同名迁移文件，实际建表通过 Alembic autogenerate 产物落地；维护时以 `alembic history` 为准。

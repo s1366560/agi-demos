@@ -2,6 +2,8 @@
 
 A refactored sidebar component system using explicit variant components and compound components pattern.
 
+> Last checked: 2026-06-22
+
 ## API
 
 ```tsx
@@ -49,6 +51,7 @@ import { AppSidebar, SidebarBrand, SidebarNavigation, SidebarUser } from '@/comp
 ### Context and Hooks
 
 - `SidebarContext` - Context for compound components
+- `SidebarProvider` - Provider component that supplies context value to children
 - `useSidebarContext` - Hook to access sidebar context
 
 ### Types
@@ -87,6 +90,5 @@ src/components/layout/AppSidebar/
 
 ## Tests
 
-- 68 tests pass across all sidebar components
-- 80%+ code coverage
+- 21 test cases across AppSidebar, TenantSidebar, ProjectSidebar, and AgentSidebar
 - Located in `src/test/components/layout/AppSidebar/`

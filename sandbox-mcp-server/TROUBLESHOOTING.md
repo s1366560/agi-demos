@@ -1,9 +1,10 @@
 # Troubleshooting Guide
 
-**Version**: 2.0
-**Last Updated**: 2026-01-28
+**Version**: 3.0
+**Last Updated**: 2026-06-22
+**Last checked against code**: 2026-06-22
 
-Common issues and solutions for Sandbox MCP Server with XFCE desktop.
+Common issues and solutions for Sandbox MCP Server with KDE Plasma desktop served over KasmVNC.
 
 ---
 
@@ -23,32 +24,32 @@ Common issues and solutions for Sandbox MCP Server with XFCE desktop.
 ### Desktop Won't Start
 
 **Symptoms**:
-- VNC connection times out
+- KasmVNC web page times out
 - "Desktop not running" status
 - Error in logs: "Desktop components not installed"
 
 **Diagnosis**:
 ```bash
-# Check if XFCE is installed
-docker exec <container> dpkg -l | grep xfce4
+# Check if KDE Plasma is installed
+docker exec <container> dpkg -l | grep -i kde-plasma
 
-# Check VNC process
-docker exec <container> ps aux | grep vnc
+# Check KasmVNC process (X server binary is Xkasmvnc)
+docker exec <container> ps aux | grep -E "Xkasmvnc|vncserver"
 
-# Check Xvfb process
-docker exec <container> ps aux | grep Xvfb
+# Check the web client port is listening
+docker exec <container> netstat -tln | grep 6080
 ```
 
 **Solutions**:
 
-1. **Rebuild image with XFCE**:
+1. **Rebuild image with KDE Plasma + KasmVNC**:
    ```bash
    docker build -t sandbox-mcp-server .
    ```
 
 2. **Verify installation**:
    ```bash
-   docker run --rm sandbox-mcp-server dpkg -l | grep xfce4
+   docker run --rm sandbox-mcp-server dpkg -l | grep -E "kde-plasma-desktop|kasmvncserver"
    ```
 
 3. **Check logs**:
@@ -60,15 +61,18 @@ docker exec <container> ps aux | grep Xvfb
 
 **Symptoms**:
 - Desktop starts then crashes
-- "Xvfb exited immediately" error
+- "KasmVNC failed to start within timeout" error
 - Return code 1 or 139
 
 **Diagnosis**:
 ```bash
-# Check Xvfb logs
-docker exec <container> cat /tmp/Xvfb.log
+# Check KasmVNC startup log (entrypoint tees here)
+docker exec <container> cat /tmp/kasmvnc.log
 
-# Check display conflicts
+# Check the X server process
+docker exec <container> ps aux | grep Xkasmvnc
+
+# Check display socket
 docker exec <container> ls -la /tmp/.X11-unix/
 ```
 
@@ -87,14 +91,15 @@ docker exec <container> ls -la /tmp/.X11-unix/
 2. **Reduce resolution**:
    ```json
    {
-     "resolution": "1024x576"
+     "resolution": "1280x720"
    }
    ```
 
 3. **Check for conflicts**:
    ```bash
-   docker exec <container> pkill Xvfb
-   docker exec <container> pkill vncserver
+   # KasmVNC ships its own X server; there is no separate Xvfb
+   docker exec <container> vncserver -kill :1
+   docker exec <container> pkill Xkasmvnc
    ```
 
 ### Desktop Freezes
@@ -106,8 +111,8 @@ docker exec <container> ls -la /tmp/.X11-unix/
 
 **Diagnosis**:
 ```bash
-# Check XFCE process
-docker exec <container> ps aux | grep xfce4-session
+# Check KDE Plasma session process
+docker exec <container> ps aux | grep -E "startplasma|plasmashell"
 
 # Check CPU usage
 docker exec <container> top
@@ -151,8 +156,8 @@ docker ps
 # Check port mapping
 docker port <container>
 
-# Check noVNC process
-docker exec <container> ps aux | grep websockify
+# Check the KasmVNC web server (built-in, no separate websockify)
+docker exec <container> ps aux | grep Xkasmvnc
 ```
 
 **Solutions**:
@@ -181,21 +186,25 @@ docker exec <container> ps aux | grep websockify
 
 **Diagnosis**:
 ```bash
-# Check VNC security settings
-docker exec <container> ps aux | grep vnc | grep -o "\-securitytypes [^ ]*"
+# Check KasmVNC security settings (started by entrypoint.sh / desktop_manager.py)
+docker exec <container> ps aux | grep "[X]kasmvnc" | grep -oE "\-SecurityTypes [^ ]+|\-disableBasicAuth"
+
+# Check the KasmVNC user credentials file
+docker exec <container> ls -l /root/.kasmpasswd 2>/dev/null && echo "found"
 ```
 
 **Solutions**:
 
 1. **Verify no authentication** (default):
    ```bash
-   # Should show: -securitytypes None
+   # Should show: -SecurityTypes None -disableBasicAuth
+   # The API proxy handles auth; KasmVNC itself runs open.
    ```
 
-2. **If authentication enabled**:
-   - Check VNC password file
-   - Verify password in ~/.vnc/passwd
-   - Disable authentication for container use
+2. **If a credential prompt still appears**:
+   - KasmVNC reads `$HOME/.kasmpasswd` (NOT `~/.vnc/passwd`)
+   - Format is `username:password:permissions` (e.g. `root:kasmvnc:ow`)
+   - Ensure `chmod 600 /root/.kasmpasswd` and that root is in the `ssl-cert` group
 
 ### Slow VNC Performance
 
@@ -215,14 +224,18 @@ docker exec <container> ps aux | grep vnc
 
 **Solutions**:
 
-1. **Reduce resolution**:
+1. **Reduce resolution** (live change, no restart):
    ```json
-   {"resolution": "1024x576"}
+   {"name": "change_resolution", "arguments": {"resolution": "1280x720"}}
    ```
 
-2. **Adjust compression** (modify code):
-   ```python
-   "-compression", "7",  # Higher = more compression
+2. **Lower image quality** (KasmVNC is configured via `/etc/kasmvnc/kasmvnc.yaml`, not CLI flags):
+   ```yaml
+   encoding:
+     max_frame_rate: 30        # lower frame rate
+     video_encoding_mode:
+       jpeg_quality: 5         # 0-9, lower = more compression
+       webp_quality: 5         # 0-9, lower = more compression
    ```
 
 3. **Check network bandwidth**:
@@ -260,7 +273,7 @@ docker exec <container> top
 
 2. **Reduce resolution**:
    ```json
-   {"resolution": "1024x576"}
+   {"resolution": "1280x720"}
    ```
 
 3. **Limit concurrent users**:
@@ -461,10 +474,10 @@ wscat -c ws://localhost:8765
 
 **Diagnosis**:
 ```bash
-# Check actual processes
-docker exec <container> ps aux | grep -E "Xvfb|vnc"
+# Check actual processes (KasmVNC X server binary is Xkasmvnc)
+docker exec <container> ps aux | grep -E "Xkasmvnc|vncserver"
 
-# Compare with status
+# Compare with status (status reports kasmvnc_pid)
 curl -X POST http://localhost:8765/tools/call \
   -H "Content-Type: application/json" \
   -d '{"name": "get_desktop_status"}'
@@ -477,10 +490,10 @@ curl -X POST http://localhost:8765/tools/call \
    {"name": "restart_desktop"}
    ```
 
-2. **Clear cache**:
+2. **Clear stale processes**:
    ```bash
-   docker exec <container> pkill -9 -f xfce
-   docker exec <container> pkill -9 -f vnc
+   docker exec <container> pkill -9 -f startplasma
+   docker exec <container> pkill -9 -f Xkasmvnc
    ```
 
 3. **Verify DesktopManager state**:
@@ -583,8 +596,8 @@ docker ps -a
 docker stats
 docker logs <container> --tail 100
 
-# Desktop info
-docker exec <container> ps aux | grep -E "Xvfb|xfce|vnc"
+# Desktop info (KasmVNC + KDE Plasma)
+docker exec <container> ps aux | grep -E "Xkasmvnc|plasma|vncserver"
 docker exec <container> df -h
 docker exec <container> free -h
 
@@ -606,13 +619,13 @@ netstat -tlnp | grep -E "8765|7681|6080"
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| "Desktop components not installed" | XFCE missing | Rebuild image |
+| "Desktop components not installed" | KDE Plasma / KasmVNC missing | Rebuild image |
 | "Connection refused" | Port not mapped | Add `-p 6080:6080` |
-| "Xvfb exited immediately" | Display conflict | Change display number |
+| "KasmVNC failed to start within timeout" | Display conflict or missing deps | Check `/tmp/kasmvnc.log`, change display number |
 | "Cannot allocate memory" | OOM | Increase memory limit |
 | "No space left on device" | Disk full | Clean workspace |
 | "Tool not found" | Server restart needed | Restart container |
-| "VNC authentication failed" | Auth enabled | Disable for container |
+| "VNC authentication failed" | Misconfigured credentials | Verify `/root/.kasmpasswd` (format `user:pass:ow`, chmod 600) and `ssl-cert` membership |
 
 ---
 
@@ -628,7 +641,7 @@ docker logs -f <container>
 
 # Restart services
 docker restart <container>
-docker exec <container> pkill -HUP xfce4-session
+docker exec <container> pkill -HUP plasmashell
 
 # Clean up
 docker exec <container> rm -rf /tmp/.X11-unix/*
@@ -641,6 +654,6 @@ curl http://localhost:6080/vnc.html
 
 ---
 
-**Last Updated**: 2026-01-28
-**Troubleshooting Guide Version**: 2.0
+**Last Updated**: 2026-06-22
+**Troubleshooting Guide Version**: 3.0
 **Status**: Comprehensive ✅

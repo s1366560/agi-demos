@@ -113,46 +113,59 @@ See references/guide.md for details.
 
 ## 四、实现阶段
 
-### Phase 1: 资源扫描
-- [ ] 创建 `SkillResourceLoader`
-- [ ] 实现 SKILL 目录扫描
-- [ ] 实现内容引用检测
-- [ ] 单元测试
+> 落地说明（对照代码，截至 2026-06-22）：架构在实现时偏离了原始设计。
+> 实际未引入独立的 `SkillResourceInjector` / `skill_path_resolver.py` / `skill_executor.py`，
+> 而是改用「`SkillResourceLoader` + `SkillResourceSyncService`（应用层统一同步入口）+
+> `SandboxSkillResourceAdapter` / `LocalSkillResourceAdapter`（二级适配器）」的组合，
+> 同步入口被 `skill_loader` 工具、`react_agent_stream_mixin` 的 INJECT 模式、`agent_session_pool`
+> 三处调用。容器内资源根目录为 `/workspace/.memstack/skills/`（非设计稿的 `/workspace/.skills/`）。
 
-### Phase 2: 资源注入
-- [ ] 创建 `SkillResourceInjector`
-- [ ] 实现批量资源注入
-- [ ] 实现环境设置
-- [ ] 单元测试
+### Phase 1: 资源扫描 — Done
+- [x] 创建 `SkillResourceLoader`（`src/infrastructure/agent/skill/skill_resource_loader.py`）
+- [x] 实现 SKILL 目录扫描（`get_skill_resources()`，委托 `FileSystemSkillScanner`）
+- [x] 实现内容引用检测（`detect_referred_resources()`）
+- [x] 单元测试（`src/tests/unit/infrastructure/agent/skill/test_skill_resource_loader.py`）
 
-### Phase 3: 执行器集成
-- [ ] 修改 `SkillExecutor` 添加资源注入
-- [ ] 集成测试
+### Phase 2: 资源注入 — Done（实现方式与设计稿不同）
+- [x] ~~创建 `SkillResourceInjector`~~ 改为 `SkillResourceSyncService`（`src/application/services/skill_resource_sync_service.py`）+ `SandboxSkillResourceAdapter`（`src/infrastructure/adapters/secondary/skill/sandbox_skill_resource_adapter.py`）
+- [x] 实现批量资源注入（`SkillResourceSyncService.sync_for_skill()` + 适配器版本缓存幂等同步）
+- [x] 实现环境设置（`SkillResourcePort.setup_environment()`，设置 `SKILL_ROOT`、`SKILL_NAME`、`PATH`）
+- [x] 单元测试（`src/tests/unit/test_skill_resource_sync_service.py`）
 
-### Phase 4: E2E 测试
+### Phase 3: 执行器集成 — Done（无独立 SkillExecutor，集成进多处）
+- [x] ~~修改 `SkillExecutor` 添加资源注入~~ 同步逻辑已挂入：`skill_loader` 工具（`src/infrastructure/agent/tools/skill_loader.py`）、ReActAgent INJECT 模式（`src/infrastructure/agent/core/react_agent_stream_mixin.py` 的 `_stream_sync_skill_resources`）、`agent_session_pool`（`src/infrastructure/agent/state/agent_session_pool.py` 装配 `SkillResourceSyncService`）
+- [x] 集成测试（随各调用点的单元测试覆盖）
+
+### Phase 4: E2E 测试 — Pending
 - [ ] 创建测试 SKILL
 - [ ] 端到端测试
-- [ ] 文档更新
+- [x] 文档更新（本次对照代码修订）
 
 ## 五、文件清单
+
+> 实际落地结构（对照代码，截至 2026-06-22）：未采用设计稿中的
+> `skill_resource_injector.py` / `skill_path_resolver.py` / `skill_executor.py`。
 
 ```
 src/infrastructure/agent/skill/
 ├── __init__.py
-├── skill_resource_loader.py      # 新增
-├── skill_resource_injector.py    # 新增
-└── skill_path_resolver.py        # 新增
+└── skill_resource_loader.py      # 已落地（路径解析内建于此）
 
-src/infrastructure/agent/core/
-└── skill_executor.py             # 修改
+src/application/services/
+└── skill_resource_sync_service.py     # 实际的统一同步入口（替代设计稿的 SkillResourceInjector）
 
-tests/unit/agent/skill/
-├── test_skill_resource_loader.py     # 新增
-├── test_skill_resource_injector.py   # 新增
-└── test_skill_path_resolver.py       # 新增
+src/infrastructure/adapters/secondary/skill/
+├── sandbox_skill_resource_adapter.py  # 远程 Sandbox 注入适配器
+└── local_skill_resource_adapter.py    # 本地环境适配器
 
-tests/integration/agent/
-└── test_skill_execution_with_resources.py  # 新增
+# 同步逻辑的调用点（设计稿称 "SkillExecutor 增强"，实际分散在以下三处）
+src/infrastructure/agent/tools/skill_loader.py          # skill_loader 工具
+src/infrastructure/agent/core/react_agent_stream_mixin.py  # INJECT 模式（_stream_sync_skill_resources）
+src/infrastructure/agent/state/agent_session_pool.py    # 装配 SkillResourceSyncService
+
+# 测试
+src/tests/unit/infrastructure/agent/skill/test_skill_resource_loader.py
+src/tests/unit/test_skill_resource_sync_service.py
 ```
 
 ## 六、复杂度评估

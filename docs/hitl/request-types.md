@@ -1,6 +1,6 @@
 # HITL 请求类型详解
 
-本文档详细说明 HITL 系统支持的 4 种请求类型。
+本文档详细说明 HITL 系统支持的 5 种请求类型。
 
 ## 概览
 
@@ -10,6 +10,7 @@
 | Decision | `decision` | 关键决策点 | 300s |
 | EnvVar | `env_var` | 收集环境变量 | 300s |
 | Permission | `permission` | 授权敏感操作 | 60s |
+| A2UIAction | `a2ui_action` | 响应交互式 A2UI 组件动作 | 300s |
 
 ---
 
@@ -457,17 +458,82 @@ if permission == PermissionAction.DENY:
 
 ---
 
+## 5. A2UIAction (A2UI 组件动作请求)
+
+当 Agent 渲染一个交互式 A2UI 组件（surface）并等待用户在组件内交互（按钮点击、
+表单提交等）时触发。响应载荷由具体组件决定，并通过组件 ID (`source_component_id`)
+和动作名 (`action_name`) 标识来源。
+
+### 使用场景
+
+- 渲染交互式卡片/表单并等待用户在卡片内操作
+- 选项由动态生成的 UI 组件定义，而非预设的 `options` 列表
+- 单个 surface 可暴露多个动作（`allowed_actions`）
+
+### 数据结构
+
+```python
+@dataclass
+class A2UIActionRequestData:
+    title: str = "A2UI interaction required"        # 展示标题
+    block_id: str = ""                              # A2UI surface/block 标识
+    allowed_actions: List[Dict[str, str]] = []      # 允许的动作清单
+    context: Dict[str, Any] = {}                    # 上下文
+```
+
+`allowed_actions` 列出允许的动作名，HITL 响应校验时会检查 `action_name` 和
+`source_component_id` 是否在该 surface 暴露的范围内。`to_dict()` 序列化时同时
+输出 `question`（取自 `title`）和 `title`，以兼容卡片标题字段。
+
+### 示例
+
+```python
+# Agent 代码
+action = await handler.request_a2ui_action(
+    title="确认导出范围",
+    block_id="export-confirmation-card",
+    allowed_actions=[
+        {"component_id": "btn_export_all", "action": "export_all"},
+        {"component_id": "btn_export_page", "action": "export_page"},
+        {"component_id": "btn_cancel", "action": "cancel"},
+    ],
+    timeout_seconds=300,
+)
+```
+
+### 前端渲染
+
+A2UI surface 由 canvas store 渲染（而非通用 HITL 卡片）。前端通过
+`a2ui_action_asked` 事件携带 `block_id` / `surface_data` 将组件挂载到画布，
+用户交互后调用 `agentService.respondToA2UIAction` 提交动作。
+
+### 响应格式
+
+```json
+{
+  "request_id": "a2ui_12345678",
+  "hitl_type": "a2ui_action",
+  "response_data": {
+    "action_name": "export_all",
+    "source_component_id": "btn_export_all",
+    "context": {}
+  }
+}
+```
+
+---
+
 ## 类型对比
 
-| 特性 | Clarification | Decision | EnvVar | Permission |
-|------|---------------|----------|--------|------------|
-| 主要目的 | 澄清意图 | 做出选择 | 收集凭证 | 授权操作 |
-| 允许自定义 | ✓ 默认允许 | ✗ 默认不允许 | - | - |
-| 多选支持 | ✗ | ✓ 可配置 | - | - |
-| 风险等级 | - | ✓ 每个选项 | - | ✓ 整体 |
-| 记住选择 | - | - | ✓ 保存凭证 | ✓ 记住授权 |
-| 典型超时 | 300s | 300s | 300s | 60s |
-| 默认值 | ✓ | ✓ | ✓ | ✓ |
+| 特性 | Clarification | Decision | EnvVar | Permission | A2UIAction |
+|------|---------------|----------|--------|------------|------------|
+| 主要目的 | 澄清意图 | 做出选择 | 收集凭证 | 授权操作 | 组件交互 |
+| 允许自定义 | ✓ 默认允许 | ✗ 默认不允许 | - | - | 组件定义 |
+| 多选支持 | ✗ | ✓ 可配置 | - | - | - |
+| 风险等级 | - | ✓ 每个选项 | - | ✓ 整体 | - |
+| 记住选择 | - | - | ✓ 保存凭证 | ✓ 记住授权 | - |
+| 典型超时 | 300s | 300s | 300s | 60s | 300s |
+| 默认值 | ✓ | ✓ | ✓ | ✓ | - |
 
 ## 工具集成
 

@@ -31,11 +31,13 @@
 web/src/components/mcp/
 ├── types.ts                 # 类型定义和辅助函数
 ├── styles.ts                # 样式常量和主题配置
-├── index.v2.ts              # V2 组件导出
+├── index.ts                 # 组件导出（V2 组件以 V1 别名导出，如 McpServerListV2 as McpServerList）
 ├── McpServerListV2.tsx      # 主页面组件
 ├── McpServerTabV2.tsx       # 服务器标签页
 ├── McpToolsTabV2.tsx        # 工具标签页
 ├── McpAppsTabV2.tsx         # 应用标签页
+├── McpPromptsTabV2.tsx      # Prompts 标签页
+├── McpLogsTabV2.tsx         # 日志标签页
 ├── McpServerCardV2.tsx      # 服务器卡片
 ├── McpAppCardV2.tsx         # 应用卡片
 └── McpToolItemV2.tsx        # 工具列表项
@@ -183,7 +185,7 @@ ANIMATION_CLASSES = {
 ### 在路由中使用新组件
 
 ```tsx
-// 替换旧版 MCP 页面
+// 替换旧版 MCP 页面（直接引用 V2 具名导出）
 import { McpServerListV2 } from '@/components/mcp/McpServerListV2';
 
 function App() {
@@ -195,10 +197,22 @@ function App() {
 }
 ```
 
+> 实际 `App.tsx` 使用 `React.lazy` 懒加载 `./components/mcp/McpServerListV2`，并以 `McpServerList` 别名消费。
+
 ### 使用独立标签页组件
 
+从 `index.ts` 桶文件导入时使用 V1 别名（`McpServerTab` / `McpToolsTab` / `McpAppsTab`）；如需直接引用 V2 类名，从各自文件导入：
+
 ```tsx
-import { McpServerTabV2, McpToolsTabV2, McpAppsTabV2 } from '@/components/mcp';
+// 方式一：经 index.ts 别名导入
+import { McpServerTab, McpToolsTab, McpAppsTab } from '@/components/mcp';
+
+// 方式二：直接从 V2 文件导入
+import { McpServerTabV2 } from '@/components/mcp/McpServerTabV2';
+import { McpToolsTabV2 } from '@/components/mcp/McpToolsTabV2';
+import { McpAppsTabV2 } from '@/components/mcp/McpAppsTabV2';
+import { McpPromptsTabV2 } from '@/components/mcp/McpPromptsTabV2';
+import { McpLogsTabV2 } from '@/components/mcp/McpLogsTabV2';
 
 function CustomMcpDashboard() {
   return (
@@ -206,6 +220,8 @@ function CustomMcpDashboard() {
       <McpServerTabV2 />
       <McpToolsTabV2 />
       <McpAppsTabV2 />
+      <McpPromptsTabV2 />
+      <McpLogsTabV2 />
     </div>
   );
 }
@@ -239,12 +255,20 @@ function CustomMcpDashboard() {
 ### 从 V1 迁移到 V2
 
 1. **更新导入路径**
-```tsx
-// 旧版
-import { McpServerList } from '@/components/mcp/McpServerList';
 
-// 新版
+当前代码库中主页面组件文件为 `McpServerListV2.tsx`（不存在独立的 V1 `McpServerList.tsx`）。两种可用导入方式：
+
+```tsx
+// 方式一：直接引用 V2 文件中的具名导出
 import { McpServerListV2 } from '@/components/mcp/McpServerListV2';
+
+// 方式二：经 index.ts 桶文件使用别名 McpServerList
+import { McpServerList } from '@/components/mcp';
+// 实际等价于 McpServerListV2（见 index.ts: McpServerListV2 as McpServerList）
+
+// App.tsx 当前采用懒加载 + 别名：
+// const McpServerList = lazy(() =>
+//   import('./components/mcp/McpServerListV2').then((m) => ({ default: m.McpServerListV2 })));
 ```
 
 2. **API 兼容性**

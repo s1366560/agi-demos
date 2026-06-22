@@ -2,11 +2,15 @@
 
 > Based on comparative analysis of OpenCode (core), Oh-My-OpenCode (plugin layer), and MemStack (current project).
 
+> **Status (last checked against code: 2026-06-22):** Most of the 12 proposals have landed.
+> Section-by-section status is annotated inline as **Implemented**, **Partial**, or **Not started**.
+> See the [Implementation Status Summary](#implementation-status-summary) at the end for a compact view.
+
 ---
 
 ## Executive Summary
 
-MemStack's tool system is functional but has accumulated organic complexity. By studying OpenCode's clean, composable architecture and Oh-My-OpenCode's hook/plugin layer, we identify **12 concrete improvement areas** that would make MemStack's tool system more maintainable, extensible, and aligned with modern agent platform patterns.
+MemStack's tool system is functional but has accumulated organic complexity. By studying OpenCode's clean, composable architecture and Oh-My-OpenCode's hook/plugin layer, we identified **12 concrete improvement areas** that would make MemStack's tool system more maintainable, extensible, and aligned with modern agent platform patterns. As of 2026-06-22, the majority of these improvements have been implemented; this document now also serves as a record of what landed and what remains.
 
 **Key takeaways:**
 - OpenCode's tool system is notably simpler despite supporting more features (plugins, hooks, skills-as-tools, subagent delegation, model-aware filtering, abort signals).
@@ -17,9 +21,16 @@ MemStack's tool system is functional but has accumulated organic complexity. By 
 
 ## 1. Tool Definition Interface Redesign
 
+> **Status: Implemented.** `@tool_define`, `ToolInfo`, and the `wrap_legacy_tool` compatibility shim
+> ship in `src/infrastructure/agent/tools/define.py`. As of this writing, 50+ tool modules
+> (terminal, todo, memory, skill, clarification, decision, web search/scrape, workspace tools,
+> subagent tools, etc.) are defined via `@tool_define`. `tool_converter.py` still wraps both legacy
+> class-based tools and `ToolInfo` into `ToolDefinition` for the processor, but the definition-side
+> indirection the proposal complained about is gone for new tools.
+
 ### Current State (MemStack)
 
-Tools inherit from a two-level class hierarchy:
+Tools inherited from a two-level class hierarchy (the legacy path, still supported as a compatibility shim):
 
 ```
 AgentToolBase (domain port, ABC)
@@ -96,9 +107,17 @@ async def read_tool(params: ReadFileParams, ctx: ToolContext) -> ToolResult:
 
 ## 2. Unified Tool Execution Wrapper
 
+> **Status: Implemented.** `ToolPipeline` in `src/infrastructure/agent/tools/pipeline.py`
+> runs a single ordered wrapper (pre-hooks -> doom check -> permission -> execute ->
+> normalize -> truncate -> post-hooks -> side-effect collection -> completed event).
+> The processor wires it in via `_execute_tool_via_pipeline`
+> (`src/infrastructure/agent/processor/processor.py`) when `self._tool_pipeline` is set.
+> The legacy `ToolExecutor` (`tools/executor.py`) is **kept** as the non-pipeline path, so its
+> duplicated doom-loop / permission checks still exist; new sessions go through the pipeline.
+
 ### Current State (MemStack)
 
-Tool execution logic is scattered across:
+Tool execution logic was scattered across:
 - `SessionProcessor._execute_tool()` — doom loop, permission checks, event coordination
 - `ToolExecutor.execute()` — permission, doom loop (again), validation, sanitization, artifacts
 - `tool_converter.py execute_wrapper` — sync/async normalization
@@ -193,9 +212,15 @@ class ToolPipeline:
 
 ## 3. Tool Hook System
 
+> **Status: Implemented.** `ToolHookRegistry` in `src/infrastructure/agent/tools/hooks.py`
+> supports glob-pattern-matched before/after hooks with priority ordering, plus definition-time
+> hooks that can modify or suppress a `ToolInfo` at registration. The `ToolPipeline` calls
+> `run_before` / `run_after` on every execution. The "Current State" below describes the pre-hook
+> era and is retained for historical context.
+
 ### Current State (MemStack)
 
-No hook/middleware system exists. Cross-cutting concerns are hardcoded into the processor and executor.
+No hook/middleware system existed at the time of writing. Cross-cutting concerns were hardcoded into the processor and executor.
 
 ### OpenCode + Oh-My-OpenCode Pattern
 
@@ -242,6 +267,13 @@ class ToolHookRegistry:
 ---
 
 ## 4. Permission System Improvements
+
+> **Status: Implemented.** `src/infrastructure/agent/permission/` ships pattern-based rules
+> (`PermissionRule`, `evaluate_rules` with last-match-wins, `arg_pattern` for
+> `key:value_glob` matching), ruleset composition, tool disabling via `get_disabled_tools`,
+> and persistent approvals (`PermissionStore` protocol, `ApprovalScope.ONCE/SESSION/ALWAYS`,
+> `is_approved`). Built-in rulesets (`default_ruleset`, `explore_mode_ruleset`,
+> `sandbox_mcp_ruleset`) are provided.
 
 ### Current State (MemStack)
 
@@ -330,9 +362,15 @@ class PermissionManager:
 
 ## 5. Truncation System Enhancement
 
+> **Status: Implemented.** `src/infrastructure/agent/tools/truncation.py` provides
+> `TruncateDirection` (HEAD/TAIL), disk persistence of full output (`full_output_path`),
+> a guidance hint, a `TruncationResult` carrying `original_bytes`/`original_lines`, and a
+> `cleanup_old_files` helper. Limits are aligned to OpenCode: `MAX_OUTPUT_BYTES = 50KB`,
+> `MAX_LINE_LENGTH = 2000`. The `ToolPipeline` calls `truncate_to_result` centrally.
+
 ### Current State (MemStack)
 
-`OutputTruncator` in `base.py` truncates by byte size (`MAX_OUTPUT_BYTES`). `ToolExecutor` also has `_MAX_TOOL_OUTPUT_BYTES`. No disk persistence. No direction-aware truncation.
+`OutputTruncator` in `base.py` truncated by byte size (`MAX_OUTPUT_BYTES`). `ToolExecutor` also had `_MAX_TOOL_OUTPUT_BYTES`. No disk persistence. No direction-aware truncation.
 
 ### OpenCode Pattern
 
@@ -412,9 +450,16 @@ class OutputTruncator:
 
 ## 6. ToolContext: Unified Execution Context
 
+> **Status: Implemented.** `ToolContext` in `src/infrastructure/agent/tools/context.py`
+> carries `session_id`, `message_id`, `call_id`, `agent_name`, `conversation_id`,
+> `abort_signal`, `messages`, plus project/tenant/user/runtime identity. It exposes
+> `metadata()`, `emit()` (replaces `_pending_events`), `ask()`, `race()`, and
+> `consume_pending_events()`. The `ToolPipeline` builds the context per invocation and
+> collects emitted events after execution.
+
 ### Current State (MemStack)
 
-Tools receive arguments as a dict. They access session state, emit events, and request permissions through various scattered mechanisms:
+Tools received arguments as a dict. They accessed session state, emitted events, and requested permissions through various scattered mechanisms:
 - `_pending_events` list (manually managed per tool)
 - Direct imports of global singletons
 - Constructor-injected dependencies (inconsistent)
@@ -497,9 +542,14 @@ The processor no longer needs to know about `_pending_events` or `consume_pendin
 
 ## 7. Abort/Cancel Signal Propagation
 
+> **Status: Implemented.** `ToolContext.abort_signal` is set on every invocation by the
+> pipeline, and `ToolContext.race(awaitable, timeout)` races the awaitable against the abort
+> signal and an optional timeout, raising `ToolAbortedError` on cancel. The pipeline catches
+> `ToolAbortedError` and emits a `ToolEvent.aborted`.
+
 ### Current State (MemStack)
 
-`SessionProcessor` has `_abort_event` (asyncio.Event) and `RunContext.abort_signal`. But tool-level abort is inconsistent — most tools don't check abort signals during execution.
+`SessionProcessor` has `_abort_event` (asyncio.Event) and `RunContext.abort_signal`. But tool-level abort was inconsistent — most tools did not check abort signals during execution.
 
 ### OpenCode Pattern
 
@@ -538,9 +588,14 @@ async def terminal_tool(params: TerminalParams, ctx: ToolContext) -> ToolResult:
 
 ## 8. Model-Aware Tool Selection
 
+> **Status: Partial.** `ToolRegistry.get_tools(model=..., agent=..., tags=...)` filters tools by
+> each tool's optional `model_filter` predicate and by required tags. The proposed
+> `_adapt_for_model` per-model tool substitution (e.g., swapping `edit` for `apply_patch` on GPT
+> models) is **not** implemented; the current mechanism is filtering only, not schema adaptation.
+
 ### Current State (MemStack)
 
-Tool selection is model-agnostic. All tools are offered to all models. MCP visibility (`_meta.ui.visibility`) controls UI-only vs model-visible, but there's no model-specific tool selection.
+Tool selection was model-agnostic. All tools were offered to all models. MCP visibility (`_meta.ui.visibility`) controlled UI-only vs model-visible, but there was no model-specific tool selection.
 
 ### OpenCode Pattern
 
@@ -589,9 +644,16 @@ class ToolRegistry:
 
 ## 9. Skills as Tools
 
+> **Status: Implemented.** The `skill` tool in `src/infrastructure/agent/tools/skill_tool.py`
+> is a `@tool_define`-declared first-class tool that loads skill content via an injected
+> `SkillLoaderProtocol` and returns a `ToolResult`. A request-scoped allowlist
+> (`ctx.runtime_context["allowed_skills"]`) gates which skills an agent profile may load.
+> `SkillOrchestrator` still handles trigger matching, but skill *invocation* now flows through
+> the standard tool pipeline.
+
 ### Current State (MemStack)
 
-Skills and tools are separate systems. Skills have their own orchestrator, loader, sync mechanism. This creates parallel infrastructure for what is essentially the same concept: "something the LLM can invoke."
+Skills and tools were separate systems. Skills had their own orchestrator, loader, sync mechanism. This created parallel infrastructure for what is essentially the same concept: "something the LLM can invoke."
 
 ### OpenCode Pattern
 
@@ -633,9 +695,16 @@ async def skill_tool(params: SkillParams, ctx: ToolContext) -> ToolResult:
 
 ## 10. Unified MCP Tool Adapter
 
+> **Status: Implemented.** `MCPToolInfo`, `MCPToolExecutorPort`, `MCPCallResult`, and
+> `mcp_tool_to_info()` in `src/infrastructure/mcp/tool_info.py` provide the unified
+> representation, and MCP tools convert to standard `ToolInfo` for the pipeline. Naming is now
+> consistently double-underscore everywhere: `mcp_tool_name()` in `agent/mcp/adapter.py` and
+> `MCPTool.full_name` in `domain/model/mcp/tool.py` both produce `mcp__{server}__{tool}`.
+> The historical single-vs-double-underscore inconsistency described below is **resolved**.
+
 ### Current State (MemStack)
 
-Two separate MCP tool adapters exist with inconsistent naming conventions:
+Historically, two separate MCP tool adapters existed with inconsistent naming conventions:
 
 ```
 MCPToolAdapter (agent/mcp/adapter.py)
@@ -767,9 +836,17 @@ mcp_tool_info = ToolInfo(
 
 ## 11. MCP Tools as First-Class Pipeline Citizens
 
+> **Status: Implemented.** `PipelineMCPExecutor` and `MCPErrorHandler` in
+> `src/infrastructure/mcp/pipeline_executor.py` route MCP tool calls through the `ToolPipeline`
+> with abort-signal racing and structured error results. `MCPToolInfo` + `mcp_tool_to_info()`
+> register MCP tools as standard `ToolInfo`, so they inherit hooks, permissions, and truncation
+> like native tools. The legacy `SandboxMCPServerToolAdapter` (`agent/mcp/sandbox_tool_adapter.py`)
+> remains for backward compatibility, so the bypass scenario described below can still occur on
+> that legacy path.
+
 ### Current State (MemStack)
 
-`SandboxMCPServerToolAdapter.execute()` bypasses the entire `ToolPipeline` flow:
+The legacy `SandboxMCPServerToolAdapter.execute()` bypassed the entire `ToolPipeline` flow:
 
 ```python
 class SandboxMCPServerToolAdapter(AgentTool):
@@ -918,9 +995,16 @@ class MCPErrorHandler:
 
 ## 12. SRP: Separate Resource/UI Concerns from Tool Execution
 
+> **Status: Implemented.** The dedicated `MCPResourceCache` service lives in
+> `src/infrastructure/mcp/resource_cache.py` (LRU-style with TTL, `get`/`put`/`prefetch`/
+> `cleanup_expired`/stats), and `SandboxMCPServerToolAdapter` now accepts an injected
+> `MCPResourceCache | None` instead of owning an inline dict cache. The inline `_capture_html`
+> logic still exists as a legacy fallback path, but the SRP separation the proposal asked for is
+> in place for new code paths.
+
 ### Current State (MemStack)
 
-`SandboxMCPServerToolAdapter` mixes tool execution with HTML caching/prefetch logic:
+Historically, `SandboxMCPServerToolAdapter` mixed tool execution with HTML caching/prefetch logic:
 
 ```python
 class SandboxMCPServerToolAdapter(AgentTool):
@@ -1133,6 +1217,14 @@ class MCPResourcePreviewService:
 
 ## Implementation Roadmap
 
+> **Progress (last checked against code: 2026-06-22):** Phase 1 is fully landed. Phase 2 is
+> landed (`@tool_define` adopted across 50+ tools, `tool_converter.py` simplified to a thin
+> adapter, model-aware filtering via `model_filter`, abort propagation via `ctx.race()`, MCP
+> pipeline integration via `PipelineMCPExecutor`). Phase 3 is landed for hooks, permission
+> pattern matching, and the `skill` tool; the only open Phase-3 items are richer per-model schema
+> adaptation (Section 8 `_adapt_for_model`) and further retirement of the legacy
+> `SandboxMCPServerToolAdapter`/`ToolExecutor` paths.
+
 ### Phase 1: Foundation (Low risk, high impact)
 
 | Item | Effort | Impact | Description |
@@ -1289,3 +1381,31 @@ MemStack (proposed):
 |------|--------|
 | `src/infrastructure/agent/core/tool_converter.py` | Replaced by `@tool_define` self-description |
 | `src/domain/ports/agent/agent_tool_port.py` | Replaced by `ToolInfo` protocol (or kept as minimal ABC) |
+
+---
+
+## Implementation Status Summary
+
+Last checked against code: 2026-06-22.
+
+| # | Proposal | Status | Key location(s) |
+|---|----------|--------|-----------------|
+| 1 | Tool Definition Interface Redesign (`@tool_define`) | Implemented | `src/infrastructure/agent/tools/define.py` (`ToolInfo`, `tool_define`, `wrap_legacy_tool`); 50+ tool modules migrated |
+| 2 | Unified Tool Execution Wrapper (`ToolPipeline`) | Implemented | `src/infrastructure/agent/tools/pipeline.py`; wired in `processor/processor.py::_execute_tool_via_pipeline`. Legacy `tools/executor.py` kept as non-pipeline path |
+| 3 | Tool Hook System | Implemented | `src/infrastructure/agent/tools/hooks.py` (`ToolHookRegistry`, glob patterns, priorities, definition hooks) |
+| 4 | Permission System Improvements | Implemented | `src/infrastructure/agent/permission/rules.py` (`PermissionRule`, `evaluate_rules`, `arg_pattern`, `get_disabled_tools`); `manager.py` (`PermissionStore`, `ApprovalScope`, persistent approvals) |
+| 5 | Truncation System Enhancement | Implemented | `src/infrastructure/agent/tools/truncation.py` (`TruncateDirection`, disk persistence, `cleanup_old_files`, 50KB / 2000-char limits) |
+| 6 | ToolContext | Implemented | `src/infrastructure/agent/tools/context.py` (`emit`, `metadata`, `ask`, `race`, `consume_pending_events`) |
+| 7 | Abort/Cancel Signal Propagation | Implemented | `ToolContext.race()` + `ToolAbortedError` in `context.py`; pipeline emits `ToolEvent.aborted` |
+| 8 | Model-Aware Tool Selection | Partial | `ToolRegistry.get_tools(model=...)` filters via `model_filter`; per-model schema/tool substitution (`_adapt_for_model`) not implemented |
+| 9 | Skills as Tools | Implemented | `src/infrastructure/agent/tools/skill_tool.py` (`@tool_define`-based `skill` tool, `SkillLoaderProtocol`) |
+| 10 | Unified MCP Tool Adapter | Implemented | `src/infrastructure/mcp/tool_info.py` (`MCPToolInfo`, `MCPToolExecutorPort`, `mcp_tool_to_info`); naming unified to `mcp__{server}__{tool}` |
+| 11 | MCP Tools as First-Class Pipeline Citizens | Implemented | `src/infrastructure/mcp/pipeline_executor.py` (`PipelineMCPExecutor`, `MCPErrorHandler`); legacy `SandboxMCPServerToolAdapter` retained |
+| 12 | SRP: Resource/UI Concerns Separation | Implemented | `src/infrastructure/mcp/resource_cache.py` (`MCPResourceCache`); injected into `SandboxMCPServerToolAdapter` (inline fallback retained) |
+
+### Remaining work
+
+- Retire the legacy `ToolExecutor` path once all sessions route through `ToolPipeline`.
+- Retire the legacy `SandboxMCPServerToolAdapter` once MCP traffic fully uses `PipelineMCPExecutor`.
+- Implement per-model tool/schema adaptation (Section 8 `_adapt_for_model`) if/when model-specific tool substitution is needed.
+- Drop the inline HTML-capture fallback in `SandboxMCPServerToolAdapter` once all callers supply an `MCPResourceCache`.

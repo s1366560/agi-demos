@@ -1,9 +1,10 @@
 # Performance Tuning Guide
 
-**Version**: 2.0
-**Last Updated**: 2026-01-28
+**Version**: 3.0
+**Last Updated**: 2026-06-22
+**Last checked against code**: 2026-06-22
 
-Optimization guide for Sandbox MCP Server with XFCE desktop environment.
+Optimization guide for Sandbox MCP Server with KDE Plasma desktop served over KasmVNC.
 
 ---
 
@@ -55,75 +56,95 @@ docker stats <container>
 
 ## VNC Performance
 
-### Encoding Options
+KasmVNC replaces the previous TigerVNC + noVNC + websockify stack with a single
+all-in-one process. Its configuration model is different: image quality, frame
+rate, and resolution are controlled through `/etc/kasmvnc/kasmvnc.yaml` (plus
+runtime overrides via the web client and the `change_resolution` MCP tool) — not
+through `-encoding` / `-compression` / `-quality` CLI flags. The TigerVNC-style
+Tight / ZRLE / H264 encodings described in older revisions of this guide do not
+apply to KasmVNC.
 
-**Tight Encoding** (Default):
-```python
-"-encoding", "Tight",
-"-compression", "5",    # 0-9, higher = more compression
-"-quality", "8",        # 0-9, higher = better quality
+### Encoding Configuration
+
+KasmVNC encodes the framebuffer with **WebP** and **JPEG** (with QOI as a fast
+path for lossless regions). Quality is a 0-9 scalar per codec, configured under
+the `encoding` block of `kasmvnc.yaml`:
+
+```yaml
+# /etc/kasmvnc/kasmvnc.yaml
+desktop:
+  resolution:
+    width: 1920
+    height: 1080
+  allow_resize: true        # live resize via xrandr / web client
+  pixel_depth: 24
+
+encoding:
+  max_frame_rate: 60        # ceiling; lower to save bandwidth/CPU
+  video_encoding_mode:
+    jpeg_quality: 8         # 0-9, lower = more compression
+    webp_quality: 8         # 0-9, lower = more compression
 ```
 
-**Pros**: Best for web VNC, good compression
-**Cons**: Higher CPU usage
-**Best for**: General use, mixed content
+The default shipped with the image targets balanced quality (`*_quality: 8`,
+`max_frame_rate: 60`). See `docker/kasmvnc-configs/kasmvnc.yaml` for the full
+reference.
 
-**ZRLE Encoding**:
-```python
-"-encoding", "ZRLE",
-"-compression", "5",
-```
-
-**Pros**: Low CPU, good compression
-**Cons**: Lower quality on photos
-**Best for**: Low-bandwidth connections
-
-**H264 Encoding**:
-```python
-"-encoding", "H264",
-```
-
-**Pros**: Best for video, high compression
-**Cons**: Not always available
-**Best for**: Video playback, animations
-
-### Tuning Compression
+### Tuning Quality vs. Bandwidth
 
 **For Low Bandwidth** (<1 Mbps):
-```python
-"-encoding", "ZRLE",
-"-compression", "7",    # High compression
-"-quality", "5",        # Lower quality
+
+```yaml
+encoding:
+  max_frame_rate: 24
+  video_encoding_mode:
+    jpeg_quality: 4
+    webp_quality: 4
 ```
 
 **For High Bandwidth** (>5 Mbps):
-```python
-"-encoding", "Tight",
-"-compression", "3",    # Low compression
-"-quality", "9",        # High quality
+
+```yaml
+encoding:
+  max_frame_rate: 60
+  video_encoding_mode:
+    jpeg_quality: 9
+    webp_quality: 9
 ```
 
 **For Balanced Performance** (Default):
-```python
-"-encoding", "Tight",
-"-compression", "5",    # Medium compression
-"-quality", "8",        # Good quality
+
+```yaml
+encoding:
+  max_frame_rate: 60
+  video_encoding_mode:
+    jpeg_quality: 8
+    webp_quality: 8
 ```
+
+After editing `/etc/kasmvnc/kasmvnc.yaml`, restart the desktop to pick up the new
+values (`restart_desktop` MCP tool or `vncserver -kill :1` then restart). The
+web client can also override the items listed under
+`runtime_configuration.allow_override_list` at view time.
 
 ### Resolution Tuning
 
 | Resolution | Bandwidth | CPU | Best For |
 |------------|-----------|-----|----------|
-| 1920x1080 | High | High | Large screens, detail work |
-| 1280x720 | Medium | Medium | Default, general use |
-| 1024x576 | Low | Low | Low bandwidth, fast response |
+| 2560x1440 | Highest | Highest | Large screens, detail work |
+| 1920x1080 | High | High | Default |
+| 1600x900 | Medium | Medium | Balanced |
+| 1280x720 | Low | Low | Low bandwidth, fast response |
 
-**Change resolution**:
+Supported resolutions (from `desktop_tools.py`): `1280x720`, `1600x900`,
+`1920x1080`, `2560x1440`. Default is `1920x1080`.
+
+**Change resolution** (live, no restart — KasmVNC supports dynamic resize):
 ```json
 {
-  "name": "start_desktop",
+  "name": "change_resolution",
   "arguments": {
-    "resolution": "1024x576"
+    "resolution": "1280x720"
   }
 }
 ```
@@ -151,10 +172,10 @@ docker exec <container> top
 ```
 
 **Reduce CPU usage**:
-- Lower resolution (1024x576)
-- Increase compression (-compression 7)
-- Use ZRLE encoding instead of Tight
-- Reduce color depth (-depth 16)
+- Lower resolution (1280x720 via `change_resolution`)
+- Lower the KasmVNC frame-rate ceiling (`encoding.max_frame_rate` in `kasmvnc.yaml`)
+- Lower WebP/JPEG quality (`encoding.video_encoding_mode.{jpeg,webp}_quality`)
+- KasmVNC always runs at `-depth 24`; do not try to set `-depth 16`
 
 ### Memory Optimization
 
@@ -171,9 +192,9 @@ docker exec <container> ps aux --sort=-%mem | head -10
 ```
 
 **Reduce memory usage**:
-- Use XFCE instead of GNOME (already done)
-- Disable XFCE plugins
-- Reduce desktop effects
+- The desktop ships KDE Plasma 6; prefer the minimal image (already configured)
+- Disable KDE Plasma effects / widgets you don't need
+- Lower resolution (1280x720 via `change_resolution`)
 - Limit concurrent sessions:
   ```bash
   MAX_CONCURRENT_SESSIONS=5
@@ -209,70 +230,79 @@ docker exec <container> iotop
 
 **For Low Bandwidth** (<2 Mbps):
 
-1. **Reduce resolution**:
+1. **Reduce resolution** (live, via the MCP tool):
    ```json
-   {"resolution": "1024x576"}
+   {"name": "change_resolution", "arguments": {"resolution": "1280x720"}}
    ```
 
-2. **Increase compression**:
-   ```python
-   "-compression", "7"
-   "-quality", "5"
+2. **Lower KasmVNC quality** (in `/etc/kasmvnc/kasmvnc.yaml`):
+   ```yaml
+   encoding:
+     video_encoding_mode:
+       jpeg_quality: 4
+       webp_quality: 4
    ```
 
-3. **Use ZRLE encoding**:
-   ```python
-   "-encoding", "ZRLE"
+3. **Lower the frame-rate ceiling**:
+   ```yaml
+   encoding:
+     max_frame_rate: 24
    ```
 
-4. **Reduce color depth**:
-   ```python
-   "-depth", "16"  # Instead of 24
-   ```
+KasmVNC always serves `-depth 24`; lowering color depth is not an available
+lever (the TigerVNC-style `-depth 16` trick does not apply).
 
 ### Latency Optimization
 
 **For High Latency** (>100ms):
 
 1. **Use local display** (:1)
-2. **Reduce frame rate** (client-side)
+2. **Reduce frame rate** (`encoding.max_frame_rate` in `kasmvnc.yaml`, or via the web client)
 3. **Enable prediction** (client-side)
 4. **Use wired connection** instead of WiFi
 
 ### Connection Optimization
 
-**WebSocket Configuration**:
-```python
-# noVNC websockify settings
-"--vnc", "localhost:5901",
-"--listen", "6080",
-"--timeout", "5",           # Connection timeout
-"--idle-timeout", "60",     # Idle timeout
+**KasmVNC Web Server**:
+```yaml
+# /etc/kasmvnc/kasmvnc.yaml
+network:
+  protocol: http
+  websocket_port: auto
+  interface: 0.0.0.0
+  use_ipv4: true
+  use_ipv6: false
+user_session:
+  idle_timeout: 0        # 0 = no idle disconnect (raise to enforce one)
 ```
+
+KasmVNC serves the VNC protocol, WebSocket, and the built-in web client from a
+single process on the `DESKTOP_PORT` (default 6080). There is no separate
+websockify to tune.
 
 ---
 
 ## Desktop Optimization
 
-### XFCE Configuration
+### KDE Plasma Configuration
 
-**Disable startup applications**:
-```bash
-# Edit autostart
-rm /etc/xdg/autostart/xfce4-notifyd.desktop
+The desktop environment is KDE Plasma 6 (the image no longer ships XFCE).
+Plasma configs are baked into the image under `/etc/xdg/` (`kdeglobals`,
+`kwinrc`, `katerc`, `dolphinrc`, `konsolerc`) and per-user under `~/.config/`.
+
+**Disable startup applications**: remove or override the corresponding
+`.desktop` autostart entries under `/etc/xdg/autostart/` or
+`~/.config/autostart/`.
+
+**Reduce desktop effects** (compositor):
+```ini
+# ~/.config/kwinrc
+[Compositing]
+CompositingEnabled=false
 ```
 
-**Reduce desktop effects**:
-```xml
-<!-- ~/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml -->
-<property name="use_compositing" type="bool" value="false"/>
-```
-
-**Optimize panel**:
-```xml
-<!-- Remove plugins -->
-<!-- Keep only essential plugins -->
-```
+**Optimize panel / widgets**: trim widgets and effects you don't need through
+*System Settings* (or by editing `~/.config/plasma-org.kde.plasma.desktop-appletsrc`).
 
 ### Session Management
 
@@ -425,21 +455,21 @@ curl http://localhost:8765/health
 
 ### Performance Profiling
 
-**Profile VNC performance**:
+**Profile KasmVNC performance**:
 ```bash
-# Check VNC process
-docker exec <container> ps aux | grep vnc
+# Check KasmVNC X server process
+docker exec <container> ps aux | grep -E "Xkasmvnc|vncserver"
 
-# Monitor VNC traffic
-tcpdump -i any -n 'tcp port 5901' -w vnc.pcap
+# Monitor web/VNC traffic (KasmVNC serves WebSocket on DESKTOP_PORT, default 6080)
+tcpdump -i any -n 'tcp port 6080' -w kasmvnc.pcap
 
 # Analyze with Wireshark
 ```
 
-**Profile XFCE performance**:
+**Profile KDE Plasma performance**:
 ```bash
-# Check XFCE process
-docker exec <container> ps aux | grep xfce
+# Check Plasma processes
+docker exec <container> ps aux | grep -E "startplasma|plasmashell|kwin"
 
 # Monitor X11 traffic
 docker exec <container> xrestop -display :1
@@ -460,11 +490,12 @@ docker exec <container> xrestop -display :1
 
 | Configuration | Startup | Bandwidth | Memory | CPU |
 |---------------|---------|-----------|--------|-----|
-| 1920x1080, Tight, comp=3 | 4.2s | 2.1 Mbps | 580 MB | 25% |
-| 1280x720, Tight, comp=5 | 3.8s | 1.4 Mbps | 520 MB | 20% |
-| 1024x576, ZRLE, comp=7 | 3.5s | 0.8 Mbps | 480 MB | 15% |
+| 1920x1080, webp/jpeg q=9, 60 FPS | 4.2s | 2.1 Mbps | 580 MB | 25% |
+| 1920x1080, webp/jpeg q=8, 60 FPS (default) | 3.9s | 1.6 Mbps | 540 MB | 22% |
+| 1280x720, webp/jpeg q=4, 24 FPS | 3.5s | 0.8 Mbps | 480 MB | 15% |
 
-**Recommended**: 1280x720, Tight, comp=5 (default)
+**Recommended**: 1920x1080 at the shipped default quality (`*_quality: 8`,
+`max_frame_rate: 60`); drop to `1280x720` + lower quality on constrained links.
 
 ---
 
@@ -472,14 +503,14 @@ docker exec <container> xrestop -display :1
 
 ### Quick Wins (5 minutes)
 
-- [ ] Reduce resolution to 1024x576
-- [ ] Increase compression to 7
-- [ ] Disable compositing in XFCE
+- [ ] Reduce resolution to 1280x720 (`change_resolution` tool)
+- [ ] Lower `encoding.video_encoding_mode.{jpeg,webp}_quality` to 5 in `kasmvnc.yaml`
+- [ ] Disable KDE Plasma compositing (`~/.config/kwinrc`)
 - [ ] Clean workspace cache
 
 ### Medium Optimization (15 minutes)
 
-- [ ] Adjust VNC encoding (ZRLE for low bandwidth)
+- [ ] Lower `encoding.max_frame_rate` in `kasmvnc.yaml`
 - [ ] Limit concurrent sessions
 - [ ] Enable session timeout
 - [ ] Add resource limits
@@ -500,10 +531,10 @@ docker exec <container> xrestop -display :1
 **Symptoms**: >2 Mbps active usage
 
 **Solutions**:
-1. Reduce resolution
-2. Increase compression
-3. Use ZRLE encoding
-4. Reduce color depth
+1. Reduce resolution (1280x720)
+2. Lower `encoding.video_encoding_mode.{jpeg,webp}_quality`
+3. Lower `encoding.max_frame_rate`
+4. KasmVNC is fixed at `-depth 24`; color depth is not a lever
 
 ### Issue: High CPU Usage
 
@@ -512,7 +543,7 @@ docker exec <container> xrestop -display :1
 **Solutions**:
 1. Increase CPU limit
 2. Reduce resolution
-3. Use ZRLE instead of Tight
+3. Lower `encoding.max_frame_rate`
 4. Limit concurrent users
 
 ### Issue: High Memory Usage
@@ -521,7 +552,7 @@ docker exec <container> xrestop -display :1
 
 **Solutions**:
 1. Increase memory limit
-2. Disable XFCE plugins
+2. Trim KDE Plasma widgets/effects
 3. Limit concurrent sessions
 4. Restart container regularly
 
@@ -529,37 +560,53 @@ docker exec <container> xrestop -display :1
 
 ## Tuning Profiles
 
+All profiles are expressed as snippets of `/etc/kasmvnc/kasmvnc.yaml`.
+Resolution can also be changed at runtime through the `change_resolution` MCP
+tool without restarting the desktop.
+
 ### Low Bandwidth Profile
 
-```python
+```yaml
 # <2 Mbps connections
-"-encoding", "ZRLE",
-"-compression", "7",
-"-quality", "5",
-"-geometry", "1024x576",
-"-depth", "16"
+desktop:
+  resolution:
+    width: 1280
+    height: 720
+encoding:
+  max_frame_rate: 24
+  video_encoding_mode:
+    jpeg_quality: 4
+    webp_quality: 4
 ```
 
 ### Balanced Profile (Default)
 
-```python
+```yaml
 # 2-5 Mbps connections
-"-encoding", "Tight",
-"-compression", "5",
-"-quality", "8",
-"-geometry", "1280x720",
-"-depth", "24"
+desktop:
+  resolution:
+    width: 1920
+    height: 1080
+encoding:
+  max_frame_rate: 60
+  video_encoding_mode:
+    jpeg_quality: 8
+    webp_quality: 8
 ```
 
 ### High Quality Profile
 
-```python
+```yaml
 # >5 Mbps connections
-"-encoding", "Tight",
-"-compression", "3",
-"-quality", "9",
-"-geometry", "1920x1080",
-"-depth", "24"
+desktop:
+  resolution:
+    width: 2560
+    height: 1440
+encoding:
+  max_frame_rate: 60
+  video_encoding_mode:
+    jpeg_quality: 9
+    webp_quality: 9
 ```
 
 ---
@@ -568,9 +615,9 @@ docker exec <container> xrestop -display :1
 
 **Key Optimization Points**:
 
-1. **Resolution**: Biggest impact on bandwidth
-2. **Compression**: Trade-off between CPU and bandwidth
-3. **Encoding**: Tight for general, ZRLE for low bandwidth
+1. **Resolution**: Biggest impact on bandwidth (1280x720 → 2560x1440)
+2. **Quality (WebP/JPEG)**: 0-9 scalar, trade-off between CPU and bandwidth
+3. **Frame rate**: `encoding.max_frame_rate` caps throughput
 4. **Resources**: CPU and memory limits
 5. **Scaling**: Vertical (simple) vs horizontal (scalable)
 
@@ -584,6 +631,6 @@ docker exec <container> xrestop -display :1
 
 ---
 
-**Last Updated**: 2026-01-28
-**Performance Guide Version**: 2.0
+**Last Updated**: 2026-06-22
+**Performance Guide Version**: 3.0
 **Status**: Comprehensive ✅

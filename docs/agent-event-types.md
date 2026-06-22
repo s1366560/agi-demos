@@ -2,14 +2,14 @@
 
 `src/domain/events/types.py` is the single source of truth for agent event names.
 
-Last checked against code: 2026-05-18.
+Last checked against code: 2026-06-22.
 
 ## Summary
 
-- Current `AgentEventType` values: **163**.
+- Current `AgentEventType` values: **165**.
 - Internal events: `compact_needed`, `retry`.
-- Delta events not persisted by default: `thought_delta`, `text_delta`, `text_start`,
-  `text_end`, `act_delta`.
+- Delta events not persisted by default: `thought_start`, `thought_delta`, `text_delta`,
+  `text_start`, `text_end`, `act_delta`.
 - Terminal events: `complete`, `error`, `cancelled`.
 - HITL request events: `clarification_asked`, `decision_asked`, `env_var_requested`,
   `permission_asked`, `elicitation_asked`, `a2ui_action_asked`.
@@ -33,7 +33,7 @@ Agent runtime / tools
 | Category | Event values |
 |---|---|
 | Status | `status`, `start`, `complete`, `error`, `cancelled` |
-| Thinking/text | `thought`, `thought_delta`, `text_start`, `text_delta`, `text_end` |
+| Thinking/text | `thought_start`, `thought`, `thought_delta`, `text_start`, `text_delta`, `text_end` |
 | Tool execution | `act`, `act_delta`, `observe`, `tool_policy_denied`, `tools_updated` |
 | Messages | `message`, `user_message`, `assistant_message` |
 | HITL | `clarification_asked`, `clarification_answered`, `decision_asked`, `decision_answered`, `env_var_requested`, `env_var_provided`, `permission_asked`, `permission_replied`, `elicitation_asked`, `elicitation_answered`, `a2ui_action_asked`, `a2ui_action_answered` |

@@ -58,10 +58,17 @@ src/
 │   ├── adapters/
 │   │   ├── primary/    # Web API (FastAPI routers)
 │   │   └── secondary/  # Repositories, external APIs
-│   ├── agent/          # ReAct Agent system
+│   ├── agent/          # 4-layer Agent system (see below)
 │   ├── llm/            # LiteLLM client
 │   └── graph/          # Knowledge graph (Neo4j)
 └── configuration/       # Config + DI container
+
+Agent 4-Layer Architecture (runs on Ray Actors; entry: src/agent_actor_worker.py)
+L4 Agent      ReAct loop: SessionProcessor (Think -> Act -> Observe), DoomLoopDetector, CostTracker
+L3 SubAgent   Specialized agents: Orchestrator -> Router (semantic) -> Executor
+L2 Skill      Declarative tool compositions with keyword/semantic/hybrid triggers
+L1 Tool       Atomic capabilities (Terminal, Desktop, WebSearch/Scrape, Plan, HITL, Sandbox MCP...)
+Routing: DIRECT_SKILL -> SUBAGENT -> PLAN_MODE -> REACT_LOOP (confidence-scored).
 
 web/src/
 ├── components/         # React components
@@ -72,10 +79,10 @@ web/src/
 
 ### Key Entry Points
 - **API**: `src/infrastructure/adapters/primary/web/main.py`
-- **Worker**: `src/worker_temporal.py`
 - **Config**: `src/configuration/config.py`
 - **DI Container**: `src/configuration/di_container.py`
 - **Agent Core**: `src/infrastructure/agent/core/react_agent.py`
+- **Ray Worker**: `src/agent_actor_worker.py`
 
 ## Key Conventions
 
@@ -107,8 +114,9 @@ web/src/
 - Tests use `asyncio_mode = "auto"` - no need for `@pytest.mark.asyncio`
 - Key fixtures: `db_session`, `test_user`, `test_project_db`, `authenticated_client`
 
-### SSE/Streaming Error Handling
-- LLM rate limit errors (429) are retryable - backend emits `retry` events
+### Streaming Error Handling (WebSocket transport)
+- Agent events stream over WebSocket at `/agent/ws` (migrated off SSE); see `unifiedEventService.ts`
+- LLM rate limit errors (429) are retryable - backend emits `retry` events consumed via the `onRetry` handler
 - Frontend should keep `isStreaming: true` during retries, only stop on fatal errors
 
 ## Core Domain Concepts
@@ -122,7 +130,7 @@ web/src/
 ## Tech Stack
 
 - **Backend**: Python 3.12+, FastAPI, SQLAlchemy 2.0+, PostgreSQL 16+, Redis 7+, Neo4j 5.26+
-- **Workflow**: Temporal.io
+- **Workflow**: asyncio + Ray Actors (dev mode via `make ray-up-dev`)
 - **LLM**: LiteLLM (supports Gemini, Dashscope, Deepseek, OpenAI, Anthropic)
 - **Frontend**: React 19+, TypeScript, Vite, Ant Design, Zustand
 - **Testing**: pytest, Vitest, Playwright
@@ -137,112 +145,15 @@ web/src/
 - API: http://localhost:8000
 - Swagger: http://localhost:8000/docs
 - Frontend: http://localhost:3000
-- Temporal UI: http://localhost:8080/namespaces/default
 
 ## Design Context
 
-### Users
+The canonical product/design spec lives in [`PRODUCT.md`](../PRODUCT.md) (Users, Brand Personality, Aesthetic Direction, Design Principles, Component Patterns, color/spacing/shadow tokens, accessibility). Refer to it directly to avoid drift; the summary below is only a quick orientation.
 
-Enterprise developers and technical professionals who use AI agents as collaborative partners. They work with complex multi-layer agent systems (Tool -> Skill -> SubAgent -> Agent) and need to:
-- Monitor agent reasoning and execution
-- Manage knowledge graphs and memories
-- Configure and orchestrate specialized subagents
-- Review artifacts and execution traces
-
-### Brand Personality
-
-**Clean, Minimal, Technical**
-
-Vercel-inspired aesthetic: black/white/gray palette, function-first, zero visual noise. Every pixel serves a purpose.
-
-- **Confidence & Precision**: Crisp typography, tight spacing, no decorative elements
-- **Voice**: Direct, technical, efficient - every word earns its place
-- **Tone**: Calm competence, understated authority
-
-### Aesthetic Direction
-
-**Vercel Design Language** - extracted from vercel.com
-
-- **Monochrome Foundation**: Black `#000`/`#171717` text on white `#fff`/`#fafafa` backgrounds
-- **10-Level Gray Scale**: `#111` to `#fafafa` (accents-1 through accents-8 + foreground/background)
-- **Blue Accent**: `#0070f3` (success/link color), used sparingly for CTAs
-- **Geist Typography**: Tight negative letter-spacing on headings (-2.4px at 48px)
-- **NOT playful/consumer apps**: No decorative blurs, gradients, or gamification
-- **NOT cluttered enterprise**: No dense dashboards with competing widgets
-
-### Design Principles
-
-1. **Clarity Over Cleanness**: Information hierarchy first. Tight negative letter-spacing on headings for max legibility
-2. **Zero Visual Noise**: 1px borders, 0.08 alpha shadows, solid backgrounds. Every element must convey information
-3. **Pill-Shape CTAs**: Primary buttons use pill shape (radius: 100px, height: 48px). Secondary: white bg, dark text, same shape
-4. **Progressive Disclosure**: Essential info first. Status badges: 11px/500 pill shape. Complex details on demand
-5. **Consistent Component Language**: 4px default control radius, 6px structural surface radius, 4px spacing base, border-only shadows, and a 36px default app-button/form-control height. Reserve pill shapes for explicit CTA moments only.
-
-### Component Patterns
-
-#### Primary Button (CTA)
-- bg `#171717`, text `#fff` 16px/500, radius 100px, height 48px
-
-#### Secondary Button
-- bg `#fff`, text `#171717` 16px/500, radius 100px, height 48px
-
-#### Default App Button
-- theme-driven monochrome colors
-- radius 4px
-- height 36px
-- use across the main product UI and canvas actions
-
-#### Ghost Button (Nav)
-- transparent bg, text `#4d4d4d` 14px/400, radius 9999px, height 30px
-
-#### Input Field
-- bg `#fff`, 1px border, radius 4px, height 36px, font 14px
-
-#### Badge/Tag
-- bg `#ebebeb`, text `#171717` 11px/500, radius 9999px, padding 0 8px
-
-#### Card
-- bg `#fff`, radius 6px, shadow `0 0 0 1px rgba(0,0,0,0.08)` + subtle inner
-
-### Color Tokens (Light Mode)
-
-```css
-/* Gray scale */
---accents-1: #fafafa   /* lightest bg */
---accents-2: #eaeaea   /* borders */
---accents-3: #999999   /* muted text */
---accents-5: #666666   /* secondary text */
---accents-7: #333333   /* emphasized */
---accents-8: #111111   /* near-black */
---foreground: #000000  /* primary text */
---background: #ffffff  /* page bg */
-
-/* Semantic */
---primary: #0070f3     /* links, active states */
---error: #ee0000
---warning: #f5a623
-```
-
-### Spacing & Radius
-
-```
-4px base: 4, 8, 12, 16, 24, 32, 40, 64, 96
-Default radius: 6px (inputs, cards)
-Marketing radius: 8px
-Pill radius: 100px (CTAs) / 9999px (badges)
-```
-
-### Shadows (Minimal)
-
-```css
---shadow-border: 0 0 0 1px rgba(0,0,0,0.08)
---shadow-small: 0 2px 2px rgba(0,0,0,0.04)
---shadow-menu: border + 0 4px 8px rgba(0,0,0,0.04), 0 16px 24px rgba(0,0,0,0.06)
-```
-
-### Accessibility
-
-Target: WCAG 2.1 AA compliance. Focus ring: `0 0 0 1px gray + 0 0 0 4px rgba(0,0,0,0.16)`. All animations respect `prefers-reduced-motion`.
+- **Audience**: Enterprise developers orchestrating multi-layer agent systems (Tool -> Skill -> SubAgent -> Agent)
+- **Aesthetic**: Vercel-inspired, monochrome (black/white/gray) with a sparing `#0070f3` blue accent, Geist typography
+- **Principle**: Clarity and zero visual noise first; pill-shape (radius 100px, height 48px) reserved for explicit CTAs; 4px default control radius / 36px default control height elsewhere
+- **Accessibility**: WCAG 2.1 AA; focus ring `0 0 0 1px gray + 0 0 0 4px rgba(0,0,0,0.16)`; respect `prefers-reduced-motion`
 
 ---
 

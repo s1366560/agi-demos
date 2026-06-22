@@ -2,9 +2,9 @@
 
 **Version**: 2.0
 **Environment**: Production
-**Last Updated**: 2026-01-28
+**Last Updated**: 2026-06-22
 
-This guide covers production deployment of the Sandbox MCP Server with XFCE desktop environment.
+This guide covers production deployment of the Sandbox MCP Server with KDE Plasma 6 desktop environment.
 
 ---
 
@@ -43,7 +43,7 @@ This guide covers production deployment of the Sandbox MCP Server with XFCE desk
 - Docker Compose 2.0+ (optional)
 - Port 8765 (MCP server)
 - Port 7681 (Web terminal)
-- Port 6080 (noVNC)
+- Port 6080 (KasmVNC web client)
 
 ---
 
@@ -89,9 +89,8 @@ MCP_WORKSPACE=/workspace
 
 # Desktop Configuration
 DESKTOP_ENABLED=true
-DESKTOP_RESOLUTION=1280x720
+DESKTOP_RESOLUTION=1920x1080
 DESKTOP_PORT=6080
-VNC_SERVER_TYPE=tigervnc  # Options: tigervnc (default), x11vnc
 
 # Terminal Configuration
 TERMINAL_PORT=7681
@@ -162,7 +161,7 @@ services:
     ports:
       - "8765:8765"  # MCP server
       - "7681:7681"  # Web terminal
-      - "6080:6080"  # noVNC
+      - "6080:6080"  # KasmVNC web client
 
     # Volumes
     volumes:
@@ -357,7 +356,7 @@ data:
   MCP_HOST: "0.0.0.0"
   MCP_PORT: "8765"
   DESKTOP_ENABLED: "true"
-  DESKTOP_RESOLUTION: "1280x720"
+  DESKTOP_RESOLUTION: "1920x1080"
   DESKTOP_PORT: "6080"
   TERMINAL_PORT: "7681"
   LOG_LEVEL: "INFO"
@@ -389,7 +388,7 @@ docker inspect sandbox-mcp-prod | grep -A 10 Health
 curl http://localhost:8765/health
 
 # Desktop status
-curl http://localhost:6080/vnc.html
+curl http://localhost:6080
 ```
 
 ### Metrics to Monitor
@@ -450,12 +449,12 @@ docker run --network sandbox-network ...
 # Firewall rules
 ufw allow 8765/tcp  # MCP server
 ufw allow 7681/tcp  # Web terminal
-ufw allow 6080/tcp  # noVNC
+ufw allow 6080/tcp  # KasmVNC web client
 ```
 
 ### VNC Security
 
-**Note**: VNC authentication is disabled by default (container-safe).
+**Note**: KasmVNC is started with `-SecurityTypes None -disableBasicAuth`, so VNC-level authentication is disabled (container-safe; authentication is expected to be handled by the API proxy in front of the container).
 
 For production, consider:
 - Reverse proxy with authentication (nginx, traefik)
@@ -541,13 +540,16 @@ docker inspect sandbox-mcp-prod
 
 ```bash
 # Check processes
-docker exec sandbox-mcp-prod ps aux | grep -E "Xvfb|xfce|vnc"
+docker exec sandbox-mcp-prod ps aux | grep -E "Xkasmvnc|kde|plasma"
+
+# Check KasmVNC log
+docker exec sandbox-mcp-prod cat /tmp/kasmvnc.log
 
 # Check ports
 docker exec sandbox-mcp-prod netstat -tlnp
 
-# Test VNC
-curl http://localhost:6080/vnc.html
+# Test KasmVNC web client
+curl http://localhost:6080
 ```
 
 ### Performance Issues
@@ -652,6 +654,6 @@ curl -v http://localhost:8765/health
 
 ---
 
-**Last Updated**: 2026-01-28
+**Last Updated**: 2026-06-22
 **Deployment Guide Version**: 2.0
 **Status**: Production Ready ✅

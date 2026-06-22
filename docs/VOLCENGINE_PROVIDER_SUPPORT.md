@@ -1,6 +1,8 @@
 # Volcengine (Doubao) Provider Support
 
-MemStack provides comprehensive support for Volcengine (火山引擎/豆包 Doubao) services, including LLM, Vision, Audio, and Real-time Voice Chat.
+MemStack provides support for Volcengine (火山引擎/豆包 Doubao) services, including LLM, Vision, and Audio.
+
+> Last checked against code: 2026-06-22
 
 ## LLM Configuration
 
@@ -34,19 +36,18 @@ MemStack implements specialized adapters for Volcengine Audio APIs which deviate
 - **Pattern**: Doubao Speech Synthesis 2.0 (HTTP Chunked/SSE).
 - **Config**: `VOLC_TTS_RESOURCE_ID` (default: `volc.speech.dialog`)
 
-## Real-time Voice Chat (RTC)
+## Instantiation
 
-For low-latency multimodal voice interactions, MemStack uses the Volcengine RTC-based protocol (`rtc-aigc`).
-
-- **Protocol**: Custom RTC signaling (not standard WebSocket).
-- **Adapter**: `VolcengineRTCChatAdapter`
-- **Capabilities**: Integrated ASR + LLM + TTS with sub-second latency.
-
-## Usage in DI Container
+The ASR and TTS adapters are plain classes and are not wired through `DIContainer`. Construct them directly with Volcengine credentials:
 
 ```python
-# Accessing via DIContainer
-asr_service = container.asr_service()
-tts_service = container.tts_service()
-rtc_adapter = container.rtc_chat_adapter()
+from src.infrastructure.adapters.secondary.external.volcengine.audio_adapters import (
+    VolcengineASRAdapter,
+    VolcengineTTSAdapter,
+)
+
+asr_service = VolcengineASRAdapter(access_key=volc_ak, app_key=volc_app_id)
+tts_service = VolcengineTTSAdapter(access_key=volc_ak, app_key=volc_app_id)
 ```
+
+> Note: A Volcengine RTC ("real-time voice chat") adapter is not implemented. Only ASR and TTS adapters ship in `src/infrastructure/adapters/secondary/external/volcengine/`.

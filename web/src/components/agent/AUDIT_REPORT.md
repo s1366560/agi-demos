@@ -1,5 +1,10 @@
 # Agent Workspace UI Audit Report
 
+> 历史审计快照，行号可能已漂移。本报告基于 2026-03-24 的代码状态生成；此后组件已演进
+> （例如 `InlineHITLCard.tsx` 1196 → 1370 行、`CanvasPanel.tsx` 1768 → 2225 行），引用的
+> 行号与文件大小仅作定位参考，请以当前代码为准。关键结论（i18n、a11y、样式系统、硬编码
+> 颜色）仍具参考价值，但在动手修复前应重新核对。
+
 **Scope**: `web/src/pages/tenant/AgentWorkspace.tsx` + `web/src/components/agent/` (100+ files)
 **Date**: 2026-03-24
 **Auditor**: Sisyphus (automated)

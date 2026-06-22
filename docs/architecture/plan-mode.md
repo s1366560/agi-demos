@@ -1,5 +1,33 @@
 # Plan Mode Architecture
 
+> **Status note (checked 2026-06-22).** The orchestration layer described below
+> (`PlanGenerator`, `PlanExecutor`, `PlanReflector`, `PlanAdjuster`,
+> `PlanModeOrchestrator`) is conceptual and does not map to concrete classes in
+> the current tree. The legacy agent tools `plan_enter` / `plan_update` /
+> `plan_exit` have been removed and are no longer part of the built-in tool set
+> (see [../TOOLS.md](../TOOLS.md)). Treat the sections that reference those
+> components as historical design notes.
+>
+> Current plan-related behavior lives in:
+>
+> - Domain models (still present): `ExecutionPlan`, `ExecutionStep`,
+>   `PlanSnapshot`, `ReflectionResult`, `StepAdjustment` in
+>   `src/domain/model/agent/execution/`.
+> - Workspace planning infrastructure:
+>   `src/infrastructure/agent/workspace_plan/` (e.g. `LLMGoalPlanner`,
+>   `WorkspaceSupervisor`, `WorkspaceOrchestrator`, `WorkspaceRunController`,
+>   `AcceptanceCriterionVerifier`, `WorkspaceWorktreeManager`,
+>   `WorkspacePlanOutboxWorker`).
+> - Terminal contract tools for the builtin workspace judgment agents:
+>   `workspace_submit_planning_contract`,
+>   `workspace_submit_verification_judgment`,
+>   `workspace_submit_iteration_review`, `workspace_submit_supervisor_decision`,
+>   `workspace_submit_worktree_preparation` in
+>   `src/infrastructure/agent/tools/workspace_planning_contract.py` and
+>   `workspace_plan_contract_tools.py`.
+> - REST routes: `/api/v1/agent/plan/*` (plan/build mode switch) and
+>   `/api/v1/workspaces/{workspace_id}/plan/*`.
+
 ## Overview
 
 Plan Mode is a sophisticated execution mode that uses pre-generated execution plans with reflection and adjustment capabilities.

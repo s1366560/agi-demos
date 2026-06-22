@@ -4,9 +4,9 @@
 Two sandbox adapters for executing code in isolated environments. Both implement `SandboxPort`.
 
 ## Key Files
-- `mcp_sandbox_adapter.py` (3069 lines) -- Docker container sandbox with MCP WebSocket
-- `local_sandbox_adapter.py` (705 lines) -- tunnel-based connection to user's local machine
-- `container_manager.py` (351 lines) -- extracted Docker lifecycle (create/start/stop/remove)
+- `mcp_sandbox_adapter.py` (4090 lines) -- Docker container sandbox with MCP WebSocket
+- `local_sandbox_adapter.py` (837 lines) -- tunnel-based connection to user's local machine
+- `container_manager.py` (362 lines) -- extracted Docker lifecycle (create/start/stop/remove)
 - `sandbox_instance.py` -- `MCPSandboxInstance` extends `SandboxInstance`
 
 ## Two Adapter Types
@@ -46,7 +46,7 @@ Two sandbox adapters for executing code in isolated environments. Both implement
 - Unhealthy sandbox transitions to ERROR state after configurable retries
 
 ## Gotchas
-- `mcp_sandbox_adapter.py` is 3069 lines -- major refactoring candidate
+- `mcp_sandbox_adapter.py` is 4090 lines -- major refactoring candidate
 - Container port conflicts possible if ports 18765/16080/17681 are in use on host
 - Docker socket must be accessible (`/var/run/docker.sock`)
 - LocalSandboxAdapter requires user to install and run ngrok/cloudflare tunnel

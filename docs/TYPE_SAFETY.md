@@ -28,7 +28,6 @@ Config file: `pyrightconfig.json`
 **Excluded directories:**
 - `src/tests` -- test files are exempt
 - `src/alembic` -- migration files are exempt
-- `src/memstack_agent` -- legacy code, migrating progressively
 - `web`, `notebooks`, `design-prototype`, `.venv`, `node_modules`, `__pycache__`
 
 ### Strict Mode Settings
@@ -106,7 +105,7 @@ strict_equality = true
 
 ### Excluded Directories
 
-Same as pyright: `src/tests/`, `src/alembic/`, `src/memstack_agent/`
+Same as pyright: `src/tests/`, `src/alembic/`
 
 ### Per-Module Overrides
 
@@ -339,7 +338,7 @@ The `.githooks/pre-commit` hook runs automatically on `git commit`:
 1. **Ruff check** on all staged Python files (fast lint pass).
 2. **Pyright** on staged Python files within scope:
    - Included: `src/`, `sdk/`, `scripts/`
-   - Excluded: `src/tests/`, `src/alembic/`, `src/memstack_agent/`
+   - Excluded: `src/tests/`, `src/alembic/`
 3. **ESLint** on staged TypeScript/JavaScript files in `web/`.
 
 The `.githooks/commit-msg` hook also runs automatically and validates the
@@ -394,11 +393,15 @@ This skips all pre-commit hooks. Use only for genuine emergencies and follow up 
 
 ## Tech Debt Baseline
 
-As of the initial type safety enforcement rollout:
+As of the initial type safety enforcement rollout (counts drift as debt is
+reduced; treat the live numbers in `pyrightconfig.json` / `pyproject.toml` as
+authoritative):
 
-- **402** `type: ignore` comments across **132** files
+- `type: ignore` comments are spread across the `src/`, `sdk/`, and `scripts/`
+  trees; the current count is on the order of ~800 across ~220 files
 - Most are in infrastructure adapters dealing with third-party libraries
-- LiteLLM module has `ignore_errors = true` in mypy (25 remaining errors)
+- LiteLLM module has `ignore_errors = true` in mypy (remaining-error count is
+  recorded inline in the `pyproject.toml` override)
 - Many infrastructure files have `ANN401` exemptions in ruff
 
 This debt is being reduced incrementally. Do not add new `type: ignore` without

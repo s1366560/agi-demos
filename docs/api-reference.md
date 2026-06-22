@@ -6,7 +6,7 @@ dump. Use the runtime OpenAPI schema for request/response details:
 - Swagger UI: `http://localhost:8000/docs`
 - OpenAPI JSON: `http://localhost:8000/openapi.json`
 
-Last checked against code: 2026-05-18.
+Last checked against code: 2026-06-22.
 
 ## Runtime Registration
 
@@ -50,7 +50,7 @@ API keys use the `ms_sk_` prefix and are sent with `Authorization: Bearer <key>`
 | HITL | `/api/v1/agent/hitl/conversations/{conversation_id}/pending`, `/respond`, `/cancel` |
 | Tools | `/api/v1/agent/tools`, `/tools/capabilities`, `/tools/compositions` |
 | Plan mode | `/api/v1/agent/plan/*` |
-| Subagents | `/api/v1/agent/subagents/*` plus top-level `/api/v1/subagents/*` |
+| Subagents | `/api/v1/agent/subagent/{execution_id}/cancel` plus top-level `/api/v1/subagents/*` |
 | Agent definitions and bindings | `/api/v1/agent/definitions/*`, `/api/v1/agent/bindings/*` |
 | Trace | `/api/v1/agent/trace/*` |
 
@@ -61,7 +61,7 @@ registered by the current router set.
 
 | Area | Paths |
 |---|---|
-| Memories | `/api/v1/memories/`, `/api/v1/memories/{memory_id}`, `/reprocess`, `/extract-entities`, `/extract-relationships` |
+| Memories | `/api/v1/memories/`, `/api/v1/memories/{memory_id}`, `/api/v1/memories/{memory_id}/reprocess`, `/api/v1/memories/extract-entities`, `/api/v1/memories/extract-relationships` |
 | Episodes | `/api/v1/episodes/`, `/api/v1/episodes/by-name/{episode_name}`, `/api/v1/episodes/health` |
 | Search | `/api/v1/memory/search`, `/api/v1/search-enhanced/*` |
 | Graph | `/api/v1/graph/*` |
@@ -74,10 +74,10 @@ registered by the current router set.
 |---|---|
 | Workspaces | `/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/*` |
 | Workspace plan | `/api/v1/workspaces/{workspace_id}/plan/*` |
-| Workspace tasks | `/api/v1/workspace-tasks/*`, `/api/v1/workspaces/{workspace_id}/autonomy/*` |
-| Workspace chat/events | `/api/v1/workspace-chat/*`, `/api/v1/workspace-events/*` |
-| Blackboard | `/api/v1/blackboard/*` |
-| Topology | `/api/v1/topology/*` |
+| Workspace tasks | `/api/v1/workspaces/{workspace_id}/tasks`, `/api/v1/workspaces/{workspace_id}/autonomy/*` |
+| Workspace chat | `/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/messages` |
+| Blackboard | `/api/v1/tenants/{tenant_id}/projects/{project_id}/workspaces/{workspace_id}/blackboard` |
+| Topology | `/api/v1/workspaces/{workspace_id}/topology/*` |
 
 ## Sandbox, MCP, Terminal
 
@@ -93,7 +93,7 @@ registered by the current router set.
 
 | Area | Paths |
 |---|---|
-| Skills | `/api/v1/skills/*`, `/api/v1/tenant-skill-configs/*` |
+| Skills | `/api/v1/skills/*`, `/api/v1/tenant/skills/config` |
 | Channels and webhooks | `/api/v1/channels/*`, `/api/v1/webhooks/*`, `/api/v1/tenant-webhooks/*` |
 | Instances/deploy/gene market | `/api/v1/instances/*`, `/api/v1/deploys/*`, `/api/v1/genes/*`, `/api/v1/instance-templates/*` |
 | Audit/trust | `/api/v1/audit/*`, `/api/v1/trust/*` |

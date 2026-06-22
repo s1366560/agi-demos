@@ -6,6 +6,11 @@ for new code; legacy code migrates gradually.
 
 ## Layering
 
+The diagram below describes the **target** dependency direction
+(`components`/`hooks` must reach `services` only through `stores` or
+dedicated hooks), not the current state of the tree — see Rule 4 for
+the enforcement gap.
+
 ```
 components/  ──┐
                │  (must go through)
@@ -28,8 +33,14 @@ hooks/        ─┼──► stores/  ──► services/api  ──► httpCli
    data into Zustand stores. This keeps a single source of truth per
    server-owned entity.
 4. **Components never import `services/*` directly.** Always flow
-   through a hook (`hooks/queries/*` or `hooks/use*`) or store. Enforced
-   as an ESLint warning.
+   through a hook (`hooks/queries/*` or `hooks/use*`) or store. This is
+   normative for new code; legacy components are grandfathered and
+   migrate gradually. **Not yet enforced** — `web/eslint.config.js`'s
+   `no-restricted-imports` currently only blocks barrel imports from
+   `@/components/agent` and `@/components/index`; it does not restrict
+   `@/services/*`. As of this writing, ~48 component files still import
+   `@/services/*` directly (~63 import lines), so treat this rule as a
+   target, not a gate.
 5. **Project scope is explicit.** Components and stores must derive the
    active project from tenant-prefixed route params, query params, or the
    tenant-scoped `useProjectStore.currentProject` value after checking

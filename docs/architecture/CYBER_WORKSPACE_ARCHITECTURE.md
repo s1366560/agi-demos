@@ -3,6 +3,7 @@
 > Reference: `/Users/tiejunsun/github/nodeskclaw` (DeskClaw)
 > Target: `/Users/tiejunsun/github/agi-demos` (MemStack)
 > Date: 2026-03-26
+> Last checked against code: 2026-06-22
 
 ---
 
@@ -10,7 +11,7 @@
 
 The Cyber Workspace is a human-AI collaborative space where humans and AI agents work together as peers. Agents occupy hex-topology positions, participate in group chat via @mentions, post to shared blackboards, and execute delegated tasks -- all visible in a 3D visualization.
 
-**Key insight: ~60% of the infrastructure already exists.** This document focuses on the **gaps** between what DeskClaw specifies and what MemStack already has.
+**Key insight: as of the 2026-06-22 recheck, the gap analysis (Sections 2.1-2.3) is now effectively closed -- the components originally marked MISSING (chat, blackboard/topology/objective/gene/task APIs, HexGrid 3D, @mention routing, delegate/escalate, event publisher wiring) are all implemented.** The "What Already Exists" table below reflects the foundational infrastructure that predated this build-out; the gap matrix reflects the current state.
 
 ### What Already Exists (DO NOT rebuild)
 
@@ -47,43 +48,43 @@ The Cyber Workspace is a human-AI collaborative space where humans and AI agents
 
 | Component | Status | What Exists | What's Missing | DeskClaw Equivalent |
 |-----------|--------|-------------|----------------|---------------------|
-| **WorkspaceMessage domain model** | MISSING | -- | `WorkspaceMessage` entity for group chat (sender_type: human/agent, content, @mentions, workspace_id, timestamp) | `workspace_message.py` |
-| **WorkspaceMessage repository** | MISSING | -- | Port interface + SQL implementation for message CRUD, pagination, @mention queries | `workspace_message_service.py` (queries) |
-| **WorkspaceMessageService** | MISSING | -- | Application service: send, list, paginate, @mention routing | `workspace_message_service.py` |
-| **Chat API endpoints** | MISSING | -- | POST /messages, GET /messages (paginated), GET /messages/mentions | `api/workspaces.py` chat routes |
-| **@mention routing** | MISSING | -- | Parse `@agent-name` from message content, route to appropriate agent ReAct session | `collaboration_service.py` mention_dispatch |
-| **Agent-as-participant** | MISSING | WorkspaceAgent model exists (agent binding to workspace) | System prompt injection with workspace context (members, recent chat, blackboard summaries) | Runtime Platform agent context |
-| **delegate/escalate protocol** | MISSING | SubAgent orchestration exists | Detect `delegate:<target>` / `escalate:<target>` patterns in agent output, forward to target agent | `collaboration_service.py` delegation |
-| **Event publisher DI wiring** | PARTIAL | `WorkspaceService.__init__` accepts optional `workspace_event_publisher` callback | API router (`workspaces.py` line 30) instantiates `WorkspaceService` WITHOUT injecting a publisher. Events silently dropped. | N/A (DeskClaw uses SSE directly) |
-| **Workspace AgentDomainEvent subclasses** | MISSING | 13 event type enums defined in `AgentEventType` | No corresponding `AgentDomainEvent` subclasses in `agent_events.py`. Events cannot be emitted through the standard pipeline. | N/A (DeskClaw uses SSE) |
-| **Blackboard API endpoints** | MISSING | Domain models + repos + ORM exist | No API router endpoints for blackboard post/reply CRUD. Frontend has BlackboardPanel but no backend endpoints to call. | `api/workspaces.py` blackboard routes |
-| **Topology mutation API** | MISSING | Domain models + repos + ORM exist | No API endpoints for add/remove/move topology nodes and edges | `api/workspaces.py` topology routes |
-| **Objective/Gene API endpoints** | MISSING | Domain models + repos + ORM exist | No CRUD endpoints. Frontend has ObjectiveList/GeneList but no backend API. | `api/workspaces.py` |
-| **Task API endpoints** | MISSING | WorkspaceTaskService exists | No router endpoints to expose task lifecycle (create, assign, update status) | `api/workspaces.py` task routes |
-| **WorkspaceMessage ORM model** | MISSING | -- | SQLAlchemy model for workspace_messages table | N/A |
-| **WorkspaceMessage migration** | MISSING | -- | Alembic migration adding workspace_messages table | N/A |
+| **WorkspaceMessage domain model** | COMPLETE | `WorkspaceMessage` entity (`workspace_id`, `sender_id`, `sender_type: human/agent`, `content`, `mentions`, `parent_message_id`, `metadata`, `created_at`) | -- | `workspace_message.py` |
+| **WorkspaceMessage repository** | COMPLETE | Port `workspace_message_repository.py` + SQL impl `sql_workspace_message_repository.py` | -- | `workspace_message_service.py` (queries) |
+| **WorkspaceMessageService** | COMPLETE | `workspace_message_service.py` (send, list, paginate, @mention routing) | -- | `workspace_message_service.py` |
+| **Chat API endpoints** | COMPLETE | `routers/workspace_chat.py`: POST `""`, GET `""` (paginated), GET `/mentions/{target_id}` | -- | `api/workspaces.py` chat routes |
+| **@mention routing** | COMPLETE | `WorkspaceMentionRouter` (`workspace_mention_router.py`) parses mentions and routes to agent ReAct sessions | -- | `collaboration_service.py` mention_dispatch |
+| **Agent-as-participant** | COMPLETE | `react_agent_prompt_mixin.py` injects workspace context (members, agents, messages, blackboard) via `build_workspace_context` | -- | Runtime Platform agent context |
+| **delegate/escalate protocol** | COMPLETE | `processor.py` `_DELEGATE_ESCALATE_RE` + `_detect_delegate_or_escalate` detects `delegate:<target>` / `escalate:<target>` patterns | -- | `collaboration_service.py` delegation |
+| **Event publisher DI wiring** | COMPLETE | `workspaces.py` router injects `workspace_event_publisher=_publish_event` into `WorkspaceService` when Redis is available; chat/blackboard/topology routers each wire their own publisher (transactional outbox for blackboard) | -- | N/A (DeskClaw uses SSE directly) |
+| **Workspace AgentDomainEvent subclasses** | COMPLETE | `agent_events.py` defines subclasses incl. `WorkspaceMessageCreatedEvent`, `WorkspaceTaskCreatedEvent`, `WorkspaceMemberJoinedEvent`, `WorkspaceAgentBoundEvent`, and others | -- | N/A (DeskClaw uses SSE) |
+| **Blackboard API endpoints** | COMPLETE | `routers/blackboard.py`: post CRUD (create/list/get/update/delete), replies, pin/unpin, blackboard files (CRUD, upload/download, copy, mkdir) | -- | `api/workspaces.py` blackboard routes |
+| **Topology mutation API** | COMPLETE | `routers/topology.py`: node CRUD (create/list/get/update/delete) + edge CRUD | -- | `api/workspaces.py` topology routes |
+| **Objective/Gene API endpoints** | COMPLETE | `routers/cyber_objectives.py` (CRUD + project-to-task) and `routers/cyber_genes.py` (CRUD) | -- | `api/workspaces.py` |
+| **Task API endpoints** | COMPLETE | `routers/workspace_tasks.py`: create/list/get/update/delete + lifecycle (`assign-agent`, `unassign-agent`, `claim`, `start`, `block`, `complete`), recovery actions, execution sessions | -- | `api/workspaces.py` task routes |
+| **WorkspaceMessage ORM model** | COMPLETE | `WorkspaceMessageModel` in `models.py` | -- | N/A |
+| **WorkspaceMessage migration** | COMPLETE | `alembic/versions/13210a8c06aa_add_workspace_messages_table.py` | -- | N/A |
 
 ### 2.2 Frontend Gaps
 
 | Component | Status | What Exists | What's Missing | DeskClaw Equivalent |
 |-----------|--------|-------------|----------------|---------------------|
-| **HexGrid 3D (R3F)** | MISSING | 2D SVG HexGrid (420 lines) with pan/zoom/drag | R3F-based 3D hex topology with InstancedMesh, orbit controls, raycasting | `Workspace3D.vue` |
-| **Chat panel** | MISSING | -- | Group chat UI: message list, input, @mention autocomplete, agent/human avatars | DeskClaw chat sidebar |
-| **3D agent mesh** | MISSING | 2D HexAgent SVG component | 3D robot/avatar mesh for agents on hex grid | `Grabby.ts` |
-| **3D corridor paths** | MISSING | 2D HexCorridor SVG component | 3D corridor mesh connecting hex nodes | `CorridorPath.ts` |
-| **Workspace service: chat endpoints** | MISSING | workspaceService.ts covers CRUD/member/agent | No chat message API methods | N/A |
-| **Workspace service: blackboard endpoints** | MISSING | -- | No blackboard post/reply API methods | N/A |
-| **Workspace service: topology endpoints** | MISSING | -- | No topology node/edge mutation API methods | N/A |
-| **Workspace store: chat state** | MISSING | Store handles presence/task/topology/blackboard/gene events | No chat message state, send action, or event handler | N/A |
+| **HexGrid 3D (R3F)** | COMPLETE | `web/src/components/workspace/hex3d/` (`HexCanvas3D`, `HexScene`, `HexInstances`, `AgentMesh`, `CorridorMesh`, `MessageFlowParticles`, `useHex3DPick`) on `@react-three/fiber` v9 + `@react-three/drei` + `three-mesh-bvh`; OrbitControls + raycasting | -- | `Workspace3D.vue` |
+| **Chat panel** | COMPLETE | `web/src/components/workspace/chat/` (`ChatPanel`, `ChatMessage`, `MentionInput`, `WorkspaceGroupChat`, `WorkspaceGroupChatPanel`) | -- | DeskClaw chat sidebar |
+| **3D agent mesh** | COMPLETE | `web/src/components/workspace/hex3d/AgentMesh.tsx` | -- | `Grabby.ts` |
+| **3D corridor paths** | COMPLETE | `web/src/components/workspace/hex3d/CorridorMesh.tsx` | -- | `CorridorPath.ts` |
+| **Workspace service: chat endpoints** | COMPLETE | `workspaceService.ts` exposes `listMessages`, `sendMessage`, `getMentions` | -- | N/A |
+| **Workspace service: blackboard endpoints** | COMPLETE | `workspaceService.ts` exposes blackboard post/reply/file CRUD, pin/unpin, execution-diagnostics | -- | N/A |
+| **Workspace service: topology endpoints** | COMPLETE | `workspaceService.ts` exposes node/edge CRUD under `/workspaces/{id}/topology` | -- | N/A |
+| **Workspace store: chat state** | COMPLETE | `workspace.ts` store holds `chatMessages`/`chatLoading` state with `sendMessage`/`listMessages` actions and event handlers | -- | N/A |
 
 ### 2.3 Integration Gaps
 
 | Integration Point | Status | What Exists | What's Missing |
 |-------------------|--------|-------------|----------------|
-| **Agent → WorkspaceMessage** | MISSING | SubAgent announce_service delivers results | No path from agent tool output to workspace chat message |
-| **WorkspaceMessage → Agent** | MISSING | ReActAgent has workspace_manager (persona loader) | No path from @mention in chat to triggering agent session |
-| **Redis Streams workspace events** | PARTIAL | `workspace_handler.py` bridges Redis `workspace:{id}:*` to WS clients | Only presence events published. No chat/blackboard/topology events published to Redis. |
-| **WebSocket event delivery** | PARTIAL | `workspace_handler.py` forwards events from Redis to subscribed clients | Event publisher not injected (see above), so no events flow through the pipeline |
+| **Agent → WorkspaceMessage** | COMPLETE | `workspace_chat_tool.py` (registered via `agent_worker_state._add_workspace_chat_tools`) lets agents post to workspace chat | -- |
+| **WorkspaceMessage → Agent** | COMPLETE | `WorkspaceMentionRouter` (`workspace_mention_router.py`) parses @mentions and triggers/resumes the mentioned agent's ReAct session | -- |
+| **Redis Streams workspace events** | COMPLETE | `workspace_chat.py`, `blackboard.py` (transactional outbox), `topology.py`, and `workspace_tasks.py` all publish to the Redis workspace bus (`workspace:{id}:*`) | -- |
+| **WebSocket event delivery** | COMPLETE | `workspace_handler.py` subscribes to `workspace:{id}:*` and forwards events from Redis to subscribed WS clients; event publisher is injected in each router | -- |
 
 ---
 

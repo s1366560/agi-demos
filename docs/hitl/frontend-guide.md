@@ -88,6 +88,12 @@ const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({
 };
 ```
 
+> A2UI 动作请求 (`type === 'a2ui_action'`) 不经过 `UnifiedHITLPanel` 的卡片分支。
+> 这类请求由 canvas store 接管：`a2ui_action_asked` 事件携带 `block_id` /
+> `surface_data`，由画布渲染交互式组件，用户在组件内触发动作后调用
+> `agentService.respondToA2UIAction(requestId, actionName, sourceComponentId, context)`。
+> `hitlStore.ts` 当前只为 clarification / decision / env_var / permission 维护待处理状态。
+
 ### InlineHITLCard
 
 历史消息中的 HITL 卡片：
@@ -288,10 +294,12 @@ type HITLEventType =
   | 'decision_asked'
   | 'env_var_requested'
   | 'permission_asked'
+  | 'a2ui_action_asked'
   | 'clarification_answered'
   | 'decision_answered'
   | 'env_var_provided'
-  | 'permission_replied';
+  | 'permission_replied'
+  | 'a2ui_action_answered';
 
 interface HITLEvent {
   type: HITLEventType;
@@ -311,14 +319,21 @@ interface HITLEvent {
 
 Key files:
 
-- `web/src/services/agentService.ts` - opens `/api/v1/agent/ws`, sends HITL responses,
-  and falls back to HTTP when the socket is unavailable.
+- `web/src/services/agentService.ts` - opens `/api/v1/agent/ws`, sends HITL responses
+  (`clarification_respond` / `decision_respond` / `env_var_respond` /
+  `permission_respond` / `a2ui_action_respond`), and falls back to HTTP when the socket
+  is unavailable.
 - `web/src/services/agent/messageRouter.ts` - routes `clarification_asked`,
-  `decision_asked`, `env_var_requested`, and `permission_asked` events.
+  `decision_asked`, `env_var_requested`, `permission_asked`, and `a2ui_action_asked`
+  events.
 - `web/src/stores/agent/hitlStore.ts` - stores pending HITL state for the active
-  conversation.
+  conversation (clarification / decision / env_var / permission).
 - `web/src/stores/agent/hitlActions.ts` - submits clarification, decision, env-var,
   and permission responses.
+- `agentService.respondToA2UIAction` / `restApi.respondToA2UIActionHttp` - A2UI action
+  responses are submitted through a separate canvas-driven path rather than the generic
+  HITL cards; `a2ui_action_asked` is routed to the canvas handler
+  (`onA2UIActionAsked`), which renders the surface and collects the component action.
 
 ## API 服务
 
@@ -440,7 +455,12 @@ const AgentChat: React.FC = () => {
 ```typescript
 // web/src/types/hitl.unified.ts
 
-export type HITLType = 'clarification' | 'decision' | 'env_var' | 'permission';
+export type HITLType =
+  | 'clarification'
+  | 'decision'
+  | 'env_var'
+  | 'permission'
+  | 'a2ui_action';
 
 export type HITLStatus = 'pending' | 'answered' | 'timeout' | 'cancelled' | 'completed';
 
@@ -505,11 +525,19 @@ export interface PermissionData {
   default_action?: 'allow' | 'deny';
 }
 
-export type HITLRequestData = 
-  | ClarificationData 
-  | DecisionData 
-  | EnvVarData 
-  | PermissionData;
+export interface A2UIActionData {
+  title: string;
+  block_id: string;
+  allowed_actions: { component_id: string; action: string }[];
+  context?: Record<string, any>;
+}
+
+export type HITLRequestData =
+  | ClarificationData
+  | DecisionData
+  | EnvVarData
+  | PermissionData
+  | A2UIActionData;
 ```
 
 ## 样式指南

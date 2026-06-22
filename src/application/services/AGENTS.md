@@ -7,7 +7,7 @@ Services own business workflows; repositories own persistence.
 
 | Service | Ports Injected | Purpose |
 |---------|---------------|---------|
-| `agent_service.py` | ConversationRepo, ExecutionRepo, GraphService, LLM, SkillRepo, SubAgentRepo, Redis | Conversation lifecycle, agent execution coordination, and stream handoff to Redis/WebSocket paths. Largest service (~1200 lines). |
+| `agent_service.py` | ConversationRepo, ExecutionRepo, GraphService, LLM, SkillRepo, SubAgentRepo, Redis | Conversation lifecycle, agent execution coordination, and stream handoff to Redis/WebSocket paths. Largest service (~1500 lines, 30+ constructor params). |
 | `memory_service.py` | MemoryRepo, GraphServicePort | Memory CRUD + graph episode creation. Creates Memory entity then queues background entity extraction. |
 | `project_service.py` | ProjectRepo, UserRepo | Project CRUD + member management. Validates owner exists before creation. |
 | `skill_service.py` | SkillRepo, TenantSkillConfigRepo, FileSystemSkillLoader | Three-level skill scoping: system < tenant < project. Progressive loading tiers (metadata/triggers/full content). |
@@ -21,12 +21,14 @@ Services own business workflows; repositories own persistence.
 | `tenant_service.py` | TenantRepo | Tenant CRUD. |
 | `workflow_learner.py` | PatternRepo | Extracts reusable patterns from successful agent interactions. |
 
-## Sandbox Service Cluster (8 files)
+## Sandbox Service Cluster (12 files)
 
 - `sandbox_orchestrator.py` -- top-level facade, all sandbox ops route through here
 - `sandbox_event_service.py` -- publishes sandbox lifecycle events to Redis
 - `sandbox_health_service.py` -- periodic health checks on running sandboxes
+- `sandbox_idle_reaper.py` -- reaps idle sandboxes past their TTL
 - `sandbox_mcp_server_manager.py` -- manages MCP servers within sandboxes
+- `sandbox_profile.py` -- sandbox resource profile definitions
 - `sandbox_status_sync_service.py` -- syncs sandbox state between DB and runtime
 - `sandbox_token_service.py` -- JWT tokens for sandbox WebSocket auth
 - `sandbox_tool_registry.py` -- registers sandbox-provided tools into agent tool set
@@ -41,11 +43,18 @@ Agent-specific application services decomposed from `agent_service.py`:
 - `conversation_manager.py` -- conversation creation, listing, deletion
 - `execution_resume_service.py` -- resumes interrupted agent executions (HITL, crash recovery)
 - `runtime_bootstrapper.py` -- assembles ReActAgent instance with all dependencies
+- `termination_service.py` -- terminates running agent sessions
 - `tool_discovery.py` -- discovers available tools for a project (built-in + MCP + sandbox)
+- `workspace_conversation_sweeper.py` -- cleans up workspace conversation state
+- `workspace_hitl_defaults.py` -- default HITL configuration for workspaces
+- `workspace_mention_candidates.py` -- resolves @mention candidates in a workspace
+- `workspace_roster_validator.py` -- validates workspace participant rosters
+- `workspace_termination_resolver.py` -- resolves termination decisions for workspaces
 
 ## channels/ Subdirectory
 
 Multi-channel message routing (Feishu, webhook, etc.):
+- `_session.py` -- shared session helpers for channel services
 - `channel_service.py` -- channel instance CRUD per project
 - `channel_service_factory.py` -- creates channel-specific service instances
 - `channel_message_router.py` -- routes inbound messages to correct conversation
@@ -56,7 +65,7 @@ Multi-channel message routing (Feishu, webhook, etc.):
 ## Patterns
 
 - Services return domain entities, not DTOs (DTOs live in `schemas/`)
-- `agent_service.py` constructor has 18+ optional params -- most are None-defaulted for testability
+- `agent_service.py` constructor has 30+ params (most None-defaulted for testability)
 - Skill loading is lazy/tiered: metadata first, full content only at execution time
 - Sandbox services form a directed dependency graph; `sandbox_orchestrator` is the entry point
 

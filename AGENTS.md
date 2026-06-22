@@ -28,7 +28,7 @@ Guidance for AI coding assistants (Copilot, Claude, Cursor, Gemini, ...) working
 
 ```bash
 make init          # First run: deps + infra + DB
-make dev           # Start backend stack (API + workers + infra)
+make dev           # Start full stack (API + Ray actor worker + infra + web :3000)
 make dev-web       # Start frontend on :3000 (new terminal)
 make status        # Check services
 make stop          # Stop all           (alias: dev-stop)
@@ -51,7 +51,7 @@ make fresh         # reset + init + dev
 | Category | Command | Description |
 |---|---|---|
 | Dev | `make dev` / `stop` / `logs` / `infra` / `status` | Lifecycle + logs |
-| Dev (focused) | `dev-backend`, `dev-worker`, `dev-agent-worker`, `dev-mcp-worker`, `dev-web` | Start one component |
+| Dev (focused) | `dev-backend`, `dev-web`, `dev-web-stop`, `agent-actor-up` | Start one component (Ray actor worker via `agent-actor-up`) |
 | Test | `make test` / `test-unit` / `test-integration` / `test-coverage` / `test-watch` | Pytest + Vitest |
 | Quality | `make format` / `lint` / `check` / `ci` / `type-check` / `type-check-{mypy,pyright}` | Ruff/ESLint/Mypy/Pyright |
 | Hooks | `make hooks-install` | Pre-commit checks staged code + commit subject format guard |
@@ -105,7 +105,7 @@ L1 Tool       Atomic capabilities: Terminal, Desktop, WebSearch/Scrape, Plan{Ent
               Clarification/Decision, GetEnvVar/RequestEnvVar, SandboxMCPToolWrapper
 ```
 
-Execution routing (confidence-scored): `DIRECT_SKILL → SUBAGENT → PLAN_MODE → REACT_LOOP`.
+Execution routing (confidence-scored): `DIRECT_SKILL → PLAN_MODE → REACT_LOOP`. (SUBAGENT removed in Wave 5 — subagents are now tools in the ReAct loop.)
 
 ### Tool → Event Pipeline
 
@@ -120,9 +120,9 @@ Tool.execute() → self._pending_events
   → agent_service.connect_chat_stream → WS bridge → frontend routeToHandler
 ```
 
-**Adding a new tool event**: add `_pending_events` + `consume_pending_events()` on the tool; consume + yield in `processor.py`; add subclass in `domain/events/agent_events.py` + enum in `types.py`; add transformation in `events/converter.py` if needed; add case in frontend `agentService.routeToHandler` + handler in `streamEventHandlers.ts` + types.
+**Adding a new tool event**: add `_pending_events` + `consume_pending_events()` on the tool; consume + yield in `processor.py`; add subclass in `domain/events/agent_events.py` + enum in `types.py`; add transformation in `events/converter.py` if needed; add case in frontend `routeToHandler` (`web/src/services/agent/messageRouter.ts`, called by `agentService`) + handler in `streamEventHandlers.ts` + types.
 
-**Event types**: `task_list_updated`, `task_updated`, `task_start`, `task_complete`, `artifact_created`, `artifact_ready`.
+**Event types** (representative; see `domain/events/types.py` for the full enum): `task_list_updated`, `task_updated`, `task_start`, `task_complete`, `artifact_created`, `artifact_ready`, plus `artifact_error`, `artifacts_batch`, `task_execution_session_updated`, and others.
 
 ### MCP & Sandbox
 
@@ -221,7 +221,7 @@ Ray actors run from baked Docker images — local edits do **not** take effect u
 
 ### Python
 
-- Line length **100**. Formatter `ruff format`. Linter `ruff check` (E, F, I, N, UP, B, C4, SIM, RUF, ANN, C901, PLR091).
+- Line length **100**. Formatter `ruff format`. Linter `ruff check` (E, F, I, N, UP, B, C4, SIM, RUF, S, TCH, PT, PIE, ANN001/002/003/201/202/401, C901, PLR091).
 - Type check: `mypy` + `pyright` (both strict; excludes tests/alembic/legacy).
 - **Async everywhere** for DB/HTTP.
 - Domain entities: `@dataclass(kw_only=True)`; value objects: `@dataclass(frozen=True)`.
@@ -268,7 +268,7 @@ Patterns for new domain/application/infrastructure layers follow standard DDD; e
 | Session processor | `src/infrastructure/agent/processor/processor.py` |
 | Tool wrapping | `src/infrastructure/agent/core/tool_converter.py` |
 | Tools | `src/infrastructure/agent/tools/` (see `todo_tools.py` for pending-events pattern) |
-| Skill orchestration | `src/infrastructure/agent/skill/orchestrator.py` |
+| Skill resources | `src/infrastructure/agent/skill/` (`skill_resource_loader.py`, `types.py`) |
 | Routing | `src/infrastructure/agent/routing/{execution,binding,default_message}_router.py`, `intent_gate.py` |
 | Events | `src/domain/events/{agent_events,types}.py`, `src/infrastructure/agent/events/converter.py` |
 | Actor exec | `src/infrastructure/agent/actor/execution.py` |
@@ -309,7 +309,7 @@ Core groups (see `.env.example` for full list): `API_*` · `SECRET_KEY`, `LLM_EN
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **agi-demos** (71126 symbols, 202209 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **agi-demos** (93596 symbols, 167387 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

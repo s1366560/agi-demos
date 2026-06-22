@@ -1,13 +1,15 @@
 # persistence/ -- SQLAlchemy Repository Layer
 
+Last checked against code: 2026-06-22
+
 ## Purpose
-32 repository implementations + unified ORM model definitions. All PostgreSQL persistence.
+~80 repository implementations + unified ORM model definitions. All PostgreSQL persistence.
 
 ## Key Files
-- `models.py` (1584 lines) -- ALL SQLAlchemy ORM models (single file)
+- `models.py` (~3824 lines) -- ALL SQLAlchemy ORM models (single file)
 - `database.py` -- `async_session_factory`, `get_db` dependency
-- `sql_*.py` (32 files) -- one repository per domain entity
-- `../common/base_repository.py` (585 lines) -- generic CRUD base class
+- `sql_*.py` (~80 files) -- one repository per domain entity
+- `../common/base_repository.py` (~593 lines) -- generic CRUD base class
 
 ## BaseRepository[T, M] Pattern
 ```python
@@ -46,7 +48,7 @@ Domain and DB field names sometimes differ:
 6. Generate Alembic migration: `PYTHONPATH=. uv run alembic revision --autogenerate -m "add new_entity"`
 
 ## Gotchas
-- `models.py` is 1584 lines -- be careful with merge conflicts; add models at bottom
+- `models.py` is ~3824 lines -- be careful with merge conflicts; add models at bottom
 - `_eager_load_options()` default is empty -- N+1 queries if relationships accessed without it
 - `find_by_id` returns `Optional[T]` -- always handle None case
 - Soft deletes: some models have `deleted_at` column, some do hard delete -- check per entity

@@ -196,7 +196,7 @@ Core groups:
 - API and security: `API_*`, `SECRET_KEY`, `LLM_ENCRYPTION_KEY`
 - Data stores: `POSTGRES_*`, `REDIS_*`, `NEO4J_*`, `MINIO_*`
 - LLM providers: `LLM_PROVIDER`, `OPENAI_API_KEY`, `GEMINI_API_KEY`,
-  `DASHSCOPE_API_KEY`, `DEEPSEEK_API_KEY`, `ZHIPUAI_API_KEY`
+  `DASHSCOPE_API_KEY`, `DEEPSEEK_API_KEY`, `ZAI_API_KEY` (alias `ZHIPU_API_KEY`)
 - Runtime: `SANDBOX_*`, `MCP_*`, `RAY_*`, agent pool and workspace settings
 
 Never commit real secrets. `.env.example` is the only committed environment template.
@@ -220,7 +220,8 @@ gene, and workspace plan tables.
 
 Use [docs/README.md](docs/README.md) as the maintained documentation index. Many files under
 `docs/` are historical plans, migration notes, or implementation summaries; keep them for
-context, but treat current code and the maintained docs as source of truth.
+context, but treat current code and the maintained docs as source of truth. [PRODUCT.md](PRODUCT.md)
+captures the product design context behind the web console.
 
 ## Contributing
 

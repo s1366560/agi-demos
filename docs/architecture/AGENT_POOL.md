@@ -1,5 +1,11 @@
 # Agent Pool Architecture
 
+> **Design proposal document.** The authoritative, code-current reference for
+> the pool subsystems is
+> [`docs/features/NEW_FEATURES.md`](../features/NEW_FEATURES.md). Some values
+> below (tier quotas, state names) are illustrative; verify against source
+> before relying on them. Last checked against code: 2026-06-22.
+
 ## Overview
 
 The Agent Pool Architecture provides enterprise-grade management for ReAct agents with:
@@ -54,13 +60,15 @@ The Agent Pool Architecture provides enterprise-grade management for ReAct agent
 - Always-on, pre-initialized
 - gRPC communication with main service
 
-**Resource Allocation**:
+**Resource Allocation** (matches `HOT_TIER_CONFIG` in `pool/config.py`):
 ```python
 ResourceQuota(
-    max_memory_mb=2048,      # 2GB dedicated memory
-    max_cpu_percent=100.0,   # Full CPU core
+    memory_limit_mb=2048,        # 2GB dedicated memory
+    memory_request_mb=1024,      # 1GB guaranteed
+    cpu_limit_cores=2.0,         # 2 CPU cores
+    cpu_request_cores=1.0,       # 1 core guaranteed
+    max_instances=4,
     max_concurrent_requests=50,
-    max_requests_per_minute=1000,
 )
 ```
 
@@ -75,13 +83,15 @@ ResourceQuota(
 - Cost-effective resource usage
 - Default tier for most projects
 
-**Resource Allocation**:
+**Resource Allocation** (matches `WARM_TIER_CONFIG` in `pool/config.py`):
 ```python
 ResourceQuota(
-    max_memory_mb=512,       # 512MB shared
-    max_cpu_percent=50.0,    # Half CPU core
+    memory_limit_mb=512,         # 512MB shared
+    memory_request_mb=256,       # 256MB guaranteed
+    cpu_limit_cores=0.5,         # Half CPU core
+    cpu_request_cores=0.25,      # Quarter core guaranteed
+    max_instances=2,
     max_concurrent_requests=10,
-    max_requests_per_minute=100,
 )
 ```
 
@@ -96,13 +106,15 @@ ResourceQuota(
 - Higher latency for first request (< 500ms)
 - Suitable for infrequent access patterns
 
-**Resource Allocation**:
+**Resource Allocation** (matches `COLD_TIER_CONFIG` in `pool/config.py`):
 ```python
 ResourceQuota(
-    max_memory_mb=256,       # 256MB on-demand
-    max_cpu_percent=25.0,    # Quarter CPU core
-    max_concurrent_requests=5,
-    max_requests_per_minute=30,
+    memory_limit_mb=256,         # 256MB on-demand
+    memory_request_mb=128,       # 128MB guaranteed
+    cpu_limit_cores=0.25,        # Quarter CPU core
+    cpu_request_cores=0.1,       # 0.1 core guaranteed
+    max_instances=1,
+    max_concurrent_requests=3,
 )
 ```
 
@@ -110,45 +122,64 @@ ResourceQuota(
 
 ### State Machine
 
+The lifecycle states and transitions are defined in `pool/lifecycle/state_machine.py`
+(`VALID_TRANSITIONS`) and `pool/types.py` (`AgentInstanceStatus`).
+
 ```
-                                    ┌──────────────────┐
-                                    │     CREATED      │
-                                    └────────┬─────────┘
-                                             │ initialize()
-                                             ▼
-                                    ┌──────────────────┐
-                                    │   INITIALIZING   │
-                                    └────────┬─────────┘
-                                             │ ready()
-                                             ▼
-                          ┌─────────►┌──────────────────┐◄─────────┐
-                          │          │      READY       │          │
-                          │          └────────┬─────────┘          │
-                          │                   │                    │
-                 release()│        acquire()  │         pause()    │ resume()
-                          │                   ▼                    │
-                          │          ┌──────────────────┐          │
-                          └──────────│      BUSY        │──────────┘
-                                     └────────┬─────────┘
-                                              │
-                              ┌───────────────┼───────────────┐
-                              │               │               │
-                              ▼               ▼               ▼
-                     ┌──────────────┐  ┌──────────┐  ┌──────────────┐
-                     │   PAUSED     │  │  ERROR   │  │  TERMINATED  │
-                     └──────────────┘  └──────────┘  └──────────────┘
+                          ┌──────────────────┐
+                          │     CREATED      │
+                          └────────┬─────────┘
+                                   │ initialize
+                                   ▼
+              ┌─────────►┌──────────────────┐◄───── retry ─────┐
+              │          │   INITIALIZING   │                   │
+              │          └────────┬─────────┘                   │
+              │                   │ initialization_complete     │
+              │                   ▼                             │
+        health_check_failed ┌──────────────────┐ health_check_failed
+              │             │      READY       │              │
+              │             └──┬────────┬──────┘              │
+              │       execute  │        │ pause               │
+              │                ▼        ▼                     │
+              │          ┌──────────┐  ┌──────────┐           │
+              │  complete│EXECUTING │  │  PAUSED  │           │
+              │          └──┬───────┘  └────┬─────┘           │
+              │             │ pause         │ resume            │
+              │             ▼               │                   │
+              │       ┌──────────┐          │                   │
+              │       │  PAUSED  │◄─────────┘                   │
+              │       └────┬─────┘                              │
+              │            │                                    │
+              ▼            ▼                                    ▼
+        ┌──────────────────┐ degrade            ┌──────────────────┐
+        │    UNHEALTHY     │───────────────────►│    DEGRADED      │
+        └────────┬─────────┘ recover            └────────┬─────────┘
+                 │                                       │ recover
+                 └──────────────► READY ◄────────────────┘
+
+  Any operational state ─────► TERMINATING ─────► TERMINATED
+  INITIALIZING ─────────────► INITIALIZATION_FAILED (then retry or terminate)
+
+  force_terminate: CREATED / INITIALIZING / EXECUTING ──► TERMINATED
 ```
+
+The diagram above shows the common paths; see `VALID_TRANSITIONS` for the
+exhaustive list (including `force_terminate` from CREATED / INITIALIZING /
+EXECUTING directly to TERMINATED).
 
 ### State Descriptions
 
 | State | Description | Transitions |
 |-------|-------------|-------------|
 | `CREATED` | Instance created, not yet initialized | → INITIALIZING |
-| `INITIALIZING` | Loading tools, LLM connections | → READY, ERROR |
-| `READY` | Available for requests | → BUSY, PAUSED, TERMINATED |
-| `BUSY` | Processing a request | → READY, ERROR |
-| `PAUSED` | Temporarily suspended | → READY, TERMINATED |
-| `ERROR` | Recoverable error state | → INITIALIZING, TERMINATED |
+| `INITIALIZING` | Loading tools, LLM connections | → READY, INITIALIZATION_FAILED |
+| `INITIALIZATION_FAILED` | Initialization failed | → INITIALIZING (retry), TERMINATING |
+| `READY` | Available for requests | → EXECUTING, PAUSED, UNHEALTHY, TERMINATING |
+| `EXECUTING` | Processing a request | → READY, PAUSED, UNHEALTHY, TERMINATING |
+| `PAUSED` | Temporarily suspended | → READY, UNHEALTHY, TERMINATING |
+| `UNHEALTHY` | Health check failed | → READY, DEGRADED, TERMINATING |
+| `DEGRADED` | Degraded operation (partial capability) | → READY, UNHEALTHY, TERMINATING |
+| `TERMINATING` | Shutting down | → TERMINATED |
 | `TERMINATED` | Instance destroyed | (final state) |
 
 ## High Availability Features
@@ -362,10 +393,12 @@ config = PoolConfig(
 )
 
 quota = ResourceQuota(
-    max_memory_mb=512,
-    max_cpu_percent=50.0,
+    memory_limit_mb=512,
+    memory_request_mb=256,
+    cpu_limit_cores=0.5,
+    cpu_request_cores=0.25,
+    max_instances=2,
     max_concurrent_requests=10,
-    max_requests_per_minute=100,
 )
 ```
 
@@ -548,7 +581,7 @@ When creating configuration objects, ensure required fields are provided:
 | Class | Required Fields | Notes |
 |-------|-----------------|-------|
 | `TierConfig` | `tier` | Must be a `ProjectTier` enum value |
-| `InstanceConfig` | `tenant_id`, `project_id` | Identifies the instance |
+| `AgentInstanceConfig` | `project_id`, `tenant_id` | Identifies the instance |
 | `ResourceQuota` | (none) | All fields have defaults |
 | `PoolConfig` | (none) | All fields have defaults |
 

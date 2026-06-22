@@ -2,10 +2,13 @@
 
 > ReActAgent 待办事项管理工具
 > 实现位置: `src/infrastructure/agent/tools/todo_tools.py`
+> Last checked against code: 2026-06-22
 
 ## 概述
 
 Todo 工具为 ReActAgent 提供会话级别的待办事项管理功能，允许 Agent 在对话过程中跟踪任务进度。
+
+> 说明：名称沿用历史 "todo" 语义，但底层实现已由 `AgentTask`（持久化任务实体）承担，工具返回的字段也来自 `AgentTask.to_dict()`。在 workspace authority 场景下，读写会代理到 `WorkspaceTask`（见下文「Workspace Authority 模式」）。
 
 ## 工具列表
 
@@ -95,48 +98,73 @@ Todo 工具为 ReActAgent 提供会话级别的待办事项管理功能，允许
 
 ## 数据模型
 
-### TodoItem
+### AgentTask
+
+实现位置：`src/domain/model/agent/task.py`
 
 ```python
+class TaskStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+class TaskPriority(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
 @dataclass
-class TodoItem:
-    id: str                  # 唯一标识符
-    content: str             # 任务描述
-    status: str = "pending"  # 状态
-    priority: str = "medium" # 优先级
-    created_at: str          # 创建时间（ISO 8601）
-    updated_at: str          # 更新时间（ISO 8601）
+class AgentTask:
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    conversation_id: str
+    content: str
+    status: TaskStatus = TaskStatus.PENDING
+    priority: TaskPriority = TaskPriority.MEDIUM
+    order_index: int = 0
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 ```
 
-**有效状态值**：
+**有效状态值**（`TaskStatus`）：
 - `pending` - 待处理
 - `in_progress` - 进行中
 - `completed` - 已完成
+- `failed` - 失败（注意：旧文档遗漏了该值）
 - `cancelled` - 已取消
 
-**有效优先级值**：
+**有效优先级值**（`TaskPriority`）：
 - `high` - 高优先级
 - `medium` - 中等优先级
 - `low` - 低优先级
+
+> 工具输出会经过 `AgentTask.to_dict()`，实际 JSON 字段以该方法返回为准；workspace 模式下则使用 `_workspace_task_to_todo(...)` 做映射，会额外携带 `workspace_task_id`、`workspace_agent_id`、worker 报告相关字段等。
 
 ---
 
 ## 存储机制
 
-### TodoStorage
+### 持久化（DB-backed）
 
-当前使用内存存储，按会话 ID 隔离：
+当前为 DB 持久化实现，按 `conversation_id` 隔离，通过 `SqlAgentTaskRepository` 读写 `AgentTask` 记录，服务重启后数据保留。
 
-```python
-storage.get(session_id)        # 获取会话的所有待办
-storage.set(session_id, todos)  # 设置会话的待办（替换）
-storage.add(session_id, todo)   # 添加单个待办
-storage.update(session_id, todo_id, updates)  # 更新待办
-storage.delete(session_id, todo_id)  # 删除待办
-storage.clear(session_id)       # 清空会话待办
-```
+- 读取 (`todoread`)：调用 `repo.find_by_conversation(conversation_id, status=...)`，按 `priority`（high > medium > low）再按 `order_index` 排序后返回。
+- 写入 (`todowrite`)：
+  - `replace` → `repo.save_all(conversation_id, task_items)`（覆盖整列）
+  - `add` → 追加，`order_index` 接在现有列表末尾
+  - `update` → `repo.update(todo_id, **updates)`，按 `todo_id` 精确定位
+- 每次写入都会 `await session.commit()` 并通过 `ctx.emit(...)` 发送 `task_list_updated` / `task_updated` 事件到前端。
 
-**注意**：当前存储为内存实现，服务重启后数据会丢失。生产环境建议使用 Redis 或数据库持久化。
+> 工具在启动时通过 `configure_todoread` / `configure_todowrite` 注入 DB 会话工厂 `_todoread_session_factory` / `_todowrite_session_factory`。
+
+### Workspace Authority 模式
+
+当运行时上下文满足 `task_authority == "workspace"` 且携带 `(workspace_id, root_goal_task_id)` 时，工具切换为 workspace 模式：
+
+- 读写代理到 `WorkspaceTask`（由 `WorkspaceTaskCommandService` + `WorkspaceTaskService` 驱动），而非 `AgentTask`。
+- `replace` / `add` 会创建派发给 worker agent 的 execution task（见 `_dispatch_created_workspace_tasks`），并受 leader/worker 角色权限约束（worker 不能 `replace` / `add`）。
+- 字段经过映射：`WorkspaceTaskStatus` ↔ todo status，`WorkspaceTaskPriority` (P1..P4) ↔ priority (high/medium/low)。
 
 ---
 
@@ -216,32 +244,32 @@ result = await todoread.execute(
 
 ## 测试覆盖
 
+当前单元测试位于 `src/tests/unit/infrastructure/agent/tools/test_todo_tools.py`：
+
 | 测试类 | 测试数量 | 覆盖内容 |
 |--------|----------|----------|
-| `TestTodoItem` | 8 | 数据模型创建、验证、序列化 |
-| `TestTodoStorage` | 9 | 存储CRUD、会话隔离 |
-| `TestTodoReadTool` | 10 | 读取、过滤、排序 |
-| `TestTodoWriteTool` | 13 | replace/add/update 操作 |
-| `TestTodoIntegration` | 1 | 完整工作流 |
-| **总计** | **36** | **100% 通过** |
+| `TestTodoReadTool` | 6 | 读取、过滤、排序 |
+| `TestTodoWriteTool` | 25 | replace / add / update / workspace authority / dispatch 等场景 |
+| **总计** | **31** | （以实际测试为准） |
+
+> 旧版文档列出的 `TestTodoItem` / `TestTodoStorage` / `TestTodoIntegration` 测试类已不存在——任务模型与存储已迁移至 `AgentTask` + `SqlAgentTaskRepository`，对应测试随实现路径调整。维护时请以 `test_todo_tools.py` 实际测试为参考，不要沿用历史数字。
 
 ---
 
-## 与 OpenCode 规范的对应
+## 历史：与 OpenCode 规范的对应
 
 | OpenCode | 本项目 | 状态 |
 |----------|--------|------|
-| `todoread` | `TodoReadTool` | ✅ |
-| `todowrite` | `TodoWriteTool` | ✅ |
+| `todoread` | `todoread_tool` (`@tool_define`) | 历史命名来源 |
+| `todowrite` | `todowrite_tool` (`@tool_define`) | 历史命名来源 |
 
-规范来源：`vendor/opencode/packages/opencode/src/session/todo.ts`
+> 旧文档引用 `vendor/opencode/packages/opencode/src/session/todo.ts` 作为「规范来源」，但当前仓库并无 `vendor/` 目录，该路径不可访问；OpenCode 对应关系仅作命名沿革说明。
 
 ---
 
 ## 未来改进
 
-1. **持久化存储**：使用 Redis 或数据库替代内存存储
-2. **过期清理**：自动清理长时间未活动的会话待办
-3. **父子关系**：支持待办的父子层级结构
-4. **标签系统**：为待办添加标签分类
-5. **提醒功能**：基于时间的待办提醒
+1. **过期清理**：自动清理长时间未活动的会话待办
+2. **父子关系**：支持待办的父子层级结构（workspace authority 已部分实现 root goal → execution task 的树形结构）
+3. **标签系统**：为待办添加标签分类
+4. **提醒功能**：基于时间的待办提醒

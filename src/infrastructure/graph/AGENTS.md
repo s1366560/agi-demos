@@ -1,11 +1,13 @@
 # graph/ -- Neo4j Knowledge Graph Layer
 
+Last checked against code: 2026-06-22
+
 ## Purpose
 Native knowledge graph implementation: entity/relationship extraction, hybrid search, community detection, deduplication. No Graphiti dependency.
 
 ## Key Files
-- `native_graph_adapter.py` (1193 lines) -- `NativeGraphAdapter` implements `GraphServicePort`
-- `search/hybrid_search.py` (835 lines) -- vector + keyword search with RRF fusion
+- `native_graph_adapter.py` (~1404 lines) -- `NativeGraphAdapter` implements `GraphServicePort`
+- `search/hybrid_search.py` (~855 lines) -- vector + keyword search with RRF fusion
 - `extraction/entity_extractor.py` -- LLM-based entity extraction from text
 - `extraction/relationship_extractor.py` -- LLM-based relationship extraction
 - `extraction/reflexion.py` -- self-correction loop for extraction quality
@@ -50,13 +52,16 @@ Text -> EntityExtractor (LLM) -> RelationshipExtractor (LLM)
 
 ## NativeGraphAdapter Key Methods
 - `add_episode()` -- full pipeline: extract entities/relationships, deduplicate, store
+- `process_episode()` -- entity/relationship processing entry point with schema context
+- `extract_entities()` / `extract_relationships()` -- direct LLM extraction access
 - `search()` -- hybrid search with configurable weights
-- `get_entity()` / `get_entities()` -- direct entity lookup
-- `delete_episode()` -- cascade delete episode + orphaned entities
-- `get_community_summary()` -- aggregated community context
+- `search_memories()` -- memory-oriented hybrid search
+- `get_graph_data()` -- graph snapshot for a project (nodes + relationships)
+- `delete_episode()` / `delete_episode_by_memory_id()` -- cascade delete episode + orphaned entities
+- `remove_episode()` / `remove_episode_by_memory_id()` -- alternate removal entry points
 
 ## Gotchas
-- `native_graph_adapter.py` is 1193 lines -- largest file in graph/
+- `native_graph_adapter.py` is ~1404 lines -- largest file in graph/
 - Neo4j 5.26+ required (vector index features)
 - Entity extraction is LLM-dependent -- quality varies by provider/model
 - RRF fusion assumes both vector and keyword indexes exist -- search fails if either missing

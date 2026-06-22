@@ -4,7 +4,7 @@ This document describes the current agent tool architecture and the maintained t
 families. It replaces older lists that referenced removed `plan_enter`, `plan_update`, and
 `plan_exit` tool files.
 
-Last checked against code: 2026-05-18.
+Last checked against code: 2026-06-22.
 
 ## Source Of Truth
 
@@ -52,10 +52,11 @@ plugin tools, MCP server tools, and sandbox tools without editing the static bui
 | SubAgent sessions | `sessions_spawn`, `sessions_list`, `sessions_history`, `sessions_timeline`, `sessions_send`, `sessions_wait`, `sessions_ack`, `sessions_overview`, `subagents` | SubAgent session lifecycle, follow-up, waiting, acknowledgement, and control. |
 | Peer session communication | `peer_sessions_list`, `peer_sessions_history`, `peer_sessions_send` | Conversation-level coordination with other peer agent sessions in the same project. |
 | Workspace | `workspace_assign_task`, `workspace_cancel_task`, `workspace_report_progress`, `workspace_report_complete`, `workspace_report_blocked`, `workspace_chat_send`, `workspace_chat_read`, `workspace_request_clarification`, `workspace_respond_clarification`, `workspace_health_verdict` | Workspace plan/task collaboration and WTP reporting. |
+| Workspace planning contract | `workspace_submit_planning_contract`, `workspace_submit_verification_judgment`, `workspace_submit_iteration_review`, `workspace_submit_supervisor_decision`, `workspace_submit_worktree_preparation` | Terminal contract submissions invoked once per run by the builtin workspace planner, verifier, iteration reviewer, supervisor, and worktree manager. |
 | Multi-agent action | `assign_task`, `refuse_task`, `request_human_input`, `escalate`, `mark_conflict`, `declare_progress`, `signal_goal_complete` | Structured inter-agent action events. |
 | Skills | `skill`, `skill_loader`, `skill_installer`, `skill_sync` | Load, install, sync, or invoke skills. |
 | Plugins/MCP | `plugin_manager`, `register_mcp_server`, `debug_mcp_server`, `create_mcp_server_from_template` | Runtime plugin and MCP server management. |
-| Runtime/model | `list_available_models`, `switch_model_next_turn`, `session_status`, `structured_output`, `reflect_friction`, `verdict`, `handoff`, `cron` | Runtime introspection, structured outputs, review/verdicts, and scheduled actions. |
+| Runtime/model | `list_available_models`, `switch_model_next_turn`, `session_status`, `structured_output`, `reflect_friction`, `verdict`, `handoff`, `cron`, `custom_tools_status` | Runtime introspection, structured outputs, review/verdicts, scheduled actions, and custom-tool loading diagnostics. |
 | Environment UI | `terminal`, `desktop` | Web terminal and remote desktop service management. |
 
 ## Plan Mode Status

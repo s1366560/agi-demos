@@ -2,6 +2,8 @@
 
 Extracted reusable UI components for MemStack.
 
+> Last checked: 2026-06-22
+
 ## StatusBadge
 
 Status indicator with consistent styling across the application.

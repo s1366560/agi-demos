@@ -1,8 +1,17 @@
 # Skill System Optimization Plan: Forced Skill Compliance
 
 **Date**: 2025-02-25
-**Status**: Proposed
+**Status**: Implemented (Fix 1-4, 6 done; Fix 5 removed as pseudo-requirement)
+**Last checked against code**: 2026-06-22
 **Scope**: ReactAgent forced skill execution pipeline
+
+> 落地情况速览（对照代码，截至 2026-06-22）：
+> - **Fix 1 — Done**：工具白名单逻辑已落地，但位置迁移——`react_agent.py` 中与 forced skill 相关的逻辑（含 `_stream_prepare_tools` / `is_forced`）已整体迁入 `src/infrastructure/agent/core/react_agent_stream_mixin.py`（`_stream_prepare_tools` 现位于该文件约 687 行）。下文各节原标注的 `react_agent.py` 行号已失效。
+> - **Fix 2 — Done**：`litellm_client.py` 的 `_trim_messages_to_input_limit()`（现约 569 行起）+ 新增 `_trim_system_prompt_preserve_skill()`（约 652 行）已实现；下文原「lines 300-354 / 322-324」行号已失效。
+> - **Fix 3 — Done**：`manager.py` 的 `_build_capability_sections()`（现约 278 行）已按 forced skill 做工具描述裁剪、跳过 subagents，并在 `build_system_prompt` 末尾追加 `<skill-reminder>`；下文原「line 194」行号已失效。
+> - **Fix 4 — Done**：`processor.py` 的 `ProcessorConfig`（约 140 行）已加 `forced_skill_name` / `forced_skill_tools`；`SessionProcessor`（约 314 行）在 `_process_step`（约 2272 行）中于 step 2+ 注入 skill reminder。下文原「ProcessorConfig line 224 / SessionProcessor line 298 / process() 497-581 / _process_step() 1165-1446」行号已失效。
+> - **Fix 5 — Removed**（伪需求，未实现，符合预期）。
+> - **Fix 6 — Done**：`compression_engine.py` 在压缩后校验并在缺失时回填 `<mandatory-skill>` 块。
 
 ## Problem Statement
 
@@ -13,6 +22,9 @@ When a user activates a skill via slash command (e.g., `/code-review`) from the 
 Six root causes were identified, ordered by impact:
 
 ### Root Cause #1: No Tool Restriction (HIGH)
+
+> 落地后此段代码已迁移：`is_forced` / `_stream_prepare_tools` 现位于
+> `src/infrastructure/agent/core/react_agent_stream_mixin.py`（约 687 行起），下文行号对应迁移前的 `react_agent.py`。
 
 **Location**: `src/infrastructure/agent/core/react_agent.py`, lines 1782-1784
 
@@ -118,13 +130,20 @@ When the ReAct loop runs multiple steps (Think -> Act -> Observe -> Think -> Act
 
 ### Fix 1: Tool Filtering for Forced Skills (HIGH PRIORITY)
 
-**File**: `src/infrastructure/agent/core/react_agent.py`
-**Method**: `_stream_prepare_tools()` (line 1705)
+> **落地状态：Done。** 实际位置已迁移：逻辑从 `react_agent.py` 移至
+> `src/infrastructure/agent/core/react_agent_stream_mixin.py` 的 `_stream_prepare_tools()`（约 687 行起，
+> 强制技能过滤段在约 766-788 行）。实现与下方提案基本一致，差异：essential tools 实际只保留
+> `{todowrite, todoread}`（未包含 `abort`）；空声明工具时的 fallback 仍是「移除 skill_loader，保留其余」。
+
+**File**: `src/infrastructure/agent/core/react_agent.py`（已迁移至 `react_agent_stream_mixin.py`）
+**Method**: `_stream_prepare_tools()` (原 line 1705，现位于 `react_agent_stream_mixin.py` 约 687 行)
 **Effort**: Small (15-25 lines)
 
 **Change**: When a forced skill is active, restrict available tools to ONLY the skill's declared tools plus essential system tools (`abort`, `todowrite`, `todoread`).
 
-**Proposed Code** (replace lines 1782-1786):
+> 注：实际落地保留的 essential tools 为 `{todowrite, todoread}`，不含 `abort`。
+
+**Proposed Code** (原 lines 1782-1786，位于 `react_agent_stream_mixin.py` 约 766-788 行):
 
 ```python
 # When a forced skill is active, restrict tools to skill's declared set
@@ -162,13 +181,17 @@ if is_forced and matched_skill:
 
 ### Fix 2: System Prompt Protection (HIGH PRIORITY)
 
+> **落地状态：Done。** `_trim_messages_to_input_limit()`（现约 569 行起）已加入
+> `<mandatory-skill>` 保护分支（约 605-625 行），并新增 `_trim_system_prompt_preserve_skill()`
+> 静态方法（约 652 行）。实现与下方提案一致。
+
 **File**: `src/infrastructure/llm/litellm/litellm_client.py`
-**Method**: `_trim_messages_to_input_limit()` (line 300)
+**Method**: `_trim_messages_to_input_limit()` (原 line 300，现约 569 行)
 **Effort**: Small (10-15 lines)
 
 **Change**: Never delete the system message when it contains `<mandatory-skill>`. Instead, truncate non-skill sections of the system prompt first.
 
-**Proposed Code** (replace lines 322-325):
+**Proposed Code** (原 lines 322-325，现位于约 605-625 行):
 
 ```python
 # Last resort: try to trim system prompt content before deleting it
@@ -260,8 +283,12 @@ def _trim_system_prompt_preserve_skill(content: str) -> str:
 
 ### Fix 3: Prompt Noise Reduction for Forced Skills (MEDIUM PRIORITY)
 
+> **落地状态：Done。** `_build_capability_sections()`（现约 278 行）已按 forced skill 裁剪工具描述、
+> 跳过 skills/subagents 段；`build_system_prompt`（约 179 行判定 `is_forced_skill`，约 214 行）
+> 末尾追加 `<skill-reminder priority="highest">`。实现与下方提案一致。
+
 **File**: `src/infrastructure/agent/prompts/manager.py`
-**Method**: `_build_capability_sections()` (line 194)
+**Method**: `_build_capability_sections()` (原 line 194，现约 278 行)
 **Effort**: Small (10-15 lines)
 
 **Change**: When a forced skill is active, reduce prompt noise by:
@@ -339,13 +366,18 @@ if is_forced_skill and context.matched_skill:
 
 ### Fix 4: ReAct Loop Skill Reinforcement (MEDIUM PRIORITY)
 
+> **落地状态：Done。** `ProcessorConfig`（现约 140 行）已新增 `forced_skill_name` / `forced_skill_tools`
+> 字段（约 186-187 行）；`SessionProcessor`（现约 314 行）在 `__init__` 中读取（约 464-466 行），
+> 并在 `_process_step`（现约 2272 行，reminder 注入约 2303-2315 行）于 step 2+ 注入 skill reminder。
+> 注意 `process()` / `_process_step()` 的行号与下方原稿（497-581 / 1165-1446）已大幅变动。
+
 **File**: `src/infrastructure/agent/processor/processor.py`
-**Classes**: `ProcessorConfig` (line 224) and `SessionProcessor` (line 298)
+**Classes**: `ProcessorConfig` (原 line 224，现约 140 行) and `SessionProcessor` (原 line 298，现约 314 行)
 **Effort**: Medium (30-50 lines across two locations)
 
 **Change**: Add skill awareness to the SessionProcessor so it can inject reminders between ReAct steps.
 
-**Step 4a: Extend ProcessorConfig** (after line 258):
+**Step 4a: Extend ProcessorConfig** (原 after line 258，现约 186-187 行):
 
 ```python
 @dataclass
@@ -357,7 +389,7 @@ class ProcessorConfig:
     forced_skill_tools: list[str] | None = None
 ```
 
-**Step 4b: Store skill context in SessionProcessor.__init__** (after line 362):
+**Step 4b: Store skill context in SessionProcessor.__init__** (原 after line 362，现约 464-466 行):
 
 ```python
 # Forced skill context for loop reinforcement
@@ -365,7 +397,7 @@ self._forced_skill_name = config.forced_skill_name
 self._forced_skill_tools = set(config.forced_skill_tools) if config.forced_skill_tools else None
 ```
 
-**Step 4c: Inject skill reminder in _process_step** (before LLM call, around line 1192):
+**Step 4c: Inject skill reminder in _process_step** (原 around line 1192，现位于 `_process_step` 约 2272 行内的 2303-2315 行):
 
 ```python
 # Inject skill reminder for multi-step forced skill execution
@@ -386,7 +418,7 @@ if self._forced_skill_name and self._step_count > 1:
     messages.append(skill_reminder)
 ```
 
-**Step 4d: Pass skill context when creating processor** in `react_agent.py` (wherever `ProcessorConfig` is constructed for forced skills):
+**Step 4d: Pass skill context when creating processor** in `react_agent_stream_mixin.py`（原稿写 `react_agent.py`；实际 `ProcessorConfig.forced_skill_tools` 的赋值现位于 `react_agent_stream_mixin.py` 约 1885 行，`_stream_resolve_forced_skill` 内约 514 行设置 `is_forced`）:
 
 ```python
 processor_config = ProcessorConfig(
@@ -412,6 +444,10 @@ processor_config = ProcessorConfig(
 ---
 
 ### Fix 6: Compression Protection (LOW PRIORITY)
+
+> **落地状态：Done。** `compression_engine.py` 在压缩产物构建完成后（约 347-367 行）校验
+> `<mandatory-skill>` 是否存活，若丢失则从原始 system prompt 重新提取并回填。实现与下方提案
+> 思路一致（校验+回填，而非预先标记不可压缩段）。
 
 **File**: `src/infrastructure/agent/context/compression_engine.py`
 **Effort**: Small (5-10 lines)
@@ -512,8 +548,8 @@ No existing behavior for non-forced skills is modified by any of these fixes.
 
 | File | Changes |
 |------|---------|
-| `src/infrastructure/agent/core/react_agent.py` | Tool filtering in `_stream_prepare_tools()`, pass skill context to ProcessorConfig |
-| `src/infrastructure/llm/litellm/litellm_client.py` | Protect system prompt in `_trim_messages_to_input_limit()`, add `_trim_system_prompt_preserve_skill()` |
-| `src/infrastructure/agent/prompts/manager.py` | Filter tool descriptions, skip subagents, add trailing skill reminder in `_build_capability_sections()` |
-| `src/infrastructure/agent/processor/processor.py` | Add `forced_skill_name`/`forced_skill_tools` to ProcessorConfig, inject skill reminders in `_process_step()` |
-| `src/infrastructure/agent/context/compression_engine.py` | Preserve `<mandatory-skill>` blocks during compression |
+| `src/infrastructure/agent/core/react_agent_stream_mixin.py`（原稿列 `react_agent.py`，逻辑已迁入此文件）| Tool filtering in `_stream_prepare_tools()`（约 687 行），forced skill 解析（`_stream_resolve_forced_skill` 约 514 行），向 ProcessorConfig 传递 `forced_skill_tools`（约 1885 行） |
+| `src/infrastructure/llm/litellm/litellm_client.py` | Protect system prompt in `_trim_messages_to_input_limit()`（约 569 行）, add `_trim_system_prompt_preserve_skill()`（约 652 行） |
+| `src/infrastructure/agent/prompts/manager.py` | Filter tool descriptions, skip subagents, add trailing skill reminder in `_build_capability_sections()`（约 278 行） |
+| `src/infrastructure/agent/processor/processor.py` | Add `forced_skill_name`/`forced_skill_tools` to ProcessorConfig（约 186-187 行）, inject skill reminders in `_process_step()`（约 2303-2315 行） |
+| `src/infrastructure/agent/context/compression_engine.py` | Preserve `<mandatory-skill>` blocks during compression（约 347-367 行） |

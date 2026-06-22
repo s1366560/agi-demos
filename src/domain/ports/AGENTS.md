@@ -2,14 +2,16 @@
 
 All interfaces that infrastructure must implement. The domain never imports infrastructure.
 
+Last checked against code: 2026-06-22
+
 ## Structure
 
 | Directory | Count | Purpose |
 |-----------|-------|---------|
-| `repositories/` | 25 files | One interface per aggregate root for persistence |
-| `services/` | 20 files | Cross-cutting domain service interfaces |
-| `agent/` | Agent-specific port interfaces |
-| `mcp/` | MCP-specific port interfaces |
+| `repositories/` | ~49 .py files | One interface per aggregate root for persistence |
+| `services/` | ~34 .py files | Cross-cutting domain service interfaces |
+| `agent/` | ~19 .py files | Agent-specific port interfaces |
+| `mcp/` | 6 .py files | MCP-specific port interfaces |
 | `tool_port.py` | Tool execution port interface |
 
 ## Repository Interfaces (repositories/)

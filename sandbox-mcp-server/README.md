@@ -8,7 +8,7 @@ A WebSocket-based MCP (Model Context Protocol) server for sandbox file system op
 - **File Operations**: read, write, edit, glob, grep
 - **Bash Execution**: Secure command execution
 - **Web Terminal**: Browser-based terminal access via ttyd
-- **Remote Desktop**: XFCE desktop environment with TigerVNC + noVNC
+- **Remote Desktop**: KDE Plasma 6 desktop environment with KasmVNC (built-in web client)
 - **Docker Ready**: Isolated sandbox environment
 - **Multi-Language**: Python 3.12, Node.js 22, Java 21 pre-installed
 
@@ -45,7 +45,7 @@ After starting the container:
 
 - **MCP Server**: `ws://localhost:8765` (WebSocket)
 - **Web Terminal**: `http://localhost:7681` (ttyd)
-- **Remote Desktop**: `http://localhost:6080/vnc.html` (noVNC)
+- **Remote Desktop**: `http://localhost:6080` (KasmVNC web client)
 
 ## Available Tools
 
@@ -118,7 +118,7 @@ After starting the container:
 
 | Tool | Description |
 |------|-------------|
-| `start_desktop` | Start XFCE remote desktop (TigerVNC + noVNC) |
+| `start_desktop` | Start KDE Plasma remote desktop (KasmVNC) |
 | `stop_desktop` | Stop remote desktop |
 | `get_desktop_status` | Get desktop status and connection URL |
 | `restart_desktop` | Restart desktop with new config |
@@ -143,9 +143,8 @@ Environment variables:
 | `MCP_WORKSPACE` | `/workspace` | Workspace directory |
 | `TERMINAL_PORT` | `7681` | Web terminal port |
 | `DESKTOP_ENABLED` | `true` | Enable desktop environment |
-| `DESKTOP_RESOLUTION` | `1280x720` | Desktop resolution |
-| `DESKTOP_PORT` | `6080` | noVNC port |
-| `VNC_SERVER_TYPE` | `tigervnc` | VNC server type: `tigervnc` (default) or `x11vnc` |
+| `DESKTOP_RESOLUTION` | `1920x1080` | Desktop resolution |
+| `DESKTOP_PORT` | `6080` | KasmVNC web client port |
 
 ## Remote Desktop
 
@@ -161,7 +160,7 @@ Environment variables:
     "name": "start_desktop",
     "arguments": {
       "display": ":1",
-      "resolution": "1280x720",
+      "resolution": "1920x1080",
       "port": 6080
     }
   }
@@ -174,51 +173,39 @@ Environment variables:
 docker run -p 6080:6080 sandbox-mcp-server
 
 # Open browser
-open http://localhost:6080/vnc.html
+open http://localhost:6080
 ```
 
 ### Desktop Features
 
-- **XFCE Desktop Environment**: Lightweight, modular desktop
-- **TigerVNC** (default): High-performance VNC server with Tight encoding (50% bandwidth reduction)
-- **x11vnc** (fallback): Reliable VNC server for X11 displays
-- **Automatic Fallback**: Seamless fallback to x11vnc if TigerVNC unavailable
-- **noVNC**: Web-based VNC client (no software required)
-- **Session Persistence**: Desktop state survives restarts
-- **Multiple Resolutions**: 1280x720, 1920x1080, 1600x900 supported
+- **KDE Plasma 6 Desktop Environment**: Modern, feature-rich desktop (Dolphin, Konsole, Kate, etc.)
+- **KasmVNC** (all-in-one): A single process provides X server + VNC server + WebSocket server + built-in web client
+- **Built-in Web Client**: No browser plugin or separate noVNC/websockify stack required
+- **WebP/QOI/JPEG Encoding**: Modern encodings for efficient remote display
+- **Dynamic Resize**: Live resolution changes via xrandr (no restart needed)
+- **Bi-directional Clipboard**: Text and image clipboard sync
+- **File Transfer**: Drag-and-drop upload/download through the web client
+- **Audio Streaming**: PulseAudio-based audio to the browser
+- **Multiple Resolutions**: 1920x1080 (default), 1600x900, 1280x720, and more supported
 
-### VNC Server Selection
+### VNC Server
 
-The sandbox supports two VNC server types with automatic fallback:
+The sandbox uses **KasmVNC** exclusively. The previous TigerVNC + noVNC + websockify
+stack (and the `VNC_SERVER_TYPE` toggle between TigerVNC and x11vnc) has been removed.
 
-**TigerVNC** (Default):
-- 50% bandwidth reduction with Tight encoding
-- Built-in X server (no Xvfb needed)
-- Better performance for remote access
-- Session persistence
+Relevant runtime details:
 
-**x11vnc** (Fallback):
-- Works with Xvfb
-- Proven stability
-- Lower memory usage
-- Use with `-e VNC_SERVER_TYPE=x11vnc`
+- Server command: `vncserver :1 -geometry 1920x1080 -depth 24 -websocketPort 6080 -interface 0.0.0.0 -disableBasicAuth -SecurityTypes None`
+- Display: `:1`
+- Process name: `Xkasmvnc`
+- Auth file: `/root/.kasmpasswd` (read from `$HOME`, not `~/.vnc/kasmpasswd`)
+- Auth mode: disabled (`-SecurityTypes None -disableBasicAuth`); authentication is delegated to the API proxy in front of the container
+- Web port: `6080` (no 5901 VNC port is exposed; the built-in web client is served on the same port)
 
-**Example: Force x11vnc**
+**Example: Run with desktop**
 ```bash
-docker run -e VNC_SERVER_TYPE=x11vnc \
-  -p 6080:6080 -p 5901:5901 \
-  sandbox-mcp-server
+docker run -p 6080:6080 sandbox-mcp-server
 ```
-
-### Performance
-
-| Metric | TigerVNC | x11vnc | Target |
-|--------|----------|--------|--------|
-| Bandwidth | ~1.5 Mbps | ~3 Mbps | <2 Mbps |
-| Frame Rate | >25 FPS | >20 FPS | >20 FPS |
-| Latency | <120ms | <150ms | <150ms |
-| Memory | ~550MB | ~450MB | <512MB |
-| Encoding | Tight | Raw | Optimal |
 
 ## Protocol
 
@@ -266,17 +253,18 @@ asyncio.run(main())
 │                    Browser                              │
 ├──────────────────────┬──────────────────────────────────┤
 │   Web Terminal       │      Remote Desktop              │
-│   (ttyd)             │      (noVNC + TigerVNC/x11vnc)    │
+│   (ttyd)             │      (KasmVNC web client)        │
 │   Port 7681          │      Port 6080                    │
 └──────────┬───────────┴──────────────┬───────────────────┘
            │                          │
 ┌──────────▼──────────────────────────▼───────────────────┐
 │                 sandbox-mcp-server                      │
 ├──────────────────────┬──────────────────────────────────┤
-│   ttyd               │   Xvfb :99 (x11vnc mode)        │
-│   (shell access)     │   ├─ XFCE                        │
-│                      │   ├─ TigerVNC (5901) OR x11vnc   │
-│                      │   └─ noVNC/websockify (6080)     │
+│   ttyd               │   KasmVNC :1 (all-in-one)        │
+│   (shell access)     │   ├─ X server (built-in)         │
+│                      │   ├─ KDE Plasma 6                │
+│                      │   └─ VNC + WebSocket + web       │
+│                      │      client on port 6080         │
 ├──────────────────────┴──────────────────────────────────┤
 │   MCP Server (Port 8765)                                │
 │   ├─ File Tools (read, write, edit, glob, grep)        │
@@ -315,14 +303,15 @@ Pre-installed in the sandbox:
 ### Desktop Won't Start
 
 ```bash
-# Check if XFCE is installed
-docker exec <container> dpkg -l | grep xfce4
+# Check if KDE Plasma is installed
+docker exec <container> dpkg -l | grep kde-plasma-desktop
 
-# Check VNC server logs
-docker exec <container> ps aux | grep vnc
+# Check KasmVNC server logs
+docker exec <container> ps aux | grep -i kasmvnc
+docker exec <container> cat /tmp/kasmvnc.log
 
-# Check noVNC proxy
-docker exec <container> ps aux | grep websockify
+# Confirm the web client port is listening
+docker exec <container> netstat -tln | grep 6080
 ```
 
 ### Connection Refused
@@ -334,25 +323,25 @@ docker ps
 # Check port mapping
 docker port <container>
 
-# Test VNC connection
-curl http://localhost:6080/vnc.html
+# Test KasmVNC web client
+curl http://localhost:6080
 ```
 
 ### Performance Issues
 
-- **Reduce resolution**: Try 1024x576 instead of 1280x720
+- **Reduce resolution**: Try 1280x720 instead of 1920x1080
 - **Adjust compression**: Modify `-compression` value (0-9)
 - **Check bandwidth`: Ensure >2 Mbps available
 
 ## Migration from LXDE
 
-**Note**: This project has been migrated from LXDE to XFCE for better performance and modularity.
+**Note**: This project has been migrated from LXDE to KDE Plasma 6 with KasmVNC for a richer desktop and a single all-in-one remote display server.
 
 Key changes:
-- LXDE → XFCE desktop environment
-- x11vnc → TigerVNC server
+- LXDE → KDE Plasma 6 desktop environment
+- Earlier TigerVNC/x11vnc + noVNC + websockify stack → KasmVNC (single process)
 - Improved performance and session persistence
-- Better encoding options (Tight, ZRLE, H264)
+- Better encoding options (WebP, QOI, JPEG) plus dynamic resize, clipboard, and audio
 
 See `MIGRATION.md` for detailed migration guide.
 
@@ -366,14 +355,14 @@ pytest tests/ -v
 pytest tests/test_desktop_manager.py -v
 pytest tests/integration/test_vnc_performance.py -v
 
-# Include RED-phase Docker/TigerVNC desktop tests
+# Include RED-phase Docker/KasmVNC desktop tests
 RUN_SANDBOX_RED_TESTS=1 pytest tests/integration/ -v
 
 # Run with coverage
 pytest --cov=src/server --cov=src/tools --cov-report=html
 ```
 
-RED-phase Docker/TigerVNC desktop tests are skipped by default in local runs because they
+RED-phase Docker/KasmVNC desktop tests are skipped by default in local runs because they
 require the desktop container stack.
 
 ## Documentation
@@ -383,7 +372,7 @@ require the desktop container stack.
 - `DEPLOYMENT.md` - Deployment guide for operations
 - `TROUBLESHOOTING.md` - Common issues and solutions
 - `PERFORMANCE.md` - Performance tuning guide
-- `docs/README.md` - Index for historical XFCE/TigerVNC phase records
+- `docs/README.md` - Index for historical desktop/VNC phase records
 
 ## Contributing
 
@@ -406,10 +395,10 @@ MIT License - See LICENSE file for details
 
 ## Version History
 
-- **v2.0** (2026-01-28): XFCE migration, TigerVNC integration, 94% test coverage
+- **v2.0** (2026-01-28): KDE Plasma 6 + KasmVNC desktop, 94% test coverage
 - **v1.0** (2025-01-15): Initial release with LXDE desktop
 
 ---
 
-**Generated**: 2026-01-28
+**Generated**: 2026-06-22
 **Status**: Production Ready ✅

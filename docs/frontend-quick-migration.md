@@ -1,38 +1,20 @@
-# Frontend Quick Migration Guide
+# Frontend Sandbox Module Guide (Project-Scoped API)
+
+> Migration status: complete. The project-scoped sandbox API is the only
+> sandbox path used by `web/src/stores/sandbox.ts`; the store imports
+> `projectSandboxService` exclusively and has no `sandboxService` fallback.
 
 ## Quick Start (5 minutes)
 
 ### 1. Import New Service
 
 ```typescript
-// In AgentChat.tsx, add:
-import { projectSandboxService } from '../../services/projectSandboxService';
+import { projectSandboxService } from '../services/projectSandboxService';
 ```
 
-### 2. Replace ensureSandbox Function
+### 2. Ensure a Sandbox
 
 ```typescript
-// REPLACE this in AgentChat.tsx:
-const ensureSandbox = useCallback(async () => {
-  if (activeSandboxId) return activeSandboxId;
-  if (!projectId) return null;
-
-  try {
-    const { sandboxes } = await sandboxService.listSandboxes(projectId);
-    if (sandboxes.length > 0 && sandboxes[0].status === 'running') {
-      setSandboxId(sandboxes[0].id);
-      return sandboxes[0].id;
-    }
-    const { sandbox } = await sandboxService.createSandbox({ project_id: projectId });
-    setSandboxId(sandbox.id);
-    return sandbox.id;
-  } catch (error) {
-    console.error('[AgentChat] Failed to ensure sandbox:', error);
-    return null;
-  }
-}, [activeSandboxId, projectId, setSandboxId]);
-
-// WITH this:
 const ensureSandbox = useCallback(async () => {
   if (activeSandboxId) return activeSandboxId;
   if (!projectId) return null;
@@ -48,25 +30,24 @@ const ensureSandbox = useCallback(async () => {
 }, [activeSandboxId, projectId, setSandboxId]);
 ```
 
-### 3. Update Store Actions (Optional but Recommended)
+### 3. Store Actions
+
+The sandbox store (`stores/sandbox.ts`) uses the project-scoped API directly.
+There is no v1 fallback branch; `activeProjectId` is required before calling
+desktop/terminal actions.
 
 ```typescript
-// In stores/sandbox.ts, update:
-startDesktop: async () => {
-  const { activeProjectId, activeSandboxId } = get();
-  
-  // Prefer project-scoped API if we have projectId
-  if (activeProjectId) {
-    const status = await projectSandboxService.startDesktop(activeProjectId);
-    set({ desktopStatus: status });
+// In stores/sandbox.ts:
+startDesktop: async (resolution = '1920x1080') => {
+  const { activeProjectId } = get();
+
+  if (!activeProjectId) {
+    logger.warn('[SandboxStore] Cannot start desktop: no active project');
     return;
   }
-  
-  // Fallback to old API
-  if (activeSandboxId) {
-    const status = await sandboxService.startDesktop(activeSandboxId);
-    set({ desktopStatus: status });
-  }
+
+  const status = await projectSandboxService.startDesktop(activeProjectId, resolution);
+  set({ desktopStatus: status });
 }
 ```
 
@@ -127,15 +108,12 @@ const handleSend = useCallback(async (content: string) => {
 
 ### Issue: Desktop/Terminal not starting
 
-**Cause**: Using old sandbox ID with new API
+**Cause**: No active project is set in the store
 
-**Fix**: Use projectId:
+**Fix**: Ensure `activeProjectId` is set before starting desktop/terminal.
+The store actions early-return when `activeProjectId` is missing:
 
 ```typescript
-// Old
-await sandboxService.startDesktop(sandboxId);
-
-// New
 await projectSandboxService.startDesktop(projectId);
 ```
 
@@ -151,6 +129,6 @@ await projectSandboxService.startDesktop(projectId);
 
 ## Rollback
 
-If needed, simply revert to the old `ensureSandbox` implementation using `sandboxService`.
-
-The old API endpoints remain available and working.
+The project-scoped sandbox API is the active code path; there is no in-store
+fallback to the legacy `sandboxService`. Rollback would require reintroducing
+a `sandboxService` import and a v1 branch in `stores/sandbox.ts`.

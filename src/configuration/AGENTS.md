@@ -2,15 +2,17 @@
 
 Configuration loading and dependency injection for the entire backend.
 
+Last checked against code: 2026-06-22
+
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `config.py` | Pydantic `Settings` class (~450 lines, 100+ env vars). `get_settings()` is `@lru_cache` singleton |
-| `di_container.py` | `DIContainer` class (~450 lines). Composes 7 sub-containers, delegates all factory methods |
+| `config.py` | Pydantic `Settings` class (~624 lines, 100+ env vars). `get_settings()` is `@lru_cache` singleton |
+| `di_container.py` | `DIContainer` class (~984 lines). Composes 9 sub-containers, delegates all factory methods |
 | `factories.py` | Factory functions for LLM clients and `NativeGraphAdapter` (Neo4j + embedding) |
 | `ray_config.py` | Ray Actor configuration for distributed execution |
-| `containers/` | 7 domain-specific sub-containers (see below) |
+| `containers/` | 9 domain-specific sub-containers (see below) |
 
 ## containers/ Hierarchy
 
@@ -23,6 +25,8 @@ Configuration loading and dependency injection for the entire backend.
 | `task_container.py` | Task | `task_repository()`, `task_service()` |
 | `sandbox_container.py` | Sandbox | `sandbox_orchestrator()`, `sandbox_resource_pool()` |
 | `infra_container.py` | Infra | `redis_client`, `workflow_engine`, `storage_service()`, `sandbox_adapter()` |
+| `cron_container.py` | Cron | cron job scheduling and repository wiring |
+| `instance_container.py` | Instance | instance lifecycle services and repositories |
 
 ## Config Loading
 
@@ -34,7 +38,7 @@ Configuration loading and dependency injection for the entire backend.
 ## DI Container Pattern
 
 - `DIContainer.__init__()` accepts `db`, `graph_service`, `redis_client`, `session_factory`, `workflow_engine`
-- Creates all 7 sub-containers in `__init__`, passing dependencies down
+- Creates all 9 sub-containers in `__init__`, passing dependencies down
 - `with_db(db)` returns a NEW `DIContainer` clone with the given session
 - Public methods delegate to sub-containers: `self._auth.user_repository()`, `self._agent.agent_service()`, etc.
 

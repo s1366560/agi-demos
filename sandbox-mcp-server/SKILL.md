@@ -8,6 +8,7 @@ metadata:
   version: "1.0.0"
   author: MemStack Team
   tags: [sandbox, code-execution, file-system, desktop, testing]
+  last_checked_against_code: "2026-06-22"
 ---
 
 # Sandbox MCP Server 技能指南
@@ -21,7 +22,7 @@ Sandbox 是一个功能完备的隔离执行环境，通过 MCP (Model Context P
 - **代码分析**: AST 解析、符号索引、调用图分析
 - **测试支持**: 测试生成、运行、覆盖率分析
 - **版本控制**: Git diff、log、commit 生成
-- **远程桌面**: XFCE 桌面环境，通过 noVNC 浏览器访问
+- **远程桌面**: KDE Plasma 桌面环境，通过 KasmVNC 内置 Web 客户端访问
 
 ## 工作目录
 
@@ -576,7 +577,7 @@ remotion, puppeteer, sharp, tailwindcss
 ### 9. 远程桌面工具
 
 #### `start_desktop` - 启动桌面
-启动 XFCE 远程桌面。
+启动 KDE Plasma 远程桌面（由 KasmVNC 提供 X server + VNC + 内置 Web 客户端，单进程一体化，无需单独的 Xvfb / websockify）。
 
 ```json
 {
@@ -589,9 +590,9 @@ remotion, puppeteer, sharp, tailwindcss
 }
 ```
 
-访问: `http://localhost:6080/vnc.html`
+访问: `http://localhost:6080/vnc.html`（KasmVNC 内置 Web 客户端）
 
-**支持分辨率**: 1280x720, 1920x1080, 1600x900
+**支持分辨率**: 1280x720, 1600x900, 1920x1080（默认）, 2560x1440
 
 #### `stop_desktop` - 停止桌面
 ```json
@@ -649,7 +650,7 @@ remotion, puppeteer, sharp, tailwindcss
 1. start_desktop resolution="1920x1080" → 启动桌面
 2. bash command="firefox https://example.com" → 打开浏览器
 3. get_desktop_status → 获取 VNC URL
-4. [用户通过浏览器访问 noVNC 进行图形操作]
+4. [用户通过浏览器访问 KasmVNC Web 客户端进行图形操作]
 ```
 
 ### 5. 文档处理 (使用预装 Skills 依赖)
