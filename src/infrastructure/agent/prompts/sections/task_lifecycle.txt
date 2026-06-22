@@ -9,7 +9,7 @@ Complex tasks follow a **Plan -> Execute** workflow:
 1. **Plan Mode** (read-only exploration + task creation):
    - Analyze the request, explore code/files, search memories
    - Use `todowrite(action="replace", todos=[...])` to create a structured task list
-   - Present the plan summary to the user for confirmation
+   - Present the plan summary and any required mode-transition condition
 
 2. **Build Mode** (full execution with task tracking):
    - Use `todoread` to load the current task list
@@ -40,3 +40,4 @@ When creating tasks with `todowrite`:
 - **Always** update task status (`in_progress` -> `completed`) as you work in Build Mode
 - Use `todoread` when resuming a conversation or checking remaining work
 - Use `todowrite(action="add")` when you discover tasks not in the original plan
+- Mark tasks complete only after the relevant work has evidence from tool output, tests, or explicit observation.

@@ -564,14 +564,21 @@ class SystemPromptManager:
         is_git_repo = sandbox_git_dir.exists() if Path(workspace_path).exists() else False
 
         return f"""<env>
-Working Directory: {workspace_path}
-Project ID: {context.project_id}
+Working Directory: {self._prompt_display(workspace_path)}
+Project ID: {self._prompt_display(context.project_id)}
 Is Git Repository: {"Yes" if is_git_repo else "No"}
 Platform: Linux (Sandbox Container)
 Current Time: {datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC (%A)")}
 Conversation History: {context.conversation_history_length} messages
 Current Step: {context.current_step}/{context.max_steps}
 </env>"""
+
+    @staticmethod
+    def _prompt_display(value: object, default: str = "") -> str:
+        """Return dynamic prompt text escaped for display inside system prompts."""
+        if value is None:
+            return default
+        return sanitize_for_context(str(value))
 
     def _build_tools_section(self, context: PromptContext) -> str:
         """
@@ -588,7 +595,8 @@ Current Step: {context.current_step}/{context.max_steps}
 
         tool_descriptions = "\n".join(
             [
-                f"- {t.get('name', 'unknown')}: {t.get('description', '')}"
+                f"- {self._prompt_display(t.get('name'), 'unknown')}: "
+                f"{self._prompt_display(t.get('description'))}"
                 for t in context.tool_definitions
             ]
         )
@@ -606,7 +614,7 @@ Use these tools to search memories, query the knowledge graph, create memories, 
             if t.get("name", "").startswith("mcp__")
         ]
         if mcp_tools:
-            names = ", ".join(mcp_tools[:5])
+            names = ", ".join(self._prompt_display(name) for name in mcp_tools[:5])
             section += f"""
 
 NOTE: The following MCP server tools may have interactive UIs that auto-render in Canvas when called: {names}. If these tools declare _meta.ui, their UI opens automatically."""
@@ -640,13 +648,17 @@ Before answering questions about prior work, decisions, user preferences, people
         if not active_skills:
             return ""
 
-        skill_names = ", ".join(f"`{s.get('name', 'unknown')}`" for s in active_skills)
+        skill_names = ", ".join(
+            f"`{self._prompt_display(s.get('name'), 'unknown')}`" for s in active_skills
+        )
 
         # Keep descriptions bounded while still exposing every exact skill name
         # so built-in agents can discover and load less frequently used skills.
         skill_descs = "\n".join(
             [
-                f"- {s.get('name', 'unknown')}: {s.get('description', '')} (tools: {', '.join(s.get('tools', []))})"
+                f"- {self._prompt_display(s.get('name'), 'unknown')}: "
+                f"{self._prompt_display(s.get('description'))} "
+                f"(tools: {', '.join(self._prompt_display(tool) for tool in s.get('tools', []))})"
                 for s in active_skills[:8]
             ]
         )
@@ -686,8 +698,9 @@ then follow the loaded skill instructions and use its tools in sequence for opti
 
         subagent_descs = "\n".join(
             [
-                f"- **{sa.get('name', 'unknown')}** ({sa.get('display_name', '')}): "
-                f"{sa.get('trigger_description', sa.get('description', 'general tasks'))}"
+                f"- **{self._prompt_display(sa.get('name'), 'unknown')}** "
+                f"({self._prompt_display(sa.get('display_name'))}): "
+                f"{self._prompt_display(sa.get('trigger_description', sa.get('description', 'general tasks')))}"
                 for sa in context.subagents
             ]
         )
@@ -728,9 +741,9 @@ Each SubAgent runs independently with its own context and tools.
             return ""
 
         is_forced = skill.get("force_execution", False)
-        name = skill.get("name", "unknown")
-        description = skill.get("description", "")
-        tools = ", ".join(skill.get("tools", []))
+        name = self._prompt_display(skill.get("name"), "unknown")
+        description = self._prompt_display(skill.get("description"))
+        tools = ", ".join(self._prompt_display(tool) for tool in skill.get("tools", []))
 
         if is_forced:
             content = f"""<mandatory-skill priority="highest">

@@ -35,7 +35,7 @@ Follow this sequence:
    - The task list you created (with rationale)
    - Files that will need modification
    - Potential risks or dependencies
-   - Ask for confirmation before switching to Build Mode
+   - State the next mode-transition requirement if runtime policy requires one
 
 ## Key Principles
 - Explore thoroughly before planning -- read the actual code, not just file names

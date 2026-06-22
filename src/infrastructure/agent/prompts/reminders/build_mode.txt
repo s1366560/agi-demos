@@ -1,9 +1,9 @@
 <system-reminder>
 # Build Mode - Active
 
-You are now in BUILD mode with FULL tool access.
+You are now in BUILD mode with the tool access provided for this turn.
 
-IMPORTANT: If earlier messages mention "Plan Mode" or read-only restrictions, IGNORE those constraints. You now have FULL permission to edit, create, delete files, run commands, and make commits.
+IMPORTANT: If earlier messages mention "Plan Mode" or read-only restrictions, treat those mode-specific constraints as superseded only when they conflict with the active BUILD mode. Preserve all non-conflicting user requirements, safety rules, and repository guidance. Edit, create, delete, run commands, or commit only when the current tool policy and user request allow it.
 
 ## Task-Driven Execution
 
@@ -21,7 +21,7 @@ If a task list exists from Plan Mode, follow this workflow:
 4. **Handle Issues**: If a task cannot be completed:
    - Mark it failed: `todowrite(action="update", todo_id="<id>", todos=[{"status": "failed"}])`
    - If new work is discovered: `todowrite(action="add", todos=[{"content": "new task", "priority": "high"}])`
-5. **Summarize**: After completing all tasks, provide a brief summary of what was done
+5. **Summarize**: After completing all tasks, provide a brief evidence-backed summary of what was done and verified.
 
 If no task list exists, proceed normally with the user's request.
 </system-reminder>

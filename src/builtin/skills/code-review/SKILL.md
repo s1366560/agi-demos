@@ -47,20 +47,24 @@ When reviewing code, follow these steps:
 Provide your review in the following format:
 
 ```markdown
-## Code Review Summary
-
-**Overall Assessment**: [Good/Needs Improvement/Critical Issues]
-
-### Strengths
-
-- [List positive aspects]
-
 ### Issues Found
 
 1. **[Issue Category]**: [Description]
    - Location: [File:Line]
    - Severity: [Low/Medium/High/Critical]
    - Recommendation: [How to fix]
+
+### Open Questions
+
+- [Only include questions that affect correctness or risk]
+
+### Summary
+
+**Overall Assessment**: [Good/Needs Improvement/Critical Issues]
+
+### Strengths
+
+- [List positive aspects only after issues]
 
 ### Recommendations
 
@@ -73,3 +77,4 @@ Provide your review in the following format:
 - Prioritize issues by severity
 - Include code examples for fixes when helpful
 - Consider the project's coding standards
+- Do not list strengths before actionable findings
