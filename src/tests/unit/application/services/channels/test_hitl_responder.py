@@ -90,7 +90,11 @@ class TestHITLChannelResponder:
         assert payload["conversation_id"] == "conv-1"
         assert payload["message_id"] == "msg-1"
 
-    async def test_respond_request_not_found(self, responder: HITLChannelResponder) -> None:
+    async def test_respond_request_not_found(
+        self,
+        responder: HITLChannelResponder,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
         """Returns False if HITL request not found in DB."""
         mock_session = AsyncMock()
         mock_repo = AsyncMock()
@@ -100,19 +104,25 @@ class TestHITLChannelResponder:
         mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
         mock_ctx.__aexit__ = AsyncMock(return_value=False)
         mock_session.get = AsyncMock()
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.channels.hitl_responder",
+        )
 
         with (
             patch(DB_FACTORY_PATH, return_value=mock_ctx),
             patch(HITL_REPO_PATH, return_value=mock_repo),
         ):
             result = await responder.respond(
-                request_id="missing-id",
+                request_id="secret-missing-id",
                 hitl_type="clarification",
                 response_data={"answer": "test"},
             )
 
         assert result is HITLChannelResponseOutcome.REJECTED
-        mock_repo.get_by_id.assert_awaited_once_with("missing-id")
+        mock_repo.get_by_id.assert_awaited_once_with("secret-missing-id")
+        assert "secret-missing-id" not in caplog.text
+        assert "has_request_id=True" in caplog.text
 
     async def test_respond_already_resolved(self, responder: HITLChannelResponder) -> None:
         """Returns False if HITL request already resolved."""

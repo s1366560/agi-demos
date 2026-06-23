@@ -190,7 +190,10 @@ class HITLChannelResponder:
         """Return a pending request when hints and basic shape checks are valid."""
         hitl_request = await repo.get_by_id(request_id)
         if hitl_request is None:
-            logger.warning(f"[HITLChannelResponder] Request not found: {request_id}")
+            logger.warning(
+                "[HITLChannelResponder] Request not found: has_request_id=%s",
+                bool(request_id),
+            )
             return None
 
         if not self._is_pending_request(hitl_request):
@@ -202,8 +205,9 @@ class HITLChannelResponder:
             hitl_request=hitl_request,
         ):
             logger.warning(
-                "[HITLChannelResponder] Request %s expired before channel response",
-                request_id,
+                "[HITLChannelResponder] Request expired before channel response: "
+                "has_request_id=%s",
+                bool(request_id),
             )
             return None
 
@@ -218,10 +222,11 @@ class HITLChannelResponder:
         stored_hitl_type = self._trusted_hitl_type(hitl_request)
         if stored_hitl_type is None or stored_hitl_type != hitl_type:
             logger.warning(
-                "[HITLChannelResponder] HITL type mismatch for %s: stored=%s received=%s",
-                request_id,
-                stored_hitl_type,
-                hitl_type,
+                "[HITLChannelResponder] HITL type mismatch: "
+                "has_request_id=%s has_stored_type=%s has_received_type=%s",
+                bool(request_id),
+                bool(stored_hitl_type),
+                bool(hitl_type),
             )
             return None
 
