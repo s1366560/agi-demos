@@ -1,6 +1,7 @@
 """Tests for HITLChannelResponder."""
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -187,6 +188,47 @@ class TestHITLChannelResponder:
         mock_repo.update_response.assert_awaited_once()
         assert mock_session.commit.await_count == 1
         mock_redis.xadd.assert_awaited_once()
+
+    async def test_publish_to_redis_failure_log_omits_identifiers(
+        self,
+        responder: HITLChannelResponder,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Redis publish failure logs should not echo request IDs or exception details."""
+        mock_redis = AsyncMock()
+        mock_redis.xadd = AsyncMock(
+            side_effect=RuntimeError("redis down for secret-request-id")
+        )
+        mock_redis.aclose = AsyncMock()
+        caplog.set_level(
+            logging.ERROR,
+            logger="src.application.services.channels.hitl_responder",
+        )
+
+        with (
+            patch(SETTINGS_PATH) as mock_settings,
+            patch("redis.asyncio.from_url", return_value=mock_redis),
+        ):
+            mock_settings.return_value.redis_host = "localhost"
+            mock_settings.return_value.redis_port = 6379
+
+            result = await responder._publish_to_redis(
+                request_id="secret-request-id",
+                hitl_type="decision",
+                response_data={"decision": "approve"},
+                tenant_id="tenant-secret",
+                project_id="project-secret",
+                conversation_id="conversation-secret",
+                message_id="message-secret",
+                responder_id="responder-secret",
+            )
+
+        assert result is False
+        mock_redis.xadd.assert_awaited_once()
+        assert "secret-request-id" not in caplog.text
+        assert "tenant-secret" not in caplog.text
+        assert "redis down" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     async def test_respond_handles_exception_gracefully(
         self, responder: HITLChannelResponder

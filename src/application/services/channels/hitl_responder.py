@@ -454,7 +454,10 @@ class HITLChannelResponder:
                 )
                 published = True
                 logger.info(
-                    f"[HITLChannelResponder] Published response for {request_id} to {redis_key}"
+                    "[HITLChannelResponder] Published response: has_request_id=%s "
+                    "has_redis_key=%s",
+                    bool(request_id),
+                    bool(redis_key),
                 )
                 return True
             finally:
@@ -462,13 +465,18 @@ class HITLChannelResponder:
                     await redis_client.aclose()
                 except Exception:
                     logger.warning(
-                        "[HITLChannelResponder] Redis close failed for %s after publish=%s",
-                        request_id,
+                        "[HITLChannelResponder] Redis close failed: "
+                        "has_request_id=%s published=%s",
+                        bool(request_id),
                         published,
-                        exc_info=True,
                     )
                     if not published:
                         raise
         except Exception as e:
-            logger.error(f"[HITLChannelResponder] Redis publish failed for {request_id}: {e}")
+            logger.error(
+                "[HITLChannelResponder] Redis publish failed: "
+                "has_request_id=%s error_type=%s",
+                bool(request_id),
+                type(e).__name__,
+            )
             return False
