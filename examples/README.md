@@ -16,7 +16,7 @@
 
 ```bash
 # 1. 确保服务正在运行
-python -m server.main
+make dev
 
 # 2. 在另一个终端运行示例
 python examples/basic_usage.py
@@ -29,8 +29,8 @@ python examples/basic_usage.py
 MemStack API 使用示例
 ================================================================================
 
-确保服务正在运行: python -m server.main
-或使用 Docker Compose: docker-compose up
+确保服务正在运行: make dev
+或只启动基础设施: docker compose up
 
 ================================================================================
 
@@ -76,12 +76,13 @@ python -m pip install dist/*.whl
 # plugin_manager(action="list")
 ```
 
-更多发布细节（包含私有索引示例）见：
-`examples/plugins/memstack-plugin-template/README.md`
+更多发布细节（包含私有索引示例）见
+[examples/plugins/memstack-plugin-template/README.md](plugins/memstack-plugin-template/README.md)。
 
 ## 飞书本地插件目录（已迁移）
 
-目录：`.memstack/plugins/feishu/`
+目录：`.memstack/plugins/feishu/`（本地运行时目录）。示例插件包文档见
+[examples/plugins/memstack-plugin-feishu/README.md](plugins/memstack-plugin-feishu/README.md)。
 
 飞书插件已迁移为本地目录发现模式，无需 wheel 打包，运行时会自动扫描：
 

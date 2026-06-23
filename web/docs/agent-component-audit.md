@@ -3,6 +3,10 @@
 > Historical audit. The current active component tree is `web/src/components/agent/`.
 > Earlier `components/agentV3` and `AgentChatV3.tsx` references are retained below as
 > original context and should not be treated as current architecture.
+>
+> Current state as of 2026-06-23: `web/src/components/agentV3/` and
+> `web/src/pages/project/AgentChatV3.tsx` do not exist. The active entry point is
+> `web/src/pages/tenant/AgentWorkspace.tsx`, composed from `web/src/components/agent/`.
 
 ## Date: 2026-01-27
 ## Phase: 1.3 - Consolidate Duplicate Agent Components
@@ -33,9 +37,9 @@ After analyzing both `agent/` and `agentV3/` component directories, **NO consoli
 - `patterns/` - PatternStats, PatternList, PatternInspector
 - `shared/` - MaterialIcon
 
-### `src/components/agentV3/` (Modern - Active Development)
-**Purpose**: Modern agent UI with multi-view execution details
-**Usage**: `src/pages/project/AgentChatV3.tsx` (6,278 bytes)
+### `src/components/agentV3/` (historical, removed)
+**Purpose at the time of audit**: Modern agent UI with multi-view execution details
+**Historical usage**: `src/pages/project/AgentChatV3.tsx` (6,278 bytes)
 
 **Components** (10 files):
 - ChatLayout, ConversationSidebar, ExecutionDetailsPanel
@@ -64,19 +68,19 @@ After analyzing both `agent/` and `agentV3/` component directories, **NO consoli
    - `agent/` - Props-driven, pure components (legacy pattern)
    - `agentV3/` - Store-connected, data-aware components (modern pattern)
 
-2. **Active Migration in Progress**
+2. **Migration was in progress at the time of audit**
    - The comment in `agent/index.ts` states: "Legacy Ant Design components (to be migrated)"
    - Recent commit: "refactor(frontend): remove AgentV2 implementation"
    - This indicates an ongoing migration from legacy → V3
 
-3. **Different Page Routes**
+3. **Different page routes at the time of audit**
    - `AgentChat.tsx` uses `agent/` components
    - `AgentChatV3.tsx` uses `agentV3/` components
    - These are separate user experiences
 
 ### Recommendations
 
-1. **DO NOT consolidate** `agent/` and `agentV3/` components
+1. **Historical recommendation**: do not consolidate `agent/` and `agentV3/` components during that migration window.
 
 2. **Complete the migration** when ready:
    - Gradually replace `AgentChat.tsx` with `AgentChatV3.tsx` features
@@ -113,6 +117,6 @@ After analyzing both `agent/` and `agentV3/` component directories, **NO consoli
 
 ## Conclusion
 
-**RECOMMENDATION**: Skip Phase 1.3 consolidation. The `agent/` and `agentV3/` directories represent parallel implementations, not duplicates. They should be consolidated as part of the broader migration effort when the team is ready to fully deprecate the legacy agent chat UI.
+**Historical recommendation**: Skip Phase 1.3 consolidation. At the time, the `agent/` and `agentV3/` directories represented parallel implementations, not duplicates. This is not current implementation guidance.
 
 **NEXT STEPS**: Proceed to Phase 1.4 (Enhance TypeScript Strict Mode) which has lower risk and clear benefits.

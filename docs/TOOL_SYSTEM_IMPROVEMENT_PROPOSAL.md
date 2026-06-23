@@ -1386,7 +1386,7 @@ MemStack (proposed):
 
 ## Implementation Status Summary
 
-Last checked against code: 2026-06-22.
+Last checked against code: 2026-06-23.
 
 | # | Proposal | Status | Key location(s) |
 |---|----------|--------|-----------------|

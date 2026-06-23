@@ -1,9 +1,9 @@
 # Cyber Workspace (赛博办公室) Architecture Design
 
-> Reference: `/Users/tiejunsun/github/nodeskclaw` (DeskClaw)
-> Target: `/Users/tiejunsun/github/agi-demos` (MemStack)
+> Reference: DeskClaw local reference project
+> Target: this MemStack repository
 > Date: 2026-03-26
-> Last checked against code: 2026-06-22
+> Last checked against code: 2026-06-23
 
 ---
 
@@ -206,7 +206,7 @@ Workspace agents are standard `ReActAgent` instances. No new runtime. Integratio
 - NEVER modify database directly -- always use Alembic migrations
 - NEVER call `app.state.container.some_service()` for DB-dependent services
 - Repository interfaces accept and return DOMAIN entities, never SQLAlchemy models
-- Do NOT bypass `EventConverter` for SSE events
+- Do NOT bypass `EventConverter` for event payloads
 - Do NOT import from `actor/` in non-actor code
 
 ### 5.2 Anti-Patterns (from Metis analysis)

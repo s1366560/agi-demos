@@ -1,6 +1,6 @@
 # MemStack Architecture
 
-Last checked against code: 2026-05-18.
+Last checked against code: 2026-06-23.
 
 MemStack is organized around DDD and hexagonal architecture, with a separate React web
 console and an agent runtime that uses Ray actors, Redis streams, MCP tools, and WebSocket
@@ -62,7 +62,7 @@ Major router groups:
 - Workspace, workspace plans/tasks/autonomy/events/chat, blackboard, topology.
 - Sandbox, project sandbox, terminal, MCP.
 - Skills, channels, webhooks, instances, deploy, genes, audit, trust,
-  observability and admin DLQ.
+  agent pool admin, observability and admin DLQ.
 
 See [../api-reference.md](../api-reference.md) for route families.
 
@@ -82,6 +82,10 @@ Important paths:
 | Routing | `src/infrastructure/agent/routing` |
 | Events | `src/domain/events`, `src/infrastructure/agent/events` |
 | Workspace orchestration | `src/infrastructure/agent/workspace`, `src/infrastructure/agent/workspace_plan` |
+
+Plan-related HTTP APIs are split by scope: conversation mode/task-list endpoints live under
+`/api/v1/agent/plan/*`, while durable workspace planning lives under
+`/api/v1/workspaces/{workspace_id}/plan/*`.
 
 Execution flow in broad terms:
 

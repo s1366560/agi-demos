@@ -4,7 +4,7 @@
 > the pool subsystems is
 > [`docs/features/NEW_FEATURES.md`](../features/NEW_FEATURES.md). Some values
 > below (tier quotas, state names) are illustrative; verify against source
-> before relying on them. Last checked against code: 2026-06-22.
+> before relying on them. Last checked against code: 2026-06-23.
 
 ## Overview
 
@@ -268,22 +268,25 @@ CircuitBreakerConfig(
 ### REST Endpoints
 
 ```
-GET  /api/v1/pool/stats              # Pool statistics
-GET  /api/v1/pool/instances          # List all instances
-GET  /api/v1/pool/instances/:id      # Get instance details
-POST /api/v1/pool/instances          # Create instance
-DELETE /api/v1/pool/instances/:id    # Destroy instance
+GET    /api/v1/admin/pool/status                    # Pool status summary
+GET    /api/v1/admin/pool/instances                 # List all instances
+GET    /api/v1/admin/pool/instances/:id             # Get instance details
+DELETE /api/v1/admin/pool/instances/:id             # Destroy instance
 
-POST /api/v1/pool/instances/:id/pause    # Pause instance
-POST /api/v1/pool/instances/:id/resume   # Resume instance
+POST   /api/v1/admin/pool/instances/:id/pause       # Pause instance
+POST   /api/v1/admin/pool/instances/:id/resume      # Resume instance
 
-GET  /api/v1/pool/health             # Pool health check
-GET  /api/v1/pool/metrics            # Prometheus metrics
+GET    /api/v1/admin/pool/projects/:project_id/tier # Get project tier
+POST   /api/v1/admin/pool/projects/:project_id/tier # Set project tier
+
+GET    /api/v1/admin/pool/metrics                   # JSON metrics
+GET    /api/v1/admin/pool/metrics/prometheus        # Prometheus metrics
 ```
 
 ### Metrics
 
-Prometheus-compatible metrics at `/api/v1/pool/metrics`:
+JSON metrics are available at `/api/v1/admin/pool/metrics`. Prometheus-compatible metrics
+are available at `/api/v1/admin/pool/metrics/prometheus`:
 
 ```
 # Instance counts
@@ -499,7 +502,7 @@ src/infrastructure/agent/pool/
 
 3. **Verify pool status**:
    ```bash
-   curl http://localhost:8000/api/v1/pool/stats
+   curl http://localhost:8000/api/v1/admin/pool/status
    ```
 
 ### Gradual Rollout
@@ -646,16 +649,16 @@ llm_stream = LLMStream(stream_config, llm_client=processor_config.llm_client)
 
 ```bash
 # Check pool status
-curl http://localhost:8000/api/v1/pool/stats | jq
+curl http://localhost:8000/api/v1/admin/pool/status | jq
 
 # List instances
-curl http://localhost:8000/api/v1/pool/instances | jq
+curl http://localhost:8000/api/v1/admin/pool/instances | jq
 
 # Check specific instance
-curl http://localhost:8000/api/v1/pool/instances/inst-123 | jq
+curl http://localhost:8000/api/v1/admin/pool/instances/inst-123 | jq
 
 # View metrics
-curl http://localhost:8000/api/v1/pool/metrics
+curl http://localhost:8000/api/v1/admin/pool/metrics/prometheus
 ```
 
 ## References

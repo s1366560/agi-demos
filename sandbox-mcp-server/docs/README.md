@@ -1,6 +1,6 @@
 # Sandbox MCP Server Docs
 
-Last checked against repository docs: 2026-06-22.
+Last checked against repository docs: 2026-06-23.
 
 ## Maintained Entry Points
 
@@ -25,9 +25,10 @@ kept for audit history and should not override the root README or current code.
 | Planning | `remote-desktop-plan.md`, `TIGERVNC_TDD_PLAN.md`, `xfce-tdd-workflow.md` |
 
 > **Note on TigerVNC → KasmVNC**: The TigerVNC + noVNC + websockify stack documented in the
-> historical files above has since been replaced by a single all-in-one **KasmVNC** server
-> (built-in web client on port 6080, KDE Plasma 6 desktop). The `VNC_SERVER_TYPE` toggle
-> between TigerVNC and x11vnc has been removed. The above phase records are retained only for
+> historical files above has since been replaced by a KasmVNC-centric runtime path
+> (built-in web client on port 6080, KDE Plasma 6 desktop). Some orchestration still accepts
+> a `VNC_SERVER_TYPE`/`VNC` compatibility flag for older commands, but current behavior should
+> be verified against KasmVNC. The above phase records are retained only for
 > audit history; for the current remote-desktop behavior, see the "Remote Desktop" / "VNC Server"
 > sections of [../README.md](../README.md) and the `KasmVNC` build steps in [../Dockerfile](../Dockerfile).
 

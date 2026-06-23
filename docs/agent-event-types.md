@@ -2,7 +2,7 @@
 
 `src/domain/events/types.py` is the single source of truth for agent event names.
 
-Last checked against code: 2026-06-22.
+Last checked against code: 2026-06-23.
 
 ## Summary
 
@@ -44,7 +44,7 @@ Agent runtime / tools
 | Subagents | `subagent_routed`, `subagent_started`, `subagent_completed`, `subagent_failed`, `subagent_spawning`, `subagent_doom_loop`, `subagent_retry`, `subagent_queued`, `subagent_killed`, `subagent_steered`, `subagent_depth_limited`, `subagent_session_update`, `subagent_spawn_rejected`, `subagent_announce_retry`, `subagent_orphan_detected`, `subagent_announce_sent`, `subagent_announce_received`, `subagent_announce_expired`, `subagent_delegation` |
 | Agent orchestration | `plan_suggested`, `selection_trace`, `policy_filtered`, `parallel_started`, `parallel_completed`, `background_launched`, `agent_spawned`, `agent_completed`, `agent_message_sent`, `agent_message_received`, `agent_stopped` |
 | Graph orchestration | `graph_run_started`, `graph_run_completed`, `graph_run_failed`, `graph_run_cancelled`, `graph_node_started`, `graph_node_completed`, `graph_node_failed`, `graph_node_skipped`, `graph_handoff` |
-| Workspace | `workspace_member_joined`, `workspace_member_left`, `workspace_updated`, `workspace_deleted`, `workspace_agent_bound`, `workspace_agent_unbound`, `workspace_message_created`, `topology_updated` |
+| Workspace | `workspace_member_joined`, `workspace_member_left`, `workspace_member_updated`, `workspace_updated`, `workspace_deleted`, `workspace_agent_bound`, `workspace_agent_unbound`, `workspace_message_created`, `topology_updated` |
 | Blackboard | `blackboard_post_created`, `blackboard_post_updated`, `blackboard_post_deleted`, `blackboard_reply_created`, `blackboard_reply_updated`, `blackboard_reply_deleted`, `blackboard_file_created`, `blackboard_file_updated`, `blackboard_file_deleted`, `blackboard_directory_deleted` |
 | Workspace tasks/plans | `workspace_task_assigned`, `workspace_task_created`, `workspace_task_updated`, `workspace_task_deleted`, `workspace_task_status_changed`, `workspace_plan_updated`, `workspace_goal_materialized`, `workspace_decomposition_complete`, `workspace_worker_dispatched`, `workspace_worker_report_submitted`, `workspace_adjudication_complete`, `workspace_goal_completed` |
 | Task execution/recovery | `task_list_updated`, `task_updated`, `task_start`, `task_complete`, `task_execution_session_updated`, `task_execution_incident_opened`, `task_recovery_action_started`, `task_recovery_action_completed` |

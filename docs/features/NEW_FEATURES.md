@@ -768,9 +768,9 @@ ReAct agent can invoke:
 | `canvas_update` | `block_id, title, content, metadata` | Update an existing block |
 | `canvas_delete` | `block_id` | Remove a block |
 
-### SSE Events
+### Agent Events
 
-Canvas mutations emit `canvas_updated` SSE events via the standard pending-events pattern:
+Canvas mutations emit `canvas_updated` agent events via the standard pending-events pattern:
 
 ```python
 {

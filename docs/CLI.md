@@ -4,7 +4,7 @@
 authentication, project/conversation listing, persisted event inspection, and artifact
 download.
 
-Last checked against code: 2026-05-18.
+Last checked against code: 2026-06-23.
 
 ## Install
 

@@ -6,7 +6,7 @@ dump. Use the runtime OpenAPI schema for request/response details:
 - Swagger UI: `http://localhost:8000/docs`
 - OpenAPI JSON: `http://localhost:8000/openapi.json`
 
-Last checked against code: 2026-06-22.
+Last checked against code: 2026-06-23.
 
 ## Runtime Registration
 

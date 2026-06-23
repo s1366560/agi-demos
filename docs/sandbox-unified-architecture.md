@@ -1,7 +1,7 @@
 # Sandbox 统一架构方案
 
 > 状态：架构已落地（部分阶段仍为 Partial）。
-> Last checked against code: 2026-06-22
+> Last checked against code: 2026-06-23
 >
 > 说明：本文原为「方案 / Phase 提案」，现改为反映现状的架构说明。代码事实以 `src/application/services/sandbox_orchestrator.py`、`src/infrastructure/adapters/primary/web/routers/project_sandbox.py` 等为准。
 
@@ -29,7 +29,7 @@
 │                                                                                      │
 │  API Gateway Layer                                                               │
 │    ├── /api/v1/agent/ws (WebSocket)                                             │
-│    └── /api/v1/sandbox/* (REST + SSE/WebSocket helpers)                         │
+│    └── /api/v1/sandbox/* (REST + event/WebSocket helpers)                       │
 │                                                                                      │
 │  Service Orchestration Layer                                                      │
 │    └── SandboxOrchestrator (统一入口)                                           │

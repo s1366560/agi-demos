@@ -3,6 +3,11 @@
 > 历史审计。当前活跃组件目录是 `web/src/components/agent/`。下文中的
 > `components/agentV3` 与 `AgentChatV3.tsx` 只保留为原始审计上下文，不代表当前架构。
 
+> 当前状态（2026-06-23）：`web/src/components/agentV3/` 与
+> `web/src/pages/project/AgentChatV3.tsx` 不存在。当前入口是
+> `web/src/pages/tenant/AgentWorkspace.tsx`，主要组合组件位于
+> `web/src/components/agent/`。
+
 ## 概述
 
 **审计日期:** 2026-01-27
@@ -148,19 +153,19 @@ components/agentV3/
 
 ## 使用情况分析
 
-### 当前活跃页面
+### 原审计时的活跃页面（已过期）
 
-**AgentChatV3.tsx** 是正在使用的页面 (见 `App.tsx:152`):
+以下代码片段来自原始审计上下文，当前代码树不再使用该页面或目录：
 ```typescript
 const AgentChat = lazy(() => import("./pages/project/AgentChatV3"));
 ```
 
-### Store 使用
+### 原审计时的 Store 使用（已过期）
 
 | 页面 | 组件目录 | Store |
 |------|---------|-------|
 | AgentChat.tsx (未使用) | agent/ | agent.ts + agent/ 子目录 |
-| AgentChatV3.tsx (活跃) | agentV3/ | agentV3.ts |
+| AgentChatV3.tsx (原审计活跃) | agentV3/ | agentV3.ts |
 
 ---
 
@@ -289,12 +294,12 @@ const AgentChat = lazy(() => import("./pages/project/AgentChatV3"));
 
 ## 总结
 
-**建议采用策略 A: 以 agentV3 为基础进行合并**
+**原始审计建议: 采用策略 A，以当时的 agentV3 为基础进行合并**
 
-**理由:**
-1. agentV3/ 是当前活跃版本
+**当时的理由:**
+1. agentV3/ 是原审计时的活跃版本
 2. 代码质量更高，更简洁
-3. 路由已指向 AgentChatV3.tsx
+3. 原审计时相关路由指向当时的新实现
 4. 更符合现代 React 最佳实践
 
 **预计工作量:** 3-5 天

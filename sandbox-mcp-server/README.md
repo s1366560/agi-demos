@@ -35,8 +35,8 @@ docker run -p 8765:8765 -p 7681:7681 -p 6080:6080 \
   -v $(pwd)/workspace:/workspace \
   sandbox-mcp-server
 
-# Or use docker-compose
-docker-compose up -d
+# Or use Docker Compose
+docker compose up -d
 ```
 
 ### Accessing Services
@@ -190,8 +190,10 @@ open http://localhost:6080
 
 ### VNC Server
 
-The sandbox uses **KasmVNC** exclusively. The previous TigerVNC + noVNC + websockify
-stack (and the `VNC_SERVER_TYPE` toggle between TigerVNC and x11vnc) has been removed.
+The sandbox runtime is **KasmVNC-centric**. The previous TigerVNC + noVNC + websockify
+stack is no longer the documented runtime path. Some repository orchestration still accepts
+a `VNC_SERVER_TYPE`/`VNC` compatibility flag for older commands, but new behavior should be
+validated against the KasmVNC path.
 
 Relevant runtime details:
 

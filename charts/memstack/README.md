@@ -38,7 +38,8 @@ secrets:
     OPENAI_API_KEY: sk-...
 ```
 
-Ray and the agent actor are optional and disabled by default:
+Ray and the agent actor are optional and disabled by default in `values.yaml`. Enable them
+with an override such as:
 
 ```yaml
 ray:

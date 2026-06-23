@@ -10,6 +10,20 @@ are explicitly linked from the maintained map.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) - current backend/frontend/runtime architecture.
 
+## Route Source Map
+
+Use these code files when a design document mentions implemented HTTP or WebSocket behavior:
+
+| Area | Source of truth |
+|---|---|
+| Agent WebSocket | `src/infrastructure/adapters/primary/web/websocket/router.py` and `websocket/handlers/` |
+| Conversation plan/build mode | `src/infrastructure/adapters/primary/web/routers/agent/plans.py` |
+| Workspace planning | `src/infrastructure/adapters/primary/web/routers/workspace_plans.py` |
+| HITL | `src/infrastructure/adapters/primary/web/routers/agent/hitl.py` and `websocket/handlers/hitl_handler.py` |
+| Sandbox | `src/infrastructure/adapters/primary/web/routers/sandbox/` and `project_sandbox.py` |
+| MCP | `src/infrastructure/adapters/primary/web/routers/mcp/` |
+| Agent pool admin | `src/infrastructure/agent/pool/api/router.py` |
+
 ## Historical Or Focused Notes
 
 - [AGENT_POOL.md](AGENT_POOL.md) - agent pool architecture notes.

@@ -1,7 +1,7 @@
 # MCP 工具与 ReActAgent 集成状态分析
 
 > 生成时间: 2026-01-30
-> 最后核对代码: 2026-06-22
+> 最后核对代码: 2026-06-23
 
 ## 执行概要
 
@@ -161,7 +161,7 @@
 
 ### 4.1 权限分类策略
 
-`classify_sandbox_tool_permission(tool_name)` 按工具名返回权限类型，取值为 `read` / `write` / `bash` / `ask`（注意 execute 类工具映射到 `bash`，而非 `execute_tools`）。代码见 `src/infrastructure/agent/permission/rules.py`：
+`classify_sandbox_tool_permission(tool_name)` 按工具名返回权限类型，取值为 `read` / `write` / `bash` / `ask`（注意 execute 类工具映射到 `bash`，而非 `execute_tools`）。代码见 `src/infrastructure/agent/permission/rules.py`。这些集合是分类函数的当前白名单，不是所有 sandbox MCP 工具的完整清单：
 
 ```python
 def classify_sandbox_tool_permission(tool_name: str) -> str:
@@ -184,9 +184,9 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
 
 | 工具类型 | 权限类型 | 默认操作 | 说明 |
 |---------|---------|---------|------|
-| file_read, list_files, cat, grep, glob, find | read | ALLOW | 直接允许 |
-| file_write, create_file, edit_file, delete_file, edit, patch | write | ASK | 需要用户确认 |
-| bash, execute, run, python, sh, shell | bash | ASK | 需要用户确认 |
+| `read`, `file_read`, `list_files`, `cat`, `grep`, `glob`, `find` | read | ALLOW | 规则集直接允许；分类函数还识别 `read_file`, `ls`, `dir`。 |
+| `write`, `file_write`, `write_file`, `create_file`, `edit_file`, `delete_file`, `edit`, `patch` | write | ASK | 规则集需要用户确认；分类函数还识别 `remove`, `rm`, `mv`, `rename`, `mkdir`, `touch`。 |
+| `bash`, `execute`, `run`, `python`, `sh`, `shell` | bash | ASK | 规则集需要用户确认；分类函数还识别 `run_command`, `node`。 |
 | 未知工具（兜底 `*/*`） | * | ASK | 默认需要确认 |
 
 ### 4.3 模式特定行为

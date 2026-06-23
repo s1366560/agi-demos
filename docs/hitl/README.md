@@ -4,7 +4,7 @@ HITL lets an agent pause and request human input before it continues. The curren
 implementation is Ray Actor + Redis Streams + PostgreSQL persistence. It does not use
 Temporal.
 
-Last checked against code: 2026-05-18.
+Last checked against code: 2026-06-23.
 
 ## Request Types
 
@@ -32,7 +32,7 @@ sequenceDiagram
     Web->>WS: send_message
     WS->>Actor: start/continue chat
     Actor->>DB: persist HITL request
-    Actor->>WS: emit clarification_asked / decision_asked / env_var_requested / permission_asked
+    Actor->>WS: emit clarification_asked / decision_asked / env_var_requested / permission_asked / a2ui_action_asked
     User->>Web: Submit response
     Web->>WS: *_respond message
     Web->>DB: POST /api/v1/agent/hitl/respond fallback/recovery path
@@ -44,6 +44,9 @@ sequenceDiagram
 
 The REST endpoints are still important for refresh/recovery and explicit response/cancel
 paths. Live chat itself is WebSocket-based.
+
+`a2ui_action` requests are the HITL branch used by interactive A2UI/canvas surfaces; the
+WebSocket response message is `a2ui_action_respond`.
 
 ## Backend Components
 

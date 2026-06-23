@@ -3,7 +3,7 @@
 > 创建日期: 2026-02-01
 > 作者: AI Assistant
 > 状态: 已实现（详见第 13 节「实现落地与设计偏差」）
-> Last checked against code: 2026-06-22
+> Last checked against code: 2026-06-23
 
 ## 1. 概述
 

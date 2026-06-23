@@ -1,7 +1,7 @@
 # memstack-cli
 
-Command-line interface for MemStack. Send prompts, browse conversations,
-fetch artifacts — all from a terminal or a script.
+Command-line interface for MemStack. Browse projects and conversations, inspect persisted
+events, and fetch artifacts from a terminal or script.
 
 ## Install
 
@@ -18,9 +18,12 @@ memstack login                      # device-code OAuth
 memstack whoami
 memstack projects
 memstack conversations --project <id>
-memstack chat <project_id> "hello" --stream
 memstack artifacts list --conversation <id>
 memstack artifacts pull <artifact_id> --output ./out.zip
 ```
+
+`memstack chat` still exists in the CLI code, but it targets the legacy REST/SSE chat route.
+Current live agent chat is WebSocket-based; see [docs/CLI.md](../../docs/CLI.md) for the
+current status.
 
 See [docs/CLI.md](../../docs/CLI.md) for the full reference.

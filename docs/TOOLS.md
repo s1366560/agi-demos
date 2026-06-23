@@ -4,7 +4,7 @@ This document describes the current agent tool architecture and the maintained t
 families. It replaces older lists that referenced removed `plan_enter`, `plan_update`, and
 `plan_exit` tool files.
 
-Last checked against code: 2026-06-22.
+Last checked against code: 2026-06-23.
 
 ## Source Of Truth
 
@@ -19,9 +19,15 @@ Last checked against code: 2026-06-22.
 | Sandbox server tools | `sandbox-mcp-server/src/tools/` |
 | Runtime catalog API | `GET /api/v1/agent/tools`, `GET /api/v1/agent/tools/capabilities` |
 
-The runtime catalog is more authoritative than this document for enabled tools because
-plugins, MCP servers, custom tools, tenant configuration, and sandbox availability can change
-the final list.
+`GET /api/v1/agent/tools` is a user-visible core-tool listing, not a full dump of every
+tool callable by the runtime. At the time of this check it is built from
+`_CORE_TOOL_DEFINITIONS` in `routers/agent/tools.py`, with memory tools gated by tenant and
+runtime configuration. Use source search, tool provider wiring, plugin runtime state, and
+sandbox/MCP discovery for a full execution inventory.
+
+The runtime capability endpoints are more authoritative than this document for enabled
+capability families because plugins, MCP servers, custom tools, tenant configuration, and
+sandbox availability can change the final list.
 
 ## Architecture
 
@@ -55,7 +61,8 @@ plugin tools, MCP server tools, and sandbox tools without editing the static bui
 | Workspace planning contract | `workspace_submit_planning_contract`, `workspace_submit_verification_judgment`, `workspace_submit_iteration_review`, `workspace_submit_supervisor_decision`, `workspace_submit_worktree_preparation` | Terminal contract submissions invoked once per run by the builtin workspace planner, verifier, iteration reviewer, supervisor, and worktree manager. |
 | Multi-agent action | `assign_task`, `refuse_task`, `request_human_input`, `escalate`, `mark_conflict`, `declare_progress`, `signal_goal_complete` | Structured inter-agent action events. |
 | Skills | `skill`, `skill_loader`, `skill_installer`, `skill_sync` | Load, install, sync, or invoke skills. |
-| Plugins/MCP | `plugin_manager`, `register_mcp_server`, `debug_mcp_server`, `create_mcp_server_from_template` | Runtime plugin and MCP server management. |
+| Plugins | `plugin_manager`, plugin runtime tools | Runtime plugin loading, reload, enablement, diagnostics, and plugin-provided tools. |
+| MCP server management | `register_mcp_server`, `mcp_server_install`, `mcp_server_start`, `mcp_server_discover_tools`, `mcp_server_status`, `mcp_server_logs`, `mcp_server_list`, `debug_mcp_server`, `create_mcp_server_from_template` | Register, install, start, inspect, and debug MCP servers; separate from MCP tools discovered from those servers. |
 | Runtime/model | `list_available_models`, `switch_model_next_turn`, `session_status`, `structured_output`, `reflect_friction`, `verdict`, `handoff`, `cron`, `custom_tools_status` | Runtime introspection, structured outputs, review/verdicts, scheduled actions, and custom-tool loading diagnostics. |
 | Environment UI | `terminal`, `desktop` | Web terminal and remote desktop service management. |
 
@@ -83,7 +90,7 @@ Representative families:
 
 | Family | Examples | Notes |
 |---|---|---|
-| File | `read`, `write`, `edit`, `glob`, `grep`, `list`, `patch` | Workspace-scoped file operations. |
+| File | Sandbox server tools such as `read`, `batch_read`, `write`, `edit`, `glob`, `grep`, `list`, `patch`; host-side decorator examples use canonical IDs such as `read_file`, `write_file`, `edit_file`, and `list_files` where available. | Workspace-scoped file operations; aliases differ between sandbox MCP servers and host-declared tools. |
 | Shell | `bash` | Non-interactive command execution with timeout and output limits. |
 | Artifact | `export_artifact`, `list_artifacts`, `batch_export_artifacts` | Export files to MemStack artifact storage. |
 | Terminal | `start_terminal`, `stop_terminal`, `get_terminal_status`, `restart_terminal` | ttyd-backed terminal service. |

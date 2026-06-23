@@ -8,7 +8,7 @@ http://localhost:8000/api/v1/agent/hitl
 
 All endpoints require `Authorization: Bearer ms_sk_...`.
 
-Last checked against code: 2026-05-18.
+Last checked against code: 2026-06-23.
 
 ## Response Models
 

@@ -2,7 +2,7 @@
 
 Python client library for MemStack's memory, episode, API key, and health endpoints.
 
-Last checked against code: 2026-05-18.
+Last checked against code: 2026-06-23.
 
 ## Installation
 
@@ -148,8 +148,8 @@ Additional synchronous methods in `memstack/client.py`:
 - `create_api_key`, `list_api_keys`, `revoke_api_key`
 - `create_memo`, `list_memos`, `get_memo`, `update_memo`, `delete_memo`
 
-The memo helpers target legacy `/api/v1/memos` endpoints. Verify backend route support
-before depending on them in new integrations.
+The memo helpers target `/api/v1/memos` endpoints exposed by the current memory router.
+Prefer the episode and memory-search APIs for graph ingestion/search workflows.
 
 ## Error Handling
 

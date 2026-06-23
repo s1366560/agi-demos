@@ -3,7 +3,7 @@
 The web console is a React 19 + TypeScript application for operating MemStack tenants,
 projects, agents, workspaces, memory graphs, MCP integrations, sandboxes, and admin views.
 
-Last checked against code: 2026-05-18.
+Last checked against code: 2026-06-23.
 
 Additional web docs start at [web/docs/README.md](docs/README.md).
 

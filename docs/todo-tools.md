@@ -2,7 +2,7 @@
 
 > ReActAgent 待办事项管理工具
 > 实现位置: `src/infrastructure/agent/tools/todo_tools.py`
-> Last checked against code: 2026-06-22
+> Last checked against code: 2026-06-23
 
 ## 概述
 

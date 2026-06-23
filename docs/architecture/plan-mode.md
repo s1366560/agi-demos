@@ -1,6 +1,6 @@
 # Plan Mode Architecture
 
-> **Status note (checked 2026-06-22).** The orchestration layer described below
+> **Status note (checked 2026-06-23).** The orchestration layer described below
 > (`PlanGenerator`, `PlanExecutor`, `PlanReflector`, `PlanAdjuster`,
 > `PlanModeOrchestrator`) is conceptual and does not map to concrete classes in
 > the current tree. The legacy agent tools `plan_enter` / `plan_update` /
@@ -25,8 +25,10 @@
 >   `workspace_submit_worktree_preparation` in
 >   `src/infrastructure/agent/tools/workspace_planning_contract.py` and
 >   `workspace_plan_contract_tools.py`.
-> - REST routes: `/api/v1/agent/plan/*` (plan/build mode switch) and
->   `/api/v1/workspaces/{workspace_id}/plan/*`.
+> - REST routes: `/api/v1/agent/plan/*` for conversation mode/task-list state
+>   (`src/infrastructure/adapters/primary/web/routers/agent/plans.py`) and
+>   `/api/v1/workspaces/{workspace_id}/plan/*` for durable workspace planning
+>   (`src/infrastructure/adapters/primary/web/routers/workspace_plans.py`).
 
 ## Overview
 
@@ -80,7 +82,7 @@ Plan Mode is a sophisticated execution mode that uses pre-generated execution pl
 - **Output**: Updated ExecutionPlan with results
 - **Features**:
   - Respects step dependencies
-  - Emits SSE events for progress
+  - Emits progress events
   - Handles abort signals
 
 ### PlanReflector
@@ -251,7 +253,7 @@ PENDING ──► CANCELLED
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        SSE Events                                │
+│                  Plan Events (historical design)                 │
 │                                                                   │
 │  plan_execution_start ──► plan_step_ready ──►                  │
 │       │                      │                                  │
@@ -327,7 +329,7 @@ This ensures:
 ### Frontend Tests
 
 - **Component Rendering**: Display plans, steps, progress
-- **Event Handling**: Update UI on SSE events
+- **Event Handling**: Update UI on plan progress events
 - **User Interaction**: Approve/reject adjustments
 
 ## Performance Considerations

@@ -1,6 +1,9 @@
 # Agent Tool Capability Audit
 
-Last checked: 2026-05-18
+Last checked against code structure: 2026-06-23.
+
+The test counts in "Current Evidence" are historical run records from the original audit;
+rerun the listed commands before using those counts as current quality evidence.
 
 ## Objective
 

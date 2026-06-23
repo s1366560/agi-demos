@@ -4,7 +4,7 @@ This directory contains both maintained documentation and historical design/plan
 artifacts. Current code is the source of truth when a historical document disagrees with
 the repository.
 
-Last checked against code: 2026-06-22.
+Last checked against code: 2026-06-23.
 
 ## Maintained Entry Points
 
@@ -32,6 +32,18 @@ Last checked against code: 2026-06-22.
 | MCP | [mcp_protocol_implementation.md](mcp_protocol_implementation.md), [mcp_protocol_quick_reference.md](mcp_protocol_quick_reference.md) |
 | Events | [agent-event-types.md](agent-event-types.md), [architecture/event-system-timeline.md](architecture/event-system-timeline.md) |
 | HITL | [hitl/README.md](hitl/README.md) |
+
+## Active And Recent Plans
+
+Planning artifacts that still describe active or recent product work live under
+[plans/](plans/). Treat them as delivery context, not as the source of truth for route names,
+event names, or runtime behavior.
+
+| Plan | Status |
+|---|---|
+| [plans/CYBER_WORKSPACE_DEVELOPMENT_PLAN.md](plans/CYBER_WORKSPACE_DEVELOPMENT_PLAN.md) | Cyber workspace development plan. |
+| [plans/SUBAGENT_ENHANCEMENT_PLAN.md](plans/SUBAGENT_ENHANCEMENT_PLAN.md) | Subagent event/UI enhancement plan. |
+| [plans/SUBAGENT_UI_IMPROVEMENT_PLAN.md](plans/SUBAGENT_UI_IMPROVEMENT_PLAN.md) | Subagent UI improvement plan. |
 
 ## Historical Artifacts
 

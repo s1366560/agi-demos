@@ -38,8 +38,8 @@ hooks/        ─┼──► stores/  ──► services/api  ──► httpCli
    migrate gradually. **Not yet enforced** — `web/eslint.config.js`'s
    `no-restricted-imports` currently only blocks barrel imports from
    `@/components/agent` and `@/components/index`; it does not restrict
-   `@/services/*`. As of this writing, ~48 component files still import
-   `@/services/*` directly (~63 import lines), so treat this rule as a
+   `@/services/*`. As of the 2026-06-23 check, 48 component files still import
+   `@/services/*` directly (63 import lines), so treat this rule as a
    target, not a gate.
 5. **Project scope is explicit.** Components and stores must derive the
    active project from tenant-prefixed route params, query params, or the
@@ -76,10 +76,10 @@ export function useX(scope: string | undefined) {
 
 ## Route Naming (warn-only)
 
-New top-level routes must be single words (`/agents`) or `/{noun}/{verb}`
-(`/agents/new`). Avoid hyphenated compounds (`/agent-workspace`) — they
-usually mask missing noun/verb decomposition. Existing offenders are
-grandfathered via `scripts/check-route-naming.mjs`'s allowlist.
+New top-level routes should be single words (`/agents`) or `/{noun}/{verb}`
+(`/agents/new`). Avoid new hyphenated compounds unless they are already canonical product
+routes. The current `agent-workspace` tenant route is canonical and grandfathered through
+`scripts/check-route-naming.mjs`'s allowlist.
 
 ## WebSocket Resilience
 

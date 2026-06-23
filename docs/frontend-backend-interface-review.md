@@ -35,7 +35,7 @@ export const EVENT_CATEGORIES: Record<AgentEventType, EventCategory> = {
 
 ### 2. WebSocket 消息格式一致性
 
-| 字段 | 后端 (SSE) | 前端 | 状态 |
+| 字段 | 后端 (WebSocket event envelope) | 前端 | 状态 |
 |------|-------------|------|------|
 | type | 事件类型 | 事件类型 | ✅ 一致 |
 | conversation_id | 会话 ID | 会话 ID | ✅ 一致 |
@@ -98,7 +98,7 @@ export function isDeltaEvent(eventType: AgentEventType): boolean {
 ```
 
 Delta 合并逻辑由 `web/src/stores/agent/deltaBuffers.ts` 提供（`getDeltaBuffer` /
-`clearDeltaBuffers` / `clearAllDeltaBuffers`），由 `agentV3` store 及
+`clearDeltaBuffers` / `clearAllDeltaBuffers`），由当前 agent store 及
 `messageSendActions` 在流式接收时消费。
 
 #### 4.2 事件类型命名风格（已解决）
