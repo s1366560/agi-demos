@@ -66,6 +66,7 @@ async def drain_pending_worker_launches_to_outbox(
                 extra={"event": "worker_launch.drain.rollback_failed"},
                 exc_info=True,
             )
+        _restore_pending_worker_launches(command_service, pending)
         logger.warning(
             "worker_launch.drain.outbox_enqueue_failed",
             extra={"event": "worker_launch.drain.outbox_enqueue_failed"},
@@ -88,8 +89,12 @@ async def enqueue_pending_worker_launches_to_outbox(
     launchable = [entry for entry in pending if _worker_agent_id(entry[0])]
     if not launchable:
         return 0
-    for task, actor_user_id, leader_agent_id in launchable:
-        await _enqueue_worker_launch(session, task, actor_user_id, leader_agent_id)
+    try:
+        for task, actor_user_id, leader_agent_id in launchable:
+            await _enqueue_worker_launch(session, task, actor_user_id, leader_agent_id)
+    except Exception:
+        _restore_pending_worker_launches(command_service, pending)
+        raise
     return len(launchable)
 
 
@@ -105,6 +110,22 @@ def _consume_pending_worker_launches(
             exc_info=True,
         )
         return []
+
+
+def _restore_pending_worker_launches(
+    command_service: WorkspaceTaskCommandService,
+    pending: list[PendingWorkerLaunch],
+) -> None:
+    if not pending:
+        return
+    queue = getattr(command_service, "_pending_worker_launches", None)
+    if not isinstance(queue, list):
+        logger.warning(
+            "worker_launch.drain.restore_failed",
+            extra={"event": "worker_launch.drain.restore_failed"},
+        )
+        return
+    queue[0:0] = pending
 
 
 async def _enqueue_worker_launch(

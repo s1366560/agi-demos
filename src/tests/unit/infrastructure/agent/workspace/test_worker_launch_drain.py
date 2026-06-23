@@ -166,6 +166,11 @@ class TestDrainPendingWorkerLaunches:
                 command_service,
                 db_session,
             )
+        pending = command_service.consume_pending_worker_launches()
+        assert len(pending) == 1
+        assert pending[0][0] is task
+        assert pending[0][1] == "user-1"
+        assert pending[0][2] is None
 
     @pytest.mark.asyncio
     async def test_transactional_enqueue_does_not_commit_caller_transaction(
