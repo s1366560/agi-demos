@@ -143,14 +143,12 @@ class ChannelMessageRouter:
         if not message.content.has_media_to_import():
             return
 
-        # DEBUG: Log message content details
         logger.info(
             f"[MessageRouter] Message details - "
             f"type={message.content.type.value}, "
             f"has_media={message.content.has_media_to_import()}, "
-            f"image_key={message.content.image_key}, "
-            f"file_key={message.content.file_key}, "
-            f"file_name={message.content.file_name}"
+            f"size={message.content.size}, "
+            f"mime_type={message.content.mime_type}"
         )
 
         await self._ensure_media_import_service()
@@ -280,7 +278,12 @@ class ChannelMessageRouter:
                 "or its format is not supported. Filename: {filename}"
             ).format(filename=filename)
         )
-        logger.warning(f"[MessageRouter] Media import failed - {error_msg}")
+        logger.warning(
+            f"[MessageRouter] Media import failed - "
+            f"type={message.content.type.value}, "
+            f"size={message.content.size}, "
+            f"mime_type={message.content.mime_type}"
+        )
         await self._send_error_reply(
             message=message,
             error_message=error_msg,
@@ -355,8 +358,10 @@ class ChannelMessageRouter:
 
         logger.info(
             f"[MessageRouter] Passing file_metadata to agent: "
-            f"filename={message.content.file_name}, "
-            f"sandbox_path={message.content.sandbox_path}"
+            f"has_filename={bool(message.content.file_name)}, "
+            f"has_sandbox_path={bool(message.content.sandbox_path)}, "
+            f"mime_type={message.content.mime_type}, "
+            f"size={message.content.size}"
         )
         return [
             {

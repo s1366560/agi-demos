@@ -1,6 +1,7 @@
 """Unit tests for ChannelMessageRouter."""
 
 import json
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -113,6 +114,123 @@ async def test_route_message_broadcasts_inbound_user_message_to_workspace() -> N
     assert broadcast_call["event_data"]["metadata"]["source"] == "channel_inbound"
     assert broadcast_call["event_data"]["content"] == "hello from feishu"
     router._invoke_agent.assert_awaited_once_with(message, "conv-1", None)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_process_media_if_needed_logs_metadata_without_media_identifiers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Media import logs should not expose platform keys or file names."""
+    router = ChannelMessageRouter()
+    router._ensure_media_import_service = AsyncMock()
+    router._do_media_import = AsyncMock()
+    router._media_import_service = object()
+    message = Message(
+        channel="feishu",
+        chat_type=ChatType.P2P,
+        chat_id="chat-1",
+        sender=SenderInfo(id="sender-1", name="Test User"),
+        content=MessageContent(
+            type=MessageType.FILE,
+            image_key="img-secret-key",
+            file_key="file-secret-key",
+            file_name="private-roadmap.pdf",
+            size=42,
+            mime_type="application/pdf",
+        ),
+        project_id="project-1",
+    )
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router._process_media_if_needed(message, "conv-1")
+
+    router._ensure_media_import_service.assert_awaited_once()
+    router._do_media_import.assert_awaited_once_with(message, "conv-1")
+    assert "file-secret-key" not in caplog.text
+    assert "img-secret-key" not in caplog.text
+    assert "private-roadmap.pdf" not in caplog.text
+    assert "type=file" in caplog.text
+    assert "has_media=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_handle_media_import_failure_log_omits_filename(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Import failure logs should keep diagnostics without echoing file names."""
+    router = ChannelMessageRouter()
+    router._send_error_reply = AsyncMock()
+    message = Message(
+        channel="feishu",
+        chat_type=ChatType.P2P,
+        chat_id="chat-1",
+        sender=SenderInfo(id="sender-1", name="Test User"),
+        content=MessageContent(
+            type=MessageType.FILE,
+            file_name="private-roadmap.pdf",
+            size=42,
+            mime_type="application/pdf",
+        ),
+        project_id="project-1",
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router._handle_media_import_failure(message)
+
+    error_message = router._send_error_reply.await_args.kwargs["error_message"]
+    assert "private-roadmap.pdf" in error_message
+    assert "private-roadmap.pdf" not in caplog.text
+    assert "type=file" in caplog.text
+    assert "mime_type=application/pdf" in caplog.text
+
+
+@pytest.mark.unit
+def test_build_file_metadata_log_omits_filename_and_sandbox_path(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Agent file metadata logs should avoid names and sandbox paths."""
+    router = ChannelMessageRouter()
+    message = Message(
+        channel="feishu",
+        chat_type=ChatType.P2P,
+        chat_id="chat-1",
+        sender=SenderInfo(id="sender-1", name="Test User"),
+        content=MessageContent(
+            type=MessageType.FILE,
+            file_name="private-roadmap.pdf",
+            sandbox_path="/workspace/private-roadmap.pdf",
+            size=42,
+            mime_type="application/pdf",
+        ),
+        project_id="project-1",
+    )
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    metadata = router._build_file_metadata(message)
+
+    assert metadata == [
+        {
+            "filename": "private-roadmap.pdf",
+            "sandbox_path": "/workspace/private-roadmap.pdf",
+            "mime_type": "application/pdf",
+            "size_bytes": 42,
+        }
+    ]
+    assert "private-roadmap.pdf" not in caplog.text
+    assert "/workspace/private-roadmap.pdf" not in caplog.text
+    assert "has_filename=True" in caplog.text
+    assert "has_sandbox_path=True" in caplog.text
 
 
 @pytest.mark.unit
