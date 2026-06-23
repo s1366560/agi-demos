@@ -935,12 +935,21 @@ class ChannelMessageRouter:
         if card_msg_id and response.strip():
             await self._record_streaming_outbox(message, conversation_id, response, card_msg_id)
             if error_message:
-                logger.warning(f"[MessageRouter] Agent error after streaming: {error_message}")
+                logger.warning(
+                    "[MessageRouter] Agent error after streaming: "
+                    "has_error_message=%s has_response=%s",
+                    bool(error_message),
+                    bool(response.strip()),
+                )
             return
 
         # Fallback: regular send
         if error_message:
-            logger.warning(f"[MessageRouter] Agent error for {conversation_id}: {error_message}")
+            logger.warning(
+                "[MessageRouter] Agent error: has_error_message=%s has_response=%s",
+                bool(error_message),
+                bool(response.strip()),
+            )
             if response.strip():
                 await self._send_response(message, conversation_id, response)
             else:

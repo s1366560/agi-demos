@@ -371,6 +371,68 @@ async def test_invoke_agent_streams_and_sends_final_response() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_send_final_response_logs_agent_errors_without_details(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Agent error logs should keep delivery state without echoing error details."""
+    router = ChannelMessageRouter()
+    router._send_response = AsyncMock()
+    router._send_error_feedback = AsyncMock()
+    router._record_streaming_outbox = AsyncMock()
+    message = _build_message(
+        text="hi",
+        raw_data={"_routing": {"channel_message_id": "msg-1"}},
+    )
+    error_message = (
+        "Tool failed while reading private-roadmap.pdf "
+        "from /workspace/input/private-roadmap.pdf"
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router._send_final_response(
+        message=message,
+        conversation_id="conv-1",
+        response="partial answer",
+        card_msg_id=None,
+        error_message=error_message,
+    )
+
+    router._send_response.assert_awaited_once_with(message, "conv-1", "partial answer")
+    router._send_error_feedback.assert_not_awaited()
+    assert "Tool failed" not in caplog.text
+    assert "private-roadmap.pdf" not in caplog.text
+    assert "/workspace/input/private-roadmap.pdf" not in caplog.text
+    assert "has_error_message=True" in caplog.text
+    assert "has_response=True" in caplog.text
+
+    caplog.clear()
+
+    await router._send_final_response(
+        message=message,
+        conversation_id="conv-1",
+        response="streamed answer",
+        card_msg_id="card-1",
+        error_message=error_message,
+    )
+
+    router._record_streaming_outbox.assert_awaited_once_with(
+        message,
+        "conv-1",
+        "streamed answer",
+        "card-1",
+    )
+    assert "Tool failed" not in caplog.text
+    assert "private-roadmap.pdf" not in caplog.text
+    assert "/workspace/input/private-roadmap.pdf" not in caplog.text
+    assert "has_error_message=True" in caplog.text
+    assert "has_response=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_invoke_agent_sends_response_text_on_no_progress_error() -> None:
     """When agent errors with 'no-progress' but has accumulated text, send that text."""
     router = ChannelMessageRouter()
