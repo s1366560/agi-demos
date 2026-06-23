@@ -245,7 +245,10 @@ class ChannelMessageRouter:
         """Update message content with the sandbox path after successful import."""
         from dataclasses import replace
 
-        logger.info(f"[MessageRouter] Media imported to sandbox: {sandbox_path}")
+        logger.info(
+            "[MessageRouter] Media imported to sandbox: has_sandbox_path=%s",
+            bool(sandbox_path),
+        )
 
         display_text = self._build_media_display_text(message, sandbox_path)
 

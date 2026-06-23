@@ -158,6 +158,37 @@ async def test_process_media_if_needed_logs_metadata_without_media_identifiers(
 
 
 @pytest.mark.unit
+def test_apply_sandbox_path_log_omits_sandbox_path_and_filename(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Import success logs should not echo workspace paths or file names."""
+    router = ChannelMessageRouter()
+    message = Message(
+        channel="feishu",
+        chat_type=ChatType.P2P,
+        chat_id="chat-1",
+        sender=SenderInfo(id="sender-1", name="Test User"),
+        content=MessageContent(
+            type=MessageType.FILE,
+            file_name="private-roadmap.pdf",
+        ),
+        project_id="project-1",
+    )
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    router._apply_sandbox_path(message, "/workspace/input/private-roadmap.pdf")
+
+    assert message.content.sandbox_path == "/workspace/input/private-roadmap.pdf"
+    assert "/workspace/input/private-roadmap.pdf" in (message.content.text or "")
+    assert "/workspace/input/private-roadmap.pdf" not in caplog.text
+    assert "private-roadmap.pdf" not in caplog.text
+    assert "has_sandbox_path=True" in caplog.text
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_handle_media_import_failure_log_omits_filename(
     caplog: pytest.LogCaptureFixture,
