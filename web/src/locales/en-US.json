@@ -298,6 +298,7 @@
     "evolution": "Evolution",
     "plugins": "Plugins",
     "templates": "Templates",
+    "patterns": "Workflow Patterns",
     "providers": "Model Services",
     "platform": "Platform",
     "administration": "Administration",
@@ -322,6 +323,8 @@
     "instanceTemplates": "Instance Templates",
     "auditLogs": "Audit Logs",
     "deadLetterQueue": "Dead Letter Queue",
+    "trustPolicies": "Trust Policies",
+    "decisionRecords": "Decision Records",
     "orgSettings": "Organization Settings",
     "blackboard": "Blackboard",
     "tenant": "Tenant"

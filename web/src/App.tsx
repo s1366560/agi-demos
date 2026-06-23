@@ -754,6 +754,14 @@ function App() {
                 }
               />
               <Route
+                path="projects/:projectId/edit"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <EditProject />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="users"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -814,6 +822,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <TenantSettings />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="patterns"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <WorkflowPatterns />
                   </Suspense>
                 }
               />
@@ -938,10 +954,26 @@ function App() {
                 }
               />
               <Route
+                path="plugins/:pluginName"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <PluginDetail />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="mcp-servers"
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <McpServerList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="pool"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <PoolDashboard />
                   </Suspense>
                 }
               />

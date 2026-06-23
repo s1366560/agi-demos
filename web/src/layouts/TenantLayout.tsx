@@ -38,6 +38,7 @@ import { useTenantStore } from '@/stores/tenant';
 import { agentService } from '@/services/agentService';
 import { unifiedEventService } from '@/services/unifiedEventService';
 
+import { getTenantContentSections } from '@/config/navigation';
 import { TenantCreateModal } from '@/pages/tenant/TenantCreate';
 
 // eslint-disable-next-line no-restricted-imports
@@ -55,6 +56,8 @@ const HTTP_STATUS = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
 } as const;
+
+const TENANT_CONTENT_SECTIONS = new Set(getTenantContentSections());
 
 type TenantEntryStatus = 'idle' | 'loading' | 'empty' | 'error';
 
@@ -433,45 +436,13 @@ export const TenantLayout: React.FC = memo(() => {
 
   const basePath = tenantBasePath;
 
-  // Determine if the current page is an agent workspace (needs full-height, no scroll)
-  // Non-agent pages: overview, projects, users, providers, analytics, etc.
-  const NON_AGENT_SUBPATHS = [
-    'overview',
-    'tasks',
-    'agents',
-    'projects',
-    'users',
-    'providers',
-    'analytics',
-    'billing',
-    'settings',
-    'patterns',
-    'subagents',
-    'skills',
-    'evolution',
-    'profile',
-    'mcp-servers',
-    'agent-definitions',
-    'agent-bindings',
-    'plugins',
-    'templates',
-    'project',
-    'instances',
-    'instance-templates',
-    'clusters',
-    'genes',
-    'audit-logs',
-    'dead-letter-queue',
-    'trust-policies',
-    'decision-records',
-    'deploy',
-    'org-settings',
-  ];
+  // Agent workspace and blackboard are immersive surfaces; registered tenant
+  // sections use the standard scrollable page shell.
   const pathSegments = location.pathname.replace(basePath, '').split('/').filter(Boolean);
   const isFullHeightPath =
     pathSegments.length === 0 ||
     pathSegments[0] === 'agent-workspace' ||
-    !NON_AGENT_SUBPATHS.includes(pathSegments[0] ?? '') ||
+    !TENANT_CONTENT_SECTIONS.has(pathSegments[0] ?? '') ||
     (pathSegments[0] === 'project' && pathSegments.length >= 3 && pathSegments[2] === 'blackboard');
 
   return (

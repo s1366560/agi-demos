@@ -17,6 +17,7 @@ import {
   getCanonicalNavigationRegistry,
   getCanonicalProjectPath,
   getCanonicalTenantPath,
+  getTenantContentSections,
   getProjectHeaderTabs,
   getProjectSidebarConfig,
   getTenantSidebarConfig,
@@ -168,11 +169,48 @@ describe('Navigation Configuration', () => {
       expect(tenantItems.find((item) => item.id === 'agent-workspace')?.path).toBe(
         '/tenant/tenant-123/agent-workspace'
       );
+      expect(tenantItems.find((item) => item.id === 'patterns')?.path).toBe(
+        '/tenant/tenant-123/patterns'
+      );
+      expect(tenantItems.find((item) => item.id === 'pool')?.path).toBe('/tenant/tenant-123/pool');
+      expect(tenantItems.find((item) => item.id === 'org-settings')?.path).toBe(
+        '/tenant/tenant-123/org-settings/info'
+      );
       expect(agentItems.map((item) => item.path)).toEqual([
         '/tenant/tenant-123/project/proj-456/agent',
         '/tenant/tenant-123/project/proj-456/agent/logs',
         '/tenant/tenant-123/project/proj-456/agent/patterns',
       ]);
+    });
+
+    it('should keep tenant sidebar destinations reachable from contextual top navigation', () => {
+      const sidebarPaths = getTenantSidebarConfig()
+        .groups.flatMap((group) => group.items)
+        .map((item) => item.path)
+        .filter((path) => path.length > 0);
+      const derivedPaths = new Set(
+        deriveTopNavigationItems('tenant', { tenantId: 'tenant-123' }).map((item) =>
+          item.path.replace('/tenant/tenant-123', '')
+        )
+      );
+
+      expect(sidebarPaths.filter((path) => !derivedPaths.has(path))).toEqual([]);
+    });
+
+    it('should derive tenant content sections from the canonical registry', () => {
+      expect(getTenantContentSections()).toEqual(
+        expect.arrayContaining([
+          'events',
+          'webhooks',
+          'workspaces',
+          'templates',
+          'patterns',
+          'pool',
+          'profile',
+          'runtimes',
+          'project',
+        ])
+      );
     });
 
     it('should keep compatibility helpers relative for existing shell consumers', () => {

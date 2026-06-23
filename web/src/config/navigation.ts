@@ -216,6 +216,7 @@ interface CanonicalDestinationDefinition {
 const LANDING_PATH = '/tenant';
 const PROJECT_DISCOVERY_PATH = '/tenant/projects';
 const CANONICAL_ABSOLUTE_PREFIXES = ['/tenant', '/project'];
+const TENANT_AUXILIARY_CONTENT_SECTIONS = ['profile'] as const;
 
 function stripHash(path: string): string {
   return path.split('#')[0] || path;
@@ -522,6 +523,33 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/analytics'),
   },
   {
+    id: 'events',
+    label: 'nav.events',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/events',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/events'),
+  },
+  {
+    id: 'webhooks',
+    label: 'nav.webhooks',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/webhooks',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/webhooks'),
+  },
+  {
+    id: 'billing',
+    label: 'nav.billing',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/billing',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/billing'),
+  },
+  {
     id: 'workspaces',
     label: 'nav.workspaces',
     routeFamily: 'project',
@@ -621,6 +649,24 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/plugins'),
   },
   {
+    id: 'templates',
+    label: 'nav.templates',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/templates',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/templates'),
+  },
+  {
+    id: 'patterns',
+    label: 'nav.patterns',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/patterns',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/patterns'),
+  },
+  {
     id: 'providers',
     label: 'nav.providers',
     routeFamily: 'tenant',
@@ -637,6 +683,99 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     displayRole: 'top-nav',
     relativePath: '/instances',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/instances'),
+  },
+  {
+    id: 'clusters',
+    label: 'nav.clusters',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/clusters',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/clusters'),
+  },
+  {
+    id: 'deploy',
+    label: 'nav.deploy',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/deploy',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/deploy'),
+  },
+  {
+    id: 'genes',
+    label: 'nav.genes',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/genes',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/genes'),
+  },
+  {
+    id: 'instance-templates',
+    label: 'nav.instanceTemplates',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/instance-templates',
+    buildPath: (context) =>
+      getCanonicalTenantDestinationPath(context.tenantId, '/instance-templates'),
+  },
+  {
+    id: 'pool',
+    label: 'nav.pool',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/pool',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/pool'),
+  },
+  {
+    id: 'runtimes',
+    label: 'nav.runtimes',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/runtimes',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/runtimes'),
+  },
+  {
+    id: 'trust-policies',
+    label: 'nav.trustPolicies',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/trust-policies',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/trust-policies'),
+  },
+  {
+    id: 'decision-records',
+    label: 'nav.decisionRecords',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/decision-records',
+    buildPath: (context) =>
+      getCanonicalTenantDestinationPath(context.tenantId, '/decision-records'),
+  },
+  {
+    id: 'org-settings',
+    label: 'nav.orgSettings',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/org-settings/info',
+    buildPath: (context) =>
+      getCanonicalTenantDestinationPath(context.tenantId, '/org-settings/info'),
+  },
+  {
+    id: 'settings',
+    label: 'nav.settings',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    relativePath: '/settings',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/settings'),
   },
   {
     id: 'overview',
@@ -896,6 +1035,16 @@ export function deriveTopNavigation(options: DeriveTopNavigationOptions): Derive
   return deriveTopNavigationItems(currentContext, runtimeContext);
 }
 
+export function getTenantContentSections(): string[] {
+  const tenantSections = CANONICAL_NAVIGATION_DESTINATIONS.filter((destination) =>
+    destination.contexts.includes('tenant')
+  )
+    .map((destination) => sanitizeSegment(destination.relativePath).split('/')[0])
+    .filter((section): section is string => Boolean(section));
+
+  return Array.from(new Set([...tenantSections, ...TENANT_AUXILIARY_CONTENT_SECTIONS, 'project']));
+}
+
 function cloneSidebarConfig(config: SidebarConfig): SidebarConfig {
   return {
     ...config,
@@ -937,7 +1086,7 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
         { id: 'plugins', icon: 'extension', label: 'nav.plugins', path: '/plugins' },
         { id: 'templates', icon: 'widgets', label: 'nav.templates', path: '/templates' },
         { id: 'mcp-servers', icon: 'cable', label: 'nav.mcpServers', path: '/mcp-servers' },
-        { id: 'patterns', icon: 'account_tree', label: 'Workflow Patterns', path: '/patterns' },
+        { id: 'patterns', icon: 'account_tree', label: 'nav.patterns', path: '/patterns' },
         { id: 'providers', icon: 'model_training', label: 'nav.providers', path: '/providers' },
         {
           id: 'agent-definitions',
@@ -978,11 +1127,16 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
         { id: 'pool', icon: 'memory', label: 'nav.pool', path: '/pool' },
         { id: 'runtimes', icon: 'monitor_heart', label: 'nav.runtimes', path: '/runtimes' },
         { id: 'audit-logs', icon: 'history', label: 'nav.auditLogs', path: '/audit-logs' },
-        { id: 'trust-policies', icon: 'policy', label: 'Trust Policies', path: '/trust-policies' },
+        {
+          id: 'trust-policies',
+          icon: 'policy',
+          label: 'nav.trustPolicies',
+          path: '/trust-policies',
+        },
         {
           id: 'decision-records',
           icon: 'gavel',
-          label: 'Decision Records',
+          label: 'nav.decisionRecords',
           path: '/decision-records',
         },
         { id: 'events', icon: 'event', label: 'nav.events', path: '/events' },
