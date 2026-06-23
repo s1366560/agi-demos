@@ -240,6 +240,43 @@ async def test_task_update_patch_logs_omit_card_and_conversation_ids(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_task_timeline_failure_log_omits_exception_details(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Timeline send failure logs should not echo adapter exception details."""
+    adapter = _make_adapter()
+    adapter.send_markdown_card = AsyncMock(
+        side_effect=RuntimeError("markdown failed for secret-chat-id")
+    )
+    adapter.send_text = AsyncMock(
+        side_effect=RuntimeError("text failed for secret-task-content")
+    )
+    bridge = ChannelEventBridge()
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.event_bridge",
+    )
+
+    await bridge._handle_task_timeline_event(
+        adapter,
+        "secret-chat-id",
+        {
+            "_event_type": "task_complete",
+            "content": "secret-task-content",
+            "status": "failed",
+        },
+    )
+
+    adapter.send_markdown_card.assert_awaited_once()
+    adapter.send_text.assert_awaited_once()
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-task-content" not in caplog.text
+    assert "text failed" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_artifact_ready_sends_rich_card() -> None:
     adapter = _make_adapter()
     binding = _make_binding()

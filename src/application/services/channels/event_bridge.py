@@ -541,7 +541,10 @@ class ChannelEventBridge:
             try:
                 await adapter.send_text(chat_id, text)
             except Exception as e:
-                logger.warning(f"[EventBridge] Task timeline send failed: {e}")
+                logger.warning(
+                    "[EventBridge] Task timeline send failed: error_type=%s",
+                    type(e).__name__,
+                )
 
     async def _handle_artifact_ready(
         self,
