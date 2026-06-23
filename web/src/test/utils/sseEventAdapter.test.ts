@@ -28,9 +28,34 @@ import type {
   CompleteEventData,
   TextDeltaEventData,
   TextEndEventData,
+  ArtifactCreatedEventData,
 } from '../../types/agent';
 
 describe('SSE Event Adapter', () => {
+  describe('Artifact events', () => {
+    it('should preserve sourcePath on artifact_created events', () => {
+      const event: AgentEvent<ArtifactCreatedEventData> = {
+        type: 'artifact_created',
+        data: {
+          artifact_id: 'artifact-1',
+          filename: 'report.md',
+          mime_type: 'text/markdown',
+          category: 'document',
+          size_bytes: 12,
+          url: 'https://files.example.com/report.md',
+          source_path: '/workspace/output/report.md',
+        },
+      };
+
+      const result = sseEventToTimeline(event);
+
+      expect(result?.type).toBe('artifact_created');
+      if (result?.type === 'artifact_created') {
+        expect(result.sourcePath).toBe('/workspace/output/report.md');
+      }
+    });
+  });
+
   describe('Typewriter Effect Support (text_*)', () => {
     it('should support text_delta event type', () => {
       expect(isSupportedEventType('text_delta')).toBe(true);

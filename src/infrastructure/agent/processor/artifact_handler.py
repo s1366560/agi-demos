@@ -10,8 +10,9 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
+from urllib.parse import unquote
 
 from src.domain.events.agent_events import (
     AgentArtifactCreatedEvent,
@@ -152,6 +153,115 @@ _MAX_TOOL_OUTPUT_BYTES = 30_000
 # Regex matching long base64-like sequences (256+ chars of [A-Za-z0-9+/=])
 _BASE64_PATTERN = re.compile(r"[A-Za-z0-9+/=]{256,}")
 
+_SESSION_FILE_LINK_SOURCE_TOOL = "session_file_link"
+_SESSION_FILE_LINK_EXTENSIONS = frozenset(
+    {
+        ".txt",
+        ".md",
+        ".markdown",
+        ".json",
+        ".jsonl",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".csv",
+        ".tsv",
+        ".xml",
+        ".html",
+        ".htm",
+        ".css",
+        ".scss",
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".py",
+        ".go",
+        ".rs",
+        ".java",
+        ".kt",
+        ".rb",
+        ".php",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".sql",
+        ".log",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".svg",
+        ".bmp",
+        ".pdf",
+        ".mp4",
+        ".webm",
+        ".mov",
+        ".mp3",
+        ".wav",
+        ".ogg",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".ppt",
+        ".pptx",
+    }
+)
+_SESSION_FILE_PATH_RE = re.compile(
+    r"(^|[\s:：|(\[])"
+    r"((?:/workspace/|~/|(?:output|outputs|artifacts|input|inputs|tmp|workspace)/)"
+    r"[^\s)\]）}>`\"']*\.[A-Za-z0-9]{1,12})"
+)
+_MARKDOWN_LINK_TARGET_RE = re.compile(r"\[[^\]]+\]\(([^)\s]+)\)")
+
+
+def _normalize_session_file_path(path: str) -> str:
+    decoded = unquote(path.strip())
+    if decoded.startswith("~/"):
+        return f"/workspace/{decoded[2:]}"
+    if decoded.startswith("workspace/"):
+        return f"/{decoded}"
+    if decoded.startswith(("output/", "outputs/", "artifacts/", "input/", "inputs/")):
+        return f"/workspace/{decoded}"
+    return decoded
+
+
+def _session_file_extension(path: str) -> str:
+    filename = path.rsplit("/", 1)[-1]
+    if "." not in filename:
+        return ""
+    return f".{filename.rsplit('.', 1)[-1].lower()}"
+
+
+def _is_previewable_session_file(path: str) -> bool:
+    return _session_file_extension(path) in _SESSION_FILE_LINK_EXTENSIONS
+
+
+def extract_previewable_session_file_paths(text: str) -> list[str]:
+    """Extract unique previewable sandbox/workspace file paths from assistant text."""
+    if not text:
+        return []
+
+    paths: list[str] = []
+    seen: set[str] = set()
+
+    def add(raw_path: str) -> None:
+        path = _normalize_session_file_path(raw_path)
+        if path in seen or not _is_previewable_session_file(path):
+            return
+        seen.add(path)
+        paths.append(path)
+
+    for match in _MARKDOWN_LINK_TARGET_RE.finditer(text):
+        add(match.group(1))
+
+    for match in _SESSION_FILE_PATH_RE.finditer(text):
+        add(match.group(2))
+
+    return paths
+
 
 class ArtifactHandler:
     """Handles artifact extraction, sanitization, and upload from tool outputs.
@@ -201,6 +311,143 @@ class ArtifactHandler:
             sanitized += "\n... [output truncated]"
 
         return sanitized
+
+    async def process_text_file_links(
+        self,
+        text: str,
+        export_file: Callable[[str], Awaitable[Any]],
+        read_text_file: Callable[[str], Awaitable[str | None]] | None = None,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        """Persist previewable sandbox files referenced in assistant text.
+
+        Session responses often contain markdown links such as
+        ``/workspace/output/report.md`` without an explicit artifact event. Export
+        those files to object storage so the link can still resolve after the
+        sandbox workspace is cleaned.
+        """
+        if not self._artifact_service:
+            return
+
+        ctx = self._langfuse_context or {}
+        project_id = ctx.get("project_id")
+        tenant_id = ctx.get("tenant_id")
+        conversation_id = ctx.get("conversation_id")
+        sandbox_id: str | None = ctx.get("sandbox_id")
+        if not project_id or not tenant_id:
+            return
+
+        for path in extract_previewable_session_file_paths(text):
+            exported = await self._safe_export_session_file(path, export_file)
+            if exported is not None:
+                async for artifact_event in self.process_tool_artifacts(
+                    tool_name=_SESSION_FILE_LINK_SOURCE_TOOL,
+                    result=exported,
+                    tool_execution_id=None,
+                ):
+                    yield artifact_event
+                continue
+
+            if read_text_file is None or not self._is_text_fallback_path(path):
+                continue
+
+            content = await self._safe_read_session_text_file(path, read_text_file)
+            if content is None:
+                continue
+
+            try:
+                filename = path.rsplit("/", 1)[-1] or "linked_file"
+                artifact = await self._artifact_service.create_artifact(
+                    file_content=content.encode("utf-8"),
+                    filename=filename,
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    sandbox_id=sandbox_id,
+                    conversation_id=conversation_id,
+                    source_tool=_SESSION_FILE_LINK_SOURCE_TOOL,
+                    source_path=path,
+                    metadata={"upload_source": _SESSION_FILE_LINK_SOURCE_TOOL},
+                )
+                yield AgentArtifactCreatedEvent(
+                    artifact_id=artifact.id,
+                    filename=artifact.filename,
+                    mime_type=artifact.mime_type,
+                    category=artifact.category.value,
+                    size_bytes=artifact.size_bytes,
+                    url=artifact.url,
+                    preview_url=artifact.preview_url,
+                    source_tool=_SESSION_FILE_LINK_SOURCE_TOOL,
+                    source_path=path,
+                )
+            except Exception:
+                logger.exception("[ArtifactUpload] Failed to persist linked file %s", path)
+
+    async def _safe_export_session_file(
+        self,
+        path: str,
+        export_file: Callable[[str], Awaitable[Any]],
+    ) -> dict[str, Any] | None:
+        try:
+            exported = await export_file(path)
+        except Exception:
+            logger.debug("[ArtifactUpload] export_artifact failed for %s", path, exc_info=True)
+            return None
+
+        if not isinstance(exported, dict):
+            return None
+        if exported.get("is_error") or exported.get("isError"):
+            return None
+        artifact = exported.get("artifact")
+        if not isinstance(artifact, dict):
+            return None
+        return exported
+
+    async def _safe_read_session_text_file(
+        self,
+        path: str,
+        read_text_file: Callable[[str], Awaitable[str | None]],
+    ) -> str | None:
+        try:
+            content = await read_text_file(path)
+        except Exception:
+            logger.debug("[ArtifactUpload] read fallback failed for %s", path, exc_info=True)
+            return None
+        return content if content else None
+
+    @staticmethod
+    def _is_text_fallback_path(path: str) -> bool:
+        return _session_file_extension(path) in {
+            ".txt",
+            ".md",
+            ".markdown",
+            ".json",
+            ".jsonl",
+            ".yaml",
+            ".yml",
+            ".toml",
+            ".csv",
+            ".tsv",
+            ".xml",
+            ".html",
+            ".htm",
+            ".css",
+            ".scss",
+            ".js",
+            ".jsx",
+            ".ts",
+            ".tsx",
+            ".py",
+            ".go",
+            ".rs",
+            ".java",
+            ".kt",
+            ".rb",
+            ".php",
+            ".sh",
+            ".bash",
+            ".zsh",
+            ".sql",
+            ".log",
+        }
 
     # ------------------------------------------------------------------
     # Artifact processing
@@ -281,9 +528,7 @@ class ArtifactHandler:
                                 break
                     if data:
                         file_content = base64.b64decode(data)
-                        logger.debug(
-                            f"Decoded {len(file_content)} bytes from base64"
-                        )
+                        logger.debug(f"Decoded {len(file_content)} bytes from base64")
                     else:
                         logger.debug("base64 encoding but no data found")
                         return
@@ -367,15 +612,14 @@ class ArtifactHandler:
         batch_results = result.get("results")
         if batch_results and isinstance(batch_results, list) and len(batch_results) > 0:
             import base64 as b64
+
             for batch_item in batch_results:
                 try:
                     filename = batch_item.get("filename", "exported_file")
                     encoding = batch_item.get("encoding", "utf-8")
                     data = batch_item.get("data")
                     if not data:
-                        logger.debug(
-                            f"Batch item {filename} has no data, skipping"
-                        )
+                        logger.debug(f"Batch item {filename} has no data, skipping")
                         continue
 
                     if encoding == "base64":
@@ -507,4 +751,3 @@ class ArtifactHandler:
 
         except Exception as e:
             logger.error(f"Error processing artifacts from tool {tool_name}: {e}")
-

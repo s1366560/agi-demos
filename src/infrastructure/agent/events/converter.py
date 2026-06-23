@@ -58,9 +58,7 @@ def normalize_event_dict(
 
     normalized: dict[str, Any] = dict(event)
     payload = {
-        key: value
-        for key, value in normalized.items()
-        if key not in _EVENT_ENVELOPE_META_KEYS
+        key: value for key, value in normalized.items() if key not in _EVENT_ENVELOPE_META_KEYS
     }
 
     raw_data = normalized.get("data")
@@ -210,6 +208,7 @@ class EventConverter:
                 "preview_url": domain_event.preview_url,
                 "tool_execution_id": domain_event.tool_execution_id,
                 "source_tool": domain_event.source_tool,
+                "source_path": domain_event.source_path,
             }
 
         # TASK_START: normalize for timeline rendering

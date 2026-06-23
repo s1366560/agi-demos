@@ -679,6 +679,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         previewUrl: data.preview_url,
         toolExecutionId: data.tool_execution_id,
         sourceTool: data.source_tool,
+        sourcePath: data.source_path,
       };
     }
 

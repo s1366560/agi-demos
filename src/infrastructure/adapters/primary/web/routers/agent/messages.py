@@ -568,6 +568,7 @@ def _build_artifact_created(
         "url": data.get("url", ""),
         "previewUrl": data.get("preview_url", ""),
         "sourceTool": data.get("source_tool", ""),
+        "sourcePath": data.get("source_path", ""),
         "metadata": data.get("metadata", {}),
     }
     if artifact_id in artifact_ready_map:

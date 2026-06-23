@@ -2168,6 +2168,100 @@ class SessionProcessor:
                             break
                 return
 
+    async def _emit_text_end_with_linked_artifacts(
+        self,
+        full_text: str,
+    ) -> AsyncIterator[ProcessorEvent]:
+        yield AgentTextEndEvent(full_text=full_text)
+
+        async for event in self._persist_linked_file_artifacts(full_text):
+            if getattr(event, "event_type", None) == AgentEventType.ARTIFACT_CREATED:
+                self._artifact_count += 1
+            yield event
+
+    async def _persist_linked_file_artifacts(
+        self,
+        full_text: str,
+    ) -> AsyncIterator[ProcessorEvent]:
+        if not full_text or not self._artifact_service:
+            return
+
+        async def export_file(path: str) -> Any:
+            return await self._execute_internal_tool_for_artifact(
+                "export_artifact",
+                {"file_path": path, "encoding": "auto"},
+            )
+
+        async def read_text_file(path: str) -> str | None:
+            result = await self._execute_internal_tool_for_artifact(
+                "read",
+                {"file_path": path, "offset": 0, "limit": 50000, "raw": True},
+            )
+            return result if isinstance(result, str) else None
+
+        try:
+            async for event in self._artifact_handler.process_text_file_links(
+                text=full_text,
+                export_file=export_file,
+                read_text_file=read_text_file,
+            ):
+                yield event
+        except Exception:
+            logger.exception("[Processor] Failed to persist linked file artifacts")
+
+    async def _execute_internal_tool_for_artifact(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> Any:
+        tool_def = self.tools.get(self._canonicalize_tool_name(tool_name))
+        if tool_def is None:
+            return None
+
+        from src.infrastructure.agent.tools.context import ToolContext
+        from src.infrastructure.agent.tools.define import ToolInfo
+        from src.infrastructure.agent.tools.result import ToolResult
+
+        tool_instance = getattr(tool_def, "_tool_instance", None)
+        langfuse_context = self._langfuse_context or {}
+        runtime_context = ToolContext(
+            session_id=langfuse_context.get("session_id", ""),
+            message_id="linked-file-artifact",
+            call_id=f"linked-file-{uuid.uuid4().hex[:8]}",
+            agent_name=langfuse_context.get("agent_name", "main"),
+            conversation_id=langfuse_context.get("conversation_id", ""),
+            abort_signal=self._abort_event or asyncio.Event(),
+            messages=[],
+            project_id=langfuse_context.get("project_id", ""),
+            tenant_id=langfuse_context.get("tenant_id", ""),
+            user_id=langfuse_context.get("user_id", ""),
+            api_auth_token=self.config.api_auth_token,
+            runtime_context=dict(self.config.runtime_context),
+        )
+
+        result: Any = None
+        try:
+            if isinstance(tool_instance, ToolInfo):
+                result = await tool_instance.execute(runtime_context, **arguments)
+            elif tool_instance is not None and hasattr(tool_instance, "set_runtime_context"):
+                tool_instance.set_runtime_context(runtime_context)
+                result = await tool_def.execute(**arguments)
+            else:
+                result = await tool_def.execute(**arguments)
+        except Exception:
+            logger.debug(
+                "[Processor] Internal linked-file tool %s failed",
+                tool_name,
+                exc_info=True,
+            )
+
+        output: Any = result
+        if isinstance(result, ToolResult):
+            output = None if result.is_error else result.metadata or result.output
+        elif isinstance(result, dict):
+            output = None if result.get("is_error") or result.get("isError") else result
+        return output
+
     async def _emit_command_result(
         self,
         result: "CommandResult",
@@ -2187,7 +2281,8 @@ class SessionProcessor:
         if isinstance(result, ReplyResult):
             yield AgentTextStartEvent()
             yield AgentTextDeltaEvent(delta=result.text)
-            yield AgentTextEndEvent(full_text=result.text)
+            async for event in self._emit_text_end_with_linked_artifacts(result.text):
+                yield event
         elif isinstance(result, ToolCallResult):
             tool_name = self._canonicalize_tool_name(result.tool_name)
             tool_def = self.tools.get(tool_name)
@@ -2195,7 +2290,8 @@ class SessionProcessor:
                 yield AgentTextStartEvent()
                 err_msg = f"Unknown tool: {result.tool_name}"
                 yield AgentTextDeltaEvent(delta=err_msg)
-                yield AgentTextEndEvent(full_text=err_msg)
+                async for event in self._emit_text_end_with_linked_artifacts(err_msg):
+                    yield event
             else:
                 yield AgentActEvent(tool_name=tool_name, tool_input=result.args)
                 try:
@@ -2418,7 +2514,10 @@ class SessionProcessor:
                             f"[Processor] TEXT_END: len={len(full_text) if full_text else 0}"
                         )
                         self._current_message.add_text(full_text)
-                        yield AgentTextEndEvent(full_text=full_text)
+                        async for text_event in self._emit_text_end_with_linked_artifacts(
+                            full_text
+                        ):
+                            yield text_event
 
                     elif event.type == StreamEventType.REASONING_START:
                         yield AgentThoughtStartEvent()

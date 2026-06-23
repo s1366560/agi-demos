@@ -211,6 +211,7 @@ class TestEventConverterArtifact:
             preview_url="https://storage.example.com/artifacts/chart_preview.png",
             tool_execution_id="exec-001",
             source_tool="chart_generator",
+            source_path="/workspace/output/chart.png",
             timestamp=time.time(),
         )
 
@@ -225,6 +226,7 @@ class TestEventConverterArtifact:
         assert result["data"]["size_bytes"] == 15000
         assert result["data"]["url"] == "https://storage.example.com/artifacts/chart.png"
         assert result["data"]["source_tool"] == "chart_generator"
+        assert result["data"]["source_path"] == "/workspace/output/chart.png"
 
 
 # ============================================================
