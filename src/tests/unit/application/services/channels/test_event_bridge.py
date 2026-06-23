@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -314,6 +315,44 @@ async def test_hitl_event_tries_cardkit_first() -> None:
 
     adapter.send_hitl_card_via_cardkit.assert_called_once()
     adapter.send_card.assert_not_called()
+
+
+@pytest.mark.unit
+async def test_hitl_cardkit_logs_omit_channel_identifiers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """HITL delivery logs should not echo channel IDs or request IDs."""
+    adapter = _make_adapter(
+        send_hitl_card_via_cardkit=AsyncMock(return_value="ck_msg_1"),
+    )
+    bridge = ChannelEventBridge()
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.event_bridge",
+    )
+
+    with patch.object(bridge, "_lookup_binding", new_callable=AsyncMock) as mock_bind:
+        mock_bind.return_value = _make_binding(chat_id="secret-chat-id")
+        with patch.object(bridge, "_get_adapter", return_value=adapter):
+            await bridge.on_agent_event(
+                "conv-ck-log",
+                {
+                    "type": "decision_asked",
+                    "data": {
+                        "request_id": "secret-hitl-request",
+                        "question": "Which?",
+                        "options": ["A", "B"],
+                    },
+                },
+            )
+
+    adapter.send_hitl_card_via_cardkit.assert_called_once()
+    assert adapter.send_hitl_card_via_cardkit.call_args.args[0] == "secret-chat-id"
+    assert adapter.send_hitl_card_via_cardkit.call_args.args[2] == "secret-hitl-request"
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-hitl-request" not in caplog.text
+    assert "has_chat_id=True" in caplog.text
+    assert "has_request_id=True" in caplog.text
 
 
 @pytest.mark.unit

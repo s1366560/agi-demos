@@ -248,8 +248,11 @@ class ChannelEventBridge:
             tenant_id = event_data.get("_tenant_id", "")
             project_id = event_data.get("_project_id", "")
             logger.info(
-                f"[EventBridge] Building HITL card: type={event_type}, "
-                f"request_id={request_id}, chat_id={chat_id}"
+                "[EventBridge] Building HITL card: type=%s has_request_id=%s "
+                "has_chat_id=%s",
+                event_type,
+                bool(request_id),
+                bool(chat_id),
             )
 
             # 1. Try unified flow: add buttons to the active streaming card
@@ -267,8 +270,9 @@ class ChannelEventBridge:
                     )
                     if ok:
                         logger.info(
-                            f"[EventBridge] Added HITL buttons to streaming card "
-                            f"{card_state.card_id}"
+                            "[EventBridge] Added HITL buttons to streaming card: "
+                            "has_card_id=%s",
+                            bool(card_state.card_id),
                         )
                         return
 
@@ -284,7 +288,12 @@ class ChannelEventBridge:
                     project_id=project_id,
                 )
                 if message_id:
-                    logger.info(f"[EventBridge] Sent HITL card via CardKit to {chat_id}")
+                    logger.info(
+                        "[EventBridge] Sent HITL card via CardKit: has_chat_id=%s "
+                        "has_message_id=%s",
+                        bool(chat_id),
+                        bool(message_id),
+                    )
                     return
                 logger.info("[EventBridge] CardKit HITL failed, falling back to static card")
 
@@ -310,16 +319,27 @@ class ChannelEventBridge:
 
             if card:
                 await adapter.send_card(chat_id, card)
-                logger.info(f"[EventBridge] Sent HITL card to {chat_id}")
+                logger.info(
+                    "[EventBridge] Sent HITL card: has_chat_id=%s",
+                    bool(chat_id),
+                )
             else:
                 question = event_data.get("question", "")
                 options = event_data.get("options", [])
                 text = self._format_hitl_text(question, options)
                 if text:
-                    logger.info(f"[EventBridge] Falling back to text for HITL: {chat_id}")
+                    logger.info(
+                        "[EventBridge] Falling back to text for HITL: has_chat_id=%s "
+                        "has_text=%s",
+                        bool(chat_id),
+                        bool(text),
+                    )
                     await adapter.send_text(chat_id, text)
         except Exception as e:
-            logger.warning(f"[EventBridge] HITL card send failed: {e}", exc_info=True)
+            logger.warning(
+                "[EventBridge] HITL card send failed: error_type=%s",
+                type(e).__name__,
+            )
 
     async def _add_hitl_to_streaming_card(
         self,
