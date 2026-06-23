@@ -303,6 +303,42 @@ async def test_artifact_ready_sends_rich_card() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_error_fallback_failure_log_omits_exception_details(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Error notification fallback logs should not echo adapter exception details."""
+    adapter = _make_adapter()
+    adapter.send_card = AsyncMock(
+        side_effect=RuntimeError("card failed for secret-chat-id")
+    )
+    adapter.send_text = AsyncMock(
+        side_effect=RuntimeError("text failed for secret-error-message")
+    )
+    bridge = ChannelEventBridge()
+    caplog.set_level(
+        logging.DEBUG,
+        logger="src.application.services.channels.event_bridge",
+    )
+
+    await bridge._handle_error(
+        adapter,
+        "secret-chat-id",
+        {
+            "message": "secret-error-message",
+            "code": "SECRET_CODE",
+        },
+    )
+
+    adapter.send_card.assert_awaited_once()
+    adapter.send_text.assert_awaited_once()
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-error-message" not in caplog.text
+    assert "text failed" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_no_adapter_skips_silently() -> None:
     binding = _make_binding()
     bridge = ChannelEventBridge()
