@@ -795,7 +795,10 @@ class ChannelEventBridge:
             except asyncio.CancelledError:
                 return
             except Exception as e:
-                logger.debug(f"[EventBridge] Subagent focus timeout handling failed: {e}")
+                logger.debug(
+                    "[EventBridge] Subagent focus timeout handling failed: error_type=%s",
+                    type(e).__name__,
+                )
             finally:
                 current = self._subagent_focus_timeout_tasks.get(conversation_id)
                 if current is asyncio.current_task():

@@ -728,6 +728,46 @@ async def test_subagent_focus_timeout_auto_unfocuses() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_subagent_focus_timeout_failure_log_omits_exception_details(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Subagent timeout failure logs should not echo send exception details."""
+    adapter = _make_adapter()
+    bridge = ChannelEventBridge(subagent_focus_ttl_seconds=0)
+    bridge._set_subagent_focus(
+        conversation_id="secret-conversation-id",
+        run_id="secret-run-id",
+        subagent_name="secret-subagent",
+    )
+    bridge._send_thread_markdown = AsyncMock(
+        side_effect=RuntimeError("send failed for secret-conversation-id")
+    )
+    caplog.set_level(
+        logging.DEBUG,
+        logger="src.application.services.channels.event_bridge",
+    )
+
+    bridge._arm_subagent_focus_timeout(
+        conversation_id="secret-conversation-id",
+        run_id="secret-run-id",
+        subagent_name="secret-subagent",
+        adapter=adapter,
+        chat_id="secret-chat-id",
+        reply_to="secret-reply-id",
+    )
+
+    timeout_task = bridge._subagent_focus_timeout_tasks["secret-conversation-id"]
+    await timeout_task
+
+    assert "secret-conversation-id" not in caplog.text
+    assert "secret-subagent" not in caplog.text
+    assert "send failed" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "secret-conversation-id" not in bridge._subagent_focus_timeout_tasks
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_subagent_retry_refreshes_focus_timeout() -> None:
     adapter = _make_adapter()
     binding = _make_binding(thread_id="root-msg-4")
