@@ -121,8 +121,10 @@ class MediaImportService:
 
             # Step 2: Download from Feishu
             logger.info(
-                f"Downloading {media_type} from Feishu: file_key={file_key}, "
-                f"message_id={message_id}"
+                "Downloading %s from Feishu: has_file_key=%s has_message_id=%s",
+                media_type,
+                bool(file_key),
+                bool(message_id),
             )
 
             content, metadata = await self._feishu_downloader.download_media(
@@ -162,18 +164,20 @@ class MediaImportService:
             )
 
             logger.info(
-                f"Successfully imported media to workspace: "
-                f"sandbox_path={sandbox_path}, artifact_id={artifact.id if artifact else None}"
+                "Successfully imported media to workspace: "
+                "has_sandbox_path=%s artifact_id=%s",
+                bool(sandbox_path),
+                artifact.id if artifact else None,
             )
 
             return sandbox_path
 
         except load_channel_module("feishu", "media_downloader").FeishuMediaDownloadError as e:
-            logger.error(f"Failed to download media from Feishu: {e}")
+            logger.error("Failed to download media from Feishu: error_type=%s", type(e).__name__)
             # Graceful degradation - return None instead of raising
             return None
         except Exception as e:
-            logger.error(f"Unexpected error importing media: {e}", exc_info=True)
+            logger.error("Unexpected error importing media: error_type=%s", type(e).__name__)
             # Graceful degradation - return None instead of raising
             return None
 
@@ -198,12 +202,14 @@ class MediaImportService:
                     message_id = msg_data.get("message_id")
 
         logger.info(
-            f"[MediaImportService] Extracting media info - "
-            f"media_type={media_type}, "
-            f"file_key={content.file_key}, "
-            f"image_key={content.image_key}, "
-            f"message_id={message_id}, "
-            f"raw_data_keys={list(message.raw_data.keys()) if message.raw_data else None}"
+            "[MediaImportService] Extracting media info - "
+            "media_type=%s has_file_key=%s has_image_key=%s has_message_id=%s "
+            "raw_data_keys=%s",
+            media_type,
+            bool(content.file_key),
+            bool(content.image_key),
+            bool(message_id),
+            list(message.raw_data.keys()) if message.raw_data else None,
         )
 
         if content.type == MessageType.IMAGE:
@@ -346,19 +352,21 @@ class MediaImportService:
                 },
             )
 
-            # Extract sandbox path from result
-            logger.info(f"[MediaImportService] Import result: {result}")
-
             # MCP tool returns result in format:
             # {"content": [{"type": "text", "text": "{\"success\": true, ...}"}], "is_error": False}
             is_error = result.get("is_error", True)
+            content_list = result.get("content", [])
+            logger.info(
+                "[MediaImportService] Import result received: is_error=%s content_items=%s",
+                is_error,
+                len(content_list) if isinstance(content_list, list) else 0,
+            )
             if is_error:
                 error_msg = result.get("error", "Unknown error")
                 raise MediaImportError(f"Sandbox import failed: {error_msg}")
 
             # Parse nested JSON from content[0].text
             try:
-                content_list = result.get("content", [])
                 if content_list and isinstance(content_list[0], dict):
                     text_content = content_list[0].get("text", "{}")
                     import_result = json.loads(text_content)
@@ -372,7 +380,10 @@ class MediaImportService:
                 if not sandbox_path:
                     # Fallback to expected path
                     sandbox_path = f"/workspace/input/{filename}"
-                logger.info(f"[MediaImportService] Import success: {sandbox_path}")
+                logger.info(
+                    "[MediaImportService] Import success: has_sandbox_path=%s",
+                    bool(sandbox_path),
+                )
                 return cast(str, sandbox_path)
             else:
                 error_msg = import_result.get(
