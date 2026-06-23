@@ -53,6 +53,7 @@ import {
   findArtifactForSandboxPath,
   isSafeArtifactUrl,
   normalizeSandboxPath,
+  resolveSandboxArtifactUrl,
 } from '@/utils/sandboxArtifactPath';
 
 import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
@@ -122,7 +123,7 @@ const USER_MESSAGE_MAX_WIDTH_CLASSES = 'max-w-[85%] md:max-w-[75%] lg:max-w-[70%
 const SANDBOX_FILE_LINK_PREFIX = '#sandbox-file:';
 const CANVAS_FORCE_VIEW_MODE_EVENT = 'canvas:force-view-mode';
 const SANDBOX_FILE_PATH_PATTERN =
-  /(^|[\s:：([（])((?:\/workspace\/|~\/|(?:output|outputs|artifacts|input|inputs|tmp|workspace)\/)[^\s)\]）}>`"']*\.[A-Za-z0-9]{1,12})/g;
+  /(^|[\s:：|])((?:\/workspace\/|~\/|(?:output|outputs|artifacts|input|inputs|tmp|workspace)\/)[^\s)\]）}>`"']*\.[A-Za-z0-9]{1,12})/g;
 const TEXT_FILE_EXTENSIONS = new Set([
   'txt',
   'md',
@@ -318,20 +319,49 @@ function isSandboxFilePathText(value: string): boolean {
   );
 }
 
-async function openArtifactInCanvas(artifact: Artifact, requestedPath: string): Promise<boolean> {
-  const url = artifact.url || artifact.previewUrl;
+function getSandboxFilePathFromHref(href: string | undefined): string | null {
+  if (!href) return null;
+
+  if (href.startsWith(SANDBOX_FILE_LINK_PREFIX)) {
+    return safeDecodeURIComponent(href.slice(SANDBOX_FILE_LINK_PREFIX.length));
+  }
+
+  const decodedHref = safeDecodeURIComponent(href);
+  if (isSandboxFilePathText(decodedHref)) return decodedHref;
+
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const url = new URL(decodedHref, window.location.origin);
+    if (url.origin === window.location.origin && isSandboxFilePathText(url.pathname)) {
+      return url.pathname;
+    }
+  } catch {
+    // Non-URL hrefs are handled above.
+  }
+
+  return null;
+}
+
+async function openArtifactUrlInCanvas(params: {
+  id: string;
+  title: string;
+  url: string;
+  artifactId?: string | undefined;
+  mimeType?: string | undefined;
+}): Promise<boolean> {
+  const { id, title, url, artifactId } = params;
   if (!url || !isSafeArtifactUrl(url)) return false;
 
-  const title = artifact.filename || getFileNameFromPath(requestedPath);
-  const mime = (artifact.mimeType || getMimeTypeForSandboxPath(title) || '').toLowerCase();
+  const mime = (params.mimeType || getMimeTypeForSandboxPath(title) || '').toLowerCase();
 
   if (shouldPreviewSandboxFileByUrl(title, mime)) {
     openSandboxUrlPreviewTab({
-      id: artifact.id,
+      id,
       title,
       url,
       mimeType: mime,
-      artifactId: artifact.id,
+      artifactId,
     });
     return true;
   }
@@ -341,11 +371,11 @@ async function openArtifactInCanvas(artifact: Artifact, requestedPath: string): 
   const responseType = response.headers.get('content-type')?.toLowerCase() || '';
   if (shouldPreviewSandboxFileByUrl(title, responseType)) {
     openSandboxUrlPreviewTab({
-      id: artifact.id,
+      id,
       title,
       url,
       mimeType: responseType || mime,
-      artifactId: artifact.id,
+      artifactId,
     });
     return true;
   }
@@ -353,13 +383,13 @@ async function openArtifactInCanvas(artifact: Artifact, requestedPath: string): 
   const content = await response.text();
   const contentType = getCanvasTypeForSandboxFile(title, responseType || mime);
   useCanvasStore.getState().openTab({
-    id: artifact.id,
+    id,
     title,
     type: contentType,
     content,
     language: getFileExtension(title) || undefined,
-    mimeType: artifact.mimeType,
-    artifactId: artifact.id,
+    mimeType: params.mimeType,
+    artifactId,
     artifactUrl: url,
   });
   useLayoutModeStore.getState().setMode('canvas');
@@ -367,21 +397,44 @@ async function openArtifactInCanvas(artifact: Artifact, requestedPath: string): 
   return true;
 }
 
+async function openArtifactInCanvas(artifact: Artifact, requestedPath: string): Promise<boolean> {
+  const url = artifact.url || artifact.previewUrl;
+  const title = artifact.filename || getFileNameFromPath(requestedPath);
+  return await openArtifactUrlInCanvas({
+    id: artifact.id,
+    title,
+    url: url || '',
+    artifactId: artifact.id,
+    mimeType: artifact.mimeType,
+  });
+}
+
 async function openSandboxPathInCanvas(path: string): Promise<void> {
+  const normalizedPath = normalizeSandboxPath(path);
+
   try {
     const artifact = await findArtifactForSandboxPath(path);
     if (artifact) {
       const opened = await openArtifactInCanvas(artifact, path);
       if (opened) return;
     }
+
+    const resolvedArtifactUrl = await resolveSandboxArtifactUrl(path);
+    if (resolvedArtifactUrl) {
+      const opened = await openArtifactUrlInCanvas({
+        id: `${SANDBOX_FILE_LINK_PREFIX}${normalizedPath}`,
+        title: getFileNameFromPath(path),
+        url: resolvedArtifactUrl,
+      });
+      if (opened) return;
+    }
   } catch {
     // Fall back to direct sandbox read below.
   }
 
-  const normalizedPath = normalizeSandboxPath(path);
   const result = await useSandboxStore
     .getState()
-    .executeTool('read', { file_path: normalizedPath, offset: 0, limit: 50000 }, 20);
+    .executeTool('read', { file_path: normalizedPath, offset: 0, limit: 50000, raw: true }, 20);
   if (!result.success || result.isError) return;
 
   const title = getFileNameFromPath(path);
@@ -743,7 +796,8 @@ const SandboxFileButton: React.FC<{ path: string; children: React.ReactNode }> =
 };
 
 const SandboxFileLink: Components['a'] = ({ href, children, ...props }) => {
-  if (!href?.startsWith(SANDBOX_FILE_LINK_PREFIX)) {
+  const path = getSandboxFilePathFromHref(href);
+  if (!path) {
     return (
       <a href={href} {...props}>
         {children}
@@ -751,7 +805,6 @@ const SandboxFileLink: Components['a'] = ({ href, children, ...props }) => {
     );
   }
 
-  const path = safeDecodeURIComponent(href.slice(SANDBOX_FILE_LINK_PREFIX.length));
   return <SandboxFileButton path={path}>{children}</SandboxFileButton>;
 };
 

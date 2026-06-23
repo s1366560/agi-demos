@@ -404,6 +404,28 @@ describe('MessageBubble Compound Component', () => {
       );
     });
 
+    it('should not rewrite sandbox paths inside existing markdown links', () => {
+      const content =
+        '| 项目 | 路径 |\n| 完整测试报告 | [/workspace/output/agent_test/agent_test_report.md](/workspace/output/agent_test/agent_test_report.md) |';
+
+      render(<MessageBubble.Assistant content={content} />);
+
+      const markdown = screen.getByTestId('markdown');
+      expect(markdown.textContent).toContain(
+        '[/workspace/output/agent_test/agent_test_report.md](/workspace/output/agent_test/agent_test_report.md)'
+      );
+      expect(markdown.textContent).not.toContain(']([/workspace/output');
+    });
+
+    it('should linkify sandbox paths in compact markdown table cells', () => {
+      render(<MessageBubble.Assistant content="| 路径 |\n|/workspace/output/report.md|" />);
+
+      const markdown = screen.getByTestId('markdown');
+      expect(markdown.textContent).toContain(
+        '|[/workspace/output/report.md](#sandbox-file:%2Fworkspace%2Foutput%2Freport.md)|'
+      );
+    });
+
     it('should return null for empty content when not streaming', () => {
       const { container } = render(<MessageBubble.Assistant content="" />);
 
