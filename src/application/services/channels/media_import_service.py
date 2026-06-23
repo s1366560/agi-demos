@@ -427,10 +427,24 @@ class MediaImportService:
                 },
             )
 
-            logger.info(f"Created artifact {artifact.id} for {filename}")
+            logger.info(
+                "[MediaImportService] Created artifact %s "
+                "mime_type=%s size_bytes=%s has_filename=%s",
+                artifact.id,
+                metadata.get("mime_type"),
+                metadata.get("size_bytes"),
+                bool(filename),
+            )
             return artifact
 
         except Exception as e:
             # Non-critical error - log and continue
-            logger.error(f"Failed to create artifact for {filename}: {e}", exc_info=True)
+            logger.error(
+                "[MediaImportService] Failed to create artifact "
+                "mime_type=%s size_bytes=%s has_filename=%s error_type=%s",
+                metadata.get("mime_type"),
+                metadata.get("size_bytes"),
+                bool(filename),
+                type(e).__name__,
+            )
             return None
