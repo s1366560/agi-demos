@@ -383,7 +383,10 @@ class ChannelEventBridge:
             added = await mgr.add_hitl_buttons(card_state, elements)
             return cast(bool, added)
         except Exception as e:
-            logger.warning(f"[EventBridge] Unified HITL failed: {e}")
+            logger.warning(
+                "[EventBridge] Unified HITL failed: error_type=%s",
+                type(e).__name__,
+            )
             return False
 
     async def _handle_task_update(

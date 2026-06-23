@@ -488,6 +488,38 @@ async def test_hitl_cardkit_logs_omit_channel_identifiers(
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_unified_hitl_failure_log_omits_exception_details(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Unified HITL failure logs should not echo loader exception details."""
+    adapter = _make_adapter()
+    bridge = ChannelEventBridge()
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.event_bridge",
+    )
+
+    with patch(
+        "src.infrastructure.adapters.secondary.channels.channel_plugin_loader.load_channel_module",
+        side_effect=RuntimeError("loader failed for secret-hitl-request"),
+    ):
+        ok = await bridge._add_hitl_to_streaming_card(
+            adapter,
+            SimpleNamespace(card_id="secret-card-id"),
+            "decision_asked",
+            "secret-hitl-request",
+            {"question": "Which?"},
+        )
+
+    assert ok is False
+    assert "secret-hitl-request" not in caplog.text
+    assert "secret-card-id" not in caplog.text
+    assert "loader failed" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
 async def test_hitl_event_falls_back_when_cardkit_fails() -> None:
     """Event bridge should fall back to static card if CardKit returns None."""
     adapter = _make_adapter(
