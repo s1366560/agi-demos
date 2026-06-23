@@ -283,6 +283,9 @@ describe('TenantChatSidebar', () => {
       route: '/tenant/tenant-1/agent-workspace',
     });
 
+    expect(screen.getByText('Core Operations')).toBeInTheDocument();
+    expect(screen.getByText('Agent Building')).toBeInTheDocument();
+
     expect(screen.getByRole('link', { name: 'Agent Workspace' })).toHaveAttribute(
       'href',
       '/tenant/tenant-1/agent-workspace'
@@ -305,6 +308,9 @@ describe('TenantChatSidebar', () => {
     render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
       route: '/tenant/tenant-1/project/project-1/memories',
     });
+
+    expect(screen.getByText('Project Workspace')).toBeInTheDocument();
+    expect(screen.getByText('Knowledge Base')).toBeInTheDocument();
 
     expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute(
       'href',
@@ -859,10 +865,7 @@ describe('TenantChatSidebar', () => {
 
   it('restores the manual tenant project selection before defaulting to the first project', async () => {
     localStorage.setItem('agent:tenant-1:lastProjectId', JSON.stringify('project-2'));
-    localStorage.setItem(
-      'agent:tenant-1:lastProjectSelectionSource',
-      JSON.stringify('manual')
-    );
+    localStorage.setItem('agent:tenant-1:lastProjectSelectionSource', JSON.stringify('manual'));
 
     render(<TenantChatSidebar tenantId="tenant-1" mobile />, {
       route: '/tenant/tenant-1/agent-workspace',

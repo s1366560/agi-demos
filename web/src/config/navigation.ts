@@ -125,6 +125,25 @@ export type TopNavigationContext = 'tenant' | 'project' | 'agent';
 export type NavigationDisplayRole = 'top-nav' | 'overflow' | 'breadcrumb-visible';
 
 /**
+ * Logical group ids for contextual navigation presentation.
+ */
+export type NavigationGroupId =
+  | 'tenant-core-operations'
+  | 'tenant-agent-building'
+  | 'tenant-extensions-integrations'
+  | 'tenant-runtime-infrastructure'
+  | 'tenant-governance-management'
+  | 'project-workspace'
+  | 'project-knowledge-base'
+  | 'project-discovery'
+  | 'project-configuration';
+
+interface NavigationGroupDefinition {
+  id: NavigationGroupId;
+  label: string;
+}
+
+/**
  * Runtime inputs for canonical path derivation.
  */
 export interface NavigationRuntimeContext {
@@ -145,6 +164,8 @@ export interface DerivedNavigationItem extends TabItem {
   context: TopNavigationContext;
   displayRole: NavigationDisplayRole;
   exact?: boolean | undefined;
+  groupId?: NavigationGroupId | undefined;
+  groupLabel?: string | undefined;
   relativePath: string;
   routeFamily: RouteFamily;
 }
@@ -209,6 +230,7 @@ interface CanonicalDestinationDefinition {
   contexts: readonly TopNavigationContext[];
   displayRole: NavigationDisplayRole;
   exact?: boolean | undefined;
+  groupId: NavigationGroupId;
   relativePath: string;
   buildPath: (context: NavigationRuntimeContext) => string;
 }
@@ -217,6 +239,45 @@ const LANDING_PATH = '/tenant';
 const PROJECT_DISCOVERY_PATH = '/tenant/projects';
 const CANONICAL_ABSOLUTE_PREFIXES = ['/tenant', '/project'];
 const TENANT_AUXILIARY_CONTENT_SECTIONS = ['profile'] as const;
+
+const NAVIGATION_GROUPS: Record<NavigationGroupId, NavigationGroupDefinition> = {
+  'tenant-core-operations': {
+    id: 'tenant-core-operations',
+    label: 'nav.coreOperations',
+  },
+  'tenant-agent-building': {
+    id: 'tenant-agent-building',
+    label: 'nav.agentBuilding',
+  },
+  'tenant-extensions-integrations': {
+    id: 'tenant-extensions-integrations',
+    label: 'nav.extensionsIntegrations',
+  },
+  'tenant-runtime-infrastructure': {
+    id: 'tenant-runtime-infrastructure',
+    label: 'nav.runtimeInfrastructure',
+  },
+  'tenant-governance-management': {
+    id: 'tenant-governance-management',
+    label: 'nav.governanceManagement',
+  },
+  'project-workspace': {
+    id: 'project-workspace',
+    label: 'nav.projectWorkspace',
+  },
+  'project-knowledge-base': {
+    id: 'project-knowledge-base',
+    label: 'nav.knowledgeBase',
+  },
+  'project-discovery': {
+    id: 'project-discovery',
+    label: 'nav.discovery',
+  },
+  'project-configuration': {
+    id: 'project-configuration',
+    label: 'nav.configuration',
+  },
+};
 
 function stripHash(path: string): string {
   return path.split('#')[0] || path;
@@ -465,6 +526,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'agent-workspace',
     contexts: ['tenant'],
     displayRole: 'top-nav',
+    groupId: 'tenant-core-operations',
     relativePath: '/agent-workspace',
     buildPath: (context) => getCanonicalAgentWorkspacePath(context),
   },
@@ -474,17 +536,9 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'top-nav',
+    groupId: 'tenant-core-operations',
     relativePath: '/overview',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/overview'),
-  },
-  {
-    id: 'agent-configuration',
-    label: 'nav.agentConfiguration',
-    routeFamily: 'tenant',
-    contexts: ['tenant'],
-    displayRole: 'top-nav',
-    relativePath: '/agents',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/agents'),
   },
   {
     id: 'projects',
@@ -492,8 +546,19 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'top-nav',
+    groupId: 'tenant-core-operations',
     relativePath: '/projects',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/projects'),
+  },
+  {
+    id: 'workspaces',
+    label: 'nav.workspaces',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'top-nav',
+    groupId: 'tenant-core-operations',
+    relativePath: '/workspaces',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/workspaces'),
   },
   {
     id: 'tasks',
@@ -501,87 +566,29 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'top-nav',
+    groupId: 'tenant-core-operations',
     relativePath: '/tasks',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/tasks'),
-  },
-  {
-    id: 'users',
-    label: 'nav.users',
-    routeFamily: 'tenant',
-    contexts: ['tenant'],
-    displayRole: 'overflow',
-    relativePath: '/users',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/users'),
   },
   {
     id: 'analytics',
     label: 'nav.analytics',
     routeFamily: 'tenant',
     contexts: ['tenant'],
-    displayRole: 'overflow',
+    displayRole: 'top-nav',
+    groupId: 'tenant-core-operations',
     relativePath: '/analytics',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/analytics'),
   },
   {
-    id: 'events',
-    label: 'nav.events',
-    routeFamily: 'tenant',
-    contexts: ['tenant'],
-    displayRole: 'overflow',
-    relativePath: '/events',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/events'),
-  },
-  {
-    id: 'webhooks',
-    label: 'nav.webhooks',
-    routeFamily: 'tenant',
-    contexts: ['tenant'],
-    displayRole: 'overflow',
-    relativePath: '/webhooks',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/webhooks'),
-  },
-  {
-    id: 'billing',
-    label: 'nav.billing',
-    routeFamily: 'tenant',
-    contexts: ['tenant'],
-    displayRole: 'overflow',
-    relativePath: '/billing',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/billing'),
-  },
-  {
-    id: 'workspaces',
-    label: 'nav.workspaces',
-    routeFamily: 'project',
-    contexts: ['tenant', 'project'],
-    displayRole: 'top-nav',
-    relativePath: 'workspaces',
-    buildPath: (context) =>
-      context.projectId && context.tenantId
-        ? getCanonicalProjectPath({
-            tenantId: context.tenantId,
-            projectId: context.projectId,
-            path: '/workspaces',
-          })
-        : getCanonicalTenantDestinationPath(context.tenantId, '/workspaces'),
-  },
-  {
-    id: 'skills',
-    label: 'nav.skills',
+    id: 'agent-configuration',
+    label: 'nav.agentConfiguration',
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'top-nav',
-    relativePath: '/skills',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/skills'),
-  },
-  {
-    id: 'evolution',
-    label: 'nav.evolution',
-    routeFamily: 'tenant',
-    contexts: ['tenant'],
-    displayRole: 'top-nav',
-    relativePath: '/evolution',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/evolution'),
+    groupId: 'tenant-agent-building',
+    relativePath: '/agents',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/agents'),
   },
   {
     id: 'subagents',
@@ -589,27 +596,9 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'top-nav',
+    groupId: 'tenant-agent-building',
     relativePath: '/subagents',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/subagents'),
-  },
-  {
-    id: 'audit-logs',
-    label: 'nav.auditLogs',
-    routeFamily: 'tenant',
-    contexts: ['tenant'],
-    displayRole: 'top-nav',
-    relativePath: '/audit-logs',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/audit-logs'),
-  },
-  {
-    id: 'dead-letter-queue',
-    label: 'nav.deadLetterQueue',
-    routeFamily: 'tenant',
-    contexts: ['tenant'],
-    displayRole: 'top-nav',
-    relativePath: '/dead-letter-queue',
-    buildPath: (context) =>
-      getCanonicalTenantDestinationPath(context.tenantId, '/dead-letter-queue'),
   },
   {
     id: 'agent-definitions',
@@ -617,6 +606,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'top-nav',
+    groupId: 'tenant-agent-building',
     relativePath: '/agent-definitions',
     buildPath: (context) =>
       getCanonicalTenantDestinationPath(context.tenantId, '/agent-definitions'),
@@ -627,26 +617,59 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'top-nav',
+    groupId: 'tenant-agent-building',
     relativePath: '/agent-bindings',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/agent-bindings'),
   },
   {
-    id: 'mcp-servers',
-    label: 'nav.mcpServers',
+    id: 'skills',
+    label: 'nav.skills',
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'top-nav',
-    relativePath: '/mcp-servers',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/mcp-servers'),
+    groupId: 'tenant-agent-building',
+    relativePath: '/skills',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/skills'),
+  },
+  {
+    id: 'evolution',
+    label: 'nav.evolution',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'top-nav',
+    groupId: 'tenant-agent-building',
+    relativePath: '/evolution',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/evolution'),
+  },
+  {
+    id: 'patterns',
+    label: 'nav.patterns',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'top-nav',
+    groupId: 'tenant-agent-building',
+    relativePath: '/patterns',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/patterns'),
   },
   {
     id: 'plugins',
     label: 'nav.plugins',
     routeFamily: 'tenant',
     contexts: ['tenant'],
-    displayRole: 'top-nav',
+    displayRole: 'overflow',
+    groupId: 'tenant-extensions-integrations',
     relativePath: '/plugins',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/plugins'),
+  },
+  {
+    id: 'mcp-servers',
+    label: 'nav.mcpServers',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    groupId: 'tenant-extensions-integrations',
+    relativePath: '/mcp-servers',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/mcp-servers'),
   },
   {
     id: 'templates',
@@ -654,33 +677,57 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'overflow',
+    groupId: 'tenant-extensions-integrations',
     relativePath: '/templates',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/templates'),
-  },
-  {
-    id: 'patterns',
-    label: 'nav.patterns',
-    routeFamily: 'tenant',
-    contexts: ['tenant'],
-    displayRole: 'overflow',
-    relativePath: '/patterns',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/patterns'),
   },
   {
     id: 'providers',
     label: 'nav.providers',
     routeFamily: 'tenant',
     contexts: ['tenant'],
-    displayRole: 'top-nav',
+    displayRole: 'overflow',
+    groupId: 'tenant-extensions-integrations',
     relativePath: '/providers',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/providers'),
+  },
+  {
+    id: 'webhooks',
+    label: 'nav.webhooks',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    groupId: 'tenant-extensions-integrations',
+    relativePath: '/webhooks',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/webhooks'),
+  },
+  {
+    id: 'runtimes',
+    label: 'nav.runtimes',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    groupId: 'tenant-runtime-infrastructure',
+    relativePath: '/runtimes',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/runtimes'),
+  },
+  {
+    id: 'pool',
+    label: 'nav.pool',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    groupId: 'tenant-runtime-infrastructure',
+    relativePath: '/pool',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/pool'),
   },
   {
     id: 'instances',
     label: 'nav.instances',
     routeFamily: 'tenant',
     contexts: ['tenant'],
-    displayRole: 'top-nav',
+    displayRole: 'overflow',
+    groupId: 'tenant-runtime-infrastructure',
     relativePath: '/instances',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/instances'),
   },
@@ -690,6 +737,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'overflow',
+    groupId: 'tenant-runtime-infrastructure',
     relativePath: '/clusters',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/clusters'),
   },
@@ -699,17 +747,9 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'overflow',
+    groupId: 'tenant-runtime-infrastructure',
     relativePath: '/deploy',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/deploy'),
-  },
-  {
-    id: 'genes',
-    label: 'nav.genes',
-    routeFamily: 'tenant',
-    contexts: ['tenant'],
-    displayRole: 'overflow',
-    relativePath: '/genes',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/genes'),
   },
   {
     id: 'instance-templates',
@@ -717,27 +757,61 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'overflow',
+    groupId: 'tenant-runtime-infrastructure',
     relativePath: '/instance-templates',
     buildPath: (context) =>
       getCanonicalTenantDestinationPath(context.tenantId, '/instance-templates'),
   },
   {
-    id: 'pool',
-    label: 'nav.pool',
+    id: 'genes',
+    label: 'nav.genes',
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'overflow',
-    relativePath: '/pool',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/pool'),
+    groupId: 'tenant-runtime-infrastructure',
+    relativePath: '/genes',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/genes'),
   },
   {
-    id: 'runtimes',
-    label: 'nav.runtimes',
+    id: 'users',
+    label: 'nav.users',
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'overflow',
-    relativePath: '/runtimes',
-    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/runtimes'),
+    groupId: 'tenant-governance-management',
+    relativePath: '/users',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/users'),
+  },
+  {
+    id: 'audit-logs',
+    label: 'nav.auditLogs',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    groupId: 'tenant-governance-management',
+    relativePath: '/audit-logs',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/audit-logs'),
+  },
+  {
+    id: 'events',
+    label: 'nav.events',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    groupId: 'tenant-governance-management',
+    relativePath: '/events',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/events'),
+  },
+  {
+    id: 'dead-letter-queue',
+    label: 'nav.deadLetterQueue',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    groupId: 'tenant-governance-management',
+    relativePath: '/dead-letter-queue',
+    buildPath: (context) =>
+      getCanonicalTenantDestinationPath(context.tenantId, '/dead-letter-queue'),
   },
   {
     id: 'trust-policies',
@@ -745,6 +819,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'overflow',
+    groupId: 'tenant-governance-management',
     relativePath: '/trust-policies',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/trust-policies'),
   },
@@ -754,9 +829,20 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'overflow',
+    groupId: 'tenant-governance-management',
     relativePath: '/decision-records',
     buildPath: (context) =>
       getCanonicalTenantDestinationPath(context.tenantId, '/decision-records'),
+  },
+  {
+    id: 'billing',
+    label: 'nav.billing',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    groupId: 'tenant-governance-management',
+    relativePath: '/billing',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/billing'),
   },
   {
     id: 'org-settings',
@@ -764,6 +850,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'overflow',
+    groupId: 'tenant-governance-management',
     relativePath: '/org-settings/info',
     buildPath: (context) =>
       getCanonicalTenantDestinationPath(context.tenantId, '/org-settings/info'),
@@ -774,6 +861,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'tenant',
     contexts: ['tenant'],
     displayRole: 'overflow',
+    groupId: 'tenant-governance-management',
     relativePath: '/settings',
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/settings'),
   },
@@ -784,6 +872,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     contexts: ['project'],
     displayRole: 'top-nav',
     exact: true,
+    groupId: 'project-workspace',
     relativePath: '',
     buildPath: (context) =>
       getCanonicalProjectPath({
@@ -792,11 +881,52 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
       }),
   },
   {
+    id: 'workspaces',
+    label: 'nav.workspaces',
+    routeFamily: 'project',
+    contexts: ['project'],
+    displayRole: 'top-nav',
+    groupId: 'project-workspace',
+    relativePath: 'workspaces',
+    buildPath: (context) =>
+      getCanonicalProjectPath({
+        tenantId: context.tenantId,
+        projectId: context.projectId,
+        path: '/workspaces',
+      }),
+  },
+  {
+    id: 'blackboard',
+    label: 'nav.blackboard',
+    routeFamily: 'project-blackboard-dynamic',
+    contexts: ['project'],
+    displayRole: 'top-nav',
+    groupId: 'project-workspace',
+    relativePath: 'blackboard',
+    buildPath: (context) => getCanonicalBlackboardPath(context),
+  },
+  {
+    id: 'team',
+    label: 'nav.team',
+    routeFamily: 'project',
+    contexts: ['project'],
+    displayRole: 'top-nav',
+    groupId: 'project-workspace',
+    relativePath: 'team',
+    buildPath: (context) =>
+      getCanonicalProjectPath({
+        tenantId: context.tenantId,
+        projectId: context.projectId,
+        path: '/team',
+      }),
+  },
+  {
     id: 'memories',
     label: 'nav.memories',
     routeFamily: 'project',
     contexts: ['project'],
     displayRole: 'top-nav',
+    groupId: 'project-knowledge-base',
     relativePath: 'memories',
     buildPath: (context) =>
       getCanonicalProjectPath({
@@ -811,6 +941,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'project',
     contexts: ['project'],
     displayRole: 'top-nav',
+    groupId: 'project-knowledge-base',
     relativePath: 'entities',
     buildPath: (context) =>
       getCanonicalProjectPath({
@@ -825,6 +956,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'project',
     contexts: ['project'],
     displayRole: 'top-nav',
+    groupId: 'project-knowledge-base',
     relativePath: 'communities',
     buildPath: (context) =>
       getCanonicalProjectPath({
@@ -839,6 +971,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'project',
     contexts: ['project'],
     displayRole: 'top-nav',
+    groupId: 'project-knowledge-base',
     relativePath: 'graph',
     buildPath: (context) =>
       getCanonicalProjectPath({
@@ -852,7 +985,8 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     label: 'nav.deepSearch',
     routeFamily: 'project',
     contexts: ['project'],
-    displayRole: 'top-nav',
+    displayRole: 'overflow',
+    groupId: 'project-discovery',
     relativePath: 'advanced-search',
     buildPath: (context) =>
       getCanonicalProjectPath({
@@ -862,20 +996,12 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
       }),
   },
   {
-    id: 'blackboard',
-    label: 'nav.blackboard',
-    routeFamily: 'project-blackboard-dynamic',
-    contexts: ['project'],
-    displayRole: 'top-nav',
-    relativePath: 'blackboard',
-    buildPath: (context) => getCanonicalBlackboardPath(context),
-  },
-  {
     id: 'schema',
     label: 'nav.schema',
     routeFamily: 'project',
     contexts: ['project'],
-    displayRole: 'top-nav',
+    displayRole: 'overflow',
+    groupId: 'project-configuration',
     relativePath: 'schema',
     buildPath: (context) =>
       getCanonicalProjectPath({
@@ -889,7 +1015,8 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     label: 'nav.channels',
     routeFamily: 'project',
     contexts: ['project'],
-    displayRole: 'top-nav',
+    displayRole: 'overflow',
+    groupId: 'project-configuration',
     relativePath: 'channels',
     buildPath: (context) =>
       getCanonicalProjectPath({
@@ -903,7 +1030,8 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     label: 'nav.maintenance',
     routeFamily: 'project',
     contexts: ['project'],
-    displayRole: 'top-nav',
+    displayRole: 'overflow',
+    groupId: 'project-configuration',
     relativePath: 'maintenance',
     buildPath: (context) =>
       getCanonicalProjectPath({
@@ -917,7 +1045,8 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     label: 'nav.cronJobs',
     routeFamily: 'project',
     contexts: ['project'],
-    displayRole: 'top-nav',
+    displayRole: 'overflow',
+    groupId: 'project-configuration',
     relativePath: 'cron-jobs',
     buildPath: (context) =>
       getCanonicalProjectPath({
@@ -927,25 +1056,12 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
       }),
   },
   {
-    id: 'team',
-    label: 'nav.team',
-    routeFamily: 'project',
-    contexts: ['project'],
-    displayRole: 'top-nav',
-    relativePath: 'team',
-    buildPath: (context) =>
-      getCanonicalProjectPath({
-        tenantId: context.tenantId,
-        projectId: context.projectId,
-        path: '/team',
-      }),
-  },
-  {
     id: 'settings',
     label: 'nav.settings',
     routeFamily: 'project',
     contexts: ['project'],
-    displayRole: 'top-nav',
+    displayRole: 'overflow',
+    groupId: 'project-configuration',
     relativePath: 'settings',
     buildPath: (context) =>
       getCanonicalProjectPath({
@@ -961,6 +1077,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     contexts: ['agent'],
     displayRole: 'top-nav',
     exact: true,
+    groupId: 'project-workspace',
     relativePath: '',
     buildPath: (context) =>
       getCanonicalAgentPath({
@@ -974,6 +1091,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'project',
     contexts: ['agent'],
     displayRole: 'top-nav',
+    groupId: 'project-workspace',
     relativePath: 'logs',
     buildPath: (context) =>
       getCanonicalAgentPath({
@@ -988,6 +1106,7 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     routeFamily: 'project',
     contexts: ['agent'],
     displayRole: 'top-nav',
+    groupId: 'project-workspace',
     relativePath: 'patterns',
     buildPath: (context) =>
       getCanonicalAgentPath({
@@ -1018,6 +1137,8 @@ export function deriveTopNavigationItems(
     context,
     displayRole: destination.displayRole,
     exact: destination.exact,
+    groupId: destination.groupId,
+    groupLabel: NAVIGATION_GROUPS[destination.groupId].label,
     id: destination.id,
     label: destination.label,
     path: destination.buildPath(runtimeContext),
@@ -1069,25 +1190,31 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
   showUser: true,
   groups: [
     {
-      id: 'platform',
-      title: 'nav.platform',
+      id: 'core-operations',
+      title: 'nav.coreOperations',
       collapsible: false,
       items: [
         { id: 'agent-workspace', icon: 'chat', label: 'nav.agentWorkspace', path: '', exact: true },
         { id: 'overview', icon: 'dashboard', label: 'nav.overview', path: '/overview' },
         { id: 'projects', icon: 'folder', label: 'nav.projects', path: '/projects' },
-        { id: 'users', icon: 'group', label: 'nav.users', path: '/users' },
-        { id: 'analytics', icon: 'monitoring', label: 'nav.analytics', path: '/analytics' },
+        { id: 'workspaces', icon: 'group_work', label: 'nav.workspaces', path: '/workspaces' },
         { id: 'tasks', icon: 'task', label: 'nav.tasks', path: '/tasks' },
-        { id: 'workspaces', icon: 'group_work', label: 'Workspaces', path: '/workspaces' },
-        { id: 'agents', icon: 'tune', label: 'nav.agentConfiguration', path: '/agents' },
+        { id: 'analytics', icon: 'monitoring', label: 'nav.analytics', path: '/analytics' },
+      ],
+    },
+    {
+      id: 'agent-building',
+      title: 'nav.agentBuilding',
+      collapsible: true,
+      defaultOpen: true,
+      items: [
+        {
+          id: 'agent-configuration',
+          icon: 'tune',
+          label: 'nav.agentConfiguration',
+          path: '/agents',
+        },
         { id: 'subagents', icon: 'smart_toy', label: 'nav.subagents', path: '/subagents' },
-        { id: 'skills', icon: 'psychology', label: 'nav.skills', path: '/skills' },
-        { id: 'plugins', icon: 'extension', label: 'nav.plugins', path: '/plugins' },
-        { id: 'templates', icon: 'widgets', label: 'nav.templates', path: '/templates' },
-        { id: 'mcp-servers', icon: 'cable', label: 'nav.mcpServers', path: '/mcp-servers' },
-        { id: 'patterns', icon: 'account_tree', label: 'nav.patterns', path: '/patterns' },
-        { id: 'providers', icon: 'model_training', label: 'nav.providers', path: '/providers' },
         {
           id: 'agent-definitions',
           icon: 'hub',
@@ -1100,33 +1227,59 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
           label: 'nav.agentBindings',
           path: '/agent-bindings',
         },
+        { id: 'skills', icon: 'psychology', label: 'nav.skills', path: '/skills' },
+        { id: 'evolution', icon: 'genetics', label: 'nav.evolution', path: '/evolution' },
+        { id: 'patterns', icon: 'account_tree', label: 'nav.patterns', path: '/patterns' },
       ],
     },
     {
-      id: 'infrastructure',
-      title: 'nav.infrastructure',
+      id: 'extensions-integrations',
+      title: 'nav.extensionsIntegrations',
       collapsible: true,
+      defaultOpen: true,
       items: [
+        { id: 'plugins', icon: 'extension', label: 'nav.plugins', path: '/plugins' },
+        { id: 'mcp-servers', icon: 'cable', label: 'nav.mcpServers', path: '/mcp-servers' },
+        { id: 'templates', icon: 'widgets', label: 'nav.templates', path: '/templates' },
+        { id: 'providers', icon: 'model_training', label: 'nav.providers', path: '/providers' },
+        { id: 'webhooks', icon: 'webhook', label: 'nav.webhooks', path: '/webhooks' },
+      ],
+    },
+    {
+      id: 'runtime-infrastructure',
+      title: 'nav.runtimeInfrastructure',
+      collapsible: true,
+      defaultOpen: true,
+      items: [
+        { id: 'runtimes', icon: 'monitor_heart', label: 'nav.runtimes', path: '/runtimes' },
+        { id: 'pool', icon: 'memory', label: 'nav.pool', path: '/pool' },
         { id: 'instances', icon: 'dns', label: 'nav.instances', path: '/instances' },
         { id: 'clusters', icon: 'cloud', label: 'nav.clusters', path: '/clusters' },
         { id: 'deploy', icon: 'rocket_launch', label: 'nav.deploy', path: '/deploy' },
-        { id: 'genes', icon: 'genetics', label: 'nav.genes', path: '/genes' },
         {
           id: 'instance-templates',
           icon: 'dashboard_customize',
           label: 'nav.instanceTemplates',
           path: '/instance-templates',
         },
+        { id: 'genes', icon: 'genetics', label: 'nav.genes', path: '/genes' },
       ],
     },
     {
-      id: 'administration',
-      title: 'nav.administration',
-      collapsible: false,
+      id: 'governance-management',
+      title: 'nav.governanceManagement',
+      collapsible: true,
+      defaultOpen: true,
       items: [
-        { id: 'pool', icon: 'memory', label: 'nav.pool', path: '/pool' },
-        { id: 'runtimes', icon: 'monitor_heart', label: 'nav.runtimes', path: '/runtimes' },
+        { id: 'users', icon: 'group', label: 'nav.users', path: '/users' },
         { id: 'audit-logs', icon: 'history', label: 'nav.auditLogs', path: '/audit-logs' },
+        { id: 'events', icon: 'event', label: 'nav.events', path: '/events' },
+        {
+          id: 'dead-letter-queue',
+          icon: 'event',
+          label: 'nav.deadLetterQueue',
+          path: '/dead-letter-queue',
+        },
         {
           id: 'trust-policies',
           icon: 'policy',
@@ -1139,8 +1292,6 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
           label: 'nav.decisionRecords',
           path: '/decision-records',
         },
-        { id: 'events', icon: 'event', label: 'nav.events', path: '/events' },
-        { id: 'webhooks', icon: 'webhook', label: 'nav.webhooks', path: '/webhooks' },
         { id: 'billing', icon: 'credit_card', label: 'nav.billing', path: '/billing' },
         {
           id: 'org-settings',

@@ -1,10 +1,23 @@
-import { deriveTopNavigationItems } from '@/config/navigation';
+import {
+  deriveTopNavigationItems,
+  type NavigationDisplayRole,
+  type NavigationGroupId,
+} from '@/config/navigation';
 
 export interface TenantTopNavItem {
   id: string;
   label: string;
   path: string;
+  displayRole?: NavigationDisplayRole | undefined;
   exact?: boolean | undefined;
+  groupId?: NavigationGroupId | undefined;
+  groupLabel?: string | undefined;
+}
+
+export interface TenantTopNavGroup {
+  id: string;
+  label: string;
+  items: TenantTopNavItem[];
 }
 
 const TENANT_NAV_FALLBACK_LABELS: Record<string, string> = {
@@ -58,6 +71,18 @@ const PROJECT_NAV_FALLBACK_LABELS: Record<string, string> = {
   workspaces: 'Workspaces',
 };
 
+const NAV_GROUP_FALLBACK_LABELS: Record<NavigationGroupId, string> = {
+  'tenant-core-operations': 'Core Operations',
+  'tenant-agent-building': 'Agent Building',
+  'tenant-extensions-integrations': 'Extensions & Integrations',
+  'tenant-runtime-infrastructure': 'Runtime & Infrastructure',
+  'tenant-governance-management': 'Governance & Management',
+  'project-workspace': 'Project Workspace',
+  'project-knowledge-base': 'Knowledge Base',
+  'project-discovery': 'Discovery',
+  'project-configuration': 'Configuration',
+};
+
 interface ContextualNavOptions {
   basePath: string;
   projectBasePath: string | null;
@@ -88,11 +113,41 @@ export function getContextualTopNavItems({
     projectId,
     preferredWorkspaceId,
   }).map((item) => ({
+    displayRole: item.displayRole,
     id: item.id,
     label: t(item.label, fallbackLabels[item.id] ?? item.label),
     path: item.path || (projectBasePath ?? basePath),
     exact: item.exact,
+    groupId: item.groupId,
+    groupLabel: item.groupLabel
+      ? t(item.groupLabel, item.groupId ? NAV_GROUP_FALLBACK_LABELS[item.groupId] : item.groupLabel)
+      : undefined,
   }));
+}
+
+export function groupTenantTopNavItems(items: TenantTopNavItem[]): TenantTopNavGroup[] {
+  const groups: TenantTopNavGroup[] = [];
+  const groupIndex = new Map<string, TenantTopNavGroup>();
+
+  items.forEach((item) => {
+    const groupId = item.groupId ?? 'ungrouped';
+    const groupLabel = item.groupLabel ?? '';
+    let group = groupIndex.get(groupId);
+
+    if (!group) {
+      group = {
+        id: groupId,
+        label: groupLabel,
+        items: [],
+      };
+      groupIndex.set(groupId, group);
+      groups.push(group);
+    }
+
+    group.items.push(item);
+  });
+
+  return groups;
 }
 
 export function isContextualTopNavItemActive(pathname: string, item: TenantTopNavItem): boolean {

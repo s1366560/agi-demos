@@ -183,6 +183,54 @@ describe('Navigation Configuration', () => {
       ]);
     });
 
+    it('should group tenant and project navigation by logical product areas', () => {
+      const tenantItems = deriveTopNavigationItems('tenant', { tenantId: 'tenant-123' });
+      const projectItems = deriveTopNavigationItems('project', {
+        tenantId: 'tenant-123',
+        projectId: 'proj-456',
+      });
+
+      expect(tenantItems.slice(0, 8).map((item) => item.id)).toEqual([
+        'agent-workspace',
+        'overview',
+        'projects',
+        'workspaces',
+        'tasks',
+        'analytics',
+        'agent-configuration',
+        'subagents',
+      ]);
+      expect(tenantItems.find((item) => item.id === 'plugins')).toMatchObject({
+        groupId: 'tenant-extensions-integrations',
+        groupLabel: 'nav.extensionsIntegrations',
+        displayRole: 'overflow',
+      });
+      expect(tenantItems.find((item) => item.id === 'dead-letter-queue')).toMatchObject({
+        groupId: 'tenant-governance-management',
+        groupLabel: 'nav.governanceManagement',
+      });
+
+      expect(projectItems.slice(0, 8).map((item) => item.id)).toEqual([
+        'overview',
+        'workspaces',
+        'blackboard',
+        'team',
+        'memories',
+        'entities',
+        'communities',
+        'graph',
+      ]);
+      expect(projectItems.find((item) => item.id === 'search')).toMatchObject({
+        groupId: 'project-discovery',
+        groupLabel: 'nav.discovery',
+        displayRole: 'overflow',
+      });
+      expect(projectItems.find((item) => item.id === 'cron-jobs')).toMatchObject({
+        groupId: 'project-configuration',
+        groupLabel: 'nav.configuration',
+      });
+    });
+
     it('should keep tenant sidebar destinations reachable from contextual top navigation', () => {
       const sidebarPaths = getTenantSidebarConfig()
         .groups.flatMap((group) => group.items)

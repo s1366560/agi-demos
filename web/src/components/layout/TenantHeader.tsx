@@ -11,7 +11,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 
 import {
   PanelLeft,
@@ -20,7 +20,6 @@ import {
   Search,
   Check,
   ChevronDown,
-  MoreHorizontal,
   User,
   Settings,
   CreditCard,
@@ -42,11 +41,15 @@ import { useCurrentWorkspace, useWorkspaces } from '@/stores/workspace';
 import { authAPI } from '@/services/api';
 
 import { NotificationDropdown } from './AppHeader/NotificationDropdown';
-import { getContextualTopNavItems, isContextualTopNavItemActive } from './tenantNavigation';
+import {
+  getContextualTopNavItems,
+  groupTenantTopNavItems,
+  isContextualTopNavItemActive,
+} from './tenantNavigation';
 
 import type { Tenant } from '@/types/memory';
 
-import type { TenantTopNavItem } from './tenantNavigation';
+import type { TenantTopNavGroup } from './tenantNavigation';
 
 interface TenantHeaderProps {
   tenantId: string;
@@ -55,8 +58,6 @@ interface TenantHeaderProps {
   onMobileMenuOpen: () => void;
   projectId?: string | undefined;
 }
-
-const MAX_VISIBLE_NAV_ITEMS = 8;
 
 function getThemePresentation(
   theme: 'light' | 'dark' | 'system',
@@ -130,8 +131,10 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
       }),
     [basePath, effectiveProjectId, normalizedTenantId, preferredWorkspaceId, projectBasePath, t]
   );
-  const visibleNav = contextualNavItems.slice(0, MAX_VISIBLE_NAV_ITEMS);
-  const overflowNav = contextualNavItems.slice(MAX_VISIBLE_NAV_ITEMS);
+  const contextualNavGroups = useMemo(
+    () => groupTenantTopNavItems(contextualNavItems),
+    [contextualNavItems]
+  );
   const searchPath = projectBasePath
     ? `${projectBasePath}/advanced-search`
     : `${basePath}/projects`;
@@ -172,30 +175,17 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
 
           {/* Center: Nav tabs */}
           <nav className="hidden xl:flex items-center gap-0.5 flex-1 min-w-0 ml-4 mr-2 overflow-hidden">
-            {visibleNav.map((item) => (
-              <NavLink
-                key={item.id}
-                to={item.path}
-                className={() =>
-                  `flex shrink-0 items-center gap-1.5 px-2 2xl:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 whitespace-nowrap ${
-                    isContextualTopNavItemActive(location.pathname, item)
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'
-                  }`
-                }
-              >
-                {item.label}
-              </NavLink>
+            {contextualNavGroups.map((group) => (
+              <GroupedNavDropdown key={group.id} group={group} />
             ))}
-            {overflowNav.length > 0 && <OverflowMenu items={overflowNav} />}
           </nav>
 
           <nav
             className="hidden md:flex xl:hidden items-center flex-1 min-w-0 ml-2 mr-2 overflow-hidden"
             aria-label={t('nav.navigation', 'Navigation')}
           >
-            <OverflowMenu
-              items={contextualNavItems}
+            <GroupedNavMenu
+              groups={contextualNavGroups}
               label={t('nav.navigation', 'Navigation')}
               icon={<Menu size={16} />}
             />
@@ -215,16 +205,25 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
 };
 
 /**
- * Overflow "More" dropdown for secondary nav items
+ * Desktop dropdown for one logical navigation group.
  */
-function OverflowMenu({
-  items,
+function GroupedNavDropdown({ group }: { group: TenantTopNavGroup }) {
+  return <GroupedNavMenu groups={[group]} label={group.label} showGroupHeaders={false} />;
+}
+
+/**
+ * Dropdown menu for one or more logical navigation groups.
+ */
+function GroupedNavMenu({
+  groups,
   label,
   icon,
+  showGroupHeaders = true,
 }: {
-  items: TenantTopNavItem[];
+  groups: TenantTopNavGroup[];
   label?: string | undefined;
   icon?: React.ReactNode;
+  showGroupHeaders?: boolean | undefined;
 }) {
   const { t } = useTranslation();
   const location = useLocation();
@@ -233,13 +232,14 @@ function OverflowMenu({
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const items = useMemo(() => groups.flatMap((group) => group.items), [groups]);
 
   const updateMenuPosition = useCallback(() => {
     const trigger = ref.current;
     if (!trigger) return;
 
     const rect = trigger.getBoundingClientRect();
-    const menuWidth = 192;
+    const menuWidth = 240;
     const viewportPadding = 8;
     const maxLeft = window.innerWidth - menuWidth - viewportPadding;
 
@@ -280,35 +280,49 @@ function OverflowMenu({
 
   const isAnyActive = items.some((item) => isContextualTopNavItemActive(location.pathname, item));
   const buttonLabel = label ?? t('nav.more', 'More');
-  const buttonIcon = icon ?? <MoreHorizontal size={16} />;
+  const trailingIcon = <ChevronDown size={14} />;
   const menu =
     open && menuPosition
       ? createPortal(
           <div
             ref={menuRef}
-            className="fixed w-48 bg-white dark:bg-surface-dark rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50"
+            className="fixed w-60 bg-white dark:bg-surface-dark rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50"
             style={{ left: menuPosition.left, top: menuPosition.top }}
           >
-            {items.map((item) => {
-              const isActive = isContextualTopNavItemActive(location.pathname, item);
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    void navigate(item.path);
-                    setOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${
-                    isActive
-                      ? 'text-primary bg-primary/5'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
+            {groups.map((group, groupIndex) => (
+              <div
+                key={group.id}
+                className={
+                  groupIndex > 0 ? 'border-t border-slate-100 pt-1 dark:border-slate-800' : ''
+                }
+              >
+                {showGroupHeaders && group.label ? (
+                  <p className="px-3 pb-1 pt-2 text-2xs font-semibold uppercase tracking-wider text-slate-400">
+                    {group.label}
+                  </p>
+                ) : null}
+                {group.items.map((item) => {
+                  const isActive = isContextualTopNavItemActive(location.pathname, item);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        void navigate(item.path);
+                        setOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-inset ${
+                        isActive
+                          ? 'text-primary bg-primary/5'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>,
           document.body
         )
@@ -328,8 +342,9 @@ function OverflowMenu({
             : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
         }`}
       >
-        {buttonIcon}
+        {icon}
         <span className="hidden lg:inline">{buttonLabel}</span>
+        {trailingIcon}
       </button>
       {menu}
     </div>
