@@ -62,6 +62,31 @@ async def test_on_agent_event_skips_when_no_binding() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_lookup_binding_failure_log_omits_exception_details(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Binding lookup logs should not echo repository exception details."""
+    bridge = ChannelEventBridge()
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.event_bridge",
+    )
+
+    with patch.object(
+        event_bridge_module,
+        "with_session",
+        side_effect=RuntimeError("database failed for secret-conversation-id"),
+    ):
+        binding = await bridge._lookup_binding("secret-conversation-id")
+
+    assert binding is None
+    assert "secret-conversation-id" not in caplog.text
+    assert "database failed" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_error_event_sends_card() -> None:
     adapter = _make_adapter()
     binding = _make_binding()

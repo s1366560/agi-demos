@@ -180,7 +180,10 @@ class ChannelEventBridge:
                 repo = ChannelSessionBindingRepository(session)
                 return await repo.get_by_conversation_id(conversation_id)
         except Exception as e:
-            logger.info(f"[EventBridge] Binding lookup failed: {e}")
+            logger.info(
+                "[EventBridge] Binding lookup failed: error_type=%s",
+                type(e).__name__,
+            )
             return None
 
     def _get_adapter(self, channel_config_id: str) -> ChannelAdapter | None:
