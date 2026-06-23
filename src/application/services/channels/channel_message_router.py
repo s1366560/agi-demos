@@ -1874,7 +1874,10 @@ class ChannelMessageRouter:
                 text=error_message,
                 reply_to=self._extract_channel_message_id(message),
             )
-            logger.info(f"[MessageRouter] Sent error reply to user: {error_message[:50]}...")
+            logger.info(
+                "[MessageRouter] Sent error reply to user: has_error_message=%s",
+                bool(error_message),
+            )
 
         except Exception as e:
             logger.error(

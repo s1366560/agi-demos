@@ -65,6 +65,46 @@ def test_build_session_key_includes_topic_and_thread() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_send_error_reply_log_omits_error_message(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Error reply logs should not echo user-visible error details."""
+    router = ChannelMessageRouter()
+    router._resolve_channel_config_id_from_message = AsyncMock(return_value="cfg-1")
+    adapter = SimpleNamespace(send_text=AsyncMock())
+    manager = SimpleNamespace(connections={"cfg-1": SimpleNamespace(adapter=adapter)})
+    message = _build_message(
+        text="upload failed",
+        raw_data={"_routing": {"channel_message_id": "msg-1"}},
+    )
+    error_message = (
+        "Sorry, file import failed. Filename: private-roadmap.pdf "
+        "at /workspace/input/private-roadmap.pdf"
+    )
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.infrastructure.adapters.primary.web.startup.channels.get_channel_manager",
+        return_value=manager,
+    ):
+        await router._send_error_reply(message, error_message)
+
+    adapter.send_text.assert_awaited_once_with(
+        to="chat-1",
+        text=error_message,
+        reply_to="msg-1",
+    )
+    assert "private-roadmap.pdf" not in caplog.text
+    assert "Sorry, file import failed" not in caplog.text
+    assert "/workspace/input/private-roadmap.pdf" not in caplog.text
+    assert "has_error_message=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_route_message_skips_bot_echo_messages() -> None:
     """Router should skip app/bot sender messages to avoid echo loops."""
     router = ChannelMessageRouter()
