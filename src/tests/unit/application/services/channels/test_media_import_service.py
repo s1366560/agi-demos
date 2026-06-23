@@ -17,6 +17,70 @@ from src.domain.model.channels.message import (
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("content", "project_id", "raw_data"),
+    [
+        (MessageContent(type=MessageType.TEXT, text="hello"), "project-1", None),
+        (
+            MessageContent(
+                type=MessageType.FILE,
+                file_key="secret-file-key",
+                file_name="private-roadmap.pdf",
+            ),
+            "",
+            {"event": {"message": {"message_id": "secret-platform-message-id"}}},
+        ),
+        (
+            MessageContent(type=MessageType.IMAGE),
+            "project-1",
+            {"event": {"message": {"message_id": "secret-platform-message-id"}}},
+        ),
+    ],
+)
+async def test_import_media_skip_logs_omit_message_identifiers(
+    caplog: pytest.LogCaptureFixture,
+    content: MessageContent,
+    project_id: str,
+    raw_data: dict[str, object] | None,
+) -> None:
+    """Media import skip logs should not expose domain or platform message IDs."""
+    message = Message(
+        id="secret-domain-message-id",
+        channel="feishu",
+        chat_type=ChatType.P2P,
+        chat_id="chat-1",
+        sender=SenderInfo(id="sender-1"),
+        content=content,
+        project_id=project_id or None,
+        raw_data=raw_data,
+    )
+    downloader = SimpleNamespace(download_media=AsyncMock())
+    service = MediaImportService(feishu_downloader=downloader)
+
+    with caplog.at_level(
+        "DEBUG",
+        logger="src.application.services.channels.media_import_service",
+    ):
+        result = await service.import_media_to_workspace(
+            message=message,
+            project_id=project_id,
+            tenant_id="tenant-1",
+            conversation_id="conv-1",
+            mcp_adapter=SimpleNamespace(),
+            artifact_service=SimpleNamespace(),
+            db_session=SimpleNamespace(),
+        )
+
+    assert result is None
+    downloader.download_media.assert_not_awaited()
+    assert "secret-domain-message-id" not in caplog.text
+    assert "secret-platform-message-id" not in caplog.text
+    assert "secret-file-key" not in caplog.text
+    assert "private-roadmap.pdf" not in caplog.text
+    assert "has_domain_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
 async def test_import_media_success_logs_omit_platform_keys_and_paths(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

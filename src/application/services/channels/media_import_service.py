@@ -98,25 +98,35 @@ class MediaImportService:
             MediaImportError: If import fails critically
         """
         if not message.content.has_media_to_import():
-            logger.debug(f"Message {message.id} has no media to import, skipping")
+            logger.debug(
+                "Message has no media to import, skipping: has_domain_message_id=%s",
+                bool(message.id),
+            )
             return None
 
         if not project_id:
-            logger.warning(f"Cannot import media: missing project_id for message {message.id}")
+            logger.warning(
+                "Cannot import media: missing project_id has_domain_message_id=%s",
+                bool(message.id),
+            )
             return None
 
         try:
             # Step 1: Determine media type, file key, and message_id
             media_type, file_key, message_id = self._extract_media_info(message)
             if not file_key:
-                logger.warning(f"No file_key found in message {message.id}")
+                logger.warning(
+                    "No file_key found in message: has_domain_message_id=%s",
+                    bool(message.id),
+                )
                 return None
 
             # Check if message_id is required for this media type
             if media_type in ("file", "audio", "video") and not message_id:
                 logger.warning(
-                    f"message_id is required for {media_type} download but was not found - "
-                    f"message_id={message_id}, message_id will be None"
+                    "%s download requires message_id but none was found: has_message_id=%s",
+                    media_type,
+                    bool(message_id),
                 )
 
             # Step 2: Download from Feishu
