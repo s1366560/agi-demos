@@ -32,8 +32,6 @@ Last updated: 2026-06-22.
 | [memstack-agent-framework-design.md](agent-framework/memstack-agent-framework-design.md) | MemStack agent backend framework design. |
 | [memstack-agent-ui-framework-design.md](agent-framework/memstack-agent-ui-framework-design.md) | MemStack agent UI framework design. |
 | [architect-reply-to-code-review.md](agent-framework/architect-reply-to-code-review.md) | Architect response to agent framework code review. |
-| [REACT_AGENT_REFACTOR_SUMMARY.md](agent-framework/REACT_AGENT_REFACTOR_SUMMARY.md) | ReAct agent refactor summary. |
-| [PLAN.md](agent-framework/PLAN.md) | Early agent framework plan. |
 
 ### agent-ui/ — Agent UI rendering history
 

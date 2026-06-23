@@ -47,8 +47,8 @@ Historical files have been moved under [archive/](archive/) and grouped by topic
 Archived clusters (see [archive/README.md](archive/README.md) for the full list):
 
 - Agent framework history: [archive/agent-framework/](archive/agent-framework/)
-  (e.g. [archive/agent-framework/PLAN.md](archive/agent-framework/PLAN.md),
-  [archive/agent-framework/REACT_AGENT_REFACTOR_SUMMARY.md](archive/agent-framework/REACT_AGENT_REFACTOR_SUMMARY.md))
+  (e.g. [archive/agent-framework/design-decisions.md](archive/agent-framework/design-decisions.md),
+  [archive/agent-framework/memstack-agent-framework-design.md](archive/agent-framework/memstack-agent-framework-design.md))
 - Sandbox integration/refactor: [archive/sandbox/](archive/sandbox/)
   (e.g. [archive/sandbox/sandbox-refactor-plan.md](archive/sandbox/sandbox-refactor-plan.md),
   [archive/sandbox/INTEGRATION_COMPLETE.md](archive/sandbox/INTEGRATION_COMPLETE.md))
