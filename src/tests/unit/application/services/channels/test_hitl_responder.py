@@ -307,12 +307,14 @@ class TestHITLChannelResponder:
         mock_redis.xadd.assert_awaited_once()
 
     async def test_respond_rejects_unauthorized_channel_responder(
-        self, responder: HITLChannelResponder
+        self,
+        responder: HITLChannelResponder,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         mock_session = AsyncMock()
         mock_repo = AsyncMock()
         mock_request = SimpleNamespace(
-            id="req-auth",
+            id="secret-req-auth",
             status="pending",
             tenant_id="t-1",
             project_id="p-1",
@@ -330,13 +332,17 @@ class TestHITLChannelResponder:
         mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
         mock_ctx.__aexit__ = AsyncMock(return_value=False)
         mock_session.get = AsyncMock(return_value=SimpleNamespace(meta={"sender_id": "owner-1"}))
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.channels.hitl_responder",
+        )
 
         with (
             patch(DB_FACTORY_PATH, return_value=mock_ctx),
             patch(HITL_REPO_PATH, return_value=mock_repo),
         ):
             result = await responder.respond(
-                request_id="req-auth",
+                request_id="secret-req-auth",
                 hitl_type="clarification",
                 response_data={"answer": "ok"},
                 responder_id="intruder-1",
@@ -344,6 +350,12 @@ class TestHITLChannelResponder:
 
         assert result is HITLChannelResponseOutcome.REJECTED
         mock_repo.update_response.assert_not_awaited()
+        assert "secret-req-auth" not in caplog.text
+        assert "owner-1" not in caplog.text
+        assert "intruder-1" not in caplog.text
+        assert "has_request_id=True" in caplog.text
+        assert "has_expected_responder=True" in caplog.text
+        assert "has_responder_id=True" in caplog.text
 
     async def test_respond_prefers_request_user_binding(
         self, responder: HITLChannelResponder

@@ -263,8 +263,9 @@ class HITLChannelResponder:
 
         if not responder_id:
             logger.warning(
-                "[HITLChannelResponder] Missing responder_id for channel HITL request %s",
-                hitl_request.id,
+                "[HITLChannelResponder] Missing responder_id for channel HITL request: "
+                "has_request_id=%s",
+                bool(hitl_request.id),
             )
             return False
 
@@ -273,9 +274,10 @@ class HITLChannelResponder:
             conversation = await session.get(Conversation, hitl_request.conversation_id)
             if conversation is None:
                 logger.warning(
-                    "[HITLChannelResponder] Conversation %s not found for HITL request %s",
-                    hitl_request.conversation_id,
-                    hitl_request.id,
+                    "[HITLChannelResponder] Conversation not found for HITL request: "
+                    "has_conversation_id=%s has_request_id=%s",
+                    bool(hitl_request.conversation_id),
+                    bool(hitl_request.id),
                 )
                 return False
 
@@ -283,17 +285,19 @@ class HITLChannelResponder:
             expected_responder = conversation_meta.get("sender_id")
             if not isinstance(expected_responder, str) or not expected_responder:
                 logger.warning(
-                    "[HITLChannelResponder] Conversation %s has no trusted sender binding",
-                    hitl_request.conversation_id,
+                    "[HITLChannelResponder] Conversation has no trusted sender binding: "
+                    "has_conversation_id=%s",
+                    bool(hitl_request.conversation_id),
                 )
                 return False
 
         if responder_id != expected_responder:
             logger.warning(
-                "[HITLChannelResponder] Unauthorized responder for %s: expected=%s got=%s",
-                hitl_request.id,
-                expected_responder,
-                responder_id,
+                "[HITLChannelResponder] Unauthorized responder: has_request_id=%s "
+                "has_expected_responder=%s has_responder_id=%s",
+                bool(hitl_request.id),
+                bool(expected_responder),
+                bool(responder_id),
             )
             return False
 
