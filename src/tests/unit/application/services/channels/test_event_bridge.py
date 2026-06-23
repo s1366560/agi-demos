@@ -206,6 +206,40 @@ async def test_task_update_sends_rich_card() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_task_update_patch_logs_omit_card_and_conversation_ids(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Task card update logs should not echo card or conversation IDs."""
+    adapter = _make_adapter()
+    adapter.patch_card = AsyncMock(return_value=True)
+    bridge = ChannelEventBridge()
+    bridge._task_card_states["secret-conversation-id"] = "secret-task-card-id"
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.event_bridge",
+    )
+
+    await bridge._handle_task_update(
+        adapter,
+        "secret-chat-id",
+        {
+            "_conversation_id": "secret-conversation-id",
+            "tasks": [{"title": "Write tests", "status": "in_progress"}],
+        },
+    )
+
+    adapter.patch_card.assert_awaited_once()
+    assert adapter.patch_card.await_args.args[0] == "secret-task-card-id"
+    adapter.send_card.assert_not_awaited()
+    assert "secret-task-card-id" not in caplog.text
+    assert "secret-conversation-id" not in caplog.text
+    assert "secret-chat-id" not in caplog.text
+    assert "has_existing_msg_id=True" in caplog.text
+    assert "has_conversation_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_artifact_ready_sends_rich_card() -> None:
     adapter = _make_adapter()
     binding = _make_binding()

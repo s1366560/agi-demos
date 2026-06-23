@@ -427,15 +427,22 @@ class ChannelEventBridge:
                     ok = await adapter.patch_card(existing_msg_id, card_json)
                     if ok:
                         logger.info(
-                            f"[EventBridge] Updated task card {existing_msg_id} "
-                            f"for conversation {conversation_id}"
+                            "[EventBridge] Updated task card: has_existing_msg_id=%s "
+                            "has_conversation_id=%s",
+                            bool(existing_msg_id),
+                            bool(conversation_id),
                         )
                         return
                     logger.warning(
-                        f"[EventBridge] Patch card failed for {existing_msg_id}, sending new card"
+                        "[EventBridge] Patch card failed, sending new card: "
+                        "has_existing_msg_id=%s",
+                        bool(existing_msg_id),
                     )
                 except Exception as e:
-                    logger.warning(f"[EventBridge] Patch card error: {e}, sending new card")
+                    logger.warning(
+                        "[EventBridge] Patch card error, sending new card: error_type=%s",
+                        type(e).__name__,
+                    )
 
             # Send new card
             try:
@@ -443,16 +450,24 @@ class ChannelEventBridge:
                 if msg_id and conversation_id:
                     self._task_card_states[conversation_id] = msg_id
                     logger.info(
-                        f"[EventBridge] Sent new task card {msg_id} "
-                        f"for conversation {conversation_id}"
+                        "[EventBridge] Sent new task card: has_msg_id=%s "
+                        "has_conversation_id=%s",
+                        bool(msg_id),
+                        bool(conversation_id),
                     )
             except Exception as e:
-                logger.warning(f"[EventBridge] Send card failed: {e}")
+                logger.warning(
+                    "[EventBridge] Send card failed: error_type=%s",
+                    type(e).__name__,
+                )
                 # Fallback to plain text
                 await self._send_task_text_fallback(adapter, chat_id, tasks)
 
         except Exception as e:
-            logger.warning(f"[EventBridge] Task update handling failed: {e}")
+            logger.warning(
+                "[EventBridge] Task update handling failed: error_type=%s",
+                type(e).__name__,
+            )
             # Fallback to plain text
             await self._send_task_text_fallback(adapter, chat_id, tasks)
 
