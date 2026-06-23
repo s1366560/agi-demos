@@ -124,18 +124,27 @@ class TestHITLChannelResponder:
         assert "secret-missing-id" not in caplog.text
         assert "has_request_id=True" in caplog.text
 
-    async def test_respond_already_resolved(self, responder: HITLChannelResponder) -> None:
+    async def test_respond_already_resolved(
+        self,
+        responder: HITLChannelResponder,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
         """Returns False if HITL request already resolved."""
         mock_session = AsyncMock()
         mock_repo = AsyncMock()
         mock_request = MagicMock()
-        mock_request.status = "resolved"
+        mock_request.id = "secret-resolved-id"
+        mock_request.status = "secret-status"
         mock_repo.get_by_id.return_value = mock_request
 
         mock_ctx = AsyncMock()
         mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
         mock_ctx.__aexit__ = AsyncMock(return_value=False)
         mock_session.get = AsyncMock()
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.channels.hitl_responder",
+        )
 
         with (
             patch(DB_FACTORY_PATH, return_value=mock_ctx),
@@ -148,6 +157,10 @@ class TestHITLChannelResponder:
             )
 
         assert result is HITLChannelResponseOutcome.REJECTED
+        assert "secret-resolved-id" not in caplog.text
+        assert "secret-status" not in caplog.text
+        assert "has_request_id=True" in caplog.text
+        assert "has_status=True" in caplog.text
 
     async def test_respond_publishes_to_redis(self, responder: HITLChannelResponder) -> None:
         """Publish failure keeps the answered request pending recovery instead of reopening."""

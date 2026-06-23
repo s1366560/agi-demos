@@ -310,9 +310,10 @@ class HITLChannelResponder:
         if request_status in ("pending", "PENDING"):
             return True
         logger.warning(
-            "[HITLChannelResponder] Request %s already in state: %s",
-            hitl_request.id,
-            hitl_request.status,
+            "[HITLChannelResponder] Request already in non-pending state: "
+            "has_request_id=%s has_status=%s",
+            bool(hitl_request.id),
+            bool(hitl_request.status),
         )
         return False
 
