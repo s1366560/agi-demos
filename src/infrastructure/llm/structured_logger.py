@@ -298,13 +298,17 @@ class StructuredLLMLogger:
         metrics = self._active_calls.get(request_id)
 
         if metrics is None:
-            self._logger.error(f"LLM call error without start: {request_id}, error={error}")
+            self._logger.error(
+                "LLM call error without start: %s error_type=%s",
+                request_id,
+                type(error).__name__,
+            )
             return
 
         # Update metrics
         metrics.has_error = True
         metrics.error_type = type(error).__name__
-        metrics.error_message = str(error)
+        metrics.error_message = None
         metrics.input_tokens = input_tokens
         metrics.end_time = time.time()
         metrics.latency_ms = (metrics.end_time - metrics.start_time) * 1000
@@ -313,8 +317,10 @@ class StructuredLLMLogger:
         del self._active_calls[request_id]
 
         self._logger.error(
-            f"LLM call failed: {metrics.provider}/{metrics.model} "
-            f"({metrics.error_type}: {metrics.error_message})",
+            "LLM call failed: %s/%s error_type=%s",
+            metrics.provider,
+            metrics.model,
+            metrics.error_type,
             extra=self._get_extra(metrics),
         )
 
