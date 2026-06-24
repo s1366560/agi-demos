@@ -144,6 +144,31 @@ class TestUnifiedLLMClient:
         assert "API Error" in str(exc_info.value)
 
     @pytest.mark.unit
+    async def test_ainvoke_error_log_redacts_exception_content(
+        self,
+        adapter,
+        mock_litellm_client,
+        caplog,
+    ):
+        """Generation failures should not log raw exception text."""
+        secret = "unified-generation-secret-2468"
+        mock_litellm_client.generate = AsyncMock(
+            side_effect=RuntimeError(f"provider echoed {secret}")
+        )
+
+        with (
+            caplog.at_level(
+                "ERROR",
+                logger="src.infrastructure.llm.litellm.unified_llm_client",
+            ),
+            pytest.raises(RuntimeError),
+        ):
+            await adapter.ainvoke(f"Test {secret}")
+
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.unit
     async def test_ainvoke_with_empty_content(self, adapter, mock_litellm_client):
         """Test ainvoke handles empty content response."""
         mock_litellm_client.generate = AsyncMock(return_value={"content": ""})

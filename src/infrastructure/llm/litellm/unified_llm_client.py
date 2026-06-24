@@ -106,7 +106,7 @@ class UnifiedLLMClient(LLMClient):
             )
             return response
         except Exception as e:
-            logger.error(f"UnifiedLLMClient generation failed: {e}")
+            logger.error("UnifiedLLMClient generation failed error_type=%s", type(e).__name__)
             raise
 
     @override
