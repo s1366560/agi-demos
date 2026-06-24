@@ -740,6 +740,39 @@ def test_project_sandbox_stats_error_log_omits_ids_and_exception_text(
 
 
 @pytest.mark.unit
+def test_execute_tool_error_log_omits_ids_and_exception_text(
+    sandbox_http_client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.execute_tool = AsyncMock(
+        side_effect=RuntimeError("execute secret for proj-1")
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    response = sandbox_http_client.post(
+        "/api/v1/projects/proj-1/sandbox/execute",
+        json={"tool_name": "bash", "arguments": {"cmd": "true"}, "timeout": 1},
+    )
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert response.json()["detail"] == "Execution failed"
+    assert "proj-1" not in response.text
+    assert "execute secret" not in response.text
+    assert "Tool execution failed" in caplog.text
+    assert "has_project_id=True" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "proj-1" not in caplog.text
+    assert "execute secret" not in caplog.text
+
+
+@pytest.mark.unit
 def test_terminate_project_sandbox_missing_sandbox_is_sanitized(
     sandbox_http_client: TestClient,
 ) -> None:

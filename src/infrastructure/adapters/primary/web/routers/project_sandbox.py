@@ -1604,7 +1604,11 @@ async def execute_tool_in_project_sandbox(
         )
 
     except Exception as e:
-        logger.exception("Tool execution failed for project %s", project_id)
+        logger.error(
+            "Tool execution failed: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Execution failed")) from e
 
 
