@@ -228,6 +228,38 @@ class TestHTTPClientHardening:
             "token": request_secret,
         }
 
+    async def test_send_notification_debug_log_redacts_payload(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPHttpClient(url="https://mcp.example.test", timeout=60)
+        notification_secret = "http-notification-secret-token"
+        post_context = AsyncMock()
+        post_context.__aenter__.return_value = MagicMock()
+        post_context.__aexit__.return_value = False
+        session = MagicMock()
+        session.post.return_value = post_context
+        client._session = session  # type: ignore[assignment]
+
+        with caplog.at_level(logging.DEBUG, logger=HTTP_LOGGER_NAME):
+            await client._send_notification(
+                "notifications/initialized",
+                {"token": notification_secret, "safe": "metadata"},
+            )
+
+        assert "Remote MCP notification" in caplog.text
+        assert "method=notifications/initialized" in caplog.text
+        assert "params_keys=" in caplog.text
+        assert notification_secret not in caplog.text
+        session.post.assert_called_once()
+        post_kwargs = session.post.call_args.kwargs
+        assert post_kwargs["json"] == {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {"token": notification_secret, "safe": "metadata"},
+        }
+        post_context.__aenter__.assert_awaited_once()
+
 
 class TestSubprocessCancelLadder:
     async def test_connect_initialize_failure_log_redacts_response_and_stderr(

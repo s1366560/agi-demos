@@ -698,7 +698,11 @@ class MCPHttpClient:
             "params": params,
         }
 
-        logger.debug(f"Remote MCP notification: {json.dumps(notification)}")
+        logger.debug(
+            "Remote MCP notification method=%s params_keys=%s",
+            method,
+            sorted(params),
+        )
 
         try:
             endpoint = self._get_endpoint(method)
