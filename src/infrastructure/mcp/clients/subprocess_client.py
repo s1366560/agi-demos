@@ -122,7 +122,11 @@ class MCPSubprocessClient:
         if self.env:
             env.update(self.env)
 
-        logger.info(f"Starting MCP subprocess: {self.command} {' '.join(self.args)}")
+        logger.info(
+            "Starting MCP subprocess command_set=%s args_count=%s",
+            bool(self.command),
+            len(self.args),
+        )
 
         try:
             # Use a larger buffer limit for stdout to handle large responses (e.g., screenshots)
@@ -160,7 +164,12 @@ class MCPSubprocessClient:
                 timeout=timeout,
             )
 
-            logger.debug(f"Initialize response: {result}")
+            response_keys = ",".join(sorted(result.keys())) if isinstance(result, dict) else ""
+            logger.debug(
+                "Initialize response has_response=%s response_keys=%s",
+                result is not None,
+                response_keys,
+            )
 
             if result and "result" in result:
                 self.server_info = result["result"].get("serverInfo", {})
@@ -172,8 +181,13 @@ class MCPSubprocessClient:
                 tools = await self.list_tools(timeout=timeout)
                 self._tools = tools
 
+                server_info_keys = (
+                    sorted(self.server_info) if isinstance(self.server_info, dict) else []
+                )
                 logger.info(
-                    f"MCP subprocess connected: {self.server_info} with {len(self._tools)} tools"
+                    "MCP subprocess connected server_info_keys=%s tools_count=%s",
+                    server_info_keys,
+                    len(self._tools),
                 )
                 return True
 

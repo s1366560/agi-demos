@@ -251,6 +251,43 @@ class TestSubprocessCancelLadder:
         assert "arg-secret" not in caplog.text
         client.disconnect.assert_awaited_once()
 
+    async def test_connect_initialize_debug_log_redacts_response(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPSubprocessClient(command="uvx", args=["server", "--token", "arg-secret"])
+        response_secret = "initialize-response-secret-token"
+        fake_proc = MagicMock(returncode=None)
+
+        async def fake_create_subprocess_exec(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return fake_proc
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+        client._send_request = AsyncMock(  # type: ignore[method-assign]
+            return_value={
+                "result": {
+                    "serverInfo": {"name": "stub", "metadata": response_secret},
+                },
+                "id": 1,
+            }
+        )
+        client._send_notification = AsyncMock()  # type: ignore[method-assign]
+        client.list_tools = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+        with caplog.at_level(logging.DEBUG, logger=SUBPROCESS_LOGGER_NAME):
+            connected = await client.connect(timeout=0.01)
+
+        assert connected is True
+        assert client.server_info == {"name": "stub", "metadata": response_secret}
+        assert "Initialize response" in caplog.text
+        assert "response_keys=" in caplog.text
+        assert "server_info_keys=" in caplog.text
+        assert response_secret not in caplog.text
+        assert "arg-secret" not in caplog.text
+        client._send_notification.assert_awaited_once_with("notifications/initialized", {})  # type: ignore[attr-defined]
+        client.list_tools.assert_awaited_once_with(timeout=0.01)  # type: ignore[attr-defined]
+
     async def test_disconnect_force_kills_on_cancellation(self) -> None:
         client = MCPSubprocessClient(command="echo", args=["stub"])
 
