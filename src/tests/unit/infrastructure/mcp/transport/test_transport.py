@@ -14,6 +14,7 @@ from src.infrastructure.mcp.transport.base import (
 from src.infrastructure.mcp.transport.factory import TransportFactory
 
 STDIO_LOGGER_NAME = "src.infrastructure.mcp.transport.stdio"
+WEBSOCKET_LOGGER_NAME = "src.infrastructure.mcp.transport.websocket"
 
 
 class _ClosedStdout:
@@ -350,6 +351,29 @@ class TestWebSocketTransport:
 
         with pytest.raises(NotImplementedError, match="request-response pattern"):
             await transport.send({"test": "message"})
+
+    @pytest.mark.asyncio
+    async def test_unexpected_message_log_redacts_payload(self, caplog):
+        """Unexpected websocket messages should not be copied into logs."""
+        from src.infrastructure.mcp.transport.websocket import WebSocketTransport
+
+        secret_payload = "websocket-secret-token"
+        message = {
+            "jsonrpc": "2.0",
+            "id": 42,
+            "result": {"token": secret_payload, "payload": "request content"},
+        }
+        transport = WebSocketTransport()
+
+        with caplog.at_level(logging.WARNING, logger=WEBSOCKET_LOGGER_NAME):
+            await transport._handle_message(message)
+
+        assert "Received unexpected message" in caplog.text
+        assert "message_keys=" in caplog.text
+        assert "has_id=True" in caplog.text
+        assert secret_payload not in caplog.text
+        assert "request content" not in caplog.text
+        assert str(message) not in caplog.text
 
 
 # ============================================================================

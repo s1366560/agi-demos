@@ -248,7 +248,11 @@ class WebSocketTransport(BaseTransport):
             logger.debug(f"Received server notification: {method}")
 
         else:
-            logger.warning(f"Received unexpected message: {data}")
+            logger.warning(
+                "Received unexpected message has_id=%s message_keys=%s",
+                request_id is not None,
+                ",".join(sorted(data.keys())),
+            )
 
     @override
     async def stop(self) -> None:
