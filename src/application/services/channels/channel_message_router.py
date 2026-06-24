@@ -197,8 +197,8 @@ class ChannelMessageRouter:
                     )
         except Exception as e:
             logger.error(
-                f"[MessageRouter] Failed to initialize MediaImportService: {e}",
-                exc_info=True,
+                "[MessageRouter] Failed to initialize MediaImportService: error_type=%s",
+                type(e).__name__,
             )
 
     async def _do_media_import(self, message: Message, conversation_id: str) -> None:

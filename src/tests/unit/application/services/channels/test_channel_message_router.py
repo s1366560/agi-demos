@@ -578,6 +578,37 @@ async def test_process_media_if_needed_unavailable_log_omits_message_identifier(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_ensure_media_import_service_failure_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Media import service initialization failures should not expose exception details."""
+    router = ChannelMessageRouter()
+
+    class _FailingSessionContext:
+        async def __aenter__(self) -> object:
+            raise RuntimeError("secret-media-init-token")
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.application.services.channels.channel_message_router.with_session",
+        return_value=_FailingSessionContext(),
+    ):
+        await router._ensure_media_import_service()
+
+    assert router._media_import_service is None
+    assert "secret-media-init-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_do_media_import_start_log_omits_message_identifier(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
