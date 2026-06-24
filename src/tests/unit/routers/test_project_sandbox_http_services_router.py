@@ -876,6 +876,36 @@ def test_terminate_project_sandbox_broadcast_error_log_omits_exception_text(
 
 
 @pytest.mark.unit
+def test_sync_project_sandbox_error_log_omits_ids_and_exception_text(
+    sandbox_http_client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.sync_sandbox_status = AsyncMock(
+        side_effect=RuntimeError("sync secret for proj-1")
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    response = sandbox_http_client.get("/api/v1/projects/proj-1/sandbox/sync")
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert response.json()["detail"] == "Sync failed"
+    assert "proj-1" not in response.text
+    assert "sync secret" not in response.text
+    assert "Failed to sync sandbox status" in caplog.text
+    assert "has_project_id=True" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "proj-1" not in caplog.text
+    assert "sync secret" not in caplog.text
+
+
+@pytest.mark.unit
 def test_restart_project_sandbox_broadcasts_project_tenant_from_access_check(
     sandbox_http_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
