@@ -571,7 +571,10 @@ class ChannelConnectionManager:
         try:
             _ = future.result()
         except Exception as e:
-            logger.error(f"[ChannelManager] Scheduled message routing failed: {e}")
+            logger.error(
+                "[ChannelManager] Scheduled message routing failed error_type=%s",
+                type(e).__name__,
+            )
 
     async def _update_db_status(
         self,

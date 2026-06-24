@@ -1,6 +1,7 @@
 """Unit tests for ChannelConnectionManager scheduling behavior."""
 
 import asyncio
+from concurrent.futures import Future
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -113,6 +114,27 @@ def test_schedule_route_message_logs_error_when_scheduler_fails(
         manager._schedule_route_message(message)
 
     assert "Failed to schedule message routing" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+def test_on_route_future_done_redacts_future_exception(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Background routing task failures should not log raw exception text."""
+    manager = ChannelConnectionManager()
+    future: Future[None] = Future()
+    exception_detail = "future failed channel-future-secret-2468"
+    future.set_exception(RuntimeError(exception_detail))
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.channels.connection_manager",
+    ):
+        manager._on_route_future_done(future)
+
+    assert "Scheduled message routing failed" in caplog.text
     assert exception_detail not in caplog.text
     assert "error_type=RuntimeError" in caplog.text
 
