@@ -391,10 +391,14 @@ class StructuredOutputValidator:
                     )
 
             except Exception as e:
-                logger.error(f"Error during validated generation (attempt {attempt + 1}): {e}")
+                logger.error(
+                    "Error during validated generation attempt=%s error_type=%s",
+                    attempt + 1,
+                    type(e).__name__,
+                )
                 last_result = ValidationResult(
                     success=False,
-                    error=str(e),
+                    error=f"LLM generation failed ({type(e).__name__})",
                     attempts=attempt + 1,
                 )
 

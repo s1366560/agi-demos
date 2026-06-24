@@ -249,6 +249,29 @@ class TestStructuredOutputValidator:
         assert result.success
         assert result.attempts == 2
 
+    @pytest.mark.asyncio
+    async def test_generate_validated_exception_redacts_error_details(self, caplog):
+        """LLM exceptions should not leak raw provider details into logs or results."""
+        secret = "validated-generation-secret-8642"
+        validator = StructuredOutputValidator(ValidationConfig(max_retries=0))
+        mock_client = AsyncMock()
+        mock_client.generate_response = AsyncMock(
+            side_effect=RuntimeError(f"provider echoed prompt {secret}")
+        )
+
+        with caplog.at_level("ERROR", logger="src.infrastructure.llm.validation"):
+            result = await validator.generate_validated(
+                llm_client=mock_client,
+                messages=[{"role": "user", "content": f"Generate person {secret}"}],
+                response_model=self.SampleModel,
+            )
+
+        assert not result.success
+        assert result.error is not None
+        assert secret not in result.error
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
 
 class TestMetricsCollector:
     """Tests for MetricsCollector."""
