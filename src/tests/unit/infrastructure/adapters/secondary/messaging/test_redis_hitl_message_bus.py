@@ -367,3 +367,107 @@ class TestRedisHITLMessageBusLogging:
         assert "has_request_id=True" in caplog.text
         assert "has_consumer_group=True" in caplog.text
         assert "has_consumer_name=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_read_pending_messages_warning_redacts_stream_group_consumer_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xreadgroup = AsyncMock(side_effect=RuntimeError("redis secret unavailable"))
+        adapter = RedisHITLMessageBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_stream_key = "hitl:stream:secret-request-4160"
+        secret_consumer_group = "secret-consumer-group"
+        secret_consumer_name = "secret-consumer-name"
+
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            messages = [
+                message
+                async for message in adapter._read_pending_messages(
+                    secret_stream_key,
+                    secret_consumer_group,
+                    secret_consumer_name,
+                )
+            ]
+
+        assert messages == []
+        assert "Error reading pending" in caplog.text
+        assert secret_stream_key not in caplog.text
+        assert secret_consumer_group not in caplog.text
+        assert secret_consumer_name not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "has_stream_key=True" in caplog.text
+        assert "has_consumer_group=True" in caplog.text
+        assert "has_consumer_name=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_poll_new_messages_error_redacts_stream_group_consumer_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xreadgroup = AsyncMock(side_effect=RuntimeError("redis secret unavailable"))
+        adapter = RedisHITLMessageBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_stream_key = "hitl:stream:secret-request-4170"
+        secret_consumer_group = "secret-consumer-group"
+        secret_consumer_name = "secret-consumer-name"
+
+        stream = adapter._poll_new_messages(
+            secret_stream_key,
+            secret_consumer_group,
+            secret_consumer_name,
+            block_ms=25,
+        )
+
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME), pytest.raises(RuntimeError):
+            await anext(stream)
+
+        assert "Error reading" in caplog.text
+        assert secret_stream_key not in caplog.text
+        assert secret_consumer_group not in caplog.text
+        assert secret_consumer_name not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "block_ms=25" in caplog.text
+        assert "has_stream_key=True" in caplog.text
+        assert "has_consumer_group=True" in caplog.text
+        assert "has_consumer_name=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_poll_new_messages_connection_error_redacts_stream_group_consumer_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xreadgroup = AsyncMock(
+            side_effect=redis.ConnectionError("redis secret connection")
+        )
+        adapter = RedisHITLMessageBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_stream_key = "hitl:stream:secret-request-4180"
+        secret_consumer_group = "secret-consumer-group"
+        secret_consumer_name = "secret-consumer-name"
+
+        stream = adapter._poll_new_messages(
+            secret_stream_key,
+            secret_consumer_group,
+            secret_consumer_name,
+            block_ms=30,
+        )
+
+        with (
+            caplog.at_level(logging.ERROR, logger=LOGGER_NAME),
+            pytest.raises(redis.ConnectionError),
+        ):
+            await anext(stream)
+
+        assert "Connection error" in caplog.text
+        assert secret_stream_key not in caplog.text
+        assert secret_consumer_group not in caplog.text
+        assert secret_consumer_name not in caplog.text
+        assert "redis secret connection" not in caplog.text
+        assert "error_type=ConnectionError" in caplog.text
+        assert "block_ms=30" in caplog.text
+        assert "has_stream_key=True" in caplog.text
+        assert "has_consumer_group=True" in caplog.text
+        assert "has_consumer_name=True" in caplog.text

@@ -206,8 +206,19 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                         if message:
                             yield message
 
-        except Exception as e:
-            logger.warning(f"[HITLMessageBus] Error reading pending from {stream_key}: {e}")
+        except Exception as exc:
+            logger.warning(
+                " ".join(
+                    [
+                        "[HITLMessageBus] Error reading pending error_type=%s",
+                        "has_stream_key=%s has_consumer_group=%s has_consumer_name=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                bool(stream_key),
+                bool(consumer_group),
+                bool(consumer_name),
+            )
 
     async def _poll_new_messages(
         self,
@@ -237,11 +248,35 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                             yield message
                             return
 
-            except redis.ConnectionError as e:
-                logger.error(f"[HITLMessageBus] Connection error on {stream_key}: {e}")
+            except redis.ConnectionError as exc:
+                logger.error(
+                    " ".join(
+                        [
+                            "[HITLMessageBus] Connection error error_type=%s block_ms=%s",
+                            "has_stream_key=%s has_consumer_group=%s has_consumer_name=%s",
+                        ]
+                    ),
+                    type(exc).__name__,
+                    block_ms,
+                    bool(stream_key),
+                    bool(consumer_group),
+                    bool(consumer_name),
+                )
                 raise
-            except Exception as e:
-                logger.error(f"[HITLMessageBus] Error reading from {stream_key}: {e}")
+            except Exception as exc:
+                logger.error(
+                    " ".join(
+                        [
+                            "[HITLMessageBus] Error reading error_type=%s block_ms=%s",
+                            "has_stream_key=%s has_consumer_group=%s has_consumer_name=%s",
+                        ]
+                    ),
+                    type(exc).__name__,
+                    block_ms,
+                    bool(stream_key),
+                    bool(consumer_group),
+                    bool(consumer_name),
+                )
                 raise
 
     def _parse_stream_message(self, msg_id: Any, fields: dict[Any, Any]) -> HITLMessage | None:
