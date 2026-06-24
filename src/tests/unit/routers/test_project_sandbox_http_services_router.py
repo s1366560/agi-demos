@@ -840,6 +840,45 @@ async def test_mcp_websocket_proxy_sanitizes_internal_errors(
 
 
 @pytest.mark.unit
+async def test_mcp_websocket_proxy_success_logs_omit_target_details(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    websocket = _FakeWebSocket()
+    service = _SandboxService(websocket_url="ws://mcp.local/secret")
+    upstream = SimpleNamespace(close=AsyncMock())
+
+    async def fake_connect(_ws_target: str) -> object:
+        return upstream
+
+    async def fake_relay_pair(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(router_mod, "_connect_mcp_upstream", fake_connect)
+    monkeypatch.setattr(router_mod, "_run_ws_relay_pair", fake_relay_pair)
+    caplog.set_level(
+        logging.INFO,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    await router_mod.proxy_project_mcp_websocket(
+        websocket=websocket,
+        project_id="proj-1",
+        current_user=SimpleNamespace(id="user-1"),
+        service=service,
+    )
+
+    assert websocket.accepted is True
+    upstream.close.assert_awaited_once()
+    assert websocket.closed is True
+    assert "MCP WS proxy" in caplog.text
+    assert "has_project_id=True" in caplog.text
+    assert "has_ws_target=True" in caplog.text
+    assert "proj-1" not in caplog.text
+    assert "ws://mcp.local/secret" not in caplog.text
+
+
+@pytest.mark.unit
 async def test_mcp_websocket_missing_sandbox_reason_is_sanitized() -> None:
     websocket = _FakeWebSocket()
     service = SimpleNamespace(get_project_sandbox=AsyncMock(return_value=None))

@@ -3273,7 +3273,11 @@ async def proxy_project_mcp_websocket(
 
     ws_target = info.websocket_url
 
-    logger.info(f"MCP WS proxy: project={project_id} -> ws_target={ws_target}")
+    logger.info(
+        "MCP WS proxy: has_project_id=%s has_ws_target=%s",
+        bool(project_id),
+        bool(ws_target),
+    )
 
     await websocket.accept()
 
@@ -3281,7 +3285,7 @@ async def proxy_project_mcp_websocket(
     try:
         upstream_ws = await _connect_mcp_upstream(ws_target)
 
-        logger.info(f"MCP WS proxy: upstream connected to {ws_target}")
+        logger.info("MCP WS proxy: upstream connected: has_ws_target=%s", bool(ws_target))
 
         await _run_ws_relay_pair(
             lambda: _relay_mcp_browser_to_upstream(websocket, upstream_ws),
