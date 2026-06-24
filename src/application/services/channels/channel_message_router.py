@@ -1621,7 +1621,10 @@ class ChannelMessageRouter:
                 if updated:
                     await session.commit()
         except Exception as e:
-            logger.warning(f"[MessageRouter] Failed to mark outbox sent: {e}")
+            logger.warning(
+                "[MessageRouter] Failed to mark outbox sent: error_type=%s",
+                type(e).__name__,
+            )
 
     async def _mark_outbox_failed(self, outbox_id: str, error_message: str) -> None:
         """Mark outbox record as failed/dead-letter."""
@@ -1636,7 +1639,10 @@ class ChannelMessageRouter:
                 if updated:
                     await session.commit()
         except Exception as e:
-            logger.warning(f"[MessageRouter] Failed to mark outbox failed: {e}")
+            logger.warning(
+                "[MessageRouter] Failed to mark outbox failed: error_type=%s",
+                type(e).__name__,
+            )
 
     async def _resolve_channel_config_id(
         self,

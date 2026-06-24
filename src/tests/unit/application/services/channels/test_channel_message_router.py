@@ -1205,6 +1205,48 @@ async def test_send_response_marks_outbox_failed_when_manager_missing() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "args", "secret"),
+    [
+        ("_mark_outbox_sent", ("secret-outbox-id", "secret-message-id"), "secret-sent-token"),
+        ("_mark_outbox_failed", ("secret-outbox-id", "private failure reason"), "secret-failed-token"),
+    ],
+)
+async def test_mark_outbox_status_failure_logs_omit_exception_text(
+    caplog: pytest.LogCaptureFixture,
+    method_name: str,
+    args: tuple[str, ...],
+    secret: str,
+) -> None:
+    """Outbox status persistence failures should not expose IDs or exception details."""
+    router = ChannelMessageRouter()
+
+    class _FailingSessionContext:
+        async def __aenter__(self) -> object:
+            raise RuntimeError(secret)
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.application.services.channels.channel_message_router.with_session",
+        return_value=_FailingSessionContext(),
+    ):
+        await getattr(router, method_name)(*args)
+
+    for arg in args:
+        assert arg not in caplog.text
+    assert secret not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_broadcast_workspace_event_sanitizes_payload() -> None:
     """Workspace broadcast payload should be JSON-safe."""
     router = ChannelMessageRouter()
