@@ -696,6 +696,28 @@ async def test_invoke_agent_streams_and_sends_final_response() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_invoke_agent_error_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Agent invocation errors should log error type without exception details."""
+    router = ChannelMessageRouter()
+    router._setup_agent_session = AsyncMock(
+        side_effect=RuntimeError("secret-agent-token")
+    )
+    message = _build_message(text="hello")
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router._invoke_agent(message, "conv-1")
+
+    assert "secret-agent-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_send_final_response_logs_agent_errors_without_details(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

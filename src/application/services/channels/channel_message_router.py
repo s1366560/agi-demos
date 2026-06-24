@@ -771,7 +771,10 @@ class ChannelMessageRouter:
             )
 
         except Exception as e:
-            logger.error(f"[MessageRouter] Agent invocation error: {e}", exc_info=True)
+            logger.error(
+                "[MessageRouter] Agent invocation error: error_type=%s",
+                type(e).__name__,
+            )
 
     async def _setup_agent_session(
         self, message: Message, conversation_id: str
