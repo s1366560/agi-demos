@@ -155,6 +155,27 @@ class TestNativeGraphAdapterEmbeddingDimension:
         assert secret not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
 
+    @pytest.mark.asyncio
+    async def test_clear_embeddings_by_dimension_redacts_query_exception_details(
+        self,
+        adapter,
+        mock_neo4j_client,
+        caplog,
+    ):
+        """Embedding cleanup failures should not write backend details to logs."""
+        secret = "clear-embedding-secret-8642"
+        mock_neo4j_client.execute_query.side_effect = RuntimeError(secret)
+
+        with caplog.at_level(
+            logging.ERROR,
+            logger="src.infrastructure.graph.native_graph_adapter",
+        ):
+            result = await adapter._clear_embeddings_by_dimension(768)
+
+        assert result == 0
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
 
 @pytest.mark.unit
 class TestNativeGraphAdapterAddEpisode:

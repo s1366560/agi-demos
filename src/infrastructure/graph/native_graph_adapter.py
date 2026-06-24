@@ -387,7 +387,7 @@ class NativeGraphAdapter(GraphServicePort):
             if result.records and len(result.records) > 0:
                 return cast(int, result.records[0]["cleared"])
         except Exception as e:
-            logger.error(f"Failed to clear embeddings: {e}")
+            logger.error("Failed to clear embeddings: error_type=%s", type(e).__name__)
         return 0
 
     @override
