@@ -669,7 +669,7 @@ class NativeGraphAdapter(GraphServicePort):
             )
 
         except Exception as e:
-            logger.error(f"Failed to process episode {episode_uuid}: {e}", exc_info=True)
+            logger.error("Failed to process episode: error_type=%s", type(e).__name__)
             # Update status to failed
             await self._update_episode_status(episode_uuid, EpisodeStatus.FAILED)
             raise

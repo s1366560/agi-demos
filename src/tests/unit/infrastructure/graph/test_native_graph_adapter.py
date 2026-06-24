@@ -12,6 +12,7 @@ from src.infrastructure.graph.native_graph_adapter import NativeGraphAdapter
 from src.infrastructure.graph.schemas import (
     EntityEdge,
     EntityNode,
+    EpisodeStatus,
     HybridSearchResult,
     SearchResultItem,
 )
@@ -306,6 +307,43 @@ class TestNativeGraphAdapterAddEpisode:
 @pytest.mark.unit
 class TestNativeGraphAdapterProcessEpisode:
     """Tests for episode entity extraction and graph construction."""
+
+    @pytest.mark.asyncio
+    async def test_process_episode_failure_log_redacts_exception_details(
+        self,
+        adapter,
+        caplog,
+    ):
+        """Process failures should mark failed without writing exception details to logs."""
+        secret = "process-episode-secret-2468"
+        episode_uuid = "episode-with-secret"
+
+        with (
+            patch.object(
+                adapter,
+                "_load_schema_context",
+                AsyncMock(side_effect=RuntimeError(secret)),
+            ),
+            patch.object(adapter, "_update_episode_status", AsyncMock()) as update_status,
+            caplog.at_level(
+                logging.ERROR,
+                logger="src.infrastructure.graph.native_graph_adapter",
+            ),
+            pytest.raises(RuntimeError, match=secret),
+        ):
+            await adapter.process_episode(
+                episode_uuid=episode_uuid,
+                content="Ada founded a lab.",
+                project_id="project-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+            )
+
+        update_status.assert_awaited_once()
+        assert update_status.await_args.args == (episode_uuid, EpisodeStatus.FAILED)
+        assert secret not in caplog.text
+        assert episode_uuid not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     @pytest.mark.asyncio
     async def test_process_episode_links_existing_duplicate_entity(
