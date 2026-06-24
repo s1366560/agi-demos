@@ -436,6 +436,47 @@ class TestSandboxOrchestrator:
         # Event publishing is now handled by the API layer
 
     @pytest.mark.asyncio
+    async def test_start_terminal_not_running_log_omits_sandbox_id_and_status_details(
+        self, orchestrator, mock_adapter, caplog
+    ):
+        """Test terminal non-running warning logs without raw sandbox IDs or status details."""
+        mock_adapter.call_tool.return_value = {
+            "content": [
+                {
+                    "text": json.dumps(
+                        {
+                            "success": False,
+                            "running": False,
+                            "url": "ws://terminal-secret.local",
+                            "session_id": "session-secret",
+                        }
+                    )
+                }
+            ],
+            "is_error": False,
+        }
+        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_orchestrator")
+
+        status = await orchestrator.start_terminal("sb-123")
+
+        assert status.running is False
+        target_records = [
+            record
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_orchestrator"
+            and record.levelno >= logging.WARNING
+        ]
+        assert len(target_records) == 1
+        message = target_records[0].getMessage()
+        assert "Terminal did not start" in message
+        assert "has_sandbox_id=True" in message
+        assert "requested_port=7681" in message
+        assert "sb-123" not in message
+        assert "ws://terminal-secret.local" not in message
+        assert "session-secret" not in message
+        assert "TerminalStatus" not in message
+
+    @pytest.mark.asyncio
     async def test_start_terminal_error_log_omits_sandbox_id_and_error_text(
         self, orchestrator, mock_adapter, caplog
     ):

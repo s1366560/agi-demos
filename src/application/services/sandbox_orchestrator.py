@@ -294,7 +294,11 @@ class SandboxOrchestrator:
             if status.running:
                 logger.info(f"Terminal started for sandbox {sandbox_id}: {status.url}")
             else:
-                logger.warning(f"Terminal did not start for sandbox {sandbox_id}, status: {status}")
+                logger.warning(
+                    "Terminal did not start: has_sandbox_id=%s requested_port=%s",
+                    bool(sandbox_id),
+                    config.port,
+                )
 
             return status
 
