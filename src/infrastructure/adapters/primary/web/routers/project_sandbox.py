@@ -3289,7 +3289,11 @@ async def proxy_project_mcp_websocket(
         )
 
     except Exception as e:
-        logger.error(f"MCP WebSocket proxy error for project {project_id}: {e}")
+        logger.error(
+            "MCP WebSocket proxy error: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(e).__name__,
+        )
         with contextlib.suppress(Exception):
             await websocket.send_json({"error": "MCP WebSocket proxy failed"})
     finally:

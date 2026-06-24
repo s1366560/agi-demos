@@ -809,6 +809,7 @@ async def test_terminal_websocket_missing_terminal_reason_is_sanitized() -> None
 @pytest.mark.unit
 async def test_mcp_websocket_proxy_sanitizes_internal_errors(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     websocket = _FakeWebSocket()
     service = _SandboxService(websocket_url="ws://mcp.local")
@@ -817,6 +818,10 @@ async def test_mcp_websocket_proxy_sanitizes_internal_errors(
         raise RuntimeError("mcp secret token")
 
     monkeypatch.setattr(router_mod, "_connect_mcp_upstream", fail_connect)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
 
     await router_mod.proxy_project_mcp_websocket(
         websocket=websocket,
@@ -828,6 +833,10 @@ async def test_mcp_websocket_proxy_sanitizes_internal_errors(
     assert websocket.sent_json == [{"error": "MCP WebSocket proxy failed"}]
     assert "secret" not in str(websocket.sent_json)
     assert websocket.closed is True
+    assert "MCP WebSocket proxy error" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "mcp secret token" not in caplog.text
+    assert "proj-1" not in caplog.text
 
 
 @pytest.mark.unit
