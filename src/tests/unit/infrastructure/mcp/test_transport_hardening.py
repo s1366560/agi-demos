@@ -260,6 +260,27 @@ class TestHTTPClientHardening:
         }
         post_context.__aenter__.assert_awaited_once()
 
+    async def test_send_notification_error_log_redacts_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPHttpClient(url="https://mcp.example.test", timeout=60)
+        error_secret = "http-notification-error-secret"
+        session = MagicMock()
+        session.post.side_effect = RuntimeError(error_secret)
+        client._session = session  # type: ignore[assignment]
+
+        with caplog.at_level(logging.ERROR, logger=HTTP_LOGGER_NAME):
+            await client._send_notification(
+                "notifications/initialized",
+                {"safe": "metadata"},
+            )
+
+        assert "Remote MCP notification error" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert error_secret not in caplog.text
+        session.post.assert_called_once()
+
 
 class TestSubprocessCancelLadder:
     async def test_connect_initialize_failure_log_redacts_response_and_stderr(

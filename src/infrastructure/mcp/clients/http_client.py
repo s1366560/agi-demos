@@ -709,7 +709,7 @@ class MCPHttpClient:
             async with self._session.post(endpoint, json=notification):
                 pass  # Ignore response for notifications
         except Exception as e:
-            logger.error(f"Remote MCP notification error: {e}")
+            logger.error("Remote MCP notification error error_type=%s", type(e).__name__)
 
     def _get_endpoint(self, method: str) -> str:
         """Get the HTTP endpoint for a given method."""
