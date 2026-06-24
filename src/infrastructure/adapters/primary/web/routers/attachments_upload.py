@@ -323,7 +323,10 @@ async def initiate_multipart_upload(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to initiate multipart upload: {e}")
+        logger.error(
+            "Failed to initiate multipart upload: error_type=%s",
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Failed to initiate upload")) from e
 
 
