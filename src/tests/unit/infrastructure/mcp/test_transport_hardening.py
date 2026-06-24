@@ -358,3 +358,25 @@ class TestSubprocessCancelLadder:
         assert secret_error not in caplog.text
         proc.stdin.write.assert_called_once()
         proc.stdin.drain.assert_not_awaited()
+
+    async def test_send_request_error_log_redacts_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPSubprocessClient(command="echo", args=["stub"])
+        secret_error = "request-secret-token"
+        proc = MagicMock()
+        proc.stdin.write = MagicMock(side_effect=RuntimeError(secret_error))
+        proc.stdin.drain = AsyncMock()
+        proc.stdout = MagicMock()
+        client._proc = proc  # type: ignore[assignment]
+
+        with caplog.at_level(logging.ERROR, logger=SUBPROCESS_LOGGER_NAME):
+            result = await client._send_request("tools/call", {"token": "redacted"}, timeout=0.01)
+
+        assert result is None
+        assert "MCP request error" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert secret_error not in caplog.text
+        proc.stdin.write.assert_called_once()
+        proc.stdin.drain.assert_not_awaited()

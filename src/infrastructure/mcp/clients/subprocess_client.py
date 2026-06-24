@@ -409,7 +409,7 @@ class MCPSubprocessClient:
             except json.JSONDecodeError as e:
                 logger.error(f"MCP response parse error: {e}")
             except Exception as e:
-                logger.error(f"MCP request error: {e}")
+                logger.error("MCP request error error_type=%s", type(e).__name__)
 
             return None
 
