@@ -1461,7 +1461,11 @@ async def ensure_project_sandbox(
         return ProjectSandboxResponse.from_info(info)
 
     except Exception as e:
-        logger.exception("Failed to ensure sandbox for project %s", project_id)
+        logger.error(
+            "Failed to ensure sandbox: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Failed to create sandbox")) from e
 
 

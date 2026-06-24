@@ -534,6 +534,7 @@ def test_stop_http_service_broadcast_error_log_omits_exception_text(
 @pytest.mark.unit
 def test_ensure_project_sandbox_sanitizes_internal_errors(
     sandbox_http_client: TestClient,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Sandbox lifecycle failures should not leak backend exception details."""
     lifecycle_service = AsyncMock()
@@ -542,6 +543,10 @@ def test_ensure_project_sandbox_sanitizes_internal_errors(
     )
     sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
         lambda: lifecycle_service
+    )
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
     )
 
     response = sandbox_http_client.post(
@@ -552,6 +557,11 @@ def test_ensure_project_sandbox_sanitizes_internal_errors(
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert response.json()["detail"] == "Failed to create sandbox"
     assert "secret-host" not in response.text
+    assert "Failed to ensure sandbox" in caplog.text
+    assert "has_project_id=True" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "proj-1" not in caplog.text
+    assert "secret-host" not in caplog.text
 
 
 @pytest.mark.unit
