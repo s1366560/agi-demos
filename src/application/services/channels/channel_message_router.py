@@ -1833,7 +1833,10 @@ class ChannelMessageRouter:
             async with with_session() as session:
                 return await session.get(ChannelConfigModel, config_id)
         except Exception as e:
-            logger.warning(f"[MessageRouter] Failed to load channel config: {e}")
+            logger.warning(
+                "[MessageRouter] Failed to load channel config: error_type=%s",
+                type(e).__name__,
+            )
             return None
 
     async def _send_error_feedback(self, message: Message, conversation_id: str) -> None:
@@ -1844,7 +1847,10 @@ class ChannelMessageRouter:
             )
             await self._send_response(message, conversation_id, error_text)
         except Exception as e:
-            logger.warning(f"[MessageRouter] Failed to send error feedback: {e}")
+            logger.warning(
+                "[MessageRouter] Failed to send error feedback: error_type=%s",
+                type(e).__name__,
+            )
 
     def _cache_conversation(self, session_key: str, conversation_id: str) -> None:
         """Cache session_key -> conversation_id with LRU eviction."""
@@ -1999,7 +2005,10 @@ class ChannelMessageRouter:
             return None
 
         except Exception as e:
-            logger.error(f"[MessageRouter] Error resolving channel_config_id: {e}")
+            logger.error(
+                "[MessageRouter] Error resolving channel_config_id: error_type=%s",
+                type(e).__name__,
+            )
             return None
 
 

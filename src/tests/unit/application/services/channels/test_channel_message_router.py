@@ -1425,6 +1425,92 @@ async def test_record_streaming_outbox_success_log_omits_identifiers(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_load_channel_config_failure_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Channel config load failures should not expose config IDs or exception details."""
+    router = ChannelMessageRouter()
+    message = _build_message(
+        text="hello",
+        raw_data={"_routing": {"channel_config_id": "secret-config-id"}},
+    )
+
+    class _FailingSessionContext:
+        async def __aenter__(self) -> object:
+            raise RuntimeError("secret-load-token")
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.application.services.channels.channel_message_router.with_session",
+        return_value=_FailingSessionContext(),
+    ):
+        result = await router._load_channel_config(message)
+
+    assert result is None
+    assert "secret-config-id" not in caplog.text
+    assert "secret-load-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_error_feedback_failure_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Error feedback failure logs should not expose conversation IDs or exception details."""
+    router = ChannelMessageRouter()
+    router._send_response = AsyncMock(side_effect=RuntimeError("secret-feedback-token"))
+    message = _build_message(text="hello")
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router._send_error_feedback(message, "secret-conversation-id")
+
+    assert "secret-conversation-id" not in caplog.text
+    assert "secret-feedback-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_resolve_channel_config_id_error_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Config ID resolution errors should not expose raw payload exception details."""
+    router = ChannelMessageRouter()
+
+    class _ExplodingRawData(dict):
+        def __init__(self) -> None:
+            super().__init__({"event": {}})
+
+        def get(self, key: object, default: object = None) -> object:
+            raise RuntimeError("secret-resolve-token")
+
+    message = _build_message(text="hello")
+    message.raw_data = _ExplodingRawData()
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    result = await router._resolve_channel_config_id_from_message(message)
+
+    assert result is None
+    assert "secret-resolve-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_broadcast_workspace_event_sanitizes_payload() -> None:
     """Workspace broadcast payload should be JSON-safe."""
     router = ChannelMessageRouter()
