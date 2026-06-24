@@ -481,7 +481,11 @@ class Neo4jClient:
             if result.records and len(result.records) > 0:
                 return cast(int | None, result.records[0].get("dimensions"))
         except Exception as e:
-            logger.warning(f"Failed to get index dimension for {index_name}: {e}")
+            logger.warning(
+                "Failed to get vector index dimension error_type=%s has_index_name=%s",
+                type(e).__name__,
+                bool(index_name),
+            )
         return None
 
     async def get_or_create_vector_index(
