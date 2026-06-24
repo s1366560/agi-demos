@@ -187,9 +187,12 @@ async def create_sandbox(
                             f"for sandbox={sandbox_info.sandbox_id} to Agent context"
                         )
                     except Exception as e:
-                        logger.warning(f"[SandboxAPI] Failed to register tools to Agent: {e}")
+                        logger.warning(
+                            "[SandboxAPI] Failed to register tools to Agent: error_type=%s",
+                            type(e).__name__,
+                        )
         except Exception as e:
-            logger.warning(f"Could not connect MCP: {e}")
+            logger.warning("Could not connect MCP: error_type=%s", type(e).__name__)
 
         # Emit sandbox_created event
         if event_publisher:
@@ -202,7 +205,10 @@ async def create_sandbox(
                     websocket_url=sandbox_info.websocket_url,
                 )
             except Exception as e:
-                logger.warning(f"Failed to publish sandbox_created event: {e}")
+                logger.warning(
+                    "Failed to publish sandbox_created event: error_type=%s",
+                    type(e).__name__,
+                )
 
         return SandboxResponse(
             id=sandbox_info.sandbox_id,
@@ -330,7 +336,10 @@ async def terminate_sandbox(
         if unregistered:
             logger.info(f"[SandboxAPI] Unregistered tools for sandbox={sandbox_id}")
     except Exception as e:
-        logger.warning(f"[SandboxAPI] Failed to unregister tools: {e}")
+        logger.warning(
+            "[SandboxAPI] Failed to unregister tools: error_type=%s",
+            type(e).__name__,
+        )
 
     success = await adapter.terminate_sandbox(sandbox_id)
 
