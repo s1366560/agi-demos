@@ -294,7 +294,18 @@ class ArtifactExtractor:
                     )
 
             except Exception as e:
-                logger.error(f"[ArtifactExtractor] Failed to create artifact from {tool_name}: {e}")
+                logger.error(
+                    " ".join(
+                        (
+                            "[ArtifactExtractor] Failed to create artifact error_type=%s",
+                            "has_tool_name=%s",
+                            "has_filename=%s",
+                        )
+                    ),
+                    type(e).__name__,
+                    bool(tool_name),
+                    bool(artifact_data.filename),
+                )
 
     def _extract_from_result(
         self, result: dict[str, Any], tool_name: str

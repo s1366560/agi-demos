@@ -5,6 +5,7 @@ Tests the artifact extraction logic extracted from SessionProcessor.
 """
 
 import base64
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -17,6 +18,8 @@ from src.infrastructure.agent.artifact.extractor import (
     get_artifact_extractor,
     set_artifact_extractor,
 )
+
+LOGGER_NAME = "src.infrastructure.agent.artifact.extractor"
 
 # ============================================================
 # Test Fixtures
@@ -662,12 +665,17 @@ class TestEdgeCases:
         assert extraction.artifacts[0].category == "image"
 
     async def test_service_error_handling(
-        self, extractor_with_service, valid_context, sample_image_base64
+        self,
+        extractor_with_service,
+        valid_context,
+        sample_image_base64,
+        caplog,
     ):
         """Test handling of service errors."""
         # Make service throw an error
+        secret_tool_name = "secret-tool-name"
         extractor_with_service._artifact_service.create_artifact.side_effect = Exception(
-            "Storage error"
+            "storage secret unavailable"
         )
 
         result = {
@@ -675,10 +683,19 @@ class TestEdgeCases:
         }
 
         events = []
-        async for event in extractor_with_service.process(
-            tool_name="test", result=result, context=valid_context
-        ):
-            events.append(event)
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+            async for event in extractor_with_service.process(
+                tool_name=secret_tool_name,
+                result=result,
+                context=valid_context,
+            ):
+                events.append(event)
 
         # Should not crash, just log error
         assert len(events) == 0
+        assert "Failed to create artifact" in caplog.text
+        assert secret_tool_name not in caplog.text
+        assert "storage secret unavailable" not in caplog.text
+        assert "error_type=Exception" in caplog.text
+        assert "has_tool_name=True" in caplog.text
+        assert "has_filename=True" in caplog.text
