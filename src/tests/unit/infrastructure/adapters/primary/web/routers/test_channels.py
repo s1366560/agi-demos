@@ -23,6 +23,9 @@ from src.infrastructure.adapters.primary.web.routers.channels import (
     ChannelConfigUpdate,
     PluginConfigUpdateRequest,
     PushMessageRequest,
+    _attach_plugin_skill_definitions,
+    _attach_plugin_tool_definitions,
+    _reconcile_channel_runtime_after_plugin_change,
     _resolve_project_tenant_id,
     create_config,
     delete_config,
@@ -1444,6 +1447,83 @@ class TestPluginSchemaExecution:
 
 class TestPluginRuntimeReconcile:
     """Test plugin action hooks that reconcile channel runtime connections."""
+
+    @pytest.mark.asyncio
+    async def test_attach_plugin_tool_definitions_failure_log_omits_error_text(self, caplog):
+        """Tool definition build failures should not expose raw exception text."""
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.infrastructure.adapters.primary.web.routers.channels",
+        )
+        registry = SimpleNamespace(
+            build_tools=AsyncMock(side_effect=RuntimeError("secret-tool-build-token"))
+        )
+
+        with patch(
+            "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry",
+            return_value=registry,
+        ):
+            result = await _attach_plugin_tool_definitions(
+                records_by_name={},
+                tenant_id="tenant-1",
+            )
+
+        assert result == []
+        assert "Failed to build plugin tool definitions for UI" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "secret-tool-build-token" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_attach_plugin_skill_definitions_failure_log_omits_error_text(self, caplog):
+        """Skill definition build failures should not expose raw exception text."""
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.infrastructure.adapters.primary.web.routers.channels",
+        )
+        registry = SimpleNamespace(
+            build_skills=AsyncMock(side_effect=RuntimeError("secret-skill-build-token"))
+        )
+
+        with patch(
+            "src.infrastructure.adapters.primary.web.routers.channels.get_plugin_registry",
+            return_value=registry,
+        ):
+            result = await _attach_plugin_skill_definitions(
+                plugin_records=[],
+                records_by_name={},
+                tenant_id="tenant-1",
+            )
+
+        assert result == []
+        assert "Failed to build plugin skill definitions for UI" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "secret-skill-build-token" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_reconcile_channel_runtime_failure_log_omits_error_text(self, caplog):
+        """Runtime reconcile failures should not expose raw exception text."""
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.infrastructure.adapters.primary.web.routers.channels",
+        )
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                return_value=object(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "reload_channel_manager_connections",
+                new=AsyncMock(side_effect=RuntimeError("secret-reconcile-token")),
+            ),
+        ):
+            result = await _reconcile_channel_runtime_after_plugin_change()
+
+        assert result is None
+        assert "Failed to reconcile channel runtime after plugin change" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "secret-reconcile-token" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_reload_plugins_includes_channel_reload_plan(self, mock_db_session):

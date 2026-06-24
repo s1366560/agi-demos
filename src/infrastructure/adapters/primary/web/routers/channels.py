@@ -900,7 +900,10 @@ async def _attach_plugin_tool_definitions(
             PluginToolBuildContext(tenant_id=tenant_id, project_id="", base_tools={})
         )
     except Exception as exc:
-        logger.warning("Failed to build plugin tool definitions for UI: %s", exc)
+        logger.warning(
+            "Failed to build plugin tool definitions for UI: error_type=%s",
+            type(exc).__name__,
+        )
         return diagnostics
 
     diagnostics.extend(_serialize_plugin_diagnostics(tool_diagnostics))
@@ -955,7 +958,10 @@ async def _attach_plugin_skill_definitions(
             PluginSkillBuildContext(tenant_id=tenant_id, project_id="", agent_mode="chat")
         )
     except Exception as exc:
-        logger.warning("Failed to build plugin skill definitions for UI: %s", exc)
+        logger.warning(
+            "Failed to build plugin skill definitions for UI: error_type=%s",
+            type(exc).__name__,
+        )
         return diagnostics
 
     diagnostics.extend(_serialize_plugin_diagnostics(skill_diagnostics))
@@ -1065,7 +1071,10 @@ async def _reconcile_channel_runtime_after_plugin_change() -> dict[str, int] | N
     try:
         reload_plan = await reload_channel_manager_connections(apply_changes=True)
     except Exception as exc:
-        logger.warning("Failed to reconcile channel runtime after plugin change: %s", exc)
+        logger.warning(
+            "Failed to reconcile channel runtime after plugin change: error_type=%s",
+            type(exc).__name__,
+        )
         return None
     return reload_plan.summary() if reload_plan else None
 
