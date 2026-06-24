@@ -65,7 +65,11 @@ class ProjectService:
         )
 
         await self._project_repo.save(project)
-        logger.info(f"Created project {project.id} for tenant {tenant_id}")
+        logger.info(
+            "Created project member_count=%d is_public=%s",
+            len(project.member_ids),
+            project.is_public,
+        )
         return project
 
     async def get_project(self, project_id: str) -> Project | None:

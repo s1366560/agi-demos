@@ -4,6 +4,7 @@ Unit tests for ProjectService.
 These tests use mocked repositories to test business logic in isolation.
 """
 
+import logging
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -66,6 +67,36 @@ async def test_create_project_success(project_service, mock_project_repo, mock_u
     assert project.tenant_id == "tenant-456"
     assert project.description == "A test project"
     assert "user-123" in project.member_ids  # Owner should be a member
+
+
+@pytest.mark.asyncio
+async def test_create_project_logs_do_not_include_project_or_tenant_identifiers(
+    project_service,
+    mock_user_repo,
+    caplog,
+):
+    """Project creation logs must not expose tenant, owner, project, or name content."""
+    secret_owner_id = "user-secret-alpha-123"
+    secret_tenant_id = "tenant-secret-beta-456"
+    secret_project_name = "Customer Confidential Workspace"
+    mock_user = Mock()
+    mock_user.id = secret_owner_id
+    mock_user_repo.find_by_id.return_value = mock_user
+    caplog.set_level(logging.INFO, logger="src.application.services.project_service")
+
+    project = await project_service.create_project(
+        name=secret_project_name,
+        owner_id=secret_owner_id,
+        tenant_id=secret_tenant_id,
+        description="A confidential project",
+    )
+
+    assert project.id not in caplog.text
+    assert secret_owner_id not in caplog.text
+    assert secret_tenant_id not in caplog.text
+    assert secret_project_name not in caplog.text
+    assert "member_count=1" in caplog.text
+    assert "is_public=False" in caplog.text
 
 
 @pytest.mark.asyncio
