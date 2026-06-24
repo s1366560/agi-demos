@@ -1285,7 +1285,10 @@ class ChannelMessageRouter:
             await get_connection_manager().broadcast_to_conversation(conversation_id, ws_event)
         except Exception as e:
             logger.warning(
-                f"[MessageRouter] Failed to broadcast event to workspace: {event_type}, error={e}"
+                "[MessageRouter] Failed to broadcast event to workspace: "
+                "has_event_type=%s error_type=%s",
+                bool(event_type),
+                type(e).__name__,
             )
 
         # Forward to channel event bridge (non-blocking)
@@ -1302,7 +1305,10 @@ class ChannelMessageRouter:
                 project_id=project_id,
             )
         except Exception as e:
-            logger.debug(f"[MessageRouter] Channel bridge forward failed: {e}")
+            logger.debug(
+                "[MessageRouter] Channel bridge forward failed: error_type=%s",
+                type(e).__name__,
+            )
 
     async def _send_response(self, message: Message, conversation_id: str, response: str) -> None:
         """Send agent response back to the channel.

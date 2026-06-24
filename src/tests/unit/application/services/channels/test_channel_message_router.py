@@ -1682,6 +1682,84 @@ async def test_broadcast_workspace_event_sanitizes_payload() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_broadcast_workspace_failure_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Workspace broadcast failures should not expose event names or exception details."""
+    router = ChannelMessageRouter()
+    manager = SimpleNamespace(
+        broadcast_to_conversation=AsyncMock(side_effect=RuntimeError("secret-broadcast-token"))
+    )
+    bridge = SimpleNamespace(on_agent_event=AsyncMock())
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
+            return_value=manager,
+        ),
+        patch(
+            "src.application.services.channels.event_bridge.get_channel_event_bridge",
+            return_value=bridge,
+        ),
+    ):
+        await router._broadcast_workspace_event(
+            conversation_id="secret-conversation-id",
+            event_type="secret-event-type",
+            event_data={"ok": True},
+            raw_event={},
+        )
+
+    assert "secret-conversation-id" not in caplog.text
+    assert "secret-event-type" not in caplog.text
+    assert "secret-broadcast-token" not in caplog.text
+    assert "has_event_type=True" in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_channel_bridge_forward_failure_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Channel bridge forwarding failures should not expose IDs or exception details."""
+    router = ChannelMessageRouter()
+    manager = SimpleNamespace(broadcast_to_conversation=AsyncMock(return_value=1))
+    bridge = SimpleNamespace(
+        on_agent_event=AsyncMock(side_effect=RuntimeError("secret-bridge-token"))
+    )
+    caplog.set_level(
+        logging.DEBUG,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with (
+        patch(
+            "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
+            return_value=manager,
+        ),
+        patch(
+            "src.application.services.channels.event_bridge.get_channel_event_bridge",
+            return_value=bridge,
+        ),
+    ):
+        await router._broadcast_workspace_event(
+            conversation_id="secret-conversation-id",
+            event_type="text_delta",
+            event_data={"ok": True},
+            raw_event={},
+        )
+
+    assert "secret-conversation-id" not in caplog.text
+    assert "secret-bridge-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
 def test_to_json_safe_converts_sdk_objects_to_dicts() -> None:
     """Router should sanitize SDK objects before JSON persistence."""
     router = ChannelMessageRouter()
