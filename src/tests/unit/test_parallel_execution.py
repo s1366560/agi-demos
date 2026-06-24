@@ -256,14 +256,21 @@ class TestTaskDecomposer:
         assert len(result.subtasks) == 1
         assert result.subtasks[0].description == "Do something"
 
-    async def test_decompose_llm_failure(self, mock_llm_client):
-        mock_llm_client.generate.side_effect = Exception("API timeout")
+    async def test_decompose_llm_failure(self, mock_llm_client, caplog):
+        exception_detail = "provider echoed task decomposition-secret-8642"
+        mock_llm_client.generate.side_effect = RuntimeError(exception_detail)
         decomposer = TaskDecomposer(llm_client=mock_llm_client)
-        result = await decomposer.decompose("Complex task")
+        with caplog.at_level("WARNING", logger="src.infrastructure.agent.subagent.task_decomposer"):
+            result = await decomposer.decompose("Complex task decomposition-secret-8642")
 
         assert result.is_decomposed is False
         assert len(result.subtasks) == 1
         assert "failed" in result.reasoning.lower()
+        assert exception_detail not in result.reasoning
+        assert "decomposition-secret-8642" not in result.reasoning
+        assert exception_detail not in caplog.text
+        assert "decomposition-secret-8642" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     async def test_decompose_no_tool_calls(self, mock_llm_client):
         mock_llm_client.generate.return_value = {

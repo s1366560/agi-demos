@@ -252,10 +252,11 @@ class TaskDecomposer:
             return result
 
         except Exception as e:
-            logger.warning(f"[TaskDecomposer] Decomposition failed: {e}")
+            error_type = type(e).__name__
+            logger.warning("[TaskDecomposer] Decomposition failed error_type=%s", error_type)
             return DecompositionResult(
                 subtasks=(SubTask(id="t1", description=query),),
-                reasoning=f"Decomposition failed: {e}",
+                reasoning=f"Decomposition failed: {error_type}",
             )
 
     async def _generate_decomposition(
