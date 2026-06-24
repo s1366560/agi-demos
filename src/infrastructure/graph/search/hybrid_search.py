@@ -464,8 +464,9 @@ class HybridSearch:
             # Check for dimension mismatch errors
             if "dimensions" in error_str.lower() or "vector has" in error_str.lower():
                 logger.warning(
-                    f"Vector dimension mismatch detected. Falling back to keyword search. "
-                    f"Error: {e}"
+                    "Vector dimension mismatch detected; falling back to keyword search "
+                    "error_type=%s",
+                    type(e).__name__,
                 )
                 return []
             logger.error("Vector search query failed error_type=%s", type(e).__name__)

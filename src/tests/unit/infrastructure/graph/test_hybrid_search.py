@@ -285,6 +285,33 @@ class TestHybridSearch:
         assert "error_type=RuntimeError" in caplog.text
 
     @pytest.mark.unit
+    async def test_vector_dimension_mismatch_log_redacts_exception_content(
+        self,
+        hybrid_search,
+        mock_neo4j_client,
+        caplog,
+    ):
+        """Vector dimension mismatch fallback should not log raw backend exception text."""
+        secret = "hybrid-vector-dimension-secret-97531"
+        mock_neo4j_client.execute_query.side_effect = RuntimeError(
+            f"vector has invalid dimensions for {secret}"
+        )
+
+        with caplog.at_level(
+            "WARNING",
+            logger="src.infrastructure.graph.search.hybrid_search",
+        ):
+            result = await hybrid_search._vector_search_entities(
+                f"find {secret}",
+                "project-1",
+                10,
+            )
+
+        assert result == []
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.unit
     async def test_search_limits_results(self, hybrid_search):
         """Test search respects limit parameter."""
         items = [
