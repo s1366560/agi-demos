@@ -194,7 +194,7 @@ class ChannelService:
             try:
                 handler(message)
             except Exception as e:
-                logger.error(f"Message handler error: {e}")
+                logger.error("Message handler error: error_type=%s", type(e).__name__)
 
     def _handle_error(self, channel_id: str, error: Exception) -> None:
         """Internal handler for channel errors."""

@@ -40,3 +40,26 @@ def test_handle_message_log_omits_message_text(caplog: pytest.LogCaptureFixture)
     assert "secret launch plan" not in caplog.text
     assert "private-roadmap.pdf" not in caplog.text
     assert "has_text=True" in caplog.text
+
+
+@pytest.mark.unit
+def test_handle_message_handler_failure_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Message handler failure logs should not expose exception details."""
+    service = ChannelService()
+    message = _build_message("hello")
+
+    def failing_handler(_: Message) -> None:
+        raise RuntimeError("secret-handler-token")
+
+    service.on_message(failing_handler)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_service",
+    )
+
+    service._handle_message(message)
+
+    assert "secret-handler-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
