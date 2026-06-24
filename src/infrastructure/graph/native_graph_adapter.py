@@ -1339,7 +1339,7 @@ class NativeGraphAdapter(GraphServicePort):
             return True
 
         except Exception as e:
-            logger.error(f"Failed to remove episode {episode_uuid}: {e}")
+            logger.error("Failed to remove episode: error_type=%s", type(e).__name__)
             raise
 
     async def remove_episode_by_memory_id(self, memory_id: str) -> bool:

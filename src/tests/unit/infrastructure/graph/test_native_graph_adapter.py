@@ -706,3 +706,27 @@ class TestNativeGraphAdapterRemoveEpisode:
 
         assert result is True
         assert mock_neo4j_client.execute_query.call_count >= 3
+
+    @pytest.mark.asyncio
+    async def test_remove_episode_failure_log_redacts_exception_details(
+        self,
+        adapter,
+        mock_neo4j_client,
+        caplog,
+    ):
+        """Remove failures should propagate without writing exception details to logs."""
+        secret = "remove-episode-secret-8642"
+        mock_neo4j_client.execute_query.side_effect = RuntimeError(secret)
+
+        with (
+            caplog.at_level(
+                logging.ERROR,
+                logger="src.infrastructure.graph.native_graph_adapter",
+            ),
+            pytest.raises(RuntimeError, match=secret),
+        ):
+            await adapter.remove_episode("episode-with-secret")
+
+        assert secret not in caplog.text
+        assert "episode-with-secret" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
