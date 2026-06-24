@@ -296,8 +296,19 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
 
             return events
 
-        except Exception as e:
-            logger.error(f"[AgentEventBus] Failed to get events from {stream_key}: {e}")
+        except Exception as exc:
+            logger.error(
+                " ".join(
+                    [
+                        "[AgentEventBus] Failed to get events error_type=%s limit=%s",
+                        "has_conversation_id=%s has_message_id=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                limit,
+                bool(conversation_id),
+                bool(message_id),
+            )
             return events
 
     async def get_last_event_time(
@@ -320,8 +331,18 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
             counter = fields.get(b"event_counter") or fields.get("event_counter")
             return (int(time_us) if time_us else 0, int(counter) if counter else 0)
 
-        except Exception as e:
-            logger.warning(f"[AgentEventBus] Failed to get last event time: {e}")
+        except Exception as exc:
+            logger.warning(
+                " ".join(
+                    [
+                        "[AgentEventBus] Failed to get last event time error_type=%s",
+                        "has_conversation_id=%s has_message_id=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                bool(conversation_id),
+                bool(message_id),
+            )
             return (0, 0)
 
     async def mark_complete(

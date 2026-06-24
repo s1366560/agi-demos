@@ -135,3 +135,57 @@ class TestRedisAgentEventBusLogging:
         assert "block_ms=30" in caplog.text
         assert "has_conversation_id=True" in caplog.text
         assert "has_message_id=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_get_events_error_log_redacts_conversation_message_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xrange = AsyncMock(side_effect=RuntimeError("redis secret unavailable"))
+        adapter = RedisAgentEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_conversation_id = "conversation-secret-7531"
+        secret_message_id = "message-secret-6420"
+
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+            events = await adapter.get_events(
+                conversation_id=secret_conversation_id,
+                message_id=secret_message_id,
+                limit=3,
+            )
+
+        assert events == []
+        assert "Failed to get events" in caplog.text
+        assert secret_conversation_id not in caplog.text
+        assert secret_message_id not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "limit=3" in caplog.text
+        assert "has_conversation_id=True" in caplog.text
+        assert "has_message_id=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_get_last_event_time_warning_redacts_conversation_message_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xrevrange = AsyncMock(side_effect=RuntimeError("redis secret unavailable"))
+        adapter = RedisAgentEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_conversation_id = "conversation-secret-6410"
+        secret_message_id = "message-secret-5300"
+
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            last_event_time = await adapter.get_last_event_time(
+                conversation_id=secret_conversation_id,
+                message_id=secret_message_id,
+            )
+
+        assert last_event_time == (0, 0)
+        assert "Failed to get last event time" in caplog.text
+        assert secret_conversation_id not in caplog.text
+        assert secret_message_id not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "has_conversation_id=True" in caplog.text
+        assert "has_message_id=True" in caplog.text
