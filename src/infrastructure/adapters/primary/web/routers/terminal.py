@@ -346,7 +346,7 @@ async def _read_terminal_output(proxy: Any, websocket: WebSocket, session: Termi
             if output:
                 await websocket.send_json({"type": "output", "data": output})
         except Exception as e:
-            logger.error(f"Output reader error: {e}")
+            logger.error("Output reader error: error_type=%s", type(e).__name__)
             break
         await asyncio.sleep(0.01)
 

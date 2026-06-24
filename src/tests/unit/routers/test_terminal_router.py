@@ -10,6 +10,7 @@ from fastapi import HTTPException, status
 from src.infrastructure.adapters.primary.web.routers import terminal as terminal_router
 from src.infrastructure.adapters.primary.web.routers.terminal import (
     CreateTerminalRequest,
+    _read_terminal_output,
     _resolve_terminal_session,
 )
 
@@ -103,6 +104,30 @@ async def test_terminal_websocket_sanitizes_unexpected_errors(
     assert "Terminal WebSocket error" in caplog.text
     assert "error_type=RuntimeError" in caplog.text
     assert "terminal upstream secret" not in caplog.text
+
+
+@pytest.mark.unit
+async def test_read_terminal_output_error_log_omits_proxy_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class FailingProxy:
+        async def read_output(self, _session_id: str) -> str | None:
+            raise RuntimeError("terminal output secret")
+
+    websocket = _FakeWebSocket()
+    session = SimpleNamespace(session_id="session-secret", is_active=True)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.terminal",
+    )
+
+    await _read_terminal_output(FailingProxy(), websocket, session)
+
+    assert websocket.sent_json == []
+    assert "Output reader error" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "terminal output secret" not in caplog.text
+    assert "session-secret" not in caplog.text
 
 
 @pytest.mark.unit
