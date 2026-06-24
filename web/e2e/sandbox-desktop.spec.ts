@@ -14,27 +14,35 @@ import {
   expect,
 } from './base';
 
-async function createSandboxProject(): Promise<string> {
+interface SandboxProject {
+  id: string;
+  tenantId: string;
+}
+
+async function createSandboxProject(): Promise<SandboxProject> {
   const token = await getAdminAuthToken();
   const project = await createTestProject({
     name: `Sandbox Test ${Date.now()}`,
     description: 'E2E Sandbox Test',
     token,
   });
-  return project.id;
+  return { id: project.id, tenantId: project.tenantId };
 }
 
 test.describe('Sandbox Desktop and Terminal Integration', () => {
   let projectId: string;
+  let tenantId: string;
 
   test.beforeEach(async ({ page }) => {
-    projectId = await createSandboxProject();
+    const project = await createSandboxProject();
+    projectId = project.id;
+    tenantId = project.tenantId;
     await loginAsAdmin(page);
   });
 
   test('should navigate to agent chat page successfully', async ({ page }) => {
     // Navigate to agent chat
-    await page.goto(agentWorkspacePath(projectId));
+    await page.goto(agentWorkspacePath(projectId, tenantId));
 
     // Wait for page to load
     await page.waitForTimeout(2000);
@@ -46,7 +54,7 @@ test.describe('Sandbox Desktop and Terminal Integration', () => {
 
   test('should have sandbox panel available in right sidebar', async ({ page }) => {
     // Navigate to agent chat
-    await page.goto(agentWorkspacePath(projectId));
+    await page.goto(agentWorkspacePath(projectId, tenantId));
     await page.waitForTimeout(2000);
 
     // The right panel should be present (with Plan tab by default)
@@ -60,7 +68,7 @@ test.describe('Sandbox Desktop and Terminal Integration', () => {
 
   test('should render sandbox components without errors', async ({ page }) => {
     // Navigate to agent chat
-    await page.goto(agentWorkspacePath(projectId));
+    await page.goto(agentWorkspacePath(projectId, tenantId));
     await page.waitForTimeout(2000);
 
     // Check for console errors related to sandbox
@@ -94,15 +102,18 @@ test.describe('Sandbox Desktop and Terminal Integration', () => {
 
 test.describe('Sandbox Component Structure', () => {
   let projectId: string;
+  let tenantId: string;
 
   test.beforeEach(async ({ page }) => {
-    projectId = await createSandboxProject();
+    const project = await createSandboxProject();
+    projectId = project.id;
+    tenantId = project.tenantId;
     await loginAsAdmin(page);
   });
 
   test('should render right panel with Plan and Sandbox tabs', async ({ page }) => {
     // Navigate to agent chat
-    await page.goto(agentWorkspacePath(projectId));
+    await page.goto(agentWorkspacePath(projectId, tenantId));
     await page.waitForTimeout(3000);
 
     // Check for tabs in the right panel
@@ -115,7 +126,7 @@ test.describe('Sandbox Component Structure', () => {
 
   test('should have input area functional', async ({ page }) => {
     // Navigate to agent chat
-    await page.goto(agentWorkspacePath(projectId));
+    await page.goto(agentWorkspacePath(projectId, tenantId));
     await page.waitForTimeout(2000);
 
     // Should have input area

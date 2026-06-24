@@ -16,6 +16,11 @@ interface ProjectResponse {
   id: string;
 }
 
+interface CreatedProject {
+  id: string;
+  tenantId: string;
+}
+
 async function loginViaApi(): Promise<string> {
   const form = new URLSearchParams();
   form.append('username', 'admin@memstack.ai');
@@ -30,7 +35,7 @@ async function loginViaApi(): Promise<string> {
   return data.access_token;
 }
 
-async function createLifecycleProject(): Promise<string> {
+async function createLifecycleProject(): Promise<CreatedProject> {
   const token = await loginViaApi();
   const tenantResp = await fetch(`${API_BASE}/api/v1/tenants`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -54,11 +59,13 @@ async function createLifecycleProject(): Promise<string> {
   });
   const text = await projectResp.text();
   expect(projectResp.ok, `create project failed: ${projectResp.status} ${text}`).toBeTruthy();
-  return (JSON.parse(text) as ProjectResponse).id;
+  return { id: (JSON.parse(text) as ProjectResponse).id, tenantId: tenants[0].id };
 }
 
-async function openAgentWorkspace(page: Page, projectId: string): Promise<void> {
-  await page.goto(`http://localhost:3000/tenant/agent-workspace?projectId=${projectId}`);
+async function openAgentWorkspace(page: Page, projectId: string, tenantId: string): Promise<void> {
+  await page.goto(
+    `http://localhost:3000/tenant/${tenantId}/agent-workspace?projectId=${projectId}`
+  );
   const skipTour = page.getByRole('button', { name: /Skip tour/i });
   if (await skipTour.isVisible({ timeout: 3000 }).catch(() => false)) {
     await skipTour.click();
@@ -67,9 +74,12 @@ async function openAgentWorkspace(page: Page, projectId: string): Promise<void> 
 
 test.describe('Agent Lifecycle Status Bar (FR-008)', () => {
   let projectId: string;
+  let tenantId: string;
 
   test.beforeEach(async ({ page }) => {
-    projectId = await createLifecycleProject();
+    const project = await createLifecycleProject();
+    projectId = project.id;
+    tenantId = project.tenantId;
 
     // Set English locale
     await page.goto('http://localhost:3000');
@@ -80,8 +90,8 @@ test.describe('Agent Lifecycle Status Bar (FR-008)', () => {
 
     // Login
     await page.goto('http://localhost:3000/login');
-    await page.getByLabel(/Email/i).fill('admin@memstack.ai');
-    await page.getByLabel(/Password/i).fill('adminpassword');
+    await page.getByTestId('email-input').fill('admin@memstack.ai');
+    await page.getByTestId('password-input').fill('adminpassword');
     await page.getByRole('button', { name: /Sign In/i }).click();
 
     // Wait for navigation
@@ -90,7 +100,7 @@ test.describe('Agent Lifecycle Status Bar (FR-008)', () => {
 
   test('should display agent workspace', async ({ page }) => {
     // Navigate to agent workspace
-    await openAgentWorkspace(page, projectId);
+    await openAgentWorkspace(page, projectId, tenantId);
 
     // Wait for page to load
     await page.waitForTimeout(2000);
@@ -105,7 +115,7 @@ test.describe('Agent Lifecycle Status Bar (FR-008)', () => {
 
   test('should show status bar area', async ({ page }) => {
     // Navigate to agent workspace
-    await openAgentWorkspace(page, projectId);
+    await openAgentWorkspace(page, projectId, tenantId);
 
     // Wait for page to load
     await page.waitForTimeout(2000);
@@ -128,7 +138,7 @@ test.describe('Agent Lifecycle Status Bar (FR-008)', () => {
 
   test('should display lifecycle state', async ({ page }) => {
     // Navigate to agent workspace
-    await openAgentWorkspace(page, projectId);
+    await openAgentWorkspace(page, projectId, tenantId);
 
     // Wait for page to load and agent to initialize
     await page.waitForTimeout(3000);
@@ -164,7 +174,7 @@ test.describe('Agent Lifecycle Status Bar (FR-008)', () => {
 
   test('should show stop/restart controls when agent is active', async ({ page }) => {
     // Navigate to agent workspace
-    await openAgentWorkspace(page, projectId);
+    await openAgentWorkspace(page, projectId, tenantId);
 
     // Wait for page to load
     await page.waitForTimeout(2000);
@@ -200,7 +210,7 @@ test.describe('Agent Lifecycle Status Bar (FR-008)', () => {
 
   test('should handle new chat creation', async ({ page }) => {
     // Navigate to agent workspace
-    await openAgentWorkspace(page, projectId);
+    await openAgentWorkspace(page, projectId, tenantId);
 
     // Wait for page to load
     await page.waitForTimeout(2000);

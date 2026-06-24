@@ -18,8 +18,8 @@ test.skip('manual sandbox UI test', async ({ page }) => {
   // Take screenshot
   await page.screenshot({ path: 'test-screenshots/01-login.png' });
 
-  await page.getByLabel(/Email/i).fill('admin@memstack.ai');
-  await page.getByLabel(/Password/i).fill('adminpassword');
+  await page.getByTestId('email-input').fill('admin@memstack.ai');
+  await page.getByTestId('password-input').fill('adminpassword');
   await page.getByRole('button', { name: /Sign In/i }).click();
 
   // Wait for navigation - use more flexible wait

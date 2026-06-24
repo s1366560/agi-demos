@@ -32,6 +32,12 @@ async function expectCommunitiesPageReady(page: Page): Promise<void> {
 test.describe('Communities Management', () => {
   let projectName: string;
   let projectId: string;
+  let tenantId: string;
+
+  async function openCommunitiesPage(page: Page): Promise<void> {
+    await page.goto(`/tenant/${tenantId}/project/${projectId}/communities`);
+    await page.getByRole('heading', { name: 'Communities', exact: true }).waitFor();
+  }
 
   test.beforeEach(async ({ page, request }) => {
     // Set Chinese locale
@@ -42,10 +48,10 @@ test.describe('Communities Management', () => {
 
     // Login
     await page.goto('/login');
-    await expect(page.getByLabel(/Email/i)).toBeVisible();
-    await expect(page.getByLabel(/Password/i)).toBeVisible();
-    await page.getByLabel(/Email/i).fill('admin@memstack.ai');
-    await page.getByLabel(/Password/i).fill('adminpassword');
+    await expect(page.getByTestId('email-input')).toBeVisible();
+    await expect(page.getByTestId('password-input')).toBeVisible();
+    await page.getByTestId('email-input').fill('admin@memstack.ai');
+    await page.getByTestId('password-input').fill('adminpassword');
     await page.getByRole('button', { name: /Sign In|登录/i }).click();
 
     // Wait for login to complete and redirect
@@ -70,7 +76,7 @@ test.describe('Communities Management', () => {
     const authHeaders = { Authorization: `Bearer ${tokenJson.access_token}` };
     const tenantsResp = await request.get(`${apiBase}/tenants/`, { headers: authHeaders });
     const tenantsJson = await tenantsResp.json();
-    const tenantId = tenantsJson.tenants?.[0]?.id || tenantsJson[0]?.id;
+    tenantId = tenantsJson.tenants?.[0]?.id || tenantsJson[0]?.id;
     const createResp = await request.post(`${apiBase}/projects/`, {
       headers: { ...authHeaders, 'Content-Type': 'application/json' },
       data: {
@@ -89,7 +95,7 @@ test.describe('Communities Management', () => {
 
   test('should display empty communities list initially', async ({ page }) => {
     // Navigate to Communities
-    await page.getByRole('link', { name: 'Communities', exact: true }).click();
+    await openCommunitiesPage(page);
 
     // Check header
     await page.locator('h1').filter({ hasText: 'Communities' }).waitFor();
@@ -100,8 +106,7 @@ test.describe('Communities Management', () => {
 
   test('should rebuild communities in background', async ({ page }) => {
     // Navigate to Communities
-    await page.getByRole('link', { name: 'Communities', exact: true }).click();
-    await page.getByRole('heading', { name: 'Communities', exact: true }).waitFor();
+    await openCommunitiesPage(page);
 
     // Click rebuild button
     const rebuildButton = page.getByRole('button', { name: /Rebuild Communities/i }).first();
@@ -116,8 +121,7 @@ test.describe('Communities Management', () => {
 
   test('should track task status during rebuild', async ({ page }) => {
     // Navigate to Communities
-    await page.getByRole('link', { name: 'Communities', exact: true }).click();
-    await page.getByRole('heading', { name: 'Communities', exact: true }).waitFor();
+    await openCommunitiesPage(page);
 
     // Click rebuild button
     await page
@@ -133,8 +137,7 @@ test.describe('Communities Management', () => {
 
   test('should display communities after rebuild', async ({ page }) => {
     // Navigate to Communities
-    await page.getByRole('link', { name: 'Communities', exact: true }).click();
-    await page.getByRole('heading', { name: 'Communities', exact: true }).waitFor();
+    await openCommunitiesPage(page);
 
     // Start rebuild if needed
     const noCommunities = page.getByText(/No communities found/i);
@@ -166,8 +169,7 @@ test.describe('Communities Management', () => {
 
   test('should load community members', async ({ page }) => {
     // Navigate to Communities
-    await page.getByRole('link', { name: 'Communities', exact: true }).click();
-    await page.getByRole('heading', { name: 'Communities', exact: true }).waitFor();
+    await openCommunitiesPage(page);
 
     // Ensure communities exist
     const noCommunities = page.getByText(/No communities found/i);
@@ -207,8 +209,7 @@ test.describe('Communities Management', () => {
     });
 
     // Navigate to Communities
-    await page.getByRole('link', { name: 'Communities', exact: true }).click();
-    await page.locator('h1').filter({ hasText: 'Communities' }).waitFor();
+    await openCommunitiesPage(page);
     await expectCommunitiesPageReady(page);
 
     // Try rebuild with mocked error
@@ -236,8 +237,7 @@ test.describe('Communities Management', () => {
 
   test('should refresh communities list', async ({ page }) => {
     // Navigate to Communities
-    await page.getByRole('link', { name: 'Communities', exact: true }).click();
-    await page.locator('h1').filter({ hasText: 'Communities' }).waitFor();
+    await openCommunitiesPage(page);
 
     // Check refresh button exists and is visible
     await expect(page.getByRole('button', { name: /^Refresh$/i })).toBeVisible();
@@ -253,7 +253,7 @@ test.describe('Communities Management', () => {
 
   test('should display correct page title and breadcrumbs', async ({ page }) => {
     // Navigate to Communities
-    await page.getByRole('link', { name: 'Communities', exact: true }).click();
+    await openCommunitiesPage(page);
 
     // Check page title
     await expect(page.locator('h1').filter({ hasText: 'Communities' })).toBeVisible();

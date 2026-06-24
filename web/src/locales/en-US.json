@@ -6674,6 +6674,21 @@
       "closeTab": "Close {{title}}",
       "selectOption": "Select an option",
       "readOnlyFormPreview": "Read-only form preview",
+      "fileExplorer": {
+        "title": "Files",
+        "sandbox": "Sandbox",
+        "artifacts": "Artifacts",
+        "refresh": "Refresh files",
+        "collapse": "Collapse file browser",
+        "expand": "Expand file browser",
+        "loading": "Loading files...",
+        "empty": "No files found",
+        "noProject": "Select a project to browse files.",
+        "loadFailed": "Failed to load files",
+        "openFailed": "Failed to open file",
+        "openFailedWithMessage": "Failed to open file: {{message}}",
+        "noPreview": "No preview is available for this file."
+      },
       "actions": {
         "explain": "Explain",
         "optimize": "Optimize",

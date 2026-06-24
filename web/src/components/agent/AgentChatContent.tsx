@@ -1165,6 +1165,9 @@ ${content}`;
           rightContent={
             <Suspense fallback={<AgentPanelFallback />}>
               <CanvasPanel
+                projectId={projectId}
+                tenantId={tenantId}
+                workspaceId={activeWorkspaceId}
                 onSendPrompt={(prompt) => {
                   void handleSend(prompt);
                 }}

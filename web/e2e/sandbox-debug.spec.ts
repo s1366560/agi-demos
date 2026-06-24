@@ -25,8 +25,8 @@ test.skip('debug sandbox UI', async ({ page }) => {
   // Login
   console.log('=== Login ===');
   await page.goto('http://localhost:3000/login');
-  await page.getByLabel(/Email/i).fill('admin@memstack.ai');
-  await page.getByLabel(/Password/i).fill('adminpassword');
+  await page.getByTestId('email-input').fill('admin@memstack.ai');
+  await page.getByTestId('password-input').fill('adminpassword');
   await page.getByRole('button', { name: /Sign In/i }).click();
 
   // Wait for navigation

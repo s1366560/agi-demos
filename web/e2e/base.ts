@@ -165,8 +165,9 @@ export function tenantProjectPath(tenantId: string, projectId: string, path = ''
   return `/tenant/${tenantId}/project/${projectId}${suffix}`;
 }
 
-export function agentWorkspacePath(projectId: string): string {
-  return `/tenant/agent-workspace?projectId=${encodeURIComponent(projectId)}`;
+export function agentWorkspacePath(projectId: string, tenantId?: string): string {
+  const basePath = tenantId ? `/tenant/${tenantId}/agent-workspace` : '/tenant/agent-workspace';
+  return `${basePath}?projectId=${encodeURIComponent(projectId)}`;
 }
 
 export async function loginAsAdmin(page: import('@playwright/test').Page): Promise<void> {

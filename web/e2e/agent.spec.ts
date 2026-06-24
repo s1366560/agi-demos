@@ -14,12 +14,17 @@ interface ProjectResponse {
   id: string;
 }
 
+interface CreatedAgentProject {
+  id: string;
+  tenantId: string;
+}
+
 interface ConversationMessagesResponse {
   timeline?: Array<{ type?: string; content?: string }>;
 }
 
-function extractProjectId(href: string | null): string | null {
-  return href?.match(/\/project\/([^/?#]+)/)?.[1] ?? null;
+interface ApiErrorResponse {
+  detail?: string;
 }
 
 function extractConversationId(url: string): string | null {
@@ -107,7 +112,7 @@ async function getFirstTenantId(token: string): Promise<string> {
   return tenants[0].id;
 }
 
-async function createAgentProject(): Promise<string> {
+async function createAgentProject(): Promise<CreatedAgentProject> {
   const token = await loginViaApi();
   const tenantId = await getFirstTenantId(token);
 
@@ -125,7 +130,7 @@ async function createAgentProject(): Promise<string> {
   });
   const text = await projectResp.text();
   expect(projectResp.ok, `create project failed: ${projectResp.status} ${text}`).toBeTruthy();
-  return (JSON.parse(text) as ProjectResponse).id;
+  return { id: (JSON.parse(text) as ProjectResponse).id, tenantId };
 }
 
 async function createConversationViaApi(
@@ -182,45 +187,33 @@ test.afterEach(async ({ page }) => {
 
 test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
   let projectId: string;
+  let tenantId: string;
 
   test.beforeEach(async ({ page }) => {
+    const project = await createAgentProject();
+    projectId = project.id;
+    tenantId = project.tenantId;
+
     // Set English locale
     await page.goto('http://localhost:3000');
     await page.evaluate(() => {
       localStorage.setItem('i18nextLng', 'en-US');
+      localStorage.setItem('memstack_onboarding_complete', 'true');
     });
 
     // Login
     await page.goto('http://localhost:3000/login');
-    await page.getByLabel(/Email/i).fill('admin@memstack.ai');
-    await page.getByLabel(/Password/i).fill('adminpassword');
+    await page.getByTestId('email-input').fill('admin@memstack.ai');
+    await page.getByTestId('password-input').fill('adminpassword');
     await page.getByRole('button', { name: /Sign In/i }).click();
 
     // Wait for navigation
     await page.waitForURL(/\/tenant/);
-
-    // Navigate to projects and get or create a test project
-    await page
-      .getByRole('link', { name: /Projects/i })
-      .first()
-      .click();
-    await page.waitForTimeout(1000);
-
-    // Get first project ID or create new one
-    const projectCard = page.locator('a[href*="/project/"]').first();
-    if (await projectCard.isVisible({ timeout: 5000 })) {
-      const href = await projectCard.getAttribute('href');
-      projectId = extractProjectId(href) ?? projectId;
-    }
-
-    if (!projectId) {
-      projectId = await createAgentProject();
-    }
   });
 
   test('should display agent chat V3 interface', async ({ page }) => {
     // Navigate to agent chat
-    await page.goto(agentWorkspaceUrl(projectId));
+    await page.goto(agentWorkspaceUrl(projectId, tenantId));
 
     // Wait for page to load
     await page.waitForTimeout(2000);
@@ -240,7 +233,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
 
   test('should create new conversation via New Chat button', async ({ page }) => {
     // Navigate to agent chat
-    await page.goto(agentWorkspaceUrl(projectId));
+    await page.goto(agentWorkspaceUrl(projectId, tenantId));
 
     // Wait for page to load
     await page.waitForTimeout(2000);
@@ -255,7 +248,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
 
   test('should display left sidebar with conversation list', async ({ page }) => {
     // Navigate to agent chat
-    await page.goto(agentWorkspaceUrl(projectId));
+    await page.goto(agentWorkspaceUrl(projectId, tenantId));
 
     // Wait for page to load
     await page.waitForTimeout(2000);
@@ -266,7 +259,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
 
   test('should toggle left sidebar visibility', async ({ page }) => {
     // Navigate to agent chat
-    await page.goto(agentWorkspaceUrl(projectId));
+    await page.goto(agentWorkspaceUrl(projectId, tenantId));
 
     // Wait for page to load
     await page.waitForTimeout(2000);
@@ -291,7 +284,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
   });
 
   test('should complete full chat workflow', async ({ page, request }) => {
-    await openConversationViaApi(page, request, projectId, 'Full chat workflow');
+    await openConversationViaApi(page, request, projectId, 'Full chat workflow', tenantId);
 
     // V3: Type a message in the TextArea
     const input = page.locator('#agent-message-input');
@@ -316,7 +309,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
   });
 
   test('should display thinking chain during agent response', async ({ page, request }) => {
-    await openConversationViaApi(page, request, projectId, 'Thinking chain response');
+    await openConversationViaApi(page, request, projectId, 'Thinking chain response', tenantId);
 
     // Send a message
     const input = page.locator('#agent-message-input');
@@ -338,7 +331,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
   });
 
   test('should handle stop button during streaming', async ({ page, request }) => {
-    await openConversationViaApi(page, request, projectId, 'Stop button streaming');
+    await openConversationViaApi(page, request, projectId, 'Stop button streaming', tenantId);
 
     // Send a message
     const input = page.locator('#agent-message-input');
@@ -362,7 +355,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
   test('should handle multi-turn conversation', async ({ page, request }) => {
     test.setTimeout(90000);
 
-    await openConversationViaApi(page, request, projectId, 'Multi-turn conversation');
+    await openConversationViaApi(page, request, projectId, 'Multi-turn conversation', tenantId);
 
     // First message
     const input = page.locator('#agent-message-input');
@@ -397,7 +390,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
   });
 
   test('should handle error states gracefully', async ({ page, request }) => {
-    await openConversationViaApi(page, request, projectId, 'Error state baseline');
+    await openConversationViaApi(page, request, projectId, 'Error state baseline', tenantId);
 
     // V3: The UI should handle errors gracefully
     // Input should be present and functional
@@ -409,7 +402,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
   });
 
   test('should toggle plan mode', async ({ page, request }) => {
-    await openConversationViaApi(page, request, projectId, 'Plan mode toggle');
+    await openConversationViaApi(page, request, projectId, 'Plan mode toggle', tenantId);
 
     const planModeButton = page.getByRole('button', {
       name: /Enter Plan Mode|Exit Plan Mode/i,
@@ -428,7 +421,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
   });
 
   test('should toggle plan panel visibility', async ({ page, request }) => {
-    await openConversationViaApi(page, request, projectId, 'Plan panel visibility');
+    await openConversationViaApi(page, request, projectId, 'Plan panel visibility', tenantId);
 
     const planPanelBtn = page.getByRole('button', { name: /Enter Plan Mode|Exit Plan Mode/i });
     await expect(planPanelBtn).toBeVisible();
@@ -442,7 +435,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
   });
 
   test('should navigate to conversation when clicked', async ({ page, request }) => {
-    await openConversationViaApi(page, request, projectId, 'Conversation navigation');
+    await openConversationViaApi(page, request, projectId, 'Conversation navigation', tenantId);
 
     const input = page.locator('#agent-message-input');
     await input.fill('Test conversation for navigation');
@@ -457,7 +450,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
   });
 
   test('should delete conversation from sidebar', async ({ page, request }) => {
-    await openConversationViaApi(page, request, projectId, 'Conversation deletion');
+    await openConversationViaApi(page, request, projectId, 'Conversation deletion', tenantId);
 
     const input = page.locator('#agent-message-input');
     await input.fill('Conversation to be deleted');
@@ -497,44 +490,33 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
 // Additional test suite for Agent V3 specific features
 test.describe('Agent V3 Tools and Streaming', () => {
   let projectId: string;
+  let tenantId: string;
 
   test.beforeEach(async ({ page }) => {
+    const project = await createAgentProject();
+    projectId = project.id;
+    tenantId = project.tenantId;
+
     // Set English locale
     await page.goto('http://localhost:3000');
     await page.evaluate(() => {
       localStorage.setItem('i18nextLng', 'en-US');
+      localStorage.setItem('memstack_onboarding_complete', 'true');
     });
 
     // Login
     await page.goto('http://localhost:3000/login');
-    await page.getByLabel(/Email/i).fill('admin@memstack.ai');
-    await page.getByLabel(/Password/i).fill('adminpassword');
+    await page.getByTestId('email-input').fill('admin@memstack.ai');
+    await page.getByTestId('password-input').fill('adminpassword');
     await page.getByRole('button', { name: /Sign In/i }).click();
 
     // Wait for navigation
     await page.waitForURL(/\/tenant/);
-
-    // Navigate to projects
-    await page
-      .getByRole('link', { name: /Projects/i })
-      .first()
-      .click();
-    await page.waitForTimeout(1000);
-
-    // Get first project ID
-    const projectCard = page.locator('a[href*="/project/"]').first();
-    if (await projectCard.isVisible({ timeout: 5000 })) {
-      const href = await projectCard.getAttribute('href');
-      projectId = extractProjectId(href) ?? projectId;
-    }
-    if (!projectId) {
-      projectId = await createAgentProject();
-    }
   });
 
   test('should display tools list API availability', async ({ page }) => {
     // This test verifies the listTools API is accessible
-    await page.goto(agentWorkspaceUrl(projectId));
+    await page.goto(agentWorkspaceUrl(projectId, tenantId));
     await page.waitForTimeout(2000);
 
     // V3: Input area should be functional
@@ -546,7 +528,7 @@ test.describe('Agent V3 Tools and Streaming', () => {
   });
 
   test('should handle SSE streaming connection', async ({ page, request }) => {
-    await openConversationViaApi(page, request, projectId, 'SSE streaming');
+    await openConversationViaApi(page, request, projectId, 'SSE streaming', tenantId);
 
     const input = page.locator('#agent-message-input');
     await input.fill('Test SSE streaming');
@@ -563,7 +545,7 @@ test.describe('Agent V3 Tools and Streaming', () => {
   });
 
   test('should handle text streaming with typewriter effect', async ({ page, request }) => {
-    await openConversationViaApi(page, request, projectId, 'Typewriter streaming');
+    await openConversationViaApi(page, request, projectId, 'Typewriter streaming', tenantId);
 
     // Send a simple message
     const input = page.locator('#agent-message-input');
@@ -591,18 +573,19 @@ test.describe('Agent V3 Event Persistence', () => {
     await page.goto('http://localhost:3000');
     await page.evaluate(() => {
       localStorage.setItem('i18nextLng', 'en-US');
+      localStorage.setItem('memstack_onboarding_complete', 'true');
     });
 
     // Login
     await page.goto('http://localhost:3000/login');
-    await page.getByLabel(/Email/i).fill('admin@memstack.ai');
-    await page.getByLabel(/Password/i).fill('adminpassword');
+    await page.getByTestId('email-input').fill('admin@memstack.ai');
+    await page.getByTestId('password-input').fill('adminpassword');
     await page.getByRole('button', { name: /Sign In/i }).click();
     await page.waitForURL(/\/tenant/);
 
-    const token = await loginViaApi();
-    tenantId = await getFirstTenantId(token);
-    projectId = await createAgentProject();
+    const project = await createAgentProject();
+    projectId = project.id;
+    tenantId = project.tenantId;
   });
 
   test('should persist messages and reload on page refresh', async ({ page, request }) => {
@@ -713,17 +696,23 @@ test.describe('Agent V3 Event Persistence', () => {
 
 // Test suite for SubAgent Management
 test.describe('Agent V3 SubAgent Management', () => {
+  let tenantId: string;
+
   test.beforeEach(async ({ page }) => {
+    const token = await loginViaApi();
+    tenantId = await getFirstTenantId(token);
+
     // Set English locale
     await page.goto('http://localhost:3000');
     await page.evaluate(() => {
       localStorage.setItem('i18nextLng', 'en-US');
+      localStorage.setItem('memstack_onboarding_complete', 'true');
     });
 
     // Login
     await page.goto('http://localhost:3000/login');
-    await page.getByLabel(/Email/i).fill('admin@memstack.ai');
-    await page.getByLabel(/Password/i).fill('adminpassword');
+    await page.getByTestId('email-input').fill('admin@memstack.ai');
+    await page.getByTestId('password-input').fill('adminpassword');
     await page.getByRole('button', { name: /Sign In/i }).click();
     await page.waitForURL(/\/tenant/);
   });
@@ -742,14 +731,14 @@ test.describe('Agent V3 SubAgent Management', () => {
       expect(page.url()).toContain('subagents');
     } else {
       // If link not found, try direct navigation
-      await page.goto('http://localhost:3000/tenant/subagents');
+      await page.goto(`http://localhost:3000/tenant/${tenantId}/subagents`);
       await page.waitForTimeout(2000);
       expect(page.url()).toContain('subagents');
     }
   });
 
   test('should display SubAgent management UI elements', async ({ page }) => {
-    await page.goto('http://localhost:3000/tenant/subagents');
+    await page.goto(`http://localhost:3000/tenant/${tenantId}/subagents`);
 
     await expect(page.getByRole('heading', { name: 'SubAgents', exact: true })).toBeVisible({
       timeout: 15000,
@@ -761,17 +750,23 @@ test.describe('Agent V3 SubAgent Management', () => {
 
 // Test suite for Skill Registry
 test.describe('Agent V3 Skill Registry', () => {
+  let tenantId: string;
+
   test.beforeEach(async ({ page }) => {
+    const token = await loginViaApi();
+    tenantId = await getFirstTenantId(token);
+
     // Set English locale
     await page.goto('http://localhost:3000');
     await page.evaluate(() => {
       localStorage.setItem('i18nextLng', 'en-US');
+      localStorage.setItem('memstack_onboarding_complete', 'true');
     });
 
     // Login
     await page.goto('http://localhost:3000/login');
-    await page.getByLabel(/Email/i).fill('admin@memstack.ai');
-    await page.getByLabel(/Password/i).fill('adminpassword');
+    await page.getByTestId('email-input').fill('admin@memstack.ai');
+    await page.getByTestId('password-input').fill('adminpassword');
     await page.getByRole('button', { name: /Sign In/i }).click();
     await page.waitForURL(/\/tenant/);
   });
@@ -790,14 +785,14 @@ test.describe('Agent V3 Skill Registry', () => {
       expect(page.url()).toContain('skills');
     } else {
       // If link not found, try direct navigation
-      await page.goto('http://localhost:3000/tenant/skills');
+      await page.goto(`http://localhost:3000/tenant/${tenantId}/skills`);
       await page.waitForTimeout(2000);
       expect(page.url()).toContain('skills');
     }
   });
 
   test('should display Skill management UI elements', async ({ page }) => {
-    await page.goto('http://localhost:3000/tenant/skills');
+    await page.goto(`http://localhost:3000/tenant/${tenantId}/skills`);
     await page.waitForTimeout(3000);
 
     // Page should load and have interactive elements
@@ -809,37 +804,26 @@ test.describe('Agent V3 Skill Registry', () => {
 // Test suite for Tools API
 test.describe('Agent V3 Tools API', () => {
   let projectId: string;
+  let tenantId: string;
 
   test.beforeEach(async ({ page }) => {
+    const project = await createAgentProject();
+    projectId = project.id;
+    tenantId = project.tenantId;
+
     // Set English locale
     await page.goto('http://localhost:3000');
     await page.evaluate(() => {
       localStorage.setItem('i18nextLng', 'en-US');
+      localStorage.setItem('memstack_onboarding_complete', 'true');
     });
 
     // Login
     await page.goto('http://localhost:3000/login');
-    await page.getByLabel(/Email/i).fill('admin@memstack.ai');
-    await page.getByLabel(/Password/i).fill('adminpassword');
+    await page.getByTestId('email-input').fill('admin@memstack.ai');
+    await page.getByTestId('password-input').fill('adminpassword');
     await page.getByRole('button', { name: /Sign In/i }).click();
     await page.waitForURL(/\/tenant/);
-
-    // Navigate to projects
-    await page
-      .getByRole('link', { name: /Projects/i })
-      .first()
-      .click();
-    await page.waitForTimeout(1000);
-
-    // Get first project ID
-    const projectCard = page.locator('a[href*="/project/"]').first();
-    if (await projectCard.isVisible({ timeout: 5000 })) {
-      const href = await projectCard.getAttribute('href');
-      projectId = extractProjectId(href) ?? projectId;
-    }
-    if (!projectId) {
-      projectId = await createAgentProject();
-    }
   });
 
   test('should list available tools via API', async ({ page, request }) => {
@@ -872,7 +856,8 @@ test.describe('Agent V3 Tools API', () => {
       page,
       request,
       projectId,
-      'Conversation events API'
+      'Conversation events API',
+      tenantId
     );
 
     const input = page.locator('#agent-message-input');
@@ -935,35 +920,20 @@ test.describe('Agent V3 Tools API', () => {
 
 // Test suite for Human Interaction Response (Clarification)
 test.describe('Agent V3 Human Interaction', () => {
-  let _projectId: string | undefined;
-
   test.beforeEach(async ({ page }) => {
     // Set English locale
     await page.goto('http://localhost:3000');
     await page.evaluate(() => {
       localStorage.setItem('i18nextLng', 'en-US');
+      localStorage.setItem('memstack_onboarding_complete', 'true');
     });
 
     // Login
     await page.goto('http://localhost:3000/login');
-    await page.getByLabel(/Email/i).fill('admin@memstack.ai');
-    await page.getByLabel(/Password/i).fill('adminpassword');
+    await page.getByTestId('email-input').fill('admin@memstack.ai');
+    await page.getByTestId('password-input').fill('adminpassword');
     await page.getByRole('button', { name: /Sign In/i }).click();
     await page.waitForURL(/\/tenant/);
-
-    // Navigate to projects
-    await page
-      .getByRole('link', { name: /Projects/i })
-      .first()
-      .click();
-    await page.waitForTimeout(1000);
-
-    // Get first project ID
-    const projectCard = page.locator('a[href*="/project/"]').first();
-    if (await projectCard.isVisible({ timeout: 5000 })) {
-      const href = await projectCard.getAttribute('href');
-      _projectId = extractProjectId(href) ?? _projectId;
-    }
   });
 
   test('should have clarification response API endpoint', async ({ page, request }) => {
@@ -983,7 +953,8 @@ test.describe('Agent V3 Human Interaction', () => {
     });
 
     expect(response.status()).toBe(404);
-    expect(JSON.stringify(await response.json())).toContain(requestId);
+    const body = (await response.json()) as ApiErrorResponse;
+    expect(body.detail).toMatch(/HITL request not found/i);
   });
 
   test('should have decision response API endpoint', async ({ page, request }) => {
@@ -1003,7 +974,8 @@ test.describe('Agent V3 Human Interaction', () => {
     });
 
     expect(response.status()).toBe(404);
-    expect(JSON.stringify(await response.json())).toContain(requestId);
+    const body = (await response.json()) as ApiErrorResponse;
+    expect(body.detail).toMatch(/HITL request not found/i);
   });
 
   test('should have permission response API endpoint', async ({ page, request }) => {
@@ -1023,6 +995,7 @@ test.describe('Agent V3 Human Interaction', () => {
     });
 
     expect(response.status()).toBe(404);
-    expect(JSON.stringify(await response.json())).toContain(requestId);
+    const body = (await response.json()) as ApiErrorResponse;
+    expect(body.detail).toMatch(/HITL request not found/i);
   });
 });

@@ -77,6 +77,7 @@ import { safeMarkdownComponents } from '../chat/safeMarkdownComponents';
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import { A2UISurfaceRenderer } from './A2UISurfaceRenderer';
+import { CanvasFileExplorer } from './CanvasFileExplorer';
 import { SelectionToolbar } from './SelectionToolbar';
 import { useSyntaxHighlighter } from './useSyntaxHighlighter';
 
@@ -2033,7 +2034,10 @@ CanvasEmptyState.displayName = 'CanvasEmptyState';
 export const CanvasPanel = memo<{
   onSendPrompt?: ((prompt: string) => void) | undefined;
   onUpdateModelContext?: ((context: Record<string, unknown>) => void) | undefined;
-}>(({ onSendPrompt, onUpdateModelContext }) => {
+  projectId?: string | undefined;
+  tenantId?: string | undefined;
+  workspaceId?: string | null | undefined;
+}>(({ onSendPrompt, onUpdateModelContext, projectId, tenantId, workspaceId }) => {
   const activeTab = useActiveCanvasTab();
   const { updateContent } = useCanvasActions();
   const contentRef = useRef<HTMLDivElement>(null);
@@ -2124,101 +2128,106 @@ export const CanvasPanel = memo<{
   }, [onSendPrompt, activeTab]);
 
   return (
-    <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden">
-      <CanvasTabBar onBeforeCloseTab={handleBeforeCloseTab} />
-      {activeTab ? (
-        <>
-          <CanvasToolbar tab={activeTab} editMode={editMode} onToggleEdit={handleToggleEdit} />
-          <QuickActions
-            type={activeTab.type}
-            content={activeTab.content}
-            onSendPrompt={onSendPrompt}
-          />
-          <div
-            ref={contentRef}
-            className="flex-1 min-h-0 overflow-hidden relative bg-white dark:bg-slate-900"
-          >
-            {/* Multi-instance MCP app rendering: each mcp-app tab gets its own isolated renderer */}
-            {mcpAppTabs.map((tab) => (
-              <div
-                key={tab.id}
-                role="tabpanel"
-                id={`panel-${tab.id}`}
-                aria-labelledby={`tab-${tab.id}`}
-                style={{
-                  display: tab.id === activeTabId ? 'flex' : 'none',
-                  flexDirection: 'column',
-                  height: '100%',
-                  width: '100%',
-                }}
-              >
-                <ErrorBoundary
-                  key={`eb-${tab.id}`}
-                  context={`MCP App: ${tab.title}`}
-                  showHomeButton={false}
-                >
-                  <StandardMCPAppRenderer
-                    ref={(handle) => {
-                      if (handle) {
-                        mcpAppRefsMap.current.set(tab.id, handle);
-                      } else {
-                        mcpAppRefsMap.current.delete(tab.id);
-                      }
-                    }}
-                    toolName={tab.mcpToolName || tab.title}
-                    resourceUri={tab.mcpResourceUri}
-                    html={tab.mcpAppHtml}
-                    projectId={tab.mcpProjectId}
-                    serverName={tab.mcpServerName}
-                    appId={tab.mcpAppId}
-                    onMessage={
-                      onSendPrompt
-                        ? (msg) => {
-                            if (msg.content.text) {
-                              onSendPrompt(msg.content.text);
-                            }
-                          }
-                        : undefined
-                    }
-                    onUpdateModelContext={onUpdateModelContext}
-                    height="100%"
-                  />
-                </ErrorBoundary>
-              </div>
-            ))}
-            {/* Non-mcp-app active tab content */}
-            {activeTab.type !== 'mcp-app' && (
-              <div
-                role="tabpanel"
-                id={`panel-${activeTab.id}`}
-                aria-labelledby={`tab-${activeTab.id}`}
-                className="h-full"
-              >
-                <CanvasContent
-                  tab={activeTab}
-                  editMode={editMode}
-                  onContentChange={handleContentChange}
-                />
-              </div>
-            )}
-            {!editMode && (
-              <SelectionToolbar containerRef={contentRef} onAction={handleSelectionAction} />
-            )}
-            {editMode && onSendPrompt && (
-              <button
-                type="button"
-                onClick={handleAskRefine}
-                className="absolute bottom-4 right-4 px-3 py-1.5 bg-primary text-white text-xs rounded-lg shadow-lg hover:bg-primary-600 flex items-center gap-1.5"
-              >
-                <Wand2 size={12} />
-                {t('agent.canvas.askRefine', 'Ask Agent to Refine')}
-              </button>
-            )}
-          </div>
-        </>
-      ) : (
-        <CanvasEmptyState />
+    <div className="flex h-full overflow-hidden bg-slate-50 dark:bg-slate-950">
+      {projectId && (
+        <CanvasFileExplorer projectId={projectId} tenantId={tenantId} workspaceId={workspaceId} />
       )}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <CanvasTabBar onBeforeCloseTab={handleBeforeCloseTab} />
+        {activeTab ? (
+          <>
+            <CanvasToolbar tab={activeTab} editMode={editMode} onToggleEdit={handleToggleEdit} />
+            <QuickActions
+              type={activeTab.type}
+              content={activeTab.content}
+              onSendPrompt={onSendPrompt}
+            />
+            <div
+              ref={contentRef}
+              className="relative min-h-0 flex-1 overflow-hidden bg-white dark:bg-slate-900"
+            >
+              {/* Multi-instance MCP app rendering: each mcp-app tab gets its own isolated renderer */}
+              {mcpAppTabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  role="tabpanel"
+                  id={`panel-${tab.id}`}
+                  aria-labelledby={`tab-${tab.id}`}
+                  style={{
+                    display: tab.id === activeTabId ? 'flex' : 'none',
+                    flexDirection: 'column',
+                    height: '100%',
+                    width: '100%',
+                  }}
+                >
+                  <ErrorBoundary
+                    key={`eb-${tab.id}`}
+                    context={`MCP App: ${tab.title}`}
+                    showHomeButton={false}
+                  >
+                    <StandardMCPAppRenderer
+                      ref={(handle) => {
+                        if (handle) {
+                          mcpAppRefsMap.current.set(tab.id, handle);
+                        } else {
+                          mcpAppRefsMap.current.delete(tab.id);
+                        }
+                      }}
+                      toolName={tab.mcpToolName || tab.title}
+                      resourceUri={tab.mcpResourceUri}
+                      html={tab.mcpAppHtml}
+                      projectId={tab.mcpProjectId}
+                      serverName={tab.mcpServerName}
+                      appId={tab.mcpAppId}
+                      onMessage={
+                        onSendPrompt
+                          ? (msg) => {
+                              if (msg.content.text) {
+                                onSendPrompt(msg.content.text);
+                              }
+                            }
+                          : undefined
+                      }
+                      onUpdateModelContext={onUpdateModelContext}
+                      height="100%"
+                    />
+                  </ErrorBoundary>
+                </div>
+              ))}
+              {/* Non-mcp-app active tab content */}
+              {activeTab.type !== 'mcp-app' && (
+                <div
+                  role="tabpanel"
+                  id={`panel-${activeTab.id}`}
+                  aria-labelledby={`tab-${activeTab.id}`}
+                  className="h-full"
+                >
+                  <CanvasContent
+                    tab={activeTab}
+                    editMode={editMode}
+                    onContentChange={handleContentChange}
+                  />
+                </div>
+              )}
+              {!editMode && (
+                <SelectionToolbar containerRef={contentRef} onAction={handleSelectionAction} />
+              )}
+              {editMode && onSendPrompt && (
+                <button
+                  type="button"
+                  onClick={handleAskRefine}
+                  className="absolute bottom-4 right-4 flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs text-white shadow-lg hover:bg-primary-600"
+                >
+                  <Wand2 size={12} />
+                  {t('agent.canvas.askRefine', 'Ask Agent to Refine')}
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <CanvasEmptyState />
+        )}
+      </div>
     </div>
   );
 });

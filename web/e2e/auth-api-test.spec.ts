@@ -7,8 +7,8 @@ import { expect, test } from '@playwright/test';
 test('test API authentication', async ({ page }) => {
   // Login first
   await page.goto('http://localhost:3000/login');
-  await page.getByLabel(/Email/i).fill('admin@memstack.ai');
-  await page.getByLabel(/Password/i).fill('adminpassword');
+  await page.getByTestId('email-input').fill('admin@memstack.ai');
+  await page.getByTestId('password-input').fill('adminpassword');
   await page.getByRole('button', { name: /Sign In/i }).click();
 
   // Wait for navigation
@@ -32,7 +32,7 @@ test('test API authentication', async ({ page }) => {
     try {
       const response = await fetch('http://localhost:8000/api/v1/projects', {
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
       });
@@ -50,7 +50,7 @@ test('test API authentication', async ({ page }) => {
     try {
       const response = await fetch('http://localhost:8000/api/v1/sandbox', {
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
       });

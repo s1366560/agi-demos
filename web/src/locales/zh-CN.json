@@ -6697,6 +6697,21 @@
       "closeTab": "关闭 {{title}}",
       "selectOption": "选择一个选项",
       "readOnlyFormPreview": "只读表单预览",
+      "fileExplorer": {
+        "title": "文件",
+        "sandbox": "沙箱",
+        "artifacts": "对象存储",
+        "refresh": "刷新文件",
+        "collapse": "收起文件浏览器",
+        "expand": "展开文件浏览器",
+        "loading": "正在加载文件...",
+        "empty": "未找到文件",
+        "noProject": "请选择项目后浏览文件。",
+        "loadFailed": "文件加载失败",
+        "openFailed": "文件打开失败",
+        "openFailedWithMessage": "文件打开失败：{{message}}",
+        "noPreview": "此文件暂无可用预览。"
+      },
       "actions": {
         "explain": "解释",
         "optimize": "优化",
