@@ -434,6 +434,28 @@ class TestNativeGraphAdapterSearch:
             assert results[0]["type"] == "entity"
             assert results[0]["name"] == "Test Entity"
 
+    @pytest.mark.asyncio
+    async def test_search_failure_log_redacts_exception_details(self, adapter, caplog):
+        """Search failures should propagate without writing exception details to logs."""
+        secret = "search-secret-8642"
+
+        with patch.object(adapter, "_get_hybrid_search") as mock_get_search:
+            mock_search = MagicMock()
+            mock_search.search = AsyncMock(side_effect=RuntimeError(secret))
+            mock_get_search.return_value = mock_search
+
+            with (
+                caplog.at_level(
+                    logging.ERROR,
+                    logger="src.infrastructure.graph.native_graph_adapter",
+                ),
+                pytest.raises(RuntimeError, match=secret),
+            ):
+                await adapter.search("secret query", project_id="proj-1", limit=10)
+
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
 
 @pytest.mark.unit
 class TestNativeGraphAdapterDeleteEpisode:

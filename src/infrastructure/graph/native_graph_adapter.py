@@ -1091,7 +1091,7 @@ class NativeGraphAdapter(GraphServicePort):
             return items[:limit]
 
         except Exception as e:
-            logger.error(f"Search failed: {e}")
+            logger.error("Search failed: error_type=%s", type(e).__name__)
             raise
 
     @override
