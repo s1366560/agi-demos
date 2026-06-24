@@ -215,20 +215,29 @@ class HybridSearch:
             if not isinstance(results[idx], BaseException):
                 vector_entity_results = results[idx]
             else:
-                logger.warning(f"Vector search failed: {results[idx]}")
+                logger.warning(
+                    "Vector search failed error_type=%s",
+                    type(results[idx]).__name__,
+                )
             idx += 1
 
             if not isinstance(results[idx], BaseException):
                 keyword_entity_results = results[idx]
             else:
-                logger.warning(f"Entity keyword search failed: {results[idx]}")
+                logger.warning(
+                    "Entity keyword search failed error_type=%s",
+                    type(results[idx]).__name__,
+                )
             idx += 1
 
         if include_episodes:
             if not isinstance(results[idx], BaseException):
                 episode_results = results[idx]
             else:
-                logger.warning(f"Episode keyword search failed: {results[idx]}")
+                logger.warning(
+                    "Episode keyword search failed error_type=%s",
+                    type(results[idx]).__name__,
+                )
         return vector_entity_results, keyword_entity_results, episode_results
 
     def _apply_post_processing(self, items: list[SearchResultItem]) -> list[SearchResultItem]:

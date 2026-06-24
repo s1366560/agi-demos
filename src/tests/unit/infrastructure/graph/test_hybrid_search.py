@@ -344,6 +344,42 @@ class TestHybridSearch:
         assert isinstance(result, HybridSearchResult)
 
     @pytest.mark.unit
+    @pytest.mark.parametrize(
+        ("results", "include_entities", "include_episodes"),
+        [
+            ([RuntimeError("vector leaked collect-secret-2468"), [], []], True, True),
+            ([[], RuntimeError("entity leaked collect-secret-2468"), []], True, True),
+            ([[], [], RuntimeError("episode leaked collect-secret-2468")], True, True),
+        ],
+    )
+    def test_collect_search_results_redacts_exception_content(
+        self,
+        hybrid_search,
+        caplog,
+        results,
+        include_entities,
+        include_episodes,
+    ):
+        """Search result collection should not log raw exception text from subtasks."""
+        with caplog.at_level(
+            "WARNING",
+            logger="src.infrastructure.graph.search.hybrid_search",
+        ):
+            vector_results, keyword_results, episode_results = (
+                hybrid_search._collect_search_results(
+                    results,
+                    include_entities=include_entities,
+                    include_episodes=include_episodes,
+                )
+            )
+
+        assert vector_results == []
+        assert keyword_results == []
+        assert episode_results == []
+        assert "collect-secret-2468" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.unit
     def test_default_parameters(self, hybrid_search):
         """Test default parameters are set correctly."""
         assert hybrid_search._rrf_k == DEFAULT_RRF_K
