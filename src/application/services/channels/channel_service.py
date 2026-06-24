@@ -95,7 +95,11 @@ class ChannelService:
                 await adapter.disconnect()
                 logger.info(f"Disconnected from {adapter.name}")
             except Exception as e:
-                logger.error(f"Error disconnecting from {adapter.name}: {e}")
+                logger.error(
+                    "Error disconnecting adapter: has_channel_id=%s error_type=%s",
+                    bool(adapter.id),
+                    type(e).__name__,
+                )
 
     async def send_message(
         self, channel_id: str, to: str, content: MessageContent, reply_to: str | None = None

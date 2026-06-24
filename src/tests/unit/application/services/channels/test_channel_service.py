@@ -96,6 +96,11 @@ class _FailingConnectAdapter(_FailingSendAdapter):
         raise RuntimeError("secret-connect-token")
 
 
+class _FailingDisconnectAdapter(_FailingSendAdapter):
+    async def disconnect(self) -> None:
+        raise RuntimeError("secret-disconnect-token")
+
+
 def _build_message(text: str) -> Message:
     return Message(
         channel="feishu",
@@ -337,5 +342,27 @@ async def test_connect_all_failure_log_omits_adapter_name_and_exception_text(
     assert "Secret Channel" not in caplog.text
     assert "secret-channel-id" not in caplog.text
     assert "secret-connect-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "has_channel_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_disconnect_all_failure_log_omits_adapter_name_and_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Disconnect failure logs should not expose adapter names or exception details."""
+    service = ChannelService()
+    service.register_adapter(_FailingDisconnectAdapter())
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_service",
+    )
+
+    await service.disconnect_all()
+
+    assert "Secret Channel" not in caplog.text
+    assert "secret-channel-id" not in caplog.text
+    assert "secret-disconnect-token" not in caplog.text
     assert "RuntimeError" in caplog.text
     assert "has_channel_id=True" in caplog.text
