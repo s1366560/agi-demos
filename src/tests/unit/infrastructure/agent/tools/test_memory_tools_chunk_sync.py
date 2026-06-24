@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -274,3 +275,127 @@ class TestMemoryToolsChunkSync:
         assert payload["status"] == "deleted"
         assert delete_chunks.await_args.kwargs["memory_id"] == "mem-1"
         assert delete_chunks.await_args.kwargs["project_id"] == "proj-1"
+
+    @pytest.mark.asyncio
+    async def test_delete_logs_do_not_include_memory_identifier(self, caplog) -> None:
+        session = AsyncMock()
+        session_factory = MagicMock(return_value=session)
+        secret_memory_id = "mem-delete-secret"
+        repo = MagicMock()
+        repo.find_by_id = AsyncMock(return_value=SimpleNamespace(project_id="proj-1"))
+        service = MagicMock()
+        service.delete_memory = AsyncMock()
+        delete_chunks = AsyncMock(return_value=1)
+        caplog.set_level(logging.INFO, logger="src.infrastructure.agent.tools.memory_tools")
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_memory_repository.SqlMemoryRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.application.services.memory_service.MemoryService",
+                return_value=service,
+            ),
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_chunk_repository.SqlChunkRepository",
+                return_value="chunk-repo",
+            ),
+            patch(
+                "src.infrastructure.memory.chunk_sync.delete_memory_chunks",
+                delete_chunks,
+            ),
+        ):
+            result = await _execute_memory_delete(
+                memory_id=secret_memory_id,
+                session_factory=session_factory,
+                graph_service=object(),
+            )
+
+        payload = json.loads(result)
+        assert payload["status"] == "deleted"
+        assert secret_memory_id not in caplog.text
+        assert "memory_delete: deleted memory" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_delete_chunk_failure_logs_do_not_include_exception_content(
+        self,
+        caplog,
+    ) -> None:
+        session = AsyncMock()
+        session_factory = MagicMock(return_value=session)
+        secret_memory_id = "mem-delete-chunk-secret"
+        exception_detail = "chunk cleanup leaked memory id mem-delete-chunk-secret"
+        repo = MagicMock()
+        repo.find_by_id = AsyncMock(return_value=SimpleNamespace(project_id="proj-1"))
+        service = MagicMock()
+        service.delete_memory = AsyncMock()
+        delete_chunks = AsyncMock(side_effect=RuntimeError(exception_detail))
+        caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_memory_repository.SqlMemoryRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.application.services.memory_service.MemoryService",
+                return_value=service,
+            ),
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_chunk_repository.SqlChunkRepository",
+                return_value="chunk-repo",
+            ),
+            patch(
+                "src.infrastructure.memory.chunk_sync.delete_memory_chunks",
+                delete_chunks,
+            ),
+        ):
+            result = await _execute_memory_delete(
+                memory_id=secret_memory_id,
+                session_factory=session_factory,
+                graph_service=object(),
+            )
+
+        payload = json.loads(result)
+        assert payload["status"] == "deleted"
+        assert secret_memory_id not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_delete_failure_logs_do_not_include_exception_content(
+        self,
+        caplog,
+    ) -> None:
+        session = AsyncMock()
+        session_factory = MagicMock(return_value=session)
+        secret_memory_id = "mem-delete-failure-secret"
+        exception_detail = "delete service leaked memory id mem-delete-failure-secret"
+        repo = MagicMock()
+        repo.find_by_id = AsyncMock(return_value=SimpleNamespace(project_id="proj-1"))
+        service = MagicMock()
+        service.delete_memory = AsyncMock(side_effect=RuntimeError(exception_detail))
+        caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_memory_repository.SqlMemoryRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.application.services.memory_service.MemoryService",
+                return_value=service,
+            ),
+        ):
+            result = await _execute_memory_delete(
+                memory_id=secret_memory_id,
+                session_factory=session_factory,
+                graph_service=object(),
+            )
+
+        payload = json.loads(result)
+        assert "error" in payload
+        assert secret_memory_id not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text

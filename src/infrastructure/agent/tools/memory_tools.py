@@ -933,14 +933,11 @@ async def _execute_memory_delete(
             await session.commit()
         except Exception as chunk_err:
             logger.warning(
-                "memory_delete: failed to remove searchable chunks: %s",
-                chunk_err,
+                "memory_delete: failed to remove searchable chunks error_type=%s",
+                type(chunk_err).__name__,
             )
 
-        logger.info(
-            "memory_delete: deleted memory %s",
-            memory_id,
-        )
+        logger.info("memory_delete: deleted memory")
 
         return json.dumps(
             {
@@ -952,7 +949,7 @@ async def _execute_memory_delete(
     except ValueError as e:
         return json.dumps({"error": str(e)})
     except Exception as e:
-        logger.warning("memory_delete failed: %s", e)
+        logger.warning("memory_delete failed error_type=%s", type(e).__name__)
         await session.rollback()
         return json.dumps({"error": f"Failed to delete memory: {e}"})
     finally:
