@@ -338,6 +338,39 @@ class TestSandboxToolRegistry:
         mock_redis.sadd.assert_called()  # Called for tracking and project index
 
     @pytest.mark.asyncio
+    async def test_save_to_redis_failure_log_omits_identifiers(
+        self, registry, mock_redis, caplog
+    ):
+        """Test Redis save failures do not log sensitive registration details."""
+        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+        mock_redis.set.side_effect = RuntimeError(
+            "redis save failed secret-sandbox-id secret-project-id secret-tool-name"
+        )
+
+        tools = await registry.register_sandbox_tools(
+            sandbox_id="secret-sandbox-id",
+            project_id="secret-project-id",
+            tenant_id="tenant-1",
+            tools=["secret-tool-name"],
+        )
+
+        assert tools == ["secret-tool-name"]
+
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_tool_registry"
+        )
+        assert "Failed to save to Redis" in message
+        assert "secret-sandbox-id" not in message
+        assert "secret-project-id" not in message
+        assert "secret-tool-name" not in message
+        assert "redis save failed" not in message
+        assert "has_sandbox_id=True" in message
+        assert "has_project_id=True" in message
+        assert "error_type=RuntimeError" in message
+
+    @pytest.mark.asyncio
     async def test_clear_from_redis(self, registry, mock_redis):
         """Test clearing registration from Redis."""
         await registry.register_sandbox_tools(
@@ -354,6 +387,40 @@ class TestSandboxToolRegistry:
         mock_redis.delete.assert_called_once()
         assert "sandbox:tools:abc123" in mock_redis.delete.call_args[0][0]
         mock_redis.srem.assert_called()  # Called for tracking and project index
+
+    @pytest.mark.asyncio
+    async def test_clear_from_redis_failure_log_omits_identifiers(
+        self, registry, mock_redis, caplog
+    ):
+        """Test Redis clear failures do not log sandbox or project identifiers."""
+        await registry.register_sandbox_tools(
+            sandbox_id="secret-sandbox-id",
+            project_id="secret-project-id",
+            tenant_id="tenant-1",
+            tools=["bash"],
+        )
+        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+        caplog.clear()
+        mock_redis.delete.side_effect = RuntimeError(
+            "redis clear failed secret-sandbox-id secret-project-id"
+        )
+
+        result = await registry.unregister_sandbox_tools("secret-sandbox-id")
+
+        assert result is True
+
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_tool_registry"
+        )
+        assert "Failed to clear from Redis" in message
+        assert "secret-sandbox-id" not in message
+        assert "secret-project-id" not in message
+        assert "redis clear failed" not in message
+        assert "has_sandbox_id=True" in message
+        assert "has_project_id=True" in message
+        assert "error_type=RuntimeError" in message
 
     @pytest.mark.asyncio
     async def test_restore_from_redis(self, registry, mock_redis):
@@ -406,6 +473,27 @@ class TestSandboxToolRegistry:
         assert "nonexistent" not in registry._registrations
 
     @pytest.mark.asyncio
+    async def test_load_from_redis_failure_log_omits_identifier(self, registry, mock_redis, caplog):
+        """Test Redis load failures do not log sandbox IDs or exception text."""
+        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+        mock_redis.get.side_effect = RuntimeError("redis load failed secret-sandbox-id")
+
+        registration = await registry.load_from_redis("secret-sandbox-id")
+
+        assert registration is None
+
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_tool_registry"
+        )
+        assert "Failed to load from Redis" in message
+        assert "secret-sandbox-id" not in message
+        assert "redis load failed" not in message
+        assert "has_sandbox_id=True" in message
+        assert "error_type=RuntimeError" in message
+
+    @pytest.mark.asyncio
     async def test_restore_already_in_memory(self, registry):
         """Test restoring when already in memory."""
         await registry.register_sandbox_tools(
@@ -450,6 +538,28 @@ class TestSandboxToolRegistry:
         # Only abc123 will be restored (def456 not in Redis)
         assert count == 1
         assert "abc123" in registry._registrations
+
+    @pytest.mark.asyncio
+    async def test_refresh_all_from_redis_failure_log_omits_exception_text(
+        self, registry, mock_redis, caplog
+    ):
+        """Test Redis refresh failures log only structural error details."""
+        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+        mock_redis.smembers.side_effect = RuntimeError("redis refresh failed secret-tracking-key")
+
+        count = await registry.refresh_all_from_redis()
+
+        assert count == 0
+
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_tool_registry"
+        )
+        assert "Failed to refresh from Redis" in message
+        assert "secret-tracking-key" not in message
+        assert "redis refresh failed" not in message
+        assert "error_type=RuntimeError" in message
 
     @pytest.mark.asyncio
     async def test_get_or_restore_registration_from_memory(self, registry):

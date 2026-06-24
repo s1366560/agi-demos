@@ -278,7 +278,13 @@ class SandboxToolRegistry:
             await cast(Awaitable[int], self._redis.sadd(project_key, registration.sandbox_id))
 
         except Exception as e:
-            logger.warning(f"[SandboxToolRegistry] Failed to save to Redis: {e}")
+            logger.warning(
+                "[SandboxToolRegistry] Failed to save to Redis: "
+                "has_sandbox_id=%s has_project_id=%s error_type=%s",
+                bool(registration.sandbox_id),
+                bool(registration.project_id),
+                type(e).__name__,
+            )
 
     async def _clear_from_redis(
         self,
@@ -300,7 +306,13 @@ class SandboxToolRegistry:
             await cast(Awaitable[int], self._redis.srem(project_key, sandbox_id))
 
         except Exception as e:
-            logger.warning(f"[SandboxToolRegistry] Failed to clear from Redis: {e}")
+            logger.warning(
+                "[SandboxToolRegistry] Failed to clear from Redis: "
+                "has_sandbox_id=%s has_project_id=%s error_type=%s",
+                bool(sandbox_id),
+                bool(project_id),
+                type(e).__name__,
+            )
 
     async def load_from_redis(self, sandbox_id: str) -> SandboxToolRegistration | None:
         """Load registration from Redis cache."""
@@ -325,7 +337,12 @@ class SandboxToolRegistry:
             )
 
         except Exception as e:
-            logger.warning(f"[SandboxToolRegistry] Failed to load from Redis: {e}")
+            logger.warning(
+                "[SandboxToolRegistry] Failed to load from Redis: "
+                "has_sandbox_id=%s error_type=%s",
+                bool(sandbox_id),
+                type(e).__name__,
+            )
             return None
 
     async def restore_from_redis(self, sandbox_id: str) -> bool:
@@ -379,7 +396,10 @@ class SandboxToolRegistry:
             return restored_count
 
         except Exception as e:
-            logger.warning(f"[SandboxToolRegistry] Failed to refresh from Redis: {e}")
+            logger.warning(
+                "[SandboxToolRegistry] Failed to refresh from Redis: error_type=%s",
+                type(e).__name__,
+            )
             return 0
 
     async def get_or_restore_registration(self, sandbox_id: str) -> SandboxToolRegistration | None:
