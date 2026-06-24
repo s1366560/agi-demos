@@ -311,8 +311,11 @@ class ChannelMessageRouter:
         denied_reason = await self._check_access_control(message)
         if denied_reason:
             logger.info(
-                f"[MessageRouter] Access denied for {message.sender.id} "
-                f"in {message.chat_id}: {denied_reason}"
+                "[MessageRouter] Access denied: "
+                "has_sender_id=%s has_chat_id=%s has_denied_reason=%s",
+                bool(message.sender.id),
+                bool(message.chat_id),
+                bool(denied_reason),
             )
             return
 

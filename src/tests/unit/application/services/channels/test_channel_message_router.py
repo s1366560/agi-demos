@@ -287,6 +287,37 @@ async def test_emit_inbound_event_rate_limit_log_omits_chat_identifier(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_emit_inbound_event_access_denied_log_omits_identifiers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Access denied logs should not expose sender, chat, or denial details."""
+    router = ChannelMessageRouter()
+    router._check_access_control = AsyncMock(
+        return_value="sender secret-sender-id not in allowlist"
+    )
+    router._check_rate_limit = MagicMock(return_value=True)
+    router._broadcast_workspace_event = AsyncMock()
+    message = _build_message(text="hello")
+    message.chat_id = "secret-chat-id"
+    message.sender = SenderInfo(id="secret-sender-id", name="Test User")
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router._emit_inbound_event(message, "conv-1")
+
+    router._broadcast_workspace_event.assert_not_awaited()
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-sender-id" not in caplog.text
+    assert "not in allowlist" not in caplog.text
+    assert "has_sender_id=True" in caplog.text
+    assert "has_chat_id=True" in caplog.text
+    assert "has_denied_reason=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_process_media_if_needed_unavailable_log_omits_message_identifier(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
