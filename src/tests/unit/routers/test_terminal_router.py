@@ -12,6 +12,7 @@ from src.infrastructure.adapters.primary.web.routers.terminal import (
     CreateTerminalRequest,
     _read_terminal_output,
     _resolve_terminal_session,
+    get_event_publisher,
     get_project_id_from_sandbox,
 )
 
@@ -158,6 +159,33 @@ async def test_get_project_id_from_sandbox_error_log_omits_sandbox_id_and_error_
     assert "error_type=RuntimeError" in caplog.text
     assert "sandbox-secret" not in caplog.text
     assert "sandbox lookup secret" not in caplog.text
+
+
+@pytest.mark.unit
+def test_get_event_publisher_error_log_omits_container_exception_text(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class FailingContainer:
+        def sandbox_event_publisher(self) -> object:
+            raise RuntimeError("event publisher secret")
+
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(container=FailingContainer()))
+    )
+    monkeypatch.setattr(terminal_router, "_event_publisher", None)
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.terminal",
+    )
+
+    result = get_event_publisher(request)
+
+    assert result is None
+    assert terminal_router._event_publisher is None
+    assert "Could not create event publisher" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "event publisher secret" not in caplog.text
 
 
 @pytest.mark.unit

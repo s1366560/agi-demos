@@ -60,7 +60,10 @@ def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
             container = request.app.state.container
             _event_publisher = container.sandbox_event_publisher()
         except Exception as e:
-            logger.warning(f"Could not create event publisher: {e}")
+            logger.warning(
+                "Could not create event publisher: error_type=%s",
+                type(e).__name__,
+            )
             _event_publisher = None
     return _event_publisher
 
