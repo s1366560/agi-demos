@@ -21,6 +21,13 @@ class MockEmbeddingService:
         return [(0, 0.99)]
 
 
+class FailingEmbeddingService(MockEmbeddingService):
+    """Mock embedding service that raises a provider-style error."""
+
+    async def embed_batch(self, texts: list):
+        raise RuntimeError("provider echoed embedding-secret-8642")
+
+
 class MockLLMClient:
     """Mock LLM client for testing."""
 
@@ -79,6 +86,26 @@ class TestEntityExtractorJsonParsing:
 
         assert result == []
         assert "entity-secret-9753" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    async def test_create_entity_nodes_redacts_embedding_exception_details(self, caplog):
+        extractor = EntityExtractor(
+            llm_client=MockLLMClient(),
+            embedding_service=FailingEmbeddingService(),
+        )
+
+        with caplog.at_level(
+            "ERROR",
+            logger="src.infrastructure.graph.extraction.entity_extractor",
+        ):
+            nodes = await extractor._create_entity_nodes(
+                [{"name": "Ada", "entity_type": "Person"}],
+            )
+
+        assert len(nodes) == 1
+        assert nodes[0].name == "Ada"
+        assert nodes[0].name_embedding is None
+        assert "embedding-secret-8642" not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
 
     def test_extract_json_simple_object(self, extractor):

@@ -543,7 +543,10 @@ class EntityExtractor:
                 list[list[float] | None], await self._embedding_service.embed_batch(names)
             )
         except Exception as e:
-            logger.error(f"Failed to generate embeddings for entities: {e}")
+            logger.error(
+                "Failed to generate embeddings for entities error_type=%s",
+                type(e).__name__,
+            )
             embeddings = [None] * len(names)
 
         # Create EntityNode objects
