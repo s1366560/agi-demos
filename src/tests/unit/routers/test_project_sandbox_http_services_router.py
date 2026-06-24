@@ -1790,6 +1790,7 @@ def test_host_preview_proxy_keeps_root_relative_assets_unmodified(
 def test_host_preview_proxy_sanitizes_upstream_connection_errors(
     sandbox_http_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Host-based preview should not leak upstream URL or connection details."""
     event_publisher = AsyncMock()
@@ -1835,6 +1836,10 @@ def test_host_preview_proxy_sanitizes_upstream_connection_errors(
         raise RuntimeError("connection refused")
 
     monkeypatch.setattr(router_mod, "_request_http_service_via_sandbox_exec", _raise_exec_fetch)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
 
     response = sandbox_http_client.get(
         "/",
@@ -1847,6 +1852,18 @@ def test_host_preview_proxy_sanitizes_upstream_connection_errors(
     assert "127.0.0.1" not in response.text
     assert "connection refused" not in response.text
     event_publisher.publish_http_service_error.assert_awaited_once()
+    error_kwargs = event_publisher.publish_http_service_error.await_args.kwargs
+    assert error_kwargs["service_id"] == "svc-int"
+    assert error_kwargs["error_message"] == "RuntimeError"
+    assert "connection refused" not in str(error_kwargs)
+    assert "127.0.0.1" not in str(error_kwargs)
+    assert "HTTP preview host proxy error" in caplog.text
+    assert "has_service_id=True" in caplog.text
+    assert "has_target_url=True" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "connection refused" not in caplog.text
+    assert "127.0.0.1" not in caplog.text
+    assert "svc-int" not in caplog.text
 
 
 @pytest.mark.unit
