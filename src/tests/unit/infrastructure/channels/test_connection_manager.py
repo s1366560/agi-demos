@@ -294,6 +294,65 @@ def test_on_route_future_done_redacts_future_exception(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_restart_connection_redacts_add_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Restart failures should not log raw config IDs or exception text."""
+    exception_detail = "restart failed channel-restart-secret-1357"
+    secret_config_id = "channel-config-secret-2468"
+
+    class _SessionContext:
+        @staticmethod
+        async def __aenter__() -> object:
+            return object()
+
+        @staticmethod
+        async def __aexit__(*args: object) -> None:
+            return None
+
+    class _FakeChannelConfigRepository:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        async def get_by_id(self, config_id: str) -> SimpleNamespace:
+            assert config_id == secret_config_id
+            return SimpleNamespace(id=secret_config_id, enabled=True)
+
+    manager = ChannelConnectionManager(session_factory=lambda: _SessionContext())
+    manager.connections[secret_config_id] = ManagedConnection(
+        config_id=secret_config_id,
+        project_id="project-1",
+        channel_type="feishu",
+        adapter=object(),
+        status=ConnectionStatus.CONNECTED,
+    )
+    manager.remove_connection = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    manager.add_connection = AsyncMock(  # type: ignore[method-assign]
+        side_effect=RuntimeError(exception_detail)
+    )
+
+    with (
+        patch(
+            "src.infrastructure.channels.connection_manager.ChannelConfigRepository",
+            _FakeChannelConfigRepository,
+        ),
+        caplog.at_level(
+            "ERROR",
+            logger="src.infrastructure.channels.connection_manager",
+        ),
+    ):
+        restarted = await manager.restart_connection(secret_config_id)
+
+    assert restarted is False
+    assert "Failed to restart" in caplog.text
+    assert exception_detail not in caplog.text
+    assert secret_config_id not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "has_config_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_add_connection_refreshes_closed_main_loop() -> None:
     """add_connection should refresh stale closed loop reference."""
 

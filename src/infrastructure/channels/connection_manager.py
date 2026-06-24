@@ -678,7 +678,11 @@ class ChannelConnectionManager:
                 await self.add_connection(config)
                 return True
             except Exception as e:
-                logger.error(f"[ChannelManager] Failed to restart {config_id}: {e}")
+                logger.error(
+                    "[ChannelManager] Failed to restart error_type=%s has_config_id=%s",
+                    type(e).__name__,
+                    bool(config_id),
+                )
                 return False
 
         return True
