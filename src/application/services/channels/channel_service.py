@@ -159,7 +159,14 @@ class ChannelService:
                     message_id = await adapter.send_message(to, content)
                     results[adapter.id] = message_id
                 except Exception as e:
-                    logger.error(f"Broadcast failed to {adapter.name}: {e}")
+                    logger.error(
+                        "Broadcast failed: has_channel_id=%s has_recipient=%s "
+                        "content_type=%s error_type=%s",
+                        bool(adapter.id),
+                        bool(to),
+                        content.type.value,
+                        type(e).__name__,
+                    )
                     results[adapter.id] = None
             else:
                 results[adapter.id] = None

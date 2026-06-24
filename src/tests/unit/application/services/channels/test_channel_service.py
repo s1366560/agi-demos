@@ -189,3 +189,29 @@ async def test_send_message_failure_log_omits_channel_id_and_exception_text(
     assert "private response body" not in caplog.text
     assert "secret-send-token" not in caplog.text
     assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_broadcast_failure_log_omits_adapter_name_and_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Broadcast failure logs should not expose adapter names or exception details."""
+    service = ChannelService()
+    service.register_adapter(_FailingSendAdapter())
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_service",
+    )
+
+    result = await service.broadcast(
+        "secret-recipient-id",
+        MessageContent(type=MessageType.TEXT, text="private broadcast body"),
+    )
+
+    assert result == {"secret-channel-id": None}
+    assert "Secret Channel" not in caplog.text
+    assert "secret-recipient-id" not in caplog.text
+    assert "private broadcast body" not in caplog.text
+    assert "secret-send-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
