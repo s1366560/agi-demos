@@ -77,8 +77,8 @@ async def create_media_import_service_from_config(
         )
 
         logger.info(
-            "[MediaImportFactory] Creating MediaImportService - channel_config_id=%s",
-            channel_config_id,
+            "[MediaImportFactory] Creating MediaImportService: has_channel_config_id=%s",
+            bool(channel_config_id),
         )
 
         # Build query
@@ -103,10 +103,11 @@ async def create_media_import_service_from_config(
             return None
 
         logger.info(
-            "[MediaImportFactory] Found config: id=%s, app_id=%s, project_id=%s",
-            config.id,
-            config.app_id,
-            config.project_id,
+            "[MediaImportFactory] Found config: has_config_id=%s has_app_id=%s "
+            "has_project_id=%s",
+            bool(config.id),
+            bool(config.app_id),
+            bool(config.project_id),
         )
 
         # Extract config
@@ -132,8 +133,9 @@ async def create_media_import_service_from_config(
 
         if not app_id or not app_secret:
             logger.warning(
-                "[MediaImportFactory] Channel config %s missing credentials - app_id=%s, app_secret=%s",
-                config.id,
+                "[MediaImportFactory] Channel config missing credentials: "
+                "has_config_id=%s has_app_id=%s has_app_secret=%s",
+                bool(config.id),
                 bool(app_id),
                 bool(app_secret),
             )
