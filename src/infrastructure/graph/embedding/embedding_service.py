@@ -205,7 +205,10 @@ class EmbeddingService:
                 )
             ]
         except Exception as e:
-            logger.warning("Batch embedding failed, returning all None: %s", e)
+            logger.warning(
+                "Batch embedding failed, returning all None error_type=%s",
+                type(e).__name__,
+            )
             return [None] * len(texts)
 
     async def _embed_batch_api(
@@ -231,7 +234,10 @@ class EmbeddingService:
                     embedding = self._fix_dimension(embedding)
                 embeddings[idx] = embedding
         except Exception as e:
-            logger.warning(f"Batch embedding failed, falling back to individual: {e}")
+            logger.warning(
+                "Batch embedding failed, falling back to individual error_type=%s",
+                type(e).__name__,
+            )
             for idx, text in zip(indices, texts, strict=False):
                 embeddings[idx] = await self.embed_text(text)
 

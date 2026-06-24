@@ -21,6 +21,18 @@ class MockEmbedder:
         return await self._create_mock(input_data=input_data)
 
 
+class MockBatchEmbedder(MockEmbedder):
+    """Mock embedder with a batch API."""
+
+    def __init__(self, embedding_dim: int = 768) -> None:
+        super().__init__(embedding_dim=embedding_dim)
+        self._create_batch_mock = AsyncMock()
+
+    async def create_batch(self, texts: list[str]) -> list[list[float]]:
+        """Create mock batch embeddings."""
+        return await self._create_batch_mock(texts)
+
+
 @pytest.fixture
 def mock_embedder():
     """Create mock embedder."""
@@ -188,6 +200,47 @@ class TestEmbeddingService:
         # Others should be normal
         assert result[0] != [0.0] * 768
         assert result[2] != [0.0] * 768
+
+    @pytest.mark.unit
+    async def test_embed_batch_api_fallback_log_redacts_exception_content(self, caplog):
+        """Batch API fallback logs should not include raw provider exception text."""
+        secret = "graph-batch-api-secret-97531"
+        embedder = MockBatchEmbedder()
+        embedder._create_batch_mock.side_effect = RuntimeError(f"provider echoed {secret}")
+        embedder._create_mock.side_effect = lambda input_data: [0.1] * 768
+        service = EmbeddingService(embedder)
+
+        with caplog.at_level(
+            "WARNING",
+            logger="src.infrastructure.graph.embedding.embedding_service",
+        ):
+            result = await service.embed_batch([f"First {secret}", "Second"])
+
+        assert len(result) == 2
+        assert all(embedding == [0.1] * 768 for embedding in result)
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.unit
+    async def test_embed_batch_safe_error_log_redacts_exception_content(
+        self,
+        embedding_service,
+        mock_embedder,
+        caplog,
+    ):
+        """Safe batch fallback logs should not include raw exception text."""
+        secret = "graph-batch-safe-secret-86420"
+        mock_embedder._create_mock.side_effect = RuntimeError(f"provider echoed {secret}")
+
+        with caplog.at_level(
+            "WARNING",
+            logger="src.infrastructure.graph.embedding.embedding_service",
+        ):
+            result = await embedding_service.embed_batch_safe([f"First {secret}", "Second"])
+
+        assert result == [None, None]
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     @pytest.mark.unit
     def test_embedding_dim_from_embedder(self, mock_embedder):
