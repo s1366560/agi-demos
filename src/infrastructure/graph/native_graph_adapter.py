@@ -948,7 +948,10 @@ class NativeGraphAdapter(GraphServicePort):
                 )
             except Exception as e:
                 # Log but don't fail the episode processing
-                logger.warning(f"Failed to save discovered types: {e}")
+                logger.warning(
+                    "Failed to save discovered types: error_type=%s",
+                    type(e).__name__,
+                )
 
     async def _get_existing_entities(
         self, project_id: str | None = None, limit: int = 10000

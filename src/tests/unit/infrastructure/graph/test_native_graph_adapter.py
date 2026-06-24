@@ -311,6 +311,39 @@ class TestNativeGraphAdapterProcessEpisode:
         assert "r.episodes = reduce" in query
 
     @pytest.mark.asyncio
+    async def test_save_discovered_types_redacts_persistence_exception_details(
+        self,
+        adapter,
+        caplog,
+    ):
+        """Schema persistence failures should not write exception details to logs."""
+        secret = "schema-persistence-secret-9753"
+        entity = EntityNode(uuid="entity-1", name="Ada", entity_type="Person")
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.schema.dynamic_schema."
+                "save_discovered_types_batch",
+                new_callable=AsyncMock,
+            ) as save_batch,
+            caplog.at_level(
+                logging.WARNING,
+                logger="src.infrastructure.graph.native_graph_adapter",
+            ),
+        ):
+            save_batch.side_effect = RuntimeError(secret)
+            await adapter._save_discovered_types(
+                project_id="project-1",
+                entities=[entity],
+                relationships=[],
+                existing_entity_types=set(),
+            )
+
+        save_batch.assert_awaited_once()
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_get_existing_entities_redacts_query_exception_details(
         self,
         adapter,
