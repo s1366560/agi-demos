@@ -5,6 +5,7 @@ Tests the unified sandbox service orchestration layer.
 """
 
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -324,13 +325,27 @@ class TestSandboxOrchestrator:
         # Event publishing is now handled by the API layer
 
     @pytest.mark.asyncio
-    async def test_stop_desktop_error(self, orchestrator, mock_adapter):
-        """Test desktop stop with error."""
-        mock_adapter.call_tool.side_effect = Exception("Stop failed")
+    async def test_stop_desktop_error(self, orchestrator, mock_adapter, caplog):
+        """Test desktop stop with error logs without raw sandbox IDs or exception text."""
+        mock_adapter.call_tool.side_effect = RuntimeError("desktop stop secret token")
+        caplog.set_level(logging.ERROR, logger="src.application.services.sandbox_orchestrator")
 
         result = await orchestrator.stop_desktop("sb-123")
 
         assert result is False  # Should handle error gracefully
+        target_records = [
+            record
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_orchestrator"
+            and record.levelno >= logging.ERROR
+        ]
+        assert len(target_records) == 1
+        message = target_records[0].getMessage()
+        assert "Failed to stop desktop" in message
+        assert "error_type=RuntimeError" in message
+        assert "sb-123" not in message
+        assert "desktop stop secret token" not in message
+        assert target_records[0].exc_info is None
 
     @pytest.mark.asyncio
     async def test_get_desktop_status_running(self, orchestrator, mock_adapter):
