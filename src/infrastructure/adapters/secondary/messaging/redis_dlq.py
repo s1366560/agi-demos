@@ -230,7 +230,12 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             return messages
 
         except redis.RedisError as e:
-            logger.error(f"[DLQ] Failed to get messages: {e}")
+            logger.error(
+                "[DLQ] Failed to get messages error_type=%s limit=%s offset=%s",
+                type(e).__name__,
+                limit,
+                offset,
+            )
             return []
 
     async def count_messages(
@@ -277,7 +282,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             return count
 
         except redis.RedisError as e:
-            logger.error(f"[DLQ] Failed to count messages: {e}")
+            logger.error("[DLQ] Failed to count messages error_type=%s", type(e).__name__)
             return 0
 
     async def retry_message(self, message_id: str) -> bool:

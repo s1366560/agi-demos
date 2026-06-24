@@ -171,6 +171,56 @@ async def test_discard_message_redacts_update_failure_log(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_get_messages_redacts_redis_error_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Message query failures should not log raw Redis exception text."""
+    exception_detail = "query redis secret 1472"
+    redis_client = SimpleNamespace(
+        zrevrange=AsyncMock(side_effect=redis.RedisError(exception_detail)),
+    )
+    adapter = RedisDLQAdapter(redis_client=redis_client)  # type: ignore[arg-type]
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+    ):
+        messages = await adapter.get_messages(limit=5, offset=2)
+
+    assert messages == []
+    assert "Failed to get messages" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RedisError" in caplog.text
+    assert "limit=5" in caplog.text
+    assert "offset=2" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_count_messages_redacts_redis_error_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Message count failures should not log raw Redis exception text."""
+    exception_detail = "count redis secret 2583"
+    redis_client = SimpleNamespace(
+        zrevrange=AsyncMock(side_effect=redis.RedisError(exception_detail)),
+    )
+    adapter = RedisDLQAdapter(redis_client=redis_client)  # type: ignore[arg-type]
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+    ):
+        count = await adapter.count_messages()
+
+    assert count == 0
+    assert "Failed to count messages" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RedisError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_get_stats_redacts_redis_error_log(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
