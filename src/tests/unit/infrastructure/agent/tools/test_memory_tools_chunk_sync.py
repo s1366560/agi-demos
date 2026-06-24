@@ -238,6 +238,150 @@ class TestMemoryToolsChunkSync:
         assert upsert_chunks.await_args.kwargs["category"] == "decision"
 
     @pytest.mark.asyncio
+    async def test_update_logs_do_not_include_memory_identifier(self, caplog) -> None:
+        session = AsyncMock()
+        session_factory = MagicMock(return_value=session)
+        secret_memory_id = "mem-update-secret"
+        repo = MagicMock()
+        service = MagicMock()
+        service.update_memory = AsyncMock(
+            return_value=SimpleNamespace(
+                id=secret_memory_id,
+                title="Updated title",
+                project_id="proj-1",
+                processing_status="COMPLETED",
+                content="updated content",
+                tags=[],
+                metadata={"category": "fact"},
+            )
+        )
+        caplog.set_level(logging.INFO, logger="src.infrastructure.agent.tools.memory_tools")
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_memory_repository.SqlMemoryRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.application.services.memory_service.MemoryService",
+                return_value=service,
+            ),
+        ):
+            result = await _execute_memory_update(
+                memory_id=secret_memory_id,
+                title=None,
+                content=None,
+                tags=None,
+                metadata=None,
+                session_factory=session_factory,
+                graph_service=object(),
+            )
+
+        payload = json.loads(result)
+        assert payload["status"] == "updated"
+        assert secret_memory_id not in caplog.text
+        assert "memory_update: updated memory" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_update_chunk_failure_logs_do_not_include_exception_content(
+        self,
+        caplog,
+    ) -> None:
+        session = AsyncMock()
+        session_factory = MagicMock(return_value=session)
+        secret_memory_id = "mem-update-chunk-secret"
+        exception_detail = "chunk sync leaked memory id mem-update-chunk-secret"
+        repo = MagicMock()
+        service = MagicMock()
+        service.update_memory = AsyncMock(
+            return_value=SimpleNamespace(
+                id=secret_memory_id,
+                title="Updated title",
+                project_id="proj-1",
+                processing_status="PENDING",
+                content="updated content",
+                tags=["tag-2"],
+                metadata={"category": "decision"},
+            )
+        )
+        upsert_chunks = AsyncMock(side_effect=RuntimeError(exception_detail))
+        caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_memory_repository.SqlMemoryRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.application.services.memory_service.MemoryService",
+                return_value=service,
+            ),
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_chunk_repository.SqlChunkRepository",
+                return_value="chunk-repo",
+            ),
+            patch(
+                "src.infrastructure.memory.chunk_sync.upsert_memory_chunks",
+                upsert_chunks,
+            ),
+        ):
+            result = await _execute_memory_update(
+                memory_id=secret_memory_id,
+                title="Updated title",
+                content="updated content",
+                tags=["tag-2"],
+                metadata={"category": "decision"},
+                session_factory=session_factory,
+                graph_service=object(),
+            )
+
+        payload = json.loads(result)
+        assert payload["status"] == "updated"
+        assert secret_memory_id not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_update_failure_logs_do_not_include_exception_content(
+        self,
+        caplog,
+    ) -> None:
+        session = AsyncMock()
+        session_factory = MagicMock(return_value=session)
+        secret_memory_id = "mem-update-failure-secret"
+        exception_detail = "update service leaked memory id mem-update-failure-secret"
+        repo = MagicMock()
+        service = MagicMock()
+        service.update_memory = AsyncMock(side_effect=RuntimeError(exception_detail))
+        caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_memory_repository.SqlMemoryRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.application.services.memory_service.MemoryService",
+                return_value=service,
+            ),
+        ):
+            result = await _execute_memory_update(
+                memory_id=secret_memory_id,
+                title=None,
+                content=None,
+                tags=None,
+                metadata=None,
+                session_factory=session_factory,
+                graph_service=object(),
+            )
+
+        payload = json.loads(result)
+        assert "error" in payload
+        assert secret_memory_id not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_delete_uses_shared_chunk_delete_helper(self) -> None:
         session = AsyncMock()
         session_factory = MagicMock(return_value=session)

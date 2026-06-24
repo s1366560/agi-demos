@@ -779,12 +779,12 @@ async def _execute_memory_update(
                 )
                 await session.commit()
         except Exception as chunk_err:
-            logger.warning("memory_update: failed to sync searchable chunks: %s", chunk_err)
+            logger.warning(
+                "memory_update: failed to sync searchable chunks error_type=%s",
+                type(chunk_err).__name__,
+            )
 
-        logger.info(
-            "memory_update: updated memory %s",
-            memory.id,
-        )
+        logger.info("memory_update: updated memory")
 
         return json.dumps(
             {
@@ -800,7 +800,7 @@ async def _execute_memory_update(
     except ValueError as e:
         return json.dumps({"error": str(e)})
     except Exception as e:
-        logger.warning("memory_update failed: %s", e)
+        logger.warning("memory_update failed error_type=%s", type(e).__name__)
         await session.rollback()
         return json.dumps({"error": f"Failed to update memory: {e}"})
     finally:
