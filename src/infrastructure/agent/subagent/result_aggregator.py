@@ -153,5 +153,8 @@ class ResultAggregator:
             )
 
         except Exception as e:
-            logger.warning(f"[ResultAggregator] LLM aggregation failed: {e}")
+            logger.warning(
+                "[ResultAggregator] LLM aggregation failed error_type=%s",
+                type(e).__name__,
+            )
             return simple

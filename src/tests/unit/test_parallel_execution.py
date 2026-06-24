@@ -589,12 +589,19 @@ class TestResultAggregator:
         assert "Unified summary" in result.summary
         mock_llm_client.generate.assert_called_once()
 
-    async def test_aggregate_with_llm_failure(self, sample_results, mock_llm_client):
-        mock_llm_client.generate.side_effect = Exception("LLM error")
+    async def test_aggregate_with_llm_failure(self, sample_results, mock_llm_client, caplog):
+        exception_detail = "LLM leaked aggregate content aggregate-secret-1357"
+        mock_llm_client.generate.side_effect = RuntimeError(exception_detail)
         agg = ResultAggregator(llm_client=mock_llm_client)
-        result = await agg.aggregate_with_llm(sample_results)
+        with caplog.at_level(
+            "WARNING", logger="src.infrastructure.agent.subagent.result_aggregator"
+        ):
+            result = await agg.aggregate_with_llm(sample_results)
         # Should fall back to simple aggregation
         assert "coder" in result.summary
+        assert exception_detail not in caplog.text
+        assert "aggregate-secret-1357" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     async def test_aggregate_with_llm_single_result(self, sample_results, mock_llm_client):
         agg = ResultAggregator(llm_client=mock_llm_client)
