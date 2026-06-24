@@ -268,6 +268,40 @@ class TestNativeGraphAdapterAddEpisode:
             user_id=episode.user_id,
         )
 
+    @pytest.mark.asyncio
+    async def test_add_episode_failure_log_redacts_exception_details(
+        self,
+        adapter,
+        mock_neo4j_client,
+        caplog,
+    ):
+        """Add failures should propagate without writing exception details to logs."""
+        secret = "add-episode-secret-1357"
+        mock_neo4j_client.execute_query.side_effect = RuntimeError(secret)
+
+        episode = Episode(
+            id=str(uuid4()),
+            content="Test episode content",
+            source_type=SourceType.TEXT,
+            valid_at=datetime.now(UTC),
+            tenant_id="tenant-1",
+            project_id="project-1",
+            user_id="user-1",
+            metadata={"memory_id": "mem-1"},
+        )
+
+        with (
+            caplog.at_level(
+                logging.ERROR,
+                logger="src.infrastructure.graph.native_graph_adapter",
+            ),
+            pytest.raises(RuntimeError, match=secret),
+        ):
+            await adapter.add_episode(episode)
+
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
 
 @pytest.mark.unit
 class TestNativeGraphAdapterProcessEpisode:
