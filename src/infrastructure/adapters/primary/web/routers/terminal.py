@@ -243,7 +243,10 @@ async def close_terminal_session(
                     session_id=session_id,
                 )
             except Exception as e:
-                logger.warning(f"Failed to publish terminal_stopped event: {e}")
+                logger.warning(
+                    "Failed to publish terminal_stopped event: error_type=%s",
+                    type(e).__name__,
+                )
 
     return {"success": success, "session_id": session_id}
 

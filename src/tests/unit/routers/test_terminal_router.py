@@ -291,6 +291,57 @@ async def test_create_terminal_session_started_event_log_omits_publisher_error_t
 
 
 @pytest.mark.unit
+async def test_close_terminal_session_stopped_event_log_omits_publisher_error_text(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    session = SimpleNamespace(
+        session_id="session-secret",
+        container_id="sandbox-secret",
+        cols=80,
+        rows=24,
+        is_active=True,
+    )
+
+    class WorkingProxy:
+        def get_session(self, _session_id: str) -> object:
+            return session
+
+        async def close_session(self, _session_id: str) -> bool:
+            return True
+
+    event_publisher = SimpleNamespace(
+        publish_terminal_stopped=AsyncMock(
+            side_effect=RuntimeError("terminal stopped publisher secret")
+        )
+    )
+    monkeypatch.setattr(terminal_router, "get_terminal_proxy", lambda: WorkingProxy())
+    monkeypatch.setattr(
+        terminal_router,
+        "get_project_id_from_sandbox",
+        AsyncMock(return_value="project-1"),
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.terminal",
+    )
+
+    response = await terminal_router.close_terminal_session(
+        sandbox_id="sandbox-secret",
+        session_id="session-secret",
+        _user=SimpleNamespace(id="user-1"),
+        event_publisher=event_publisher,
+    )
+
+    assert response == {"success": True, "session_id": "session-secret"}
+    assert "Failed to publish terminal_stopped event" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "terminal stopped publisher secret" not in caplog.text
+    assert "sandbox-secret" not in caplog.text
+    assert "session-secret" not in caplog.text
+
+
+@pytest.mark.unit
 async def test_create_terminal_session_error_log_omits_proxy_exception_text(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
