@@ -548,7 +548,10 @@ class AttachmentService:
                     part = await self.prepare_for_llm(attachment)
                     parts.append(part)
                 except Exception as e:
-                    logger.warning(f"Failed to prepare attachment {attachment.id} for LLM: {e}")
+                    logger.warning(
+                        "Failed to prepare attachment for LLM error_type=%s",
+                        type(e).__name__,
+                    )
         return parts
 
     # ==================== Sandbox Integration ====================
@@ -622,7 +625,10 @@ class AttachmentService:
                     data["attachment_id"] = attachment.id
                     results.append(data)
                 except Exception as e:
-                    logger.warning(f"Failed to prepare attachment {attachment.id} for sandbox: {e}")
+                    logger.warning(
+                        "Failed to prepare attachment for sandbox error_type=%s",
+                        type(e).__name__,
+                    )
         return results
 
     async def mark_sandbox_imported(
@@ -662,7 +668,7 @@ class AttachmentService:
         try:
             await self._storage.delete_file(attachment.object_key)
         except Exception as e:
-            logger.warning(f"Failed to delete attachment file: {e}")
+            logger.warning("Failed to delete attachment file error_type=%s", type(e).__name__)
 
         # Delete record
         await self._repo.delete(attachment_id)

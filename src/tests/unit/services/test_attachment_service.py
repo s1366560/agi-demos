@@ -82,7 +82,9 @@ class _Storage:
         upload_id: str,
         parts: list[PartUploadResult],
     ) -> UploadResult:
-        return UploadResult(object_key=object_key, size_bytes=0, content_type="application/octet-stream")
+        return UploadResult(
+            object_key=object_key, size_bytes=0, content_type="application/octet-stream"
+        )
 
     async def abort_multipart_upload(self, object_key: str, upload_id: str) -> bool:
         return True
@@ -132,6 +134,118 @@ class _Repository:
 
     async def update_sandbox_path(self, attachment_id: str, sandbox_path: str) -> bool:
         return False
+
+
+def _make_attachment(
+    *,
+    attachment_id: str = "attachment-1",
+    purpose: AttachmentPurpose = AttachmentPurpose.LLM_CONTEXT,
+) -> Attachment:
+    return Attachment(
+        id=attachment_id,
+        conversation_id="conversation-1",
+        project_id="project-1",
+        tenant_id="tenant-1",
+        filename="secret.txt",
+        mime_type="text/plain",
+        size_bytes=12,
+        object_key="attachments/tenant/project/conversation/secret.txt",
+        purpose=purpose,
+        status=AttachmentStatus.UPLOADED,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
+@pytest.mark.unit
+async def test_prepare_for_llm_batch_log_omits_attachment_id_and_exception_content(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    secret_attachment_id = "attachment-llm-secret"
+    exception_detail = "llm prepare leaked attachment attachment-llm-secret"
+
+    class _FailingLLMService(AttachmentService):
+        async def prepare_for_llm(self, attachment: Attachment) -> dict[str, Any]:
+            raise RuntimeError(exception_detail)
+
+    service = _FailingLLMService(
+        storage_service=_Storage({}),
+        attachment_repository=_Repository(),
+    )
+
+    with caplog.at_level("WARNING", logger="src.application.services.attachment_service"):
+        result = await service.prepare_for_llm_batch(
+            [_make_attachment(attachment_id=secret_attachment_id)]
+        )
+
+    assert result == []
+    assert secret_attachment_id not in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+async def test_prepare_for_sandbox_batch_log_omits_attachment_id_and_exception_content(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    secret_attachment_id = "attachment-sandbox-secret"
+    exception_detail = "sandbox prepare leaked attachment attachment-sandbox-secret"
+
+    class _FailingSandboxService(AttachmentService):
+        async def prepare_for_sandbox(self, attachment: Attachment) -> dict[str, Any]:
+            raise RuntimeError(exception_detail)
+
+    service = _FailingSandboxService(
+        storage_service=_Storage({}),
+        attachment_repository=_Repository(),
+    )
+
+    with caplog.at_level("WARNING", logger="src.application.services.attachment_service"):
+        result = await service.prepare_for_sandbox_batch(
+            [
+                _make_attachment(
+                    attachment_id=secret_attachment_id,
+                    purpose=AttachmentPurpose.SANDBOX_INPUT,
+                )
+            ]
+        )
+
+    assert result == []
+    assert secret_attachment_id not in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+async def test_delete_log_omits_storage_exception_content(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    secret_attachment_id = "attachment-delete-secret"
+    exception_detail = "delete storage leaked attachment attachment-delete-secret"
+    attachment = _make_attachment(attachment_id=secret_attachment_id)
+
+    class _FailingDeleteStorage(_Storage):
+        async def delete_file(self, object_key: str) -> bool:
+            raise RuntimeError(exception_detail)
+
+    class _DeleteRepository(_Repository):
+        async def get(self, attachment_id: str) -> Attachment | None:
+            return attachment
+
+        async def delete(self, attachment_id: str) -> bool:
+            return True
+
+    service = AttachmentService(
+        storage_service=_FailingDeleteStorage({attachment.object_key: b"secret"}),
+        attachment_repository=_DeleteRepository(),
+    )
+
+    with caplog.at_level("WARNING", logger="src.application.services.attachment_service"):
+        deleted = await service.delete(secret_attachment_id)
+
+    assert deleted is True
+    assert secret_attachment_id not in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
 
 
 @pytest.mark.unit
