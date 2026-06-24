@@ -523,7 +523,10 @@ class ChannelConnectionManager:
                 else:
                     self._message_router(message)
         except Exception as e:
-            logger.error(f"[ChannelManager] Message routing error: {e}")
+            logger.error(
+                "[ChannelManager] Message routing error error_type=%s",
+                type(e).__name__,
+            )
 
     def _schedule_route_message(self, message: Message) -> None:
         """Schedule message routing on the manager's main event loop."""

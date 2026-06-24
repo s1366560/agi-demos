@@ -28,6 +28,30 @@ def _build_message() -> Message:
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_safe_route_message_redacts_router_exception(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Router failures should not log raw exception text."""
+    exception_detail = "router failed channel-router-secret-9753"
+
+    async def _router(_message: Message) -> None:
+        raise RuntimeError(exception_detail)
+
+    manager = ChannelConnectionManager(message_router=_router)
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.channels.connection_manager",
+    ):
+        await manager._safe_route_message(_build_message())
+
+    assert "Message routing error" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
 def test_schedule_route_message_uses_main_loop() -> None:
     """Routing should always be scheduled onto the manager main loop."""
 
