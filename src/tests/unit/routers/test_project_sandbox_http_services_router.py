@@ -128,6 +128,34 @@ class _FailingRedisClientContainer:
         raise RuntimeError("redis client secret")
 
 
+class _FailingSandboxLifecycleEventPublisher:
+    async def publish_sandbox_created(self, **_kwargs: object) -> None:
+        raise RuntimeError("sandbox created secret for proj-1")
+
+    async def publish_sandbox_status(self, **_kwargs: object) -> None:
+        raise RuntimeError("sandbox restarted secret for proj-1")
+
+    async def publish_sandbox_terminated(self, **_kwargs: object) -> None:
+        raise RuntimeError("sandbox terminated secret for proj-1")
+
+
+class _FailingSandboxStateBroadcastManager:
+    def __init__(self, secret: str) -> None:
+        self.secret = secret
+
+    async def broadcast_sandbox_state(self, **_kwargs: object) -> None:
+        raise RuntimeError(self.secret)
+
+
+def _sandbox_info(project_id: str = "proj-1") -> router_mod.SandboxInfo:
+    return router_mod.SandboxInfo(
+        sandbox_id="sandbox-1",
+        project_id=project_id,
+        tenant_id="tenant-project",
+        status="running",
+    )
+
+
 @pytest.mark.unit
 def test_get_event_publisher_error_log_omits_exception_text(
     caplog: pytest.LogCaptureFixture,
@@ -206,6 +234,68 @@ def test_get_http_service_redis_client_for_websocket_error_log_omits_exception_t
     assert "Could not get Redis client for HTTP service websocket routes" in caplog.text
     assert "error_type=RuntimeError" in caplog.text
     assert "redis client secret" not in caplog.text
+
+
+@pytest.mark.unit
+def test_ensure_project_sandbox_publish_error_log_omits_exception_text(
+    sandbox_http_client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.get_or_create_sandbox = AsyncMock(return_value=_sandbox_info())
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_event_publisher] = (
+        lambda: _FailingSandboxLifecycleEventPublisher()
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    response = sandbox_http_client.post(
+        "/api/v1/projects/proj-1/sandbox",
+        json={"profile": "standard"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert "Failed to publish sandbox_created event" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "sandbox created secret" not in caplog.text
+    assert "proj-1" not in caplog.text
+
+
+@pytest.mark.unit
+def test_ensure_project_sandbox_broadcast_error_log_omits_exception_text(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.get_or_create_sandbox = AsyncMock(return_value=_sandbox_info())
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
+        lambda: _FailingSandboxStateBroadcastManager("broadcast created secret for proj-1"),
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    response = sandbox_http_client.post(
+        "/api/v1/projects/proj-1/sandbox",
+        json={"profile": "standard"},
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert "Failed to broadcast sandbox state via WebSocket" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "broadcast created secret" not in caplog.text
+    assert "proj-1" not in caplog.text
 
 
 @pytest.mark.unit
@@ -387,6 +477,62 @@ def test_terminate_project_sandbox_missing_sandbox_is_sanitized(
 
 
 @pytest.mark.unit
+def test_terminate_project_sandbox_publish_error_log_omits_exception_text(
+    sandbox_http_client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.terminate_project_sandbox = AsyncMock(return_value=True)
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_event_publisher] = (
+        lambda: _FailingSandboxLifecycleEventPublisher()
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    response = sandbox_http_client.delete("/api/v1/projects/proj-1/sandbox")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert "Failed to publish sandbox_terminated event" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "sandbox terminated secret" not in caplog.text
+    assert "proj-1" not in caplog.text
+
+
+@pytest.mark.unit
+def test_terminate_project_sandbox_broadcast_error_log_omits_exception_text(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.terminate_project_sandbox = AsyncMock(return_value=True)
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
+        lambda: _FailingSandboxStateBroadcastManager("broadcast terminated secret for proj-1"),
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    response = sandbox_http_client.delete("/api/v1/projects/proj-1/sandbox")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert "Failed to broadcast sandbox state via WebSocket" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "broadcast terminated secret" not in caplog.text
+    assert "proj-1" not in caplog.text
+
+
+@pytest.mark.unit
 def test_restart_project_sandbox_broadcasts_project_tenant_from_access_check(
     sandbox_http_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -424,6 +570,62 @@ def test_restart_project_sandbox_broadcasts_project_tenant_from_access_check(
     lifecycle_service.restart_project_sandbox.assert_awaited_once_with("proj-1")
     manager.broadcast_sandbox_state.assert_awaited_once()
     assert manager.broadcast_sandbox_state.await_args.kwargs["tenant_id"] == "tenant-project"
+
+
+@pytest.mark.unit
+def test_restart_project_sandbox_publish_error_log_omits_exception_text(
+    sandbox_http_client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.restart_project_sandbox = AsyncMock(return_value=_sandbox_info())
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_event_publisher] = (
+        lambda: _FailingSandboxLifecycleEventPublisher()
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    response = sandbox_http_client.post("/api/v1/projects/proj-1/sandbox/restart")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert "Failed to publish sandbox_restarted event" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "sandbox restarted secret" not in caplog.text
+    assert "proj-1" not in caplog.text
+
+
+@pytest.mark.unit
+def test_restart_project_sandbox_broadcast_error_log_omits_exception_text(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.restart_project_sandbox = AsyncMock(return_value=_sandbox_info())
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
+        lambda: _FailingSandboxStateBroadcastManager("broadcast restarted secret for proj-1"),
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    response = sandbox_http_client.post("/api/v1/projects/proj-1/sandbox/restart")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert "Failed to broadcast sandbox state via WebSocket" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "broadcast restarted secret" not in caplog.text
+    assert "proj-1" not in caplog.text
 
 
 @pytest.mark.unit

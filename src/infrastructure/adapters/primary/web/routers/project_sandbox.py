@@ -1417,7 +1417,10 @@ async def ensure_project_sandbox(
                     websocket_url=info.websocket_url,
                 )
             except Exception as e:
-                logger.warning(f"Failed to publish sandbox_created event: {e}")
+                logger.warning(
+                    "Failed to publish sandbox_created event: error_type=%s",
+                    type(e).__name__,
+                )
 
         # Also broadcast via WebSocket for real-time sync
         try:
@@ -1442,7 +1445,10 @@ async def ensure_project_sandbox(
                 },
             )
         except Exception as e:
-            logger.warning(f"Failed to broadcast sandbox state via WebSocket: {e}")
+            logger.warning(
+                "Failed to broadcast sandbox state via WebSocket: error_type=%s",
+                type(e).__name__,
+            )
 
         return ProjectSandboxResponse.from_info(info)
 
@@ -1607,7 +1613,10 @@ async def restart_project_sandbox(
                     status="restarted",
                 )
             except Exception as e:
-                logger.warning(f"Failed to publish sandbox_restarted event: {e}")
+                logger.warning(
+                    "Failed to publish sandbox_restarted event: error_type=%s",
+                    type(e).__name__,
+                )
 
         # Also broadcast via WebSocket for real-time sync
         try:
@@ -1631,7 +1640,10 @@ async def restart_project_sandbox(
                 },
             )
         except Exception as e:
-            logger.warning(f"Failed to broadcast sandbox state via WebSocket: {e}")
+            logger.warning(
+                "Failed to broadcast sandbox state via WebSocket: error_type=%s",
+                type(e).__name__,
+            )
 
         return SandboxActionResponse(
             success=True,
@@ -1674,7 +1686,10 @@ async def terminate_project_sandbox(
                     sandbox_id=project_id,  # Association already deleted
                 )
             except Exception as e:
-                logger.warning(f"Failed to publish sandbox_terminated event: {e}")
+                logger.warning(
+                    "Failed to publish sandbox_terminated event: error_type=%s",
+                    type(e).__name__,
+                )
 
         # Also broadcast via WebSocket for real-time sync
         try:
@@ -1694,7 +1709,10 @@ async def terminate_project_sandbox(
                 },
             )
         except Exception as e:
-            logger.warning(f"Failed to broadcast sandbox state via WebSocket: {e}")
+            logger.warning(
+                "Failed to broadcast sandbox state via WebSocket: error_type=%s",
+                type(e).__name__,
+            )
 
         return SandboxActionResponse(
             success=True,
