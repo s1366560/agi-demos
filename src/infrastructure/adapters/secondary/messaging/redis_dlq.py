@@ -364,7 +364,11 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             try:
                 results[msg_id] = await self.retry_message(msg_id)
             except (DLQMessageNotFoundError, DLQRetryError) as e:
-                logger.warning(f"[DLQ] Batch retry failed for {msg_id}: {e}")
+                logger.warning(
+                    "[DLQ] Batch retry failed error_type=%s has_message_id=%s",
+                    type(e).__name__,
+                    bool(msg_id),
+                )
                 results[msg_id] = False
         return results
 

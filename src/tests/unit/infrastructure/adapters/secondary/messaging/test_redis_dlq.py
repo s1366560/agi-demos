@@ -8,6 +8,7 @@ import pytest
 from src.domain.ports.services.dead_letter_queue_port import (
     DeadLetterMessage,
     DLQMessageStatus,
+    DLQRetryError,
 )
 from src.infrastructure.adapters.secondary.messaging.redis_dlq import RedisDLQAdapter
 
@@ -62,3 +63,31 @@ async def test_retry_message_redacts_publish_failure_log(
     assert "has_message_id=True" in caplog.text
     assert message.error == exception_detail
     assert message.error_traceback is not None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_retry_batch_redacts_retry_error_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Batch retry failures should not log raw exception text or message IDs."""
+    exception_detail = "batch failed dlq-secret-8642"
+    secret_message_id = "dlq-secret-message-9753"
+
+    adapter = RedisDLQAdapter(redis_client=object())  # type: ignore[arg-type]
+    adapter.retry_message = AsyncMock(  # type: ignore[method-assign]
+        side_effect=DLQRetryError(secret_message_id, exception_detail)
+    )
+
+    with caplog.at_level(
+        "WARNING",
+        logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+    ):
+        results = await adapter.retry_batch([secret_message_id])
+
+    assert results == {secret_message_id: False}
+    assert "Batch retry failed" in caplog.text
+    assert exception_detail not in caplog.text
+    assert secret_message_id not in caplog.text
+    assert "error_type=DLQRetryError" in caplog.text
+    assert "has_message_id=True" in caplog.text
