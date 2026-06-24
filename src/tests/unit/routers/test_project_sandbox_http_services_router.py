@@ -122,6 +122,12 @@ class _FailingEventPublisherContainer:
         raise RuntimeError("event publisher secret")
 
 
+class _FailingRedisClientContainer:
+    @property
+    def redis_client(self) -> object:
+        raise RuntimeError("redis client secret")
+
+
 @pytest.mark.unit
 def test_get_event_publisher_error_log_omits_exception_text(
     caplog: pytest.LogCaptureFixture,
@@ -160,6 +166,46 @@ def test_get_event_publisher_for_websocket_error_log_omits_exception_text(
     assert "Could not create websocket event publisher" in caplog.text
     assert "error_type=RuntimeError" in caplog.text
     assert "event publisher secret" not in caplog.text
+
+
+@pytest.mark.unit
+def test_get_http_service_redis_client_error_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(container=_FailingRedisClientContainer()))
+    )
+    caplog.set_level(
+        logging.DEBUG,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    result = router_mod.get_http_service_redis_client(request)
+
+    assert result is None
+    assert "Could not get Redis client for HTTP service routes" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "redis client secret" not in caplog.text
+
+
+@pytest.mark.unit
+def test_get_http_service_redis_client_for_websocket_error_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    websocket = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(container=_FailingRedisClientContainer()))
+    )
+    caplog.set_level(
+        logging.DEBUG,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    result = router_mod.get_http_service_redis_client_for_websocket(websocket)
+
+    assert result is None
+    assert "Could not get Redis client for HTTP service websocket routes" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "redis client secret" not in caplog.text
 
 
 @pytest.mark.unit

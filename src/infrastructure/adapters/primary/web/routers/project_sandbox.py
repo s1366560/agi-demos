@@ -486,7 +486,10 @@ def get_http_service_redis_client(request: Request) -> redis.Redis | None:
         container = request.app.state.container
         return cast(redis.Redis | None, container.redis_client)
     except Exception as e:
-        logger.debug("Could not get Redis client for HTTP service routes: %s", e)
+        logger.debug(
+            "Could not get Redis client for HTTP service routes: error_type=%s",
+            type(e).__name__,
+        )
         return None
 
 
@@ -496,7 +499,10 @@ def get_http_service_redis_client_for_websocket(websocket: WebSocket) -> redis.R
         container = websocket.app.state.container
         return cast(redis.Redis | None, container.redis_client)
     except Exception as e:
-        logger.debug("Could not get Redis client for HTTP service websocket routes: %s", e)
+        logger.debug(
+            "Could not get Redis client for HTTP service websocket routes: error_type=%s",
+            type(e).__name__,
+        )
         return None
 
 
