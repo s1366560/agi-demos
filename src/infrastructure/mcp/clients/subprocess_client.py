@@ -431,4 +431,4 @@ class MCPSubprocessClient:
             self._proc.stdin.write(notification_str.encode())
             await self._proc.stdin.drain()
         except Exception as e:
-            logger.error(f"MCP notification error: {e}")
+            logger.error("MCP notification error error_type=%s", type(e).__name__)

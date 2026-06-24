@@ -338,3 +338,23 @@ class TestSubprocessCancelLadder:
         assert "error_type=RuntimeError" in caplog.text
         assert secret_error not in caplog.text
         client._send_request.assert_awaited_once_with("ping", {}, timeout=0.01)  # type: ignore[attr-defined]
+
+    async def test_notification_error_log_redacts_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPSubprocessClient(command="echo", args=["stub"])
+        secret_error = "notification-secret-token"
+        proc = MagicMock()
+        proc.stdin.write = MagicMock(side_effect=RuntimeError(secret_error))
+        proc.stdin.drain = AsyncMock()
+        client._proc = proc  # type: ignore[assignment]
+
+        with caplog.at_level(logging.ERROR, logger=SUBPROCESS_LOGGER_NAME):
+            await client._send_notification("notifications/cancelled", {"token": "redacted"})
+
+        assert "MCP notification error" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert secret_error not in caplog.text
+        proc.stdin.write.assert_called_once()
+        proc.stdin.drain.assert_not_awaited()
