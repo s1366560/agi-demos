@@ -368,6 +368,33 @@ class TestRedisHITLMessageBusLogging:
         assert "has_consumer_group=True" in caplog.text
         assert "has_consumer_name=True" in caplog.text
 
+    def test_parse_stream_message_warning_redacts_message_id_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        adapter = RedisHITLMessageBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_message_id = "secret-message-id-4190"
+        secret_message_type = "secret-message-type"
+
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            message = adapter._parse_stream_message(
+                secret_message_id,
+                {
+                    "data": (
+                        '{"request_id": "hitl-secret-request-4190", '
+                        f'"message_type": "{secret_message_type}", "payload": {{}}}}'
+                    )
+                },
+            )
+
+        assert message is None
+        assert "Failed to parse message" in caplog.text
+        assert secret_message_id not in caplog.text
+        assert secret_message_type not in caplog.text
+        assert "error_type=ValueError" in caplog.text
+        assert "has_message_id=True" in caplog.text
+
     @pytest.mark.asyncio
     async def test_read_pending_messages_warning_redacts_stream_group_consumer_and_exception(
         self,

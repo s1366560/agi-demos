@@ -312,8 +312,12 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 metadata=data.get("metadata"),
             )
 
-        except Exception as e:
-            logger.warning(f"[HITLMessageBus] Failed to parse message {msg_id}: {e}")
+        except Exception as exc:
+            logger.warning(
+                "[HITLMessageBus] Failed to parse message error_type=%s has_message_id=%s",
+                type(exc).__name__,
+                bool(msg_id),
+            )
             return None
 
     async def acknowledge(
