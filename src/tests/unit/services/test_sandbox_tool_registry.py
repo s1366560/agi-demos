@@ -131,6 +131,40 @@ class TestSandboxToolRegistry:
         mock_adapter.list_tools.assert_called_once_with("abc123")
 
     @pytest.mark.asyncio
+    async def test_register_sandbox_tools_success_log_omits_identifiers(
+        self, registry, mock_adapter, caplog
+    ):
+        """Test successful registration logs do not expose sandbox or project IDs."""
+        caplog.set_level(logging.INFO, logger="src.application.services.sandbox_tool_registry")
+        mock_adapter.list_tools.return_value = [
+            {"name": "secret-tool-name", "description": "Execute bash"},
+        ]
+
+        tools = await registry.register_sandbox_tools(
+            sandbox_id="secret-sandbox-id",
+            project_id="secret-project-id",
+            tenant_id="tenant-1",
+            tools=None,
+        )
+
+        assert tools == ["secret-tool-name"]
+
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_tool_registry"
+        )
+        assert "Registering tools" in message
+        assert "Fetched tools" in message
+        assert "Registered tools" in message
+        assert "secret-sandbox-id" not in message
+        assert "secret-project-id" not in message
+        assert "secret-tool-name" not in message
+        assert "has_sandbox_id=True" in message
+        assert "has_project_id=True" in message
+        assert "tool_count=1" in message
+
+    @pytest.mark.asyncio
     async def test_register_sandbox_tools_adapter_error(self, registry, mock_adapter, caplog):
         """Test handling adapter error gracefully."""
         caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
@@ -198,6 +232,33 @@ class TestSandboxToolRegistry:
 
         assert result is True
         assert "abc123" not in registry._registrations
+
+    @pytest.mark.asyncio
+    async def test_unregister_sandbox_tools_success_log_omits_identifier(self, registry, caplog):
+        """Test successful unregister logs do not expose sandbox IDs."""
+        await registry.register_sandbox_tools(
+            sandbox_id="secret-sandbox-id",
+            project_id="secret-project-id",
+            tenant_id="tenant-1",
+            tools=["bash"],
+        )
+        caplog.set_level(logging.INFO, logger="src.application.services.sandbox_tool_registry")
+        caplog.clear()
+
+        result = await registry.unregister_sandbox_tools("secret-sandbox-id")
+
+        assert result is True
+
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_tool_registry"
+        )
+        assert "Unregistered tools" in message
+        assert "secret-sandbox-id" not in message
+        assert "secret-project-id" not in message
+        assert "has_sandbox_id=True" in message
+        assert "tool_count=1" in message
 
     @pytest.mark.asyncio
     async def test_unregister_sandbox_tools_not_found(self, registry, caplog):
@@ -461,6 +522,40 @@ class TestSandboxToolRegistry:
         assert result is True
         assert "abc123" in registry._registrations
         assert registry._registrations["abc123"].tool_names == ["bash", "file_read"]
+
+    @pytest.mark.asyncio
+    async def test_restore_from_redis_success_log_omits_identifier(
+        self, registry, mock_redis, caplog
+    ):
+        """Test successful restore logs do not expose sandbox IDs or tool names."""
+        import json
+        from datetime import datetime
+
+        registration_data = {
+            "sandbox_id": "secret-sandbox-id",
+            "project_id": "secret-project-id",
+            "tenant_id": "tenant-1",
+            "tool_names": ["secret-tool-name"],
+            "registered_at": datetime.now().isoformat(),
+        }
+        mock_redis.get = AsyncMock(return_value=json.dumps(registration_data))
+        caplog.set_level(logging.INFO, logger="src.application.services.sandbox_tool_registry")
+
+        result = await registry.restore_from_redis("secret-sandbox-id")
+
+        assert result is True
+
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_tool_registry"
+        )
+        assert "Restored registration" in message
+        assert "secret-sandbox-id" not in message
+        assert "secret-project-id" not in message
+        assert "secret-tool-name" not in message
+        assert "has_sandbox_id=True" in message
+        assert "tool_count=1" in message
 
     @pytest.mark.asyncio
     async def test_restore_from_redis_not_found(self, registry, mock_redis):

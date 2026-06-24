@@ -86,8 +86,9 @@ class SandboxToolRegistry:
             List of registered tool names (namespaced)
         """
         logger.info(
-            f"[SandboxToolRegistry] Registering tools for sandbox={sandbox_id}, "
-            f"project={project_id}"
+            "[SandboxToolRegistry] Registering tools: has_sandbox_id=%s has_project_id=%s",
+            bool(sandbox_id),
+            bool(project_id),
         )
 
         # If tools not provided, fetch from MCP adapter
@@ -96,7 +97,9 @@ class SandboxToolRegistry:
                 tool_list = await self._mcp_adapter.list_tools(sandbox_id)
                 tools = [t["name"] for t in tool_list]
                 logger.info(
-                    f"[SandboxToolRegistry] Fetched {len(tools)} tools from sandbox={sandbox_id}"
+                    "[SandboxToolRegistry] Fetched tools: has_sandbox_id=%s tool_count=%s",
+                    bool(sandbox_id),
+                    len(tools),
                 )
             except Exception as e:
                 logger.warning(
@@ -127,7 +130,11 @@ class SandboxToolRegistry:
         if self._redis:
             await self._save_to_redis(registration)
 
-        logger.info(f"[SandboxToolRegistry] Registered {len(tools)} tools for sandbox={sandbox_id}")
+        logger.info(
+            "[SandboxToolRegistry] Registered tools: has_sandbox_id=%s tool_count=%s",
+            bool(sandbox_id),
+            len(tools),
+        )
 
         return tools
 
@@ -158,8 +165,9 @@ class SandboxToolRegistry:
             await self._clear_from_redis(sandbox_id, registration.project_id)
 
         logger.info(
-            f"[SandboxToolRegistry] Unregistered {len(registration.tool_names)} tools "
-            f"for sandbox={sandbox_id}"
+            "[SandboxToolRegistry] Unregistered tools: has_sandbox_id=%s tool_count=%s",
+            bool(sandbox_id),
+            len(registration.tool_names),
         )
 
         return True
@@ -362,7 +370,12 @@ class SandboxToolRegistry:
         registration = await self.load_from_redis(sandbox_id)
         if registration:
             self._registrations[sandbox_id] = registration
-            logger.info(f"[SandboxToolRegistry] Restored registration for sandbox={sandbox_id}")
+            logger.info(
+                "[SandboxToolRegistry] Restored registration: "
+                "has_sandbox_id=%s tool_count=%s",
+                bool(sandbox_id),
+                len(registration.tool_names),
+            )
             return True
 
         return False
