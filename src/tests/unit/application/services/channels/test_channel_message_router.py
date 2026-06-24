@@ -307,6 +307,34 @@ async def test_find_or_create_conversation_config_log_omits_config_id(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_store_message_history_failure_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Message history persistence failures should not expose exception details."""
+    router = ChannelMessageRouter()
+    message = _build_message(
+        text="hello",
+        raw_data={"_routing": {"channel_config_id": "cfg-1", "channel_message_id": "msg-1"}},
+    )
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.side_effect = RuntimeError("secret-history-token")
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+        return_value=session_ctx,
+    ):
+        await router._store_message_history(message, "conv-1")
+
+    assert "secret-history-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_process_media_if_needed_logs_metadata_without_media_identifiers(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

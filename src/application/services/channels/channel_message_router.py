@@ -684,7 +684,10 @@ class ChannelMessageRouter:
                 await session.commit()
 
         except Exception as e:
-            logger.warning(f"[MessageRouter] Failed to store message history: {e}")
+            logger.warning(
+                "[MessageRouter] Failed to store message history: error_type=%s",
+                type(e).__name__,
+            )
 
     def _to_json_safe(self, value: Any, *, _depth: int = 0) -> Any:
         """Convert payload value into JSON-serializable primitives."""
