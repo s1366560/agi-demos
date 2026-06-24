@@ -717,6 +717,32 @@ class TestSandboxOrchestrator:
         assert status.running is False
         assert status.url is None
 
+    def test_parse_desktop_result_empty_content_log_omits_result(self, orchestrator, caplog):
+        """Test desktop empty-content logs omit raw MCP result."""
+        result = {
+            "content": [],
+            "is_error": True,
+            "error": "desktop status leaked secret desktop-empty-secret-9753",
+        }
+        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_orchestrator")
+
+        status = orchestrator._parse_desktop_result(result)
+
+        assert status.running is False
+        assert status.url is None
+        target_records = [
+            record
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_orchestrator"
+            and record.levelno >= logging.WARNING
+        ]
+        assert len(target_records) == 1
+        message = target_records[0].getMessage()
+        assert "Desktop result has no content" in message
+        assert "content_items=0" in message
+        assert "desktop-empty-secret-9753" not in message
+        assert "desktop status leaked secret" not in message
+
     def test_parse_desktop_result_invalid_json(self, orchestrator):
         """Test parsing desktop result with invalid JSON."""
         result = {
@@ -728,6 +754,34 @@ class TestSandboxOrchestrator:
 
         assert status.running is False
         assert status.url is None
+
+    def test_parse_desktop_result_invalid_json_log_omits_content(self, orchestrator, caplog):
+        """Test desktop parse failure logs omit raw MCP content."""
+        secret_content = "desktop parse leaked secret token desktop-secret-1357"
+        result = {
+            "content": [{"text": secret_content}],
+            "is_error": False,
+        }
+        caplog.set_level(logging.ERROR, logger="src.application.services.sandbox_orchestrator")
+
+        status = orchestrator._parse_desktop_result(result)
+
+        assert status.running is False
+        assert status.url is None
+        target_records = [
+            record
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_orchestrator"
+            and record.levelno >= logging.ERROR
+        ]
+        assert len(target_records) == 1
+        message = target_records[0].getMessage()
+        assert "Failed to parse desktop result" in message
+        assert "error_type=JSONDecodeError" in message
+        assert "content_items=1" in message
+        assert secret_content not in message
+        assert "desktop-secret-1357" not in message
+        assert target_records[0].exc_info is None
 
     def test_parse_terminal_result_running(self, orchestrator):
         """Test parsing terminal result when running."""
@@ -766,6 +820,34 @@ class TestSandboxOrchestrator:
         assert status.running is False
         assert status.url is None
 
+    def test_parse_terminal_result_invalid_json_log_omits_content(self, orchestrator, caplog):
+        """Test terminal parse failure logs omit raw MCP content."""
+        secret_content = "terminal parse leaked secret token terminal-secret-2468"
+        result = {
+            "content": [{"text": secret_content}],
+            "is_error": False,
+        }
+        caplog.set_level(logging.ERROR, logger="src.application.services.sandbox_orchestrator")
+
+        status = orchestrator._parse_terminal_result(result)
+
+        assert status.running is False
+        assert status.url is None
+        target_records = [
+            record
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_orchestrator"
+            and record.levelno >= logging.ERROR
+        ]
+        assert len(target_records) == 1
+        message = target_records[0].getMessage()
+        assert "Failed to parse terminal result" in message
+        assert "error_type=JSONDecodeError" in message
+        assert "content_items=1" in message
+        assert secret_content not in message
+        assert "terminal-secret-2468" not in message
+        assert target_records[0].exc_info is None
+
     def test_parse_terminal_result_empty_content(self, orchestrator):
         """Test parsing terminal result with empty content."""
         result = {"content": [], "is_error": False}
@@ -774,3 +856,29 @@ class TestSandboxOrchestrator:
 
         assert status.running is False
         assert status.url is None
+
+    def test_parse_terminal_result_empty_content_log_omits_result(self, orchestrator, caplog):
+        """Test terminal empty-content logs omit raw MCP result."""
+        result = {
+            "content": [],
+            "is_error": True,
+            "error": "terminal status leaked secret terminal-empty-secret-8642",
+        }
+        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_orchestrator")
+
+        status = orchestrator._parse_terminal_result(result)
+
+        assert status.running is False
+        assert status.url is None
+        target_records = [
+            record
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_orchestrator"
+            and record.levelno >= logging.WARNING
+        ]
+        assert len(target_records) == 1
+        message = target_records[0].getMessage()
+        assert "Terminal result has no content" in message
+        assert "content_items=0" in message
+        assert "terminal-empty-secret-8642" not in message
+        assert "terminal status leaked secret" not in message

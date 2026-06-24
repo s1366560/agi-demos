@@ -411,7 +411,11 @@ class SandboxOrchestrator:
         """Parse MCP tool result to DesktopStatus."""
         content_list = result.get("content", [])
         if not content_list:
-            logger.warning(f"Desktop result has no content: {result}")
+            logger.warning(
+                "Desktop result has no content content_items=%s is_error=%s",
+                len(content_list),
+                bool(result.get("is_error")),
+            )
             return DesktopStatus(running=False, url=None, display="", resolution="", port=0)
 
         try:
@@ -431,20 +435,36 @@ class SandboxOrchestrator:
                 encoding=data.get("encoding", "webp"),
             )
         except (json.JSONDecodeError, ValueError, KeyError) as e:
-            logger.error(f"Failed to parse desktop result: {e}, content: {content_list}")
+            logger.error(
+                "Failed to parse desktop result error_type=%s content_items=%s",
+                type(e).__name__,
+                len(content_list),
+            )
             return DesktopStatus(running=False, url=None, display="", resolution="", port=0)
 
     def _parse_terminal_result(self, result: dict[str, Any]) -> TerminalStatus:
         """Parse MCP tool result to TerminalStatus."""
-        logger.debug(f"Parsing terminal result: {result}")
         content_list = result.get("content", [])
+        logger.debug(
+            "Parsing terminal result content_items=%s is_error=%s",
+            len(content_list),
+            bool(result.get("is_error")),
+        )
         if not content_list:
-            logger.warning(f"Terminal result has no content: {result}")
+            logger.warning(
+                "Terminal result has no content content_items=%s is_error=%s",
+                len(content_list),
+                bool(result.get("is_error")),
+            )
             return TerminalStatus(running=False, url=None, port=0)
 
         try:
             text_content = content_list[0].get("text", "{}")
-            logger.debug(f"Terminal result text: {text_content}")
+            logger.debug(
+                "Terminal result text received has_text=%s text_length=%s",
+                bool(text_content),
+                len(text_content),
+            )
             data = json.loads(text_content)
             # If success is True, consider terminal as running
             running = data.get("running", data.get("success", False))
@@ -455,5 +475,9 @@ class SandboxOrchestrator:
                 pid=data.get("pid"),
             )
         except (json.JSONDecodeError, ValueError, KeyError) as e:
-            logger.error(f"Failed to parse terminal result: {e}, content: {content_list}")
+            logger.error(
+                "Failed to parse terminal result error_type=%s content_items=%s",
+                type(e).__name__,
+                len(content_list),
+            )
             return TerminalStatus(running=False, url=None, port=0)
