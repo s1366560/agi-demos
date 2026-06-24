@@ -232,6 +232,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
         except redis.RedisError as e:
             logger.error(f"[DLQ] Failed to get messages: {e}")
             return []
+
     async def count_messages(
         self,
         *,
@@ -278,7 +279,6 @@ class RedisDLQAdapter(DeadLetterQueuePort):
         except redis.RedisError as e:
             logger.error(f"[DLQ] Failed to count messages: {e}")
             return 0
-
 
     async def retry_message(self, message_id: str) -> bool:
         """Retry a DLQ message."""
@@ -335,7 +335,11 @@ class RedisDLQAdapter(DeadLetterQueuePort):
 
                     await self._update_message(message)
 
-                    logger.warning(f"[DLQ] Retry failed for {message_id}: {e}")
+                    logger.warning(
+                        "[DLQ] Retry failed error_type=%s has_message_id=%s",
+                        type(e).__name__,
+                        bool(message_id),
+                    )
                     return False
             else:
                 # No event bus configured
@@ -479,8 +483,12 @@ class RedisDLQAdapter(DeadLetterQueuePort):
 
             # Update stats
             if count > 0:
-                await cast(Awaitable[int], self._redis.hincrby(self.STATS_KEY, "pending_count", -count))
-                await cast(Awaitable[int], self._redis.hincrby(self.STATS_KEY, "expired_count", count))
+                await cast(
+                    Awaitable[int], self._redis.hincrby(self.STATS_KEY, "pending_count", -count)
+                )
+                await cast(
+                    Awaitable[int], self._redis.hincrby(self.STATS_KEY, "expired_count", count)
+                )
 
             logger.info(f"[DLQ] Cleaned up {count} expired messages")
             return count
@@ -537,7 +545,9 @@ class RedisDLQAdapter(DeadLetterQueuePort):
     async def _update_message(self, message: DeadLetterMessage) -> None:
         """Update a message in Redis."""
         message_key = self._message_key(message.id)
-        await cast(Awaitable[int], self._redis.hset(message_key, "data", json.dumps(message.to_dict())))
+        await cast(
+            Awaitable[int], self._redis.hset(message_key, "data", json.dumps(message.to_dict()))
+        )
 
     async def _remove_from_indexes(self, message: DeadLetterMessage) -> None:
         """Remove a message from all indexes."""
