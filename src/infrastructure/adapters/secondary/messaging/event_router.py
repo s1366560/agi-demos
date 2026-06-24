@@ -289,7 +289,7 @@ class EventRouter:
                 await registration.handler(event)
                 result.handlers_invoked += 1
             except Exception as e:
-                logger.error(f"[EventRouter] Handler '{registration.name}' failed: {e}")
+                self._log_handler_failure(registration, e)
                 result.errors.append((registration.name or "unknown", e))
                 if not self._continue_on_error:
                     break
@@ -301,7 +301,7 @@ class EventRouter:
         result: RoutingResult,
     ) -> None:
         """Execute handlers in parallel."""
-        tasks = []
+        tasks: list[tuple[HandlerRegistration, asyncio.Task[None]]] = []
         for registration in handlers:
             task = asyncio.create_task(
                 self._safe_invoke(registration, event),
@@ -315,7 +315,7 @@ class EventRouter:
                 await task
                 result.handlers_invoked += 1
             except Exception as e:
-                logger.error(f"[EventRouter] Handler '{registration.name}' failed: {e}")
+                self._log_handler_failure(registration, e)
                 result.errors.append((registration.name or "unknown", e))
 
     async def _safe_invoke(
@@ -325,6 +325,23 @@ class EventRouter:
     ) -> None:
         """Safely invoke a handler."""
         await registration.handler(event)
+
+    def _log_handler_failure(self, registration: HandlerRegistration, error: Exception) -> None:
+        """Log handler failures without exposing handler or exception details."""
+        logger.error(
+            " ".join(
+                (
+                    "[EventRouter] Handler failed error_type=%s",
+                    "parallel_execution=%s",
+                    "continue_on_error=%s",
+                    "has_handler_name=%s",
+                )
+            ),
+            type(error).__name__,
+            self._parallel,
+            self._continue_on_error,
+            bool(registration.name),
+        )
 
     def get_handlers_for_pattern(self, pattern: str) -> list[HandlerRegistration]:
         """Get all handlers registered for a specific pattern."""

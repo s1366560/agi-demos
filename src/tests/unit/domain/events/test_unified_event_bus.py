@@ -30,6 +30,7 @@ from src.infrastructure.adapters.secondary.messaging.redis_unified_event_bus imp
 )
 
 LOGGER_NAME = "src.infrastructure.adapters.secondary.messaging.redis_unified_event_bus"
+EVENT_ROUTER_LOGGER_NAME = "src.infrastructure.adapters.secondary.messaging.event_router"
 
 
 class _RedisStreamSubscribeFake:
@@ -595,6 +596,38 @@ class TestEventRouter:
         assert len(result.errors) == 1
         assert result.errors[0][0] == "failing_handler"
         assert result.success is False
+
+    @pytest.mark.parametrize("parallel_execution", [False, True])
+    @pytest.mark.asyncio
+    async def test_route_handler_error_log_redacts_handler_name_and_exception(
+        self,
+        sample_event,
+        caplog: pytest.LogCaptureFixture,
+        parallel_execution: bool,
+    ) -> None:
+        """Test handler errors keep details in result while logs stay redacted."""
+        secret_handler_name = "secret-handler-for-conversation-123"
+        exception_detail = "handler secret token unavailable"
+        router = EventRouter(parallel_execution=parallel_execution)
+
+        async def failing_handler(event):
+            raise ValueError(exception_detail)
+
+        router.register("agent.*", failing_handler, name=secret_handler_name)
+
+        with caplog.at_level(logging.ERROR, logger=EVENT_ROUTER_LOGGER_NAME):
+            result = await router.route(sample_event)
+
+        assert result.handled is False
+        assert len(result.errors) == 1
+        assert result.errors[0][0] == secret_handler_name
+        assert str(result.errors[0][1]) == exception_detail
+        assert "Handler failed" in caplog.text
+        assert secret_handler_name not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=ValueError" in caplog.text
+        assert f"parallel_execution={parallel_execution}" in caplog.text
+        assert "has_handler_name=True" in caplog.text
 
     @pytest.mark.asyncio
     async def test_route_continue_on_error(self, router, sample_event):
