@@ -394,7 +394,11 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             return True
 
         except Exception as e:
-            logger.error(f"[DLQ] Error discarding {message_id}: {e}")
+            logger.error(
+                "[DLQ] Error discarding error_type=%s has_message_id=%s",
+                type(e).__name__,
+                bool(message_id),
+            )
             return False
 
     async def discard_batch(

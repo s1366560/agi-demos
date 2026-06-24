@@ -91,3 +91,41 @@ async def test_retry_batch_redacts_retry_error_log(
     assert secret_message_id not in caplog.text
     assert "error_type=DLQRetryError" in caplog.text
     assert "has_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_discard_message_redacts_update_failure_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Discard failures should not log raw exception text or message IDs."""
+    exception_detail = "discard failed dlq-secret-5319"
+    secret_message_id = "dlq-secret-message-7531"
+
+    message = DeadLetterMessage(
+        id=secret_message_id,
+        event_id="event-1",
+        event_type="event.type",
+        event_data="{}",
+        routing_key="routing.secret",
+        error="original error",
+        error_type="RuntimeError",
+        status=DLQMessageStatus.PENDING,
+    )
+    adapter = RedisDLQAdapter(redis_client=object())  # type: ignore[arg-type]
+    adapter.get_message = AsyncMock(return_value=message)  # type: ignore[method-assign]
+    adapter._update_message = AsyncMock(side_effect=RuntimeError(exception_detail))  # type: ignore[method-assign]
+    adapter._update_stats_on_discard = AsyncMock()  # type: ignore[method-assign]
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+    ):
+        discarded = await adapter.discard_message(secret_message_id, "operator-secret")
+
+    assert discarded is False
+    assert "Error discarding" in caplog.text
+    assert exception_detail not in caplog.text
+    assert secret_message_id not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "has_message_id=True" in caplog.text
