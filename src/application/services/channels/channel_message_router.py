@@ -1042,7 +1042,10 @@ class ChannelMessageRouter:
             cardkit_mgr = CardKitStreamingManager(cast(Any, streaming_adapter))
             cardkit_state = await cardkit_mgr.start_streaming(message.chat_id, reply_to=reply_to)
         except Exception as e:
-            logger.warning(f"[MessageRouter] CardKit start failed: {e}")
+            logger.warning(
+                "[MessageRouter] CardKit start failed: error_type=%s",
+                type(e).__name__,
+            )
 
         if not cardkit_state:
             # Fall back to legacy

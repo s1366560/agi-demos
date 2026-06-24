@@ -1256,6 +1256,42 @@ async def test_patch_streaming_card_failure_log_omits_exception_text(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_run_cardkit_updater_start_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """CardKit start failures should not expose chat IDs or exception details."""
+    router = ChannelMessageRouter()
+    router._run_legacy_card_updater = AsyncMock()
+    message = _build_message(text="hello")
+    message.chat_id = "secret-chat-id"
+    stream_state = SimpleNamespace(stream_done=True)
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.infrastructure.adapters.secondary.channels.channel_plugin_loader.load_channel_module",
+        side_effect=RuntimeError("secret-cardkit-token"),
+    ):
+        await router._run_cardkit_updater(
+            message,
+            "secret-conversation-id",
+            SimpleNamespace(),
+            stream_state,
+            reply_to="secret-reply-id",
+        )
+
+    router._run_legacy_card_updater.assert_awaited_once()
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-conversation-id" not in caplog.text
+    assert "secret-reply-id" not in caplog.text
+    assert "secret-cardkit-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_invoke_agent_uses_cardkit_streaming_when_available() -> None:
     """When adapter supports CardKit, the CardKit streaming path is used."""
     router = ChannelMessageRouter()
