@@ -2088,7 +2088,12 @@ async def register_project_http_service(
                     restart_token=stored.restart_token,
                 )
         except Exception as e:
-            logger.warning("Failed to publish %s event for %s: %s", event_type, service_id, e)
+            logger.warning(
+                "Failed to publish %s event: has_service_id=%s error_type=%s",
+                event_type,
+                bool(service_id),
+                type(e).__name__,
+            )
 
     try:
         from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
@@ -2115,7 +2120,11 @@ async def register_project_http_service(
             },
         )
     except Exception as e:
-        logger.warning("Failed to broadcast %s websocket state: %s", event_type, e)
+        logger.warning(
+            "Failed to broadcast %s websocket state: error_type=%s",
+            event_type,
+            type(e).__name__,
+        )
 
     return HttpServiceResponse(
         service_id=stored.service_id,
