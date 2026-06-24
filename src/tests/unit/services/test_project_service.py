@@ -314,6 +314,33 @@ async def test_add_member_success(project_service, mock_project_repo, mock_user_
 
 
 @pytest.mark.asyncio
+async def test_add_member_logs_do_not_include_project_or_user_identifiers(
+    project_service,
+    mock_project_repo,
+    mock_user_repo,
+    caplog,
+):
+    """Member-add logs must not expose project or user IDs."""
+    secret_project_id = "project-secret-member-123"
+    secret_user_id = "user-secret-member-456"
+    mock_project = Mock()
+    mock_project.id = secret_project_id
+    mock_project.member_ids = ["owner-123"]
+    mock_project_repo.find_by_id.return_value = mock_project
+
+    mock_user = Mock()
+    mock_user.id = secret_user_id
+    mock_user_repo.find_by_id.return_value = mock_user
+    caplog.set_level(logging.INFO, logger="src.application.services.project_service")
+
+    await project_service.add_member(secret_project_id, secret_user_id)
+
+    assert secret_project_id not in caplog.text
+    assert secret_user_id not in caplog.text
+    assert "member_count=2" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_add_member_already_exists(project_service, mock_project_repo, mock_user_repo):
     """Test adding a user who is already a member"""
     mock_project = Mock()
@@ -330,6 +357,33 @@ async def test_add_member_already_exists(project_service, mock_project_repo, moc
 
     # Should not call save (no changes needed)
     # Note: Depending on implementation, this might still call save
+
+
+@pytest.mark.asyncio
+async def test_add_member_existing_logs_do_not_include_project_or_user_identifiers(
+    project_service,
+    mock_project_repo,
+    mock_user_repo,
+    caplog,
+):
+    """Duplicate-member logs must not expose project or user IDs."""
+    secret_project_id = "project-secret-member-duplicate"
+    secret_user_id = "user-secret-member-duplicate"
+    mock_project = Mock()
+    mock_project.id = secret_project_id
+    mock_project.member_ids = ["owner-123", secret_user_id]
+    mock_project_repo.find_by_id.return_value = mock_project
+
+    mock_user = Mock()
+    mock_user.id = secret_user_id
+    mock_user_repo.find_by_id.return_value = mock_user
+    caplog.set_level(logging.WARNING, logger="src.application.services.project_service")
+
+    await project_service.add_member(secret_project_id, secret_user_id)
+
+    assert secret_project_id not in caplog.text
+    assert secret_user_id not in caplog.text
+    assert "member_count=2" in caplog.text
 
 
 @pytest.mark.asyncio

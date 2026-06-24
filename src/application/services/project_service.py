@@ -203,14 +203,16 @@ class ProjectService:
             raise ValueError(f"User {user_id} not found")
 
         if user_id in project.member_ids:
-            logger.warning(f"User {user_id} is already a member of project {project_id}")
+            logger.warning(
+                "User is already a project member member_count=%d", len(project.member_ids)
+            )
             return
 
         project.member_ids.append(user_id)
         project.updated_at = datetime.now(UTC)
 
         await self._project_repo.save(project)
-        logger.info(f"Added user {user_id} to project {project_id}")
+        logger.info("Added project member member_count=%d", len(project.member_ids))
 
     async def remove_member(self, project_id: str, user_id: str) -> None:
         """
