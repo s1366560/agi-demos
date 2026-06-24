@@ -5,9 +5,12 @@ WebSocket connections.
 """
 
 import asyncio
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+LOGGER_NAME = "src.infrastructure.mcp.clients.mcp_connection_pool"
 
 
 class TestMCPConnectionPoolBasics:
@@ -177,6 +180,26 @@ class TestConnectionPoolDisconnect:
         # Disconnected connection should not be in pool
         assert pool.available_count == 0
         mock_client.disconnect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_return_disconnected_connection_log_redacts_disconnect_error(self, caplog):
+        """Failed disconnects for dead clients should not leak exception text."""
+        from src.infrastructure.mcp.clients.mcp_connection_pool import MCPConnectionPool
+
+        pool = MCPConnectionPool(url="ws://localhost:8765", pool_size=3)
+        secret_error = "disconnect-secret-token"
+        mock_client = MagicMock()
+        mock_client.is_connected = False
+        mock_client.disconnect = AsyncMock(side_effect=RuntimeError(secret_error))
+
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            await pool.return_connection(mock_client)
+
+        assert pool.available_count == 0
+        assert "Error disconnecting client" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert secret_error not in caplog.text
+        mock_client.disconnect.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_get_connection_skips_disconnected(self):

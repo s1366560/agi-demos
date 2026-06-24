@@ -167,7 +167,7 @@ class MCPConnectionPool:
             try:
                 await client.disconnect()
             except Exception as e:
-                logger.warning(f"Error disconnecting client: {e}")
+                logger.warning("Error disconnecting client error_type=%s", type(e).__name__)
             async with self._lock:
                 self._created_count -= 1
             self._semaphore.release()
