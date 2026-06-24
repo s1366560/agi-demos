@@ -382,6 +382,77 @@ async def test_health_check_loop_redacts_loop_error(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_start_all_redacts_connection_start_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Startup connection failures should not log raw config IDs or exception text."""
+    exception_detail = "startup failed channel-start-secret-1357"
+    secret_config_id = "channel-config-secret-2468"
+
+    class _SessionContext:
+        @staticmethod
+        async def __aenter__() -> object:
+            return object()
+
+        @staticmethod
+        async def __aexit__(*args: object) -> None:
+            return None
+
+    class _FakeOutboxRetryWorker:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        @staticmethod
+        def start() -> None:
+            return None
+
+    manager = ChannelConnectionManager(session_factory=lambda: _SessionContext())
+    manager._list_all_enabled = AsyncMock(  # type: ignore[method-assign]
+        return_value=[
+            SimpleNamespace(
+                id=secret_config_id,
+                enabled=True,
+                channel_type="feishu",
+                project_id="project-1",
+            )
+        ]
+    )
+    manager.add_connection = AsyncMock(  # type: ignore[method-assign]
+        side_effect=RuntimeError(exception_detail)
+    )
+
+    fake_task = SimpleNamespace(done=lambda: False)
+
+    def _fake_create_task(coro):
+        coro.close()
+        return fake_task
+
+    with (
+        patch(
+            "src.infrastructure.channels.connection_manager.OutboxRetryWorker",
+            _FakeOutboxRetryWorker,
+        ),
+        patch(
+            "src.infrastructure.channels.connection_manager.asyncio.create_task",
+            side_effect=_fake_create_task,
+        ),
+        caplog.at_level(
+            "ERROR",
+            logger="src.infrastructure.channels.connection_manager",
+        ),
+    ):
+        started = await manager.start_all()
+
+    assert started == 0
+    assert "Failed to start connection" in caplog.text
+    assert exception_detail not in caplog.text
+    assert secret_config_id not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "has_config_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_add_connection_refreshes_closed_main_loop() -> None:
     """add_connection should refresh stale closed loop reference."""
 

@@ -185,7 +185,11 @@ class ChannelConnectionManager:
                 await self.add_connection(config)
                 started += 1
             except Exception as e:
-                logger.error(f"[ChannelManager] Failed to start connection {config.id}: {e}")
+                logger.error(
+                    "[ChannelManager] Failed to start connection error_type=%s has_config_id=%s",
+                    type(e).__name__,
+                    bool(config.id),
+                )
 
         # Start health check loop
         self._health_check_task = asyncio.create_task(self._health_check_loop())
