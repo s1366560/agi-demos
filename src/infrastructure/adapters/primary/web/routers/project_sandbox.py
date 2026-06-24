@@ -2223,7 +2223,10 @@ async def stop_project_http_service(
                 status=removed.status,
             )
         except Exception as e:
-            logger.warning("Failed to publish http_service_stopped for %s: %s", service_id, e)
+            logger.warning(
+                "Failed to publish http_service_stopped: error_type=%s",
+                type(e).__name__,
+            )
 
     try:
         from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
@@ -2244,7 +2247,10 @@ async def stop_project_http_service(
             },
         )
     except Exception as e:
-        logger.warning("Failed to broadcast http_service_stopped websocket state: %s", e)
+        logger.warning(
+            "Failed to broadcast http_service_stopped websocket state: error_type=%s",
+            type(e).__name__,
+        )
 
     removed_response = HttpServiceResponse(
         service_id=removed.service_id,

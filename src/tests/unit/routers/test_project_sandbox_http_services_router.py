@@ -147,6 +147,11 @@ class _FailingSandboxStateBroadcastManager:
         raise RuntimeError(self.secret)
 
 
+class _FailingHttpServiceStoppedPublisher:
+    async def publish_http_service_stopped(self, **_kwargs: object) -> None:
+        raise RuntimeError("http service stopped secret for svc-secret")
+
+
 def _sandbox_info(project_id: str = "proj-1") -> router_mod.SandboxInfo:
     return router_mod.SandboxInfo(
         sandbox_id="sandbox-1",
@@ -322,6 +327,78 @@ def test_register_list_stop_external_http_service(sandbox_http_client: TestClien
     )
     assert stop_response.status_code == status.HTTP_200_OK
     assert stop_response.json()["service"]["status"] == "stopped"
+
+
+@pytest.mark.unit
+def test_stop_http_service_publish_error_log_omits_exception_text(
+    sandbox_http_client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    create_response = sandbox_http_client.post(
+        "/api/v1/projects/proj-1/sandbox/http-services",
+        json={
+            "service_id": "svc-secret",
+            "name": "Docs",
+            "source_type": "external_url",
+            "external_url": "https://example.com/docs",
+        },
+    )
+    assert create_response.status_code == status.HTTP_200_OK
+
+    sandbox_http_client.app.dependency_overrides[router_mod.get_event_publisher] = (
+        lambda: _FailingHttpServiceStoppedPublisher()
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    response = sandbox_http_client.delete(
+        "/api/v1/projects/proj-1/sandbox/http-services/svc-secret"
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert "Failed to publish http_service_stopped" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "http service stopped secret" not in caplog.text
+    assert "svc-secret" not in caplog.text
+
+
+@pytest.mark.unit
+def test_stop_http_service_broadcast_error_log_omits_exception_text(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    create_response = sandbox_http_client.post(
+        "/api/v1/projects/proj-1/sandbox/http-services",
+        json={
+            "service_id": "svc-secret",
+            "name": "Docs",
+            "source_type": "external_url",
+            "external_url": "https://example.com/docs",
+        },
+    )
+    assert create_response.status_code == status.HTTP_200_OK
+
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
+        lambda: _FailingSandboxStateBroadcastManager("http service broadcast secret for svc-secret"),
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    response = sandbox_http_client.delete(
+        "/api/v1/projects/proj-1/sandbox/http-services/svc-secret"
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert "Failed to broadcast http_service_stopped websocket state" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "http service broadcast secret" not in caplog.text
+    assert "svc-secret" not in caplog.text
 
 
 @pytest.mark.unit
