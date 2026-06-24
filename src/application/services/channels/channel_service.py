@@ -64,7 +64,7 @@ class ChannelService:
         """Unregister a channel adapter."""
         if adapter_id in self._adapters:
             adapter = self._adapters.pop(adapter_id)
-            logger.info(f"Unregistered channel adapter: {adapter.name}")
+            logger.info("Unregistered channel adapter: has_channel_id=%s", bool(adapter.id))
 
     def get_adapter(self, adapter_id: str) -> ChannelAdapter | None:
         """Get a registered adapter by ID."""
