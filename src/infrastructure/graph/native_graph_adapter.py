@@ -1247,7 +1247,7 @@ class NativeGraphAdapter(GraphServicePort):
             return True
 
         except Exception as e:
-            logger.error(f"Failed to delete episode {episode_name}: {e}")
+            logger.error("Failed to delete episode: error_type=%s", type(e).__name__)
             raise
 
     @override

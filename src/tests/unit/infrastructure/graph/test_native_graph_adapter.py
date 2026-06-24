@@ -633,6 +633,30 @@ class TestNativeGraphAdapterDeleteEpisode:
         mock_neo4j_client.execute_query.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_delete_episode_failure_log_redacts_exception_details(
+        self,
+        adapter,
+        mock_neo4j_client,
+        caplog,
+    ):
+        """Delete failures should propagate without writing exception details to logs."""
+        secret = "delete-episode-secret-9753"
+        mock_neo4j_client.execute_query.side_effect = RuntimeError(secret)
+
+        with (
+            caplog.at_level(
+                logging.ERROR,
+                logger="src.infrastructure.graph.native_graph_adapter",
+            ),
+            pytest.raises(RuntimeError, match=secret),
+        ):
+            await adapter.delete_episode("episode-with-secret")
+
+        assert secret not in caplog.text
+        assert "episode-with-secret" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_delete_episode_by_memory_id(self, adapter, mock_neo4j_client):
         """Test deleting episode by memory_id."""
         mock_neo4j_client.execute_query.return_value = MagicMock()
