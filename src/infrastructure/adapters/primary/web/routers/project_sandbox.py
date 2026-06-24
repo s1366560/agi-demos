@@ -3213,7 +3213,10 @@ async def proxy_project_terminal_websocket(
         try:
             await _handle_terminal_input(websocket, proxy, session.session_id)
         except WebSocketDisconnect:
-            logger.info(f"WebSocket disconnected for session {session.session_id}")
+            logger.info(
+                "Project terminal WebSocket disconnected: has_session_id=%s",
+                bool(session.session_id),
+            )
 
     except Exception as e:
         logger.error(f"Terminal WebSocket proxy error: {e}")

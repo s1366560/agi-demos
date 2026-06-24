@@ -4,15 +4,36 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from types import SimpleNamespace
 from typing import cast
+from unittest.mock import AsyncMock
 
+import pytest
+from fastapi import WebSocketDisconnect
 from starlette.datastructures import Headers, QueryParams
 from starlette.requests import HTTPConnection, Request
 from starlette.responses import Response
 
 from src.infrastructure.adapters.primary.web.dependencies import auth_dependencies
 from src.infrastructure.adapters.primary.web.routers import project_sandbox
+
+
+class _FakeWebSocket:
+    def __init__(self) -> None:
+        self.headers = Headers()
+        self.sent_json: list[object] = []
+        self.accepted_subprotocol: str | None = None
+        self.close_calls: list[tuple[int | None, str | None]] = []
+
+    async def accept(self, subprotocol: str | None = None) -> None:
+        self.accepted_subprotocol = subprotocol
+
+    async def send_json(self, payload: object) -> None:
+        self.sent_json.append(payload)
+
+    async def close(self, code: int | None = None, reason: str | None = None) -> None:
+        self.close_calls.append((code, reason))
 
 
 def test_http_service_proxy_rewrites_html_js_css_urls() -> None:
@@ -167,6 +188,72 @@ async def test_proxy_auth_dependency_accepts_websocket_subprotocol_token() -> No
     )
 
     assert token == "ms_sk_ws_cookie_token"
+
+
+async def test_project_terminal_websocket_disconnect_log_omits_session_id(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    session = SimpleNamespace(
+        session_id="session-secret",
+        container_id="sandbox-1",
+        cols=80,
+        rows=24,
+        is_active=False,
+    )
+    proxy = SimpleNamespace(create_session=AsyncMock(return_value=session))
+    websocket = _FakeWebSocket()
+    service = SimpleNamespace(
+        get_project_sandbox=AsyncMock(
+            return_value=SimpleNamespace(sandbox_id="sandbox-1", terminal_url="ws://terminal")
+        )
+    )
+
+    async def noop_output_loop(*_args: object) -> None:
+        return None
+
+    monkeypatch.setattr(
+        project_sandbox,
+        "_verify_project_access_or_close",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(project_sandbox, "_read_terminal_output_loop", noop_output_loop)
+    monkeypatch.setattr(
+        project_sandbox,
+        "_handle_terminal_input",
+        AsyncMock(side_effect=WebSocketDisconnect()),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.sandbox.terminal_proxy.get_terminal_proxy",
+        lambda: proxy,
+    )
+    caplog.set_level(
+        logging.INFO,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    await project_sandbox.proxy_project_terminal_websocket(
+        websocket=cast("project_sandbox.WebSocket", websocket),
+        project_id="project-1",
+        session_id=None,
+        current_user=cast("project_sandbox.User", SimpleNamespace(id="user-1")),
+        db=cast("project_sandbox.AsyncSession", SimpleNamespace()),
+        service=cast("project_sandbox.ProjectSandboxLifecycleService", service),
+    )
+
+    assert websocket.accepted_subprotocol is None
+    assert websocket.sent_json == [
+        {
+            "type": "connected",
+            "session_id": "session-secret",
+            "cols": 80,
+            "rows": 24,
+        }
+    ]
+    assert websocket.close_calls == [(None, None)]
+    assert "WebSocket disconnected" in caplog.text
+    assert "has_session_id=True" in caplog.text
+    assert "session-secret" not in caplog.text
 
 
 def test_sandbox_proxy_auth_cookie_is_scoped_to_project_sandbox_path() -> None:
