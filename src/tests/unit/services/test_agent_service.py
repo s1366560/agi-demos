@@ -165,6 +165,39 @@ class TestAgentServiceAuthorization:
         assert result is None
 
     @pytest.mark.asyncio
+    async def test_get_conversation_unauthorized_logs_do_not_include_identifiers(
+        self,
+        agent_service,
+        mock_conversation_repo,
+        sample_conversation,
+        caplog,
+    ):
+        """Unauthorized conversation access logs must not expose scoped IDs."""
+        secret_conversation_id = "conversation-secret-unauthorized"
+        secret_project_id = "project-secret-unauthorized"
+        secret_user_id = "user-secret-unauthorized"
+        sample_conversation.id = secret_conversation_id
+        sample_conversation.project_id = secret_project_id
+        sample_conversation.user_id = "owner-secret-user"
+        mock_conversation_repo.find_by_id.return_value = sample_conversation
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.agent.conversation_manager",
+        )
+
+        result = await agent_service.get_conversation(
+            conversation_id=secret_conversation_id,
+            project_id=secret_project_id,
+            user_id=secret_user_id,
+        )
+
+        assert result is None
+        assert secret_conversation_id not in caplog.text
+        assert secret_project_id not in caplog.text
+        assert secret_user_id not in caplog.text
+        assert "Unauthorized access attempt to conversation" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_get_conversation_wrong_project_cannot_access(
         self, agent_service, mock_conversation_repo, sample_conversation
     ):

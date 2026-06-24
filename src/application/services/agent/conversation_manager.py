@@ -87,8 +87,9 @@ class ConversationManager:
             return None
         if conversation.project_id != project_id or conversation.user_id != user_id:
             logger.warning(
-                f"Unauthorized access attempt to conversation {conversation_id} "
-                f"by user {user_id} in project {project_id}"
+                "Unauthorized access attempt to conversation project_match=%s user_match=%s",
+                conversation.project_id == project_id,
+                conversation.user_id == user_id,
             )
             return None
         return conversation
