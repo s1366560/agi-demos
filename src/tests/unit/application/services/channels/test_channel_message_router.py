@@ -198,6 +198,99 @@ async def test_process_media_if_needed_logs_metadata_without_media_identifiers(
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_process_media_if_needed_unavailable_log_omits_message_identifier(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Media import unavailable logs should not expose the domain message ID."""
+    router = ChannelMessageRouter()
+    router._ensure_media_import_service = AsyncMock()
+    router._media_import_service = None
+    message = Message(
+        id="secret-domain-message-id",
+        channel="feishu",
+        chat_type=ChatType.P2P,
+        chat_id="chat-1",
+        sender=SenderInfo(id="sender-1", name="Test User"),
+        content=MessageContent(
+            type=MessageType.FILE,
+            file_key="secret-file-key",
+            file_name="private-roadmap.pdf",
+        ),
+        project_id="project-1",
+    )
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router._process_media_if_needed(message, "conv-1")
+
+    router._ensure_media_import_service.assert_awaited_once()
+    assert "secret-domain-message-id" not in caplog.text
+    assert "secret-file-key" not in caplog.text
+    assert "private-roadmap.pdf" not in caplog.text
+    assert "has_domain_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_do_media_import_start_log_omits_message_identifier(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Media import start logs should not expose the domain message ID."""
+    router = ChannelMessageRouter()
+    router._handle_media_import_failure = AsyncMock()
+    media_import_service = SimpleNamespace(import_media_to_workspace=AsyncMock(return_value=None))
+    router._media_import_service = media_import_service
+    message = Message(
+        id="secret-domain-message-id",
+        channel="feishu",
+        chat_type=ChatType.P2P,
+        chat_id="chat-1",
+        sender=SenderInfo(id="sender-1", name="Test User"),
+        content=MessageContent(
+            type=MessageType.FILE,
+            file_key="secret-file-key",
+            file_name="private-roadmap.pdf",
+        ),
+        project_id="project-1",
+    )
+    session = MagicMock()
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+    mcp_adapter = SimpleNamespace(sync_from_docker=AsyncMock())
+    app_container = SimpleNamespace(
+        sandbox_adapter=MagicMock(return_value=mcp_adapter),
+        storage_service=MagicMock(return_value=object()),
+    )
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with (
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            return_value=session_ctx,
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
+            return_value=app_container,
+        ),
+    ):
+        await router._do_media_import(message, "conv-1")
+
+    media_import_service.import_media_to_workspace.assert_awaited_once()
+    router._handle_media_import_failure.assert_awaited_once_with(message)
+    assert "secret-domain-message-id" not in caplog.text
+    assert "secret-file-key" not in caplog.text
+    assert "private-roadmap.pdf" not in caplog.text
+    assert "has_domain_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
 def test_apply_sandbox_path_log_omits_sandbox_path_and_filename(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

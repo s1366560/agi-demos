@@ -157,8 +157,9 @@ class ChannelMessageRouter:
             await self._do_media_import(message, conversation_id)
         else:
             logger.warning(
-                f"[MessageRouter] MediaImportService not available - "
-                f"cannot import media message {message.id}"
+                "[MessageRouter] MediaImportService not available - "
+                "cannot import media message has_domain_message_id=%s",
+                bool(message.id),
             )
 
     async def _ensure_media_import_service(self) -> None:
@@ -213,8 +214,10 @@ class ChannelMessageRouter:
                 )
 
                 logger.info(
-                    f"[MessageRouter] Importing media message to workspace: "
-                    f"type={message.content.type.value}, message_id={message.id}"
+                    "[MessageRouter] Importing media message to workspace: "
+                    "type=%s has_domain_message_id=%s",
+                    message.content.type.value,
+                    bool(message.id),
                 )
 
                 assert self._media_import_service is not None
