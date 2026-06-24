@@ -7,6 +7,7 @@ Tests cover:
 - Encryption of credentials (P0-SEC-1)
 """
 
+import logging
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -808,6 +809,141 @@ class TestPluginSchemaExecution:
         assert captured["config"].domain == "feishu-default"
         assert captured["config"].webhook_path == "/plugin/hook"
         assert response.domain == "feishu-default"
+
+    @pytest.mark.asyncio
+    async def test_create_config_auto_connect_log_omits_config_id(
+        self, mock_db_session, caplog
+    ):
+        """Auto-connect success logs should not expose persisted channel config IDs."""
+        caplog.set_level(
+            logging.INFO,
+            logger="src.infrastructure.adapters.primary.web.routers.channels",
+        )
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        payload = ChannelConfigCreate(
+            channel_type="feishu",
+            name="Feishu",
+            enabled=True,
+            app_id="cli_test",
+            app_secret="secret",
+        )
+
+        async def _create_side_effect(config: ChannelConfigModel) -> ChannelConfigModel:
+            config.id = "secret-config-id"
+            config.status = "disconnected"
+            config.created_at = datetime.utcnow()
+            return config
+
+        channel_manager = SimpleNamespace(add_connection=AsyncMock())
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_ensure_channel_plugin_enabled_for_project",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_resolve_channel_metadata",
+                return_value=None,
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
+            ) as mock_repo_class,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                return_value=channel_manager,
+            ),
+        ):
+            mock_repo = MagicMock()
+            mock_repo.create = AsyncMock(side_effect=_create_side_effect)
+            mock_repo_class.return_value = mock_repo
+
+            response = await create_config(
+                project_id="project-1",
+                data=payload,
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        channel_manager.add_connection.assert_awaited_once()
+        assert response.id == "secret-config-id"
+        assert "Auto-connected channel" in caplog.text
+        assert "has_channel_config_id=True" in caplog.text
+        assert "secret-config-id" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_create_config_auto_connect_failure_log_omits_config_id_and_error_text(
+        self, mock_db_session, caplog
+    ):
+        """Auto-connect failure logs should keep diagnostics without raw IDs or error text."""
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.infrastructure.adapters.primary.web.routers.channels",
+        )
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        payload = ChannelConfigCreate(
+            channel_type="feishu",
+            name="Feishu",
+            enabled=True,
+            app_id="cli_test",
+            app_secret="secret",
+        )
+
+        async def _create_side_effect(config: ChannelConfigModel) -> ChannelConfigModel:
+            config.id = "secret-config-id"
+            config.status = "disconnected"
+            config.created_at = datetime.utcnow()
+            return config
+
+        channel_manager = SimpleNamespace(
+            add_connection=AsyncMock(side_effect=RuntimeError("secret-connect-token"))
+        )
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_ensure_channel_plugin_enabled_for_project",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_resolve_channel_metadata",
+                return_value=None,
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
+            ) as mock_repo_class,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                return_value=channel_manager,
+            ),
+        ):
+            mock_repo = MagicMock()
+            mock_repo.create = AsyncMock(side_effect=_create_side_effect)
+            mock_repo_class.return_value = mock_repo
+
+            response = await create_config(
+                project_id="project-1",
+                data=payload,
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        assert response.id == "secret-config-id"
+        assert "Failed to auto-connect channel" in caplog.text
+        assert "has_channel_config_id=True" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "secret-config-id" not in caplog.text
+        assert "secret-connect-token" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_create_config_rejects_invalid_plugin_settings(self, mock_db_session):

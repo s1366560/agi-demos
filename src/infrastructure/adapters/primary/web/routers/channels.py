@@ -1748,9 +1748,17 @@ async def create_config(
         if channel_manager:
             try:
                 await channel_manager.add_connection(created)
-                logger.info(f"[Channels] Auto-connected channel {created.id}")
+                logger.info(
+                    "[Channels] Auto-connected channel: has_channel_config_id=%s",
+                    bool(created.id),
+                )
             except Exception as e:
-                logger.warning(f"[Channels] Failed to auto-connect channel {created.id}: {e}")
+                logger.warning(
+                    "[Channels] Failed to auto-connect channel: "
+                    "has_channel_config_id=%s error_type=%s",
+                    bool(created.id),
+                    type(e).__name__,
+                )
 
     return to_response(created)
 
