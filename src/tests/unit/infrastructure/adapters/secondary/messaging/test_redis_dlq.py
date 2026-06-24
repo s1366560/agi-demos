@@ -135,6 +135,55 @@ async def test_retry_message_redacts_publish_failure_log(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_retry_message_success_redacts_message_id_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Successful retry logs should not include raw message IDs."""
+    secret_message_id = "dlq-secret-message-3141"
+
+    class _SuccessfulEventBus:
+        publish = AsyncMock()
+
+    message = DeadLetterMessage(
+        id=secret_message_id,
+        event_id="event-1",
+        event_type="event.type",
+        event_data="{}",
+        routing_key="routing.secret",
+        error="original error",
+        error_type="RuntimeError",
+        status=DLQMessageStatus.PENDING,
+        retry_count=0,
+        max_retries=3,
+    )
+    adapter = RedisDLQAdapter(redis_client=object(), event_bus=_SuccessfulEventBus())  # type: ignore[arg-type]
+    adapter.get_message = AsyncMock(return_value=message)  # type: ignore[method-assign]
+    adapter._update_message = AsyncMock()  # type: ignore[method-assign]
+    adapter._update_stats_on_resolve = AsyncMock()  # type: ignore[method-assign]
+
+    with (
+        patch(
+            "src.infrastructure.adapters.secondary.messaging.redis_dlq.EventEnvelope.from_json",
+            return_value=SimpleNamespace(event_id="event-1"),
+        ),
+        caplog.at_level(
+            "INFO",
+            logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+        ),
+    ):
+        retried = await adapter.retry_message(secret_message_id)
+
+    assert retried is True
+    assert message.status == DLQMessageStatus.RESOLVED
+    assert adapter._update_message.await_count == 2  # type: ignore[attr-defined]
+    adapter._update_stats_on_resolve.assert_awaited_once_with(message)  # type: ignore[attr-defined]
+    assert "Message retried successfully" in caplog.text
+    assert secret_message_id not in caplog.text
+    assert "has_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_retry_message_without_event_bus_redacts_message_id(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

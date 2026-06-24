@@ -334,7 +334,10 @@ class RedisDLQAdapter(DeadLetterQueuePort):
                     await self._update_message(message)
                     await self._update_stats_on_resolve(message)
 
-                    logger.info(f"[DLQ] Message {message_id} retried successfully")
+                    logger.info(
+                        "[DLQ] Message retried successfully has_message_id=%s",
+                        bool(message_id),
+                    )
                     return True
 
                 except Exception as e:
