@@ -134,6 +134,32 @@ class TestLiteLLMClient:
             assert response == {"name": "test", "value": 42}
 
     @pytest.mark.asyncio
+    async def test_generate_response_structured_failure_redacts_raw_output(self, client, caplog):
+        """Structured output parse failures should not log raw model output."""
+        secret = "structured-output-secret-2468"
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message = {"content": f"not json {secret}"}
+
+        with patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+            mock_acompletion.return_value = mock_response
+
+            messages = [Message(role="user", content="Generate a response")]
+
+            with (
+                caplog.at_level(
+                    "ERROR",
+                    logger="src.infrastructure.llm.litellm.litellm_client",
+                ),
+                pytest.raises(Exception),
+            ):
+                await client._generate_response(messages, response_model=DummyResponseModel)
+
+        assert secret not in caplog.text
+        assert "Raw output" not in caplog.text
+        assert "error_type=JSONDecodeError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_generate_response_rate_limit_error(self, client):
         """Test that rate limit errors are properly raised."""
         with patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:

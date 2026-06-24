@@ -1057,9 +1057,12 @@ class LiteLLMClient(LLMClient):
                     validated = response_model.model_validate(parsed_data)
                     return validated.model_dump()
                 except Exception as e:
-                    logger.error(f"Failed to parse/validate JSON: {e}")
-                    logger.error(f"Raw output: {content}")
-                    raise
+                    logger.error(
+                        "Failed to parse/validate JSON response error_type=%s content_length=%s",
+                        type(e).__name__,
+                        len(content) if isinstance(content, str) else 0,
+                    )
+                    raise ValueError("Structured output parse/validation failed") from e
 
             return {"content": content}
 
