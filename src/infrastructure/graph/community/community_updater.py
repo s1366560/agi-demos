@@ -264,7 +264,10 @@ class CommunityUpdater:
                 "summary": result.summary,
             }
         except Exception as e:
-            logger.warning("Failed to generate community summary: %s", e)
+            logger.warning(
+                "Failed to generate community summary error_type=%s",
+                type(e).__name__,
+            )
             return {
                 "name": "Unnamed Community",
                 "summary": "",

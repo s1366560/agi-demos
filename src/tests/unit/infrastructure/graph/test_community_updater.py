@@ -39,6 +39,13 @@ class InvalidJsonGenerateLLMClient:
         return {"content": "not-json community-summary-secret-97531"}
 
 
+class FailingGenerateLLMClient:
+    """LLM client raising a provider-style error during summary generation."""
+
+    async def generate(self, **_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("provider echoed community-generate-secret-8642")
+
+
 class FailingStructuredLLM:
     """Structured-output adapter that raises a provider-style error."""
 
@@ -133,6 +140,24 @@ class TestCommunityUpdaterLLMResponseHandling:
         assert result.summary == "Platform services."
         assert llm_client.calls[0]["response_format"] == "json"
         assert "community-structured-secret-2468" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    async def test_generate_community_summary_redacts_fallback_error(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        updater = build_updater(FailingGenerateLLMClient())
+
+        with caplog.at_level(
+            "WARNING",
+            logger="src.infrastructure.graph.community.community_updater",
+        ):
+            result = await updater._generate_community_summary(
+                [{"name": "Ada", "summary": "Research lead"}]
+            )
+
+        assert result == {"name": "Unnamed Community", "summary": ""}
+        assert "community-generate-secret-8642" not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
 
     async def test_call_llm_with_json_extraction_supports_private_generate_response_client(
