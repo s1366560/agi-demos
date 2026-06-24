@@ -746,7 +746,7 @@ class ChannelConnectionManager:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"[ChannelManager] Health check error: {e}")
+                logger.error("[ChannelManager] Health check error error_type=%s", type(e).__name__)
 
     def get_status(self, config_id: str) -> dict[str, Any] | None:
         """Get the status of a specific connection.

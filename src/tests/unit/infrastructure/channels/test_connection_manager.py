@@ -353,6 +353,35 @@ async def test_restart_connection_redacts_add_failure(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_health_check_loop_redacts_loop_error(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Health check loop failures should not log raw exception text."""
+    exception_detail = "health check failed channel-health-secret-1357"
+
+    manager = ChannelConnectionManager()
+    manager._started = True
+
+    async def _sleep(_seconds: float) -> None:
+        manager._started = False
+        raise RuntimeError(exception_detail)
+
+    monkeypatch.setattr("src.infrastructure.channels.connection_manager.asyncio.sleep", _sleep)
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.channels.connection_manager",
+    ):
+        await manager._health_check_loop()
+
+    assert "Health check error" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_add_connection_refreshes_closed_main_loop() -> None:
     """add_connection should refresh stale closed loop reference."""
 
