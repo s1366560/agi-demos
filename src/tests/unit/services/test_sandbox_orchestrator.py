@@ -436,6 +436,31 @@ class TestSandboxOrchestrator:
         # Event publishing is now handled by the API layer
 
     @pytest.mark.asyncio
+    async def test_start_terminal_error_log_omits_sandbox_id_and_error_text(
+        self, orchestrator, mock_adapter, caplog
+    ):
+        """Test terminal start failure logs without raw sandbox IDs or exception text."""
+        mock_adapter.call_tool.side_effect = RuntimeError("terminal start secret token")
+        caplog.set_level(logging.ERROR, logger="src.application.services.sandbox_orchestrator")
+
+        with pytest.raises(RuntimeError):
+            await orchestrator.start_terminal("sb-123")
+
+        target_records = [
+            record
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_orchestrator"
+            and record.levelno >= logging.ERROR
+        ]
+        assert len(target_records) == 1
+        message = target_records[0].getMessage()
+        assert "Failed to start terminal" in message
+        assert "error_type=RuntimeError" in message
+        assert "sb-123" not in message
+        assert "terminal start secret token" not in message
+        assert target_records[0].exc_info is None
+
+    @pytest.mark.asyncio
     async def test_stop_terminal_success(self, orchestrator, mock_adapter, mock_event_publisher):
         """Test successful terminal stop."""
         mock_adapter.call_tool.return_value = {
