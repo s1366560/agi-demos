@@ -108,6 +108,25 @@ class TestEntityExtractorJsonParsing:
         assert "embedding-secret-8642" not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
 
+    def test_parse_entities_response_redacts_invalid_json_details(self, extractor, caplog):
+        """Invalid JSON warnings should not write response text to logs."""
+        secret = "entity-json-secret-1357"
+        response = (
+            f"provider preface {secret}\n"
+            '{"entities": [{"name": "Ada", "entity_type": "Person"}]}'
+        )
+
+        with caplog.at_level(
+            "WARNING",
+            logger="src.infrastructure.graph.extraction.entity_extractor",
+        ):
+            result = extractor._parse_entities_response(response)
+
+        assert result == [{"name": "Ada", "entity_type": "Person"}]
+        assert secret not in caplog.text
+        assert "error_type=JSONDecodeError" in caplog.text
+        assert "response_length=" in caplog.text
+
     def test_extract_json_simple_object(self, extractor):
         """Test extracting simple JSON object with entities."""
         text = '{"entities": [{"name": "John", "entity_type": "Person"}]}'

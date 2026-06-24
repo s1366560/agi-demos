@@ -386,7 +386,12 @@ class EntityExtractor:
             data = json.loads(response)
             return self._extract_entities_from_parsed(data)
         except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse entity extraction response as JSON: {e}")
+            logger.warning(
+                "Failed to parse entity extraction response as JSON: "
+                "error_type=%s response_length=%s",
+                type(e).__name__,
+                len(response),
+            )
             return self._extract_json_from_text(response)
 
     @staticmethod
