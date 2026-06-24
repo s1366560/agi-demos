@@ -35,6 +35,13 @@ class GenerateOnlyLLMClient:
         return {"content": '{"entities": [{"name": "Ada", "entity_type": "Person"}]}'}
 
 
+class FailingLLMClient:
+    """Mock LLM client that raises a provider-style error."""
+
+    async def generate_response(self, **_kwargs):
+        raise RuntimeError("provider echoed entity-secret-9753")
+
+
 @pytest.fixture
 def extractor():
     """Create EntityExtractor with mocked dependencies."""
@@ -57,6 +64,22 @@ class TestEntityExtractorJsonParsing:
         response = await extractor._call_llm("Extract entities", "Ada founded a lab.")
 
         assert response == '{"entities": [{"name": "Ada", "entity_type": "Person"}]}'
+
+    async def test_extract_redacts_llm_exception_details(self, caplog):
+        extractor = EntityExtractor(
+            llm_client=FailingLLMClient(),
+            embedding_service=MockEmbeddingService(),
+        )
+
+        with caplog.at_level(
+            "ERROR",
+            logger="src.infrastructure.graph.extraction.entity_extractor",
+        ):
+            result = await extractor.extract("Ada discussed entity-secret-9753")
+
+        assert result == []
+        assert "entity-secret-9753" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     def test_extract_json_simple_object(self, extractor):
         """Test extracting simple JSON object with entities."""
