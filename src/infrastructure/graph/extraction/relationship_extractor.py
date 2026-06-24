@@ -114,7 +114,10 @@ class RelationshipExtractor:
                 user_prompt=user_prompt,
             )
         except Exception as e:
-            logger.error(f"LLM call failed during relationship extraction: {e}")
+            logger.error(
+                "LLM call failed during relationship extraction error_type=%s",
+                type(e).__name__,
+            )
             return []
 
         # Parse response
@@ -282,6 +285,7 @@ class RelationshipExtractor:
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse relationship response as JSON: {e}")
             return self._extract_json_from_text(response)
+
     @staticmethod
     def _extract_relationships_from_parsed(data: Any) -> list[dict[str, Any]]:
         """Extract relationship list from parsed JSON data."""

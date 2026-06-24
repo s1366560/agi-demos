@@ -25,6 +25,13 @@ class GenerateOnlyLLMClient:
         }
 
 
+class FailingLLMClient:
+    """Mock LLM client that raises a provider-style error."""
+
+    async def generate_response(self, **_kwargs):
+        raise RuntimeError("provider echoed relationship-secret-2468")
+
+
 @pytest.fixture
 def extractor():
     """Create RelationshipExtractor with mocked dependencies."""
@@ -42,6 +49,23 @@ class TestRelationshipExtractorLLMResponse:
 
         assert '"relationships"' in response
         assert '"relationship_type": "FOUNDED"' in response
+
+    async def test_extract_redacts_llm_exception_details(self, caplog):
+        extractor = RelationshipExtractor(llm_client=FailingLLMClient())
+        entities = [
+            {"name": "Ada", "entity_type": "Person", "uuid": "ada-1"},
+            {"name": "Lab", "entity_type": "Organization", "uuid": "lab-1"},
+        ]
+
+        with caplog.at_level(
+            "ERROR",
+            logger="src.infrastructure.graph.extraction.relationship_extractor",
+        ):
+            result = await extractor.extract("Ada founded relationship-secret-2468", entities)
+
+        assert result == []
+        assert "relationship-secret-2468" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
 
 @pytest.mark.unit
