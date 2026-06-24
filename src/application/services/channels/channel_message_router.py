@@ -1175,7 +1175,10 @@ class ChannelMessageRouter:
 
             adapter = bridge._get_adapter(binding.channel_config_id)
             if not adapter:
-                logger.warning(f"[MessageRouter] No adapter for config {binding.channel_config_id}")
+                logger.warning(
+                    "[MessageRouter] No adapter for channel config: has_channel_config_id=%s",
+                    bool(binding.channel_config_id),
+                )
                 return False
 
             chat_id = binding.chat_id
@@ -1203,8 +1206,9 @@ class ChannelMessageRouter:
             return True
         except Exception as e:
             logger.error(
-                f"[MessageRouter] Push message failed for {conversation_id}: {e}",
-                exc_info=True,
+                "[MessageRouter] Push message failed: has_conversation_id=%s error_type=%s",
+                bool(conversation_id),
+                type(e).__name__,
             )
             return False
 

@@ -1412,13 +1412,17 @@ async def test_send_to_channel_no_binding():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_send_to_channel_no_adapter():
+async def test_send_to_channel_no_adapter(caplog: pytest.LogCaptureFixture):
     """send_to_channel returns False when adapter not found."""
     router = ChannelMessageRouter()
-    mock_binding = SimpleNamespace(channel_config_id="cfg-dead", chat_id="chat-42")
+    mock_binding = SimpleNamespace(channel_config_id="secret-config-id", chat_id="chat-42")
     mock_bridge = MagicMock()
     mock_bridge._lookup_binding = AsyncMock(return_value=mock_binding)
     mock_bridge._get_adapter = MagicMock(return_value=None)
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
 
     with patch(
         "src.application.services.channels.event_bridge.get_channel_event_bridge",
@@ -1427,3 +1431,32 @@ async def test_send_to_channel_no_adapter():
         result = await router.send_to_channel("conv-1", "Hello")
 
     assert result is False
+    assert "secret-config-id" not in caplog.text
+    assert "has_channel_config_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_to_channel_failure_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Push failure logs should not expose conversation IDs or exception details."""
+    router = ChannelMessageRouter()
+    mock_bridge = MagicMock()
+    mock_bridge._lookup_binding = AsyncMock(side_effect=RuntimeError("secret-push-token"))
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.application.services.channels.event_bridge.get_channel_event_bridge",
+        return_value=mock_bridge,
+    ):
+        result = await router.send_to_channel("secret-conversation-id", "Hello")
+
+    assert result is False
+    assert "secret-conversation-id" not in caplog.text
+    assert "secret-push-token" not in caplog.text
+    assert "has_conversation_id=True" in caplog.text
+    assert "RuntimeError" in caplog.text
