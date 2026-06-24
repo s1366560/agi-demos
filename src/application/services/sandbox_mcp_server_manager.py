@@ -78,7 +78,12 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             project_id=project_id,
             tenant_id=tenant_id,
         )
-        logger.info(f"Sandbox ready (id={sandbox_id}) for MCP server '{server_name}'")
+        logger.info(
+            "Sandbox ready for MCP server: has_sandbox_id=%s has_server_name=%s server_type=%s",
+            bool(sandbox_id),
+            bool(server_name),
+            server_type,
+        )
 
         config_json = json.dumps(transport_config)
 
@@ -96,7 +101,14 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         install_data = self._parse_tool_result(install_result)
         if not install_data.get("success", False):
             error = install_data.get("error", "Installation failed")
-            logger.error(f"Failed to install MCP server '{server_name}': {error}")
+            logger.error(
+                "Failed to install MCP server: has_sandbox_id=%s "
+                "has_server_name=%s has_error_detail=%s server_type=%s",
+                bool(sandbox_id),
+                bool(server_name),
+                bool(error),
+                server_type,
+            )
             return SandboxMCPServerStatus(
                 name=server_name,
                 server_type=server_type,
@@ -118,7 +130,14 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         start_data = self._parse_tool_result(start_result)
         if not start_data.get("success", False):
             error = start_data.get("error", "Start failed")
-            logger.error(f"Failed to start MCP server '{server_name}': {error}")
+            logger.error(
+                "Failed to start MCP server: has_sandbox_id=%s "
+                "has_server_name=%s has_error_detail=%s server_type=%s",
+                bool(sandbox_id),
+                bool(server_name),
+                bool(error),
+                server_type,
+            )
             return SandboxMCPServerStatus(
                 name=server_name,
                 server_type=server_type,
@@ -126,7 +145,12 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 error=error,
             )
 
-        logger.info(f"MCP server '{server_name}' started in sandbox {sandbox_id}")
+        logger.info(
+            "MCP server started: has_sandbox_id=%s has_server_name=%s server_type=%s",
+            bool(sandbox_id),
+            bool(server_name),
+            server_type,
+        )
         return SandboxMCPServerStatus(
             name=server_name,
             server_type=server_type,
@@ -152,7 +176,11 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             data = self._parse_tool_result(result)
             return cast(bool, data.get("success", False))
         except Exception as e:
-            logger.warning(f"Failed to stop MCP server '{server_name}': {e}")
+            logger.warning(
+                "Failed to stop MCP server: has_server_name=%s error_type=%s",
+                bool(server_name),
+                type(e).__name__,
+            )
             return False
 
     @override

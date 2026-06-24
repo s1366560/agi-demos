@@ -1,6 +1,7 @@
 """Unit tests for SandboxMCPServerManager."""
 
 import json
+import logging
 from unittest.mock import AsyncMock
 
 import pytest
@@ -48,6 +49,41 @@ class TestSandboxMCPServerManager:
         assert result.pid == 1234
         assert resource.execute_tool.call_count == 2
 
+    async def test_install_and_start_success_log_omits_identifiers(self, caplog):
+        mgr, resource = self._make_manager()
+        resource.ensure_sandbox_ready = AsyncMock(return_value="secret-sandbox-id")
+        resource.execute_tool.side_effect = [
+            self._tool_result({"success": True}),
+            self._tool_result({"success": True, "status": "running", "pid": 1234}),
+        ]
+        caplog.set_level(
+            logging.INFO,
+            logger="src.application.services.sandbox_mcp_server_manager",
+        )
+
+        result = await mgr.install_and_start(
+            project_id="secret-project-id",
+            tenant_id="tenant-1",
+            server_name="secret-server-name",
+            server_type="stdio",
+            transport_config={"command": "node", "args": ["server.js"]},
+        )
+
+        assert result.status == "running"
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_mcp_server_manager"
+        )
+        assert "Sandbox ready" in message
+        assert "MCP server started" in message
+        assert "secret-sandbox-id" not in message
+        assert "secret-project-id" not in message
+        assert "secret-server-name" not in message
+        assert "has_sandbox_id=True" in message
+        assert "has_server_name=True" in message
+        assert "server_type=stdio" in message
+
     async def test_install_and_start_install_failure(self):
         mgr, resource = self._make_manager()
         resource.ensure_sandbox_ready = AsyncMock(return_value="sandbox-1")
@@ -65,6 +101,77 @@ class TestSandboxMCPServerManager:
 
         assert result.status == "failed"
         assert "npm" in (result.error or "")
+
+    async def test_install_and_start_install_failure_log_omits_error_details(self, caplog):
+        mgr, resource = self._make_manager()
+        resource.ensure_sandbox_ready = AsyncMock(return_value="secret-sandbox-id")
+        resource.execute_tool.return_value = self._tool_result(
+            {"success": False, "error": "install secret token"}, is_error=False
+        )
+        caplog.set_level(
+            logging.INFO,
+            logger="src.application.services.sandbox_mcp_server_manager",
+        )
+
+        result = await mgr.install_and_start(
+            project_id="secret-project-id",
+            tenant_id="tenant-1",
+            server_name="secret-server-name",
+            server_type="stdio",
+            transport_config={"command": "node"},
+        )
+
+        assert result.status == "failed"
+        assert result.error == "install secret token"
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_mcp_server_manager"
+        )
+        assert "Failed to install MCP server" in message
+        assert "secret-sandbox-id" not in message
+        assert "secret-project-id" not in message
+        assert "secret-server-name" not in message
+        assert "install secret token" not in message
+        assert "has_sandbox_id=True" in message
+        assert "has_server_name=True" in message
+        assert "has_error_detail=True" in message
+
+    async def test_install_and_start_start_failure_log_omits_error_details(self, caplog):
+        mgr, resource = self._make_manager()
+        resource.ensure_sandbox_ready = AsyncMock(return_value="secret-sandbox-id")
+        resource.execute_tool.side_effect = [
+            self._tool_result({"success": True}),
+            self._tool_result({"success": False, "error": "start secret token"}),
+        ]
+        caplog.set_level(
+            logging.INFO,
+            logger="src.application.services.sandbox_mcp_server_manager",
+        )
+
+        result = await mgr.install_and_start(
+            project_id="secret-project-id",
+            tenant_id="tenant-1",
+            server_name="secret-server-name",
+            server_type="stdio",
+            transport_config={"command": "node"},
+        )
+
+        assert result.status == "failed"
+        assert result.error == "start secret token"
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_mcp_server_manager"
+        )
+        assert "Failed to start MCP server" in message
+        assert "secret-sandbox-id" not in message
+        assert "secret-project-id" not in message
+        assert "secret-server-name" not in message
+        assert "start secret token" not in message
+        assert "has_sandbox_id=True" in message
+        assert "has_server_name=True" in message
+        assert "has_error_detail=True" in message
 
     async def test_stop_server_success(self):
         mgr, resource = self._make_manager()
@@ -87,6 +194,32 @@ class TestSandboxMCPServerManager:
         )
 
         assert result is False
+
+    async def test_stop_server_failure_log_omits_server_name_and_error_text(self, caplog):
+        mgr, resource = self._make_manager()
+        resource.execute_tool.side_effect = ConnectionError("stop secret token")
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.sandbox_mcp_server_manager",
+        )
+
+        result = await mgr.stop_server(
+            project_id="secret-project-id",
+            server_name="secret-server-name",
+        )
+
+        assert result is False
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_mcp_server_manager"
+        )
+        assert "Failed to stop MCP server" in message
+        assert "secret-project-id" not in message
+        assert "secret-server-name" not in message
+        assert "stop secret token" not in message
+        assert "has_server_name=True" in message
+        assert "error_type=ConnectionError" in message
 
     async def test_discover_tools_success(self):
         mgr, resource = self._make_manager()
