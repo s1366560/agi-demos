@@ -117,7 +117,7 @@ class EmbeddingService:
             return embedding
 
         except Exception as e:
-            logger.error(f"Failed to generate embedding: {e}")
+            logger.error("Failed to generate embedding error_type=%s", type(e).__name__)
             raise
 
     async def embed_text_safe(self, text: str) -> list[float] | None:
@@ -130,7 +130,8 @@ class EmbeddingService:
             return await self.embed_text(text)
         except Exception as e:
             logger.warning(
-                "Embedding failed, falling back to FTS-only: %s", e
+                "Embedding failed, falling back to FTS-only error_type=%s",
+                type(e).__name__,
             )
             return None
 
@@ -196,17 +197,15 @@ class EmbeddingService:
         """
         try:
             return [
-                list(e) for e in
-                await self.embed_batch(
+                list(e)
+                for e in await self.embed_batch(
                     texts,
                     batch_size=batch_size,
                     max_concurrency=max_concurrency,
                 )
             ]
         except Exception as e:
-            logger.warning(
-                "Batch embedding failed, returning all None: %s", e
-            )
+            logger.warning("Batch embedding failed, returning all None: %s", e)
             return [None] * len(texts)
 
     async def _embed_batch_api(
@@ -390,7 +389,6 @@ class EmbeddingService:
         return similarities[:top_k]
 
 
-
 class NullEmbeddingService:
     """No-op embedding service for when no embedding model is configured.
 
@@ -408,8 +406,7 @@ class NullEmbeddingService:
     async def embed_text(self, text: str) -> list[float]:
         """Always raise -- callers should use embed_text_safe()."""
         raise RuntimeError(
-            "No embedding model configured. "
-            "Use embed_text_safe() for graceful degradation."
+            "No embedding model configured. Use embed_text_safe() for graceful degradation."
         )
 
     async def embed_text_safe(self, text: str) -> list[float] | None:
@@ -424,8 +421,7 @@ class NullEmbeddingService:
     ) -> list[list[float]]:
         """Always raise -- callers should use embed_batch_safe()."""
         raise RuntimeError(
-            "No embedding model configured. "
-            "Use embed_batch_safe() for graceful degradation."
+            "No embedding model configured. Use embed_batch_safe() for graceful degradation."
         )
 
     async def embed_batch_safe(

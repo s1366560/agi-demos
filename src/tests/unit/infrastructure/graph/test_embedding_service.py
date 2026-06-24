@@ -105,6 +105,50 @@ class TestEmbeddingService:
             await embedding_service.embed_text("Test")
 
     @pytest.mark.unit
+    async def test_embed_text_error_log_redacts_exception_content(
+        self,
+        embedding_service,
+        mock_embedder,
+        caplog,
+    ):
+        """Embedding failures should not log raw provider exception text."""
+        secret = "graph-embedding-secret-13579"
+        mock_embedder._create_mock.side_effect = RuntimeError(f"provider echoed {secret}")
+
+        with (
+            caplog.at_level(
+                "ERROR",
+                logger="src.infrastructure.graph.embedding.embedding_service",
+            ),
+            pytest.raises(RuntimeError, match=secret),
+        ):
+            await embedding_service.embed_text(f"Test {secret}")
+
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.unit
+    async def test_embed_text_safe_error_log_redacts_exception_content(
+        self,
+        embedding_service,
+        mock_embedder,
+        caplog,
+    ):
+        """Safe embedding fallback logs should not include raw exception text."""
+        secret = "graph-embedding-safe-secret-24680"
+        mock_embedder._create_mock.side_effect = RuntimeError(f"provider echoed {secret}")
+
+        with caplog.at_level(
+            "WARNING",
+            logger="src.infrastructure.graph.embedding.embedding_service",
+        ):
+            result = await embedding_service.embed_text_safe(f"Test {secret}")
+
+        assert result is None
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.unit
     async def test_embed_batch_empty_list(self, embedding_service):
         """Test batch embedding with empty list."""
         result = await embedding_service.embed_batch([])
