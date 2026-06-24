@@ -1443,7 +1443,8 @@ def test_register_http_service_emits_error_event_on_registration_failure(
     assert error_kwargs["project_id"] == "proj-1"
     assert error_kwargs["service_id"] == "svc-fail"
     assert error_kwargs["service_name"] == "docs"
-    assert error_kwargs["error_message"] == "persist failed"
+    assert error_kwargs["error_message"] == "RuntimeError"
+    assert "persist failed" not in error_kwargs["error_message"]
 
 
 @pytest.mark.unit

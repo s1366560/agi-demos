@@ -2044,7 +2044,7 @@ async def register_project_http_service(
             sandbox_id=sandbox_id,
             service_id=service_id,
             service_name=request.name,
-            error_message=str(e) or type(e).__name__,
+            error_message=type(e).__name__,
         )
         raise
 
