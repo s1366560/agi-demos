@@ -109,7 +109,10 @@ class MCPConnectionPool:
                 try:
                     await client.disconnect()
                 except Exception as e:
-                    logger.warning(f"Error disconnecting stale connection: {e}")
+                    logger.warning(
+                        "Error disconnecting stale connection error_type=%s",
+                        type(e).__name__,
+                    )
                 # Decrement created count since we're removing this connection
                 async with self._lock:
                     self._created_count -= 1

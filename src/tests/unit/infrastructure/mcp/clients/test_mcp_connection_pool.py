@@ -232,6 +232,35 @@ class TestConnectionPoolDisconnect:
             mock_disconnected.disconnect.assert_called()
 
     @pytest.mark.asyncio
+    async def test_get_connection_stale_disconnect_log_redacts_error(self, caplog):
+        """Failed stale-connection cleanup should not leak exception text."""
+        from src.infrastructure.mcp.clients.mcp_connection_pool import MCPConnectionPool
+
+        pool = MCPConnectionPool(url="ws://localhost:8765", pool_size=3)
+        secret_error = "stale-disconnect-secret-token"
+        mock_disconnected = MagicMock()
+        mock_disconnected.is_connected = False
+        mock_disconnected.disconnect = AsyncMock(side_effect=RuntimeError(secret_error))
+        await pool._connections.put(mock_disconnected)
+
+        with patch(
+            "src.infrastructure.mcp.clients.mcp_connection_pool.MCPWebSocketClient"
+        ) as mock_client_class:
+            mock_new_client = MagicMock()
+            mock_new_client.connect = AsyncMock(return_value=True)
+            mock_new_client.is_connected = True
+            mock_client_class.return_value = mock_new_client
+
+            with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+                conn = await pool.get_connection()
+
+        assert conn is mock_new_client
+        assert "Error disconnecting stale connection" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert secret_error not in caplog.text
+        mock_disconnected.disconnect.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_get_connection_disconnects_cancelled_client(self):
         """Test that cancelled connection creation releases client resources."""
         from src.infrastructure.mcp.clients.mcp_connection_pool import MCPConnectionPool
