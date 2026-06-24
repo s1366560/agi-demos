@@ -178,7 +178,7 @@ class HybridSearch:
             return query
         keywords = extract_keywords(query)
         if keywords:
-            logger.debug(f"Query expanded: '{query}' -> keywords: {keywords}")
+            logger.debug("Query expanded keyword_count=%d", len(keywords))
             return " ".join(keywords)
         return query
 

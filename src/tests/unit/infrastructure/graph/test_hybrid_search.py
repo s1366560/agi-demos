@@ -344,6 +344,22 @@ class TestHybridSearch:
         assert isinstance(result, HybridSearchResult)
 
     @pytest.mark.unit
+    def test_expand_query_log_redacts_query_content(self, hybrid_search, caplog):
+        """Query expansion debug logs should not include raw search query text."""
+        secret = "customer_secret_token_1122"
+
+        with caplog.at_level(
+            "DEBUG",
+            logger="src.infrastructure.graph.search.hybrid_search",
+        ):
+            expanded = hybrid_search._expand_query(f"find {secret} roadmap")
+
+        assert expanded == f"{secret} roadmap"
+        assert secret not in caplog.text
+        assert "find customer_secret_token_1122 roadmap" not in caplog.text
+        assert "keyword_count=2" in caplog.text
+
+    @pytest.mark.unit
     @pytest.mark.parametrize(
         ("results", "include_entities", "include_episodes"),
         [
