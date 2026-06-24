@@ -1895,7 +1895,11 @@ async def start_project_desktop(
         }
 
     except Exception as e:
-        logger.exception("Failed to start desktop for project %s", project_id)
+        logger.error(
+            "Failed to start desktop: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Failed to start desktop")) from e
 
 
