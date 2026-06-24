@@ -135,6 +135,54 @@ async def test_cleanup_connection_redacts_disconnect_error(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_connection_loop_redacts_error_state_and_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Connection loop failures should not expose raw exceptions through logs or status."""
+    exception_detail = "connect failed channel-loop-secret-1357"
+    secret_config_id = "channel-config-secret-2468"
+    expected_error = "Connection error: RuntimeError"
+
+    manager = ChannelConnectionManager()
+    connection = ManagedConnection(
+        config_id=secret_config_id,
+        project_id="project-1",
+        channel_type="feishu",
+        adapter=object(),
+        status=ConnectionStatus.DISCONNECTED,
+    )
+    config = SimpleNamespace(id=secret_config_id)
+
+    async def _fail_attempt(_connection: ManagedConnection, _config: object) -> None:
+        raise RuntimeError(exception_detail)
+
+    manager._attempt_connect = _fail_attempt  # type: ignore[method-assign]
+    manager._handle_reconnect_backoff = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    manager._cleanup_connection = AsyncMock()  # type: ignore[method-assign]
+    manager._update_db_status = AsyncMock()  # type: ignore[method-assign]
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.channels.connection_manager",
+    ):
+        await manager._connection_loop(connection, config)  # type: ignore[arg-type]
+
+    assert "Connection error" in caplog.text
+    assert exception_detail not in caplog.text
+    assert secret_config_id not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "has_config_id=True" in caplog.text
+    assert connection.status == ConnectionStatus.ERROR
+    assert connection.last_error == expected_error
+    manager._update_db_status.assert_awaited_once_with(  # type: ignore[attr-defined]
+        secret_config_id,
+        "error",
+        expected_error,
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_safe_route_message_redacts_router_exception(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

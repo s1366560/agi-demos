@@ -399,10 +399,15 @@ class ChannelConnectionManager:
                 connection.status = ConnectionStatus.DISCONNECTED
 
             except Exception as e:
-                logger.error(f"[ChannelManager] Connection error for {config.id}: {e}")
+                error_summary = f"Connection error: {type(e).__name__}"
+                logger.error(
+                    "[ChannelManager] Connection error error_type=%s has_config_id=%s",
+                    type(e).__name__,
+                    bool(config.id),
+                )
                 connection.status = ConnectionStatus.ERROR
-                connection.last_error = str(e)
-                await self._update_db_status(config.id, "error", str(e))
+                connection.last_error = error_summary
+                await self._update_db_status(config.id, "error", error_summary)
 
             should_stop = await self._handle_reconnect_backoff(connection, config)
             if should_stop:
