@@ -591,7 +591,7 @@ class MCPHttpClient:
         """
         timeout = timeout or self.timeout
         logger.info(f"Calling remote MCP tool: {name}")
-        logger.debug(f"Tool arguments: {arguments}")
+        logger.debug("Tool arguments argument_keys=%s", sorted(arguments))
 
         # Use SSE transport if connected via SSE
         if self.transport_type == "sse" and self._write_stream:

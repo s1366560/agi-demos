@@ -25,10 +25,12 @@ from src.infrastructure.mcp._security import (
 from src.infrastructure.mcp.clients.global_connection_limiter import (
     GlobalConnectionLimiter,
 )
+from src.infrastructure.mcp.clients.http_client import MCPHttpClient
 from src.infrastructure.mcp.clients.subprocess_client import MCPSubprocessClient
 
 pytestmark = pytest.mark.unit
 
+HTTP_LOGGER_NAME = "src.infrastructure.mcp.clients.http_client"
 SUBPROCESS_LOGGER_NAME = "src.infrastructure.mcp.clients.subprocess_client"
 
 
@@ -150,6 +152,36 @@ class TestGlobalLimiterFastPath:
         assert "error_type=RuntimeError" in caplog.text
         assert secret_error not in caplog.text
         callback.assert_awaited_once()
+
+
+class TestHTTPClientHardening:
+    async def test_call_tool_debug_log_redacts_arguments(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPHttpClient(url="https://mcp.example.test", timeout=60)
+        argument_secret = "http-argument-secret-token"
+        client._send_request = AsyncMock(  # type: ignore[method-assign]
+            return_value={"result": {"content": [{"type": "text", "text": "ok"}]}}
+        )
+
+        with caplog.at_level(logging.DEBUG, logger=HTTP_LOGGER_NAME):
+            result = await client.call_tool(
+                "search",
+                {"token": argument_secret, "safe": "metadata"},
+                timeout=70,
+            )
+
+        assert result.content == [{"type": "text", "text": "ok"}]
+        assert result.isError is False
+        assert "Tool arguments" in caplog.text
+        assert "argument_keys=" in caplog.text
+        assert argument_secret not in caplog.text
+        client._send_request.assert_awaited_once_with(  # type: ignore[attr-defined]
+            "tools/call",
+            {"name": "search", "arguments": {"token": argument_secret, "safe": "metadata"}},
+            timeout=70,
+        )
 
 
 class TestSubprocessCancelLadder:
