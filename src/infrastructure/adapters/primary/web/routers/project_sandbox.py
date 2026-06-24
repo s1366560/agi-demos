@@ -1751,7 +1751,11 @@ async def terminate_project_sandbox(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Failed to terminate sandbox for project %s", project_id)
+        logger.error(
+            "Failed to terminate sandbox: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Termination failed")) from e
 
 

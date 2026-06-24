@@ -790,6 +790,36 @@ def test_terminate_project_sandbox_missing_sandbox_is_sanitized(
 
 
 @pytest.mark.unit
+def test_terminate_project_sandbox_error_log_omits_ids_and_exception_text(
+    sandbox_http_client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    lifecycle_service = AsyncMock()
+    lifecycle_service.terminate_project_sandbox = AsyncMock(
+        side_effect=RuntimeError("terminate secret for proj-1")
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    response = sandbox_http_client.delete("/api/v1/projects/proj-1/sandbox")
+
+    assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert response.json()["detail"] == "Termination failed"
+    assert "proj-1" not in response.text
+    assert "terminate secret" not in response.text
+    assert "Failed to terminate sandbox" in caplog.text
+    assert "has_project_id=True" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "proj-1" not in caplog.text
+    assert "terminate secret" not in caplog.text
+
+
+@pytest.mark.unit
 def test_terminate_project_sandbox_publish_error_log_omits_exception_text(
     sandbox_http_client: TestClient,
     caplog: pytest.LogCaptureFixture,
