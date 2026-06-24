@@ -104,14 +104,17 @@ def test_schedule_route_message_logs_error_when_scheduler_fails(
     manager = ChannelConnectionManager()
     manager._main_loop = _Loop()  # type: ignore[assignment]
     message = _build_message()
+    exception_detail = "loop closed channel-schedule-secret-1357"
 
     with patch(
         "src.infrastructure.channels.connection_manager.asyncio.run_coroutine_threadsafe",
-        side_effect=RuntimeError("loop closed"),
+        side_effect=RuntimeError(exception_detail),
     ):
         manager._schedule_route_message(message)
 
     assert "Failed to schedule message routing" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
 
 
 @pytest.mark.unit

@@ -558,7 +558,10 @@ class ChannelConnectionManager:
             future = asyncio.run_coroutine_threadsafe(coro, self._main_loop)  # type: ignore[arg-type]
         except Exception as e:
             coro.close()
-            logger.error(f"[ChannelManager] Failed to schedule message routing: {e}")
+            logger.error(
+                "[ChannelManager] Failed to schedule message routing error_type=%s",
+                type(e).__name__,
+            )
             return
 
         future.add_done_callback(self._on_route_future_done)
