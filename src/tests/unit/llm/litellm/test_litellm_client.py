@@ -160,6 +160,28 @@ class TestLiteLLMClient:
         assert "error_type=JSONDecodeError" in caplog.text
 
     @pytest.mark.asyncio
+    async def test_generate_response_provider_error_redacts_exception_content(self, client, caplog):
+        """Provider call failures should not log raw exception text."""
+        secret = "provider-error-secret-1357"
+
+        with patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+            mock_acompletion.side_effect = RuntimeError(f"provider echoed {secret}")
+
+            messages = [Message(role="user", content=f"Test {secret}")]
+
+            with (
+                caplog.at_level(
+                    "ERROR",
+                    logger="src.infrastructure.llm.litellm.litellm_client",
+                ),
+                pytest.raises(RuntimeError),
+            ):
+                await client._generate_response(messages)
+
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_generate_response_rate_limit_error(self, client):
         """Test that rate limit errors are properly raised."""
         with patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:

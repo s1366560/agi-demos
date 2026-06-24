@@ -1069,7 +1069,7 @@ class LiteLLMClient(LLMClient):
         except RateLimitError:
             raise
         except Exception as e:
-            logger.error(f"LiteLLM error: {e}")
+            logger.error("LiteLLM error error_type=%s", type(e).__name__)
             raise
 
     def _get_model_for_size(self, model_size: ModelSize) -> str:
