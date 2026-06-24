@@ -344,6 +344,64 @@ class TestMemoryService:
         # Assert - DB deletion should still happen
         mock_memory_repo.delete.assert_called_once_with(memory_id)
 
+    async def test_delete_memory_logs_do_not_include_identifier_on_success(
+        self,
+        mock_memory_repo,
+        mock_graphiti_client,
+        caplog,
+    ):
+        """Successful deletion logs must not expose memory IDs."""
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
+        secret_memory_id = "memory-delete-secret-alpha"
+        mock_memory_repo.find_by_id.return_value = Memory(
+            id=secret_memory_id,
+            title="Private title",
+            content="Private content",
+            version=1,
+            project_id="project-delete-secret",
+            author_id="user-delete-secret",
+            created_at=datetime.now(UTC),
+        )
+        mock_graphiti_client.delete_episode_by_memory_id = AsyncMock(return_value=True)
+        caplog.set_level(logging.INFO, logger="src.application.services.memory_service")
+
+        await service.delete_memory(secret_memory_id)
+
+        assert secret_memory_id not in caplog.text
+        assert "Removed graph state with proper cleanup" in caplog.text
+        assert "Deleted memory" in caplog.text
+
+    async def test_delete_memory_graph_failure_logs_do_not_include_identifier_or_error_text(
+        self,
+        mock_memory_repo,
+        mock_graphiti_client,
+        caplog,
+    ):
+        """Graph cleanup failure logs must not expose memory IDs or backend error text."""
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
+        secret_memory_id = "memory-delete-secret-beta"
+        exception_detail = "neo4j delete failed for hidden memory theta-4912"
+        mock_memory_repo.find_by_id.return_value = Memory(
+            id=secret_memory_id,
+            title="Private title",
+            content="Private content",
+            version=1,
+            project_id="project-delete-secret",
+            author_id="user-delete-secret",
+            created_at=datetime.now(UTC),
+        )
+        mock_graphiti_client.delete_episode_by_memory_id = AsyncMock(
+            side_effect=RuntimeError(exception_detail)
+        )
+        caplog.set_level(logging.WARNING, logger="src.application.services.memory_service")
+
+        await service.delete_memory(secret_memory_id)
+
+        assert secret_memory_id not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        mock_memory_repo.delete.assert_called_once_with(secret_memory_id)
+
     async def test_create_memory_persists_system_metadata(
         self, mock_memory_repo, mock_graphiti_client
     ):

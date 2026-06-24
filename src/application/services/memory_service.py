@@ -357,21 +357,22 @@ class MemoryService:
         graph_cleanup_failed = False
         try:
             await self._graph_service.delete_episode_by_memory_id(memory_id)
-            logger.info(f"Removed graph state with proper cleanup for memory {memory_id}")
+            logger.info("Removed graph state with proper cleanup")
         except Exception as e:
             graph_cleanup_failed = True
             logger.warning(
-                f"Failed to remove graph state for memory {memory_id}: {e}. "
-                "Orphaned data may remain in Neo4j. Continuing with database deletion."
+                "Failed to remove graph state for memory error_type=%s. "
+                "Orphaned data may remain in Neo4j. Continuing with database deletion.",
+                type(e).__name__,
             )
 
         # Delete memory from database
         await self._memory_repo.delete(memory_id)
 
         if graph_cleanup_failed:
-            logger.warning(f"Deleted memory {memory_id} from database but graph cleanup failed")
+            logger.warning("Deleted memory from database but graph cleanup failed")
         else:
-            logger.info(f"Deleted memory {memory_id}")
+            logger.info("Deleted memory")
 
     async def share_memory(self, memory_id: str, collaborators: list[str]) -> Memory:
         """
