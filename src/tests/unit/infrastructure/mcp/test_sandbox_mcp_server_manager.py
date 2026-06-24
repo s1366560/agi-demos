@@ -313,6 +313,28 @@ class TestSandboxMCPServerManager:
         assert servers[1].name == "server2"
         assert servers[1].status == "stopped"
 
+    async def test_list_servers_failure_log_omits_project_and_error_text(self, caplog):
+        mgr, resource = self._make_manager()
+        resource.execute_tool.side_effect = RuntimeError("list secret token for secret-project-id")
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.sandbox_mcp_server_manager",
+        )
+
+        servers = await mgr.list_servers(project_id="secret-project-id")
+
+        assert servers == []
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_mcp_server_manager"
+        )
+        assert "Failed to list MCP servers" in message
+        assert "secret-project-id" not in message
+        assert "list secret token" not in message
+        assert "has_project_id=True" in message
+        assert "error_type=RuntimeError" in message
+
     async def test_list_prompts_calls_sandbox_management_tool(self):
         mgr, resource = self._make_manager()
         resource.execute_tool.return_value = self._tool_result(
@@ -328,6 +350,32 @@ class TestSandboxMCPServerManager:
             arguments={"name": "test-server"},
             timeout=15.0,
         )
+
+    async def test_list_prompts_failure_log_omits_server_name_and_error_text(self, caplog):
+        mgr, resource = self._make_manager()
+        resource.execute_tool.side_effect = RuntimeError("prompt secret token")
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.sandbox_mcp_server_manager",
+        )
+
+        prompts = await mgr.list_prompts(
+            project_id="secret-project-id",
+            server_name="secret-server-name",
+        )
+
+        assert prompts == []
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_mcp_server_manager"
+        )
+        assert "Failed to list MCP prompts" in message
+        assert "secret-project-id" not in message
+        assert "secret-server-name" not in message
+        assert "prompt secret token" not in message
+        assert "has_server_name=True" in message
+        assert "error_type=RuntimeError" in message
 
     async def test_set_log_level_calls_sandbox_management_tool(self):
         mgr, resource = self._make_manager()
@@ -346,6 +394,33 @@ class TestSandboxMCPServerManager:
             arguments={"name": "test-server", "level": "debug"},
             timeout=15.0,
         )
+
+    async def test_set_log_level_failure_log_omits_server_name_and_error_text(self, caplog):
+        mgr, resource = self._make_manager()
+        resource.execute_tool.side_effect = RuntimeError("log level secret token")
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.sandbox_mcp_server_manager",
+        )
+
+        result = await mgr.set_log_level(
+            project_id="secret-project-id",
+            server_name="secret-server-name",
+            level="debug",
+        )
+
+        assert result is False
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_mcp_server_manager"
+        )
+        assert "Failed to set MCP log level" in message
+        assert "secret-project-id" not in message
+        assert "secret-server-name" not in message
+        assert "log level secret token" not in message
+        assert "has_server_name=True" in message
+        assert "error_type=RuntimeError" in message
 
     async def test_parse_tool_result_json(self):
         mgr, _ = self._make_manager()

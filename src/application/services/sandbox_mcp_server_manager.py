@@ -370,7 +370,11 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 return [p for p in prompts if isinstance(p, dict)]
             return []
         except Exception as e:
-            logger.warning(f"Failed to list MCP prompts for '{server_name}': {e}")
+            logger.warning(
+                "Failed to list MCP prompts: has_server_name=%s error_type=%s",
+                bool(server_name),
+                type(e).__name__,
+            )
             return []
 
     async def set_log_level(
@@ -390,7 +394,11 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             payload = self._parse_tool_result(result)
             return isinstance(payload, dict) and payload.get("success") is True
         except Exception as e:
-            logger.warning(f"Failed to set MCP log level for '{server_name}': {e}")
+            logger.warning(
+                "Failed to set MCP log level: has_server_name=%s error_type=%s",
+                bool(server_name),
+                type(e).__name__,
+            )
             return False
 
     @override
@@ -479,7 +487,11 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 for s in servers_list
             ]
         except Exception as e:
-            logger.warning(f"Failed to list MCP servers: {e}")
+            logger.warning(
+                "Failed to list MCP servers: has_project_id=%s error_type=%s",
+                bool(project_id),
+                type(e).__name__,
+            )
             return []
 
     def _parse_tool_result(self, result: dict[str, Any]) -> Any:
