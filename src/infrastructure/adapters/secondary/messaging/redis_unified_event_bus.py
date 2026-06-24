@@ -447,7 +447,17 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
             # Get event data
             event_json = decoded.get("data")
             if not event_json:
-                logger.warning(f"Message {msg_id} has no data field")
+                logger.warning(
+                    " ".join(
+                        (
+                            "Message missing data field",
+                            "has_message_id=%s",
+                            "has_stream_key=%s",
+                        )
+                    ),
+                    bool(msg_id),
+                    bool(stream_key),
+                )
                 return None
 
             # Deserialize event
@@ -464,7 +474,18 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
             )
 
         except Exception as e:
-            logger.error(f"Failed to parse message {msg_id}: {e}")
+            logger.error(
+                " ".join(
+                    (
+                        "Failed to parse message error_type=%s",
+                        "has_message_id=%s",
+                        "has_stream_key=%s",
+                    )
+                ),
+                type(e).__name__,
+                bool(msg_id),
+                bool(stream_key),
+            )
             return None
 
     async def get_events(

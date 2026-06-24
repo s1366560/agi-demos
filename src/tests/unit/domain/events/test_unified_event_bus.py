@@ -349,6 +349,52 @@ class TestRedisUnifiedEventBusLogging:
         assert "block_ms=3" in caplog.text
         assert "has_pattern=True" in caplog.text
 
+    def test_parse_message_error_log_redacts_message_stream_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        exception_detail = "parse payload secret unavailable"
+        secret_message_id = "secret-message-id-7319"
+        secret_stream_key = "events:agent.secret-conversation.secret-message"
+        redis_client = Mock()
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        adapter._serializer.deserialize = Mock(side_effect=ValueError(exception_detail))  # type: ignore[method-assign]
+
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+            event = adapter._parse_message(
+                secret_message_id,
+                {b"data": b'{"secret": true}'},
+                secret_stream_key,
+            )
+
+        assert event is None
+        assert "Failed to parse message" in caplog.text
+        assert secret_message_id not in caplog.text
+        assert secret_stream_key not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=ValueError" in caplog.text
+        assert "has_message_id=True" in caplog.text
+        assert "has_stream_key=True" in caplog.text
+
+    def test_parse_message_missing_data_log_redacts_message_and_stream(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        secret_message_id = "secret-message-id-9137"
+        secret_stream_key = "events:agent.secret-conversation.secret-message"
+        redis_client = Mock()
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            event = adapter._parse_message(secret_message_id, {}, secret_stream_key)
+
+        assert event is None
+        assert "Message missing data field" in caplog.text
+        assert secret_message_id not in caplog.text
+        assert secret_stream_key not in caplog.text
+        assert "has_message_id=True" in caplog.text
+        assert "has_stream_key=True" in caplog.text
+
     @pytest.mark.asyncio
     async def test_get_events_error_log_redacts_routing_key_and_exception(
         self,
