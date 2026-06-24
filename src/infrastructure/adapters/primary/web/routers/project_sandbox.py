@@ -777,7 +777,11 @@ async def _resolve_sandbox_container_ip(adapter: MCPSandboxAdapter, sandbox_id: 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to resolve sandbox container IP for %s: %s", sandbox_id, e)
+        logger.error(
+            "Failed to resolve sandbox container IP: has_sandbox_id=%s error_type=%s",
+            bool(sandbox_id),
+            type(e).__name__,
+        )
 
     raise HTTPException(
         status_code=503,

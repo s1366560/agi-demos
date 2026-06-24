@@ -242,6 +242,34 @@ def test_get_http_service_redis_client_for_websocket_error_log_omits_exception_t
 
 
 @pytest.mark.unit
+async def test_resolve_sandbox_container_ip_error_log_omits_ids_and_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Container IP lookup failures should not leak sandbox IDs or Docker errors."""
+
+    class _FailingContainers:
+        def get(self, _sandbox_id):
+            raise RuntimeError("docker secret for sandbox-secret")
+
+    adapter = SimpleNamespace(_docker=SimpleNamespace(containers=_FailingContainers()))
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await router_mod._resolve_sandbox_container_ip(adapter, "sandbox-secret")
+
+    assert exc_info.value.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert exc_info.value.detail == "Unable to resolve sandbox network address"
+    assert "Failed to resolve sandbox container IP" in caplog.text
+    assert "has_sandbox_id=True" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "sandbox-secret" not in caplog.text
+    assert "docker secret" not in caplog.text
+
+
+@pytest.mark.unit
 def test_ensure_project_sandbox_publish_error_log_omits_exception_text(
     sandbox_http_client: TestClient,
     caplog: pytest.LogCaptureFixture,
