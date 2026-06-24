@@ -183,6 +183,51 @@ class TestHTTPClientHardening:
             timeout=70,
         )
 
+    async def test_send_request_debug_logs_redact_payloads(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPHttpClient(url="https://mcp.example.test", timeout=60)
+        request_secret = "http-request-secret-token"
+        response_secret = "http-response-secret-token"
+        response_payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"content": [{"type": "text", "text": response_secret}]},
+        }
+        response = MagicMock()
+        response.status = 200
+        response.json = AsyncMock(return_value=response_payload)
+        post_context = AsyncMock()
+        post_context.__aenter__.return_value = response
+        post_context.__aexit__.return_value = False
+        session = MagicMock()
+        session.post.return_value = post_context
+        client._session = session  # type: ignore[assignment]
+
+        with caplog.at_level(logging.DEBUG, logger=HTTP_LOGGER_NAME):
+            result = await client._send_request(
+                "tools/call",
+                {"name": "search", "token": request_secret},
+                timeout=70,
+            )
+
+        assert result == response_payload
+        assert "Remote MCP request" in caplog.text
+        assert "method=tools/call" in caplog.text
+        assert "params_keys=" in caplog.text
+        assert "Remote MCP response" in caplog.text
+        assert "response_chars=" in caplog.text
+        assert request_secret not in caplog.text
+        assert response_secret not in caplog.text
+        session.post.assert_called_once()
+        post_kwargs = session.post.call_args.kwargs
+        assert post_kwargs["json"]["method"] == "tools/call"
+        assert post_kwargs["json"]["params"] == {
+            "name": "search",
+            "token": request_secret,
+        }
+
 
 class TestSubprocessCancelLadder:
     async def test_connect_initialize_failure_log_redacts_response_and_stderr(

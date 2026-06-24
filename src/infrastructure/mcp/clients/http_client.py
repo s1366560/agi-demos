@@ -646,7 +646,12 @@ class MCPHttpClient:
             "id": request_id,
         }
 
-        logger.debug(f"Remote MCP request: {json.dumps(request)}")
+        logger.debug(
+            "Remote MCP request method=%s id=%s params_keys=%s",
+            method,
+            request_id,
+            sorted(params),
+        )
 
         try:
             # Determine endpoint based on method
@@ -662,7 +667,13 @@ class MCPHttpClient:
                     return None
 
                 result = await response.json()
-                logger.debug(f"Remote MCP response: {json.dumps(result)}")
+                result_keys = sorted(result) if isinstance(result, dict) else []
+                logger.debug(
+                    "Remote MCP response id=%s response_keys=%s response_chars=%s",
+                    request_id,
+                    result_keys,
+                    len(json.dumps(result)),
+                )
                 return cast(dict[str, Any] | None, result)
 
         except TimeoutError:
