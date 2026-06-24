@@ -1,5 +1,9 @@
 """Unit tests for MCP transport layer."""
 
+import asyncio
+import logging
+from typing import Any, cast
+
 import pytest
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType
@@ -8,6 +12,35 @@ from src.infrastructure.mcp.transport.base import (
     MCPTransportError,
 )
 from src.infrastructure.mcp.transport.factory import TransportFactory
+
+STDIO_LOGGER_NAME = "src.infrastructure.mcp.transport.stdio"
+
+
+class _ClosedStdout:
+    async def readline(self) -> bytes:
+        return b""
+
+
+class _HangingStdout:
+    async def readline(self) -> bytes:
+        await asyncio.sleep(10)
+        return b""
+
+
+class _FakeStderr:
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+
+    async def read(self) -> bytes:
+        return self._data
+
+
+class _FakeProcess:
+    def __init__(self, stdout: Any, stderr: Any, returncode: int | None = 1) -> None:
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
+
 
 # ============================================================================
 # TransportFactory Tests
@@ -171,6 +204,62 @@ class TestStdioTransport:
 
         with pytest.raises(MCPTransportClosedError):
             await transport.receive()
+
+    @pytest.mark.asyncio
+    async def test_receive_closed_connection_log_redacts_stderr(self, caplog):
+        """Closed subprocess stderr should not be copied into logs."""
+        from src.infrastructure.mcp.transport.stdio import StdioTransport
+
+        secret_stderr = b"API_KEY=stdio-secret-token\ntraceback details"
+        transport = StdioTransport()
+        transport._process = cast(
+            Any,
+            _FakeProcess(
+                stdout=_ClosedStdout(),
+                stderr=_FakeStderr(secret_stderr),
+                returncode=1,
+            ),
+        )
+
+        with (
+            caplog.at_level(logging.ERROR, logger=STDIO_LOGGER_NAME),
+            pytest.raises(MCPTransportClosedError, match="Process closed connection"),
+        ):
+            await transport.receive(timeout=0.01)
+
+        assert "Process closed connection" in caplog.text
+        assert "stderr_bytes=" in caplog.text
+        assert "API_KEY" not in caplog.text
+        assert "stdio-secret-token" not in caplog.text
+        assert "traceback details" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_receive_timeout_after_exit_log_redacts_stderr(self, caplog):
+        """Timed-out exited subprocess stderr should not be copied into logs."""
+        from src.infrastructure.mcp.transport.stdio import StdioTransport
+
+        secret_stderr = b"password=stdio-secret-token\nrequest payload"
+        transport = StdioTransport()
+        transport._process = cast(
+            Any,
+            _FakeProcess(
+                stdout=_HangingStdout(),
+                stderr=_FakeStderr(secret_stderr),
+                returncode=2,
+            ),
+        )
+
+        with (
+            caplog.at_level(logging.ERROR, logger=STDIO_LOGGER_NAME),
+            pytest.raises(TimeoutError),
+        ):
+            await transport.receive(timeout=0.001)
+
+        assert "Process exited with code 2" in caplog.text
+        assert "stderr_bytes=" in caplog.text
+        assert "password" not in caplog.text
+        assert "stdio-secret-token" not in caplog.text
+        assert "request payload" not in caplog.text
 
 
 # ============================================================================

@@ -246,14 +246,15 @@ class StdioTransport(BaseTransport):
             if self._process.returncode is not None:
                 stderr = await self._process.stderr.read() if self._process.stderr else b""
                 logger.error(
-                    f"Process exited with code {self._process.returncode}, "
-                    f"stderr: {stderr.decode()[:500]}"
+                    "Process exited with code %s stderr_bytes=%s",
+                    self._process.returncode,
+                    len(stderr),
                 )
             raise
 
         if not line:
             stderr = await self._process.stderr.read() if self._process.stderr else b""
-            logger.error(f"Process closed connection, stderr: {stderr.decode()[:500]}")
+            logger.error("Process closed connection stderr_bytes=%s", len(stderr))
             raise MCPTransportClosedError("Process closed connection")
 
         logger.debug(f"Received: {line.decode()[:200]}...")
