@@ -221,7 +221,11 @@ class SandboxOrchestrator:
             return status
 
         except Exception as e:
-            logger.error(f"Failed to start desktop for {sandbox_id}: {e}")
+            logger.error(
+                "Failed to start desktop: has_sandbox_id=%s error_type=%s",
+                bool(sandbox_id),
+                type(e).__name__,
+            )
             raise
 
     async def stop_desktop(self, sandbox_id: str) -> bool:

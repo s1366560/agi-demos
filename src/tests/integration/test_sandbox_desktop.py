@@ -8,6 +8,7 @@ Tests the desktop management endpoints:
 TDD: Tests written before implementation.
 """
 
+import logging
 from datetime import datetime
 from unittest.mock import Mock
 
@@ -170,6 +171,62 @@ class TestSandboxDesktopEndpoints:
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
+
+    async def test_start_desktop_failure_log_omits_sandbox_id_and_error_text(
+        self,
+        authenticated_async_client,
+        monkeypatch,
+        caplog,
+        test_sandbox_id: str,
+    ):
+        """Test start desktop failure logs avoid raw sandbox IDs and exception messages."""
+        from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
+            MCPSandboxAdapter,
+        )
+
+        async def mock_get_sandbox(self, sandbox_id: str):
+            return create_mock_sandbox_instance(sandbox_id)
+
+        async def mock_call_tool(
+            self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0
+        ):
+            raise RuntimeError("desktop upstream secret token")
+
+        async def mock_connect_mcp(self, sandbox_id: str, timeout: float = 30.0):
+            return True
+
+        monkeypatch.setattr(MCPSandboxAdapter, "get_sandbox", mock_get_sandbox)
+        monkeypatch.setattr(MCPSandboxAdapter, "call_tool", mock_call_tool)
+        monkeypatch.setattr(MCPSandboxAdapter, "connect_mcp", mock_connect_mcp)
+        caplog.set_level(
+            logging.ERROR,
+            logger="src.infrastructure.adapters.primary.web.routers.sandbox.services",
+        )
+
+        response = await authenticated_async_client.post(
+            f"/api/v1/sandbox/{test_sandbox_id}/desktop",
+            json=DESKTOP_START_REQUEST,
+        )
+
+        assert response.status_code == 500
+        target_records = [
+            record
+            for record in caplog.records
+            if record.name
+            in {
+                "src.application.services.sandbox_orchestrator",
+                "src.infrastructure.adapters.primary.web.routers.sandbox.services",
+            }
+            and record.levelno >= logging.ERROR
+        ]
+        assert len(target_records) == 2
+        for record in target_records:
+            message = record.getMessage()
+            assert "Failed to start desktop" in message
+            assert "error_type=RuntimeError" in message
+            assert test_sandbox_id not in message
+            assert "desktop upstream secret token" not in message
+            assert record.exc_info is None
 
     async def test_stop_desktop_returns_200(
         self,

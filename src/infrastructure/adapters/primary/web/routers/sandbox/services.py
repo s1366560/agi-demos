@@ -104,7 +104,11 @@ async def start_desktop(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Failed to start desktop for sandbox %s", sandbox_id)
+        logger.error(
+            "Failed to start desktop: has_sandbox_id=%s error_type=%s",
+            bool(sandbox_id),
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Failed to start desktop")) from e
 
 
