@@ -1967,7 +1967,11 @@ async def start_project_terminal(
         }
 
     except Exception as e:
-        logger.exception("Failed to start terminal for project %s", project_id)
+        logger.error(
+            "Failed to start terminal: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Failed to start terminal")) from e
 
 
