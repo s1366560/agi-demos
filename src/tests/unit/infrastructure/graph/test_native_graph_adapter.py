@@ -104,6 +104,59 @@ class TestNativeGraphAdapterProperties:
 
 
 @pytest.mark.unit
+class TestNativeGraphAdapterEmbeddingDimension:
+    """Tests for embedding dimension compatibility helpers."""
+
+    @pytest.mark.asyncio
+    async def test_get_existing_embedding_dimension_redacts_property_exception_details(
+        self,
+        adapter,
+        mock_neo4j_client,
+        caplog,
+    ):
+        """Fast-path dimension lookup failures should not write exception details to logs."""
+        secret = "embedding-dim-property-secret-2468"
+        mock_neo4j_client.execute_query.side_effect = [
+            RuntimeError(secret),
+            MagicMock(records=[]),
+        ]
+
+        with caplog.at_level(
+            logging.DEBUG,
+            logger="src.infrastructure.graph.native_graph_adapter",
+        ):
+            result = await adapter._get_existing_embedding_dimension()
+
+        assert result is None
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_get_existing_embedding_dimension_redacts_fallback_exception_details(
+        self,
+        adapter,
+        mock_neo4j_client,
+        caplog,
+    ):
+        """Fallback dimension lookup failures should not write exception details to logs."""
+        secret = "embedding-dim-fallback-secret-1357"
+        mock_neo4j_client.execute_query.side_effect = [
+            MagicMock(records=[]),
+            RuntimeError(secret),
+        ]
+
+        with caplog.at_level(
+            logging.WARNING,
+            logger="src.infrastructure.graph.native_graph_adapter",
+        ):
+            result = await adapter._get_existing_embedding_dimension()
+
+        assert result is None
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
 class TestNativeGraphAdapterAddEpisode:
     """Tests for add_episode method."""
 

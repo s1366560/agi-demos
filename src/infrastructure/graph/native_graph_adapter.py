@@ -343,7 +343,10 @@ class NativeGraphAdapter(GraphServicePort):
             if result.records and len(result.records) > 0 and result.records[0]["dim"]:
                 return cast(int | None, result.records[0]["dim"])
         except Exception as e:
-            logger.debug(f"Failed to get embedding_dim property: {e}")
+            logger.debug(
+                "Failed to get embedding_dim property: error_type=%s",
+                type(e).__name__,
+            )
 
         # Fallback: compute from actual vector size
         query_size = """
@@ -357,7 +360,10 @@ class NativeGraphAdapter(GraphServicePort):
             if result.records and len(result.records) > 0:
                 return cast(int | None, result.records[0]["dim"])
         except Exception as e:
-            logger.warning(f"Failed to get existing embedding dimension: {e}")
+            logger.warning(
+                "Failed to get existing embedding dimension: error_type=%s",
+                type(e).__name__,
+            )
         return None
 
     async def _clear_embeddings_by_dimension(self, dimension: int) -> int:
