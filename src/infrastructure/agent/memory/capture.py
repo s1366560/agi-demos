@@ -157,7 +157,7 @@ class MemoryCapturePostprocessor:
             if session_to_close and captured > 0:
                 await session_to_close.commit()
         except Exception as e:
-            logger.warning(f"Memory capture storage error: {e}")
+            logger.warning("Memory capture storage error error_type=%s", type(e).__name__)
             if session_to_close:
                 with contextlib.suppress(Exception):
                     await session_to_close.rollback()
@@ -264,7 +264,11 @@ class MemoryCapturePostprocessor:
 
             return self._parse_llm_response(content)
         except Exception as e:
-            logger.warning(f"LLM memory extraction failed ({type(self._llm_client).__name__}): {e}")
+            logger.warning(
+                "LLM memory extraction failed client_type=%s error_type=%s",
+                type(self._llm_client).__name__,
+                type(e).__name__,
+            )
             return []
 
     def _parse_llm_response(self, content: str) -> list[dict[str, Any]]:
@@ -321,7 +325,7 @@ class MemoryCapturePostprocessor:
             logger.info(f"Auto-captured memory: category={category}, len={len(content)}")
             return True
         except Exception as e:
-            logger.warning(f"Failed to capture memory: {e}")
+            logger.warning("Failed to capture memory error_type=%s", type(e).__name__)
             return False
 
     async def _is_duplicate(
