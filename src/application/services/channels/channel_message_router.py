@@ -952,7 +952,10 @@ class ChannelMessageRouter:
         try:
             await asyncio.wait_for(task, timeout=15.0)
         except (TimeoutError, Exception) as e:
-            logger.warning(f"[MessageRouter] Card updater error: {e}")
+            logger.warning(
+                "[MessageRouter] Card updater error: error_type=%s",
+                type(e).__name__,
+            )
             task.cancel()
 
     async def _send_final_response(

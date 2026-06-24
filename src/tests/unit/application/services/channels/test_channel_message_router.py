@@ -1,5 +1,6 @@
 """Unit tests for ChannelMessageRouter."""
 
+import asyncio
 import json
 import logging
 from types import SimpleNamespace
@@ -838,6 +839,29 @@ async def test_send_final_response_empty_log_omits_conversation_identifier(
     )
     assert "secret-conversation-id" not in caplog.text
     assert "has_conversation_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_await_card_updater_error_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Card updater failures should log error type without exception details."""
+    router = ChannelMessageRouter()
+
+    async def failing_task() -> None:
+        raise RuntimeError("secret-card-token")
+
+    task = asyncio.create_task(failing_task())
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router._await_card_updater(task)
+
+    assert "secret-card-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
 
 
 @pytest.mark.unit
