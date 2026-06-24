@@ -1,5 +1,6 @@
 """Unit tests for sandbox lifecycle route hardening."""
 
+import logging
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
@@ -7,13 +8,43 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import HTTPException, status
 
-from src.infrastructure.adapters.primary.web.routers.sandbox import lifecycle as lifecycle_router
+from src.infrastructure.adapters.primary.web.routers.sandbox import (
+    lifecycle as lifecycle_router,
+    utils as sandbox_utils,
+)
 from src.infrastructure.adapters.primary.web.routers.sandbox.schemas import CreateSandboxRequest
 from src.infrastructure.adapters.primary.web.routers.sandbox.utils import assert_caller_owns_sandbox
 
 
 async def _allow_project_access(**_kwargs: Any) -> None:
     return None
+
+
+@pytest.mark.unit
+def test_get_event_publisher_error_log_omits_exception_text(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class FailingContainer:
+        def sandbox_event_publisher(self) -> object:
+            raise RuntimeError("event publisher secret")
+
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(container=FailingContainer()))
+    )
+    monkeypatch.setattr(sandbox_utils, "_event_publisher", None)
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.sandbox.utils",
+    )
+
+    result = sandbox_utils.get_event_publisher(request)
+
+    assert result is None
+    assert sandbox_utils._event_publisher is None
+    assert "Could not create event publisher" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "event publisher secret" not in caplog.text
 
 
 @pytest.mark.unit
