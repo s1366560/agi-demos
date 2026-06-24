@@ -408,7 +408,11 @@ async def extract_artifacts_from_text(
             )
 
         except Exception as e:
-            logger.warning(f"Failed to decode embedded data: {e}")
+            logger.warning(
+                "Failed to decode embedded data error_type=%s has_mime_type=%s",
+                type(e).__name__,
+                bool(mime_type),
+            )
 
     return artifacts
 
@@ -482,7 +486,18 @@ def extract_artifacts_from_mcp_result(
                     counter += 1
 
                 except Exception as e:
-                    logger.warning(f"Failed to decode MCP image content: {e}")
+                    logger.warning(
+                        " ".join(
+                            (
+                                "Failed to decode MCP image content error_type=%s",
+                                "has_tool_name=%s",
+                                "has_mime_type=%s",
+                            )
+                        ),
+                        type(e).__name__,
+                        bool(tool_name),
+                        bool(mime_type),
+                    )
 
         elif item_type == "resource":
             # MCP resource content (file references)
@@ -512,6 +527,17 @@ def extract_artifacts_from_mcp_result(
                     counter += 1
 
                 except Exception as e:
-                    logger.warning(f"Failed to decode MCP resource blob: {e}")
+                    logger.warning(
+                        " ".join(
+                            (
+                                "Failed to decode MCP resource blob error_type=%s",
+                                "has_tool_name=%s",
+                                "has_uri=%s",
+                            )
+                        ),
+                        type(e).__name__,
+                        bool(tool_name),
+                        bool(uri),
+                    )
 
     return artifacts
