@@ -120,14 +120,25 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 message_id = message_id.decode("utf-8")
 
             logger.info(
-                f"[HITLMessageBus] Published response to {stream_key}: "
-                f"message_id={message_id}, key={response_key}"
+                " ".join(
+                    [
+                        "[HITLMessageBus] Published response message_id=%s",
+                        "has_request_id=%s has_response_key=%s",
+                    ]
+                ),
+                message_id,
+                bool(request_id),
+                bool(response_key),
             )
 
             return cast(str, message_id)
 
-        except Exception as e:
-            logger.error(f"[HITLMessageBus] Failed to publish to {stream_key}: {e}")
+        except Exception as exc:
+            logger.error(
+                "[HITLMessageBus] Failed to publish error_type=%s has_request_id=%s",
+                type(exc).__name__,
+                bool(request_id),
+            )
             raise
 
     async def subscribe_for_response(
@@ -291,10 +302,31 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
 
         try:
             acked = await self._redis.xack(stream_key, consumer_group, *message_ids)
-            logger.info(f"[HITLMessageBus] Acknowledged {acked} messages in {stream_key}")
+            logger.info(
+                " ".join(
+                    [
+                        "[HITLMessageBus] Acknowledged messages acked=%s message_count=%s",
+                        "has_request_id=%s has_consumer_group=%s",
+                    ]
+                ),
+                acked,
+                len(message_ids),
+                bool(request_id),
+                bool(consumer_group),
+            )
             return cast(int, acked)
-        except Exception as e:
-            logger.error(f"[HITLMessageBus] Failed to ack messages in {stream_key}: {e}")
+        except Exception as exc:
+            logger.error(
+                " ".join(
+                    [
+                        "[HITLMessageBus] Failed to ack messages error_type=%s",
+                        "has_request_id=%s has_consumer_group=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                bool(request_id),
+                bool(consumer_group),
+            )
             raise
 
     async def create_consumer_group(
@@ -460,16 +492,33 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
             if max_len is None:
                 # Delete the entire stream
                 await self._redis.delete(stream_key)
-                logger.info(f"[HITLMessageBus] Deleted stream {stream_key}")
+                logger.info(
+                    "[HITLMessageBus] Cleaned up stream operation=delete has_request_id=%s",
+                    bool(request_id),
+                )
                 return 0
             else:
                 # Trim to max length
                 removed = await self._redis.xtrim(stream_key, maxlen=max_len, approximate=True)
-                logger.info(f"[HITLMessageBus] Trimmed {removed} messages from {stream_key}")
+                logger.info(
+                    " ".join(
+                        [
+                            "[HITLMessageBus] Cleaned up stream operation=trim removed=%s",
+                            "max_len=%s has_request_id=%s",
+                        ]
+                    ),
+                    removed,
+                    max_len,
+                    bool(request_id),
+                )
                 return cast(int, removed)
 
-        except Exception as e:
-            logger.error(f"[HITLMessageBus] Failed to cleanup {stream_key}: {e}")
+        except Exception as exc:
+            logger.error(
+                "[HITLMessageBus] Failed to cleanup error_type=%s has_request_id=%s",
+                type(exc).__name__,
+                bool(request_id),
+            )
             raise
 
     async def stream_exists(self, request_id: str) -> bool:
@@ -486,8 +535,17 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
 
         try:
             return cast(bool, await self._redis.exists(stream_key) > 0)
-        except Exception as e:
-            logger.error(f"[HITLMessageBus] Failed to check stream existence: {e}")
+        except Exception as exc:
+            logger.error(
+                " ".join(
+                    [
+                        "[HITLMessageBus] Failed to check stream existence error_type=%s",
+                        "has_request_id=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                bool(request_id),
+            )
             return False
 
     # =========================================================================
