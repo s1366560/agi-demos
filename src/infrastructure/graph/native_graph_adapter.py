@@ -323,7 +323,10 @@ class NativeGraphAdapter(GraphServicePort):
                 )
 
         except Exception as e:
-            logger.error(f"Failed to check embedding dimension: {e}", exc_info=True)
+            logger.error(
+                "Failed to check embedding dimension: error_type=%s",
+                type(e).__name__,
+            )
 
     async def _get_existing_embedding_dimension(self) -> int | None:
         """Get the dimension of existing embeddings in Neo4j.

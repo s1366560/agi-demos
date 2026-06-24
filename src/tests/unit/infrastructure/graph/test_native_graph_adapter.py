@@ -108,6 +108,31 @@ class TestNativeGraphAdapterEmbeddingDimension:
     """Tests for embedding dimension compatibility helpers."""
 
     @pytest.mark.asyncio
+    async def test_check_embedding_dimension_redacts_unexpected_exception_details(
+        self,
+        adapter,
+        caplog,
+    ):
+        """Unexpected dimension check failures should not write exception details to logs."""
+        secret = "embedding-check-secret-9753"
+
+        with (
+            patch.object(
+                adapter,
+                "_get_existing_embedding_dimension",
+                AsyncMock(side_effect=RuntimeError(secret)),
+            ),
+            caplog.at_level(
+                logging.ERROR,
+                logger="src.infrastructure.graph.native_graph_adapter",
+            ),
+        ):
+            await adapter._check_embedding_dimension(force=True)
+
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_get_existing_embedding_dimension_redacts_property_exception_details(
         self,
         adapter,
