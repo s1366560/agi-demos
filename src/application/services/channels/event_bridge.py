@@ -126,8 +126,10 @@ class ChannelEventBridge:
             return
 
         logger.info(
-            f"[EventBridge] Received forwarded event: type={event_type}, "
-            f"conversation_id={conversation_id}"
+            "[EventBridge] Received forwarded event: event_type=%s "
+            "has_conversation_id=%s",
+            event_type,
+            bool(conversation_id),
         )
 
         handler = self._handlers.get(event_type)
@@ -138,16 +140,20 @@ class ChannelEventBridge:
             binding = await self._lookup_binding(conversation_id)
             if not binding:
                 logger.info(
-                    f"[EventBridge] No binding for conversation {conversation_id}, "
-                    f"skipping {event_type}"
+                    "[EventBridge] No binding for forwarded event, skipping: "
+                    "event_type=%s has_conversation_id=%s",
+                    event_type,
+                    bool(conversation_id),
                 )
                 return
 
             adapter = self._get_adapter(binding.channel_config_id)
             if not adapter:
                 logger.info(
-                    f"[EventBridge] No adapter for config {binding.channel_config_id}, "
-                    f"skipping {event_type}"
+                    "[EventBridge] No adapter for forwarded event, skipping: "
+                    "event_type=%s has_channel_config_id=%s",
+                    event_type,
+                    bool(getattr(binding, "channel_config_id", None)),
                 )
                 return
 

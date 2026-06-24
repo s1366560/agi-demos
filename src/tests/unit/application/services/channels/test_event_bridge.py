@@ -62,6 +62,84 @@ async def test_on_agent_event_skips_when_no_binding() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_on_agent_event_received_log_omits_conversation_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Forwarding receipt logs should not echo raw conversation IDs."""
+    adapter = _make_adapter()
+    binding = _make_binding()
+    bridge = ChannelEventBridge()
+    bridge._lookup_binding = AsyncMock(return_value=binding)
+    bridge._get_adapter = MagicMock(return_value=adapter)
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.event_bridge",
+    )
+
+    await bridge.on_agent_event(
+        "secret-conversation-id",
+        {"type": "error", "data": {"message": "fail"}},
+    )
+
+    assert "secret-conversation-id" not in caplog.text
+    assert "Received forwarded event" in caplog.text
+    assert "event_type=error" in caplog.text
+    assert "has_conversation_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_on_agent_event_no_binding_log_omits_conversation_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """No-binding logs should not echo raw conversation IDs."""
+    bridge = ChannelEventBridge()
+    bridge._lookup_binding = AsyncMock(return_value=None)
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.event_bridge",
+    )
+
+    await bridge.on_agent_event(
+        "secret-conversation-id",
+        {"type": "error", "data": {"message": "fail"}},
+    )
+
+    assert "secret-conversation-id" not in caplog.text
+    assert "No binding" in caplog.text
+    assert "event_type=error" in caplog.text
+    assert "has_conversation_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_on_agent_event_no_adapter_log_omits_channel_config_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """No-adapter logs should not echo raw channel config IDs."""
+    binding = _make_binding(channel_config_id="secret-config-id")
+    bridge = ChannelEventBridge()
+    bridge._lookup_binding = AsyncMock(return_value=binding)
+    bridge._get_adapter = MagicMock(return_value=None)
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.event_bridge",
+    )
+
+    await bridge.on_agent_event(
+        "secret-conversation-id",
+        {"type": "error", "data": {"message": "fail"}},
+    )
+
+    assert "secret-conversation-id" not in caplog.text
+    assert "secret-config-id" not in caplog.text
+    assert "No adapter" in caplog.text
+    assert "event_type=error" in caplog.text
+    assert "has_channel_config_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_on_agent_event_failure_log_omits_conversation_and_exception_details(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
