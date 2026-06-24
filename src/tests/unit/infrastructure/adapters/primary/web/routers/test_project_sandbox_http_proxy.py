@@ -345,6 +345,57 @@ async def test_project_terminal_output_reader_log_omits_exception_text(
     assert "session-secret" not in caplog.text
 
 
+async def test_mcp_browser_relay_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class FailingReceiveWebSocket:
+        async def receive(self) -> object:
+            raise RuntimeError("mcp browser secret")
+
+    upstream_ws = SimpleNamespace(close=AsyncMock())
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    await project_sandbox._relay_mcp_browser_to_upstream(
+        websocket=cast("project_sandbox.WebSocket", FailingReceiveWebSocket()),
+        upstream_ws=upstream_ws,
+    )
+
+    upstream_ws.close.assert_awaited_once_with()
+    assert "MCP proxy browser->upstream" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "mcp browser secret" not in caplog.text
+
+
+async def test_mcp_upstream_relay_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class FailingUpstream:
+        def __aiter__(self) -> FailingUpstream:
+            return self
+
+        async def __anext__(self) -> object:
+            raise RuntimeError("mcp upstream secret")
+
+    websocket = _FakeWebSocket()
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    await project_sandbox._relay_mcp_upstream_to_browser(
+        websocket=cast("project_sandbox.WebSocket", websocket),
+        upstream_ws=FailingUpstream(),
+    )
+
+    assert websocket.close_calls == [(1001, "Upstream disconnected")]
+    assert "MCP proxy upstream->browser" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "mcp upstream secret" not in caplog.text
+
+
 def test_sandbox_proxy_auth_cookie_is_scoped_to_project_sandbox_path() -> None:
     request = Request(
         {

@@ -2471,7 +2471,7 @@ async def _relay_mcp_browser_to_upstream(websocket: WebSocket, upstream_ws: Any)
     except WebSocketDisconnect:
         logger.debug("MCP proxy: browser disconnected")
     except Exception as e:
-        logger.warning(f"MCP proxy browser->upstream: {type(e).__name__}: {e}")
+        logger.warning("MCP proxy browser->upstream: error_type=%s", type(e).__name__)
     finally:
         # Signal upstream to close when browser disconnects
         with contextlib.suppress(Exception):
@@ -2543,7 +2543,7 @@ async def _relay_mcp_upstream_to_browser(websocket: WebSocket, upstream_ws: Any)
             else:
                 await websocket.send_bytes(message)
     except Exception as e:
-        logger.warning(f"MCP proxy upstream->browser: {type(e).__name__}: {e}")
+        logger.warning("MCP proxy upstream->browser: error_type=%s", type(e).__name__)
     finally:
         # Signal browser to close when upstream disconnects
         with contextlib.suppress(Exception):
