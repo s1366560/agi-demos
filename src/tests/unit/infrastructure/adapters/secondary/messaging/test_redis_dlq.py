@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import redis.asyncio as redis
 
 from src.domain.ports.services.dead_letter_queue_port import (
     DeadLetterMessage,
@@ -166,3 +167,77 @@ async def test_discard_message_redacts_update_failure_log(
     assert secret_message_id not in caplog.text
     assert "error_type=RuntimeError" in caplog.text
     assert "has_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_stats_redacts_redis_error_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Stats failures should not log raw Redis exception text."""
+    exception_detail = "stats redis secret 7241"
+    redis_client = SimpleNamespace(
+        hgetall=AsyncMock(side_effect=redis.RedisError(exception_detail)),
+    )
+    adapter = RedisDLQAdapter(redis_client=redis_client)  # type: ignore[arg-type]
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+    ):
+        stats = await adapter.get_stats()
+
+    assert stats.total_messages == 0
+    assert "Failed to get stats" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RedisError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cleanup_expired_redacts_redis_error_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Expired cleanup failures should not log raw Redis exception text."""
+    exception_detail = "expired cleanup redis secret 8352"
+    redis_client = SimpleNamespace(
+        zrangebyscore=AsyncMock(side_effect=redis.RedisError(exception_detail)),
+    )
+    adapter = RedisDLQAdapter(redis_client=redis_client)  # type: ignore[arg-type]
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+    ):
+        cleaned = await adapter.cleanup_expired(older_than_hours=42)
+
+    assert cleaned == 0
+    assert "Cleanup failed" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RedisError" in caplog.text
+    assert "older_than_hours=42" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cleanup_resolved_redacts_redis_error_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Resolved cleanup failures should not log raw Redis exception text."""
+    exception_detail = "resolved cleanup redis secret 9463"
+    redis_client = SimpleNamespace(
+        zrangebyscore=AsyncMock(side_effect=redis.RedisError(exception_detail)),
+    )
+    adapter = RedisDLQAdapter(redis_client=redis_client)  # type: ignore[arg-type]
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+    ):
+        cleaned = await adapter.cleanup_resolved(older_than_hours=13)
+
+    assert cleaned == 0
+    assert "Resolved cleanup failed" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RedisError" in caplog.text
+    assert "older_than_hours=13" in caplog.text

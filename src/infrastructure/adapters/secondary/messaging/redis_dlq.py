@@ -459,7 +459,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             )
 
         except redis.RedisError as e:
-            logger.error(f"[DLQ] Failed to get stats: {e}")
+            logger.error("[DLQ] Failed to get stats error_type=%s", type(e).__name__)
             return DLQStats()
 
     async def cleanup_expired(
@@ -505,7 +505,11 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             return count
 
         except redis.RedisError as e:
-            logger.error(f"[DLQ] Cleanup failed: {e}")
+            logger.error(
+                "[DLQ] Cleanup failed error_type=%s older_than_hours=%s",
+                type(e).__name__,
+                older_than_hours,
+            )
             return 0
 
     async def cleanup_resolved(
@@ -550,7 +554,11 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             return count
 
         except redis.RedisError as e:
-            logger.error(f"[DLQ] Resolved cleanup failed: {e}")
+            logger.error(
+                "[DLQ] Resolved cleanup failed error_type=%s older_than_hours=%s",
+                type(e).__name__,
+                older_than_hours,
+            )
             return 0
 
     async def _update_message(self, message: DeadLetterMessage) -> None:
