@@ -177,18 +177,25 @@ class MCPSubprocessClient:
                 )
                 return True
 
-            logger.error(f"MCP initialize request failed. Response: {result}")
+            response_keys = ",".join(sorted(result.keys())) if isinstance(result, dict) else ""
+            logger.error(
+                "MCP initialize request failed has_response=%s response_keys=%s",
+                result is not None,
+                response_keys,
+            )
             stderr_text = await self._read_stderr()
             if stderr_text:
-                logger.error(f"MCP subprocess stderr:\n{stderr_text}")
+                logger.error("MCP subprocess stderr captured stderr_chars=%s", len(stderr_text))
             await self.disconnect()
             return False
 
         except TimeoutError:
             stderr_text = await self._read_stderr()
             logger.error(
-                f"MCP connection timeout after {timeout}s for '{self.command} {' '.join(self.args)}'"
-                + (f"\nStderr: {stderr_text}" if stderr_text else "")
+                "MCP connection timeout after %ss args_count=%s stderr_chars=%s",
+                timeout,
+                len(self.args),
+                len(stderr_text),
             )
             await self.disconnect()
             return False
@@ -197,9 +204,10 @@ class MCPSubprocessClient:
             return False
         except Exception as e:
             stderr_text = await self._read_stderr()
-            logger.exception(
-                f"Error connecting to MCP subprocess: {e}"
-                + (f"\nStderr: {stderr_text}" if stderr_text else "")
+            logger.error(
+                "Error connecting to MCP subprocess error_type=%s stderr_chars=%s",
+                type(e).__name__,
+                len(stderr_text),
             )
             await self.disconnect()
             return False

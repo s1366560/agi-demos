@@ -9,6 +9,7 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -26,6 +27,8 @@ from src.infrastructure.mcp.clients.global_connection_limiter import (
 from src.infrastructure.mcp.clients.subprocess_client import MCPSubprocessClient
 
 pytestmark = pytest.mark.unit
+
+SUBPROCESS_LOGGER_NAME = "src.infrastructure.mcp.clients.subprocess_client"
 
 
 class TestTLSDefaults:
@@ -105,6 +108,104 @@ class TestGlobalLimiterFastPath:
 
 
 class TestSubprocessCancelLadder:
+    async def test_connect_initialize_failure_log_redacts_response_and_stderr(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPSubprocessClient(command="uvx", args=["server", "--token", "arg-secret"])
+        response_secret = "response-secret-token"
+        stderr_secret = "stderr-secret-token"
+        fake_proc = MagicMock(returncode=None)
+
+        async def fake_create_subprocess_exec(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return fake_proc
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+        client._send_request = AsyncMock(  # type: ignore[method-assign]
+            return_value={"error": {"message": response_secret}, "id": 1}
+        )
+        client._read_stderr = AsyncMock(return_value=f"stderr: {stderr_secret}")  # type: ignore[method-assign]
+        client.disconnect = AsyncMock()  # type: ignore[method-assign]
+
+        with caplog.at_level(logging.ERROR, logger=SUBPROCESS_LOGGER_NAME):
+            connected = await client.connect(timeout=0.01)
+
+        assert connected is False
+        assert "MCP initialize request failed" in caplog.text
+        assert "response_keys=" in caplog.text
+        assert "MCP subprocess stderr captured" in caplog.text
+        assert "stderr_chars=" in caplog.text
+        assert response_secret not in caplog.text
+        assert stderr_secret not in caplog.text
+        assert "arg-secret" not in caplog.text
+        client.disconnect.assert_awaited_once()
+
+    async def test_connect_timeout_log_redacts_command_args_and_stderr(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPSubprocessClient(command="uvx", args=["server", "--token", "arg-secret"])
+        stderr_secret = "timeout-stderr-secret"
+        fake_proc = MagicMock(returncode=None)
+
+        async def fake_create_subprocess_exec(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return fake_proc
+
+        async def raise_timeout(*args, **kwargs):  # type: ignore[no-untyped-def]
+            raise TimeoutError
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+        client._send_request = AsyncMock(side_effect=raise_timeout)  # type: ignore[method-assign]
+        client._read_stderr = AsyncMock(return_value=f"stderr: {stderr_secret}")  # type: ignore[method-assign]
+        client.disconnect = AsyncMock()  # type: ignore[method-assign]
+
+        with caplog.at_level(logging.ERROR, logger=SUBPROCESS_LOGGER_NAME):
+            connected = await client.connect(timeout=0.01)
+
+        assert connected is False
+        assert "MCP connection timeout" in caplog.text
+        assert "args_count=3" in caplog.text
+        assert "stderr_chars=" in caplog.text
+        assert "uvx" not in caplog.text
+        assert "arg-secret" not in caplog.text
+        assert stderr_secret not in caplog.text
+        client.disconnect.assert_awaited_once()
+
+    async def test_connect_error_log_redacts_exception_and_stderr(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPSubprocessClient(command="uvx", args=["server", "--token", "arg-secret"])
+        stderr_secret = "error-stderr-secret"
+        exception_secret = "exception-secret-token"
+        fake_proc = MagicMock(returncode=None)
+
+        async def fake_create_subprocess_exec(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return fake_proc
+
+        async def raise_error(*args, **kwargs):  # type: ignore[no-untyped-def]
+            raise RuntimeError(exception_secret)
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+        client._send_request = AsyncMock(side_effect=raise_error)  # type: ignore[method-assign]
+        client._read_stderr = AsyncMock(return_value=f"stderr: {stderr_secret}")  # type: ignore[method-assign]
+        client.disconnect = AsyncMock()  # type: ignore[method-assign]
+
+        with caplog.at_level(logging.ERROR, logger=SUBPROCESS_LOGGER_NAME):
+            connected = await client.connect(timeout=0.01)
+
+        assert connected is False
+        assert "Error connecting to MCP subprocess" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "stderr_chars=" in caplog.text
+        assert exception_secret not in caplog.text
+        assert stderr_secret not in caplog.text
+        assert "arg-secret" not in caplog.text
+        client.disconnect.assert_awaited_once()
+
     async def test_disconnect_force_kills_on_cancellation(self) -> None:
         client = MCPSubprocessClient(command="echo", args=["stub"])
 
