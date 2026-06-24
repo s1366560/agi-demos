@@ -141,7 +141,10 @@ async def create_media_import_service_from_config(
             )
             return None
 
-        logger.info(f"[MediaImportFactory] Creating MediaImportService with domain={domain}")
+        logger.info(
+            "[MediaImportFactory] Creating MediaImportService: has_domain=%s",
+            bool(domain),
+        )
 
         return create_media_import_service(
             db_session=db_session,

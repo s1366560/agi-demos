@@ -90,7 +90,7 @@ async def test_create_media_import_service_from_config_logs_omit_config_identifi
         app_id="secret-app-id",
         app_secret="encrypted-secret-value",
         project_id="secret-project-id",
-        domain="feishu",
+        domain="secret-tenant-domain",
         extra_settings={},
     )
 
@@ -114,11 +114,13 @@ async def test_create_media_import_service_from_config_logs_omit_config_identifi
     assert "secret-config-id" not in caplog.text
     assert "secret-app-id" not in caplog.text
     assert "secret-project-id" not in caplog.text
+    assert "secret-tenant-domain" not in caplog.text
     assert "secret-decrypted-value" not in caplog.text
     assert "has_channel_config_id=True" in caplog.text
     assert "has_config_id=True" in caplog.text
     assert "has_app_id=True" in caplog.text
     assert "has_project_id=True" in caplog.text
+    assert "has_domain=True" in caplog.text
 
 
 @pytest.mark.unit
