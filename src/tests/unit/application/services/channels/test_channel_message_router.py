@@ -510,6 +510,38 @@ async def test_check_access_control_error_log_omits_exception_text(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_get_conversation_channel_config_id_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Conversation metadata fallback failures should not expose IDs or exception details."""
+    router = ChannelMessageRouter()
+
+    class _FailingSessionContext:
+        async def __aenter__(self) -> object:
+            raise RuntimeError("secret-metadata-token")
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.application.services.channels.channel_message_router.with_session",
+        return_value=_FailingSessionContext(),
+    ):
+        result = await router._get_conversation_channel_config_id("secret-conversation-id")
+
+    assert result is None
+    assert "secret-conversation-id" not in caplog.text
+    assert "secret-metadata-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_process_media_if_needed_unavailable_log_omits_message_identifier(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

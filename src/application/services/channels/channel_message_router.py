@@ -1774,7 +1774,9 @@ class ChannelMessageRouter:
                         return config_id
         except Exception as e:
             logger.warning(
-                f"[MessageRouter] Failed to load channel_config_id from conversation metadata: {e}"
+                "[MessageRouter] Failed to load channel_config_id from conversation metadata: "
+                "error_type=%s",
+                type(e).__name__,
             )
         return None
 
