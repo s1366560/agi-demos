@@ -199,6 +199,27 @@ class TestSandboxOrchestrator:
             default_timeout=30,
         )
 
+    def test_register_sandbox_type_log_omits_sandbox_id(self, orchestrator, caplog):
+        """Test sandbox type registration debug log omits raw sandbox IDs."""
+        caplog.set_level(logging.DEBUG, logger="src.application.services.sandbox_orchestrator")
+
+        orchestrator.register_sandbox_type("secret-sandbox-id", "local")
+
+        assert orchestrator.get_sandbox_type("secret-sandbox-id") == "local"
+        assert orchestrator.is_local_sandbox("secret-sandbox-id") is True
+
+        target_records = [
+            record
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_orchestrator"
+        ]
+        assert len(target_records) == 1
+        message = target_records[0].getMessage()
+        assert "Registered sandbox type" in message
+        assert "secret-sandbox-id" not in message
+        assert "has_sandbox_id=True" in message
+        assert "sandbox_type=local" in message
+
     # ========================================================================
     # Desktop Management Tests
     # ========================================================================

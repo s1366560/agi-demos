@@ -151,7 +151,11 @@ class SandboxOrchestrator:
             sandbox_type: "cloud" or "local"
         """
         self._sandbox_types[sandbox_id] = sandbox_type
-        logger.debug(f"Registered sandbox {sandbox_id} as {sandbox_type}")
+        logger.debug(
+            "Registered sandbox type: has_sandbox_id=%s sandbox_type=%s",
+            bool(sandbox_id),
+            sandbox_type,
+        )
 
     def get_sandbox_type(self, sandbox_id: str) -> str:
         """Get the type of a sandbox (defaults to "cloud")."""
