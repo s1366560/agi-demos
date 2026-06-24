@@ -3,6 +3,7 @@ Unit tests for MemoryService.
 Tests memory CRUD operations, version handling, and share functionality.
 """
 
+import logging
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
@@ -57,7 +58,9 @@ class TestMemoryService:
         assert episode.project_id == "project-1"
         assert episode.user_id == "user-1"
 
-    async def test_create_memory_can_skip_graph_enqueue(self, mock_memory_repo, mock_graphiti_client):
+    async def test_create_memory_can_skip_graph_enqueue(
+        self, mock_memory_repo, mock_graphiti_client
+    ):
         """Agent tools can use a fast commit path and queue graph work separately."""
         service = MemoryService(mock_memory_repo, mock_graphiti_client)
 
@@ -287,6 +290,28 @@ class TestMemoryService:
         # Assert - returns SearchResults object with memories and entities
         assert len(results.memories) == 2
         mock_graphiti_client.search.assert_called_once()
+
+    async def test_search_memories_failure_logs_do_not_include_query_or_exception_content(
+        self,
+        mock_memory_repo,
+        mock_graphiti_client,
+        caplog,
+    ):
+        """Search failure logs must not expose query or backend exception text."""
+        secret_query = "find customer memory token alpha-2468"
+        exception_detail = "graph search leaked private payload beta-1357"
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
+        mock_graphiti_client.search = AsyncMock(side_effect=RuntimeError(exception_detail))
+        caplog.set_level(logging.ERROR, logger="src.application.services.memory_service")
+
+        with pytest.raises(RuntimeError):
+            await service.search_memories(query=secret_query, project_id="project-1", limit=7)
+
+        assert secret_query not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "query_len=37" in caplog.text
+        assert "limit=7" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     async def test_share_memory_with_user(self, mock_memory_repo):
         """Test sharing memory with a user."""

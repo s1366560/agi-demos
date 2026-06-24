@@ -214,7 +214,12 @@ class MemoryService:
             )
 
         except Exception as e:
-            logger.error(f"Search failed for query '{query}': {e}")
+            logger.error(
+                "Search failed query_len=%d limit=%d error_type=%s",
+                len(query),
+                limit,
+                type(e).__name__,
+            )
             raise
 
     async def update_memory(
