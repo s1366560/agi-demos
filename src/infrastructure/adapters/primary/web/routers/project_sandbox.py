@@ -1496,7 +1496,11 @@ async def check_project_sandbox_health(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Health check failed for project %s", project_id)
+        logger.error(
+            "Health check failed: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Health check failed")) from e
 
 
