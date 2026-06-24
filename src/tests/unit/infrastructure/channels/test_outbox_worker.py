@@ -10,6 +10,39 @@ from src.infrastructure.channels.outbox_worker import OutboxRetryWorker
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_poll_loop_redacts_batch_error(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Poll loop failures should not log raw exception text or tracebacks."""
+    exception_detail = "poll failed channel-outbox-poll-secret-7531"
+
+    async def _sleep(_seconds: float) -> None:
+        return None
+
+    async def _fail_process_batch() -> None:
+        worker._running = False
+        raise RuntimeError(exception_detail)
+
+    worker = OutboxRetryWorker(session_factory=lambda: None, get_connection_fn=lambda _id: None)
+    worker._running = True
+    worker._process_batch = _fail_process_batch  # type: ignore[method-assign]
+    monkeypatch.setattr("src.infrastructure.channels.outbox_worker.asyncio.sleep", _sleep)
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.channels.outbox_worker",
+    ):
+        await worker._poll_loop()
+
+    assert "Poll error" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_retry_item_redacts_retry_and_status_update_failures(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

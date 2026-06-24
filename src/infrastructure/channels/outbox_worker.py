@@ -66,7 +66,7 @@ class OutboxRetryWorker:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"[OutboxWorker] Poll error: {e}", exc_info=True)
+                logger.error("[OutboxWorker] Poll error error_type=%s", type(e).__name__)
 
     async def _process_batch(self) -> None:
         """Process a batch of retryable outbox messages."""
