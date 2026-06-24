@@ -347,7 +347,18 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                     for key in stream_keys:
                         await self._ensure_consumer_group(key, consumer_group)
                 else:
-                    logger.error(f"[UnifiedEventBus] Consumer group error: {e}")
+                    logger.error(
+                        " ".join(
+                            (
+                                "[UnifiedEventBus] Consumer group error error_type=%s",
+                                "has_pattern=%s",
+                                "has_consumer_group=%s",
+                            )
+                        ),
+                        type(e).__name__,
+                        bool(pattern),
+                        bool(consumer_group),
+                    )
                     raise
             except redis.ConnectionError as e:
                 logger.error(f"[UnifiedEventBus] Connection error: {e}")

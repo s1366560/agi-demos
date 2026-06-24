@@ -234,6 +234,47 @@ class TestRedisUnifiedEventBusLogging:
         assert "event_count=1" in caplog.text
 
     @pytest.mark.asyncio
+    async def test_consumer_group_error_log_redacts_pattern_group_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        exception_detail = "consumer group secret unavailable"
+        secret_pattern = "agent.secret-conversation.*"
+        secret_group = "secret-consumer-group"
+        subscription_id = "secret-subscription"
+
+        redis_client = Mock()
+        redis_client.xreadgroup = AsyncMock(side_effect=redis.ResponseError(exception_detail))
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        adapter._active_subscriptions[subscription_id] = True
+        adapter._get_matching_streams = AsyncMock(return_value=["events:agent:secret"])  # type: ignore[method-assign]
+        adapter._ensure_consumer_group = AsyncMock()  # type: ignore[method-assign]
+
+        stream = adapter._subscribe_with_consumer_group(
+            secret_pattern,
+            SubscriptionOptions(consumer_group=secret_group, block_ms=1),
+            subscription_id,
+        )
+        try:
+            with (
+                caplog.at_level(logging.ERROR, logger=LOGGER_NAME),
+                pytest.raises(redis.ResponseError) as exc_info,
+            ):
+                await anext(stream)
+        finally:
+            adapter._active_subscriptions.pop(subscription_id, None)
+            await stream.aclose()
+
+        assert str(exc_info.value) == exception_detail
+        assert "Consumer group error" in caplog.text
+        assert secret_pattern not in caplog.text
+        assert secret_group not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=ResponseError" in caplog.text
+        assert "has_pattern=True" in caplog.text
+        assert "has_consumer_group=True" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_get_events_error_log_redacts_routing_key_and_exception(
         self,
         caplog: pytest.LogCaptureFixture,
