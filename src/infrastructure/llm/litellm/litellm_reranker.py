@@ -182,7 +182,7 @@ class LiteLLMReranker(BaseReranker):
         except RateLimitError:
             raise
         except Exception as e:
-            logger.error(f"Reranking failed: {e}")
+            logger.error("Reranking failed error_type=%s", type(e).__name__)
             # Fallback to original order with neutral scores
             return [(p, 0.5) for p in passages[:top_n]]
 

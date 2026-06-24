@@ -186,6 +186,26 @@ class TestLiteLLMReranker:
             assert ranked[1][1] == 0.5
 
     @pytest.mark.asyncio
+    async def test_rank_error_log_redacts_exception_content(self, reranker, caplog):
+        """Reranker provider failures should not log raw exception text."""
+        secret = "rerank-provider-secret-8642"
+        with patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+            mock_acompletion.side_effect = RuntimeError(f"provider echoed {secret}")
+
+            with caplog.at_level(
+                "ERROR",
+                logger="src.infrastructure.llm.litellm.litellm_reranker",
+            ):
+                ranked = await reranker.rank(
+                    f"query {secret}",
+                    ["P1", f"passage {secret}"],
+                )
+
+        assert ranked == [("P1", 0.5), (f"passage {secret}", 0.5)]
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_rank_handles_invalid_json(self, reranker):
         """Test ranking with invalid JSON response."""
         mock_response = MagicMock()
