@@ -1895,6 +1895,75 @@ async def test_http_service_websocket_missing_service_reason_is_sanitized(
 
 
 @pytest.mark.unit
+async def test_host_preview_websocket_sanitizes_upstream_connection_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Host-based WebSocket preview should not leak upstream URL or connection details."""
+    token = router_mod._create_preview_session_token("proj-1", "svc-int", "user-1")
+    websocket = _FakeWebSocket(
+        headers={"host": "svc-int.proj-1.preview.localhost:8000"},
+        cookies={router_mod._PREVIEW_SESSION_COOKIE_NAME: token},
+        query_items=[("debug", "query-secret")],
+    )
+    event_publisher = AsyncMock()
+    event_publisher.publish_http_service_error = AsyncMock()
+
+    router_mod._http_service_registry.clear()
+    router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
+        router_mod.HttpServiceProxyInfo(
+            service_id="svc-int",
+            name="internal",
+            source_type=router_mod.HttpServiceSourceType.SANDBOX_INTERNAL,
+            status="running",
+            service_url="http://127.0.0.1:3000",
+            preview_url=router_mod._build_http_preview_proxy_url("proj-1", "svc-int"),
+            ws_preview_url=router_mod._build_http_preview_ws_proxy_url("proj-1", "svc-int"),
+            sandbox_id="sandbox-1",
+            auto_open=True,
+            restart_token="r1",
+            updated_at="2025-01-01T00:00:00+00:00",
+        )
+    )
+
+    async def fail_connect(*_args, **_kwargs):
+        raise RuntimeError("host preview websocket secret")
+
+    monkeypatch.setattr(router_mod, "_connect_http_service_upstream", fail_connect)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    await router_mod.proxy_project_http_service_preview_host_websocket(
+        websocket=websocket,
+        path="socket",
+        event_publisher=event_publisher,
+        redis_client=None,
+    )
+
+    assert websocket.accepted is True
+    assert websocket.closed is True
+    assert websocket.close_code == 1011
+    assert websocket.close_reason == "HTTP preview host WS proxy failure"
+    event_publisher.publish_http_service_error.assert_awaited_once()
+    error_kwargs = event_publisher.publish_http_service_error.await_args.kwargs
+    assert error_kwargs["service_id"] == "svc-int"
+    assert error_kwargs["error_message"] == "RuntimeError"
+    assert "host preview websocket secret" not in str(error_kwargs)
+    assert "127.0.0.1" not in str(error_kwargs)
+    assert "query-secret" not in str(error_kwargs)
+    assert "HTTP preview host WS proxy error" in caplog.text
+    assert "has_service_id=True" in caplog.text
+    assert "has_ws_target=True" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "host preview websocket secret" not in caplog.text
+    assert "127.0.0.1" not in caplog.text
+    assert "query-secret" not in caplog.text
+    assert "svc-int" not in caplog.text
+
+
+@pytest.mark.unit
 async def test_host_preview_websocket_missing_service_reason_is_sanitized() -> None:
     """Host-based WebSocket preview should not echo missing IDs in close reasons."""
     websocket = _FakeWebSocket(headers={"host": "missing.proj-1.preview.localhost:8000"})

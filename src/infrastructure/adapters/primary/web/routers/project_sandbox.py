@@ -2992,11 +2992,12 @@ async def proxy_project_http_service_preview_host_websocket(
             lambda: _relay_binary_upstream_to_browser(websocket, upstream_ws),
         )
     except Exception as e:
+        error_type = type(e).__name__
         logger.error(
-            "HTTP preview host WS proxy error for %s (%s): %s",
-            service_info.service_id,
-            ws_target,
-            e,
+            "HTTP preview host WS proxy error: has_service_id=%s has_ws_target=%s error_type=%s",
+            bool(service_info.service_id),
+            bool(ws_target),
+            error_type,
         )
         await _publish_http_service_error_event(
             event_publisher,
@@ -3004,7 +3005,7 @@ async def proxy_project_http_service_preview_host_websocket(
             sandbox_id=service_info.sandbox_id,
             service_id=service_info.service_id,
             service_name=service_info.name,
-            error_message=str(e) or type(e).__name__,
+            error_message=error_type,
         )
         with contextlib.suppress(Exception):
             await websocket.close(code=1011, reason="HTTP preview host WS proxy failure")
