@@ -152,7 +152,10 @@ class CommunityUpdater:
                     community.name = summary_result.get("name", community.name)
                     community.summary = summary_result.get("summary", "")
                 except Exception as e:
-                    logger.warning(f"Failed to generate community summary: {e}")
+                    logger.warning(
+                        "Failed to generate community summary error_type=%s",
+                        type(e).__name__,
+                    )
 
             # Save community
             member_uuids = cast(

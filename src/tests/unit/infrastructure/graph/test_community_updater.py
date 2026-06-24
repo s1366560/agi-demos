@@ -6,6 +6,7 @@ import pytest
 
 from src.domain.llm_providers.llm_types import Message
 from src.infrastructure.graph.community.community_updater import CommunityUpdater
+from src.infrastructure.graph.schemas import CommunityNode
 
 
 class GenerateOnlyLLMClient:
@@ -84,6 +85,23 @@ class CommunityMemberDetector:
 
     async def get_community_members(self, _community_uuid: str) -> list[dict[str, Any]]:
         return [{"name": "Ada", "summary": "Research lead"}]
+
+
+class CommunityUpdateDetector:
+    """Louvain detector fake for update_communities_for_entities."""
+
+    def __init__(self) -> None:
+        self.saved_member_uuids: list[str] = []
+        self.deleted_project_id: str | None = None
+
+    async def detect_communities(self, **_kwargs: Any) -> list[CommunityNode]:
+        return [CommunityNode(uuid="community-1", name="Detected", member_count=1)]
+
+    async def save_community(self, _community: CommunityNode, member_uuids: list[str]) -> None:
+        self.saved_member_uuids = member_uuids
+
+    async def delete_stale_communities(self, project_id: str) -> None:
+        self.deleted_project_id = project_id
 
 
 class PrivateGenerateResponseOnlyLLMClient:
@@ -210,6 +228,49 @@ class TestCommunityUpdaterLLMResponseHandling:
 
         assert result is None
         assert "community-update-secret-1357" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    async def test_update_communities_redacts_summary_error(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        detector = CommunityUpdateDetector()
+        updater = CommunityUpdater(
+            neo4j_client=object(),  # type: ignore[arg-type]
+            llm_client=GenerateOnlyLLMClient(),  # type: ignore[arg-type]
+            louvain_detector=detector,  # type: ignore[arg-type]
+        )
+
+        async def no_existing_communities(_project_id: str) -> list[dict[str, Any]]:
+            return []
+
+        async def community_members(
+            _community: CommunityNode,
+            _project_id: str,
+        ) -> list[dict[str, Any]]:
+            return [{"uuid": "entity-1", "name": "Ada"}]
+
+        async def fail_summary(_member_entities: list[dict[str, Any]]) -> dict[str, str]:
+            raise RuntimeError("provider echoed community-loop-secret-7531")
+
+        monkeypatch.setattr(updater, "_get_existing_communities", no_existing_communities)
+        monkeypatch.setattr(updater, "_get_entities_for_community", community_members)
+        monkeypatch.setattr(updater, "_generate_community_summary", fail_summary)
+
+        with caplog.at_level(
+            "WARNING",
+            logger="src.infrastructure.graph.community.community_updater",
+        ):
+            result = await updater.update_communities_for_entities(
+                [{"name": "Ada"}],  # type: ignore[list-item]
+                "project-1",
+            )
+
+        assert len(result) == 1
+        assert detector.saved_member_uuids == ["entity-1"]
+        assert detector.deleted_project_id == "project-1"
+        assert "community-loop-secret-7531" not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
 
     async def test_call_llm_with_json_extraction_supports_private_generate_response_client(
