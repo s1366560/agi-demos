@@ -2075,16 +2075,20 @@ async def test_store_message_history_sanitizes_non_serializable_raw_data() -> No
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_send_to_channel_text_success():
+async def test_send_to_channel_text_success(caplog: pytest.LogCaptureFixture):
     """send_to_channel dispatches text to the adapter."""
     router = ChannelMessageRouter()
     mock_adapter = AsyncMock()
     mock_adapter.send_text = AsyncMock(return_value="msg-1")
 
-    mock_binding = SimpleNamespace(channel_config_id="cfg-1", chat_id="chat-42")
+    mock_binding = SimpleNamespace(channel_config_id="cfg-1", chat_id="secret-chat-id")
     mock_bridge = MagicMock()
     mock_bridge._lookup_binding = AsyncMock(return_value=mock_binding)
     mock_bridge._get_adapter = MagicMock(return_value=mock_adapter)
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_message_router",
+    )
 
     with (
         patch(
@@ -2093,10 +2097,16 @@ async def test_send_to_channel_text_success():
         ),
         patch.object(router, "_track_push_outbox", new_callable=AsyncMock),
     ):
-        result = await router.send_to_channel("conv-1", "Hello from agent")
+        result = await router.send_to_channel("secret-conversation-id", "Hello from agent")
 
     assert result is True
-    mock_adapter.send_text.assert_awaited_once_with("chat-42", "Hello from agent")
+    mock_adapter.send_text.assert_awaited_once_with("secret-chat-id", "Hello from agent")
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-conversation-id" not in caplog.text
+    assert "Push message sent" in caplog.text
+    assert "content_type=text" in caplog.text
+    assert "has_chat_id=True" in caplog.text
+    assert "has_conversation_id=True" in caplog.text
 
 
 @pytest.mark.unit

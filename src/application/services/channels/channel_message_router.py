@@ -1205,8 +1205,11 @@ class ChannelMessageRouter:
             )
 
             logger.info(
-                f"[MessageRouter] Push message sent to {chat_id} "
-                f"(conversation={conversation_id}, type={content_type})"
+                "[MessageRouter] Push message sent: content_type=%s "
+                "has_chat_id=%s has_conversation_id=%s",
+                content_type,
+                bool(chat_id),
+                bool(conversation_id),
             )
             return True
         except Exception as e:
