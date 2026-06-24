@@ -172,6 +172,56 @@ async def test_route_message_broadcasts_inbound_user_message_to_workspace(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_route_message_missing_conversation_log_omits_chat_identifier(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Conversation lookup failure logs should not expose channel chat identifiers."""
+    router = ChannelMessageRouter()
+    router._get_or_create_conversation = AsyncMock(return_value=None)
+    router._store_message_history = AsyncMock()
+    router._invoke_agent = AsyncMock()
+    message = _build_message(text="hello")
+    message.chat_id = "secret-chat-id"
+    message.sender = SenderInfo(id="secret-sender-id", name="Test User")
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router.route_message(message)
+
+    router._get_or_create_conversation.assert_awaited_once_with(message)
+    router._store_message_history.assert_not_awaited()
+    router._invoke_agent.assert_not_awaited()
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-sender-id" not in caplog.text
+    assert "has_chat_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_route_message_error_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Route exception logs should keep error shape without echoing exception details."""
+    router = ChannelMessageRouter()
+    router._get_or_create_conversation = AsyncMock(
+        side_effect=RuntimeError("secret-routing-token")
+    )
+    message = _build_message(text="hello")
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router.route_message(message)
+
+    assert "secret-routing-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_process_media_if_needed_logs_metadata_without_media_identifiers(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

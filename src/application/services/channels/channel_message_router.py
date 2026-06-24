@@ -117,7 +117,8 @@ class ChannelMessageRouter:
             conversation_id = await self._get_or_create_conversation(message)
             if not conversation_id:
                 logger.error(
-                    f"[MessageRouter] Failed to get/create conversation for chat {message.chat_id}"
+                    "[MessageRouter] Failed to get/create conversation: has_chat_id=%s",
+                    bool(message.chat_id),
                 )
                 return
 
@@ -135,7 +136,10 @@ class ChannelMessageRouter:
             )
 
         except Exception as e:
-            logger.error(f"[MessageRouter] Error routing message: {e}", exc_info=True)
+            logger.error(
+                "[MessageRouter] Error routing message: error_type=%s",
+                type(e).__name__,
+            )
 
     def _validate_inbound(self, message: Message) -> bool:
         """Run pre-routing validation checks. Returns True if message should be routed."""
