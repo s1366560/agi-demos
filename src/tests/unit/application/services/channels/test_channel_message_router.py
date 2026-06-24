@@ -485,6 +485,31 @@ async def test_emit_inbound_event_access_denied_log_omits_identifiers(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_check_access_control_error_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Access-control errors should not expose identifiers or exception details."""
+    router = ChannelMessageRouter()
+    router._load_channel_config = AsyncMock(side_effect=RuntimeError("secret-access-token"))
+    message = _build_message(text="hello")
+    message.chat_id = "secret-chat-id"
+    message.sender = SenderInfo(id="secret-sender-id", name="Test User")
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    result = await router._check_access_control(message)
+
+    assert result is None
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-sender-id" not in caplog.text
+    assert "secret-access-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_process_media_if_needed_unavailable_log_omits_message_identifier(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

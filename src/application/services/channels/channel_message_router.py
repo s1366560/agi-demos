@@ -1807,7 +1807,10 @@ class ChannelMessageRouter:
                         return f"sender {message.sender.id} not in allowlist"
 
         except Exception as e:
-            logger.warning(f"[MessageRouter] Access control check error: {e}")
+            logger.warning(
+                "[MessageRouter] Access control check error: error_type=%s",
+                type(e).__name__,
+            )
         return None
 
     def _check_rate_limit(self, message: Message) -> bool:
