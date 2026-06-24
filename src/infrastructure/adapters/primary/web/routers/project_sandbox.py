@@ -463,7 +463,7 @@ def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
         container = request.app.state.container
         return cast(SandboxEventPublisher | None, container.sandbox_event_publisher())
     except Exception as e:
-        logger.warning(f"Could not create event publisher: {e}")
+        logger.warning("Could not create event publisher: error_type=%s", type(e).__name__)
         return None
 
 
@@ -473,7 +473,10 @@ def get_event_publisher_for_websocket(websocket: WebSocket) -> SandboxEventPubli
         container = websocket.app.state.container
         return cast(SandboxEventPublisher | None, container.sandbox_event_publisher())
     except Exception as e:
-        logger.warning(f"Could not create websocket event publisher: {e}")
+        logger.warning(
+            "Could not create websocket event publisher: error_type=%s",
+            type(e).__name__,
+        )
         return None
 
 

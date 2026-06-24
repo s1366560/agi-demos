@@ -117,6 +117,51 @@ class _SandboxService:
         return self._sandbox_info
 
 
+class _FailingEventPublisherContainer:
+    def sandbox_event_publisher(self) -> object:
+        raise RuntimeError("event publisher secret")
+
+
+@pytest.mark.unit
+def test_get_event_publisher_error_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(container=_FailingEventPublisherContainer()))
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    result = router_mod.get_event_publisher(request)
+
+    assert result is None
+    assert "Could not create event publisher" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "event publisher secret" not in caplog.text
+
+
+@pytest.mark.unit
+def test_get_event_publisher_for_websocket_error_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    websocket = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(container=_FailingEventPublisherContainer()))
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    result = router_mod.get_event_publisher_for_websocket(websocket)
+
+    assert result is None
+    assert "Could not create websocket event publisher" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "event publisher secret" not in caplog.text
+
+
 @pytest.mark.unit
 def test_register_list_stop_external_http_service(sandbox_http_client: TestClient) -> None:
     """Register/list/stop flow should work for external_url services."""
