@@ -1074,16 +1074,19 @@ async def test_terminal_websocket_accepts_auth_subprotocol(
 @pytest.mark.unit
 async def test_http_service_websocket_proxy_sanitizes_internal_errors(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     websocket = _FakeWebSocket()
     event_publisher = AsyncMock()
+    event_publisher.publish_http_service_error = AsyncMock()
 
+    router_mod._http_service_registry.clear()
     router_mod._http_service_registry.setdefault("proj-1", {})["svc-int"] = (
         router_mod.HttpServiceProxyInfo(
             service_id="svc-int",
             name="internal",
             source_type="sandbox_internal",
-            service_url="http://sandbox-service.local",
+            service_url="http://127.0.0.1:3000",
             project_id="proj-1",
             sandbox_id="sandbox-1",
             internal_port=5173,
@@ -1101,6 +1104,10 @@ async def test_http_service_websocket_proxy_sanitizes_internal_errors(
 
     monkeypatch.setattr(router_mod, "verify_project_access", allow_access)
     monkeypatch.setattr(router_mod, "_connect_http_service_upstream", fail_connect)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
 
     await router_mod.proxy_project_http_service_websocket(
         websocket=websocket,
@@ -1116,6 +1123,20 @@ async def test_http_service_websocket_proxy_sanitizes_internal_errors(
     assert websocket.sent_json == [{"error": "HTTP service WebSocket proxy failed"}]
     assert "secret" not in str(websocket.sent_json)
     assert websocket.closed is True
+    assert websocket.close_code == 1011
+    assert websocket.close_reason == "HTTP service WS proxy failure"
+    event_publisher.publish_http_service_error.assert_awaited_once()
+    error_kwargs = event_publisher.publish_http_service_error.await_args.kwargs
+    assert error_kwargs["service_id"] == "svc-int"
+    assert error_kwargs["error_message"] == "RuntimeError"
+    assert "secret" not in str(error_kwargs)
+    assert "HTTP service WS proxy error" in caplog.text
+    assert "has_service_id=True" in caplog.text
+    assert "has_ws_target=True" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "http service secret token" not in caplog.text
+    assert "127.0.0.1" not in caplog.text
+    assert "svc-int" not in caplog.text
 
 
 @pytest.mark.unit
