@@ -4,6 +4,7 @@ TDD Phase 2: Write failing tests first (RED).
 Tests the sandbox tool registry for managing dynamic tool registration.
 """
 
+import logging
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 
@@ -130,12 +131,13 @@ class TestSandboxToolRegistry:
         mock_adapter.list_tools.assert_called_once_with("abc123")
 
     @pytest.mark.asyncio
-    async def test_register_sandbox_tools_adapter_error(self, registry, mock_adapter):
+    async def test_register_sandbox_tools_adapter_error(self, registry, mock_adapter, caplog):
         """Test handling adapter error gracefully."""
-        mock_adapter.list_tools.side_effect = Exception("Connection failed")
+        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+        mock_adapter.list_tools.side_effect = Exception("secret connection token")
 
         tools = await registry.register_sandbox_tools(
-            sandbox_id="abc123",
+            sandbox_id="secret-sandbox-id",
             project_id="proj-1",
             tenant_id="tenant-1",
             tools=None,
@@ -143,7 +145,42 @@ class TestSandboxToolRegistry:
 
         assert tools is None or tools == []
         # Registration should not be created on error
-        assert "abc123" not in registry._registrations
+        assert "secret-sandbox-id" not in registry._registrations
+
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_tool_registry"
+        )
+        assert "Failed to fetch tools" in message
+        assert "secret-sandbox-id" not in message
+        assert "secret connection token" not in message
+        assert "has_sandbox_id=True" in message
+        assert "error_type=Exception" in message
+
+    @pytest.mark.asyncio
+    async def test_register_sandbox_tools_no_tools_log_omits_sandbox_id(self, registry, caplog):
+        """Test no-tools warning does not expose sandbox identifiers."""
+        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+
+        tools = await registry.register_sandbox_tools(
+            sandbox_id="secret-sandbox-id",
+            project_id="proj-1",
+            tenant_id="tenant-1",
+            tools=[],
+        )
+
+        assert tools == []
+        assert "secret-sandbox-id" not in registry._registrations
+
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_tool_registry"
+        )
+        assert "No tools to register" in message
+        assert "secret-sandbox-id" not in message
+        assert "has_sandbox_id=True" in message
 
     @pytest.mark.asyncio
     async def test_unregister_sandbox_tools(self, registry):
@@ -163,11 +200,22 @@ class TestSandboxToolRegistry:
         assert "abc123" not in registry._registrations
 
     @pytest.mark.asyncio
-    async def test_unregister_sandbox_tools_not_found(self, registry):
+    async def test_unregister_sandbox_tools_not_found(self, registry, caplog):
         """Test unregistering non-existent sandbox."""
-        result = await registry.unregister_sandbox_tools("nonexistent")
+        caplog.set_level(logging.WARNING, logger="src.application.services.sandbox_tool_registry")
+
+        result = await registry.unregister_sandbox_tools("secret-missing-sandbox")
 
         assert result is False
+
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_tool_registry"
+        )
+        assert "not found in registry" in message
+        assert "secret-missing-sandbox" not in message
+        assert "has_sandbox_id=True" in message
 
     @pytest.mark.asyncio
     async def test_get_sandbox_tools(self, registry):

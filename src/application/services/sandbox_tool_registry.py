@@ -100,12 +100,18 @@ class SandboxToolRegistry:
                 )
             except Exception as e:
                 logger.warning(
-                    f"[SandboxToolRegistry] Failed to fetch tools from sandbox={sandbox_id}: {e}"
+                    "[SandboxToolRegistry] Failed to fetch tools: "
+                    "has_sandbox_id=%s error_type=%s",
+                    bool(sandbox_id),
+                    type(e).__name__,
                 )
                 return []
 
         if not tools:
-            logger.warning(f"[SandboxToolRegistry] No tools to register for sandbox={sandbox_id}")
+            logger.warning(
+                "[SandboxToolRegistry] No tools to register: has_sandbox_id=%s",
+                bool(sandbox_id),
+            )
             return []
 
         # Create registration record
@@ -139,7 +145,10 @@ class SandboxToolRegistry:
             True if tools were unregistered, False if sandbox not found
         """
         if sandbox_id not in self._registrations:
-            logger.warning(f"[SandboxToolRegistry] Sandbox {sandbox_id} not found in registry")
+            logger.warning(
+                "[SandboxToolRegistry] Sandbox not found in registry: has_sandbox_id=%s",
+                bool(sandbox_id),
+            )
             return False
 
         registration = self._registrations.pop(sandbox_id)
