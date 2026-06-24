@@ -459,7 +459,7 @@ class LiteLLMEmbedder(BaseEmbedder):
             return embedding
 
         except Exception as e:
-            logger.error(f"LiteLLM embedding error: {e}")
+            logger.error("LiteLLM embedding error error_type=%s", type(e).__name__)
             raise
 
     def _extract_batch_embeddings(self, response: Any) -> list[list[float]]:

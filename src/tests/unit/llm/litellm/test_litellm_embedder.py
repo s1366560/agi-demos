@@ -121,6 +121,25 @@ class TestLiteLLMEmbedder:
                 await embedder.create("Test text")
 
     @pytest.mark.asyncio
+    async def test_create_error_log_redacts_exception_content(self, embedder, caplog):
+        """Embedding provider failures should not log raw exception text."""
+        secret = "embedding-provider-secret-8642"
+        with patch("litellm.aembedding", new_callable=AsyncMock) as mock_aembedding:
+            mock_aembedding.side_effect = RuntimeError(f"provider echoed {secret}")
+
+            with (
+                caplog.at_level(
+                    "ERROR",
+                    logger="src.infrastructure.llm.litellm.litellm_embedder",
+                ),
+                pytest.raises(RuntimeError),
+            ):
+                await embedder.create(f"Test text {secret}")
+
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_embedding_config_parameters_are_forwarded(self):
         """Structured embedding config should be forwarded to LiteLLM kwargs."""
         provider = ProviderConfig(
