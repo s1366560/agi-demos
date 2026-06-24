@@ -97,7 +97,12 @@ class MemoryService:
 
         # Save memory to database
         await self._memory_repo.save(memory)
-        logger.info(f"Saved memory {memory.id} to database")
+        logger.info(
+            "Saved memory to database tag_count=%d is_public=%s enqueue_graph=%s",
+            len(memory.tags),
+            memory.is_public,
+            enqueue_graph,
+        )
 
         if not enqueue_graph:
             return memory
@@ -124,9 +129,9 @@ class MemoryService:
         # Add episode to graph (this also queues background processing)
         try:
             await self._graph_service.add_episode(episode)
-            logger.info(f"Added episode {episode.id} to graph for memory {memory.id}")
+            logger.info("Added episode to graph")
         except Exception as e:
-            logger.error(f"Failed to add episode to graph: {e}")
+            logger.error("Failed to add episode to graph error_type=%s", type(e).__name__)
             # Update memory status to failed
             memory.processing_status = ProcessingStatus.FAILED.value
             await self._memory_repo.save(memory)

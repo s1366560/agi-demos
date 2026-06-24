@@ -58,6 +58,72 @@ class TestMemoryService:
         assert episode.project_id == "project-1"
         assert episode.user_id == "user-1"
 
+    async def test_create_memory_logs_do_not_include_identifiers_or_content(
+        self,
+        mock_memory_repo,
+        mock_graphiti_client,
+        caplog,
+    ):
+        """Memory creation logs must not expose IDs, title, or content."""
+        secret_title = "Customer private memory title"
+        secret_content = "The memory contains secret token alpha-1357"
+        secret_project_id = "project-secret-memory-create"
+        secret_user_id = "user-secret-memory-create"
+        secret_tenant_id = "tenant-secret-memory-create"
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
+        caplog.set_level(logging.INFO, logger="src.application.services.memory_service")
+
+        memory = await service.create_memory(
+            title=secret_title,
+            content=secret_content,
+            project_id=secret_project_id,
+            user_id=secret_user_id,
+            tenant_id=secret_tenant_id,
+            tags=["private", "incident"],
+            is_public=False,
+        )
+        episode = mock_graphiti_client.add_episode.call_args.args[0]
+
+        assert memory.id not in caplog.text
+        assert episode.id not in caplog.text
+        assert secret_title not in caplog.text
+        assert secret_content not in caplog.text
+        assert secret_project_id not in caplog.text
+        assert secret_user_id not in caplog.text
+        assert secret_tenant_id not in caplog.text
+        assert "tag_count=2" in caplog.text
+        assert "is_public=False" in caplog.text
+
+    async def test_create_memory_graph_failure_logs_do_not_include_identifiers_or_exception(
+        self,
+        mock_memory_repo,
+        mock_graphiti_client,
+        caplog,
+    ):
+        """Graph enqueue failure logs must not expose IDs, content, or backend error text."""
+        secret_title = "Graph failure private title"
+        secret_content = "Graph failure secret body beta-2468"
+        exception_detail = "graph backend leaked episode payload gamma-9753"
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
+        mock_graphiti_client.add_episode = AsyncMock(side_effect=RuntimeError(exception_detail))
+        caplog.set_level(logging.ERROR, logger="src.application.services.memory_service")
+
+        with pytest.raises(RuntimeError):
+            await service.create_memory(
+                title=secret_title,
+                content=secret_content,
+                project_id="project-secret-graph-failure",
+                user_id="user-secret-graph-failure",
+                tenant_id="tenant-secret-graph-failure",
+            )
+
+        saved_memory = mock_memory_repo.save.await_args_list[0].args[0]
+        assert saved_memory.id not in caplog.text
+        assert secret_title not in caplog.text
+        assert secret_content not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
     async def test_create_memory_can_skip_graph_enqueue(
         self, mock_memory_repo, mock_graphiti_client
     ):
