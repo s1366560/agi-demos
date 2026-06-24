@@ -226,6 +226,47 @@ class TestRedisUnifiedEventBusLogging:
         assert "error_type=RedisError" in caplog.text
         assert "has_routing_key=True" in caplog.text
 
+    @pytest.mark.asyncio
+    async def test_trim_stream_error_log_redacts_routing_key_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xtrim = AsyncMock(side_effect=redis.RedisError("redis secret unavailable"))
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_routing_key = "agent.secret-conversation.secret-message"
+
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+            removed = await adapter.trim_stream(secret_routing_key, max_length=5)
+
+        assert removed == 0
+        assert "Failed to trim stream" in caplog.text
+        assert secret_routing_key not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RedisError" in caplog.text
+        assert "max_length=5" in caplog.text
+        assert "has_routing_key=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_delete_stream_error_log_redacts_routing_key_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.delete = AsyncMock(side_effect=redis.RedisError("redis secret unavailable"))
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_routing_key = "agent.secret-conversation.secret-message"
+
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+            deleted = await adapter.delete_stream(secret_routing_key)
+
+        assert deleted is False
+        assert "Failed to delete stream" in caplog.text
+        assert secret_routing_key not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RedisError" in caplog.text
+        assert "has_routing_key=True" in caplog.text
+
 
 class TestEventRouter:
     """Tests for EventRouter."""

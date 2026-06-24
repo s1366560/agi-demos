@@ -542,8 +542,18 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                     approximate=approximate,
                 ),
             )
-        except redis.RedisError as e:
-            logger.error(f"Failed to trim stream {stream_key}: {e}")
+        except redis.RedisError as exc:
+            logger.error(
+                " ".join(
+                    [
+                        "[UnifiedEventBus] Failed to trim stream error_type=%s max_length=%s",
+                        "has_routing_key=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                max_length,
+                bool(str(routing_key)),
+            )
             return 0
 
     async def delete_stream(self, routing_key: str | RoutingKey) -> bool:
@@ -553,8 +563,12 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         try:
             result = await self._redis.delete(stream_key)
             return cast(bool, result > 0)
-        except redis.RedisError as e:
-            logger.error(f"Failed to delete stream {stream_key}: {e}")
+        except redis.RedisError as exc:
+            logger.error(
+                "[UnifiedEventBus] Failed to delete stream error_type=%s has_routing_key=%s",
+                type(exc).__name__,
+                bool(str(routing_key)),
+            )
             return False
 
     async def create_consumer_group(
