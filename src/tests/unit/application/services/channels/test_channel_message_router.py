@@ -263,6 +263,30 @@ async def test_process_media_if_needed_logs_metadata_without_media_identifiers(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_emit_inbound_event_rate_limit_log_omits_chat_identifier(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Rate limit logs should not expose channel chat identifiers."""
+    router = ChannelMessageRouter()
+    router._check_access_control = AsyncMock(return_value=None)
+    router._check_rate_limit = MagicMock(return_value=False)
+    router._broadcast_workspace_event = AsyncMock()
+    message = _build_message(text="hello")
+    message.chat_id = "secret-chat-id"
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router._emit_inbound_event(message, "conv-1")
+
+    router._broadcast_workspace_event.assert_not_awaited()
+    assert "secret-chat-id" not in caplog.text
+    assert "has_chat_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_process_media_if_needed_unavailable_log_omits_message_identifier(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

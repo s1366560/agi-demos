@@ -318,7 +318,10 @@ class ChannelMessageRouter:
 
         # Rate limiting check
         if not self._check_rate_limit(message):
-            logger.warning(f"[MessageRouter] Rate limited: chat_id={message.chat_id}")
+            logger.warning(
+                "[MessageRouter] Rate limited: has_chat_id=%s",
+                bool(message.chat_id),
+            )
             return
 
         inbound_event_time_us = int(datetime.now(UTC).timestamp() * 1_000_000)
