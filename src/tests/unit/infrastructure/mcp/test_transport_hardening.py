@@ -380,3 +380,28 @@ class TestSubprocessCancelLadder:
         assert secret_error not in caplog.text
         proc.stdin.write.assert_called_once()
         proc.stdin.drain.assert_not_awaited()
+
+    async def test_send_request_timeout_log_redacts_stderr(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPSubprocessClient(command="echo", args=["stub"])
+        stderr_secret = "stderr-timeout-secret-token"
+        proc = MagicMock()
+        proc.stdin.write = MagicMock()
+        proc.stdin.drain = AsyncMock()
+        proc.stdout.readline = AsyncMock(side_effect=TimeoutError)
+        client._proc = proc  # type: ignore[assignment]
+        client._read_stderr = AsyncMock(return_value=f"stderr: {stderr_secret}")  # type: ignore[method-assign]
+
+        with caplog.at_level(logging.ERROR, logger=SUBPROCESS_LOGGER_NAME):
+            result = await client._send_request("tools/call", {"token": "redacted"}, timeout=0.01)
+
+        assert result is None
+        assert "MCP request" in caplog.text
+        assert "timed out after 0.01s" in caplog.text
+        assert "stderr_chars=" in caplog.text
+        assert stderr_secret not in caplog.text
+        proc.stdin.write.assert_called_once()
+        proc.stdin.drain.assert_awaited_once()
+        client._read_stderr.assert_awaited_once()  # type: ignore[attr-defined]

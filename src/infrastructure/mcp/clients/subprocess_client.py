@@ -403,8 +403,10 @@ class MCPSubprocessClient:
             except TimeoutError:
                 stderr_text = await self._read_stderr()
                 logger.error(
-                    f"MCP request '{method}' timed out after {timeout}s"
-                    + (f"\nStderr: {stderr_text}" if stderr_text else "")
+                    "MCP request '%s' timed out after %ss stderr_chars=%s",
+                    method,
+                    timeout,
+                    len(stderr_text),
                 )
             except json.JSONDecodeError as e:
                 logger.error(f"MCP response parse error: {e}")
