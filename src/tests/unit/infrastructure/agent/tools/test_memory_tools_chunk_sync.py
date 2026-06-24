@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import src.infrastructure.agent.tools.memory_tools as memory_tools_module
 from src.infrastructure.agent.tools.memory_tools import (
     _background_sync_created_memory,
     _execute_memory_create,
@@ -14,6 +15,8 @@ from src.infrastructure.agent.tools.memory_tools import (
     _execute_memory_get,
     _execute_memory_update,
     _mark_created_memory_processing_status,
+    memory_get_tool,
+    memory_search_tool,
 )
 
 
@@ -47,6 +50,57 @@ class TestMemoryToolsChunkSync:
         assert result["processing_status"] == "PENDING"
         assert "error" not in result
         assert session.execute.await_count == 2
+        session.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_memory_search_logs_do_not_include_query_or_exception_content(
+        self,
+        caplog,
+        monkeypatch,
+    ) -> None:
+        secret_query = "find private token sigma-9911"
+        exception_detail = "chunk search leaked query token sigma-9911"
+        chunk_search = SimpleNamespace(search=AsyncMock(side_effect=RuntimeError(exception_detail)))
+        monkeypatch.setattr(memory_tools_module, "_memory_chunk_search", chunk_search)
+        monkeypatch.setattr(memory_tools_module, "_memory_graph_service", None)
+        monkeypatch.setattr(memory_tools_module, "_memory_project_id", "proj-1")
+        caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
+
+        result = await memory_search_tool.execute(
+            SimpleNamespace(),
+            query=secret_query,
+            max_results=5,
+            category=None,
+        )
+
+        payload = json.loads(result.output)
+        assert payload["results"] == []
+        assert secret_query not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_memory_get_logs_do_not_include_source_id_or_exception_content(
+        self,
+        caplog,
+        monkeypatch,
+    ) -> None:
+        session = AsyncMock()
+        secret_source_id = "mem-get-secret"
+        exception_detail = "memory get leaked source id mem-get-secret"
+        session.execute = AsyncMock(side_effect=RuntimeError(exception_detail))
+        session_factory = MagicMock(return_value=session)
+        monkeypatch.setattr(memory_tools_module, "_memget_session_factory", session_factory)
+        monkeypatch.setattr(memory_tools_module, "_memget_project_id", "proj-1")
+        caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
+
+        result = await memory_get_tool.execute(SimpleNamespace(), source_id=secret_source_id)
+
+        payload = json.loads(result.output)
+        assert "error" in payload
+        assert secret_source_id not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
         session.close.assert_awaited_once()
 
     @pytest.mark.asyncio

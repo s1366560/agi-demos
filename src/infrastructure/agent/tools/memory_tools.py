@@ -274,7 +274,7 @@ async def memory_search_tool(
             }
             results.append(item)
     except Exception as e:
-        logger.warning("Memory chunk search failed: %s", e)
+        logger.warning("Memory chunk search failed error_type=%s", type(e).__name__)
 
     # Also search knowledge graph if available
     if _memory_graph_service and len(results) < max_results:
@@ -365,7 +365,7 @@ async def memory_get_tool(
             is_error=is_err,
         )
     except Exception as e:
-        logger.warning("Memory get failed: %s", e)
+        logger.warning("Memory get failed error_type=%s", type(e).__name__)
         return ToolResult(
             output=json.dumps({"error": f"Failed to retrieve memory: {e}"}),
             is_error=True,
