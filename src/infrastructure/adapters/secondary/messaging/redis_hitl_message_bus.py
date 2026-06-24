@@ -446,8 +446,19 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
 
             return messages
 
-        except Exception as e:
-            logger.error(f"[HITLMessageBus] Failed to get pending messages from {stream_key}: {e}")
+        except Exception as exc:
+            logger.error(
+                " ".join(
+                    [
+                        "[HITLMessageBus] Failed to get pending messages error_type=%s",
+                        "count=%s has_request_id=%s has_consumer_group=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                count,
+                bool(request_id),
+                bool(consumer_group),
+            )
             return messages
 
     async def claim_pending_messages(
@@ -489,11 +500,36 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 if message:
                     messages.append(message)
 
-            logger.info(f"[HITLMessageBus] Claimed {len(messages)} messages in {stream_key}")
+            logger.info(
+                " ".join(
+                    [
+                        "[HITLMessageBus] Claimed pending messages claimed=%s message_count=%s",
+                        "has_request_id=%s has_consumer_group=%s has_consumer_name=%s",
+                    ]
+                ),
+                len(messages),
+                len(message_ids),
+                bool(request_id),
+                bool(consumer_group),
+                bool(consumer_name),
+            )
             return messages
 
-        except Exception as e:
-            logger.error(f"[HITLMessageBus] Failed to claim messages: {e}")
+        except Exception as exc:
+            logger.error(
+                " ".join(
+                    [
+                        "[HITLMessageBus] Failed to claim messages error_type=%s",
+                        "message_count=%s has_request_id=%s",
+                        "has_consumer_group=%s has_consumer_name=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                len(message_ids),
+                bool(request_id),
+                bool(consumer_group),
+                bool(consumer_name),
+            )
             return messages
 
     async def cleanup_stream(

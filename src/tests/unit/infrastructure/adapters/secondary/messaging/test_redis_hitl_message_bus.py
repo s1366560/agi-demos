@@ -272,3 +272,98 @@ class TestRedisHITLMessageBusLogging:
         assert "error_type=ResponseError" in caplog.text
         assert "has_request_id=True" in caplog.text
         assert "has_consumer_group=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_get_pending_messages_error_log_redacts_request_id_group_and_exception_text(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xpending_range = AsyncMock(
+            side_effect=RuntimeError("redis secret unavailable")
+        )
+        adapter = RedisHITLMessageBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_request_id = "hitl-secret-request-3130"
+        secret_consumer_group = "secret-consumer-group"
+
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+            messages = await adapter.get_pending_messages(
+                request_id=secret_request_id,
+                consumer_group=secret_consumer_group,
+                count=3,
+            )
+
+        assert messages == []
+        assert "Failed to get pending messages" in caplog.text
+        assert secret_request_id not in caplog.text
+        assert secret_consumer_group not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "count=3" in caplog.text
+        assert "has_request_id=True" in caplog.text
+        assert "has_consumer_group=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_claim_pending_messages_success_log_redacts_request_group_and_consumer(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xclaim = AsyncMock(return_value=[])
+        adapter = RedisHITLMessageBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_request_id = "hitl-secret-request-3140"
+        secret_consumer_group = "secret-consumer-group"
+        secret_consumer_name = "secret-consumer-name"
+
+        with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+            messages = await adapter.claim_pending_messages(
+                request_id=secret_request_id,
+                consumer_group=secret_consumer_group,
+                consumer_name=secret_consumer_name,
+                min_idle_ms=1000,
+                message_ids=["1-0", "2-0"],
+            )
+
+        assert messages == []
+        assert "Claimed pending messages" in caplog.text
+        assert secret_request_id not in caplog.text
+        assert secret_consumer_group not in caplog.text
+        assert secret_consumer_name not in caplog.text
+        assert "claimed=0" in caplog.text
+        assert "message_count=2" in caplog.text
+        assert "has_request_id=True" in caplog.text
+        assert "has_consumer_group=True" in caplog.text
+        assert "has_consumer_name=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_claim_pending_messages_error_log_redacts_request_group_consumer_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xclaim = AsyncMock(side_effect=RuntimeError("redis secret unavailable"))
+        adapter = RedisHITLMessageBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_request_id = "hitl-secret-request-3150"
+        secret_consumer_group = "secret-consumer-group"
+        secret_consumer_name = "secret-consumer-name"
+
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+            messages = await adapter.claim_pending_messages(
+                request_id=secret_request_id,
+                consumer_group=secret_consumer_group,
+                consumer_name=secret_consumer_name,
+                min_idle_ms=1000,
+                message_ids=["1-0"],
+            )
+
+        assert messages == []
+        assert "Failed to claim messages" in caplog.text
+        assert secret_request_id not in caplog.text
+        assert secret_consumer_group not in caplog.text
+        assert secret_consumer_name not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "message_count=1" in caplog.text
+        assert "has_request_id=True" in caplog.text
+        assert "has_consumer_group=True" in caplog.text
+        assert "has_consumer_name=True" in caplog.text
