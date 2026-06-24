@@ -128,7 +128,7 @@ class MemoryFlushService:
             if session_to_close and flushed > 0:
                 await session_to_close.commit()
         except Exception as e:
-            logger.warning(f"Memory flush storage error: {e}")
+            logger.warning("Memory flush storage error error_type=%s", type(e).__name__)
             if session_to_close:
                 with contextlib.suppress(Exception):
                     await session_to_close.rollback()
@@ -212,7 +212,10 @@ class MemoryFlushService:
         try:
             system_prompt = get_memory_flush_prompt()
         except Exception as e:
-            logger.warning(f"Failed to load builtin memory flush skill: {e}")
+            logger.warning(
+                "Failed to load builtin memory flush skill error_type=%s",
+                type(e).__name__,
+            )
             return []
 
         try:

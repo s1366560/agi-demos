@@ -52,3 +52,45 @@ class TestMemoryFlushService:
 
         assert stored is True
         assert saved_chunks[0].metadata_ == {"flush": True}
+
+    @pytest.mark.asyncio
+    async def test_process_and_store_items_log_omits_exception_content(self, caplog) -> None:
+        exception_detail = "flush storage leaked compressed memory alpha-9753"
+        service = MemoryFlushService(llm_client=AsyncMock(), session_factory=None)
+        service._process_flush_item = AsyncMock(side_effect=RuntimeError(exception_detail))  # type: ignore[method-assign]
+
+        with caplog.at_level("WARNING", logger="src.infrastructure.agent.memory.flush"):
+            flushed = await service._process_and_store_items(
+                items=[{"content": "compressed memory alpha-9753", "category": "fact"}],
+                chunk_repo=object(),
+                project_id="project-secret",
+                conversation_id="conversation-secret",
+            )
+
+        assert flushed == 0
+        assert exception_detail not in caplog.text
+        assert "alpha-9753" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_extract_prompt_load_log_omits_exception_content(
+        self, caplog, monkeypatch
+    ) -> None:
+        exception_detail = "flush prompt load leaked local secret beta-8642"
+
+        def _raise_prompt_error() -> str:
+            raise RuntimeError(exception_detail)
+
+        monkeypatch.setattr(
+            "src.infrastructure.agent.memory.flush.get_memory_flush_prompt",
+            _raise_prompt_error,
+        )
+        service = MemoryFlushService(llm_client=AsyncMock(), session_factory=None)
+
+        with caplog.at_level("WARNING", logger="src.infrastructure.agent.memory.flush"):
+            items = await service._extract("compressed content beta-8642", 1)
+
+        assert items == []
+        assert exception_detail not in caplog.text
+        assert "beta-8642" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
