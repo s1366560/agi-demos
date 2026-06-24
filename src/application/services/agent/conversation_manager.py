@@ -71,7 +71,11 @@ class ConversationManager:
         )
 
         await self._conversation_repo.save(conversation)
-        logger.info(f"Created conversation {conversation.id} for project {project_id}")
+        logger.info(
+            "Created conversation title_len=%d agent_config_present=%s",
+            len(conversation.title),
+            agent_config is not None,
+        )
         return conversation
 
     async def get_conversation(

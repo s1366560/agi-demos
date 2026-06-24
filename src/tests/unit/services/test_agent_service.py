@@ -1,5 +1,6 @@
 """Unit tests for AgentService, focusing on authorization."""
 
+import logging
 from datetime import datetime
 from unittest.mock import AsyncMock
 
@@ -95,6 +96,40 @@ class TestAgentServiceAuthorization:
             title="Test Conversation",
             status=ConversationStatus.ACTIVE,
         )
+
+    @pytest.mark.asyncio
+    async def test_create_conversation_logs_do_not_include_identifiers_or_title(
+        self,
+        agent_service,
+        mock_conversation_repo,
+        caplog,
+    ):
+        """Conversation creation logs must not expose IDs or title content."""
+        secret_project_id = "project-secret-create-123"
+        secret_user_id = "user-secret-create-456"
+        secret_tenant_id = "tenant-secret-create-789"
+        secret_title = "Customer Confidential Incident"
+        caplog.set_level(
+            logging.INFO,
+            logger="src.application.services.agent.conversation_manager",
+        )
+
+        conversation = await agent_service.create_conversation(
+            project_id=secret_project_id,
+            user_id=secret_user_id,
+            tenant_id=secret_tenant_id,
+            title=secret_title,
+            agent_config={"model": "private-model"},
+        )
+
+        mock_conversation_repo.save.assert_called_once()
+        assert conversation.id not in caplog.text
+        assert secret_project_id not in caplog.text
+        assert secret_user_id not in caplog.text
+        assert secret_tenant_id not in caplog.text
+        assert secret_title not in caplog.text
+        assert "title_len=30" in caplog.text
+        assert "agent_config_present=True" in caplog.text
 
     @pytest.mark.asyncio
     async def test_get_conversation_owner_can_access(
