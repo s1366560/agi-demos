@@ -810,6 +810,38 @@ async def test_send_final_response_logs_agent_errors_without_details(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_send_final_response_empty_log_omits_conversation_identifier(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Empty response logs should not expose conversation identifiers."""
+    router = ChannelMessageRouter()
+    router._send_response = AsyncMock()
+    router._send_error_feedback = AsyncMock()
+    message = _build_message(text="hi")
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router._send_final_response(
+        message=message,
+        conversation_id="secret-conversation-id",
+        response="   ",
+        card_msg_id=None,
+        error_message=None,
+    )
+
+    router._send_response.assert_not_awaited()
+    router._send_error_feedback.assert_awaited_once_with(
+        message,
+        "secret-conversation-id",
+    )
+    assert "secret-conversation-id" not in caplog.text
+    assert "has_conversation_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_invoke_agent_sends_response_text_on_no_progress_error() -> None:
     """When agent errors with 'no-progress' but has accumulated text, send that text."""
     router = ChannelMessageRouter()

@@ -992,7 +992,10 @@ class ChannelMessageRouter:
         if response.strip():
             await self._send_response(message, conversation_id, response)
         else:
-            logger.warning(f"[MessageRouter] Agent produced empty response for {conversation_id}")
+            logger.warning(
+                "[MessageRouter] Agent produced empty response: has_conversation_id=%s",
+                bool(conversation_id),
+            )
             await self._send_error_feedback(message, conversation_id)
 
     async def _run_card_updater(
