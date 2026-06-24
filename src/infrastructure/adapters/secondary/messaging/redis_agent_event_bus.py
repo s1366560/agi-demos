@@ -511,8 +511,12 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 conversation_id=conversation_id,
             )
 
-        except Exception as e:
-            logger.warning(f"[AgentEventBus] Failed to parse message {msg_id}: {e}")
+        except Exception as exc:
+            logger.warning(
+                "[AgentEventBus] Failed to parse message error_type=%s has_message_id=%s",
+                type(exc).__name__,
+                bool(msg_id),
+            )
             return None
 
     async def _is_stream_complete(self, conversation_id: str, message_id: str) -> bool:

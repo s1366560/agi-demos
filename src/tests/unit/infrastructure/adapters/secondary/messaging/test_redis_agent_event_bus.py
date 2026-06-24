@@ -315,3 +315,33 @@ class TestRedisAgentEventBusLogging:
         assert "error_type=RuntimeError" in caplog.text
         assert "has_conversation_id=True" in caplog.text
         assert "has_message_id=True" in caplog.text
+
+    def test_parse_stream_message_warning_redacts_message_id_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        adapter = RedisAgentEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_stream_message_id = "secret-stream-message-id-8642"
+        secret_event_type = "secret-event-type"
+
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            event = adapter._parse_stream_message(
+                secret_stream_message_id,
+                {
+                    "event_time_us": "123",
+                    "event_counter": "1",
+                    "event_type": secret_event_type,
+                    "data": "{}",
+                    "timestamp": "2026-01-01T00:00:00+00:00",
+                    "conversation_id": "conversation-secret-8642",
+                    "message_id": "message-secret-7531",
+                },
+            )
+
+        assert event is None
+        assert "Failed to parse message" in caplog.text
+        assert secret_stream_message_id not in caplog.text
+        assert secret_event_type not in caplog.text
+        assert "error_type=ValueError" in caplog.text
+        assert "has_message_id=True" in caplog.text
