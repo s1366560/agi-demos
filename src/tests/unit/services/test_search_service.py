@@ -221,3 +221,24 @@ async def test_search_by_date_range_reads_additional_pages_until_limit() -> None
         {"project_id": "project-1", "limit": 50, "offset": 50},
     ]
     assert [result["id"] for result in results] == ["memory-55", "memory-56"]
+
+
+@pytest.mark.asyncio
+async def test_search_by_date_range_failure_logs_do_not_include_exception_content(
+    caplog,
+) -> None:
+    exception_detail = "memory repo leaked date search payload gamma-13579"
+    memory_repo = _FailingMemoryRepositoryStub(exception_detail)
+    service = SearchService(graph_service=_GraphServiceStub([]), memory_repo=memory_repo)
+    caplog.set_level(logging.ERROR, logger="src.application.services.search_service")
+
+    with pytest.raises(RuntimeError):
+        await service.search_by_date_range(
+            "project-1",
+            date_from=datetime(2026, 1, 1, tzinfo=UTC),
+            date_to=datetime(2026, 1, 2, tzinfo=UTC),
+            limit=2,
+        )
+
+    assert exception_detail not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text

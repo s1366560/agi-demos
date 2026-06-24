@@ -258,7 +258,10 @@ class SearchService:
             return filtered
 
         except Exception as e:
-            logger.error(f"Date range search failed: {e}")
+            logger.error(
+                "Date range search failed error_type=%s",
+                type(e).__name__,
+            )
             raise
 
     async def get_graph_context(
