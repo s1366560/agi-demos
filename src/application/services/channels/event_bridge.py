@@ -165,8 +165,11 @@ class ChannelEventBridge:
             await handler(adapter, chat_id, event_data)
         except Exception as e:
             logger.warning(
-                f"[EventBridge] Failed to forward {event_type} "
-                f"for conversation {conversation_id}: {e}"
+                "[EventBridge] Failed to forward event: event_type=%s "
+                "has_conversation_id=%s error_type=%s",
+                event_type,
+                bool(conversation_id),
+                type(e).__name__,
             )
 
     async def _lookup_binding(self, conversation_id: str) -> Any:

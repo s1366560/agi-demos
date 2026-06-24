@@ -62,6 +62,37 @@ async def test_on_agent_event_skips_when_no_binding() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_on_agent_event_failure_log_omits_conversation_and_exception_details(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Top-level forwarding logs should not echo conversation IDs or exception text."""
+    adapter = _make_adapter()
+    binding = _make_binding()
+    bridge = ChannelEventBridge()
+    bridge._lookup_binding = AsyncMock(return_value=binding)
+    bridge._get_adapter = MagicMock(return_value=adapter)
+    bridge._handlers["error"] = AsyncMock(
+        side_effect=RuntimeError("handler failed for secret-conversation-id"),
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.event_bridge",
+    )
+
+    await bridge.on_agent_event(
+        "secret-conversation-id",
+        {"type": "error", "data": {"message": "fail"}},
+    )
+
+    assert "secret-conversation-id" not in caplog.text
+    assert "handler failed" not in caplog.text
+    assert "event_type=error" in caplog.text
+    assert "has_conversation_id=True" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_lookup_binding_failure_log_omits_exception_details(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
