@@ -189,6 +189,77 @@ class TestMemoryService:
         assert episode.metadata["tenant_id"] == "tenant-1"
         assert episode.metadata["reprocess"] is True
 
+    async def test_update_memory_logs_do_not_include_identifiers_or_content(
+        self,
+        mock_memory_repo,
+        mock_graphiti_client,
+        caplog,
+    ):
+        """Memory update logs must not expose IDs, title, or content."""
+        secret_memory_id = "memory-secret-update"
+        secret_title = "Updated private memory title"
+        secret_content = "Updated body has secret token delta-8642"
+        existing_memory = Memory(
+            id=secret_memory_id,
+            title="Old private title",
+            content="Old private content",
+            version=1,
+            project_id="project-secret-update",
+            author_id="user-secret-update",
+            metadata={"tenant_id": "tenant-secret-update"},
+            created_at=datetime.now(UTC),
+        )
+        mock_memory_repo.find_by_id.return_value = existing_memory
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
+        caplog.set_level(logging.INFO, logger="src.application.services.memory_service")
+
+        result = await service.update_memory(
+            memory_id=secret_memory_id,
+            title=secret_title,
+            content=secret_content,
+            tags=["private"],
+        )
+
+        assert result.title == secret_title
+        assert secret_memory_id not in caplog.text
+        assert secret_title not in caplog.text
+        assert secret_content not in caplog.text
+        assert "content_changed=True" in caplog.text
+        assert "tag_count=1" in caplog.text
+
+    async def test_update_memory_reprocess_failure_logs_do_not_include_exception_content(
+        self,
+        mock_memory_repo,
+        mock_graphiti_client,
+        caplog,
+    ):
+        """Memory reprocess failure logs must not expose IDs, content, or backend error text."""
+        secret_memory_id = "memory-secret-reprocess"
+        secret_content = "Reprocess secret content epsilon-7531"
+        exception_detail = "graph enqueue leaked memory body zeta-1597"
+        existing_memory = Memory(
+            id=secret_memory_id,
+            title="Reprocess private title",
+            content="Old reprocess content",
+            version=1,
+            project_id="project-secret-reprocess",
+            author_id="user-secret-reprocess",
+            metadata={"tenant_id": "tenant-secret-reprocess"},
+            created_at=datetime.now(UTC),
+        )
+        mock_memory_repo.find_by_id.return_value = existing_memory
+        mock_graphiti_client.add_episode = AsyncMock(side_effect=RuntimeError(exception_detail))
+        service = MemoryService(mock_memory_repo, mock_graphiti_client)
+        caplog.set_level(logging.ERROR, logger="src.application.services.memory_service")
+
+        with pytest.raises(RuntimeError):
+            await service.update_memory(memory_id=secret_memory_id, content=secret_content)
+
+        assert secret_memory_id not in caplog.text
+        assert secret_content not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
     async def test_update_memory_content_unchanged_does_not_reprocess(
         self, mock_memory_repo, mock_graphiti_client
     ):

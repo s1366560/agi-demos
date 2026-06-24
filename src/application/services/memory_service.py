@@ -283,19 +283,27 @@ class MemoryService:
             memory.processing_status = ProcessingStatus.PENDING.value
 
         await self._memory_repo.save(memory)
-        logger.info(f"Updated memory {memory_id}")
+        logger.info(
+            "Updated memory title_updated=%s content_changed=%s tags_updated=%s "
+            "is_public_updated=%s metadata_updated=%s tag_count=%d",
+            title is not None,
+            content_changed,
+            tags is not None,
+            is_public is not None,
+            metadata is not None,
+            len(memory.tags),
+        )
 
         # If content changed, forget the stale graph state and create a new episode.
         if content_changed:
             try:
                 try:
                     await self._graph_service.delete_episode_by_memory_id(memory_id)
-                    logger.info(f"Cleaned old graph state before reprocessing memory {memory_id}")
+                    logger.info("Cleaned old graph state before reprocessing memory")
                 except Exception as cleanup_error:
                     logger.warning(
-                        "Failed to clean old graph state before reprocessing memory %s: %s",
-                        memory_id,
-                        cleanup_error,
+                        "Failed to clean old graph state before reprocessing memory error_type=%s",
+                        type(cleanup_error).__name__,
                     )
 
                 episode = Episode(
@@ -317,9 +325,9 @@ class MemoryService:
                     status=ProcessingStatus.PENDING.value,
                 )
                 await self._graph_service.add_episode(episode)
-                logger.info(f"Queued reprocessing for memory {memory_id}")
+                logger.info("Queued reprocessing for memory")
             except Exception as e:
-                logger.error(f"Failed to queue reprocessing: {e}")
+                logger.error("Failed to queue reprocessing error_type=%s", type(e).__name__)
                 memory.processing_status = ProcessingStatus.FAILED.value
                 await self._memory_repo.save(memory)
                 raise
