@@ -201,7 +201,11 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                 return results
 
             except redis.RedisError as e:
-                logger.error(f"[UnifiedEventBus] Batch publish failed: {e}")
+                logger.error(
+                    "[UnifiedEventBus] Batch publish failed error_type=%s event_count=%s",
+                    type(e).__name__,
+                    len(events),
+                )
                 raise EventPublishError(f"Batch publish failed: {e}") from e
 
     async def subscribe(

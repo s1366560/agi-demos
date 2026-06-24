@@ -14,6 +14,7 @@ from src.domain.events.envelope import EventEnvelope
 from src.domain.events.serialization import EventSerializer
 from src.domain.events.types import AgentEventType
 from src.domain.ports.services.unified_event_bus_port import (
+    EventPublishError,
     EventWithMetadata,
     PublishResult,
     RoutingKey,
@@ -185,6 +186,53 @@ class TestRedisUnifiedEventBusSubscription:
 
 
 class TestRedisUnifiedEventBusLogging:
+    @pytest.mark.asyncio
+    async def test_publish_batch_error_log_redacts_routing_key_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        exception_detail = "batch publish redis secret 2468"
+        secret_routing_key = "agent.secret-conversation.secret-message"
+
+        class _FailingPipeline:
+            async def __aenter__(self) -> "_FailingPipeline":
+                return self
+
+            async def __aexit__(
+                self,
+                _exc_type: type[BaseException] | None,
+                _exc: BaseException | None,
+                _traceback: object | None,
+            ) -> None:
+                return None
+
+            def xadd(self, *_args: object, **_kwargs: object) -> None:
+                return None
+
+            async def execute(self) -> None:
+                raise redis.RedisError(exception_detail)
+
+        event = EventEnvelope.wrap(
+            event_type=AgentEventType.WORKSPACE_UPDATED,
+            payload={"workspace_id": "ws-secret"},
+        )
+        redis_client = Mock()
+        redis_client.pipeline = Mock(return_value=_FailingPipeline())
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+
+        with (
+            caplog.at_level(logging.ERROR, logger=LOGGER_NAME),
+            pytest.raises(EventPublishError) as exc_info,
+        ):
+            await adapter.publish_batch([(event, secret_routing_key)])
+
+        assert exception_detail in str(exc_info.value)
+        assert "Batch publish failed" in caplog.text
+        assert secret_routing_key not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RedisError" in caplog.text
+        assert "event_count=1" in caplog.text
+
     @pytest.mark.asyncio
     async def test_get_events_error_log_redacts_routing_key_and_exception(
         self,
