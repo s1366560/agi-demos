@@ -242,3 +242,30 @@ async def test_search_by_date_range_failure_logs_do_not_include_exception_conten
 
     assert exception_detail not in caplog.text
     assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_get_graph_context_failure_logs_do_not_include_entity_or_exception_content(
+    caplog,
+) -> None:
+    secret_entity_id = "entity-secret-alpha-2468"
+    secret_project_id = "project-secret-beta-1357"
+    service = SearchService(
+        graph_service=_GraphServiceStub([]), memory_repo=_MemoryRepositoryStub([])
+    )
+    caplog.set_level(logging.ERROR, logger="src.application.services.search_service")
+
+    with pytest.raises(ValueError):
+        await service.get_graph_context(
+            secret_entity_id,
+            secret_project_id,
+            depth=3,
+            limit=7,
+        )
+
+    assert secret_entity_id not in caplog.text
+    assert secret_project_id not in caplog.text
+    assert "not found" not in caplog.text
+    assert "depth=3" in caplog.text
+    assert "limit=7" in caplog.text
+    assert "error_type=ValueError" in caplog.text

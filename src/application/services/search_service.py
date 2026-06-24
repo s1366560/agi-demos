@@ -338,7 +338,12 @@ class SearchService:
             )
 
         except Exception as e:
-            logger.error(f"Failed to get graph context for entity {entity_id}: {e}")
+            logger.error(
+                "Failed to get graph context depth=%d limit=%d error_type=%s",
+                depth,
+                limit,
+                type(e).__name__,
+            )
             raise
 
     async def get_recent_activity(
