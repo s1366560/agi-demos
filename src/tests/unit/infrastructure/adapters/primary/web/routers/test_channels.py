@@ -24,6 +24,7 @@ from src.infrastructure.adapters.primary.web.routers.channels import (
     PluginConfigUpdateRequest,
     PushMessageRequest,
     create_config,
+    delete_config,
     enable_tenant_plugin,
     get_project_channel_plugin_schema,
     get_tenant_channel_plugin_schema,
@@ -1109,6 +1110,252 @@ class TestPluginSchemaExecution:
 
         assert response.domain == "lark"
         mock_repo.update.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_update_config_restart_log_omits_config_id(self, mock_db_session, caplog):
+        """Restart success logs should not expose channel config IDs."""
+        caplog.set_level(
+            logging.INFO,
+            logger="src.infrastructure.adapters.primary.web.routers.channels",
+        )
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        existing = ChannelConfigModel(
+            id="secret-config-id",
+            project_id="project-1",
+            channel_type="feishu",
+            name="Feishu",
+            enabled=True,
+            connection_mode="websocket",
+            app_id="cli_test",
+            app_secret="secret",
+            domain="feishu",
+            created_at=datetime.utcnow(),
+            status="disconnected",
+        )
+        channel_manager = SimpleNamespace(restart_connection=AsyncMock())
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_ensure_channel_plugin_enabled_for_project",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_resolve_channel_metadata",
+                return_value=None,
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
+            ) as mock_repo_class,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                return_value=channel_manager,
+            ),
+        ):
+            mock_repo = MagicMock()
+            mock_repo.get_by_id = AsyncMock(return_value=existing)
+            mock_repo.update = AsyncMock(return_value=existing)
+            mock_repo_class.return_value = mock_repo
+
+            response = await update_config(
+                config_id="secret-config-id",
+                data=ChannelConfigUpdate(name="Updated Feishu"),
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        channel_manager.restart_connection.assert_awaited_once_with("secret-config-id")
+        assert response.name == "Updated Feishu"
+        assert "Restarted connection" in caplog.text
+        assert "has_channel_config_id=True" in caplog.text
+        assert "secret-config-id" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_update_config_restart_failure_log_omits_config_id_and_error_text(
+        self, mock_db_session, caplog
+    ):
+        """Restart failure logs should keep diagnostics without raw IDs or error text."""
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.infrastructure.adapters.primary.web.routers.channels",
+        )
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        existing = ChannelConfigModel(
+            id="secret-config-id",
+            project_id="project-1",
+            channel_type="feishu",
+            name="Feishu",
+            enabled=True,
+            connection_mode="websocket",
+            app_id="cli_test",
+            app_secret="secret",
+            domain="feishu",
+            created_at=datetime.utcnow(),
+            status="disconnected",
+        )
+        channel_manager = SimpleNamespace(
+            restart_connection=AsyncMock(side_effect=RuntimeError("secret-restart-token"))
+        )
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_ensure_channel_plugin_enabled_for_project",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels."
+                "_resolve_channel_metadata",
+                return_value=None,
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
+            ) as mock_repo_class,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                return_value=channel_manager,
+            ),
+        ):
+            mock_repo = MagicMock()
+            mock_repo.get_by_id = AsyncMock(return_value=existing)
+            mock_repo.update = AsyncMock(return_value=existing)
+            mock_repo_class.return_value = mock_repo
+
+            response = await update_config(
+                config_id="secret-config-id",
+                data=ChannelConfigUpdate(name="Updated Feishu"),
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        assert response.name == "Updated Feishu"
+        assert "Failed to restart connection" in caplog.text
+        assert "has_channel_config_id=True" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "secret-config-id" not in caplog.text
+        assert "secret-restart-token" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_delete_config_disconnect_log_omits_config_id(
+        self, mock_db_session, caplog
+    ):
+        """Disconnect success logs should not expose channel config IDs."""
+        caplog.set_level(
+            logging.INFO,
+            logger="src.infrastructure.adapters.primary.web.routers.channels",
+        )
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        existing = ChannelConfigModel(
+            id="secret-config-id",
+            project_id="project-1",
+            channel_type="feishu",
+            name="Feishu",
+            enabled=True,
+            connection_mode="websocket",
+            app_id="cli_test",
+            app_secret="secret",
+            domain="feishu",
+            created_at=datetime.utcnow(),
+            status="disconnected",
+        )
+        channel_manager = SimpleNamespace(remove_connection=AsyncMock())
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
+            ) as mock_repo_class,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                return_value=channel_manager,
+            ),
+        ):
+            mock_repo = MagicMock()
+            mock_repo.get_by_id = AsyncMock(return_value=existing)
+            mock_repo.delete = AsyncMock(return_value=True)
+            mock_repo_class.return_value = mock_repo
+
+            response = await delete_config(
+                config_id="secret-config-id",
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        channel_manager.remove_connection.assert_awaited_once_with("secret-config-id")
+        assert response is None
+        assert "Disconnected channel" in caplog.text
+        assert "has_channel_config_id=True" in caplog.text
+        assert "secret-config-id" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_delete_config_disconnect_failure_log_omits_config_id_and_error_text(
+        self, mock_db_session, caplog
+    ):
+        """Disconnect failure logs should keep diagnostics without raw IDs or error text."""
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.infrastructure.adapters.primary.web.routers.channels",
+        )
+        current_user = User(id="u-1", email="user@example.com", hashed_password="hash")
+        existing = ChannelConfigModel(
+            id="secret-config-id",
+            project_id="project-1",
+            channel_type="feishu",
+            name="Feishu",
+            enabled=True,
+            connection_mode="websocket",
+            app_id="cli_test",
+            app_secret="secret",
+            domain="feishu",
+            created_at=datetime.utcnow(),
+            status="disconnected",
+        )
+        channel_manager = SimpleNamespace(
+            remove_connection=AsyncMock(side_effect=RuntimeError("secret-disconnect-token"))
+        )
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.verify_project_access",
+                new=AsyncMock(),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.ChannelConfigRepository"
+            ) as mock_repo_class,
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+                return_value=channel_manager,
+            ),
+        ):
+            mock_repo = MagicMock()
+            mock_repo.get_by_id = AsyncMock(return_value=existing)
+            mock_repo.delete = AsyncMock(return_value=True)
+            mock_repo_class.return_value = mock_repo
+
+            response = await delete_config(
+                config_id="secret-config-id",
+                db=mock_db_session,
+                current_user=current_user,
+            )
+
+        assert response is None
+        assert "Failed to disconnect channel" in caplog.text
+        assert "has_channel_config_id=True" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "secret-config-id" not in caplog.text
+        assert "secret-disconnect-token" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_create_config_rejects_when_plugin_disabled_for_tenant(self, mock_db_session):

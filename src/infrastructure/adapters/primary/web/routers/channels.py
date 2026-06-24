@@ -1895,9 +1895,17 @@ async def update_config(
     if channel_manager:
         try:
             await channel_manager.restart_connection(config_id)
-            logger.info(f"[Channels] Restarted connection for channel {config_id}")
+            logger.info(
+                "[Channels] Restarted connection: has_channel_config_id=%s",
+                bool(config_id),
+            )
         except Exception as e:
-            logger.warning(f"[Channels] Failed to restart connection {config_id}: {e}")
+            logger.warning(
+                "[Channels] Failed to restart connection: "
+                "has_channel_config_id=%s error_type=%s",
+                bool(config_id),
+                type(e).__name__,
+            )
 
     return to_response(updated)
 
@@ -1925,9 +1933,17 @@ async def delete_config(
     if channel_manager:
         try:
             await channel_manager.remove_connection(config_id)
-            logger.info(f"[Channels] Disconnected channel {config_id}")
+            logger.info(
+                "[Channels] Disconnected channel: has_channel_config_id=%s",
+                bool(config_id),
+            )
         except Exception as e:
-            logger.warning(f"[Channels] Failed to disconnect channel {config_id}: {e}")
+            logger.warning(
+                "[Channels] Failed to disconnect channel: "
+                "has_channel_config_id=%s error_type=%s",
+                bool(config_id),
+                type(e).__name__,
+            )
 
     deleted = await repo.delete(config_id)
     await db.commit()
