@@ -343,7 +343,10 @@ class RedisDLQAdapter(DeadLetterQueuePort):
                     return False
             else:
                 # No event bus configured
-                logger.warning(f"[DLQ] Cannot retry {message_id}: no event bus configured")
+                logger.warning(
+                    "[DLQ] Cannot retry reason=no_event_bus has_message_id=%s",
+                    bool(message_id),
+                )
                 message.status = DLQMessageStatus.PENDING
                 await self._update_message(message)
                 return False

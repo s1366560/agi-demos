@@ -67,6 +67,43 @@ async def test_retry_message_redacts_publish_failure_log(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_retry_message_without_event_bus_redacts_message_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Missing event bus retry warnings should not log raw message IDs."""
+    secret_message_id = "dlq-secret-message-6420"
+    message = DeadLetterMessage(
+        id=secret_message_id,
+        event_id="event-1",
+        event_type="event.type",
+        event_data="{}",
+        routing_key="routing.secret",
+        error="original error",
+        error_type="RuntimeError",
+        status=DLQMessageStatus.PENDING,
+        retry_count=0,
+        max_retries=3,
+    )
+    adapter = RedisDLQAdapter(redis_client=object())  # type: ignore[arg-type]
+    adapter.get_message = AsyncMock(return_value=message)  # type: ignore[method-assign]
+    adapter._update_message = AsyncMock()  # type: ignore[method-assign]
+
+    with caplog.at_level(
+        "WARNING",
+        logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+    ):
+        retried = await adapter.retry_message(secret_message_id)
+
+    assert retried is False
+    assert "Cannot retry" in caplog.text
+    assert secret_message_id not in caplog.text
+    assert "reason=no_event_bus" in caplog.text
+    assert "has_message_id=True" in caplog.text
+    assert message.status == DLQMessageStatus.PENDING
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_retry_batch_redacts_retry_error_log(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
