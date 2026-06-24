@@ -251,6 +251,62 @@ async def test_get_or_create_conversation_database_log_omits_exception_text(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_find_or_create_conversation_project_log_omits_project_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Missing project logs should not expose project identifiers."""
+    router = ChannelMessageRouter()
+    session = MagicMock()
+    session.get = AsyncMock(return_value=None)
+    message = _build_message(text="hello")
+    message.project_id = "secret-project-id"
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    result = await router._find_or_create_conversation_db(
+        session=session,
+        message=message,
+        session_key="session-key",
+        channel_config_id="cfg-1",
+    )
+
+    assert result is None
+    assert "secret-project-id" not in caplog.text
+    assert "has_project_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_find_or_create_conversation_config_log_omits_config_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Invalid channel config logs should not expose config identifiers."""
+    router = ChannelMessageRouter()
+    session = MagicMock()
+    project = SimpleNamespace(id="project-1")
+    session.get = AsyncMock(side_effect=[project, None])
+    message = _build_message(text="hello")
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    result = await router._find_or_create_conversation_db(
+        session=session,
+        message=message,
+        session_key="session-key",
+        channel_config_id="secret-config-id",
+    )
+
+    assert result is None
+    assert "secret-config-id" not in caplog.text
+    assert "has_channel_config_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_process_media_if_needed_logs_metadata_without_media_identifiers(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

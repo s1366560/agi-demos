@@ -486,7 +486,10 @@ class ChannelMessageRouter:
 
         project = await session.get(Project, message.project_id)
         if not project:
-            logger.error(f"[MessageRouter] Project not found: {message.project_id}")
+            logger.error(
+                "[MessageRouter] Project not found: has_project_id=%s",
+                bool(message.project_id),
+            )
             return None
 
         if not channel_config_id:
@@ -496,7 +499,9 @@ class ChannelMessageRouter:
         config = await session.get(ChannelConfigModel, channel_config_id)
         if not config or config.project_id != project.id:
             logger.error(
-                f"[MessageRouter] Invalid channel config for project routing: {channel_config_id}"
+                "[MessageRouter] Invalid channel config for project routing: "
+                "has_channel_config_id=%s",
+                bool(channel_config_id),
             )
             return None
 
