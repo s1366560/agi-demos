@@ -267,6 +267,66 @@ class TestRedisUnifiedEventBusLogging:
         assert "error_type=RedisError" in caplog.text
         assert "has_routing_key=True" in caplog.text
 
+    @pytest.mark.asyncio
+    async def test_acknowledge_error_log_redacts_routing_group_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xack = AsyncMock(
+            side_effect=redis.RedisError("redis secret group unavailable")
+        )
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_routing_key = "agent.secret-conversation.secret-message"
+        secret_consumer_group = "secret-consumer-group"
+
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+            acked = await adapter.acknowledge(
+                routing_key=secret_routing_key,
+                sequence_ids=["1-0", "2-0"],
+                consumer_group=secret_consumer_group,
+            )
+
+        assert acked == 0
+        assert "Failed to ack events" in caplog.text
+        assert secret_routing_key not in caplog.text
+        assert secret_consumer_group not in caplog.text
+        assert "redis secret group unavailable" not in caplog.text
+        assert "error_type=RedisError" in caplog.text
+        assert "sequence_count=2" in caplog.text
+        assert "has_routing_key=True" in caplog.text
+        assert "has_consumer_group=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_create_consumer_group_error_log_redacts_routing_group_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xgroup_create = AsyncMock(
+            side_effect=redis.ResponseError("ERR secret group unavailable")
+        )
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_routing_key = "agent.secret-conversation.secret-message"
+        secret_group_name = "secret-consumer-group"
+
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+            created = await adapter.create_consumer_group(
+                routing_key=secret_routing_key,
+                group_name=secret_group_name,
+                start_id="1-0",
+            )
+
+        assert created is False
+        assert "Failed to create consumer group" in caplog.text
+        assert secret_routing_key not in caplog.text
+        assert secret_group_name not in caplog.text
+        assert "secret group unavailable" not in caplog.text
+        assert "error_type=ResponseError" in caplog.text
+        assert "start_id=1-0" in caplog.text
+        assert "has_routing_key=True" in caplog.text
+        assert "has_group_name=True" in caplog.text
+
 
 class TestEventRouter:
     """Tests for EventRouter."""

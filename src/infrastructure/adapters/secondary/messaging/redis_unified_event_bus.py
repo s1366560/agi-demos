@@ -506,8 +506,19 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
 
         try:
             return cast(int, await self._redis.xack(stream_key, consumer_group, *sequence_ids))
-        except redis.RedisError as e:
-            logger.error(f"Failed to ack events: {e}")
+        except redis.RedisError as exc:
+            logger.error(
+                " ".join(
+                    [
+                        "[UnifiedEventBus] Failed to ack events error_type=%s sequence_count=%s",
+                        "has_routing_key=%s has_consumer_group=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                len(sequence_ids),
+                bool(str(routing_key)),
+                bool(consumer_group),
+            )
             return 0
 
     async def stream_exists(self, routing_key: str | RoutingKey) -> bool:
@@ -591,7 +602,18 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         except redis.ResponseError as e:
             if "BUSYGROUP" in str(e):
                 return True  # Group already exists
-            logger.error(f"Failed to create consumer group: {e}")
+            logger.error(
+                " ".join(
+                    [
+                        "[UnifiedEventBus] Failed to create consumer group",
+                        "error_type=%s start_id=%s has_routing_key=%s has_group_name=%s",
+                    ]
+                ),
+                type(e).__name__,
+                start_id,
+                bool(str(routing_key)),
+                bool(group_name),
+            )
             return False
 
     def stop_subscription(self, pattern: str) -> None:
