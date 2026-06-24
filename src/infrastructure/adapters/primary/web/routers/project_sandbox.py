@@ -1927,7 +1927,11 @@ async def stop_project_desktop(
         return {"success": success}
 
     except Exception as e:
-        logger.exception("Failed to stop desktop for project %s", project_id)
+        logger.error(
+            "Failed to stop desktop: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Failed to stop desktop")) from e
 
 
