@@ -479,7 +479,10 @@ async def _background_sync_created_memory(
         )
         _ = await graph_service.add_episode(episode)
     except Exception as graph_err:
-        logger.warning("memory_create: failed to queue graph processing: %s", graph_err)
+        logger.warning(
+            "memory_create: failed to queue graph processing error_type=%s",
+            type(graph_err).__name__,
+        )
         await _mark_created_memory_processing_status(
             session_factory=session_factory,
             memory_id=memory_id,
@@ -507,7 +510,10 @@ async def _background_sync_created_memory(
         )
         await session.commit()
     except Exception as chunk_err:
-        logger.warning("memory_create: failed to sync searchable chunks: %s", chunk_err)
+        logger.warning(
+            "memory_create: failed to sync searchable chunks error_type=%s",
+            type(chunk_err).__name__,
+        )
         await session.rollback()
     finally:
         await session.close()
@@ -533,10 +539,10 @@ async def _mark_created_memory_processing_status(
             await session.commit()
     except Exception as status_err:
         logger.warning(
-            "memory_create: failed to mark memory %s as %s: %s",
-            memory_id,
+            "memory_create: failed to mark memory processing status "
+            "processing_status=%s error_type=%s",
             processing_status,
-            status_err,
+            type(status_err).__name__,
         )
         await session.rollback()
     finally:

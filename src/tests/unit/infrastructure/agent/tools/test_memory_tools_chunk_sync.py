@@ -13,6 +13,7 @@ from src.infrastructure.agent.tools.memory_tools import (
     _execute_memory_delete,
     _execute_memory_get,
     _execute_memory_update,
+    _mark_created_memory_processing_status,
 )
 
 
@@ -274,6 +275,130 @@ class TestMemoryToolsChunkSync:
         repo.save.assert_awaited_once_with(memory)
         session.commit.assert_awaited_once()
         upsert_chunks.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_background_graph_failure_logs_do_not_include_exception_content(
+        self,
+        caplog,
+    ) -> None:
+        session = AsyncMock()
+        session_factory = MagicMock(return_value=session)
+        secret_memory_id = "mem-bg-graph-secret"
+        exception_detail = "graph queue leaked memory id mem-bg-graph-secret"
+        memory = SimpleNamespace(id=secret_memory_id, processing_status="PENDING")
+        repo = MagicMock()
+        repo.find_by_id = AsyncMock(return_value=memory)
+        repo.save = AsyncMock(return_value=memory)
+        graph_service = SimpleNamespace(
+            add_episode=AsyncMock(side_effect=RuntimeError(exception_detail))
+        )
+        upsert_chunks = AsyncMock(return_value=1)
+        caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_memory_repository.SqlMemoryRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.infrastructure.memory.chunk_sync.upsert_memory_chunks",
+                upsert_chunks,
+            ),
+        ):
+            await _background_sync_created_memory(
+                session_factory=session_factory,
+                graph_service=graph_service,
+                memory_id=secret_memory_id,
+                title="Memory title",
+                content="remember this",
+                project_id="proj-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                category="fact",
+                tags=[],
+                embedding_service=None,
+            )
+
+        assert secret_memory_id not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_background_chunk_failure_logs_do_not_include_exception_content(
+        self,
+        caplog,
+    ) -> None:
+        sessions = [AsyncMock(), AsyncMock()]
+        session_factory = MagicMock(side_effect=sessions)
+        secret_memory_id = "mem-bg-chunk-secret"
+        exception_detail = "chunk sync leaked memory id mem-bg-chunk-secret"
+        memory = SimpleNamespace(id=secret_memory_id, processing_status="PENDING")
+        repo = MagicMock()
+        repo.find_by_id = AsyncMock(return_value=memory)
+        repo.save = AsyncMock(return_value=memory)
+        graph_service = SimpleNamespace(add_episode=AsyncMock())
+        upsert_chunks = AsyncMock(side_effect=RuntimeError(exception_detail))
+        caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_memory_repository.SqlMemoryRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_chunk_repository.SqlChunkRepository",
+                return_value="chunk-repo",
+            ),
+            patch(
+                "src.infrastructure.memory.chunk_sync.upsert_memory_chunks",
+                upsert_chunks,
+            ),
+        ):
+            await _background_sync_created_memory(
+                session_factory=session_factory,
+                graph_service=graph_service,
+                memory_id=secret_memory_id,
+                title="Memory title",
+                content="remember this",
+                project_id="proj-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                category="fact",
+                tags=[],
+                embedding_service=None,
+            )
+
+        assert secret_memory_id not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_status_mark_failure_logs_do_not_include_identifier_or_exception_content(
+        self,
+        caplog,
+    ) -> None:
+        session = AsyncMock()
+        session_factory = MagicMock(return_value=session)
+        secret_memory_id = "mem-status-secret"
+        exception_detail = "status update leaked memory id mem-status-secret"
+        repo = MagicMock()
+        repo.find_by_id = AsyncMock(side_effect=RuntimeError(exception_detail))
+        caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
+
+        with patch(
+            "src.infrastructure.adapters.secondary.persistence.sql_memory_repository.SqlMemoryRepository",
+            return_value=repo,
+        ):
+            await _mark_created_memory_processing_status(
+                session_factory=session_factory,
+                memory_id=secret_memory_id,
+                processing_status="FAILED",
+            )
+
+        assert secret_memory_id not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "processing_status=FAILED" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     @pytest.mark.asyncio
     async def test_update_uses_shared_chunk_sync_helper(self) -> None:
