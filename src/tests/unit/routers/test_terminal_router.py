@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException, status
+from fastapi import HTTPException, WebSocketDisconnect, status
 
 from src.infrastructure.adapters.primary.web.routers import terminal as terminal_router
 from src.infrastructure.adapters.primary.web.routers.terminal import (
@@ -106,6 +106,64 @@ async def test_terminal_websocket_sanitizes_unexpected_errors(
     assert "Terminal WebSocket error" in caplog.text
     assert "error_type=RuntimeError" in caplog.text
     assert "terminal upstream secret" not in caplog.text
+
+
+@pytest.mark.unit
+async def test_terminal_websocket_disconnect_log_omits_session_id(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    session = SimpleNamespace(
+        session_id="session-secret",
+        container_id="sandbox-1",
+        cols=80,
+        rows=24,
+        is_active=False,
+    )
+
+    class WorkingProxy:
+        pass
+
+    websocket = _FakeWebSocket()
+    monkeypatch.setattr(terminal_router, "get_terminal_proxy", lambda: WorkingProxy())
+    monkeypatch.setattr(
+        terminal_router,
+        "_resolve_terminal_session",
+        AsyncMock(return_value=session),
+    )
+    monkeypatch.setattr(
+        terminal_router,
+        "_read_terminal_output",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        terminal_router,
+        "receive_json_with_limit",
+        AsyncMock(side_effect=WebSocketDisconnect()),
+    )
+    caplog.set_level(
+        logging.INFO,
+        logger="src.infrastructure.adapters.primary.web.routers.terminal",
+    )
+
+    await terminal_router.terminal_websocket(
+        websocket=websocket,
+        sandbox_id="sandbox-1",
+        session_id=None,
+    )
+
+    assert websocket.sent_json == [
+        {
+            "type": "connected",
+            "session_id": "session-secret",
+            "cols": 80,
+            "rows": 24,
+        }
+    ]
+    assert websocket.closed is True
+    assert "WebSocket disconnected" in caplog.text
+    assert "has_session_id=True" in caplog.text
+    assert "session-secret" not in caplog.text
 
 
 @pytest.mark.unit

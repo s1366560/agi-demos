@@ -311,7 +311,10 @@ async def terminal_websocket(
                     return
                 await _handle_terminal_message(proxy, websocket, session, msg)
         except WebSocketDisconnect:
-            logger.info(f"WebSocket disconnected for session {session.session_id}")
+            logger.info(
+                "WebSocket disconnected: has_session_id=%s",
+                bool(session.session_id),
+            )
     except Exception as e:
         logger.error("Terminal WebSocket error: error_type=%s", type(e).__name__)
         with contextlib.suppress(Exception):
