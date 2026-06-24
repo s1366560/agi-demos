@@ -228,6 +228,58 @@ class TestHTTPClientHardening:
             "token": request_secret,
         }
 
+    async def test_send_request_error_log_redacts_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPHttpClient(url="https://mcp.example.test", timeout=60)
+        error_secret = "http-request-error-secret"
+        session = MagicMock()
+        session.post.side_effect = RuntimeError(error_secret)
+        client._session = session  # type: ignore[assignment]
+
+        with caplog.at_level(logging.ERROR, logger=HTTP_LOGGER_NAME):
+            result = await client._send_request(
+                "tools/call",
+                {"safe": "metadata"},
+                timeout=70,
+            )
+
+        assert result is None
+        assert "Remote MCP request error" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert error_secret not in caplog.text
+        session.post.assert_called_once()
+
+    async def test_send_request_parse_error_log_redacts_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPHttpClient(url="https://mcp.example.test", timeout=60)
+        parse_secret = "http-parse-error-secret"
+        response = MagicMock()
+        response.status = 200
+        response.json = AsyncMock(side_effect=json.JSONDecodeError(parse_secret, "{}", 0))
+        post_context = AsyncMock()
+        post_context.__aenter__.return_value = response
+        post_context.__aexit__.return_value = False
+        session = MagicMock()
+        session.post.return_value = post_context
+        client._session = session  # type: ignore[assignment]
+
+        with caplog.at_level(logging.ERROR, logger=HTTP_LOGGER_NAME):
+            result = await client._send_request(
+                "tools/call",
+                {"safe": "metadata"},
+                timeout=70,
+            )
+
+        assert result is None
+        assert "Remote MCP response parse error" in caplog.text
+        assert "error_type=JSONDecodeError" in caplog.text
+        assert parse_secret not in caplog.text
+        session.post.assert_called_once()
+
     async def test_send_notification_debug_log_redacts_payload(
         self,
         caplog: pytest.LogCaptureFixture,

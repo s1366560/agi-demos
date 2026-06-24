@@ -679,11 +679,11 @@ class MCPHttpClient:
         except TimeoutError:
             logger.error(f"Remote MCP request '{method}' timed out after {timeout}s")
         except aiohttp.ClientError as e:
-            logger.error(f"Remote MCP request error: {e}")
+            logger.error("Remote MCP request error error_type=%s", type(e).__name__)
         except json.JSONDecodeError as e:
-            logger.error(f"Remote MCP response parse error: {e}")
+            logger.error("Remote MCP response parse error error_type=%s", type(e).__name__)
         except Exception as e:
-            logger.error(f"Remote MCP request error: {e}")
+            logger.error("Remote MCP request error error_type=%s", type(e).__name__)
 
         return None
 
