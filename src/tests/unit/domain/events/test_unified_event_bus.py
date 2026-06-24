@@ -15,6 +15,7 @@ from src.domain.events.serialization import EventSerializer
 from src.domain.events.types import AgentEventType
 from src.domain.ports.services.unified_event_bus_port import (
     EventPublishError,
+    EventSubscribeError,
     EventWithMetadata,
     PublishResult,
     RoutingKey,
@@ -273,6 +274,46 @@ class TestRedisUnifiedEventBusLogging:
         assert "error_type=ResponseError" in caplog.text
         assert "has_pattern=True" in caplog.text
         assert "has_consumer_group=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_direct_subscribe_error_log_redacts_pattern_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        exception_detail = "subscribe redis secret unavailable"
+        secret_pattern = "agent.secret-conversation.*"
+        subscription_id = "secret-direct-subscription"
+
+        redis_client = Mock()
+        redis_client.xread = AsyncMock(side_effect=RuntimeError(exception_detail))
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        adapter._active_subscriptions[subscription_id] = True
+        adapter._get_matching_streams = AsyncMock(return_value=["events:agent:secret"])  # type: ignore[method-assign]
+
+        stream = adapter._subscribe_direct(
+            secret_pattern,
+            SubscriptionOptions(batch_size=2, block_ms=3),
+            subscription_id,
+        )
+        try:
+            with (
+                caplog.at_level(logging.ERROR, logger=LOGGER_NAME),
+                pytest.raises(EventSubscribeError) as exc_info,
+            ):
+                await anext(stream)
+        finally:
+            adapter._active_subscriptions.pop(subscription_id, None)
+            await stream.aclose()
+
+        assert str(exc_info.value) == exception_detail
+        assert exc_info.value.pattern == secret_pattern
+        assert "Subscribe error" in caplog.text
+        assert secret_pattern not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "batch_size=2" in caplog.text
+        assert "block_ms=3" in caplog.text
+        assert "has_pattern=True" in caplog.text
 
     @pytest.mark.asyncio
     async def test_get_events_error_log_redacts_routing_key_and_exception(

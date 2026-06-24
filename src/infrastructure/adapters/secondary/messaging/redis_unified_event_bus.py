@@ -290,7 +290,20 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                 logger.error(f"[UnifiedEventBus] Connection error: {e}")
                 await asyncio.sleep(1)
             except Exception as e:
-                logger.error(f"[UnifiedEventBus] Subscribe error: {e}")
+                logger.error(
+                    " ".join(
+                        (
+                            "[UnifiedEventBus] Subscribe error error_type=%s",
+                            "batch_size=%s",
+                            "block_ms=%s",
+                            "has_pattern=%s",
+                        )
+                    ),
+                    type(e).__name__,
+                    opts.batch_size,
+                    opts.block_ms,
+                    bool(pattern),
+                )
                 raise EventSubscribeError(str(e), pattern=pattern) from e
 
     async def _add_new_matching_streams(
