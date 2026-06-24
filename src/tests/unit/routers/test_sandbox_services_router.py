@@ -21,6 +21,9 @@ class FailingOrchestrator:
     async def start_terminal(self, sandbox_id: str, config: Any) -> Any:
         raise RuntimeError(f"internal terminal secret for {sandbox_id}")
 
+    async def get_terminal_status(self, sandbox_id: str) -> Any:
+        raise RuntimeError(f"internal terminal status secret for {sandbox_id}")
+
 
 class SuccessfulOrchestrator:
     async def start_desktop(self, _sandbox_id: str, _config: Any) -> Any:
@@ -247,3 +250,43 @@ async def test_stop_terminal_publish_error_log_omits_exception_text(
     assert "error_type=RuntimeError" in caplog.text
     assert "terminal stopped secret" not in caplog.text
     assert "sandbox-secret" not in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_get_terminal_status_sanitizes_internal_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(services_router, "assert_caller_owns_sandbox", _allow_sandbox_access)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.sandbox.services",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await services_router.get_terminal_status(
+            sandbox_id="sandbox-secret",
+            current_user=SimpleNamespace(id="user-1", is_superuser=True),
+            adapter=SimpleNamespace(),
+            orchestrator=FailingOrchestrator(),
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert exc_info.value.detail == "Failed to get terminal status"
+    assert "internal" not in exc_info.value.detail
+    assert "sandbox-secret" not in exc_info.value.detail
+    target_records = [
+        record
+        for record in caplog.records
+        if record.name == "src.infrastructure.adapters.primary.web.routers.sandbox.services"
+        and record.levelno >= logging.ERROR
+    ]
+    assert len(target_records) == 1
+    message = target_records[0].getMessage()
+    assert "Failed to get terminal status" in message
+    assert "error_type=RuntimeError" in message
+    assert "sandbox-secret" not in message
+    assert "internal terminal status secret" not in message
+    assert target_records[0].exc_info is None
