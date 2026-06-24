@@ -67,6 +67,7 @@ async def test_resolve_terminal_session_sanitizes_creation_errors(
 @pytest.mark.unit
 async def test_terminal_websocket_sanitizes_unexpected_errors(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     class FailingProxy:
         async def create_session(self, *_args: object, **_kwargs: object) -> object:
@@ -85,6 +86,10 @@ async def test_terminal_websocket_sanitizes_unexpected_errors(
         "_resolve_terminal_session",
         AsyncMock(side_effect=RuntimeError("terminal upstream secret")),
     )
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.terminal",
+    )
 
     await terminal_router.terminal_websocket(
         websocket=websocket,
@@ -95,6 +100,9 @@ async def test_terminal_websocket_sanitizes_unexpected_errors(
     assert websocket.sent_json == [{"type": "error", "message": "Terminal WebSocket failed"}]
     assert "secret" not in str(websocket.sent_json)
     assert websocket.closed is True
+    assert "Terminal WebSocket error" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "terminal upstream secret" not in caplog.text
 
 
 @pytest.mark.unit
