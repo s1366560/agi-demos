@@ -1676,7 +1676,11 @@ async def restart_project_sandbox(
         )
 
     except Exception as e:
-        logger.exception("Failed to restart sandbox for project %s", project_id)
+        logger.error(
+            "Failed to restart sandbox: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Restart failed")) from e
 
 
