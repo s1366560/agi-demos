@@ -1172,7 +1172,9 @@ class ChannelMessageRouter:
             binding = await bridge._lookup_binding(conversation_id)
             if not binding:
                 logger.debug(
-                    f"[MessageRouter] No channel binding for conversation {conversation_id}"
+                    "[MessageRouter] No channel binding for push message: "
+                    "has_conversation_id=%s",
+                    bool(conversation_id),
                 )
                 return False
 

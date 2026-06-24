@@ -2154,19 +2154,26 @@ async def test_send_to_channel_card():
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_send_to_channel_no_binding():
+async def test_send_to_channel_no_binding(caplog: pytest.LogCaptureFixture):
     """send_to_channel returns False when no binding exists."""
     router = ChannelMessageRouter()
     mock_bridge = MagicMock()
     mock_bridge._lookup_binding = AsyncMock(return_value=None)
+    caplog.set_level(
+        logging.DEBUG,
+        logger="src.application.services.channels.channel_message_router",
+    )
 
     with patch(
         "src.application.services.channels.event_bridge.get_channel_event_bridge",
         return_value=mock_bridge,
     ):
-        result = await router.send_to_channel("conv-missing", "Hello")
+        result = await router.send_to_channel("secret-conversation-id", "Hello")
 
     assert result is False
+    assert "secret-conversation-id" not in caplog.text
+    assert "No channel binding" in caplog.text
+    assert "has_conversation_id=True" in caplog.text
 
 
 @pytest.mark.unit
