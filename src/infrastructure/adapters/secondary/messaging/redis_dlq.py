@@ -157,7 +157,20 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             return message.id
 
         except redis.RedisError as e:
-            logger.error(f"[DLQ] Failed to store message: {e}")
+            logger.error(
+                " ".join(
+                    (
+                        "[DLQ] Failed to store message redis_error_type=%s",
+                        "event_type=%s",
+                        "dlq_error_type=%s",
+                        "retry_count=%s",
+                    )
+                ),
+                type(e).__name__,
+                event_type,
+                error_type,
+                retry_count,
+            )
             raise DLQError(f"Failed to store DLQ message: {e}") from e
 
     async def get_message(self, message_id: str) -> DeadLetterMessage | None:

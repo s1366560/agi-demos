@@ -8,10 +8,77 @@ import redis.asyncio as redis
 
 from src.domain.ports.services.dead_letter_queue_port import (
     DeadLetterMessage,
+    DLQError,
     DLQMessageStatus,
     DLQRetryError,
 )
 from src.infrastructure.adapters.secondary.messaging.redis_dlq import RedisDLQAdapter
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_to_dlq_redacts_store_failure_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """DLQ store failures should not log raw Redis exception text."""
+    exception_detail = "store failed redis secret 4826"
+
+    class _FailingPipeline:
+        async def __aenter__(self) -> "_FailingPipeline":
+            return self
+
+        async def __aexit__(
+            self,
+            _exc_type: type[BaseException] | None,
+            _exc: BaseException | None,
+            _traceback: object | None,
+        ) -> None:
+            return None
+
+        def hset(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def expire(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def zadd(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        def hincrby(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        async def execute(self) -> None:
+            raise redis.RedisError(exception_detail)
+
+    redis_client = SimpleNamespace(pipeline=lambda transaction=True: _FailingPipeline())
+    adapter = RedisDLQAdapter(redis_client=redis_client)  # type: ignore[arg-type]
+
+    with (
+        caplog.at_level(
+            "ERROR",
+            logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+        ),
+        pytest.raises(DLQError) as exc_info,
+    ):
+        await adapter.send_to_dlq(
+            event_id="event-secret-4826",
+            event_type="event.type",
+            event_data="{}",
+            routing_key="routing.secret",
+            error="original error",
+            error_type="RuntimeError",
+            retry_count=1,
+        )
+
+    assert exception_detail in str(exc_info.value)
+    assert "Failed to store message" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "event-secret-4826" not in caplog.text
+    assert "routing.secret" not in caplog.text
+    assert "redis_error_type=RedisError" in caplog.text
+    assert "event_type=event.type" in caplog.text
+    assert "dlq_error_type=RuntimeError" in caplog.text
+    assert "retry_count=1" in caplog.text
 
 
 @pytest.mark.unit
