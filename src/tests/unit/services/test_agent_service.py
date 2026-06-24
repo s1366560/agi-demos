@@ -250,6 +250,39 @@ class TestAgentServiceAuthorization:
         mock_conversation_repo.delete.assert_called_once_with("conv-1")
 
     @pytest.mark.asyncio
+    async def test_delete_conversation_success_logs_do_not_include_identifiers(
+        self,
+        agent_service,
+        mock_conversation_repo,
+        sample_conversation,
+        caplog,
+    ):
+        """Successful conversation delete logs must not expose conversation IDs."""
+        secret_conversation_id = "conversation-secret-delete"
+        secret_project_id = "project-secret-delete"
+        secret_user_id = "user-secret-delete"
+        sample_conversation.id = secret_conversation_id
+        sample_conversation.project_id = secret_project_id
+        sample_conversation.user_id = secret_user_id
+        mock_conversation_repo.find_by_id.return_value = sample_conversation
+        caplog.set_level(
+            logging.INFO,
+            logger="src.application.services.agent.conversation_manager",
+        )
+
+        result = await agent_service.delete_conversation(
+            conversation_id=secret_conversation_id,
+            project_id=secret_project_id,
+            user_id=secret_user_id,
+        )
+
+        assert result is True
+        assert secret_conversation_id not in caplog.text
+        assert secret_project_id not in caplog.text
+        assert secret_user_id not in caplog.text
+        assert "Deleted conversation" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_delete_conversation_unauthorized_user_cannot_delete(
         self,
         agent_service,
@@ -270,6 +303,65 @@ class TestAgentServiceAuthorization:
         # Should not call delete methods
         mock_execution_repo.delete_by_conversation.assert_not_called()
         mock_conversation_repo.delete.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_conversation_unauthorized_logs_do_not_include_identifiers(
+        self,
+        agent_service,
+        mock_conversation_repo,
+        sample_conversation,
+        caplog,
+    ):
+        """Unauthorized conversation delete logs must not expose scoped IDs."""
+        secret_conversation_id = "conversation-secret-delete-denied"
+        secret_project_id = "project-secret-delete-denied"
+        secret_user_id = "user-secret-delete-denied"
+        sample_conversation.id = secret_conversation_id
+        sample_conversation.project_id = secret_project_id
+        sample_conversation.user_id = "owner-secret-delete"
+        mock_conversation_repo.find_by_id.return_value = sample_conversation
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.agent.conversation_manager",
+        )
+
+        result = await agent_service.delete_conversation(
+            conversation_id=secret_conversation_id,
+            project_id=secret_project_id,
+            user_id=secret_user_id,
+        )
+
+        assert result is False
+        assert secret_conversation_id not in caplog.text
+        assert secret_project_id not in caplog.text
+        assert secret_user_id not in caplog.text
+        assert "project_match=True" in caplog.text
+        assert "user_match=False" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_delete_conversation_missing_logs_do_not_include_identifier(
+        self,
+        agent_service,
+        mock_conversation_repo,
+        caplog,
+    ):
+        """Missing conversation delete logs must not expose the requested ID."""
+        secret_conversation_id = "conversation-secret-delete-missing"
+        mock_conversation_repo.find_by_id.return_value = None
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.agent.conversation_manager",
+        )
+
+        result = await agent_service.delete_conversation(
+            conversation_id=secret_conversation_id,
+            project_id="project-secret-delete-missing",
+            user_id="user-secret-delete-missing",
+        )
+
+        assert result is False
+        assert secret_conversation_id not in caplog.text
+        assert "conversation_exists=False" in caplog.text
 
     @pytest.mark.asyncio
     async def test_get_conversation_messages_owner_can_access(

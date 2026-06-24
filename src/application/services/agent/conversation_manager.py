@@ -121,13 +121,16 @@ class ConversationManager:
         """Delete a conversation and all its messages."""
         conversation = await self._conversation_repo.find_by_id(conversation_id)
         if not conversation:
-            logger.warning(f"Attempted to delete non-existent conversation {conversation_id}")
+            logger.warning(
+                "Attempted to delete non-existent conversation conversation_exists=False"
+            )
             return False
 
         if conversation.project_id != project_id or conversation.user_id != user_id:
             logger.warning(
-                f"Unauthorized delete attempt on conversation {conversation_id} "
-                f"by user {user_id} in project {project_id}"
+                "Unauthorized delete attempt on conversation project_match=%s user_match=%s",
+                conversation.project_id == project_id,
+                conversation.user_id == user_id,
             )
             return False
 
@@ -144,7 +147,7 @@ class ConversationManager:
 
         await self._conversation_repo.delete(conversation_id)
 
-        logger.info(f"Deleted conversation {conversation_id}")
+        logger.info("Deleted conversation")
         return True
 
     async def update_conversation_title(
