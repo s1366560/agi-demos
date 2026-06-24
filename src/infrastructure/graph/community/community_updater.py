@@ -337,8 +337,6 @@ class CommunityUpdater:
             CommunitySummary object with name and summary
         """
         import json
-        import re
-
         # Get raw response from LLM using domain Message interface
         if hasattr(self._llm_client, "ainvoke"):
             ainvoke_response = await self._llm_client.ainvoke(messages)
@@ -382,7 +380,29 @@ class CommunityUpdater:
         else:
             raise NotImplementedError(f"Unsupported LLM client type: {type(self._llm_client)}")
 
-        # Extract JSON from markdown code blocks if present
+        json_str = self._extract_json_text(content)
+
+        # Parse JSON
+        try:
+            data = json.loads(json_str)
+            return CommunitySummary(
+                name=data.get("name", "Unnamed Community"),
+                summary=data.get("summary", ""),
+            )
+        except json.JSONDecodeError as e:
+            logger.warning(
+                "Failed to parse JSON from LLM response error_type=%s response_length=%d",
+                type(e).__name__,
+                len(content),
+            )
+            # Return empty result if parsing fails
+            raise ValueError(f"Failed to parse community summary JSON: {e}") from e
+
+    @staticmethod
+    def _extract_json_text(content: str) -> str:
+        """Extract a JSON object string from direct, fenced, or prefixed LLM output."""
+        import re
+
         json_str = content.strip()
         if json_str.startswith("```"):
             # Try multiple patterns to handle various markdown formats
@@ -400,22 +420,12 @@ class CommunityUpdater:
                     match = re.search(r"\{.*\}", json_str, re.DOTALL)
                     if match:
                         json_str = match.group(0).strip()
+        elif not json_str.startswith("{"):
+            match = re.search(r"\{.*\}", json_str, re.DOTALL)
+            if match:
+                json_str = match.group(0).strip()
 
-        # Parse JSON
-        try:
-            data = json.loads(json_str)
-            return CommunitySummary(
-                name=data.get("name", "Unnamed Community"),
-                summary=data.get("summary", ""),
-            )
-        except json.JSONDecodeError as e:
-            logger.warning(
-                "Failed to parse JSON from LLM response error_type=%s response_length=%d",
-                type(e).__name__,
-                len(content),
-            )
-            # Return empty result if parsing fails
-            raise ValueError(f"Failed to parse community summary JSON: {e}") from e
+        return json_str
 
     @staticmethod
     def _response_content(response: object) -> str:

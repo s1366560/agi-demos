@@ -33,6 +33,18 @@ class GenerateResponseOnlyLLMClient:
         return {"content": '{"name": "Memory Graph", "summary": "Graph operations."}'}
 
 
+class PrefixedJsonGenerateLLMClient:
+    """LLM client returning explanatory text before the JSON object."""
+
+    async def generate(self, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "content": (
+                "Here is the community summary:\n"
+                '{"name": "Research Graph", "summary": "Research collaboration signals."}'
+            )
+        }
+
+
 class InvalidJsonGenerateLLMClient:
     """LLM client returning malformed JSON with sensitive response content."""
 
@@ -145,6 +157,16 @@ class TestCommunityUpdaterLLMResponseHandling:
         assert result.name == "Memory Graph"
         assert result.summary == "Graph operations."
         assert llm_client.calls[0]["response_model"] is None
+
+    async def test_call_llm_with_json_extraction_accepts_prefixed_json(self) -> None:
+        updater = build_updater(PrefixedJsonGenerateLLMClient())
+
+        result = await updater._call_llm_with_json_extraction(
+            [Message.system("Summarize"), Message.user("Members")]
+        )
+
+        assert result.name == "Research Graph"
+        assert result.summary == "Research collaboration signals."
 
     async def test_call_llm_with_json_extraction_redacts_invalid_response(
         self,
