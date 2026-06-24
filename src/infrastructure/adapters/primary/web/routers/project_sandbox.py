@@ -1566,7 +1566,11 @@ async def get_project_sandbox_stats(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Failed to get sandbox stats for project %s", project_id)
+        logger.error(
+            "Failed to get sandbox stats: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Stats query failed")) from e
 
 
