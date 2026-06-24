@@ -100,16 +100,27 @@ class RedisAgentMessageBusAdapter(AgentMessageBusPort):
                 stream_id = stream_id.decode("utf-8")
 
             logger.info(
-                f"[AgentMessageBus] Sent message to {stream_key}: "
-                f"stream_id={stream_id}, "
-                f"from={from_agent_id}, to={to_agent_id}, "
-                f"type={message_type.value}"
+                " ".join(
+                    [
+                        "[AgentMessageBus] Sent message stream_id=%s type=%s",
+                        "has_session_id=%s has_from_agent_id=%s has_to_agent_id=%s",
+                    ]
+                ),
+                stream_id,
+                message_type.value,
+                bool(session_id),
+                bool(from_agent_id),
+                bool(to_agent_id),
             )
 
             return cast(str, message_data["message_id"])
 
-        except Exception as e:
-            logger.error(f"[AgentMessageBus] Failed to send to {stream_key}: {e}")
+        except Exception as exc:
+            logger.error(
+                "[AgentMessageBus] Failed to send error_type=%s has_session_id=%s",
+                type(exc).__name__,
+                bool(session_id),
+            )
             raise
 
     async def receive_messages(
@@ -152,8 +163,12 @@ class RedisAgentMessageBusAdapter(AgentMessageBusPort):
 
             return messages[:limit]
 
-        except Exception as e:
-            logger.error(f"[AgentMessageBus] Failed to receive from {stream_key}: {e}")
+        except Exception as exc:
+            logger.error(
+                "[AgentMessageBus] Failed to receive error_type=%s has_session_id=%s",
+                type(exc).__name__,
+                bool(session_id),
+            )
             raise
 
     async def subscribe_messages(
@@ -188,11 +203,19 @@ class RedisAgentMessageBusAdapter(AgentMessageBusPort):
                         if message and message.to_agent_id == agent_id:
                             yield message
 
-            except redis.ConnectionError as e:
-                logger.error(f"[AgentMessageBus] Connection error on {stream_key}: {e}")
+            except redis.ConnectionError as exc:
+                logger.error(
+                    "[AgentMessageBus] Connection error error_type=%s has_session_id=%s",
+                    type(exc).__name__,
+                    bool(session_id),
+                )
                 raise
-            except Exception as e:
-                logger.error(f"[AgentMessageBus] Error reading from {stream_key}: {e}")
+            except Exception as exc:
+                logger.error(
+                    "[AgentMessageBus] Error reading error_type=%s has_session_id=%s",
+                    type(exc).__name__,
+                    bool(session_id),
+                )
                 raise
 
     async def get_message_history(
@@ -222,8 +245,12 @@ class RedisAgentMessageBusAdapter(AgentMessageBusPort):
 
             return messages
 
-        except Exception as e:
-            logger.error(f"[AgentMessageBus] Failed to get history from {stream_key}: {e}")
+        except Exception as exc:
+            logger.error(
+                "[AgentMessageBus] Failed to get history error_type=%s has_session_id=%s",
+                type(exc).__name__,
+                bool(session_id),
+            )
             raise
 
     async def cleanup_session(self, session_id: str) -> None:
@@ -232,9 +259,13 @@ class RedisAgentMessageBusAdapter(AgentMessageBusPort):
 
         try:
             await self._redis.delete(stream_key)
-            logger.info(f"[AgentMessageBus] Cleaned up stream {stream_key}")
-        except Exception as e:
-            logger.error(f"[AgentMessageBus] Failed to cleanup {stream_key}: {e}")
+            logger.info("[AgentMessageBus] Cleaned up stream has_session_id=%s", bool(session_id))
+        except Exception as exc:
+            logger.error(
+                "[AgentMessageBus] Failed to cleanup error_type=%s has_session_id=%s",
+                type(exc).__name__,
+                bool(session_id),
+            )
             raise
 
     async def session_has_messages(self, session_id: str) -> bool:
@@ -243,8 +274,12 @@ class RedisAgentMessageBusAdapter(AgentMessageBusPort):
 
         try:
             return cast(bool, await self._redis.exists(stream_key) > 0)
-        except Exception as e:
-            logger.error(f"[AgentMessageBus] Failed to check existence of {stream_key}: {e}")
+        except Exception as exc:
+            logger.error(
+                "[AgentMessageBus] Failed to check existence error_type=%s has_session_id=%s",
+                type(exc).__name__,
+                bool(session_id),
+            )
             return False
 
     def _parse_stream_message(
