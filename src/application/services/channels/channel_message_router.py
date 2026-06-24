@@ -804,7 +804,10 @@ class ChannelMessageRouter:
 
         conversation = await db_session.get(Conversation, conversation_id)
         if not conversation:
-            logger.error(f"[MessageRouter] Conversation not found: {conversation_id}")
+            logger.error(
+                "[MessageRouter] Conversation not found: has_conversation_id=%s",
+                bool(conversation_id),
+            )
             await session.__aexit__(None, None, None)
             return None
 

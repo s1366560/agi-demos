@@ -718,6 +718,36 @@ async def test_invoke_agent_error_log_omits_exception_text(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_setup_agent_session_missing_conversation_log_omits_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Missing conversation logs should not expose conversation identifiers."""
+    router = ChannelMessageRouter()
+    message = _build_message(text="hello")
+    session = MagicMock()
+    session.get = AsyncMock(return_value=None)
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+        return_value=session_ctx,
+    ):
+        result = await router._setup_agent_session(message, "secret-conversation-id")
+
+    assert result is None
+    session_ctx.__aexit__.assert_awaited_once_with(None, None, None)
+    assert "secret-conversation-id" not in caplog.text
+    assert "has_conversation_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_send_final_response_logs_agent_errors_without_details(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
