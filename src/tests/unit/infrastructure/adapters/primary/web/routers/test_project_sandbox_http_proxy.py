@@ -256,6 +256,73 @@ async def test_project_terminal_websocket_disconnect_log_omits_session_id(
     assert "session-secret" not in caplog.text
 
 
+async def test_project_terminal_websocket_error_log_omits_exception_text(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    session = SimpleNamespace(
+        session_id="session-secret",
+        container_id="sandbox-1",
+        cols=80,
+        rows=24,
+        is_active=False,
+    )
+    proxy = SimpleNamespace(create_session=AsyncMock(return_value=session))
+    websocket = _FakeWebSocket()
+    service = SimpleNamespace(
+        get_project_sandbox=AsyncMock(
+            return_value=SimpleNamespace(sandbox_id="sandbox-1", terminal_url="ws://terminal")
+        )
+    )
+
+    async def noop_output_loop(*_args: object) -> None:
+        return None
+
+    monkeypatch.setattr(
+        project_sandbox,
+        "_verify_project_access_or_close",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(project_sandbox, "_read_terminal_output_loop", noop_output_loop)
+    monkeypatch.setattr(
+        project_sandbox,
+        "_handle_terminal_input",
+        AsyncMock(side_effect=RuntimeError("terminal upstream secret")),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.adapters.secondary.sandbox.terminal_proxy.get_terminal_proxy",
+        lambda: proxy,
+    )
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    await project_sandbox.proxy_project_terminal_websocket(
+        websocket=cast("project_sandbox.WebSocket", websocket),
+        project_id="project-1",
+        session_id=None,
+        current_user=cast("project_sandbox.User", SimpleNamespace(id="user-1")),
+        db=cast("project_sandbox.AsyncSession", SimpleNamespace()),
+        service=cast("project_sandbox.ProjectSandboxLifecycleService", service),
+    )
+
+    assert websocket.sent_json == [
+        {
+            "type": "connected",
+            "session_id": "session-secret",
+            "cols": 80,
+            "rows": 24,
+        },
+        {"type": "error", "message": "Terminal WebSocket proxy failed"},
+    ]
+    assert websocket.close_calls == [(None, None)]
+    assert "Terminal WebSocket proxy error" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "terminal upstream secret" not in caplog.text
+    assert "session-secret" not in caplog.text
+
+
 def test_sandbox_proxy_auth_cookie_is_scoped_to_project_sandbox_path() -> None:
     request = Request(
         {

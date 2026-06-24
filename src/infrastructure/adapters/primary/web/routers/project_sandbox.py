@@ -3219,7 +3219,7 @@ async def proxy_project_terminal_websocket(
             )
 
     except Exception as e:
-        logger.error(f"Terminal WebSocket proxy error: {e}")
+        logger.error("Terminal WebSocket proxy error: error_type=%s", type(e).__name__)
         with contextlib.suppress(Exception):
             await websocket.send_json(
                 {"type": "error", "message": "Terminal WebSocket proxy failed"}
