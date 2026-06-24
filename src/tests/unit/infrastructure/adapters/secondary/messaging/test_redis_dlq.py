@@ -105,6 +105,48 @@ async def test_retry_message_without_event_bus_redacts_message_id(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_retry_message_redacts_outer_update_failure_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Retry setup failures should not log raw exception text or message IDs."""
+    exception_detail = "update failed dlq-secret-2601"
+    secret_message_id = "dlq-secret-message-3712"
+    message = DeadLetterMessage(
+        id=secret_message_id,
+        event_id="event-1",
+        event_type="event.type",
+        event_data="{}",
+        routing_key="routing.secret",
+        error="original error",
+        error_type="RuntimeError",
+        status=DLQMessageStatus.PENDING,
+        retry_count=0,
+        max_retries=3,
+    )
+    adapter = RedisDLQAdapter(redis_client=object())  # type: ignore[arg-type]
+    adapter.get_message = AsyncMock(return_value=message)  # type: ignore[method-assign]
+    adapter._update_message = AsyncMock(side_effect=RuntimeError(exception_detail))  # type: ignore[method-assign]
+
+    with (
+        caplog.at_level(
+            "ERROR",
+            logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+        ),
+        pytest.raises(DLQRetryError) as exc_info,
+    ):
+        await adapter.retry_message(secret_message_id)
+
+    assert exc_info.value.message_id == secret_message_id
+    assert exc_info.value.reason == exception_detail
+    assert "Error retrying" in caplog.text
+    assert exception_detail not in caplog.text
+    assert secret_message_id not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "has_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_retry_batch_redacts_retry_error_log(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

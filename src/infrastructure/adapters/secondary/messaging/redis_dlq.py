@@ -363,7 +363,11 @@ class RedisDLQAdapter(DeadLetterQueuePort):
         except DLQError:
             raise
         except Exception as e:
-            logger.error(f"[DLQ] Error retrying {message_id}: {e}")
+            logger.error(
+                "[DLQ] Error retrying error_type=%s has_message_id=%s",
+                type(e).__name__,
+                bool(message_id),
+            )
             raise DLQRetryError(message_id, str(e)) from e
 
     async def retry_batch(
