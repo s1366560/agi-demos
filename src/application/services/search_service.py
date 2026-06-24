@@ -388,7 +388,12 @@ class SearchService:
             }
 
         except Exception as e:
-            logger.error(f"Failed to get recent activity for project {project_id}: {e}")
+            logger.error(
+                "Failed to get recent activity days=%d limit=%d error_type=%s",
+                days,
+                limit,
+                type(e).__name__,
+            )
             raise
 
     def _graph_fetch_limit(

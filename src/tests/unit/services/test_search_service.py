@@ -45,6 +45,15 @@ class _FailingGraphServiceStub(_GraphServiceStub):
         raise RuntimeError(self._error_message)
 
 
+class _FailingGraphDataServiceStub(_GraphServiceStub):
+    def __init__(self, error_message: str) -> None:
+        super().__init__([])
+        self._error_message = error_message
+
+    async def get_graph_data(self, project_id: str, limit: int = 100) -> dict[str, Any]:
+        raise RuntimeError(self._error_message)
+
+
 class _MemoryRepositoryStub(MemoryRepository):
     def __init__(self, memories: list[Memory]) -> None:
         self._memories = memories
@@ -269,3 +278,25 @@ async def test_get_graph_context_failure_logs_do_not_include_entity_or_exception
     assert "depth=3" in caplog.text
     assert "limit=7" in caplog.text
     assert "error_type=ValueError" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_get_recent_activity_failure_logs_do_not_include_project_or_exception_content(
+    caplog,
+) -> None:
+    secret_project_id = "project-secret-delta-8642"
+    exception_detail = "graph activity leaked customer node epsilon-97531"
+    service = SearchService(
+        graph_service=_FailingGraphDataServiceStub(exception_detail),
+        memory_repo=_MemoryRepositoryStub([]),
+    )
+    caplog.set_level(logging.ERROR, logger="src.application.services.search_service")
+
+    with pytest.raises(RuntimeError):
+        await service.get_recent_activity(secret_project_id, days=3, limit=7)
+
+    assert secret_project_id not in caplog.text
+    assert exception_detail not in caplog.text
+    assert "days=3" in caplog.text
+    assert "limit=7" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
