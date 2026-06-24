@@ -1355,7 +1355,8 @@ class ChannelMessageRouter:
                     await self._mark_outbox_failed(outbox_id, "no active connection")
                 logger.warning(
                     "[MessageRouter] No active connection for outbound response: "
-                    f"channel_config_id={channel_config_id}"
+                    "has_channel_config_id=%s",
+                    bool(channel_config_id),
                 )
                 return
 
@@ -1368,8 +1369,10 @@ class ChannelMessageRouter:
             if outbox_id:
                 await self._mark_outbox_sent(outbox_id, sent_message_id)
             logger.info(
-                f"[MessageRouter] Sent response to chat {message.chat_id}, "
-                f"message_id={sent_message_id}"
+                "[MessageRouter] Sent response to channel: "
+                "has_chat_id=%s has_message_id=%s",
+                bool(message.chat_id),
+                bool(sent_message_id),
             )
             await self._store_outbound_message_history(
                 message=message,
@@ -1382,7 +1385,10 @@ class ChannelMessageRouter:
         except Exception as e:
             if outbox_id:
                 await self._mark_outbox_failed(outbox_id, str(e))
-            logger.error(f"[MessageRouter] Error sending response: {e}")
+            logger.error(
+                "[MessageRouter] Error sending response: error_type=%s",
+                type(e).__name__,
+            )
 
     # Patterns that indicate rich markdown (code fences, tables, headers, lists)
     _RICH_MD_RE = re.compile(

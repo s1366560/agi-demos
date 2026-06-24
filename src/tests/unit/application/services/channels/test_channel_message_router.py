@@ -1376,7 +1376,9 @@ async def test_invoke_agent_uses_cardkit_streaming_when_available() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_send_response_marks_outbox_failed_when_connection_missing() -> None:
+async def test_send_response_marks_outbox_failed_when_connection_missing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Router should persist failed outbox state if channel connection is unavailable."""
     router = ChannelMessageRouter()
     router._create_outbox_record = AsyncMock(return_value="outbox-1")
@@ -1384,7 +1386,16 @@ async def test_send_response_marks_outbox_failed_when_connection_missing() -> No
 
     message = _build_message(
         text="hello",
-        raw_data={"_routing": {"channel_config_id": "cfg-1", "channel_message_id": "msg-1"}},
+        raw_data={
+            "_routing": {
+                "channel_config_id": "secret-config-id",
+                "channel_message_id": "msg-1",
+            }
+        },
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
     )
 
     channel_manager = SimpleNamespace(connections={})
@@ -1395,6 +1406,8 @@ async def test_send_response_marks_outbox_failed_when_connection_missing() -> No
         await router._send_response(message, "conv-1", "reply")
 
     router._mark_outbox_failed.assert_awaited_once_with("outbox-1", "no active connection")
+    assert "secret-config-id" not in caplog.text
+    assert "has_channel_config_id=True" in caplog.text
 
 
 @pytest.mark.unit
@@ -1417,6 +1430,93 @@ async def test_send_response_marks_outbox_failed_when_manager_missing() -> None:
         await router._send_response(message, "conv-1", "reply")
 
     router._mark_outbox_failed.assert_awaited_once_with("outbox-1", "channel manager unavailable")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_response_success_log_omits_identifiers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Successful response logs should not expose chat or channel message IDs."""
+    router = ChannelMessageRouter()
+    router._create_outbox_record = AsyncMock(return_value="outbox-1")
+    router._mark_outbox_sent = AsyncMock()
+    router._store_outbound_message_history = AsyncMock()
+    router._smart_send = AsyncMock(return_value="secret-sent-msg-id")
+    message = _build_message(
+        text="hello",
+        raw_data={
+            "_routing": {
+                "channel_config_id": "secret-config-id",
+                "channel_message_id": "secret-inbound-msg-id",
+            }
+        },
+    )
+    message.chat_id = "secret-chat-id"
+    channel_manager = SimpleNamespace(
+        connections={
+            "secret-config-id": SimpleNamespace(adapter=object(), config_id="secret-config-id")
+        }
+    )
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.infrastructure.adapters.primary.web.startup.get_channel_manager",
+        return_value=channel_manager,
+    ):
+        await router._send_response(message, "secret-conversation-id", "private response body")
+
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-sent-msg-id" not in caplog.text
+    assert "private response body" not in caplog.text
+    assert "has_chat_id=True" in caplog.text
+    assert "has_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_response_error_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Response send errors should not expose IDs, response text, or exception details."""
+    router = ChannelMessageRouter()
+    router._create_outbox_record = AsyncMock(return_value="outbox-1")
+    router._mark_outbox_failed = AsyncMock()
+    router._smart_send = AsyncMock(side_effect=RuntimeError("secret-send-token"))
+    message = _build_message(
+        text="hello",
+        raw_data={
+            "_routing": {
+                "channel_config_id": "secret-config-id",
+                "channel_message_id": "secret-inbound-msg-id",
+            }
+        },
+    )
+    message.chat_id = "secret-chat-id"
+    channel_manager = SimpleNamespace(
+        connections={
+            "secret-config-id": SimpleNamespace(adapter=object(), config_id="secret-config-id")
+        }
+    )
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.infrastructure.adapters.primary.web.startup.get_channel_manager",
+        return_value=channel_manager,
+    ):
+        await router._send_response(message, "secret-conversation-id", "private response body")
+
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-conversation-id" not in caplog.text
+    assert "private response body" not in caplog.text
+    assert "secret-send-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
 
 
 @pytest.mark.unit
