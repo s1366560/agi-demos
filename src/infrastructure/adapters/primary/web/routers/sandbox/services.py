@@ -301,7 +301,11 @@ async def stop_terminal(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Failed to stop terminal for sandbox %s", sandbox_id)
+        logger.error(
+            "Failed to stop terminal: has_sandbox_id=%s error_type=%s",
+            bool(sandbox_id),
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Failed to stop terminal")) from e
 
 

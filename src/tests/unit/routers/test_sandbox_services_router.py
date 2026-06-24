@@ -24,6 +24,9 @@ class FailingOrchestrator:
     async def get_terminal_status(self, sandbox_id: str) -> Any:
         raise RuntimeError(f"internal terminal status secret for {sandbox_id}")
 
+    async def stop_terminal(self, sandbox_id: str) -> bool:
+        raise RuntimeError(f"internal terminal stop secret for {sandbox_id}")
+
 
 class SuccessfulOrchestrator:
     async def start_desktop(self, _sandbox_id: str, _config: Any) -> Any:
@@ -250,6 +253,47 @@ async def test_stop_terminal_publish_error_log_omits_exception_text(
     assert "error_type=RuntimeError" in caplog.text
     assert "terminal stopped secret" not in caplog.text
     assert "sandbox-secret" not in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_stop_terminal_sanitizes_internal_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(services_router, "assert_caller_owns_sandbox", _allow_sandbox_access)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.sandbox.services",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await services_router.stop_terminal(
+            sandbox_id="sandbox-secret",
+            current_user=SimpleNamespace(id="user-1", is_superuser=True),
+            adapter=SimpleNamespace(),
+            orchestrator=FailingOrchestrator(),
+            event_publisher=None,
+            db=SimpleNamespace(),
+        )
+
+    assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert exc_info.value.detail == "Failed to stop terminal"
+    assert "internal" not in exc_info.value.detail
+    assert "sandbox-secret" not in exc_info.value.detail
+    target_records = [
+        record
+        for record in caplog.records
+        if record.name == "src.infrastructure.adapters.primary.web.routers.sandbox.services"
+        and record.levelno >= logging.ERROR
+    ]
+    assert len(target_records) == 1
+    message = target_records[0].getMessage()
+    assert "Failed to stop terminal" in message
+    assert "error_type=RuntimeError" in message
+    assert "sandbox-secret" not in message
+    assert "internal terminal stop secret" not in message
+    assert target_records[0].exc_info is None
 
 
 @pytest.mark.unit
