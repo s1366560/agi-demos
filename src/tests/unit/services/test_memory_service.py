@@ -579,6 +579,38 @@ class TestMemoryService:
         assert result.updated_at is not None
         mock_memory_repo.save.assert_called_once_with(existing_memory)
 
+    async def test_share_memory_logs_do_not_include_identifiers(
+        self,
+        mock_memory_repo,
+        caplog,
+    ):
+        """Share logs must not expose memory or collaborator IDs."""
+        service = MemoryService(mock_memory_repo, Mock())
+        secret_memory_id = "memory-share-secret"
+        secret_collaborator_id = "user-share-secret"
+        existing_memory = Memory(
+            id=secret_memory_id,
+            title="Memory",
+            content="Content",
+            version=1,
+            project_id="project-share-secret",
+            author_id="user-share-author",
+            collaborators=[],
+            created_at=datetime.now(UTC),
+        )
+        mock_memory_repo.find_by_id.return_value = existing_memory
+        caplog.set_level(logging.INFO, logger="src.application.services.memory_service")
+
+        result = await service.share_memory(
+            memory_id=secret_memory_id,
+            collaborators=[secret_collaborator_id],
+        )
+
+        assert result.collaborators == [secret_collaborator_id]
+        assert secret_memory_id not in caplog.text
+        assert secret_collaborator_id not in caplog.text
+        assert "collaborator_count=1" in caplog.text
+
     async def test_share_memory_not_found(self, mock_memory_repo):
         """Test sharing a missing memory raises a clear error."""
         service = MemoryService(mock_memory_repo, Mock())

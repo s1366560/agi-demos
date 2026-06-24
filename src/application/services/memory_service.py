@@ -399,7 +399,7 @@ class MemoryService:
 
         memory.updated_at = datetime.now(UTC)
         await self._memory_repo.save(memory)
-        logger.info(f"Shared memory {memory_id} with {len(collaborators)} collaborators")
+        logger.info("Shared memory collaborator_count=%d", len(collaborators))
 
         return memory
 
