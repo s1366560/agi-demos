@@ -112,7 +112,14 @@ class ChannelService:
 
         try:
             message_id = await adapter.send_message(to, content, reply_to)
-            logger.debug(f"Sent message to {channel_id}: {message_id}")
+            logger.debug(
+                "Sent message: has_channel_id=%s has_recipient=%s "
+                "content_type=%s has_message_id=%s",
+                bool(channel_id),
+                bool(to),
+                content.type.value,
+                bool(message_id),
+            )
             return message_id
         except Exception as e:
             logger.error(
