@@ -1317,6 +1317,114 @@ async def test_mark_outbox_status_failure_logs_omit_exception_text(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "args", "secret"),
+    [
+        (
+            "_record_streaming_outbox",
+            (
+                "secret-conversation-id",
+                "private response body",
+                "secret-stream-msg-id",
+            ),
+            "secret-record-token",
+        ),
+        (
+            "_store_outbound_message_history",
+            (
+                "secret-conversation-id",
+                "private response body",
+                "secret-config-id",
+                "secret-outbound-msg-id",
+            ),
+            "secret-history-token",
+        ),
+        (
+            "_create_outbox_record",
+            (
+                "secret-conversation-id",
+                "secret-config-id",
+                "private response body",
+                "secret-reply-msg-id",
+            ),
+            "secret-create-token",
+        ),
+    ],
+)
+async def test_outbox_persistence_failure_logs_omit_exception_text(
+    caplog: pytest.LogCaptureFixture,
+    method_name: str,
+    args: tuple[str, ...],
+    secret: str,
+) -> None:
+    """Outbox persistence failures should not expose IDs, response text, or exception details."""
+    router = ChannelMessageRouter()
+    message = _build_message(
+        text="hello",
+        raw_data={"_routing": {"channel_config_id": "secret-config-id"}},
+    )
+
+    class _FailingSessionContext:
+        async def __aenter__(self) -> object:
+            raise RuntimeError(secret)
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.application.services.channels.channel_message_router.with_session",
+        return_value=_FailingSessionContext(),
+    ):
+        await getattr(router, method_name)(message, *args)
+
+    for arg in args:
+        assert arg not in caplog.text
+    assert "secret-config-id" not in caplog.text
+    assert secret not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_record_streaming_outbox_success_log_omits_identifiers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Streaming outbox success logs should not expose chat or channel message IDs."""
+    router = ChannelMessageRouter()
+    router._create_outbox_record = AsyncMock(return_value="secret-outbox-id")
+    router._mark_outbox_sent = AsyncMock()
+    router._store_outbound_message_history = AsyncMock()
+    message = _build_message(
+        text="hello",
+        raw_data={"_routing": {"channel_config_id": "secret-config-id"}},
+    )
+    message.chat_id = "secret-chat-id"
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    await router._record_streaming_outbox(
+        message=message,
+        conversation_id="secret-conversation-id",
+        response_text="private response body",
+        streaming_msg_id="secret-stream-msg-id",
+    )
+
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-stream-msg-id" not in caplog.text
+    assert "private response body" not in caplog.text
+    assert "has_chat_id=True" in caplog.text
+    assert "has_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_broadcast_workspace_event_sanitizes_payload() -> None:
     """Workspace broadcast payload should be JSON-safe."""
     router = ChannelMessageRouter()

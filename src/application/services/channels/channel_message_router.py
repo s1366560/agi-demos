@@ -1520,11 +1520,16 @@ class ChannelMessageRouter:
                     outbound_message_id=streaming_msg_id,
                 )
                 logger.info(
-                    f"[MessageRouter] Streaming response recorded: "
-                    f"chat={message.chat_id}, msg_id={streaming_msg_id}"
+                    "[MessageRouter] Streaming response recorded: "
+                    "has_chat_id=%s has_message_id=%s",
+                    bool(message.chat_id),
+                    bool(streaming_msg_id),
                 )
         except Exception as e:
-            logger.warning(f"[MessageRouter] Failed to record streaming outbox: {e}")
+            logger.warning(
+                "[MessageRouter] Failed to record streaming outbox: error_type=%s",
+                type(e).__name__,
+            )
 
     async def _store_outbound_message_history(
         self,
@@ -1572,7 +1577,10 @@ class ChannelMessageRouter:
                 await session.commit()
 
         except Exception as e:
-            logger.warning(f"[MessageRouter] Failed to store outbound message history: {e}")
+            logger.warning(
+                "[MessageRouter] Failed to store outbound message history: error_type=%s",
+                type(e).__name__,
+            )
 
     async def _create_outbox_record(
         self,
@@ -1610,7 +1618,10 @@ class ChannelMessageRouter:
                 await session.commit()
                 return outbox.id
         except Exception as e:
-            logger.warning(f"[MessageRouter] Failed to create outbox record: {e}")
+            logger.warning(
+                "[MessageRouter] Failed to create outbox record: error_type=%s",
+                type(e).__name__,
+            )
             return None
 
     async def _mark_outbox_sent(
