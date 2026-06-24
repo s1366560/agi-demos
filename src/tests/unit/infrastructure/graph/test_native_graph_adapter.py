@@ -1,5 +1,6 @@
 """Unit tests for NativeGraphAdapter."""
 
+import logging
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -308,6 +309,59 @@ class TestNativeGraphAdapterProcessEpisode:
         query = mock_neo4j_client.execute_query.await_args.args[0]
         assert "MERGE (from)-[r:WORKS_AT]->(to)" in query
         assert "r.episodes = reduce" in query
+
+    @pytest.mark.asyncio
+    async def test_get_existing_entities_redacts_query_exception_details(
+        self,
+        adapter,
+        mock_neo4j_client,
+        caplog,
+    ):
+        """Entity lookup failures should not write backend details to logs."""
+        secret = "existing-entity-query-secret-2468"
+        mock_neo4j_client.execute_query.side_effect = RuntimeError(secret)
+
+        with caplog.at_level(
+            logging.WARNING,
+            logger="src.infrastructure.graph.native_graph_adapter",
+        ):
+            result = await adapter._get_existing_entities(project_id="project-1")
+
+        assert result == []
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_get_existing_entities_redacts_parse_exception_details(
+        self,
+        adapter,
+        mock_neo4j_client,
+        caplog,
+    ):
+        """Malformed entity records should not write record values to logs."""
+        secret = "existing-entity-parse-secret-1357"
+        mock_neo4j_client.execute_query.return_value = MagicMock(
+            records=[
+                {
+                    "e": {
+                        "uuid": "entity-1",
+                        "name": "Ada",
+                        "entity_type": "Person",
+                        "created_at": secret,
+                    }
+                }
+            ]
+        )
+
+        with caplog.at_level(
+            logging.WARNING,
+            logger="src.infrastructure.graph.native_graph_adapter",
+        ):
+            result = await adapter._get_existing_entities(project_id="project-1")
+
+        assert result == []
+        assert secret not in caplog.text
+        assert "error_type=ValueError" in caplog.text
 
 
 @pytest.mark.unit

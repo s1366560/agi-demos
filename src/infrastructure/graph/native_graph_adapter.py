@@ -1005,11 +1005,17 @@ class NativeGraphAdapter(GraphServicePort):
                     )
                     entities.append(entity)
                 except Exception as e:
-                    logger.warning(f"Failed to parse entity node: {e}")
+                    logger.warning(
+                        "Failed to parse entity node: error_type=%s",
+                        type(e).__name__,
+                    )
                     continue
             return entities
         except Exception as e:
-            logger.warning(f"Failed to get existing entities: {e}")
+            logger.warning(
+                "Failed to get existing entities: error_type=%s",
+                type(e).__name__,
+            )
             return []
 
     async def _update_episode_status(
