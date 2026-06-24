@@ -1637,6 +1637,46 @@ async def test_outbox_persistence_failure_logs_omit_exception_text(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_track_push_outbox_failure_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Push outbox tracking failures should not expose IDs, content, or exception details."""
+    router = ChannelMessageRouter()
+
+    class _FailingSessionContext:
+        async def __aenter__(self) -> object:
+            raise RuntimeError("secret-push-token")
+
+        async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+            return None
+
+    caplog.set_level(
+        logging.DEBUG,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.application.services.channels.channel_message_router.with_session",
+        return_value=_FailingSessionContext(),
+    ):
+        await router._track_push_outbox(
+            conversation_id="secret-conversation-id",
+            channel_config_id="secret-config-id",
+            chat_id="secret-chat-id",
+            content="private push body",
+            content_type="text",
+        )
+
+    assert "secret-conversation-id" not in caplog.text
+    assert "secret-config-id" not in caplog.text
+    assert "secret-chat-id" not in caplog.text
+    assert "private push body" not in caplog.text
+    assert "secret-push-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_record_streaming_outbox_success_log_omits_identifiers(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

@@ -1246,7 +1246,10 @@ class ChannelMessageRouter:
                 )
                 await session.commit()
         except Exception as e:
-            logger.debug(f"[MessageRouter] Outbox tracking failed: {e}")
+            logger.debug(
+                "[MessageRouter] Outbox tracking failed: error_type=%s",
+                type(e).__name__,
+            )
 
     async def _broadcast_workspace_event(
         self,
