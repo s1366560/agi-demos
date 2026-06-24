@@ -3126,7 +3126,11 @@ async def proxy_project_desktop_websocket(
         )
 
     except Exception as e:
-        logger.error(f"Desktop WebSocket proxy error for project {project_id}: {e}")
+        logger.error(
+            "Desktop WebSocket proxy error: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(e).__name__,
+        )
         with contextlib.suppress(Exception):
             await websocket.send_json({"error": "Desktop WebSocket proxy failed"})
     finally:

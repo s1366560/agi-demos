@@ -1,5 +1,6 @@
 """Unit tests for project sandbox HTTP service routes."""
 
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from urllib.parse import parse_qs, urlparse
@@ -517,6 +518,7 @@ async def test_mcp_websocket_proxy_requires_project_access(
 @pytest.mark.unit
 async def test_desktop_websocket_proxy_sanitizes_internal_errors(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     websocket = _FakeWebSocket()
     service = _SandboxService(desktop_url="http://desktop.local")
@@ -525,6 +527,10 @@ async def test_desktop_websocket_proxy_sanitizes_internal_errors(
         raise RuntimeError("desktop secret token")
 
     monkeypatch.setattr(router_mod, "_connect_desktop_upstream", fail_connect)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
 
     await router_mod.proxy_project_desktop_websocket(
         websocket=websocket,
@@ -536,6 +542,10 @@ async def test_desktop_websocket_proxy_sanitizes_internal_errors(
     assert websocket.sent_json == [{"error": "Desktop WebSocket proxy failed"}]
     assert "secret" not in str(websocket.sent_json)
     assert websocket.closed is True
+    assert "Desktop WebSocket proxy error" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "desktop secret token" not in caplog.text
+    assert "proj-1" not in caplog.text
 
 
 @pytest.mark.unit
