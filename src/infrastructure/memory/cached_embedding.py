@@ -126,7 +126,10 @@ class CachedEmbeddingService:
         try:
             return await self.embed_text(text)
         except Exception as e:
-            logger.warning(f"Embedding failed, falling back to FTS-only: {e}")
+            logger.warning(
+                "Embedding failed, falling back to FTS-only error_type=%s",
+                type(e).__name__,
+            )
             return None
 
     async def embed_batch(

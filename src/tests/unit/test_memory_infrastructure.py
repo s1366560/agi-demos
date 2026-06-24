@@ -299,16 +299,22 @@ class TestCachedEmbedding:
         assert stats["l1_hits"] == 1
         assert stats["misses"] == 1
 
-    async def test_embed_text_safe_returns_none_on_error(self):
+    async def test_embed_text_safe_returns_none_on_error(self, caplog):
         from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
 
+        exception_detail = "embedding provider leaked input embedding-secret-8642"
         inner = AsyncMock()
         inner.embedding_dim = 4
-        inner.embed_text = AsyncMock(side_effect=Exception("API error"))
+        inner.embed_text = AsyncMock(side_effect=RuntimeError(exception_detail))
 
         service = CachedEmbeddingService(inner)
-        result = await service.embed_text_safe("hello")
+        with caplog.at_level("WARNING", logger="src.infrastructure.memory.cached_embedding"):
+            result = await service.embed_text_safe("hello embedding-secret-8642")
+
         assert result is None
+        assert exception_detail not in caplog.text
+        assert "embedding-secret-8642" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     async def test_empty_text_returns_zero_vector(self):
         from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
