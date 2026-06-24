@@ -1398,7 +1398,10 @@ class NativeGraphAdapter(GraphServicePort):
             return True
 
         except Exception as e:
-            logger.warning(f"Failed to remove episode by memory_id {memory_id}: {e}")
+            logger.warning(
+                "Failed to remove episode by memory_id: error_type=%s",
+                type(e).__name__,
+            )
             return False
 
     async def search_memories(

@@ -668,6 +668,28 @@ class TestNativeGraphAdapterDeleteEpisode:
         assert any("MATCH (:Entity)-[r]->(:Entity)" in query for query in queries)
         assert not any("[r:RELATES_TO" in query for query in queries)
 
+    @pytest.mark.asyncio
+    async def test_delete_episode_by_memory_id_failure_log_redacts_exception_details(
+        self,
+        adapter,
+        mock_neo4j_client,
+        caplog,
+    ):
+        """Memory-id delete failures should return False without writing details to logs."""
+        secret = "memory-delete-secret-2468"
+        mock_neo4j_client.execute_query.side_effect = RuntimeError(secret)
+
+        with caplog.at_level(
+            logging.WARNING,
+            logger="src.infrastructure.graph.native_graph_adapter",
+        ):
+            result = await adapter.delete_episode_by_memory_id("memory-with-secret")
+
+        assert result is False
+        assert secret not in caplog.text
+        assert "memory-with-secret" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
 
 @pytest.mark.unit
 class TestNativeGraphAdapterRemoveEpisode:
