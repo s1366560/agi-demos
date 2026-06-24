@@ -28,6 +28,41 @@ def responder() -> HITLChannelResponder:
 
 @pytest.mark.unit
 class TestHITLChannelResponder:
+    async def test_respond_top_level_failure_log_omits_request_id_and_exception_text(
+        self,
+        responder: HITLChannelResponder,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Top-level HITL response failures should not expose request IDs or exception details."""
+
+        class _FailingSessionContext:
+            async def __aenter__(self) -> object:
+                raise RuntimeError("secret-hitl-token")
+
+            async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+                return None
+
+        caplog.set_level(
+            logging.ERROR,
+            logger="src.application.services.channels.hitl_responder",
+        )
+
+        with patch(
+            "src.application.services.channels.hitl_responder.with_session",
+            return_value=_FailingSessionContext(),
+        ):
+            result = await responder.respond(
+                request_id="secret-request-id",
+                hitl_type="clarification",
+                response_data={"answer": "test"},
+            )
+
+        assert result is HITLChannelResponseOutcome.REJECTED
+        assert "secret-request-id" not in caplog.text
+        assert "secret-hitl-token" not in caplog.text
+        assert "RuntimeError" in caplog.text
+        assert "has_request_id=True" in caplog.text
+
     async def test_respond_claims_and_publishes_with_tenant_project_hints(
         self, responder: HITLChannelResponder
     ) -> None:

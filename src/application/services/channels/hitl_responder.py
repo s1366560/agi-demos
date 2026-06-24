@@ -95,8 +95,10 @@ class HITLChannelResponder:
                 )
         except Exception as e:
             logger.error(
-                f"[HITLChannelResponder] Failed to submit response for {request_id}: {e}",
-                exc_info=True,
+                "[HITLChannelResponder] Failed to submit response: "
+                "has_request_id=%s error_type=%s",
+                bool(request_id),
+                type(e).__name__,
             )
             return HITLChannelResponseOutcome.REJECTED
 
