@@ -198,13 +198,17 @@ class ChannelService:
 
     def _handle_error(self, channel_id: str, error: Exception) -> None:
         """Internal handler for channel errors."""
-        logger.error(f"Channel error ({channel_id}): {error}")
+        logger.error(
+            "Channel error: has_channel_id=%s error_type=%s",
+            bool(channel_id),
+            type(error).__name__,
+        )
 
         for handler in self._error_handlers:
             try:
                 handler(channel_id, error)
             except Exception as e:
-                logger.error(f"Error handler error: {e}")
+                logger.error("Error handler error: error_type=%s", type(e).__name__)
 
     async def get_chat_members(self, channel_id: str, chat_id: str) -> list[Any]:
         """Get members of a chat group."""

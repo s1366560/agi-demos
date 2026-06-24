@@ -63,3 +63,44 @@ def test_handle_message_handler_failure_log_omits_exception_text(
 
     assert "secret-handler-token" not in caplog.text
     assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+def test_handle_error_log_omits_channel_id_and_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Channel error logs should not expose channel IDs or exception details."""
+    service = ChannelService()
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_service",
+    )
+
+    service._handle_error("secret-channel-id", RuntimeError("secret-channel-token"))
+
+    assert "secret-channel-id" not in caplog.text
+    assert "secret-channel-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "has_channel_id=True" in caplog.text
+
+
+@pytest.mark.unit
+def test_handle_error_handler_failure_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Error handler failure logs should not expose exception details."""
+    service = ChannelService()
+
+    def failing_handler(_: str, __: Exception) -> None:
+        raise RuntimeError("secret-error-handler-token")
+
+    service.on_error(failing_handler)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_service",
+    )
+
+    service._handle_error("secret-channel-id", RuntimeError("secret-channel-token"))
+
+    assert "secret-error-handler-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
