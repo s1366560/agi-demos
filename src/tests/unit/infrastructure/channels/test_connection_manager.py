@@ -143,6 +143,29 @@ def test_schedule_route_message_logs_error_when_scheduler_fails(
 
 
 @pytest.mark.unit
+def test_schedule_route_message_redacts_sync_router_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Sync fallback routing failures should not log raw exception text."""
+    exception_detail = "sync router failed channel-sync-secret-8642"
+
+    def _router(_message: Message) -> None:
+        raise RuntimeError(exception_detail)
+
+    manager = ChannelConnectionManager(message_router=_router)
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.channels.connection_manager",
+    ):
+        manager._schedule_route_message(_build_message())
+
+    assert "Sync routing failed" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
 def test_on_route_future_done_redacts_future_exception(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

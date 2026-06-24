@@ -553,7 +553,10 @@ class ChannelConnectionManager:
                         self._message_router(message)
                         return
                     except Exception as e:
-                        logger.error(f"[ChannelManager] Sync routing failed: {e}")
+                        logger.error(
+                            "[ChannelManager] Sync routing failed error_type=%s",
+                            type(e).__name__,
+                        )
                         return
 
         coro = self._safe_route_message(message)
