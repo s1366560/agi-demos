@@ -106,6 +106,50 @@ class TestGlobalLimiterFastPath:
         await limiter.release("ws://x")
         assert limiter.active_count == 0
 
+    async def test_lru_eviction_log_redacts_callback_error(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        limiter = GlobalConnectionLimiter(max_connections=2)
+        secret_error = "lru-secret-token"
+        callback = AsyncMock(side_effect=RuntimeError(secret_error))
+        limiter.register_pool("ws://old", callback)
+        await limiter.acquire("ws://old")
+
+        with caplog.at_level(
+            logging.WARNING,
+            logger="src.infrastructure.mcp.clients.global_connection_limiter",
+        ):
+            evicted = await limiter.try_evict_lru()
+
+        assert evicted is False
+        assert "Error during LRU eviction" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert secret_error not in caplog.text
+        callback.assert_awaited_once()
+
+    async def test_idle_eviction_log_redacts_callback_error(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        limiter = GlobalConnectionLimiter(max_connections=2, ttl=0)
+        secret_error = "idle-secret-token"
+        callback = AsyncMock(side_effect=RuntimeError(secret_error))
+        limiter.register_pool("ws://idle", callback)
+        await limiter.acquire("ws://idle")
+
+        with caplog.at_level(
+            logging.WARNING,
+            logger="src.infrastructure.mcp.clients.global_connection_limiter",
+        ):
+            evicted_count = await limiter.evict_idle()
+
+        assert evicted_count == 0
+        assert "Error evicting idle connection" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert secret_error not in caplog.text
+        callback.assert_awaited_once()
+
 
 class TestSubprocessCancelLadder:
     async def test_connect_initialize_failure_log_redacts_response_and_stderr(

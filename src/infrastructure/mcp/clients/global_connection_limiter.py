@@ -229,7 +229,11 @@ class GlobalConnectionLimiter:
                 logger.debug(f"Evicted idle connection from pool {oldest_pool}")
             return evicted
         except Exception as e:
-            logger.warning(f"Error during LRU eviction from {oldest_pool}: {e}")
+            logger.warning(
+                "Error during LRU eviction from %s error_type=%s",
+                oldest_pool,
+                type(e).__name__,
+            )
             return False
 
     async def evict_idle(self) -> int:
@@ -262,7 +266,11 @@ class GlobalConnectionLimiter:
                 if evicted:
                     evicted_count += 1
             except Exception as e:
-                logger.warning(f"Error evicting idle connection from {pool_url}: {e}")
+                logger.warning(
+                    "Error evicting idle connection from %s error_type=%s",
+                    pool_url,
+                    type(e).__name__,
+                )
 
         if evicted_count > 0:
             logger.info(f"Evicted {evicted_count} idle connections exceeding TTL")
