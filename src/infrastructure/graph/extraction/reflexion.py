@@ -117,7 +117,7 @@ class ReflexionChecker:
                 user_prompt=user_prompt,
             )
         except Exception as e:
-            logger.error(f"LLM call failed during reflexion: {e}")
+            logger.error("LLM call failed during reflexion error_type=%s", type(e).__name__)
             return []
 
         # Parse response

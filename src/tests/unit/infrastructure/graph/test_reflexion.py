@@ -21,6 +21,13 @@ class GenerateOnlyLLMClient:
         return {"content": '{"missed_entities": [{"name": "Grace", "entity_type": "Person"}]}'}
 
 
+class FailingLLMClient:
+    """Mock LLM client that raises a provider-style error."""
+
+    async def generate(self, **_kwargs):
+        raise RuntimeError("provider echoed reflexion-secret-1357")
+
+
 @pytest.mark.unit
 class TestReflexionCheckerLLMResponseHandling:
     """Tests for LLM response normalization."""
@@ -34,6 +41,25 @@ class TestReflexionCheckerLLMResponseHandling:
         response = await checker._call_llm("Check missed entities", "Grace Hopper")
 
         assert response == '{"missed_entities": [{"name": "Grace", "entity_type": "Person"}]}'
+
+    async def test_check_missed_entities_redacts_llm_exception_details(self, caplog):
+        checker = ReflexionChecker(
+            llm_client=FailingLLMClient(),
+            embedding_service=MockEmbeddingService(),
+        )
+
+        with caplog.at_level(
+            "ERROR",
+            logger="src.infrastructure.graph.extraction.reflexion",
+        ):
+            result = await checker.check_missed_entities(
+                content="Grace mentioned reflexion-secret-1357",
+                extracted_entities=[{"name": "Grace", "entity_type": "Person"}],
+            )
+
+        assert result == []
+        assert "reflexion-secret-1357" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     def test_resolve_localized_person_type_to_canonical_schema_type(self):
         checker = ReflexionChecker(
