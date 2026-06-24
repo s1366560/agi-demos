@@ -459,7 +459,10 @@ class ChannelConnectionManager:
                 try:
                     self._schedule_route_message(message)
                 except Exception as e:
-                    logger.error(f"[ChannelManager] Error routing message: {e}")
+                    logger.error(
+                        "[ChannelManager] Error routing message error_type=%s",
+                        type(e).__name__,
+                    )
 
         return message_handler
 

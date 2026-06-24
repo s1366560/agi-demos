@@ -32,6 +32,39 @@ def _build_message() -> Message:
 
 
 @pytest.mark.unit
+def test_message_handler_redacts_schedule_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Message handler scheduling failures should not log raw exception text."""
+    exception_detail = "schedule failed channel-handler-secret-1357"
+
+    manager = ChannelConnectionManager(message_router=lambda _message: None)
+    config = SimpleNamespace(
+        id="channel-config-secret-2468",
+        project_id="project-1",
+        channel_type="feishu",
+        rate_limit_per_minute=60,
+    )
+
+    def fail_schedule(_message: Message) -> None:
+        raise RuntimeError(exception_detail)
+
+    manager._schedule_route_message = fail_schedule  # type: ignore[method-assign]
+    handler = manager._build_message_handler(config)  # type: ignore[arg-type]
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.channels.connection_manager",
+    ):
+        handler(_build_message())
+
+    assert "Error routing message" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "channel-config-secret-2468" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_update_db_status_redacts_session_failure(
     caplog: pytest.LogCaptureFixture,
