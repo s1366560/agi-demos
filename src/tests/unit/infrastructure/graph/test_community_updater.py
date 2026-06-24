@@ -32,6 +32,13 @@ class GenerateResponseOnlyLLMClient:
         return {"content": '{"name": "Memory Graph", "summary": "Graph operations."}'}
 
 
+class InvalidJsonGenerateLLMClient:
+    """LLM client returning malformed JSON with sensitive response content."""
+
+    async def generate(self, **_kwargs: Any) -> dict[str, Any]:
+        return {"content": "not-json community-summary-secret-97531"}
+
+
 class PrivateGenerateResponseOnlyLLMClient:
     """LLM client exposing the Graphiti-compatible private response surface."""
 
@@ -73,6 +80,27 @@ class TestCommunityUpdaterLLMResponseHandling:
         assert result.name == "Memory Graph"
         assert result.summary == "Graph operations."
         assert llm_client.calls[0]["response_model"] is None
+
+    async def test_call_llm_with_json_extraction_redacts_invalid_response(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        updater = build_updater(InvalidJsonGenerateLLMClient())
+
+        with (
+            caplog.at_level(
+                "DEBUG",
+                logger="src.infrastructure.graph.community.community_updater",
+            ),
+            pytest.raises(ValueError),
+        ):
+            await updater._call_llm_with_json_extraction(
+                [Message.system("Summarize"), Message.user("Members")]
+            )
+
+        assert "community-summary-secret-97531" not in caplog.text
+        assert "error_type=JSONDecodeError" in caplog.text
+        assert "response_length=" in caplog.text
 
     async def test_call_llm_with_json_extraction_supports_private_generate_response_client(
         self,

@@ -354,11 +354,14 @@ class CommunityUpdater:
             self._llm_client,
             "_generate_response",
         ):
-            generate_response = getattr(
-                self._llm_client,
-                "generate_response",
-                None,
-            ) or self._llm_client._generate_response
+            generate_response = (
+                getattr(
+                    self._llm_client,
+                    "generate_response",
+                    None,
+                )
+                or self._llm_client._generate_response
+            )
             generated_response = await generate_response(
                 messages=messages,
                 response_model=None,
@@ -394,8 +397,11 @@ class CommunityUpdater:
                 summary=data.get("summary", ""),
             )
         except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse JSON from LLM response: {e}")
-            logger.debug(f"Raw response: {content[:500]}")
+            logger.warning(
+                "Failed to parse JSON from LLM response error_type=%s response_length=%d",
+                type(e).__name__,
+                len(content),
+            )
             # Return empty result if parsing fails
             raise ValueError(f"Failed to parse community summary JSON: {e}") from e
 
