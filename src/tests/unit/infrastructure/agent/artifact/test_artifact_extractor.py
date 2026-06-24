@@ -440,6 +440,39 @@ class TestMCPResourceExtraction:
         artifact = extraction.artifacts[0]
         assert artifact.content == b'{"key": "value"}'
 
+    def test_invalid_blob_resource_log_redacts_blob_uri_and_tool(
+        self,
+        extractor,
+        caplog,
+    ):
+        """Test invalid resource blobs are skipped without leaking details."""
+        secret_uri = "file:///workspace/secret-image.png"
+        secret_tool_name = "secret-file-reader"
+        invalid_blob = "not-valid-resource-base64!!!"
+        result = {
+            "content": [
+                {
+                    "type": "resource",
+                    "uri": secret_uri,
+                    "blob": invalid_blob,
+                    "mimeType": "image/png",
+                }
+            ]
+        }
+
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            extraction = extractor.extract_only(result, secret_tool_name)
+
+        assert not extraction.has_artifacts
+        assert "Failed to decode resource blob" in caplog.text
+        assert secret_uri not in caplog.text
+        assert secret_tool_name not in caplog.text
+        assert invalid_blob not in caplog.text
+        assert "Invalid base64" not in caplog.text
+        assert "error_type=Error" in caplog.text
+        assert "has_tool_name=True" in caplog.text
+        assert "has_uri=True" in caplog.text
+
     def test_skip_empty_resource(self, extractor):
         """Test skipping resources with no content."""
         result = {
@@ -637,16 +670,24 @@ class TestEdgeCases:
         # Content should be extracted but not uploaded
         assert len(extraction.artifacts[0].content) > 0
 
-    def test_invalid_base64_handling(self, extractor):
+    def test_invalid_base64_handling(self, extractor, caplog):
         """Test handling of invalid base64 data."""
-        result = {
-            "content": [{"type": "image", "data": "not-valid-base64!!!", "mimeType": "image/png"}]
-        }
+        secret_tool_name = "secret-image-tool"
+        invalid_data = "not-valid-base64!!!"
+        result = {"content": [{"type": "image", "data": invalid_data, "mimeType": "image/png"}]}
 
-        extraction = extractor.extract_only(result, "test")
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            extraction = extractor.extract_only(result, secret_tool_name)
 
         # Should not crash, just skip the invalid content
         assert not extraction.has_artifacts
+        assert "Failed to decode MCP image" in caplog.text
+        assert secret_tool_name not in caplog.text
+        assert invalid_data not in caplog.text
+        assert "Invalid base64" not in caplog.text
+        assert "error_type=Error" in caplog.text
+        assert "has_tool_name=True" in caplog.text
+        assert "has_mime_type=True" in caplog.text
 
     def test_mixed_content_types(self, extractor, sample_image_base64):
         """Test handling mixed content types."""

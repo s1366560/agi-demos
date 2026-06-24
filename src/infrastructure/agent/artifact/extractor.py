@@ -495,7 +495,18 @@ class ArtifactExtractor:
             )
 
         except Exception as e:
-            logger.warning(f"[ArtifactExtractor] Failed to decode MCP image: {e}")
+            logger.warning(
+                " ".join(
+                    (
+                        "[ArtifactExtractor] Failed to decode MCP image error_type=%s",
+                        "has_tool_name=%s",
+                        "has_mime_type=%s",
+                    )
+                ),
+                type(e).__name__,
+                bool(tool_name),
+                bool(mime_type),
+            )
             return None
 
     def _extract_resource_content(
@@ -524,7 +535,18 @@ class ArtifactExtractor:
             try:
                 content = base64.b64decode(blob)
             except Exception as e:
-                logger.warning(f"[ArtifactExtractor] Failed to decode resource blob: {e}")
+                logger.warning(
+                    " ".join(
+                        (
+                            "[ArtifactExtractor] Failed to decode resource blob error_type=%s",
+                            "has_tool_name=%s",
+                            "has_uri=%s",
+                        )
+                    ),
+                    type(e).__name__,
+                    bool(tool_name),
+                    bool(uri),
+                )
                 return None
         elif text:
             content = text.encode("utf-8")
