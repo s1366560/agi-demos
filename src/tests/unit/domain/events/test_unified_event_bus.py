@@ -189,6 +189,39 @@ class TestRedisUnifiedEventBusSubscription:
 
 class TestRedisUnifiedEventBusLogging:
     @pytest.mark.asyncio
+    async def test_publish_error_log_redacts_routing_key_stream_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        exception_detail = "publish redis secret unavailable"
+        secret_routing_key = "agent.secret-conversation.secret-message"
+        secret_stream_key = f"events:{secret_routing_key}"
+        event = EventEnvelope.wrap(
+            event_type=AgentEventType.WORKSPACE_UPDATED,
+            payload={"workspace_id": "ws-secret"},
+        )
+        redis_client = Mock()
+        redis_client.xadd = AsyncMock(side_effect=redis.RedisError(exception_detail))
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+
+        with (
+            caplog.at_level(logging.ERROR, logger=LOGGER_NAME),
+            pytest.raises(EventPublishError) as exc_info,
+        ):
+            await adapter.publish(event, secret_routing_key)
+
+        assert exception_detail in str(exc_info.value)
+        assert exc_info.value.routing_key == secret_routing_key
+        assert exc_info.value.event_type == AgentEventType.WORKSPACE_UPDATED.value
+        assert "Failed to publish" in caplog.text
+        assert secret_routing_key not in caplog.text
+        assert secret_stream_key not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RedisError" in caplog.text
+        assert f"event_type={event.event_type}" in caplog.text
+        assert "has_routing_key=True" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_publish_batch_error_log_redacts_routing_key_and_exception(
         self,
         caplog: pytest.LogCaptureFixture,

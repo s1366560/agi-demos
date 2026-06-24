@@ -144,7 +144,18 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
             )
 
         except redis.RedisError as e:
-            logger.error(f"[UnifiedEventBus] Failed to publish to {stream_key}: {e}")
+            logger.error(
+                " ".join(
+                    (
+                        "[UnifiedEventBus] Failed to publish error_type=%s",
+                        "event_type=%s",
+                        "has_routing_key=%s",
+                    )
+                ),
+                type(e).__name__,
+                event.event_type,
+                bool(routing_key_str),
+            )
             raise EventPublishError(
                 f"Failed to publish event: {e}",
                 routing_key=routing_key_str,
