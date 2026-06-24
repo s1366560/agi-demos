@@ -601,11 +601,7 @@ async def _execute_memory_create(
             embedding_service=embedding_service or _memcreate_embedding_service,
         )
 
-        logger.info(
-            "memory_create: created memory %s for project %s",
-            memory.id,
-            project_id,
-        )
+        logger.info("memory_create: created memory")
 
         return json.dumps(
             {
@@ -619,7 +615,7 @@ async def _execute_memory_create(
             default=str,
         )
     except Exception as e:
-        logger.warning("memory_create failed: %s", e)
+        logger.warning("memory_create failed error_type=%s", type(e).__name__)
         await session.rollback()
         return json.dumps({"error": f"Failed to create memory: {e}"})
     finally:

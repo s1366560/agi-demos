@@ -99,6 +99,97 @@ class TestMemoryToolsChunkSync:
         assert schedule_sync.call_args.kwargs["embedding_service"] is None
 
     @pytest.mark.asyncio
+    async def test_create_logs_do_not_include_memory_or_project_identifiers(self, caplog) -> None:
+        session = AsyncMock()
+        session_factory = MagicMock(return_value=session)
+        secret_memory_id = "mem-create-secret"
+        secret_project_id = "proj-create-secret"
+        repo = MagicMock()
+        service = MagicMock()
+        service.create_memory = AsyncMock(
+            return_value=SimpleNamespace(
+                id=secret_memory_id,
+                title="Memory title",
+                processing_status="PENDING",
+            )
+        )
+        schedule_sync = MagicMock()
+        caplog.set_level(logging.INFO, logger="src.infrastructure.agent.tools.memory_tools")
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_memory_repository.SqlMemoryRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.application.services.memory_service.MemoryService",
+                return_value=service,
+            ),
+            patch(
+                "src.infrastructure.agent.tools.memory_tools._schedule_memory_create_background_sync",
+                schedule_sync,
+            ),
+        ):
+            result = await _execute_memory_create(
+                content="remember this",
+                title="Memory title",
+                category="fact",
+                tags=["tag-1"],
+                session_factory=session_factory,
+                graph_service=object(),
+                project_id=secret_project_id,
+                tenant_id="tenant-1",
+                user_id="user-1",
+                embedding_service=None,
+            )
+
+        payload = json.loads(result)
+        assert payload["status"] == "created"
+        assert secret_memory_id not in caplog.text
+        assert secret_project_id not in caplog.text
+        assert "memory_create: created memory" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_create_failure_logs_do_not_include_exception_content(self, caplog) -> None:
+        session = AsyncMock()
+        session_factory = MagicMock(return_value=session)
+        secret_memory_id = "mem-create-failure-secret"
+        exception_detail = "create service leaked memory id mem-create-failure-secret"
+        repo = MagicMock()
+        service = MagicMock()
+        service.create_memory = AsyncMock(side_effect=RuntimeError(exception_detail))
+        caplog.set_level(logging.WARNING, logger="src.infrastructure.agent.tools.memory_tools")
+
+        with (
+            patch(
+                "src.infrastructure.adapters.secondary.persistence.sql_memory_repository.SqlMemoryRepository",
+                return_value=repo,
+            ),
+            patch(
+                "src.application.services.memory_service.MemoryService",
+                return_value=service,
+            ),
+        ):
+            result = await _execute_memory_create(
+                content="remember this",
+                title="Memory title",
+                category="fact",
+                tags=["tag-1"],
+                session_factory=session_factory,
+                graph_service=object(),
+                project_id="proj-1",
+                tenant_id="tenant-1",
+                user_id="user-1",
+                embedding_service=None,
+            )
+
+        payload = json.loads(result)
+        assert "error" in payload
+        assert secret_memory_id not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_background_sync_marks_created_memory_completed_after_graph_sync(self) -> None:
         sessions = [AsyncMock(), AsyncMock()]
         session_factory = MagicMock(side_effect=sessions)
