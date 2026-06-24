@@ -31,17 +31,23 @@ class _FakeWebSocket:
 
 
 @pytest.mark.unit
-async def test_resolve_terminal_session_sanitizes_creation_errors() -> None:
+async def test_resolve_terminal_session_sanitizes_creation_errors(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     class FailingProxy:
         async def create_session(self, *_args: object, **_kwargs: object) -> object:
             raise ValueError("docker socket secret")
 
     websocket = _FakeWebSocket()
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.terminal",
+    )
 
     result = await _resolve_terminal_session(
         proxy=FailingProxy(),
         websocket=websocket,
-        sandbox_id="sandbox-1",
+        sandbox_id="sandbox-secret",
         session_id=None,
     )
 
@@ -51,6 +57,11 @@ async def test_resolve_terminal_session_sanitizes_creation_errors() -> None:
     ]
     assert "secret" not in str(websocket.sent_json)
     assert websocket.closed is True
+    assert "Failed to create terminal session" in caplog.text
+    assert "has_sandbox_id=True" in caplog.text
+    assert "error_type=ValueError" in caplog.text
+    assert "sandbox-secret" not in caplog.text
+    assert "docker socket secret" not in caplog.text
 
 
 @pytest.mark.unit

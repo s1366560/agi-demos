@@ -326,7 +326,11 @@ async def _resolve_terminal_session(
     try:
         return cast(TerminalSession | None, await proxy.create_session(container_id=sandbox_id))
     except ValueError as e:
-        logger.warning("Failed to create terminal session for sandbox %s: %s", sandbox_id, e)
+        logger.warning(
+            "Failed to create terminal session: has_sandbox_id=%s error_type=%s",
+            bool(sandbox_id),
+            type(e).__name__,
+        )
         await websocket.send_json({"type": "error", "message": "Failed to create terminal session"})
         await websocket.close()
         return None
