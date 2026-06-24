@@ -814,10 +814,16 @@ class ProviderService:
                 return "sk-***"
             return f"sk-{normalized[:4]}...{normalized[-4:]}"
         except ValueError as e:
-            logger.warning(f"Failed to decrypt API key for masking (invalid format): {e}")
+            logger.warning(
+                "Failed to decrypt API key for masking invalid_format=true error_type=%s",
+                type(e).__name__,
+            )
             return "sk-[ERROR]"
         except Exception as e:
-            logger.error(f"Unexpected error decrypting API key for masking: {e}", exc_info=True)
+            logger.error(
+                "Unexpected error decrypting API key for masking error_type=%s",
+                type(e).__name__,
+            )
             return "sk-[ERROR]"
 
     def _get_resilience_status(self, provider_type: ProviderType) -> ResilienceStatus:

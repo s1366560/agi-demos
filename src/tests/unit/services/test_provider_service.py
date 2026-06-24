@@ -302,6 +302,34 @@ class TestProviderService:
             assert "..." in masked
             assert masked.endswith("cdef")
 
+    def test_mask_api_key_invalid_format_log_omits_exception_content(self, service, caplog):
+        """Invalid encrypted key logs must not include raw exception content."""
+        exception_detail = "invalid encrypted api key leaked secret provider-secret-1357"
+        service.encryption_service = MagicMock()
+        service.encryption_service.decrypt.side_effect = ValueError(exception_detail)
+
+        with caplog.at_level("WARNING", logger="src.application.services.provider_service"):
+            masked = service._mask_api_key("encrypted-provider-secret-1357")
+
+        assert masked == "sk-[ERROR]"
+        assert exception_detail not in caplog.text
+        assert "provider-secret-1357" not in caplog.text
+        assert "error_type=ValueError" in caplog.text
+
+    def test_mask_api_key_unexpected_error_log_omits_exception_content(self, service, caplog):
+        """Unexpected encrypted key errors must not include raw exception content."""
+        exception_detail = "decrypt backend leaked api key provider-secret-2468"
+        service.encryption_service = MagicMock()
+        service.encryption_service.decrypt.side_effect = RuntimeError(exception_detail)
+
+        with caplog.at_level("ERROR", logger="src.application.services.provider_service"):
+            masked = service._mask_api_key("encrypted-provider-secret-2468")
+
+        assert masked == "sk-[ERROR]"
+        assert exception_detail not in caplog.text
+        assert "provider-secret-2468" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
     @pytest.mark.asyncio
     async def test_cache_invalidation_on_create(self, service):
         """Test that cache is invalidated on provider creation."""
