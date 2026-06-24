@@ -538,7 +538,7 @@ class HybridSearch:
             return items
 
         except Exception as e:
-            logger.error(f"Entity keyword search failed: {e}")
+            logger.error("Entity keyword search failed error_type=%s", type(e).__name__)
             return []
 
     async def _keyword_search_episodes(

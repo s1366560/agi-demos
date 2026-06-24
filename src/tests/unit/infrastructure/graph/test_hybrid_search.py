@@ -543,6 +543,31 @@ class TestQueryExpansion:
         assert len(search_query.split()) == MAX_FULLTEXT_QUERY_TERMS
 
     @pytest.mark.unit
+    async def test_keyword_entity_search_error_log_redacts_exception_content(
+        self,
+        hybrid_search,
+        mock_neo4j_client,
+        caplog,
+    ):
+        """Entity keyword search failures should not log raw backend exception text."""
+        secret = "hybrid-entity-keyword-secret-8642"
+        mock_neo4j_client.execute_query.side_effect = RuntimeError(f"backend echoed {secret}")
+
+        with caplog.at_level(
+            "ERROR",
+            logger="src.infrastructure.graph.search.hybrid_search",
+        ):
+            result = await hybrid_search._keyword_search_entities(
+                f"find {secret}",
+                "project-1",
+                10,
+            )
+
+        assert result == []
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.unit
     async def test_keyword_episode_search_caps_long_fulltext_query(
         self, hybrid_search, mock_neo4j_client
     ):
