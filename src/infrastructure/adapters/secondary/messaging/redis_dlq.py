@@ -176,7 +176,11 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             return DeadLetterMessage.from_dict(message_dict)
 
         except redis.RedisError as e:
-            logger.error(f"[DLQ] Failed to get message {message_id}: {e}")
+            logger.error(
+                "[DLQ] Failed to get message error_type=%s has_message_id=%s",
+                type(e).__name__,
+                bool(message_id),
+            )
             return None
 
     async def get_messages(

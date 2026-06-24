@@ -171,6 +171,33 @@ async def test_discard_message_redacts_update_failure_log(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_get_message_redacts_redis_error_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Single-message fetch failures should not log raw exception text or message IDs."""
+    exception_detail = "fetch redis secret 0369"
+    secret_message_id = "dlq-secret-message-1590"
+    redis_client = SimpleNamespace(
+        hget=AsyncMock(side_effect=redis.RedisError(exception_detail)),
+    )
+    adapter = RedisDLQAdapter(redis_client=redis_client)  # type: ignore[arg-type]
+
+    with caplog.at_level(
+        "ERROR",
+        logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+    ):
+        message = await adapter.get_message(secret_message_id)
+
+    assert message is None
+    assert "Failed to get message" in caplog.text
+    assert exception_detail not in caplog.text
+    assert secret_message_id not in caplog.text
+    assert "error_type=RedisError" in caplog.text
+    assert "has_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_get_messages_redacts_redis_error_log(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
