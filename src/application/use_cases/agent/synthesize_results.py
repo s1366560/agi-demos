@@ -100,7 +100,7 @@ Be thorough but concise. Focus on actionable insights.
             return synthesized
 
         except Exception as e:
-            logger.error(f"Error synthesizing results: {e}")
+            logger.error("Error synthesizing results error_type=%s", type(e).__name__)
             # Fallback: simple concatenation of results
             return self._fallback_synthesis(work_plan, step_results)
 
