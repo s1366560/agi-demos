@@ -85,7 +85,10 @@ class ChunkHybridSearch:
             session = self._session_factory()
             return SqlChunkRepository(session)
         except Exception as e:
-            logger.warning(f"Failed to create chunk repo for search: {e}")
+            logger.warning(
+                "Failed to create chunk repo for search error_type=%s",
+                type(e).__name__,
+            )
             return None
 
     async def search(
@@ -144,7 +147,10 @@ class ChunkHybridSearch:
         # 2. FTS search with keyword extraction
         keywords = extract_keywords(query)
         fts_results = await chunk_repo.fts_search(
-            query, project_id, fetch_limit, category=category,
+            query,
+            project_id,
+            fetch_limit,
+            category=category,
             keywords=keywords if keywords else None,
         )
 
