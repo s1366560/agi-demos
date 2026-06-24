@@ -223,11 +223,33 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 if is_terminal:
                     return
 
-            except redis.ConnectionError as e:
-                logger.error(f"[AgentEventBus] Connection error on {stream_key}: {e}")
+            except redis.ConnectionError as exc:
+                logger.error(
+                    " ".join(
+                        [
+                            "[AgentEventBus] Connection error error_type=%s block_ms=%s",
+                            "has_conversation_id=%s has_message_id=%s",
+                        ]
+                    ),
+                    type(exc).__name__,
+                    block_ms,
+                    bool(conversation_id),
+                    bool(message_id),
+                )
                 raise
-            except Exception as e:
-                logger.error(f"[AgentEventBus] Error reading from {stream_key}: {e}")
+            except Exception as exc:
+                logger.error(
+                    " ".join(
+                        [
+                            "[AgentEventBus] Error reading error_type=%s block_ms=%s",
+                            "has_conversation_id=%s has_message_id=%s",
+                        ]
+                    ),
+                    type(exc).__name__,
+                    block_ms,
+                    bool(conversation_id),
+                    bool(message_id),
+                )
                 raise
 
     async def get_events(
