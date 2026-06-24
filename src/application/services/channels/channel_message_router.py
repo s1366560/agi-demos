@@ -107,8 +107,11 @@ class ChannelMessageRouter:
                 return
 
             logger.info(
-                f"[MessageRouter] Routing message from {message.channel}: "
-                f"chat_id={message.chat_id}, sender={message.sender.id}"
+                "[MessageRouter] Routing message from %s: "
+                "has_chat_id=%s has_sender_id=%s",
+                message.channel,
+                bool(message.chat_id),
+                bool(message.sender.id),
             )
 
             conversation_id = await self._get_or_create_conversation(message)
@@ -126,7 +129,10 @@ class ChannelMessageRouter:
             file_metadata = self._build_file_metadata(message)
             await self._invoke_agent(message, conversation_id, file_metadata)
 
-            logger.info(f"[MessageRouter] Message routed to conversation {conversation_id}")
+            logger.info(
+                "[MessageRouter] Message routed to conversation: has_conversation_id=%s",
+                bool(conversation_id),
+            )
 
         except Exception as e:
             logger.error(f"[MessageRouter] Error routing message: {e}", exc_info=True)

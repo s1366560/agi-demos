@@ -126,10 +126,12 @@ async def test_route_message_skips_bot_echo_messages() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_route_message_broadcasts_inbound_user_message_to_workspace() -> None:
+async def test_route_message_broadcasts_inbound_user_message_to_workspace(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Router should emit realtime inbound user message event for workspace."""
     router = ChannelMessageRouter()
-    router._get_or_create_conversation = AsyncMock(return_value="conv-1")
+    router._get_or_create_conversation = AsyncMock(return_value="secret-conversation-id")
     router._store_message_history = AsyncMock()
     router._broadcast_workspace_event = AsyncMock()
     router._invoke_agent = AsyncMock()
@@ -140,6 +142,12 @@ async def test_route_message_broadcasts_inbound_user_message_to_workspace() -> N
             "_routing": {"channel_config_id": "cfg-1", "channel_message_id": "om_1"},
             "event": {"sender": {"sender_type": "user"}},
         },
+    )
+    message.chat_id = "secret-chat-id"
+    message.sender = SenderInfo(id="secret-sender-id", name="Test User")
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_message_router",
     )
 
     await router.route_message(message)
@@ -153,7 +161,13 @@ async def test_route_message_broadcasts_inbound_user_message_to_workspace() -> N
     broadcast_call = message_calls[0]
     assert broadcast_call["event_data"]["metadata"]["source"] == "channel_inbound"
     assert broadcast_call["event_data"]["content"] == "hello from feishu"
-    router._invoke_agent.assert_awaited_once_with(message, "conv-1", None)
+    router._invoke_agent.assert_awaited_once_with(message, "secret-conversation-id", None)
+    assert "secret-conversation-id" not in caplog.text
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-sender-id" not in caplog.text
+    assert "has_conversation_id=True" in caplog.text
+    assert "has_chat_id=True" in caplog.text
+    assert "has_sender_id=True" in caplog.text
 
 
 @pytest.mark.unit
