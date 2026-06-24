@@ -111,14 +111,34 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 event_id = event_id.decode("utf-8")
 
             logger.debug(
-                f"[AgentEventBus] Published event to {stream_key}: "
-                f"event_time_us={event_time_us}, type={event_type.value}, id={event_id}"
+                " ".join(
+                    [
+                        "[AgentEventBus] Published event event_time_us=%s type=%s event_id=%s",
+                        "has_conversation_id=%s has_message_id=%s",
+                    ]
+                ),
+                event_time_us,
+                event_type.value,
+                event_id,
+                bool(conversation_id),
+                bool(message_id),
             )
 
             return cast(str, event_id)
 
-        except Exception as e:
-            logger.error(f"[AgentEventBus] Failed to publish to {stream_key}: {e}")
+        except Exception as exc:
+            logger.error(
+                " ".join(
+                    [
+                        "[AgentEventBus] Failed to publish error_type=%s type=%s",
+                        "has_conversation_id=%s has_message_id=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                event_type.value,
+                bool(conversation_id),
+                bool(message_id),
+            )
             raise
 
     _TERMINAL_EVENTS = frozenset(
