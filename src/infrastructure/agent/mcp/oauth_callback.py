@@ -9,6 +9,7 @@ Based on vendor/opencode/packages/opencode/src/mcp/oauth-callback.ts
 """
 
 import asyncio
+import html
 import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -61,6 +62,10 @@ HTML_ERROR = """<!DOCTYPE html>
 
 CALLBACK_TIMEOUT_MS = 5 * 60 * 1000  # 5 minutes
 CALLBACK_PATH = "/mcp/oauth/callback"
+
+
+def _render_error_html(error: str) -> str:
+    return HTML_ERROR.replace("{error}", html.escape(error, quote=True))
 
 
 class PendingAuth:
@@ -122,19 +127,32 @@ class MCPOAuthCallbackServer:
         error = request.query.get("error")
         error_description = request.query.get("error_description")
 
+        pending = self._pending_auths.get(state) if state else None
         logger.info(
-            "Received OAuth callback: state=%s, error=%s, bound_mcp_name=%s",
-            state,
-            error,
-            self._pending_auths[state].mcp_name if state and state in self._pending_auths else None,
+            " ".join(
+                (
+                    "Received OAuth callback: has_state=%s",
+                    "has_error=%s",
+                    "has_code=%s",
+                    "bound_mcp_name=%s",
+                )
+            ),
+            bool(state),
+            bool(error),
+            bool(code),
+            pending.mcp_name if pending is not None else None,
         )
 
         # Validate state parameter (required for CSRF protection)
         if not state:
             error_msg = "Missing required state parameter - potential CSRF attack"
-            logger.error(f"OAuth callback missing state parameter: {request.url}")
+            logger.error(
+                "OAuth callback missing state parameter has_state=False has_error=%s has_code=%s",
+                bool(error),
+                bool(code),
+            )
             return web.Response(
-                text=HTML_ERROR.format(error=error_msg),
+                text=_render_error_html(error_msg),
                 status=400,
                 content_type="text/html",
             )
@@ -147,14 +165,14 @@ class MCPOAuthCallbackServer:
                 pending.timeout_handle.cancel()
                 pending.reject(Exception(error_msg))
             return web.Response(
-                text=HTML_ERROR.format(error=error_msg),
+                text=_render_error_html(error_msg),
                 content_type="text/html",
             )
 
         # Validate authorization code
         if not code:
             return web.Response(
-                text=HTML_ERROR.format(error="No authorization code provided"),
+                text=_render_error_html("No authorization code provided"),
                 status=400,
                 content_type="text/html",
             )
@@ -162,9 +180,9 @@ class MCPOAuthCallbackServer:
         # Validate state parameter
         if state not in self._pending_auths:
             error_msg = "Invalid or expired state parameter - potential CSRF attack"
-            logger.error(f"OAuth callback with invalid state: {state}")
+            logger.error("OAuth callback with invalid state has_state=True has_code=%s", bool(code))
             return web.Response(
-                text=HTML_ERROR.format(error=error_msg),
+                text=_render_error_html(error_msg),
                 status=400,
                 content_type="text/html",
             )

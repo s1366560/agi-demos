@@ -7,7 +7,9 @@ including auth storage, OAuth provider, and callback server.
 
 import asyncio
 import contextlib
+import logging
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -22,6 +24,8 @@ from src.infrastructure.agent.mcp.oauth import (
 from src.infrastructure.agent.mcp.oauth_callback import (
     MCPOAuthCallbackServer,
 )
+
+LOGGER_NAME = "src.infrastructure.agent.mcp.oauth_callback"
 
 
 class _FakeTCPSite:
@@ -463,6 +467,76 @@ class TestMCPOAuthCallbackServer:
     def test_initially_not_running(self, server):
         """Test that server is initially not running."""
         assert not server.is_running
+
+    @pytest.mark.asyncio
+    async def test_missing_state_log_redacts_callback_query(self, server, caplog):
+        """Missing-state callbacks should not log raw query secrets."""
+        secret_code = "oauth-code-secret"
+        secret_token = "query-token-secret"
+        request = SimpleNamespace(
+            query={"code": secret_code, "access_token": secret_token},
+            url=(
+                "http://127.0.0.1:19876/mcp/oauth/callback"
+                f"?code={secret_code}&access_token={secret_token}"
+            ),
+        )
+
+        with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+            response = await server._handle_callback(request)
+
+        assert response.status == 400
+        assert "OAuth callback missing state parameter" in caplog.text
+        assert str(request.url) not in caplog.text
+        assert secret_code not in caplog.text
+        assert secret_token not in caplog.text
+        assert "has_state=False" in caplog.text
+        assert "has_code=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_invalid_state_log_redacts_state_and_code(self, server, caplog):
+        """Invalid-state callbacks should not log CSRF state or auth code."""
+        secret_state = "stolen-state-secret"
+        secret_code = "oauth-code-secret"
+        request = SimpleNamespace(
+            query={"state": secret_state, "code": secret_code},
+            url=(
+                f"http://127.0.0.1:19876/mcp/oauth/callback?state={secret_state}&code={secret_code}"
+            ),
+        )
+
+        with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+            response = await server._handle_callback(request)
+
+        assert response.status == 400
+        assert "OAuth callback with invalid state" in caplog.text
+        assert secret_state not in caplog.text
+        assert secret_code not in caplog.text
+        assert str(request.url) not in caplog.text
+        assert "has_state=True" in caplog.text
+        assert "has_code=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_error_description_html_is_escaped(self, server):
+        """OAuth provider error text should be escaped before rendering."""
+        state = "pending-state"
+        future = asyncio.ensure_future(server.wait_for_callback(state))
+        raw_error = "<script>alert('xss')</script>"
+        request = SimpleNamespace(
+            query={
+                "state": state,
+                "error": "access_denied",
+                "error_description": raw_error,
+            },
+            url="http://127.0.0.1:19876/mcp/oauth/callback?error=access_denied",
+        )
+
+        response = await server._handle_callback(request)
+
+        assert response.status == 200
+        assert raw_error not in response.text
+        assert "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;" in response.text
+        with pytest.raises(Exception, match="xss"):
+            await future
 
     @pytest.mark.asyncio
     async def test_start_and_stop(self, server):
