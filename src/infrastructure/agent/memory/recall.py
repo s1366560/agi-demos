@@ -143,7 +143,7 @@ class MemoryRecallPreprocessor:
                 )
             return results
         except Exception as e:
-            logger.warning(f"Chunk search failed during recall: {e}")
+            logger.warning("Chunk search failed during recall error_type=%s", type(e).__name__)
             return []
 
     async def _search_graph(
@@ -177,7 +177,7 @@ class MemoryRecallPreprocessor:
                     )
             return results
         except Exception as e:
-            logger.warning(f"Graph search failed during recall: {e}")
+            logger.warning("Graph search failed during recall error_type=%s", type(e).__name__)
             return []
 
     def _extract_graph_content(self, result: Any) -> str:

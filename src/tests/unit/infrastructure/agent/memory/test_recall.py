@@ -30,6 +30,33 @@ class _ChunkSearch:
         return self._results
 
 
+class _FailingChunkSearch:
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    async def search(
+        self,
+        query: str,
+        project_id: str,
+        max_results: int,
+    ) -> list[_ChunkResult]:
+        raise self._error
+
+
+class _FailingGraphSearch:
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    async def search(
+        self,
+        query: str,
+        *,
+        project_id: str,
+        limit: int,
+    ) -> list[object]:
+        raise self._error
+
+
 @pytest.mark.unit
 async def test_recall_filters_workspace_task_bindings_from_other_workspaces() -> None:
     query = """Complete the assigned workspace task.
@@ -148,3 +175,43 @@ Keep the node id and status context.
     assert "Bearer [REDACTED]" in context
     assert secret_value not in preprocessor.last_results[0]["content"]
     assert token_value not in preprocessor.last_results[0]["content"]
+
+
+@pytest.mark.unit
+async def test_search_chunks_failure_log_omits_query_and_exception_content(caplog) -> None:
+    exception_detail = "chunk backend leaked recall query chunk-secret-1357"
+    preprocessor = MemoryRecallPreprocessor(
+        chunk_search=_FailingChunkSearch(RuntimeError(exception_detail))
+    )
+
+    with caplog.at_level("WARNING", logger="src.infrastructure.agent.memory.recall"):
+        results = await preprocessor._search_chunks(
+            query="find memory chunk-secret-1357",
+            project_id="project-secret",
+            max_results=3,
+        )
+
+    assert results == []
+    assert exception_detail not in caplog.text
+    assert "chunk-secret-1357" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+async def test_search_graph_failure_log_omits_query_and_exception_content(caplog) -> None:
+    exception_detail = "graph backend leaked recall query graph-secret-2468"
+    preprocessor = MemoryRecallPreprocessor(
+        graph_search=_FailingGraphSearch(RuntimeError(exception_detail))
+    )
+
+    with caplog.at_level("WARNING", logger="src.infrastructure.agent.memory.recall"):
+        results = await preprocessor._search_graph(
+            query="find memory graph-secret-2468",
+            project_id="project-secret",
+            max_results=3,
+        )
+
+    assert results == []
+    assert exception_detail not in caplog.text
+    assert "graph-secret-2468" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
