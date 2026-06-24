@@ -661,5 +661,8 @@ class RelationshipDeduplicator:
             result = await self._neo4j_client.execute_query(query, project_id=project_id)
             return [dict(record) for record in result.records]
         except Exception as e:
-            logger.error(f"Failed to get existing edges: {e}")
+            logger.error(
+                "Failed to get existing edges error_type=%s",
+                type(e).__name__,
+            )
             return []

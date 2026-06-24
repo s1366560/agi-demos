@@ -2,7 +2,10 @@
 
 import pytest
 
-from src.infrastructure.graph.extraction.relationship_extractor import RelationshipExtractor
+from src.infrastructure.graph.extraction.relationship_extractor import (
+    RelationshipDeduplicator,
+    RelationshipExtractor,
+)
 
 
 class MockLLMClient:
@@ -30,6 +33,13 @@ class FailingLLMClient:
 
     async def generate_response(self, **_kwargs):
         raise RuntimeError("provider echoed relationship-secret-2468")
+
+
+class FailingNeo4jClient:
+    """Mock Neo4j client that raises a provider-style error."""
+
+    async def execute_query(self, *_args, **_kwargs):
+        raise RuntimeError("provider echoed existing-edge-secret-8642")
 
 
 @pytest.fixture
@@ -324,3 +334,21 @@ class TestCreateEntityEdges:
         assert len(edges) == 1
         # Should be normalized but kept
         assert edges[0].relationship_type == "CUSTOM_RELATION"
+
+
+@pytest.mark.unit
+class TestRelationshipDeduplicator:
+    """Tests for relationship deduplication fallback behavior."""
+
+    async def test_get_existing_edges_redacts_query_exception_details(self, caplog):
+        deduplicator = RelationshipDeduplicator(neo4j_client=FailingNeo4jClient())
+
+        with caplog.at_level(
+            "ERROR",
+            logger="src.infrastructure.graph.extraction.relationship_extractor",
+        ):
+            result = await deduplicator._get_existing_edges("project-1")
+
+        assert result == []
+        assert "existing-edge-secret-8642" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
