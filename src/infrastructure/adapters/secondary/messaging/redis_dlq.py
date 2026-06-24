@@ -419,7 +419,11 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             await self._update_message(message)
             await self._update_stats_on_discard(message)
 
-            logger.info(f"[DLQ] Message {message_id} discarded: {reason}")
+            logger.info(
+                "[DLQ] Message discarded has_message_id=%s has_reason=%s",
+                bool(message_id),
+                bool(reason),
+            )
             return True
 
         except Exception as e:

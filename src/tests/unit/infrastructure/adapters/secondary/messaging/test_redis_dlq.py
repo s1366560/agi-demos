@@ -280,6 +280,47 @@ async def test_discard_message_redacts_update_failure_log(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_discard_message_success_redacts_reason_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Successful discard logs should not include raw message IDs or reasons."""
+    secret_message_id = "dlq-secret-message-8640"
+    secret_reason = "operator pasted secret token 9753"
+
+    message = DeadLetterMessage(
+        id=secret_message_id,
+        event_id="event-1",
+        event_type="event.type",
+        event_data="{}",
+        routing_key="routing.secret",
+        error="original error",
+        error_type="RuntimeError",
+        status=DLQMessageStatus.PENDING,
+    )
+    adapter = RedisDLQAdapter(redis_client=object())  # type: ignore[arg-type]
+    adapter.get_message = AsyncMock(return_value=message)  # type: ignore[method-assign]
+    adapter._update_message = AsyncMock()  # type: ignore[method-assign]
+    adapter._update_stats_on_discard = AsyncMock()  # type: ignore[method-assign]
+
+    with caplog.at_level(
+        "INFO",
+        logger="src.infrastructure.adapters.secondary.messaging.redis_dlq",
+    ):
+        discarded = await adapter.discard_message(secret_message_id, secret_reason)
+
+    assert discarded is True
+    assert message.status == DLQMessageStatus.DISCARDED
+    assert message.metadata["discard_reason"] == secret_reason
+    assert "discarded_at" in message.metadata
+    assert "Message discarded" in caplog.text
+    assert secret_message_id not in caplog.text
+    assert secret_reason not in caplog.text
+    assert "has_message_id=True" in caplog.text
+    assert "has_reason=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_get_message_redacts_redis_error_log(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
