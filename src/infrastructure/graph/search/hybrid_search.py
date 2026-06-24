@@ -607,7 +607,7 @@ class HybridSearch:
             return items
 
         except Exception as e:
-            logger.error(f"Episode keyword search failed: {e}")
+            logger.error("Episode keyword search failed error_type=%s", type(e).__name__)
             return []
 
     def _rrf_fusion(
