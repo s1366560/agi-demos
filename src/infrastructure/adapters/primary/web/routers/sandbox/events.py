@@ -68,7 +68,11 @@ async def sandbox_event_stream(
     except asyncio.CancelledError:
         logger.info(f"[SandboxSSE] Stream cancelled for {stream_key}")
     except Exception as e:
-        logger.error(f"[SandboxSSE] Stream error for {stream_key}: {e}")
+        logger.error(
+            "[SandboxSSE] Stream error: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(e).__name__,
+        )
 
 
 async def sse_generator(
