@@ -85,14 +85,19 @@ class TestMemoryAccessorSearch:
 
         graph.search.assert_called_once_with(query="test", project_id="proj-1", limit=7)
 
-    async def test_search_handles_error_gracefully(self):
+    async def test_search_handles_error_gracefully(self, caplog):
+        exception_detail = "graph search leaked query memory-secret-1357"
         graph = AsyncMock()
-        graph.search.side_effect = RuntimeError("connection failed")
+        graph.search.side_effect = RuntimeError(exception_detail)
 
         accessor = MemoryAccessor(graph, project_id="proj-1")
-        items = await accessor.search("test")
+        with caplog.at_level("WARNING", logger="src.infrastructure.agent.subagent.memory_accessor"):
+            items = await accessor.search("find memory-secret-1357")
 
         assert items == []
+        assert exception_detail not in caplog.text
+        assert "memory-secret-1357" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     async def test_search_empty_results(self):
         graph = AsyncMock()
@@ -168,15 +173,20 @@ class TestMemoryAccessorWrite:
         assert episode.project_id == "proj-1"
         assert "subagent" in episode.name
 
-    async def test_write_handles_error(self):
+    async def test_write_handles_error(self, caplog):
+        exception_detail = "graph write leaked content memory-secret-2468"
         graph = AsyncMock()
-        graph.add_episode.side_effect = RuntimeError("DB error")
+        graph.add_episode.side_effect = RuntimeError(exception_detail)
 
         accessor = MemoryAccessor(graph, project_id="proj-1", writable=True)
-        result = await accessor.write("content")
+        with caplog.at_level("WARNING", logger="src.infrastructure.agent.subagent.memory_accessor"):
+            result = await accessor.write("content memory-secret-2468")
 
         assert not result.success
-        assert "DB error" in result.error
+        assert exception_detail in result.error
+        assert exception_detail not in caplog.text
+        assert "memory-secret-2468" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     async def test_is_writable_property(self):
         graph = AsyncMock()

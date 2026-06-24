@@ -127,7 +127,7 @@ class MemoryAccessor:
             )
             return self._normalize_results(raw_results)
         except Exception as e:
-            logger.warning(f"[MemoryAccessor] Search failed: {e}")
+            logger.warning("[MemoryAccessor] Search failed error_type=%s", type(e).__name__)
             return []
 
     async def write(
@@ -171,7 +171,7 @@ class MemoryAccessor:
             return MemoryWriteResult(success=True, episode_id=str(episode_id))
 
         except Exception as e:
-            logger.warning(f"[MemoryAccessor] Write failed: {e}")
+            logger.warning("[MemoryAccessor] Write failed error_type=%s", type(e).__name__)
             return MemoryWriteResult(success=False, error=str(e))
 
     def format_for_context(self, items: list[MemoryItem]) -> str:
