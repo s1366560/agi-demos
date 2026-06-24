@@ -154,8 +154,13 @@ async def test_stop_desktop_publish_error_log_omits_exception_text(
 @pytest.mark.asyncio
 async def test_start_terminal_sanitizes_internal_errors(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setattr(services_router, "assert_caller_owns_sandbox", _allow_sandbox_access)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.sandbox.services",
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         await services_router.start_terminal(
@@ -172,6 +177,19 @@ async def test_start_terminal_sanitizes_internal_errors(
     assert exc_info.value.detail == "Failed to start terminal"
     assert "internal" not in exc_info.value.detail
     assert "sandbox-secret" not in exc_info.value.detail
+    target_records = [
+        record
+        for record in caplog.records
+        if record.name == "src.infrastructure.adapters.primary.web.routers.sandbox.services"
+        and record.levelno >= logging.ERROR
+    ]
+    assert len(target_records) == 1
+    message = target_records[0].getMessage()
+    assert "Failed to start terminal" in message
+    assert "error_type=RuntimeError" in message
+    assert "sandbox-secret" not in message
+    assert "internal terminal secret" not in message
+    assert target_records[0].exc_info is None
 
 
 @pytest.mark.unit
