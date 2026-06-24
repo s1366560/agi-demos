@@ -81,7 +81,11 @@ class ChannelService:
                 await adapter.connect()
                 logger.info(f"Connected to {adapter.name}")
             except Exception as e:
-                logger.error(f"Failed to connect to {adapter.name}: {e}")
+                logger.error(
+                    "Failed to connect adapter: has_channel_id=%s error_type=%s",
+                    bool(adapter.id),
+                    type(e).__name__,
+                )
                 self._handle_error(adapter.id, e)
 
     async def disconnect_all(self) -> None:
