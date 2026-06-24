@@ -248,7 +248,14 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             )
 
         except Exception as e:
-            logger.error(f"Error calling tool '{tool_name}' on '{server_name}': {e}")
+            logger.error(
+                "Error calling tool: has_project_id=%s has_server_name=%s "
+                "has_tool_name=%s error_type=%s",
+                bool(project_id),
+                bool(server_name),
+                bool(tool_name),
+                type(e).__name__,
+            )
             return SandboxMCPToolCallResult(
                 content=[{"type": "text", "text": f"Error: {e!s}"}],
                 is_error=True,
@@ -291,13 +298,14 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                     return default
             # Tool not found in server listing — allow by default
             return default
-        except Exception:
+        except Exception as e:
             logger.warning(
-                "Failed to discover tool visibility: project=%s server=%s tool=%s",
-                project_id,
-                server_name,
-                tool_name,
-                exc_info=True,
+                "Failed to discover tool visibility: has_project_id=%s "
+                "has_server_name=%s has_tool_name=%s error_type=%s",
+                bool(project_id),
+                bool(server_name),
+                bool(tool_name),
+                type(e).__name__,
             )
             return default
 

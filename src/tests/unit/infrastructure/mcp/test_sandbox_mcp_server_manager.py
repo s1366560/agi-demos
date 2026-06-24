@@ -296,6 +296,71 @@ class TestSandboxMCPServerManager:
         assert result.is_error is True
         assert "sandbox down" in result.error_message
 
+    async def test_call_tool_exception_log_omits_identifiers_and_error_text(self, caplog):
+        mgr, resource = self._make_manager()
+        resource.execute_tool.side_effect = RuntimeError("call secret token")
+        caplog.set_level(
+            logging.ERROR,
+            logger="src.application.services.sandbox_mcp_server_manager",
+        )
+
+        result = await mgr.call_tool(
+            project_id="secret-project-id",
+            server_name="secret-server-name",
+            tool_name="secret-tool-name",
+            arguments={},
+        )
+
+        assert result.is_error is True
+        assert result.error_message == "call secret token"
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_mcp_server_manager"
+        )
+        assert "Error calling tool" in message
+        assert "secret-project-id" not in message
+        assert "secret-server-name" not in message
+        assert "secret-tool-name" not in message
+        assert "call secret token" not in message
+        assert "has_project_id=True" in message
+        assert "has_server_name=True" in message
+        assert "has_tool_name=True" in message
+        assert "error_type=RuntimeError" in message
+
+    async def test_get_tool_visibility_failure_log_omits_identifiers_and_traceback(self, caplog):
+        mgr, resource = self._make_manager()
+        resource.execute_tool.side_effect = RuntimeError("visibility secret token")
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.sandbox_mcp_server_manager",
+        )
+
+        visibility = await mgr.get_tool_visibility(
+            project_id="secret-project-id",
+            server_name="secret-server-name",
+            tool_name="secret-tool-name",
+        )
+
+        assert visibility == ["model", "app"]
+        target_records = [
+            record
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_mcp_server_manager"
+        ]
+        assert len(target_records) == 1
+        message = target_records[0].getMessage()
+        assert "Failed to discover tool visibility" in message
+        assert "secret-project-id" not in message
+        assert "secret-server-name" not in message
+        assert "secret-tool-name" not in message
+        assert "visibility secret token" not in message
+        assert "has_project_id=True" in message
+        assert "has_server_name=True" in message
+        assert "has_tool_name=True" in message
+        assert "error_type=RuntimeError" in message
+        assert target_records[0].exc_info is None
+
     async def test_read_resource_failure_log_omits_uri_and_error_text(self, caplog):
         mgr, resource = self._make_manager()
         resource.read_resource.side_effect = RuntimeError("read secret token private://doc")
