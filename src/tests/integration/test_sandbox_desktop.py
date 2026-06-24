@@ -388,6 +388,56 @@ class TestSandboxDesktopEndpoints:
         assert data["running"] is False
         assert data["url"] is None
 
+    async def test_get_desktop_status_failure_log_omits_sandbox_id_and_traceback(
+        self,
+        authenticated_async_client,
+        monkeypatch,
+        caplog,
+        test_sandbox_id: str,
+    ):
+        """Test desktop status failure logs avoid raw sandbox IDs and traceback details."""
+        from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
+            MCPSandboxAdapter,
+        )
+
+        async def mock_get_sandbox(self, sandbox_id: str):
+            return create_mock_sandbox_instance(sandbox_id)
+
+        async def mock_call_tool(
+            self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0
+        ):
+            raise RuntimeError("desktop status secret token")
+
+        async def mock_connect_mcp(self, sandbox_id: str, timeout: float = 30.0):
+            return True
+
+        monkeypatch.setattr(MCPSandboxAdapter, "get_sandbox", mock_get_sandbox)
+        monkeypatch.setattr(MCPSandboxAdapter, "call_tool", mock_call_tool)
+        monkeypatch.setattr(MCPSandboxAdapter, "connect_mcp", mock_connect_mcp)
+        caplog.set_level(
+            logging.ERROR,
+            logger="src.infrastructure.adapters.primary.web.routers.sandbox.services",
+        )
+
+        response = await authenticated_async_client.get(
+            f"/api/v1/sandbox/{test_sandbox_id}/desktop"
+        )
+
+        assert response.status_code == 500
+        target_records = [
+            record
+            for record in caplog.records
+            if record.name == "src.infrastructure.adapters.primary.web.routers.sandbox.services"
+            and record.levelno >= logging.ERROR
+        ]
+        assert len(target_records) == 1
+        message = target_records[0].getMessage()
+        assert "Failed to get desktop status" in message
+        assert "error_type=RuntimeError" in message
+        assert test_sandbox_id not in message
+        assert "desktop status secret token" not in message
+        assert target_records[0].exc_info is None
+
     async def test_get_desktop_status_sandbox_not_found_returns_404(
         self,
         authenticated_async_client,
