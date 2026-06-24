@@ -431,6 +431,71 @@ class TestLiteLLMClient:
         assert called_kwargs["model"] == "volcengine/doubao-1.5-pro-32k-250115"
 
     @pytest.mark.asyncio
+    async def test_generate_stream_provider_error_redacts_exception_content(self, client, caplog):
+        """Streaming provider failures should not log raw exception text."""
+
+        class _NoopLimiter:
+            class _Ctx:
+                async def __aenter__(self):
+                    return None
+
+                async def __aexit__(self, exc_type, exc, tb):
+                    return False
+
+            async def acquire(self, _provider_type):
+                return self._Ctx()
+
+        class _NoopCircuitBreaker:
+            @staticmethod
+            def can_execute() -> bool:
+                return True
+
+            @staticmethod
+            def record_success() -> None:
+                return None
+
+            @staticmethod
+            def record_failure() -> None:
+                return None
+
+        class _NoopRegistry:
+            @staticmethod
+            def get(_provider_type):
+                return _NoopCircuitBreaker()
+
+        secret = "stream-provider-secret-8642"
+
+        with (
+            patch(
+                "src.infrastructure.llm.litellm.litellm_client.get_provider_rate_limiter",
+                return_value=_NoopLimiter(),
+            ),
+            patch(
+                "src.infrastructure.llm.litellm.litellm_client.get_circuit_breaker_registry",
+                return_value=_NoopRegistry(),
+            ),
+            patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion,
+        ):
+            mock_acompletion.side_effect = RuntimeError(f"provider echoed {secret}")
+
+            with (
+                caplog.at_level(
+                    "ERROR",
+                    logger="src.infrastructure.llm.litellm.litellm_client",
+                ),
+                pytest.raises(RuntimeError),
+            ):
+                [
+                    chunk
+                    async for chunk in client.generate_stream(
+                        messages=[Message(role="user", content=f"hello {secret}")],
+                    )
+                ]
+
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_generate_stream_qualifies_unqualified_minimax_override(self):
         """Should qualify unqualified MiniMax override model before LiteLLM call."""
 

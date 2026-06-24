@@ -975,7 +975,7 @@ class LiteLLMClient(LLMClient):
                 for kw in ["rate limit", "quota", "throttling", "request denied", "429"]
             ):
                 raise RateLimitError(f"Rate limit error: {e}") from e
-            logger.error(f"LiteLLM streaming error: {e}")
+            logger.error("LiteLLM streaming error error_type=%s", type(e).__name__)
             raise
 
     @override
