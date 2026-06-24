@@ -361,6 +361,55 @@ async def test_find_or_create_conversation_config_log_omits_config_id(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_find_or_create_conversation_success_log_omits_ids(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Conversation creation logs should not expose conversation or chat IDs."""
+    router = ChannelMessageRouter()
+    project = SimpleNamespace(id="project-1", tenant_id="tenant-1", owner_id="owner-1")
+    config = SimpleNamespace(id="secret-config-id", project_id="project-1", created_by=None)
+    session = MagicMock()
+    session.get = AsyncMock(side_effect=[project, config])
+    session.add = MagicMock()
+    session.flush = AsyncMock()
+
+    binding_repo = MagicMock()
+    binding_repo.get_by_session_key = AsyncMock(return_value=None)
+    async def _upsert_binding(**kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(conversation_id=kwargs["conversation_id"])
+
+    binding_repo.upsert = AsyncMock(side_effect=_upsert_binding)
+    message = _build_message(text="hello")
+    message.chat_id = "secret-chat-id"
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.infrastructure.adapters.secondary.persistence.channel_repository."
+        "ChannelSessionBindingRepository",
+        return_value=binding_repo,
+    ):
+        result = await router._find_or_create_conversation_db(
+            session=session,
+            message=message,
+            session_key="session-key",
+            channel_config_id="secret-config-id",
+        )
+
+    created_conversation = session.add.call_args.args[0]
+    assert result == created_conversation.id
+    assert created_conversation.id not in caplog.text
+    assert "secret-chat-id" not in caplog.text
+    assert "secret-config-id" not in caplog.text
+    assert "Created new conversation" in caplog.text
+    assert "has_conversation_id=True" in caplog.text
+    assert "has_chat_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_store_message_history_failure_log_omits_exception_text(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

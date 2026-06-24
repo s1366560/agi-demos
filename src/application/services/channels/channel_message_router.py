@@ -557,8 +557,10 @@ class ChannelMessageRouter:
             return binding.conversation_id
 
         logger.info(
-            f"[MessageRouter] Created new conversation {new_conversation.id} "
-            f"for chat {message.chat_id}"
+            "[MessageRouter] Created new conversation: has_conversation_id=%s "
+            "has_chat_id=%s",
+            bool(new_conversation.id),
+            bool(message.chat_id),
         )
 
         return new_conversation.id
