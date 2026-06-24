@@ -239,7 +239,10 @@ class MemoryCapturePostprocessor:
         try:
             system_prompt = get_memory_capture_prompt()
         except Exception as e:
-            logger.warning(f"Failed to load builtin memory capture skill: {e}")
+            logger.warning(
+                "Failed to load builtin memory capture skill error_type=%s",
+                type(e).__name__,
+            )
             return []
 
         try:

@@ -51,6 +51,32 @@ class TestMemoryCapturePostprocessor:
         assert "error_type=RuntimeError" in caplog.text
 
     @pytest.mark.asyncio
+    async def test_extract_memories_prompt_load_log_omits_exception_content(
+        self, caplog, monkeypatch
+    ) -> None:
+        exception_detail = "capture prompt load leaked local secret delta-5791"
+
+        def _raise_prompt_error() -> str:
+            raise RuntimeError(exception_detail)
+
+        monkeypatch.setattr(
+            "src.infrastructure.agent.memory.capture.get_memory_capture_prompt",
+            _raise_prompt_error,
+        )
+        service = MemoryCapturePostprocessor(llm_client=AsyncMock())
+
+        with caplog.at_level("WARNING", logger="src.infrastructure.agent.memory.capture"):
+            items = await service._extract_memories(
+                user_message="remember private token delta-5791",
+                assistant_response="noted",
+            )
+
+        assert items == []
+        assert exception_detail not in caplog.text
+        assert "delta-5791" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_store_chunk_log_omits_exception_content(self, caplog) -> None:
         exception_detail = "chunk save leaked memory content beta-3579"
         chunk_repo = Mock()
