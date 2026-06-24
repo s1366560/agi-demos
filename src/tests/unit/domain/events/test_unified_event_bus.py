@@ -4,8 +4,11 @@ Tests the unified event bus port, routing key, and event router.
 """
 
 import asyncio
+import logging
+from unittest.mock import AsyncMock, Mock
 
 import pytest
+import redis.asyncio as redis
 
 from src.domain.events.envelope import EventEnvelope
 from src.domain.events.serialization import EventSerializer
@@ -23,6 +26,8 @@ from src.infrastructure.adapters.secondary.messaging.event_router import (
 from src.infrastructure.adapters.secondary.messaging.redis_unified_event_bus import (
     RedisUnifiedEventBusAdapter,
 )
+
+LOGGER_NAME = "src.infrastructure.adapters.secondary.messaging.redis_unified_event_bus"
 
 
 class _RedisStreamSubscribeFake:
@@ -177,6 +182,49 @@ class TestRedisUnifiedEventBusSubscription:
         assert redis.scan_calls >= 2
         assert event.envelope.event_type == AgentEventType.WORKSPACE_UPDATED.value
         assert event.routing_key == "workspace:ws-1:workspace_updated"
+
+
+class TestRedisUnifiedEventBusLogging:
+    @pytest.mark.asyncio
+    async def test_get_events_error_log_redacts_routing_key_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xrange = AsyncMock(side_effect=redis.RedisError("redis secret unavailable"))
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_routing_key = "agent.secret-conversation.secret-message"
+
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+            events = await adapter.get_events(secret_routing_key, max_count=3)
+
+        assert events == []
+        assert "Failed to get events" in caplog.text
+        assert secret_routing_key not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RedisError" in caplog.text
+        assert "max_count=3" in caplog.text
+        assert "has_routing_key=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_get_latest_event_error_log_redacts_routing_key_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xrevrange = AsyncMock(side_effect=redis.RedisError("redis secret unavailable"))
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_routing_key = "agent.secret-conversation.secret-message"
+
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+            event = await adapter.get_latest_event(secret_routing_key)
+
+        assert event is None
+        assert "Failed to get latest" in caplog.text
+        assert secret_routing_key not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RedisError" in caplog.text
+        assert "has_routing_key=True" in caplog.text
 
 
 class TestEventRouter:

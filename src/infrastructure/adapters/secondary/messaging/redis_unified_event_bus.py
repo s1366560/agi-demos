@@ -457,8 +457,18 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
 
             return events
 
-        except redis.RedisError as e:
-            logger.error(f"Failed to get events from {stream_key}: {e}")
+        except redis.RedisError as exc:
+            logger.error(
+                " ".join(
+                    [
+                        "[UnifiedEventBus] Failed to get events error_type=%s max_count=%s",
+                        "has_routing_key=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                max_count,
+                bool(str(routing_key)),
+            )
             return []
 
     async def get_latest_event(
@@ -477,8 +487,12 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                 return self._parse_message(msg_id, fields, stream_key)
             return None
 
-        except redis.RedisError as e:
-            logger.error(f"Failed to get latest from {stream_key}: {e}")
+        except redis.RedisError as exc:
+            logger.error(
+                "[UnifiedEventBus] Failed to get latest error_type=%s has_routing_key=%s",
+                type(exc).__name__,
+                bool(str(routing_key)),
+            )
             return None
 
     async def acknowledge(
