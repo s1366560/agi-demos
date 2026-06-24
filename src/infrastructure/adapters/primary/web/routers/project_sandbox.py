@@ -996,7 +996,11 @@ async def _publish_http_service_error_event(
             error_message=error_message,
         )
     except Exception as e:
-        logger.warning("Failed to publish http_service_error for %s: %s", service_id, e)
+        logger.warning(
+            "Failed to publish http_service_error: has_service_id=%s error_type=%s",
+            bool(service_id),
+            type(e).__name__,
+        )
 
 
 def _filter_proxy_headers(headers: Any) -> dict[str, str]:

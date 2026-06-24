@@ -152,6 +152,11 @@ class _FailingHttpServiceStoppedPublisher:
         raise RuntimeError("http service stopped secret for svc-secret")
 
 
+class _FailingHttpServiceErrorPublisher:
+    async def publish_http_service_error(self, **_kwargs: object) -> None:
+        raise RuntimeError("http service error secret for svc-secret")
+
+
 def _sandbox_info(project_id: str = "proj-1") -> router_mod.SandboxInfo:
     return router_mod.SandboxInfo(
         sandbox_id="sandbox-1",
@@ -267,6 +272,33 @@ async def test_resolve_sandbox_container_ip_error_log_omits_ids_and_exception_te
     assert "error_type=RuntimeError" in caplog.text
     assert "sandbox-secret" not in caplog.text
     assert "docker secret" not in caplog.text
+
+
+@pytest.mark.unit
+async def test_publish_http_service_error_event_log_omits_ids_and_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Failed http_service_error publishing should not leak service IDs or publisher errors."""
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    await router_mod._publish_http_service_error_event(
+        _FailingHttpServiceErrorPublisher(),
+        project_id="proj-1",
+        sandbox_id="sandbox-secret",
+        service_id="svc-secret",
+        service_name="secret service",
+        error_message="RuntimeError",
+    )
+
+    assert "Failed to publish http_service_error" in caplog.text
+    assert "has_service_id=True" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "svc-secret" not in caplog.text
+    assert "sandbox-secret" not in caplog.text
+    assert "http service error secret" not in caplog.text
 
 
 @pytest.mark.unit
