@@ -85,7 +85,10 @@ async def start_desktop(
                     port=status.port,
                 )
             except Exception as e:
-                logger.warning(f"Failed to publish desktop_started event: {e}")
+                logger.warning(
+                    "Failed to publish desktop_started event: error_type=%s",
+                    type(e).__name__,
+                )
 
         return DesktopStatusResponse(
             running=status.running,
@@ -134,7 +137,10 @@ async def stop_desktop(
                     sandbox_id=sandbox_id,
                 )
             except Exception as e:
-                logger.warning(f"Failed to publish desktop_stopped event: {e}")
+                logger.warning(
+                    "Failed to publish desktop_stopped event: error_type=%s",
+                    type(e).__name__,
+                )
 
         return DesktopStopResponse(
             success=success, message="Desktop stopped" if success else "Failed to stop desktop"
@@ -222,7 +228,10 @@ async def start_terminal(
                     session_id=status.session_id,
                 )
             except Exception as e:
-                logger.warning(f"Failed to publish terminal_started event: {e}")
+                logger.warning(
+                    "Failed to publish terminal_started event: error_type=%s",
+                    type(e).__name__,
+                )
 
         return TerminalStatusResponse(
             running=status.running,
@@ -268,7 +277,10 @@ async def stop_terminal(
                     sandbox_id=sandbox_id,
                 )
             except Exception as e:
-                logger.warning(f"Failed to publish terminal_stopped event: {e}")
+                logger.warning(
+                    "Failed to publish terminal_stopped event: error_type=%s",
+                    type(e).__name__,
+                )
 
         return TerminalStopResponse(
             success=success, message="Terminal stopped" if success else "Failed to stop terminal"
