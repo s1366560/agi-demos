@@ -79,6 +79,25 @@ class TestRelationshipExtractorLLMResponse:
 
 
 @pytest.mark.unit
+class TestRelationshipExtractorDatetime:
+    """Tests for relationship datetime parsing."""
+
+    def test_parse_datetime_redacts_invalid_input(self, extractor, caplog):
+        """Invalid datetime debug logs should not include raw extracted values."""
+        secret = "relationship-datetime-secret-1357"
+
+        with caplog.at_level(
+            "DEBUG",
+            logger="src.infrastructure.graph.extraction.relationship_extractor",
+        ):
+            result = extractor._parse_datetime(f"invalid-{secret}")
+
+        assert result is None
+        assert secret not in caplog.text
+        assert "error_type=ValueError" in caplog.text
+
+
+@pytest.mark.unit
 class TestEdgeTypeValidation:
     """Tests for _validate_edge_type method (Graphiti-compatible)."""
 

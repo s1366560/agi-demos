@@ -453,7 +453,7 @@ class RelationshipExtractor:
                 dt_str = dt_str[:-1] + "+00:00"
             return datetime.fromisoformat(dt_str)
         except (ValueError, TypeError) as e:
-            logger.debug(f"Failed to parse datetime '{dt_str}': {e}")
+            logger.debug("Failed to parse datetime error_type=%s", type(e).__name__)
             return None
 
     def _find_entity_uuid(
