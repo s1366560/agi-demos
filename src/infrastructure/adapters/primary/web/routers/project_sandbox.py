@@ -3105,8 +3105,12 @@ async def proxy_project_desktop(
 
             return response_obj
     except httpx.RequestError as e:
-        error_detail = str(e) or type(e).__name__
-        logger.error("Failed to proxy desktop request to %s: %s", target_url, error_detail)
+        error_type = type(e).__name__
+        logger.error(
+            "Failed to proxy desktop request: has_target_url=%s error_type=%s",
+            bool(target_url),
+            error_type,
+        )
         raise HTTPException(
             status_code=502,
             detail=_("Failed to connect to desktop service"),

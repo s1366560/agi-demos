@@ -810,6 +810,59 @@ def test_desktop_http_proxy_requires_project_access(
 
 
 @pytest.mark.unit
+def test_desktop_http_proxy_sanitizes_upstream_connection_errors(
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Desktop HTTP proxy should not log upstream URLs or connection details."""
+    lifecycle_service = AsyncMock()
+    lifecycle_service.get_project_sandbox = AsyncMock(
+        return_value=SimpleNamespace(desktop_url="http://127.0.0.1:6080")
+    )
+    sandbox_http_client.app.dependency_overrides[router_mod.get_lifecycle_service] = (
+        lambda: lifecycle_service
+    )
+
+    class _FailingAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, *args, **kwargs):
+            req = httpx.Request("GET", "https://127.0.0.1:6080/app.js?debug=query-secret")
+            raise httpx.RequestError("desktop connection secret", request=req)
+
+    monkeypatch.setattr("httpx.AsyncClient", _FailingAsyncClient)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    response = sandbox_http_client.get(
+        "/api/v1/projects/proj-1/sandbox/desktop/proxy/app.js?debug=query-secret&token=ms_sk_test"
+    )
+
+    assert response.status_code == status.HTTP_502_BAD_GATEWAY
+    assert response.json()["detail"] == "Failed to connect to desktop service"
+    assert "desktop connection secret" not in response.text
+    assert "127.0.0.1" not in response.text
+    assert "query-secret" not in response.text
+    assert "Failed to proxy desktop request" in caplog.text
+    assert "has_target_url=True" in caplog.text
+    assert "error_type=RequestError" in caplog.text
+    assert "desktop connection secret" not in caplog.text
+    assert "127.0.0.1" not in caplog.text
+    assert "query-secret" not in caplog.text
+    assert "proj-1" not in caplog.text
+
+
+@pytest.mark.unit
 async def test_desktop_websocket_proxy_requires_project_access(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
