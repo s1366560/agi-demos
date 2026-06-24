@@ -209,7 +209,11 @@ class SearchService:
             return filtered
 
         except Exception as e:
-            logger.error(f"Tag search failed: {e}")
+            logger.error(
+                "Tag search failed tag_count=%d error_type=%s",
+                len(tags),
+                type(e).__name__,
+            )
             raise
 
     async def search_by_date_range(

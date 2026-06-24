@@ -70,6 +70,17 @@ class _MemoryRepositoryStub(MemoryRepository):
         return len(self._memories) != before
 
 
+class _FailingMemoryRepositoryStub(_MemoryRepositoryStub):
+    def __init__(self, error_message: str) -> None:
+        super().__init__([])
+        self._error_message = error_message
+
+    async def list_by_project(
+        self, project_id: str, limit: int = 50, offset: int = 0
+    ) -> list[Memory]:
+        raise RuntimeError(self._error_message)
+
+
 def _episode(index: int) -> dict[str, Any]:
     return {
         "type": "episode",
@@ -168,6 +179,24 @@ async def test_search_memories_by_tags_reads_additional_pages_until_limit() -> N
         {"project_id": "project-1", "limit": 50, "offset": 50},
     ]
     assert [result["id"] for result in results] == ["memory-55", "memory-56"]
+
+
+@pytest.mark.asyncio
+async def test_search_memories_by_tags_failure_logs_do_not_include_exception_content(
+    caplog,
+) -> None:
+    exception_detail = "memory repo leaked private tag omega-24680"
+    memory_repo = _FailingMemoryRepositoryStub(exception_detail)
+    service = SearchService(graph_service=_GraphServiceStub([]), memory_repo=memory_repo)
+    caplog.set_level(logging.ERROR, logger="src.application.services.search_service")
+
+    with pytest.raises(RuntimeError):
+        await service.search_memories_by_tags(["customer-secret-tag"], "project-1", limit=2)
+
+    assert "customer-secret-tag" not in caplog.text
+    assert exception_detail not in caplog.text
+    assert "tag_count=1" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
 
 
 @pytest.mark.asyncio
