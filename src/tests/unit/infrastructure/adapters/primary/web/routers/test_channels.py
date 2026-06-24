@@ -23,6 +23,7 @@ from src.infrastructure.adapters.primary.web.routers.channels import (
     ChannelConfigUpdate,
     PluginConfigUpdateRequest,
     PushMessageRequest,
+    _resolve_project_tenant_id,
     create_config,
     delete_config,
     enable_tenant_plugin,
@@ -209,6 +210,30 @@ class TestEndpointAccessibility:
             )
             # Should not return 404 (not found) or 405 (method not allowed)
             assert response.status_code not in [404, 405]
+
+
+class TestProjectTenantResolution:
+    """Test tenant resolution for project compatibility routes."""
+
+    @pytest.mark.asyncio
+    async def test_resolve_project_tenant_id_failure_log_omits_project_id_and_error_text(
+        self, mock_db_session, caplog
+    ):
+        """Tenant resolution failures should not expose raw project IDs or DB errors."""
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.infrastructure.adapters.primary.web.routers.channels",
+        )
+        mock_db_session.execute = AsyncMock(side_effect=RuntimeError("secret-db-token"))
+
+        result = await _resolve_project_tenant_id("secret-project-id", mock_db_session)
+
+        assert result is None
+        assert "Failed to resolve tenant_id" in caplog.text
+        assert "has_project_id=True" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "secret-project-id" not in caplog.text
+        assert "secret-db-token" not in caplog.text
 
 
 class TestToResponse:

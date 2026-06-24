@@ -124,7 +124,11 @@ async def _resolve_project_tenant_id(project_id: str, db: AsyncSession) -> str |
             refresh_select_statement(select(Project.tenant_id).where(Project.id == project_id))
         )
     except Exception as exc:
-        logger.warning("Failed to resolve tenant_id for project=%s: %s", project_id, exc)
+        logger.warning(
+            "Failed to resolve tenant_id: has_project_id=%s error_type=%s",
+            bool(project_id),
+            type(exc).__name__,
+        )
         return None
     return result.scalar_one_or_none()
 
