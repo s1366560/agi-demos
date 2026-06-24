@@ -63,7 +63,7 @@ class AuthorizationService(AuthorizationPort):
             return permission in user_permissions
 
         except Exception as e:
-            logger.error(f"Error checking permission for user {user_id}: {e}")
+            logger.error("Error checking permission error_type=%s", type(e).__name__)
             return False
 
     async def get_user_permissions(
@@ -110,7 +110,7 @@ class AuthorizationService(AuthorizationPort):
             return list(set(permissions))  # Remove duplicates
 
         except Exception as e:
-            logger.error(f"Error getting permissions for user {user_id}: {e}")
+            logger.error("Error getting permissions error_type=%s", type(e).__name__)
             return []
 
     async def assign_role(
