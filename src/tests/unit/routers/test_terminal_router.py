@@ -12,6 +12,7 @@ from src.infrastructure.adapters.primary.web.routers.terminal import (
     CreateTerminalRequest,
     _read_terminal_output,
     _resolve_terminal_session,
+    get_project_id_from_sandbox,
 )
 
 
@@ -128,6 +129,35 @@ async def test_read_terminal_output_error_log_omits_proxy_exception_text(
     assert "error_type=RuntimeError" in caplog.text
     assert "terminal output secret" not in caplog.text
     assert "session-secret" not in caplog.text
+
+
+@pytest.mark.unit
+async def test_get_project_id_from_sandbox_error_log_omits_sandbox_id_and_error_text(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class FailingSandboxAdapter:
+        async def get_sandbox(self, _sandbox_id: str) -> object:
+            raise RuntimeError("sandbox lookup secret")
+
+    monkeypatch.setattr(
+        terminal_router,
+        "get_sandbox_adapter",
+        lambda: FailingSandboxAdapter(),
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.terminal",
+    )
+
+    result = await get_project_id_from_sandbox("sandbox-secret")
+
+    assert result is None
+    assert "Could not get project_id from sandbox" in caplog.text
+    assert "has_sandbox_id=True" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "sandbox-secret" not in caplog.text
+    assert "sandbox lookup secret" not in caplog.text
 
 
 @pytest.mark.unit

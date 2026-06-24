@@ -84,7 +84,11 @@ async def get_project_id_from_sandbox(sandbox_id: str) -> str | None:
             if match:
                 return match.group(1)
     except Exception as e:
-        logger.warning(f"Could not get project_id from sandbox {sandbox_id}: {e}")
+        logger.warning(
+            "Could not get project_id from sandbox: has_sandbox_id=%s error_type=%s",
+            bool(sandbox_id),
+            type(e).__name__,
+        )
     return None
 
 
