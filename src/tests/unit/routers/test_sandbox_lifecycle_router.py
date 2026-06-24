@@ -48,6 +48,32 @@ def test_get_event_publisher_error_log_omits_exception_text(
 
 
 @pytest.mark.unit
+async def test_ensure_sandbox_sync_error_log_omits_exception_text(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class FailingAdapter:
+        async def sync_from_docker(self) -> int:
+            raise RuntimeError("docker sync secret")
+
+    monkeypatch.setattr(sandbox_utils, "_sandbox_adapter", FailingAdapter())
+    monkeypatch.setattr(sandbox_utils, "_worker_id", 123)
+    monkeypatch.setattr(sandbox_utils, "_sync_pending", True)
+    monkeypatch.setattr(sandbox_utils, "_get_worker_id", lambda: 123)
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.sandbox.utils",
+    )
+
+    await sandbox_utils.ensure_sandbox_sync()
+
+    assert sandbox_utils._sync_pending is False
+    assert "API Server: Failed to sync sandboxes from Docker" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "docker sync secret" not in caplog.text
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_create_sandbox_sanitizes_internal_errors(
     monkeypatch: pytest.MonkeyPatch,

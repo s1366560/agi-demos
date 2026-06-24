@@ -115,7 +115,10 @@ async def ensure_sandbox_sync() -> None:
                 logger.info("API Server: No existing sandboxes found in Docker")
             _sync_pending = False
         except Exception as e:
-            logger.warning(f"API Server: Failed to sync sandboxes from Docker: {e}")
+            logger.warning(
+                "API Server: Failed to sync sandboxes from Docker: error_type=%s",
+                type(e).__name__,
+            )
             _sync_pending = False
 
 
