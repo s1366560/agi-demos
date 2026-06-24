@@ -310,7 +310,7 @@ class MCPSubprocessClient:
         """
         timeout = timeout or self.timeout
         logger.info(f"Calling MCP tool: {name}")
-        logger.debug(f"Tool arguments: {arguments}")
+        logger.debug("Tool arguments argument_keys=%s", sorted(arguments))
 
         result = await self._send_request(
             "tools/call",

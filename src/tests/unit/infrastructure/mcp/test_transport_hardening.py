@@ -440,3 +440,31 @@ class TestSubprocessCancelLadder:
         assert "response_chars=" in caplog.text
         assert request_secret not in caplog.text
         assert response_secret not in caplog.text
+
+    async def test_call_tool_debug_log_redacts_arguments(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPSubprocessClient(command="echo", args=["stub"])
+        argument_secret = "tool-argument-secret-token"
+        client._send_request = AsyncMock(  # type: ignore[method-assign]
+            return_value={"result": {"content": [{"type": "text", "text": "ok"}], "isError": False}}
+        )
+
+        with caplog.at_level(logging.DEBUG, logger=SUBPROCESS_LOGGER_NAME):
+            result = await client.call_tool(
+                "echo",
+                {"token": argument_secret, "safe": "metadata"},
+                timeout=0.01,
+            )
+
+        assert result.content == [{"type": "text", "text": "ok"}]
+        assert result.isError is False
+        assert "Tool arguments" in caplog.text
+        assert "argument_keys=" in caplog.text
+        assert argument_secret not in caplog.text
+        client._send_request.assert_awaited_once_with(  # type: ignore[attr-defined]
+            "tools/call",
+            {"name": "echo", "arguments": {"token": argument_secret, "safe": "metadata"}},
+            timeout=0.01,
+        )
