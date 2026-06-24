@@ -226,6 +226,30 @@ class TestLiteLLMReranker:
                 assert score == 0.5
 
     @pytest.mark.asyncio
+    async def test_invalid_score_log_redacts_response_value(self, reranker, caplog):
+        """Invalid score values from LLM responses should not be logged verbatim."""
+        secret = "rerank-score-secret-97531"
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message = {"content": f'{{"scores": ["{secret}", 0.7]}}'}
+
+        with patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+            mock_acompletion.return_value = mock_response
+
+            with caplog.at_level(
+                "WARNING",
+                logger="src.infrastructure.llm.litellm.litellm_reranker",
+            ):
+                ranked = await reranker.rank(
+                    "query",
+                    ["P1", "P2"],
+                )
+
+        assert ranked == [("P2", 0.7), ("P1", 0.5)]
+        assert secret not in caplog.text
+        assert "error_type=ValueError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_uses_reranker_model_from_config(self, reranker, provider_config):
         """Test that reranker uses the configured reranker model."""
         mock_response = MagicMock()

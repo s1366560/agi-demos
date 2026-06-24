@@ -434,11 +434,15 @@ Ensure:
             padded = True
 
         normalized_scores = []
-        for score in scores:
+        for index, score in enumerate(scores):
             try:
                 score_float = float(score)
-            except (ValueError, TypeError):
-                logger.warning(f"Invalid score {score}, using 0.5")
+            except (ValueError, TypeError) as e:
+                logger.warning(
+                    "Invalid rerank score; using neutral fallback score_index=%s error_type=%s",
+                    index,
+                    type(e).__name__,
+                )
                 score_float = 0.5
             score_float = max(0.0, min(1.0, score_float))
             normalized_scores.append(score_float)
