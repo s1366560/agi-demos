@@ -300,3 +300,24 @@ class TestSubprocessCancelLadder:
         proc.terminate.assert_called_once()
         proc.kill.assert_called_once()
         assert client._proc is None
+
+    async def test_disconnect_error_log_redacts_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPSubprocessClient(command="echo", args=["stub"])
+        secret_error = "disconnect-secret-token"
+        proc = MagicMock()
+        proc.terminate = MagicMock(side_effect=RuntimeError(secret_error))
+        proc.kill = MagicMock()
+        client._proc = proc  # type: ignore[assignment]
+
+        with caplog.at_level(logging.ERROR, logger=SUBPROCESS_LOGGER_NAME):
+            await client.disconnect()
+
+        assert "Error disconnecting MCP subprocess" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert secret_error not in caplog.text
+        proc.terminate.assert_called_once()
+        proc.kill.assert_called_once()
+        assert client._proc is None

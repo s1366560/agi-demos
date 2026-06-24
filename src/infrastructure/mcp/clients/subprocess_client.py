@@ -257,7 +257,7 @@ class MCPSubprocessClient:
                 proc.kill()
             raise
         except Exception as e:
-            logger.error(f"Error disconnecting MCP subprocess: {e}")
+            logger.error("Error disconnecting MCP subprocess error_type=%s", type(e).__name__)
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()
         finally:
