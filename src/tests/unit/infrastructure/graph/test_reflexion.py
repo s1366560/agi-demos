@@ -71,6 +71,29 @@ class TestReflexionCheckerLLMResponseHandling:
         assert "reflexion-secret-1357" not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
 
+    def test_parse_reflexion_response_redacts_invalid_json_details(self, caplog):
+        """Invalid JSON warnings should not write response text to logs."""
+        checker = ReflexionChecker(
+            llm_client=GenerateOnlyLLMClient(),
+            embedding_service=MockEmbeddingService(),
+        )
+        secret = "reflexion-json-secret-2468"
+        response = (
+            f"provider preface {secret}\n"
+            '{"missed_entities": [{"name": "Grace", "entity_type": "Person"}]}'
+        )
+
+        with caplog.at_level(
+            "WARNING",
+            logger="src.infrastructure.graph.extraction.reflexion",
+        ):
+            result = checker._parse_reflexion_response(response)
+
+        assert result == [{"name": "Grace", "entity_type": "Person"}]
+        assert secret not in caplog.text
+        assert "error_type=JSONDecodeError" in caplog.text
+        assert "response_length=" in caplog.text
+
     async def test_create_entity_nodes_redacts_embedding_exception_details(self, caplog):
         checker = ReflexionChecker(
             llm_client=GenerateOnlyLLMClient(),

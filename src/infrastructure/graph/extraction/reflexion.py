@@ -324,7 +324,12 @@ class ReflexionChecker:
             data = json.loads(response)
             return self._extract_missed_entities(data)
         except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse reflexion response as JSON: {e}")
+            logger.warning(
+                "Failed to parse reflexion response as JSON: "
+                "error_type=%s response_length=%s",
+                type(e).__name__,
+                len(response),
+            )
             return self._extract_json_from_text(response)
 
     @staticmethod
