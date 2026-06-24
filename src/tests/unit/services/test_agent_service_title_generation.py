@@ -341,6 +341,42 @@ class TestConversationTitleGeneration:
         assert secret_title not in caplog.text
 
     @pytest.mark.asyncio
+    async def test_update_title_success_logs_do_not_include_identifiers(
+        self,
+        agent_service,
+        mock_conversation_repo,
+        sample_conversation,
+        caplog,
+    ):
+        """Successful title update logs must not expose conversation, project, or user IDs."""
+        secret_conversation_id = "conversation-secret-title"
+        secret_project_id = "project-secret-title"
+        secret_user_id = "user-secret-title"
+        sample_conversation.id = secret_conversation_id
+        sample_conversation.project_id = secret_project_id
+        sample_conversation.user_id = secret_user_id
+        mock_conversation_repo.find_by_id.return_value = sample_conversation
+        caplog.set_level(
+            logging.INFO,
+            logger="src.application.services.agent.conversation_manager",
+        )
+
+        result = await agent_service.update_conversation_title(
+            conversation_id=secret_conversation_id,
+            project_id=secret_project_id,
+            user_id=secret_user_id,
+            title="New private title",
+        )
+
+        assert result is not None
+        assert secret_conversation_id not in caplog.text
+        assert secret_project_id not in caplog.text
+        assert secret_user_id not in caplog.text
+        assert "title_len=17" in caplog.text
+        assert "project_match=True" in caplog.text
+        assert "user_match=True" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_update_title_unauthorized_returns_none(
         self,
         agent_service,
@@ -359,6 +395,67 @@ class TestConversationTitleGeneration:
 
         assert result is None
         mock_conversation_repo.save_and_commit.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_title_unauthorized_logs_do_not_include_identifiers(
+        self,
+        agent_service,
+        mock_conversation_repo,
+        sample_conversation,
+        caplog,
+    ):
+        """Unauthorized title update logs must not expose scoped IDs."""
+        secret_conversation_id = "conversation-secret-title-denied"
+        secret_project_id = "project-secret-title-denied"
+        secret_user_id = "user-secret-title-denied"
+        sample_conversation.id = secret_conversation_id
+        sample_conversation.project_id = secret_project_id
+        sample_conversation.user_id = "owner-secret-title"
+        mock_conversation_repo.find_by_id.return_value = sample_conversation
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.agent.conversation_manager",
+        )
+
+        result = await agent_service.update_conversation_title(
+            conversation_id=secret_conversation_id,
+            project_id=secret_project_id,
+            user_id=secret_user_id,
+            title="Denied private title",
+        )
+
+        assert result is None
+        assert secret_conversation_id not in caplog.text
+        assert secret_project_id not in caplog.text
+        assert secret_user_id not in caplog.text
+        assert "project_match=True" in caplog.text
+        assert "user_match=False" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_update_title_missing_logs_do_not_include_identifier(
+        self,
+        agent_service,
+        mock_conversation_repo,
+        caplog,
+    ):
+        """Missing conversation title update logs must not expose the requested ID."""
+        secret_conversation_id = "conversation-secret-title-missing"
+        mock_conversation_repo.find_by_id.return_value = None
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.agent.conversation_manager",
+        )
+
+        result = await agent_service.update_conversation_title(
+            conversation_id=secret_conversation_id,
+            project_id="project-secret-title-missing",
+            user_id="user-secret-title-missing",
+            title="Missing private title",
+        )
+
+        assert result is None
+        assert secret_conversation_id not in caplog.text
+        assert "conversation_exists=False" in caplog.text
 
 
 class TestTitleGenerationTriggerConditions:

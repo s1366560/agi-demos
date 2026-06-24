@@ -155,30 +155,31 @@ class ConversationManager:
     ) -> Conversation | None:
         """Update conversation title."""
         logger.info(
-            "[update_conversation_title] START: id=%s, title_len=%d",
-            conversation_id,
+            "[update_conversation_title] START title_len=%d",
             len(title),
         )
         conversation = await self._conversation_repo.find_by_id(conversation_id)
         if not conversation:
-            logger.warning(f"Attempted to update non-existent conversation {conversation_id}")
+            logger.warning(
+                "Attempted to update non-existent conversation conversation_exists=False"
+            )
             return None
 
         logger.info(
-            "[update_conversation_title] Found conversation: project_id=%s, user_id=%s, "
-            "current_title_len=%d",
-            conversation.project_id,
-            conversation.user_id,
+            "[update_conversation_title] Found conversation current_title_len=%d",
             len(conversation.title),
         )
         logger.info(
-            f"[update_conversation_title] Authorization check: expected project_id={project_id}, user_id={user_id}"
+            "[update_conversation_title] Authorization check project_match=%s user_match=%s",
+            conversation.project_id == project_id,
+            conversation.user_id == user_id,
         )
 
         if conversation.project_id != project_id or conversation.user_id != user_id:
             logger.warning(
-                f"Unauthorized title update attempt on conversation {conversation_id} "
-                f"by user {user_id} in project {project_id}"
+                "Unauthorized title update attempt on conversation project_match=%s user_match=%s",
+                conversation.project_id == project_id,
+                conversation.user_id == user_id,
             )
             return None
 
@@ -188,8 +189,7 @@ class ConversationManager:
         await self._conversation_repo.save_and_commit(conversation)  # type: ignore[attr-defined]
 
         logger.info(
-            "Updated title for conversation %s title_len=%d",
-            conversation_id,
+            "Updated title for conversation title_len=%d",
             len(title),
         )
         return conversation
