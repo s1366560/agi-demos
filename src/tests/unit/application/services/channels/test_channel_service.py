@@ -1,6 +1,7 @@
 """Unit tests for ChannelService."""
 
 import logging
+from collections.abc import Callable
 
 import pytest
 
@@ -12,6 +13,63 @@ from src.domain.model.channels.message import (
     MessageType,
     SenderInfo,
 )
+
+
+class _FailingSendAdapter:
+    def __init__(self) -> None:
+        self._message_handler: Callable[[Message], None] | None = None
+        self._error_handler: Callable[[Exception], None] | None = None
+
+    @property
+    def id(self) -> str:
+        return "secret-channel-id"
+
+    @property
+    def name(self) -> str:
+        return "Secret Channel"
+
+    @property
+    def connected(self) -> bool:
+        return True
+
+    async def connect(self) -> None:
+        return None
+
+    async def disconnect(self) -> None:
+        return None
+
+    async def send_message(
+        self,
+        to: str,
+        content: MessageContent,
+        reply_to: str | None = None,
+    ) -> str:
+        raise RuntimeError("secret-send-token")
+
+    async def send_text(self, to: str, text: str, reply_to: str | None = None) -> str:
+        raise RuntimeError("secret-send-token")
+
+    def on_message(self, handler: Callable[[Message], None]) -> Callable[[], None]:
+        self._message_handler = handler
+
+        def unregister() -> None:
+            self._message_handler = None
+
+        return unregister
+
+    def on_error(self, handler: Callable[[Exception], None]) -> Callable[[], None]:
+        self._error_handler = handler
+
+        def unregister() -> None:
+            self._error_handler = None
+
+        return unregister
+
+    async def get_chat_members(self, chat_id: str) -> list[SenderInfo]:
+        return []
+
+    async def get_user_info(self, user_id: str) -> SenderInfo | None:
+        return None
 
 
 def _build_message(text: str) -> Message:
@@ -103,4 +161,31 @@ def test_handle_error_handler_failure_log_omits_exception_text(
     service._handle_error("secret-channel-id", RuntimeError("secret-channel-token"))
 
     assert "secret-error-handler-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_message_failure_log_omits_channel_id_and_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Send failure logs should not expose channel IDs or adapter exception details."""
+    service = ChannelService()
+    service.register_adapter(_FailingSendAdapter())
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_service",
+    )
+
+    result = await service.send_message(
+        "secret-channel-id",
+        "secret-recipient-id",
+        MessageContent(type=MessageType.TEXT, text="private response body"),
+    )
+
+    assert result is None
+    assert "secret-channel-id" not in caplog.text
+    assert "secret-recipient-id" not in caplog.text
+    assert "private response body" not in caplog.text
+    assert "secret-send-token" not in caplog.text
     assert "RuntimeError" in caplog.text

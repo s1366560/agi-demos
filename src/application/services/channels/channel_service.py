@@ -115,7 +115,14 @@ class ChannelService:
             logger.debug(f"Sent message to {channel_id}: {message_id}")
             return message_id
         except Exception as e:
-            logger.error(f"Failed to send message via {channel_id}: {e}")
+            logger.error(
+                "Failed to send message: has_channel_id=%s has_recipient=%s "
+                "content_type=%s error_type=%s",
+                bool(channel_id),
+                bool(to),
+                content.type.value,
+                type(e).__name__,
+            )
             self._handle_error(channel_id, e)
             return None
 
