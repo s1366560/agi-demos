@@ -323,6 +323,28 @@ async def test_project_terminal_websocket_error_log_omits_exception_text(
     assert "session-secret" not in caplog.text
 
 
+async def test_project_terminal_output_reader_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    session = SimpleNamespace(session_id="session-secret", is_active=True)
+    proxy = SimpleNamespace(
+        read_output=AsyncMock(side_effect=RuntimeError("terminal output secret"))
+    )
+    websocket = _FakeWebSocket()
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
+
+    await project_sandbox._read_terminal_output_loop(websocket, proxy, session)
+
+    assert websocket.sent_json == []
+    assert "Output reader error" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "terminal output secret" not in caplog.text
+    assert "session-secret" not in caplog.text
+
+
 def test_sandbox_proxy_auth_cookie_is_scoped_to_project_sandbox_path() -> None:
     request = Request(
         {
