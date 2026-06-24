@@ -404,6 +404,29 @@ async def test_remove_member_success(project_service, mock_project_repo):
 
 
 @pytest.mark.asyncio
+async def test_remove_member_logs_do_not_include_project_or_user_identifiers(
+    project_service,
+    mock_project_repo,
+    caplog,
+):
+    """Member-remove logs must not expose project or user IDs."""
+    secret_project_id = "project-secret-remove-123"
+    secret_user_id = "user-secret-remove-456"
+    mock_project = Mock()
+    mock_project.id = secret_project_id
+    mock_project.owner_id = "owner-123"
+    mock_project.member_ids = ["owner-123", secret_user_id]
+    mock_project_repo.find_by_id.return_value = mock_project
+    caplog.set_level(logging.INFO, logger="src.application.services.project_service")
+
+    await project_service.remove_member(secret_project_id, secret_user_id)
+
+    assert secret_project_id not in caplog.text
+    assert secret_user_id not in caplog.text
+    assert "member_count=1" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_remove_member_owner_forbidden(project_service, mock_project_repo):
     """Test that owner cannot be removed"""
     mock_project = Mock()
@@ -415,6 +438,29 @@ async def test_remove_member_owner_forbidden(project_service, mock_project_repo)
     # Try to remove owner
     with pytest.raises(ValueError, match="Cannot remove project owner"):
         await project_service.remove_member("project-123", "owner-123")
+
+
+@pytest.mark.asyncio
+async def test_remove_member_missing_logs_do_not_include_project_or_user_identifiers(
+    project_service,
+    mock_project_repo,
+    caplog,
+):
+    """Missing-member logs must not expose project or user IDs."""
+    secret_project_id = "project-secret-remove-missing"
+    secret_user_id = "user-secret-remove-missing"
+    mock_project = Mock()
+    mock_project.id = secret_project_id
+    mock_project.owner_id = "owner-123"
+    mock_project.member_ids = ["owner-123"]
+    mock_project_repo.find_by_id.return_value = mock_project
+    caplog.set_level(logging.WARNING, logger="src.application.services.project_service")
+
+    await project_service.remove_member(secret_project_id, secret_user_id)
+
+    assert secret_project_id not in caplog.text
+    assert secret_user_id not in caplog.text
+    assert "member_count=1" in caplog.text
 
 
 @pytest.mark.asyncio

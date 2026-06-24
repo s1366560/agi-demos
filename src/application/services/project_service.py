@@ -234,14 +234,14 @@ class ProjectService:
             raise ValueError("Cannot remove project owner")
 
         if user_id not in project.member_ids:
-            logger.warning(f"User {user_id} is not a member of project {project_id}")
+            logger.warning("User is not a project member member_count=%d", len(project.member_ids))
             return
 
         project.member_ids.remove(user_id)
         project.updated_at = datetime.now(UTC)
 
         await self._project_repo.save(project)
-        logger.info(f"Removed user {user_id} from project {project_id}")
+        logger.info("Removed project member member_count=%d", len(project.member_ids))
 
     async def get_members(self, project_id: str) -> list[str]:
         """
