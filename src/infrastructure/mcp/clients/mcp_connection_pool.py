@@ -203,7 +203,10 @@ class MCPConnectionPool:
             try:
                 await client.disconnect()
             except Exception as e:
-                logger.warning(f"Error disconnecting client during close_all: {e}")
+                logger.warning(
+                    "Error disconnecting client during close_all error_type=%s",
+                    type(e).__name__,
+                )
             closed_count += 1
 
         # Release global slots for all closed connections
@@ -258,7 +261,7 @@ class MCPConnectionPool:
         try:
             await client.disconnect()
         except Exception as e:
-            logger.warning(f"Error disconnecting evicted client: {e}")
+            logger.warning("Error disconnecting evicted client error_type=%s", type(e).__name__)
 
         async with self._lock:
             self._created_count -= 1

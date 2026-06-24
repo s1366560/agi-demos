@@ -375,6 +375,50 @@ class TestConnectionPoolClose:
         # Disconnected ones should also be cleaned up
         assert pool.available_count == 0
 
+    @pytest.mark.asyncio
+    async def test_close_all_log_redacts_disconnect_error(self, caplog):
+        """Failed close_all disconnects should not leak exception text."""
+        from src.infrastructure.mcp.clients.mcp_connection_pool import MCPConnectionPool
+
+        pool = MCPConnectionPool(url="ws://localhost:8765", pool_size=3)
+        secret_error = "close-all-secret-token"
+        mock_client = MagicMock()
+        mock_client.disconnect = AsyncMock(side_effect=RuntimeError(secret_error))
+        await pool._global_limiter.acquire(pool._url)
+        await pool._connections.put(mock_client)
+
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            await pool.close_all()
+
+        assert "Error disconnecting client during close_all" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert secret_error not in caplog.text
+        mock_client.disconnect.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_evict_one_idle_log_redacts_disconnect_error(self, caplog):
+        """Failed idle eviction disconnects should not leak exception text."""
+        from src.infrastructure.mcp.clients.mcp_connection_pool import MCPConnectionPool
+
+        pool = MCPConnectionPool(url="ws://localhost:8765", pool_size=3)
+        secret_error = "evict-idle-secret-token"
+        mock_client = MagicMock()
+        mock_client.disconnect = AsyncMock(side_effect=RuntimeError(secret_error))
+        await pool._global_limiter.acquire(pool._url)
+        await pool._connections.put(mock_client)
+        pool._created_count = 1
+
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            evicted = await pool._evict_one_idle()
+
+        assert evicted is True
+        assert "Error disconnecting evicted client" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert secret_error not in caplog.text
+        assert pool.available_count == 0
+        assert pool._created_count == 0
+        mock_client.disconnect.assert_awaited_once()
+
 
 class TestConnectionPoolContext:
     """Test pool usage as context manager."""
