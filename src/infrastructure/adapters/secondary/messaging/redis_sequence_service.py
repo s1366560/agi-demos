@@ -65,8 +65,12 @@ class RedisSequenceService:
 
             return cast(int, seq)
 
-        except Exception as e:
-            logger.error(f"Failed to get next sequence for {conversation_id}: {e}")
+        except Exception as exc:
+            logger.error(
+                "Failed to get next sequence error_type=%s has_conversation_id=%s",
+                type(exc).__name__,
+                bool(conversation_id),
+            )
             raise
 
     async def get_current_sequence(self, conversation_id: str) -> int:
@@ -84,8 +88,12 @@ class RedisSequenceService:
         try:
             value = await self._redis.get(key)
             return int(value) if value else 0
-        except Exception as e:
-            logger.error(f"Failed to get current sequence for {conversation_id}: {e}")
+        except Exception as exc:
+            logger.error(
+                "Failed to get current sequence error_type=%s has_conversation_id=%s",
+                type(exc).__name__,
+                bool(conversation_id),
+            )
             return 0
 
     async def sync_from_db(self, conversation_id: str, db_last_seq: int) -> bool:
@@ -122,17 +130,27 @@ class RedisSequenceService:
                             pipe.expire(key, self.SEQUENCE_TTL)
                             await pipe.execute()
                             logger.info(
-                                f"Synced sequence for {conversation_id}: {current_int} -> {db_last_seq}"
+                                "Synced sequence current=%s target=%s has_conversation_id=%s",
+                                current_int,
+                                db_last_seq,
+                                bool(conversation_id),
                             )
                             return True
                     except redis.WatchError:
                         # Another process modified the key, that's fine
-                        logger.debug(f"Sequence sync race for {conversation_id}, skipping")
+                        logger.debug(
+                            "Sequence sync race skipped has_conversation_id=%s",
+                            bool(conversation_id),
+                        )
 
             return False
 
-        except Exception as e:
-            logger.error(f"Failed to sync sequence for {conversation_id}: {e}")
+        except Exception as exc:
+            logger.error(
+                "Failed to sync sequence error_type=%s has_conversation_id=%s",
+                type(exc).__name__,
+                bool(conversation_id),
+            )
             return False
 
     async def reset_sequence(self, conversation_id: str) -> None:
@@ -146,7 +164,7 @@ class RedisSequenceService:
         """
         key = self._get_sequence_key(conversation_id)
         await self._redis.delete(key)
-        logger.info(f"Reset sequence for {conversation_id}")
+        logger.info("Reset sequence has_conversation_id=%s", bool(conversation_id))
 
     async def get_batch_sequences(self, conversation_id: str, count: int) -> list[int]:
         """
@@ -178,6 +196,11 @@ class RedisSequenceService:
             start_seq = end_seq - count + 1
             return list(range(start_seq, end_seq + 1))
 
-        except Exception as e:
-            logger.error(f"Failed to get batch sequences for {conversation_id}: {e}")
+        except Exception as exc:
+            logger.error(
+                "Failed to get batch sequences error_type=%s count=%s has_conversation_id=%s",
+                type(exc).__name__,
+                count,
+                bool(conversation_id),
+            )
             raise
