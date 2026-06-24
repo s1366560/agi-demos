@@ -264,7 +264,7 @@ class LouvainDetector:
         try:
             community_sets = louvain_communities(G, weight="weight")
         except Exception as e:
-            logger.error(f"Louvain algorithm failed: {e}")
+            logger.error("Louvain algorithm failed error_type=%s", type(e).__name__)
             return []
 
         # Create community nodes
