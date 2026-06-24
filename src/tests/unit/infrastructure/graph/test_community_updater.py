@@ -39,6 +39,20 @@ class InvalidJsonGenerateLLMClient:
         return {"content": "not-json community-summary-secret-97531"}
 
 
+class FailingStructuredLLM:
+    """Structured-output adapter that raises a provider-style error."""
+
+    async def ainvoke(self, _messages: list[Any]) -> object:
+        raise RuntimeError("structured provider echoed community-structured-secret-2468")
+
+
+class StructuredFallbackGenerateLLMClient(GenerateOnlyLLMClient):
+    """LLM client whose structured path fails before generate() fallback succeeds."""
+
+    def with_structured_output(self, _schema: type[object]) -> FailingStructuredLLM:
+        return FailingStructuredLLM()
+
+
 class PrivateGenerateResponseOnlyLLMClient:
     """LLM client exposing the Graphiti-compatible private response surface."""
 
@@ -101,6 +115,25 @@ class TestCommunityUpdaterLLMResponseHandling:
         assert "community-summary-secret-97531" not in caplog.text
         assert "error_type=JSONDecodeError" in caplog.text
         assert "response_length=" in caplog.text
+
+    async def test_call_llm_structured_redacts_structured_output_error(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        llm_client = StructuredFallbackGenerateLLMClient()
+        updater = build_updater(llm_client)
+
+        with caplog.at_level(
+            "DEBUG",
+            logger="src.infrastructure.graph.community.community_updater",
+        ):
+            result = await updater._call_llm_structured("Summarize", "Members")
+
+        assert result.name == "Core Platform"
+        assert result.summary == "Platform services."
+        assert llm_client.calls[0]["response_format"] == "json"
+        assert "community-structured-secret-2468" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
 
     async def test_call_llm_with_json_extraction_supports_private_generate_response_client(
         self,

@@ -306,7 +306,10 @@ class CommunityUpdater:
                 if isinstance(result, CommunitySummary) and result.name and result.summary:
                     return result
             except Exception as e:
-                logger.debug(f"Structured output failed, falling back to manual parsing: {e}")
+                logger.debug(
+                    "Structured output failed; falling back to manual parsing error_type=%s",
+                    type(e).__name__,
+                )
 
         # Fallback: Manual JSON extraction from LLM response
         return await self._call_llm_with_json_extraction(messages)
