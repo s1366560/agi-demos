@@ -349,6 +349,105 @@ class TestRedisUnifiedEventBusLogging:
         assert "block_ms=3" in caplog.text
         assert "has_pattern=True" in caplog.text
 
+    @pytest.mark.asyncio
+    async def test_direct_connection_error_log_redacts_pattern_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        exception_detail = "direct connection secret unavailable"
+        secret_pattern = "agent.secret-conversation.*"
+        subscription_id = "secret-direct-connection"
+
+        redis_client = Mock()
+        redis_client.xread = AsyncMock(side_effect=redis.ConnectionError(exception_detail))
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        adapter._active_subscriptions[subscription_id] = True
+        adapter._get_matching_streams = AsyncMock(return_value=["events:agent:secret"])  # type: ignore[method-assign]
+
+        async def stop_after_sleep(_delay: float) -> None:
+            adapter._active_subscriptions[subscription_id] = False
+
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.messaging.redis_unified_event_bus.asyncio.sleep",
+            stop_after_sleep,
+        )
+
+        stream = adapter._subscribe_direct(
+            secret_pattern,
+            SubscriptionOptions(batch_size=2, block_ms=3),
+            subscription_id,
+        )
+        try:
+            with (
+                caplog.at_level(logging.ERROR, logger=LOGGER_NAME),
+                pytest.raises(StopAsyncIteration),
+            ):
+                await anext(stream)
+        finally:
+            adapter._active_subscriptions.pop(subscription_id, None)
+            await stream.aclose()
+
+        assert "Connection error" in caplog.text
+        assert secret_pattern not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=ConnectionError" in caplog.text
+        assert "batch_size=2" in caplog.text
+        assert "block_ms=3" in caplog.text
+        assert "has_pattern=True" in caplog.text
+        assert "has_consumer_group=False" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_consumer_group_connection_error_log_redacts_pattern_group_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        exception_detail = "consumer group connection secret unavailable"
+        secret_pattern = "agent.secret-conversation.*"
+        secret_group = "secret-consumer-group"
+        subscription_id = "secret-consumer-connection"
+
+        redis_client = Mock()
+        redis_client.xreadgroup = AsyncMock(side_effect=redis.ConnectionError(exception_detail))
+        adapter = RedisUnifiedEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        adapter._active_subscriptions[subscription_id] = True
+        adapter._get_matching_streams = AsyncMock(return_value=["events:agent:secret"])  # type: ignore[method-assign]
+        adapter._ensure_consumer_group = AsyncMock()  # type: ignore[method-assign]
+
+        async def stop_after_sleep(_delay: float) -> None:
+            adapter._active_subscriptions[subscription_id] = False
+
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.secondary.messaging.redis_unified_event_bus.asyncio.sleep",
+            stop_after_sleep,
+        )
+
+        stream = adapter._subscribe_with_consumer_group(
+            secret_pattern,
+            SubscriptionOptions(consumer_group=secret_group, batch_size=4, block_ms=5),
+            subscription_id,
+        )
+        try:
+            with (
+                caplog.at_level(logging.ERROR, logger=LOGGER_NAME),
+                pytest.raises(StopAsyncIteration),
+            ):
+                await anext(stream)
+        finally:
+            adapter._active_subscriptions.pop(subscription_id, None)
+            await stream.aclose()
+
+        assert "Connection error" in caplog.text
+        assert secret_pattern not in caplog.text
+        assert secret_group not in caplog.text
+        assert exception_detail not in caplog.text
+        assert "error_type=ConnectionError" in caplog.text
+        assert "batch_size=4" in caplog.text
+        assert "block_ms=5" in caplog.text
+        assert "has_pattern=True" in caplog.text
+        assert "has_consumer_group=True" in caplog.text
+
     def test_parse_message_error_log_redacts_message_stream_and_exception(
         self,
         caplog: pytest.LogCaptureFixture,

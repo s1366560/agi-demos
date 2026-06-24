@@ -298,7 +298,22 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                     last_ids[stream_name] = msg_id
 
             except redis.ConnectionError as e:
-                logger.error(f"[UnifiedEventBus] Connection error: {e}")
+                logger.error(
+                    " ".join(
+                        (
+                            "[UnifiedEventBus] Connection error error_type=%s",
+                            "batch_size=%s",
+                            "block_ms=%s",
+                            "has_pattern=%s",
+                            "has_consumer_group=%s",
+                        )
+                    ),
+                    type(e).__name__,
+                    opts.batch_size,
+                    opts.block_ms,
+                    bool(pattern),
+                    bool(opts.consumer_group),
+                )
                 await asyncio.sleep(1)
             except Exception as e:
                 logger.error(
@@ -385,7 +400,22 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                     )
                     raise
             except redis.ConnectionError as e:
-                logger.error(f"[UnifiedEventBus] Connection error: {e}")
+                logger.error(
+                    " ".join(
+                        (
+                            "[UnifiedEventBus] Connection error error_type=%s",
+                            "batch_size=%s",
+                            "block_ms=%s",
+                            "has_pattern=%s",
+                            "has_consumer_group=%s",
+                        )
+                    ),
+                    type(e).__name__,
+                    opts.batch_size,
+                    opts.block_ms,
+                    bool(pattern),
+                    bool(opts.consumer_group),
+                )
                 await asyncio.sleep(1)
 
     async def _get_matching_streams(self, pattern: str) -> list[str]:
