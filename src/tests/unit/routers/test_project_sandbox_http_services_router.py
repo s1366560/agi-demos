@@ -1489,7 +1489,9 @@ def test_http_proxy_returns_404_when_service_missing(sandbox_http_client: TestCl
 
 @pytest.mark.unit
 def test_http_proxy_returns_502_when_upstream_fails(
-    sandbox_http_client: TestClient, monkeypatch: pytest.MonkeyPatch
+    sandbox_http_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """HTTP reverse proxy should map upstream connection errors to 502."""
     event_publisher = AsyncMock()
@@ -1534,6 +1536,10 @@ def test_http_proxy_returns_502_when_upstream_fails(
         raise RuntimeError("connection refused")
 
     monkeypatch.setattr(router_mod, "_request_http_service_via_sandbox_exec", _raise_exec_fetch)
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
 
     response = sandbox_http_client.get(
         "/api/v1/projects/proj-1/sandbox/http-services/svc-int/proxy/"
@@ -1547,7 +1553,14 @@ def test_http_proxy_returns_502_when_upstream_fails(
     assert error_kwargs["project_id"] == "proj-1"
     assert error_kwargs["service_id"] == "svc-int"
     assert error_kwargs["service_name"] == "internal"
-    assert "connection refused" in error_kwargs["error_message"]
+    assert error_kwargs["error_message"] == "RuntimeError"
+    assert "HTTP service proxy error" in caplog.text
+    assert "has_service_id=True" in caplog.text
+    assert "has_target_url=True" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "connection refused" not in caplog.text
+    assert "127.0.0.1" not in caplog.text
+    assert "svc-int" not in caplog.text
 
 
 @pytest.mark.unit

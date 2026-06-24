@@ -2698,9 +2698,12 @@ async def proxy_project_http_service(
 
         return response_obj
     except (httpx.RequestError, RuntimeError) as e:
-        error_detail = str(e) or type(e).__name__
+        error_type = type(e).__name__
         logger.error(
-            "HTTP service proxy error for %s (%s): %s", service_id, target_url, error_detail
+            "HTTP service proxy error: has_service_id=%s has_target_url=%s error_type=%s",
+            bool(service_id),
+            bool(target_url),
+            error_type,
         )
         await _publish_http_service_error_event(
             event_publisher,
@@ -2708,7 +2711,7 @@ async def proxy_project_http_service(
             sandbox_id=service_info.sandbox_id,
             service_id=service_info.service_id,
             service_name=service_info.name,
-            error_message=error_detail,
+            error_message=error_type,
         )
         raise HTTPException(
             status_code=502,
