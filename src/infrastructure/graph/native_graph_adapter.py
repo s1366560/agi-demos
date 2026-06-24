@@ -1223,7 +1223,10 @@ class NativeGraphAdapter(GraphServicePort):
             return {"nodes": list(nodes.values()), "edges": edges}
 
         except Exception as e:
-            logger.error(f"Failed to get graph data for project {project_id}: {e}")
+            logger.error(
+                "Failed to get graph data: error_type=%s",
+                type(e).__name__,
+            )
             raise
 
     @override

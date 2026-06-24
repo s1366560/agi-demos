@@ -591,6 +591,34 @@ class TestNativeGraphAdapterSearch:
 
 
 @pytest.mark.unit
+class TestNativeGraphAdapterGraphData:
+    """Tests for graph data retrieval."""
+
+    @pytest.mark.asyncio
+    async def test_get_graph_data_failure_log_redacts_exception_details(
+        self,
+        adapter,
+        mock_neo4j_client,
+        caplog,
+    ):
+        """Graph data failures should propagate without writing exception details to logs."""
+        secret = "graph-data-secret-2468"
+        mock_neo4j_client.execute_query.side_effect = RuntimeError(secret)
+
+        with (
+            caplog.at_level(
+                logging.ERROR,
+                logger="src.infrastructure.graph.native_graph_adapter",
+            ),
+            pytest.raises(RuntimeError, match=secret),
+        ):
+            await adapter.get_graph_data(project_id="project-1")
+
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
 class TestNativeGraphAdapterDeleteEpisode:
     """Tests for delete_episode methods."""
 
