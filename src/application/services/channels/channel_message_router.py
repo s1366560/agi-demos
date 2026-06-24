@@ -616,7 +616,8 @@ class ChannelMessageRouter:
                     channel_message_id = f"generated-{uuid.uuid4().hex}"
                     logger.warning(
                         "[MessageRouter] Missing channel_message_id in inbound payload; "
-                        f"using synthetic id {channel_message_id}"
+                        "using synthetic id: has_synthetic_channel_message_id=%s",
+                        bool(channel_message_id),
                     )
 
                 dedupe_query = select(ChannelMessageModel.id).where(
@@ -628,7 +629,9 @@ class ChannelMessageRouter:
                 if dedupe_result.scalar_one_or_none():
                     logger.debug(
                         "[MessageRouter] Duplicate inbound message skipped: "
-                        f"{channel_config_id}/{channel_message_id}"
+                        "has_channel_config_id=%s has_channel_message_id=%s",
+                        bool(channel_config_id),
+                        bool(channel_message_id),
                     )
                     return
 

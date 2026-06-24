@@ -389,6 +389,108 @@ async def test_store_message_history_failure_log_omits_exception_text(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_store_message_history_missing_message_id_log_omits_synthetic_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Synthetic channel message IDs should not be echoed in persistence logs."""
+    router = ChannelMessageRouter()
+    router._resolve_channel_config_id = AsyncMock(return_value="secret-config-id")
+    message = _build_message(
+        text="hello",
+        raw_data={"_routing": {"channel_config_id": "secret-config-id"}},
+    )
+
+    mock_dedupe_result = MagicMock()
+    mock_dedupe_result.scalar_one_or_none.return_value = None
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=mock_dedupe_result)
+    session.commit = AsyncMock()
+
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+
+    mock_repo = MagicMock()
+    mock_repo.create = AsyncMock()
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with (
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            return_value=session_ctx,
+        ),
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.channel_repository.ChannelMessageRepository",
+            return_value=mock_repo,
+        ),
+    ):
+        await router._store_message_history(message, "conv-1")
+
+    assert "secret-config-id" not in caplog.text
+    assert "generated-" not in caplog.text
+    assert "Missing channel_message_id" in caplog.text
+    assert "has_synthetic_channel_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_store_message_history_duplicate_log_omits_channel_identifiers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Duplicate inbound logs should not echo channel config or message IDs."""
+    router = ChannelMessageRouter()
+    router._resolve_channel_config_id = AsyncMock(return_value="secret-config-id")
+    message = _build_message(
+        text="hello",
+        raw_data={
+            "_routing": {
+                "channel_config_id": "secret-config-id",
+                "channel_message_id": "secret-message-id",
+            }
+        },
+    )
+
+    mock_dedupe_result = MagicMock()
+    mock_dedupe_result.scalar_one_or_none.return_value = "existing-row-id"
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=mock_dedupe_result)
+
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+
+    mock_repo = MagicMock()
+    mock_repo.create = AsyncMock()
+    caplog.set_level(
+        logging.DEBUG,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with (
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            return_value=session_ctx,
+        ),
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.channel_repository.ChannelMessageRepository",
+            return_value=mock_repo,
+        ),
+    ):
+        await router._store_message_history(message, "conv-1")
+
+    mock_repo.create.assert_not_awaited()
+    assert "secret-config-id" not in caplog.text
+    assert "secret-message-id" not in caplog.text
+    assert "Duplicate inbound message skipped" in caplog.text
+    assert "has_channel_config_id=True" in caplog.text
+    assert "has_channel_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_process_media_if_needed_logs_metadata_without_media_identifiers(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
