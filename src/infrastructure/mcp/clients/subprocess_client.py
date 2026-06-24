@@ -360,7 +360,7 @@ class MCPSubprocessClient:
             result = await self._send_request("ping", {}, timeout=timeout)
             return result is not None and "result" in result
         except Exception as e:
-            logger.error(f"Ping failed: {e}")
+            logger.error("Ping failed error_type=%s", type(e).__name__)
             return False
 
     async def _send_request(

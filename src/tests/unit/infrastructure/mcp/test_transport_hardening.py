@@ -321,3 +321,20 @@ class TestSubprocessCancelLadder:
         proc.terminate.assert_called_once()
         proc.kill.assert_called_once()
         assert client._proc is None
+
+    async def test_ping_error_log_redacts_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPSubprocessClient(command="echo", args=["stub"])
+        secret_error = "ping-secret-token"
+        client._send_request = AsyncMock(side_effect=RuntimeError(secret_error))  # type: ignore[method-assign]
+
+        with caplog.at_level(logging.ERROR, logger=SUBPROCESS_LOGGER_NAME):
+            pinged = await client.ping(timeout=0.01)
+
+        assert pinged is False
+        assert "Ping failed" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert secret_error not in caplog.text
+        client._send_request.assert_awaited_once_with("ping", {}, timeout=0.01)  # type: ignore[attr-defined]
