@@ -165,7 +165,11 @@ class SearchService:
             )
 
         except Exception as e:
-            logger.error(f"Search failed for query '{query}': {e}")
+            logger.error(
+                "Search failed query_len=%d error_type=%s",
+                len(query),
+                type(e).__name__,
+            )
             raise
 
     async def search_memories_by_tags(

@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -33,6 +34,15 @@ class _GraphServiceStub(GraphServicePort):
 
     async def remove_episode(self, episode_uuid: str) -> bool:
         return True
+
+
+class _FailingGraphServiceStub(_GraphServiceStub):
+    def __init__(self, error_message: str) -> None:
+        super().__init__([])
+        self._error_message = error_message
+
+    async def search(self, query: str, project_id: str | None = None, limit: int = 10) -> list[Any]:
+        raise RuntimeError(self._error_message)
 
 
 class _MemoryRepositoryStub(MemoryRepository):
@@ -126,6 +136,23 @@ async def test_search_fetches_extra_candidates_before_content_type_filtering() -
     assert graph_service.search_calls == [{"query": "query", "project_id": "project-1", "limit": 8}]
     assert [result.id for result in results.results] == ["entity-2", "entity-3"]
     assert results.total == 4
+
+
+@pytest.mark.asyncio
+async def test_search_failure_logs_do_not_include_query_or_exception_content(caplog) -> None:
+    secret_query = "find customer secret token alpha-12345"
+    exception_detail = "graph backend leaked password beta-98765"
+    graph_service = _FailingGraphServiceStub(exception_detail)
+    memory_repo = _MemoryRepositoryStub([])
+    service = SearchService(graph_service=graph_service, memory_repo=memory_repo)
+    caplog.set_level(logging.ERROR, logger="src.application.services.search_service")
+
+    with pytest.raises(RuntimeError):
+        await service.search(secret_query, "project-1")
+
+    assert secret_query not in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
 
 
 @pytest.mark.asyncio
