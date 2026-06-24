@@ -113,6 +113,24 @@ def _build_message(text: str) -> Message:
 
 
 @pytest.mark.unit
+def test_register_adapter_log_omits_adapter_name_and_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Adapter registration logs should not expose adapter names or IDs."""
+    service = ChannelService()
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_service",
+    )
+
+    service.register_adapter(_FailingSendAdapter())
+
+    assert "Secret Channel" not in caplog.text
+    assert "secret-channel-id" not in caplog.text
+    assert "has_channel_id=True" in caplog.text
+
+
+@pytest.mark.unit
 def test_handle_message_log_omits_message_text(caplog: pytest.LogCaptureFixture) -> None:
     """Inbound channel logs should not expose message text."""
     service = ChannelService()

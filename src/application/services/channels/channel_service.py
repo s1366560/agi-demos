@@ -58,7 +58,7 @@ class ChannelService:
         adapter.on_message(self._handle_message)
         adapter.on_error(lambda e: self._handle_error(adapter.id, e))
 
-        logger.info(f"Registered channel adapter: {adapter.name} ({adapter.id})")
+        logger.info("Registered channel adapter: has_channel_id=%s", bool(adapter.id))
 
     def unregister_adapter(self, adapter_id: str) -> None:
         """Unregister a channel adapter."""
