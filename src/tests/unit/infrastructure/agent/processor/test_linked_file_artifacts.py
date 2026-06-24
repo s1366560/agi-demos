@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import Any
@@ -22,6 +23,8 @@ from src.infrastructure.agent.processor.processor import (
 )
 from src.infrastructure.agent.tools.result import ToolResult
 
+LOGGER_NAME = "src.infrastructure.agent.processor.artifact_handler"
+
 
 class _FakeArtifactService:
     def __init__(self) -> None:
@@ -40,6 +43,11 @@ class _FakeArtifactService:
             url=f"https://files.example.com/{filename}",
             preview_url=None,
         )
+
+
+class _FailingArtifactService:
+    async def create_artifact(self, **_kwargs: Any) -> Any:
+        raise RuntimeError("artifact secret unavailable")
 
 
 class _TextWithLinkedFileStream:
@@ -141,6 +149,100 @@ async def test_process_text_file_links_falls_back_to_raw_read_for_text_files() -
     assert service.calls[0]["source_path"] == "/workspace/output/report.md"
     assert service.calls[0]["file_content"] == b"# fallback"
     assert isinstance(events[0], AgentArtifactCreatedEvent)
+
+
+@pytest.mark.unit
+async def test_process_tool_artifacts_create_failure_log_redacts_tool_and_exception(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    handler = ArtifactHandler(
+        _FailingArtifactService(),  # type: ignore[arg-type]
+        langfuse_context={
+            "project_id": "project-1",
+            "tenant_id": "tenant-1",
+            "conversation_id": "conversation-1",
+        },
+    )
+    secret_tool_name = "secret-tool-name"
+    result = {
+        "content": [
+            {
+                "type": "image",
+                "data": "aGVsbG8=",
+                "mimeType": "image/png",
+            }
+        ]
+    }
+
+    with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+        events = [
+            event
+            async for event in handler.process_tool_artifacts(
+                tool_name=secret_tool_name,
+                result=result,
+                tool_execution_id="tool-execution-1",
+            )
+        ]
+
+    assert events == []
+    assert "Failed to create artifact" in caplog.text
+    assert secret_tool_name not in caplog.text
+    assert "artifact secret unavailable" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "has_tool_name=True" in caplog.text
+    assert "has_filename=True" in caplog.text
+
+
+@pytest.mark.unit
+async def test_process_tool_artifacts_extraction_failure_log_redacts_tool_and_exception(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _FakeArtifactService()
+    handler = ArtifactHandler(
+        service,
+        langfuse_context={
+            "project_id": "project-1",
+            "tenant_id": "tenant-1",
+            "conversation_id": "conversation-1",
+        },
+    )
+    secret_tool_name = "secret-tool-name"
+    result = {
+        "content": [
+            {
+                "type": "image",
+                "data": "aGVsbG8=",
+                "mimeType": "image/png",
+            }
+        ]
+    }
+
+    def fail_extraction(_result: dict[str, Any], _tool_name: str) -> list[dict[str, Any]]:
+        raise RuntimeError("extract secret unavailable")
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.processor.artifact_handler.extract_artifacts_from_mcp_result",
+        fail_extraction,
+    )
+
+    with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+        events = [
+            event
+            async for event in handler.process_tool_artifacts(
+                tool_name=secret_tool_name,
+                result=result,
+            )
+        ]
+
+    assert events == []
+    assert service.calls == []
+    assert "Error processing artifacts" in caplog.text
+    assert secret_tool_name not in caplog.text
+    assert "extract secret unavailable" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "has_tool_name=True" in caplog.text
+    assert "content_item_count=1" in caplog.text
 
 
 @pytest.mark.unit

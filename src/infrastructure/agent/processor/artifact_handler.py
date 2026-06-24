@@ -747,7 +747,29 @@ class ArtifactHandler:
                             pass  # Binary content, skip canvas open
 
                 except Exception as e:
-                    logger.error(f"Failed to create artifact from {tool_name}: {e}")
+                    logger.error(
+                        " ".join(
+                            (
+                                "Failed to create artifact error_type=%s",
+                                "has_tool_name=%s",
+                                "has_filename=%s",
+                            )
+                        ),
+                        type(e).__name__,
+                        bool(tool_name),
+                        bool(artifact_data.get("filename")),
+                    )
 
         except Exception as e:
-            logger.error(f"Error processing artifacts from tool {tool_name}: {e}")
+            logger.error(
+                " ".join(
+                    (
+                        "Error processing artifacts error_type=%s",
+                        "has_tool_name=%s",
+                        "content_item_count=%s",
+                    )
+                ),
+                type(e).__name__,
+                bool(tool_name),
+                len(content),
+            )
