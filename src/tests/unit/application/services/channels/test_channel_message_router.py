@@ -1076,6 +1076,76 @@ async def test_invoke_agent_falls_back_when_initial_card_fails() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_send_initial_streaming_card_log_omits_message_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Initial streaming card success logs should not expose channel message IDs."""
+    router = ChannelMessageRouter()
+    adapter = SimpleNamespace(send_streaming_card=AsyncMock(return_value="secret-stream-msg-id"))
+    message = _build_message(
+        text="hello",
+        raw_data={"_routing": {"channel_message_id": "reply-msg-1"}},
+    )
+    caplog.set_level(
+        logging.DEBUG,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    result = await router._send_initial_streaming_card(adapter, message)
+
+    assert result == "secret-stream-msg-id"
+    assert "secret-stream-msg-id" not in caplog.text
+    assert "has_message_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_initial_streaming_card_failure_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Initial streaming card failures should not expose exception details."""
+    router = ChannelMessageRouter()
+    adapter = SimpleNamespace(
+        send_streaming_card=AsyncMock(side_effect=RuntimeError("secret-card-token"))
+    )
+    message = _build_message(text="hello")
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    result = await router._send_initial_streaming_card(adapter, message)
+
+    assert result is None
+    assert "secret-card-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_patch_streaming_card_failure_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Streaming card patch failures should not expose message IDs or exception details."""
+    router = ChannelMessageRouter()
+    adapter = SimpleNamespace(
+        _build_streaming_card=MagicMock(side_effect=RuntimeError("secret-patch-token")),
+    )
+    caplog.set_level(
+        logging.DEBUG,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    result = await router._patch_streaming_card(adapter, "secret-stream-msg-id", "hello")
+
+    assert result is False
+    assert "secret-stream-msg-id" not in caplog.text
+    assert "secret-patch-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_invoke_agent_uses_cardkit_streaming_when_available() -> None:
     """When adapter supports CardKit, the CardKit streaming path is used."""
     router = ChannelMessageRouter()

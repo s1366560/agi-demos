@@ -1459,10 +1459,16 @@ class ChannelMessageRouter:
                 reply_to=reply_to,
             )
             if msg_id:
-                logger.debug(f"[MessageRouter] Streaming card sent: {msg_id}")
+                logger.debug(
+                    "[MessageRouter] Streaming card sent: has_message_id=%s",
+                    bool(msg_id),
+                )
             return cast("str | None", msg_id)
         except Exception as e:
-            logger.warning(f"[MessageRouter] Failed to send streaming card: {e}")
+            logger.warning(
+                "[MessageRouter] Failed to send streaming card: error_type=%s",
+                type(e).__name__,
+            )
             return None
 
     async def _patch_streaming_card(
@@ -1478,7 +1484,10 @@ class ChannelMessageRouter:
             card_json = adapter._build_streaming_card(text, loading=loading)  # type: ignore[attr-defined]
             return await adapter.patch_card(message_id, card_json)
         except Exception as e:
-            logger.debug(f"[MessageRouter] Streaming card patch failed: {e}")
+            logger.debug(
+                "[MessageRouter] Streaming card patch failed: error_type=%s",
+                type(e).__name__,
+            )
             return False
 
     async def _record_streaming_outbox(
