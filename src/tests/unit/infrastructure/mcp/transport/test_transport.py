@@ -14,6 +14,7 @@ from src.infrastructure.mcp.transport.base import (
 from src.infrastructure.mcp.transport.factory import TransportFactory
 
 STDIO_LOGGER_NAME = "src.infrastructure.mcp.transport.stdio"
+SSE_LOGGER_NAME = "src.infrastructure.mcp.transport.sse"
 WEBSOCKET_LOGGER_NAME = "src.infrastructure.mcp.transport.websocket"
 
 
@@ -41,6 +42,30 @@ class _FakeProcess:
         self.stdout = stdout
         self.stderr = stderr
         self.returncode = returncode
+
+
+class _SingleItemAsyncStream:
+    def __init__(self, item: Any) -> None:
+        self._items = [item]
+
+    def __aiter__(self) -> "_SingleItemAsyncStream":
+        return self
+
+    async def __anext__(self) -> Any:
+        if not self._items:
+            raise StopAsyncIteration
+        return self._items.pop(0)
+
+
+class _RaisingAsyncStream:
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    def __aiter__(self) -> "_RaisingAsyncStream":
+        return self
+
+    async def __anext__(self) -> Any:
+        raise self._exc
 
 
 # ============================================================================
@@ -306,6 +331,57 @@ class TestHTTPTransport:
 
         with pytest.raises(NotImplementedError, match="request-response pattern"):
             await transport.receive()
+
+
+# ============================================================================
+# SSETransport Tests
+# ============================================================================
+
+
+class TestSSETransport:
+    """Tests for SSETransport."""
+
+    @pytest.mark.asyncio
+    async def test_read_messages_exception_item_log_redacts_message(self, caplog):
+        """Exception items from the SSE stream should not be copied into logs."""
+        from src.infrastructure.mcp.transport.sse import SSETransport
+
+        secret_message = "sse-secret-token request payload"
+        transport = SSETransport()
+        transport._read_stream = _SingleItemAsyncStream(RuntimeError(secret_message))
+        pending = asyncio.get_running_loop().create_future()
+        transport._pending_requests[1] = pending
+
+        with caplog.at_level(logging.ERROR, logger=SSE_LOGGER_NAME):
+            await transport._read_messages()
+
+        assert "Received exception from MCP server" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert secret_message not in caplog.text
+        assert "request payload" not in caplog.text
+        assert pending.done()
+        assert isinstance(pending.exception(), RuntimeError)
+
+    @pytest.mark.asyncio
+    async def test_read_messages_loop_error_log_redacts_exception_text(self, caplog):
+        """SSE receive loop exceptions should log type metadata only."""
+        from src.infrastructure.mcp.transport.sse import SSETransport
+
+        secret_message = "sse-loop-secret-token request payload"
+        transport = SSETransport()
+        transport._read_stream = _RaisingAsyncStream(RuntimeError(secret_message))
+        pending = asyncio.get_running_loop().create_future()
+        transport._pending_requests[2] = pending
+
+        with caplog.at_level(logging.ERROR, logger=SSE_LOGGER_NAME):
+            await transport._read_messages()
+
+        assert "Error in SSE receive loop" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert secret_message not in caplog.text
+        assert "request payload" not in caplog.text
+        assert pending.done()
+        assert isinstance(pending.exception(), RuntimeError)
 
 
 # ============================================================================

@@ -138,7 +138,10 @@ class SSETransport(BaseTransport):
         try:
             async for message in self._read_stream:  # type: ignore[union-attr]
                 if isinstance(message, Exception):
-                    logger.error(f"Received exception from MCP server: {message}")
+                    logger.error(
+                        "Received exception from MCP server error_type=%s",
+                        type(message).__name__,
+                    )
                     self._fail_pending(message)
                     continue
 
@@ -158,7 +161,7 @@ class SSETransport(BaseTransport):
         except asyncio.CancelledError:
             logger.debug("SSE receive loop cancelled")
         except Exception as exc:
-            logger.error(f"Error in SSE receive loop: {exc}", exc_info=True)
+            logger.error("Error in SSE receive loop error_type=%s", type(exc).__name__)
             self._fail_pending(exc)
 
     def _fail_pending(self, exc: BaseException) -> None:
