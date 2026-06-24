@@ -345,7 +345,7 @@ class MediaImportService:
             )
 
             if not sandbox:
-                raise MediaImportError(f"No sandbox available for project {project_id}")
+                raise MediaImportError("No sandbox available for project")
 
             # 2. Convert to base64
             content_base64 = base64.b64encode(content).decode("utf-8")
@@ -372,8 +372,7 @@ class MediaImportService:
                 len(content_list) if isinstance(content_list, list) else 0,
             )
             if is_error:
-                error_msg = result.get("error", "Unknown error")
-                raise MediaImportError(f"Sandbox import failed: {error_msg}")
+                raise MediaImportError("Sandbox import failed")
 
             # Parse nested JSON from content[0].text
             try:
@@ -396,15 +395,12 @@ class MediaImportService:
                 )
                 return cast(str, sandbox_path)
             else:
-                error_msg = import_result.get(
-                    "error", import_result.get("message", "Unknown error")
-                )
-                raise MediaImportError(f"Sandbox import failed: {error_msg}")
+                raise MediaImportError("Sandbox import failed")
 
         except Exception as e:
             if isinstance(e, MediaImportError):
                 raise
-            raise MediaImportError(f"Failed to import to sandbox: {e}") from e
+            raise MediaImportError("Failed to import to sandbox") from e
 
     async def _create_artifact(
         self,

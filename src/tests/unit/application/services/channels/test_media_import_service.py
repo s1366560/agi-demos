@@ -6,7 +6,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.application.services.channels.media_import_service import MediaImportService
+from src.application.services.channels.media_import_service import (
+    MediaImportError,
+    MediaImportService,
+)
 from src.domain.model.channels.message import (
     ChatType,
     Message,
@@ -159,6 +162,103 @@ async def test_import_media_success_logs_omit_platform_keys_and_paths(
     assert "private-roadmap.pdf" not in caplog.text
     assert "/workspace/input/private-roadmap.pdf" not in caplog.text
     assert "artifact-1" in caplog.text
+
+
+@pytest.mark.unit
+async def test_import_to_sandbox_no_sandbox_error_omits_project_id() -> None:
+    """Sandbox lookup failures should not expose project identifiers."""
+    service = MediaImportService(feishu_downloader=AsyncMock())
+    mcp_adapter = SimpleNamespace(
+        get_or_create_sandbox=AsyncMock(return_value=None),
+    )
+
+    with pytest.raises(MediaImportError) as exc_info:
+        await service._import_to_sandbox(
+            content=b"file-bytes",
+            filename="private-roadmap.pdf",
+            project_id="secret-project-id",
+            mcp_adapter=mcp_adapter,
+            db_session=SimpleNamespace(),
+        )
+
+    message = str(exc_info.value)
+    assert "secret-project-id" not in message
+    assert "private-roadmap.pdf" not in message
+    assert "No sandbox available" in message
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "tool_result",
+    [
+        {"is_error": True, "error": "secret-sandbox-token"},
+        {
+            "is_error": False,
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(
+                        {
+                            "success": False,
+                            "error": "secret-sandbox-token",
+                        }
+                    ),
+                }
+            ],
+        },
+    ],
+)
+async def test_import_to_sandbox_failure_error_omits_backend_details(
+    tool_result: dict[str, object],
+) -> None:
+    """Sandbox import failures should not expose backend error text."""
+    service = MediaImportService(feishu_downloader=AsyncMock())
+    mcp_adapter = SimpleNamespace(
+        get_or_create_sandbox=AsyncMock(return_value=SimpleNamespace(id="secret-sandbox-id")),
+        call_tool=AsyncMock(return_value=tool_result),
+    )
+
+    with pytest.raises(MediaImportError) as exc_info:
+        await service._import_to_sandbox(
+            content=b"file-bytes",
+            filename="private-roadmap.pdf",
+            project_id="secret-project-id",
+            mcp_adapter=mcp_adapter,
+            db_session=SimpleNamespace(),
+        )
+
+    message = str(exc_info.value)
+    assert "secret-sandbox-token" not in message
+    assert "secret-project-id" not in message
+    assert "secret-sandbox-id" not in message
+    assert "private-roadmap.pdf" not in message
+    assert "Sandbox import failed" in message
+
+
+@pytest.mark.unit
+async def test_import_to_sandbox_unexpected_error_omits_exception_text() -> None:
+    """Unexpected sandbox adapter failures should not expose exception text."""
+    service = MediaImportService(feishu_downloader=AsyncMock())
+    mcp_adapter = SimpleNamespace(
+        get_or_create_sandbox=AsyncMock(return_value=SimpleNamespace(id="secret-sandbox-id")),
+        call_tool=AsyncMock(side_effect=RuntimeError("secret-sandbox-token")),
+    )
+
+    with pytest.raises(MediaImportError) as exc_info:
+        await service._import_to_sandbox(
+            content=b"file-bytes",
+            filename="private-roadmap.pdf",
+            project_id="secret-project-id",
+            mcp_adapter=mcp_adapter,
+            db_session=SimpleNamespace(),
+        )
+
+    message = str(exc_info.value)
+    assert "secret-sandbox-token" not in message
+    assert "secret-project-id" not in message
+    assert "secret-sandbox-id" not in message
+    assert "private-roadmap.pdf" not in message
+    assert "Failed to import to sandbox" in message
 
 
 @pytest.mark.unit
