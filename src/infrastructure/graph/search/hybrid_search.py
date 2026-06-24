@@ -468,7 +468,7 @@ class HybridSearch:
                     f"Error: {e}"
                 )
                 return []
-            logger.error(f"Vector search query failed: {e}")
+            logger.error("Vector search query failed error_type=%s", type(e).__name__)
             return []
 
     async def _keyword_search_entities(
