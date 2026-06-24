@@ -156,7 +156,11 @@ class MemoryIndexService:
 
         new_chunks = await self._dedup_chunks(chunks, project_id)
         if not new_chunks:
-            logger.info(f"All {len(chunks)} chunks already exist for {source_type}/{source_id}")
+            logger.info(
+                "All chunks already exist source_type=%s chunk_count=%d",
+                source_type,
+                len(chunks),
+            )
             return 0
 
         embeddings = await self._embed_chunks(new_chunks)
@@ -172,7 +176,12 @@ class MemoryIndexService:
         await self._save_chunks(db_chunks)
 
         created = len(db_chunks)
-        logger.info(f"Indexed {created}/{len(chunks)} chunks for {source_type}/{source_id}")
+        logger.info(
+            "Indexed chunks source_type=%s created_count=%d total_count=%d",
+            source_type,
+            created,
+            len(chunks),
+        )
         return created
 
     async def _dedup_chunks(
@@ -220,7 +229,7 @@ class MemoryIndexService:
                 for i, text in enumerate(texts):
                     embeddings[i] = await self._embedding.embed_text(text)
         except Exception as e:
-            logger.warning(f"Batch embedding failed: {e}")
+            logger.warning("Batch embedding failed error_type=%s", type(e).__name__)
         return embeddings
 
     @staticmethod
