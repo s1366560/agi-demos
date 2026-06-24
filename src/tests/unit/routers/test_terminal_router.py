@@ -240,6 +240,57 @@ async def test_create_terminal_session_sanitizes_proxy_value_error(
 
 
 @pytest.mark.unit
+async def test_create_terminal_session_started_event_log_omits_publisher_error_text(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class ExistingSandboxAdapter:
+        async def get_sandbox(self, _sandbox_id: str) -> object:
+            return SimpleNamespace(project_path=None)
+
+    class WorkingProxy:
+        async def create_session(self, *_args: object, **_kwargs: object) -> object:
+            return SimpleNamespace(
+                session_id="session-secret",
+                container_id="sandbox-secret",
+                cols=80,
+                rows=24,
+                is_active=True,
+            )
+
+    event_publisher = SimpleNamespace(
+        publish_terminal_started=AsyncMock(
+            side_effect=RuntimeError("terminal started publisher secret")
+        )
+    )
+    monkeypatch.setattr(terminal_router, "get_sandbox_adapter", lambda: ExistingSandboxAdapter())
+    monkeypatch.setattr(terminal_router, "get_terminal_proxy", lambda: WorkingProxy())
+    monkeypatch.setattr(
+        terminal_router,
+        "get_project_id_from_sandbox",
+        AsyncMock(return_value="project-1"),
+    )
+    caplog.set_level(
+        logging.WARNING,
+        logger="src.infrastructure.adapters.primary.web.routers.terminal",
+    )
+
+    response = await terminal_router.create_terminal_session(
+        sandbox_id="sandbox-secret",
+        request=CreateTerminalRequest(),
+        _user=SimpleNamespace(id="user-1"),
+        event_publisher=event_publisher,
+    )
+
+    assert response.session_id == "session-secret"
+    assert "Failed to publish terminal_started event" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "terminal started publisher secret" not in caplog.text
+    assert "sandbox-secret" not in caplog.text
+    assert "session-secret" not in caplog.text
+
+
+@pytest.mark.unit
 async def test_create_terminal_session_error_log_omits_proxy_exception_text(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,

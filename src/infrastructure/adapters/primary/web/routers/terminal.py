@@ -178,7 +178,10 @@ async def create_terminal_session(
                     session_id=session.session_id,
                 )
             except Exception as e:
-                logger.warning(f"Failed to publish terminal_started event: {e}")
+                logger.warning(
+                    "Failed to publish terminal_started event: error_type=%s",
+                    type(e).__name__,
+                )
 
     return TerminalSessionResponse(
         session_id=session.session_id,
