@@ -147,7 +147,10 @@ async def create_terminal_session(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=_("Terminal session not found")) from e
     except Exception as e:
-        logger.error(f"Failed to create terminal session: {e}")
+        logger.error(
+            "Failed to create terminal session: error_type=%s",
+            type(e).__name__,
+        )
         raise HTTPException(status_code=500, detail=_("Failed to create terminal session")) from e
 
     # Emit terminal_started event

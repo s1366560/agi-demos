@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -134,3 +135,38 @@ async def test_create_terminal_session_sanitizes_proxy_value_error(
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
     assert exc_info.value.detail == "Terminal session not found"
     assert "secret" not in exc_info.value.detail
+
+
+@pytest.mark.unit
+async def test_create_terminal_session_error_log_omits_proxy_exception_text(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class ExistingSandboxAdapter:
+        async def get_sandbox(self, _sandbox_id: str) -> object:
+            return SimpleNamespace(project_path=None)
+
+    class FailingProxy:
+        async def create_session(self, *_args: object, **_kwargs: object) -> object:
+            raise RuntimeError("terminal runtime secret")
+
+    monkeypatch.setattr(terminal_router, "get_sandbox_adapter", lambda: ExistingSandboxAdapter())
+    monkeypatch.setattr(terminal_router, "get_terminal_proxy", lambda: FailingProxy())
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.infrastructure.adapters.primary.web.routers.terminal",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await terminal_router.create_terminal_session(
+            sandbox_id="sandbox-secret",
+            request=CreateTerminalRequest(),
+            _user=SimpleNamespace(id="user-1"),
+            event_publisher=None,
+        )
+
+    assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    assert exc_info.value.detail == "Failed to create terminal session"
+    assert "Failed to create terminal session" in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "terminal runtime secret" not in caplog.text
