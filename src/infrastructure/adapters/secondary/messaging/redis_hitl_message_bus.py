@@ -357,18 +357,43 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 mkstream=True,  # Create stream if it doesn't exist
             )
             logger.info(
-                f"[HITLMessageBus] Created consumer group {consumer_group} for {stream_key}"
+                " ".join(
+                    [
+                        "[HITLMessageBus] Created consumer group start_from_latest=%s",
+                        "has_request_id=%s has_consumer_group=%s",
+                    ]
+                ),
+                start_from_latest,
+                bool(request_id),
+                bool(consumer_group),
             )
             return True
 
-        except redis.ResponseError as e:
-            if "BUSYGROUP" in str(e):
+        except redis.ResponseError as exc:
+            if "BUSYGROUP" in str(exc):
                 # Group already exists - this is fine
                 logger.debug(
-                    f"[HITLMessageBus] Consumer group {consumer_group} already exists for {stream_key}"
+                    " ".join(
+                        [
+                            "[HITLMessageBus] Consumer group already exists",
+                            "has_request_id=%s has_consumer_group=%s",
+                        ]
+                    ),
+                    bool(request_id),
+                    bool(consumer_group),
                 )
                 return True
-            logger.error(f"[HITLMessageBus] Failed to create group: {e}")
+            logger.error(
+                " ".join(
+                    [
+                        "[HITLMessageBus] Failed to create group error_type=%s",
+                        "has_request_id=%s has_consumer_group=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                bool(request_id),
+                bool(consumer_group),
+            )
             raise
 
     async def get_pending_messages(

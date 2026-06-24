@@ -2,6 +2,7 @@ import logging
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+import redis.asyncio as redis
 
 from src.infrastructure.adapters.secondary.messaging.redis_hitl_message_bus import (
     RedisHITLMessageBusAdapter,
@@ -191,3 +192,83 @@ class TestRedisHITLMessageBusLogging:
         assert "redis secret unavailable" not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
         assert "has_request_id=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_create_consumer_group_success_log_redacts_request_id_and_group(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xgroup_create = AsyncMock(return_value=True)
+        adapter = RedisHITLMessageBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_request_id = "hitl-secret-request-3100"
+        secret_consumer_group = "secret-consumer-group"
+
+        with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+            created = await adapter.create_consumer_group(
+                request_id=secret_request_id,
+                consumer_group=secret_consumer_group,
+                start_from_latest=False,
+            )
+
+        assert created is True
+        assert "Created consumer group" in caplog.text
+        assert secret_request_id not in caplog.text
+        assert secret_consumer_group not in caplog.text
+        assert "start_from_latest=False" in caplog.text
+        assert "has_request_id=True" in caplog.text
+        assert "has_consumer_group=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_create_consumer_group_busy_log_redacts_request_id_and_group(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xgroup_create = AsyncMock(
+            side_effect=redis.ResponseError("BUSYGROUP secret group already exists")
+        )
+        adapter = RedisHITLMessageBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_request_id = "hitl-secret-request-3110"
+        secret_consumer_group = "secret-consumer-group"
+
+        with caplog.at_level(logging.DEBUG, logger=LOGGER_NAME):
+            created = await adapter.create_consumer_group(
+                request_id=secret_request_id,
+                consumer_group=secret_consumer_group,
+            )
+
+        assert created is True
+        assert "Consumer group already exists" in caplog.text
+        assert secret_request_id not in caplog.text
+        assert secret_consumer_group not in caplog.text
+        assert "secret group already exists" not in caplog.text
+        assert "has_request_id=True" in caplog.text
+        assert "has_consumer_group=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_create_consumer_group_error_log_redacts_request_id_group_and_exception_text(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.xgroup_create = AsyncMock(
+            side_effect=redis.ResponseError("ERR secret backend unavailable")
+        )
+        adapter = RedisHITLMessageBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_request_id = "hitl-secret-request-3120"
+        secret_consumer_group = "secret-consumer-group"
+
+        with caplog.at_level(logging.ERROR, logger=LOGGER_NAME), pytest.raises(redis.ResponseError):
+            await adapter.create_consumer_group(
+                request_id=secret_request_id,
+                consumer_group=secret_consumer_group,
+            )
+
+        assert "Failed to create group" in caplog.text
+        assert secret_request_id not in caplog.text
+        assert secret_consumer_group not in caplog.text
+        assert "secret backend unavailable" not in caplog.text
+        assert "error_type=ResponseError" in caplog.text
+        assert "has_request_id=True" in caplog.text
+        assert "has_consumer_group=True" in caplog.text
