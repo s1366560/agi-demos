@@ -93,7 +93,7 @@ class ChannelService:
         for adapter in self._adapters.values():
             try:
                 await adapter.disconnect()
-                logger.info(f"Disconnected from {adapter.name}")
+                logger.info("Disconnected adapter: has_channel_id=%s", bool(adapter.id))
             except Exception as e:
                 logger.error(
                     "Error disconnecting adapter: has_channel_id=%s error_type=%s",
