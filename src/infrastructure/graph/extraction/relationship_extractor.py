@@ -366,7 +366,12 @@ class RelationshipExtractor:
             )
 
             if not from_entity or not to_entity:
-                logger.warning(f"Skipping relationship with missing entity: {rel_data}")
+                logger.warning(
+                    "Skipping relationship with missing entity: "
+                    "from_entity_present=%s to_entity_present=%s",
+                    bool(from_entity),
+                    bool(to_entity),
+                )
                 continue
 
             # Look up UUIDs

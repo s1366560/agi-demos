@@ -354,6 +354,32 @@ class TestCreateEntityEdges:
         # Should be normalized but kept
         assert edges[0].relationship_type == "CUSTOM_RELATION"
 
+    def test_create_edges_redacts_missing_entity_relationship_data(self, extractor, caplog):
+        """Missing-entity relationships should not write raw relationship payloads to logs."""
+        secret = "relationship-missing-secret-9753"
+        relationships_data = [
+            {
+                "from_entity": "",
+                "to_entity": f"Target {secret}",
+                "relationship_type": "KNOWS",
+                "fact": f"Sensitive fact {secret}",
+            }
+        ]
+
+        with caplog.at_level(
+            "WARNING",
+            logger="src.infrastructure.graph.extraction.relationship_extractor",
+        ):
+            edges = extractor._create_entity_edges(
+                relationships_data=relationships_data,
+                entity_map={},
+            )
+
+        assert edges == []
+        assert secret not in caplog.text
+        assert "from_entity_present=False" in caplog.text
+        assert "to_entity_present=True" in caplog.text
+
 
 @pytest.mark.unit
 class TestRelationshipDeduplicator:
