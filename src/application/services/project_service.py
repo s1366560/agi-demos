@@ -155,7 +155,15 @@ class ProjectService:
         project.updated_at = datetime.now(UTC)
 
         await self._project_repo.save(project)
-        logger.info(f"Updated project {project_id}")
+        logger.info(
+            "Updated project name_updated=%s description_updated=%s is_public_updated=%s "
+            "memory_rules_updated=%s graph_config_updated=%s",
+            name is not None,
+            description is not None,
+            is_public is not None,
+            memory_rules is not None,
+            graph_config is not None,
+        )
         return project
 
     async def delete_project(self, project_id: str) -> None:

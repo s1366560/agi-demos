@@ -209,6 +209,40 @@ async def test_update_project_success(project_service, mock_project_repo):
 
 
 @pytest.mark.asyncio
+async def test_update_project_logs_do_not_include_project_or_content_identifiers(
+    project_service,
+    mock_project_repo,
+    caplog,
+):
+    """Project update logs must not expose project IDs or user-controlled content."""
+    secret_project_id = "project-secret-alpha-789"
+    secret_name = "Private Renamed Project"
+    secret_description = "Contains confidential customer context"
+    mock_project = Mock()
+    mock_project.id = secret_project_id
+    mock_project.name = "Old Name"
+    mock_project.description = "Old Description"
+    mock_project.is_public = False
+    mock_project_repo.find_by_id.return_value = mock_project
+    caplog.set_level(logging.INFO, logger="src.application.services.project_service")
+
+    result = await project_service.update_project(
+        project_id=secret_project_id,
+        name=secret_name,
+        description=secret_description,
+        is_public=True,
+    )
+
+    assert result.name == secret_name
+    assert secret_project_id not in caplog.text
+    assert secret_name not in caplog.text
+    assert secret_description not in caplog.text
+    assert "name_updated=True" in caplog.text
+    assert "description_updated=True" in caplog.text
+    assert "is_public_updated=True" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_update_project_not_found(project_service, mock_project_repo):
     """Test updating non-existent project"""
     mock_project_repo.find_by_id.return_value = None
