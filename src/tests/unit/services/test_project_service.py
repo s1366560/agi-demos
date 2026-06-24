@@ -266,6 +266,25 @@ async def test_delete_project_success(project_service, mock_project_repo):
 
 
 @pytest.mark.asyncio
+async def test_delete_project_logs_do_not_include_project_identifier(
+    project_service,
+    mock_project_repo,
+    caplog,
+):
+    """Project deletion logs must not expose project IDs."""
+    secret_project_id = "project-secret-delete-123"
+    mock_project = Mock()
+    mock_project.id = secret_project_id
+    mock_project_repo.find_by_id.return_value = mock_project
+    caplog.set_level(logging.INFO, logger="src.application.services.project_service")
+
+    await project_service.delete_project(secret_project_id)
+
+    assert secret_project_id not in caplog.text
+    assert "Deleted project" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_delete_project_not_found(project_service, mock_project_repo):
     """Test deleting non-existent project"""
     mock_project_repo.find_by_id.return_value = None

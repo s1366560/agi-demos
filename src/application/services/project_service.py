@@ -181,7 +181,7 @@ class ProjectService:
             raise ValueError(f"Project {project_id} not found")
 
         await self._project_repo.delete(project_id)
-        logger.info(f"Deleted project {project_id}")
+        logger.info("Deleted project")
 
     async def add_member(self, project_id: str, user_id: str) -> None:
         """
