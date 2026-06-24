@@ -33,6 +33,37 @@ def _build_message() -> Message:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_update_db_status_redacts_session_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """DB status update failures should not log raw exception text."""
+    exception_detail = "session failed channel-db-secret-8642"
+
+    class _FailingSessionContext:
+        @staticmethod
+        async def __aenter__() -> object:
+            raise RuntimeError(exception_detail)
+
+        @staticmethod
+        async def __aexit__(*args: object) -> None:
+            return None
+
+    manager = ChannelConnectionManager(session_factory=lambda: _FailingSessionContext())
+
+    with caplog.at_level(
+        "WARNING",
+        logger="src.infrastructure.channels.connection_manager",
+    ):
+        await manager._update_db_status("config-secret-1357", "error", "failed")
+
+    assert "Failed to update DB status" in caplog.text
+    assert exception_detail not in caplog.text
+    assert "config-secret-1357" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_cleanup_connection_redacts_disconnect_error(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

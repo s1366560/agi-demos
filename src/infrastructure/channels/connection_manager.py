@@ -602,7 +602,10 @@ class ChannelConnectionManager:
                 await repo.update_status(config_id, status, error)
                 await session.commit()
         except Exception as e:
-            logger.warning(f"[ChannelManager] Failed to update DB status: {e}")
+            logger.warning(
+                "[ChannelManager] Failed to update DB status error_type=%s",
+                type(e).__name__,
+            )
 
     async def remove_connection(self, config_id: str) -> bool:
         """Remove and disconnect a connection.
