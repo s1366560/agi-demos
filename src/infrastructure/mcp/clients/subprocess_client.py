@@ -384,7 +384,12 @@ class MCPSubprocessClient:
             }
 
             request_str = json.dumps(request) + "\n"
-            logger.debug(f"MCP request: {request_str.strip()}")
+            logger.debug(
+                "MCP request method=%s id=%s params_keys=%s",
+                method,
+                self._request_id,
+                sorted(params),
+            )
 
             try:
                 self._proc.stdin.write(request_str.encode())
@@ -395,7 +400,11 @@ class MCPSubprocessClient:
                     timeout=timeout,
                 )
                 response_str = response_bytes.decode().strip()
-                logger.debug(f"MCP response: {response_str}")
+                logger.debug(
+                    "MCP response id=%s response_chars=%s",
+                    self._request_id,
+                    len(response_str),
+                )
 
                 if response_str:
                     return cast(dict[str, Any] | None, json.loads(response_str))

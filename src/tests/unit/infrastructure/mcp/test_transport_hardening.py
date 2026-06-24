@@ -9,6 +9,7 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from unittest.mock import AsyncMock, MagicMock
 
@@ -405,3 +406,37 @@ class TestSubprocessCancelLadder:
         proc.stdin.write.assert_called_once()
         proc.stdin.drain.assert_awaited_once()
         client._read_stderr.assert_awaited_once()  # type: ignore[attr-defined]
+
+    async def test_send_request_debug_logs_redact_payloads(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPSubprocessClient(command="echo", args=["stub"])
+        request_secret = "request-debug-secret-token"
+        response_secret = "response-debug-secret-token"
+        response = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"content": [{"type": "text", "text": response_secret}]},
+        }
+        proc = MagicMock()
+        proc.stdin.write = MagicMock()
+        proc.stdin.drain = AsyncMock()
+        proc.stdout.readline = AsyncMock(return_value=json.dumps(response).encode())
+        client._proc = proc  # type: ignore[assignment]
+
+        with caplog.at_level(logging.DEBUG, logger=SUBPROCESS_LOGGER_NAME):
+            result = await client._send_request(
+                "tools/call",
+                {"name": "echo", "token": request_secret},
+                timeout=0.01,
+            )
+
+        assert result == response
+        assert "MCP request" in caplog.text
+        assert "MCP response" in caplog.text
+        assert "method=tools/call" in caplog.text
+        assert "params_keys=" in caplog.text
+        assert "response_chars=" in caplog.text
+        assert request_secret not in caplog.text
+        assert response_secret not in caplog.text
