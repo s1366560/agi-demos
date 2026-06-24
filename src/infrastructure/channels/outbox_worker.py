@@ -121,5 +121,13 @@ class OutboxRetryWorker:
                 await repo.mark_failed(item.id, str(e))
                 await session.commit()
             except Exception as commit_err:
-                logger.warning(f"[OutboxWorker] Failed to update outbox status: {commit_err}")
-            logger.warning(f"[OutboxWorker] Retry failed for {item.id}: {e}")
+                logger.warning(
+                    "[OutboxWorker] Failed to update outbox status error_type=%s has_outbox_id=%s",
+                    type(commit_err).__name__,
+                    bool(item.id),
+                )
+            logger.warning(
+                "[OutboxWorker] Retry failed error_type=%s has_outbox_id=%s",
+                type(e).__name__,
+                bool(item.id),
+            )
