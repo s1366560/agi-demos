@@ -509,7 +509,11 @@ class ChannelConnectionManager:
         try:
             await connection.adapter.disconnect()
         except Exception as e:
-            logger.warning(f"[ChannelManager] Error disconnecting {config.id}: {e}")
+            logger.warning(
+                "[ChannelManager] Error disconnecting error_type=%s has_config_id=%s",
+                type(e).__name__,
+                bool(config.id),
+            )
 
         connection.status = ConnectionStatus.DISCONNECTED
         logger.info(f"[ChannelManager] Connection loop ended: {config.id}")

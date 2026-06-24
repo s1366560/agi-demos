@@ -14,7 +14,11 @@ from src.domain.model.channels.message import (
     MessageType,
     SenderInfo,
 )
-from src.infrastructure.channels.connection_manager import ChannelConnectionManager
+from src.infrastructure.channels.connection_manager import (
+    ChannelConnectionManager,
+    ConnectionStatus,
+    ManagedConnection,
+)
 
 
 def _build_message() -> Message:
@@ -25,6 +29,44 @@ def _build_message() -> Message:
         sender=SenderInfo(id="ou_sender"),
         content=MessageContent(type=MessageType.TEXT, text="hello"),
     )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cleanup_connection_redacts_disconnect_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Disconnect cleanup failures should not log raw config IDs or exception text."""
+    exception_detail = "disconnect failed channel-cleanup-secret-1357"
+    secret_config_id = "channel-config-secret-2468"
+
+    class _FailingAdapter:
+        @staticmethod
+        async def disconnect() -> None:
+            raise RuntimeError(exception_detail)
+
+    manager = ChannelConnectionManager()
+    connection = ManagedConnection(
+        config_id=secret_config_id,
+        project_id="project-1",
+        channel_type="feishu",
+        adapter=_FailingAdapter(),
+        status=ConnectionStatus.CONNECTED,
+    )
+    config = SimpleNamespace(id=secret_config_id)
+
+    with caplog.at_level(
+        "WARNING",
+        logger="src.infrastructure.channels.connection_manager",
+    ):
+        await manager._cleanup_connection(connection, config)  # type: ignore[arg-type]
+
+    assert connection.status == ConnectionStatus.DISCONNECTED
+    assert "Error disconnecting" in caplog.text
+    assert secret_config_id not in caplog.text
+    assert exception_detail not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "has_config_id=True" in caplog.text
 
 
 @pytest.mark.unit
