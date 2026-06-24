@@ -240,7 +240,7 @@ class LouvainDetector:
                 relationship_query, project_id=project_id
             )
         except Exception as e:
-            logger.error(f"Failed to fetch graph data: {e}")
+            logger.error("Failed to fetch graph data error_type=%s", type(e).__name__)
             return []
 
         # Build networkx graph
