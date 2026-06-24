@@ -371,10 +371,30 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
             # Set TTL on the stream
             await self._redis.expire(stream_key, ttl_seconds)
 
-            logger.info(f"[AgentEventBus] Marked {stream_key} complete with TTL={ttl_seconds}s")
+            logger.info(
+                " ".join(
+                    [
+                        "[AgentEventBus] Marked complete ttl_seconds=%s",
+                        "has_conversation_id=%s has_message_id=%s",
+                    ]
+                ),
+                ttl_seconds,
+                bool(conversation_id),
+                bool(message_id),
+            )
 
-        except Exception as e:
-            logger.warning(f"[AgentEventBus] Failed to mark complete: {e}")
+        except Exception as exc:
+            logger.warning(
+                " ".join(
+                    [
+                        "[AgentEventBus] Failed to mark complete error_type=%s",
+                        "has_conversation_id=%s has_message_id=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                bool(conversation_id),
+                bool(message_id),
+            )
 
     async def stream_exists(
         self,
@@ -386,8 +406,18 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
 
         try:
             return cast(bool, await self._redis.exists(stream_key) > 0)
-        except Exception as e:
-            logger.warning(f"[AgentEventBus] Failed to check stream existence: {e}")
+        except Exception as exc:
+            logger.warning(
+                " ".join(
+                    [
+                        "[AgentEventBus] Failed to check stream existence error_type=%s",
+                        "has_conversation_id=%s has_message_id=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                bool(conversation_id),
+                bool(message_id),
+            )
             return False
 
     async def cleanup_stream(
@@ -400,10 +430,30 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
         meta_key = self._get_meta_key(conversation_id, message_id)
 
         try:
-            await self._redis.delete(stream_key, meta_key)
-            logger.info(f"[AgentEventBus] Deleted stream {stream_key}")
-        except Exception as e:
-            logger.warning(f"[AgentEventBus] Failed to cleanup stream: {e}")
+            removed = await self._redis.delete(stream_key, meta_key)
+            logger.info(
+                " ".join(
+                    [
+                        "[AgentEventBus] Deleted stream removed=%s",
+                        "has_conversation_id=%s has_message_id=%s",
+                    ]
+                ),
+                removed,
+                bool(conversation_id),
+                bool(message_id),
+            )
+        except Exception as exc:
+            logger.warning(
+                " ".join(
+                    [
+                        "[AgentEventBus] Failed to cleanup stream error_type=%s",
+                        "has_conversation_id=%s has_message_id=%s",
+                    ]
+                ),
+                type(exc).__name__,
+                bool(conversation_id),
+                bool(message_id),
+            )
 
     # =========================================================================
     # Private helper methods

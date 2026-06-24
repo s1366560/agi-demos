@@ -189,3 +189,129 @@ class TestRedisAgentEventBusLogging:
         assert "error_type=RuntimeError" in caplog.text
         assert "has_conversation_id=True" in caplog.text
         assert "has_message_id=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_mark_complete_success_log_redacts_conversation_and_message(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.setex = AsyncMock(return_value=True)
+        redis_client.expire = AsyncMock(return_value=True)
+        adapter = RedisAgentEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_conversation_id = "conversation-secret-8640"
+        secret_message_id = "message-secret-7530"
+
+        with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+            await adapter.mark_complete(
+                conversation_id=secret_conversation_id,
+                message_id=secret_message_id,
+                ttl_seconds=120,
+            )
+
+        assert "Marked complete" in caplog.text
+        assert secret_conversation_id not in caplog.text
+        assert secret_message_id not in caplog.text
+        assert "ttl_seconds=120" in caplog.text
+        assert "has_conversation_id=True" in caplog.text
+        assert "has_message_id=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_mark_complete_warning_redacts_conversation_message_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.setex = AsyncMock(side_effect=RuntimeError("redis secret unavailable"))
+        adapter = RedisAgentEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_conversation_id = "conversation-secret-6420"
+        secret_message_id = "message-secret-5310"
+
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            await adapter.mark_complete(
+                conversation_id=secret_conversation_id,
+                message_id=secret_message_id,
+            )
+
+        assert "Failed to mark complete" in caplog.text
+        assert secret_conversation_id not in caplog.text
+        assert secret_message_id not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "has_conversation_id=True" in caplog.text
+        assert "has_message_id=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_stream_exists_warning_redacts_conversation_message_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.exists = AsyncMock(side_effect=RuntimeError("redis secret unavailable"))
+        adapter = RedisAgentEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_conversation_id = "conversation-secret-4200"
+        secret_message_id = "message-secret-3100"
+
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            exists = await adapter.stream_exists(
+                conversation_id=secret_conversation_id,
+                message_id=secret_message_id,
+            )
+
+        assert exists is False
+        assert "Failed to check stream existence" in caplog.text
+        assert secret_conversation_id not in caplog.text
+        assert secret_message_id not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "has_conversation_id=True" in caplog.text
+        assert "has_message_id=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_cleanup_stream_success_log_redacts_conversation_and_message(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.delete = AsyncMock(return_value=2)
+        adapter = RedisAgentEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_conversation_id = "conversation-secret-3100"
+        secret_message_id = "message-secret-2468"
+
+        with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+            await adapter.cleanup_stream(
+                conversation_id=secret_conversation_id,
+                message_id=secret_message_id,
+            )
+
+        assert "Deleted stream" in caplog.text
+        assert secret_conversation_id not in caplog.text
+        assert secret_message_id not in caplog.text
+        assert "removed=2" in caplog.text
+        assert "has_conversation_id=True" in caplog.text
+        assert "has_message_id=True" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_cleanup_stream_warning_redacts_conversation_message_and_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        redis_client = Mock()
+        redis_client.delete = AsyncMock(side_effect=RuntimeError("redis secret unavailable"))
+        adapter = RedisAgentEventBusAdapter(redis_client)  # type: ignore[arg-type]
+        secret_conversation_id = "conversation-secret-1357"
+        secret_message_id = "message-secret-9753"
+
+        with caplog.at_level(logging.WARNING, logger=LOGGER_NAME):
+            await adapter.cleanup_stream(
+                conversation_id=secret_conversation_id,
+                message_id=secret_message_id,
+            )
+
+        assert "Failed to cleanup stream" in caplog.text
+        assert secret_conversation_id not in caplog.text
+        assert secret_message_id not in caplog.text
+        assert "redis secret unavailable" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "has_conversation_id=True" in caplog.text
+        assert "has_message_id=True" in caplog.text
