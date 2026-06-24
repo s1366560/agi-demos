@@ -60,6 +60,32 @@ class StructuredFallbackGenerateLLMClient(GenerateOnlyLLMClient):
         return FailingStructuredLLM()
 
 
+class CommunityQueryNeo4jClient:
+    """Neo4j client returning a single community record."""
+
+    async def execute_query(self, *_args: Any, **_kwargs: Any) -> object:
+        class Result:
+            def __init__(self) -> None:
+                self.records = [
+                    {
+                        "c": {
+                            "name": "Existing Community",
+                            "project_id": "project-1",
+                            "tenant_id": "tenant-1",
+                        }
+                    }
+                ]
+
+        return Result()
+
+
+class CommunityMemberDetector:
+    """Louvain detector returning one community member."""
+
+    async def get_community_members(self, _community_uuid: str) -> list[dict[str, Any]]:
+        return [{"name": "Ada", "summary": "Research lead"}]
+
+
 class PrivateGenerateResponseOnlyLLMClient:
     """LLM client exposing the Graphiti-compatible private response surface."""
 
@@ -158,6 +184,32 @@ class TestCommunityUpdaterLLMResponseHandling:
 
         assert result == {"name": "Unnamed Community", "summary": ""}
         assert "community-generate-secret-8642" not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    async def test_update_single_community_redacts_summary_error(
+        self,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        updater = CommunityUpdater(
+            neo4j_client=CommunityQueryNeo4jClient(),  # type: ignore[arg-type]
+            llm_client=GenerateOnlyLLMClient(),  # type: ignore[arg-type]
+            louvain_detector=CommunityMemberDetector(),  # type: ignore[arg-type]
+        )
+
+        async def fail_summary(_member_entities: list[dict[str, Any]]) -> dict[str, str]:
+            raise RuntimeError("provider echoed community-update-secret-1357")
+
+        monkeypatch.setattr(updater, "_generate_community_summary", fail_summary)
+
+        with caplog.at_level(
+            "ERROR",
+            logger="src.infrastructure.graph.community.community_updater",
+        ):
+            result = await updater.update_single_community("community-1")
+
+        assert result is None
+        assert "community-update-secret-1357" not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
 
     async def test_call_llm_with_json_extraction_supports_private_generate_response_client(

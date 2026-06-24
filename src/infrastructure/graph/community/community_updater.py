@@ -231,7 +231,10 @@ class CommunityUpdater:
             )
 
         except Exception as e:
-            logger.error(f"Failed to update community {community_uuid}: {e}")
+            logger.error(
+                "Failed to update community error_type=%s",
+                type(e).__name__,
+            )
             return None
 
     async def _generate_community_summary(
