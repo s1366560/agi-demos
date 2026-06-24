@@ -551,6 +551,7 @@ async def test_desktop_websocket_proxy_sanitizes_internal_errors(
 @pytest.mark.unit
 async def test_desktop_websocket_proxy_upgrades_stale_http_url(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     websocket = _FakeWebSocket()
     service = _SandboxService(desktop_url="http://desktop.local:16080")
@@ -567,6 +568,10 @@ async def test_desktop_websocket_proxy_upgrades_stale_http_url(
 
     monkeypatch.setattr(router_mod, "_connect_desktop_upstream", fake_connect)
     monkeypatch.setattr(router_mod, "_run_ws_relay_pair", fake_relay_pair)
+    caplog.set_level(
+        logging.INFO,
+        logger="src.infrastructure.adapters.primary.web.routers.project_sandbox",
+    )
 
     await router_mod.proxy_project_desktop_websocket(
         websocket=websocket,
@@ -582,6 +587,12 @@ async def test_desktop_websocket_proxy_upgrades_stale_http_url(
     }
     upstream.close.assert_awaited_once()
     assert websocket.closed is True
+    assert "Desktop WS proxy" in caplog.text
+    assert "has_project_id=True" in caplog.text
+    assert "has_desktop_url=True" in caplog.text
+    assert "has_ws_target=True" in caplog.text
+    assert "proj-1" not in caplog.text
+    assert "desktop.local" not in caplog.text
 
 
 @pytest.mark.unit

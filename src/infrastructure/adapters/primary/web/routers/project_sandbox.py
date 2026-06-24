@@ -3108,8 +3108,10 @@ async def proxy_project_desktop_websocket(
     ws_target = _build_desktop_websocket_target(info.desktop_url)
 
     logger.info(
-        f"Desktop WS proxy: project={project_id} "
-        f"desktop_url={info.desktop_url} -> ws_target={ws_target}"
+        "Desktop WS proxy: has_project_id=%s has_desktop_url=%s has_ws_target=%s",
+        bool(project_id),
+        bool(info.desktop_url),
+        bool(ws_target),
     )
 
     await websocket.accept(subprotocol="binary")
@@ -3118,7 +3120,7 @@ async def proxy_project_desktop_websocket(
     try:
         upstream_ws = await _connect_desktop_upstream(ws_target, info.desktop_url)
 
-        logger.info(f"Desktop WS proxy: upstream connected to {ws_target}")
+        logger.info("Desktop WS proxy: upstream connected: has_ws_target=%s", bool(ws_target))
 
         await _run_ws_relay_pair(
             lambda: _relay_binary_browser_to_upstream(websocket, upstream_ws),
