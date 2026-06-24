@@ -440,8 +440,11 @@ def _decrypt_app_secret(encrypted_value: str | None) -> str | None:
     encryption_service = get_encryption_service()
     try:
         return encryption_service.decrypt(encrypted_value)
-    except Exception:
-        logger.warning("Failed to decrypt app_secret while building plugin settings", exc_info=True)
+    except Exception as exc:
+        logger.warning(
+            "Failed to decrypt app_secret while building plugin settings: error_type=%s",
+            type(exc).__name__,
+        )
         return encrypted_value
 
 

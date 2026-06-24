@@ -25,6 +25,7 @@ from src.infrastructure.adapters.primary.web.routers.channels import (
     PushMessageRequest,
     _attach_plugin_skill_definitions,
     _attach_plugin_tool_definitions,
+    _decrypt_app_secret,
     _reconcile_channel_runtime_after_plugin_change,
     _resolve_project_tenant_id,
     create_config,
@@ -237,6 +238,37 @@ class TestProjectTenantResolution:
         assert "error_type=RuntimeError" in caplog.text
         assert "secret-project-id" not in caplog.text
         assert "secret-db-token" not in caplog.text
+
+
+class TestChannelSecretDecryption:
+    """Test channel secret handling helpers."""
+
+    def test_decrypt_app_secret_failure_log_omits_secret_error_text(
+        self, caplog, monkeypatch
+    ):
+        """Decrypt failures should preserve the encrypted value without logging secrets."""
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.infrastructure.adapters.primary.web.routers.channels",
+        )
+
+        class _EncryptionService:
+            def decrypt(self, _value: str) -> str:
+                raise RuntimeError("secret-decrypt-token")
+
+        monkeypatch.setattr(
+            "src.infrastructure.adapters.primary.web.routers.channels."
+            "get_encryption_service",
+            lambda: _EncryptionService(),
+        )
+
+        result = _decrypt_app_secret("encrypted-secret-value")
+
+        assert result == "encrypted-secret-value"
+        assert "Failed to decrypt app_secret while building plugin settings" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert "secret-decrypt-token" not in caplog.text
+        assert "encrypted-secret-value" not in caplog.text
 
 
 class TestToResponse:
