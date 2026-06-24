@@ -140,6 +140,28 @@ class TestLiteLLMEmbedder:
         assert "error_type=RuntimeError" in caplog.text
 
     @pytest.mark.asyncio
+    async def test_create_batch_error_logs_redact_exception_content(self, embedder, caplog):
+        """Batch embedding failures should not log raw provider exception text."""
+        secret = "batch-embedding-secret-9753"
+        with patch("litellm.aembedding", new_callable=AsyncMock) as mock_aembedding:
+            mock_aembedding.side_effect = RuntimeError(f"provider echoed {secret}")
+
+            with caplog.at_level(
+                "WARNING",
+                logger="src.infrastructure.llm.litellm.litellm_embedder",
+            ):
+                embeddings = await embedder.create_batch(
+                    [f"first {secret}", "second"],
+                    batch_size=2,
+                    max_retries=1,
+                    retry_delay=0,
+                )
+
+        assert embeddings == [[0.0] * embedder.embedding_dim] * 2
+        assert secret not in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_embedding_config_parameters_are_forwarded(self):
         """Structured embedding config should be forwarded to LiteLLM kwargs."""
         provider = ProviderConfig(

@@ -492,7 +492,7 @@ class LiteLLMEmbedder(BaseEmbedder):
 
         logger.warning(
             f"Batch {batch_idx}/{total_batches} embedding error (attempt "
-            f"{retry_count}/{max_retries}): {error}"
+            f"{retry_count}/{max_retries}) error_type={type(error).__name__}"
         )
         await asyncio.sleep(current_delay)
         return current_delay
@@ -529,7 +529,7 @@ class LiteLLMEmbedder(BaseEmbedder):
                 if retry_count > max_retries:
                     logger.error(
                         f"Batch {batch_idx}/{total_batches} embedding failed after "
-                        f"{max_retries} retries: {e}"
+                        f"{max_retries} retries error_type={type(e).__name__}"
                     )
                     remaining = len(batch)
                     return [[0.0] * self._embedding_dim] * remaining
