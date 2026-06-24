@@ -16,6 +16,7 @@ Reference: https://modelcontextprotocol.io/specification/2025-11-25
 """
 
 import asyncio
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -276,9 +277,41 @@ class TestToolCallTimeouts:
         with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {"content": [{"type": "text", "text": "ok"}]}
 
-            await client.call_tool("bash", {"command": "npm run build", "timeout": 120}, timeout=200)
+            await client.call_tool(
+                "bash", {"command": "npm run build", "timeout": 120}, timeout=200
+            )
 
         assert mock_send.await_args.kwargs["timeout"] == 200
+
+    @pytest.mark.asyncio
+    async def test_call_tool_debug_log_redacts_arguments(self, caplog):
+        from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
+
+        client = MCPWebSocketClient(url="ws://localhost:8765", timeout=60)
+        argument_secret = "websocket-argument-secret-token"
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
+            mock_send.return_value = {"content": [{"type": "text", "text": "ok"}]}
+
+            with caplog.at_level(
+                logging.DEBUG,
+                logger="src.infrastructure.mcp.clients.websocket_client",
+            ):
+                result = await client.call_tool(
+                    "bash",
+                    {"token": argument_secret, "safe": "metadata"},
+                    timeout=70,
+                )
+
+        assert result.content == [{"type": "text", "text": "ok"}]
+        assert result.isError is False
+        assert "Tool arguments" in caplog.text
+        assert "argument_keys=" in caplog.text
+        assert argument_secret not in caplog.text
+        mock_send.assert_awaited_once_with(
+            "tools/call",
+            {"name": "bash", "arguments": {"token": argument_secret, "safe": "metadata"}},
+            timeout=70,
+        )
 
     @pytest.mark.asyncio
     async def test_late_timed_out_response_is_discarded(self, caplog):

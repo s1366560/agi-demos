@@ -520,7 +520,7 @@ class MCPWebSocketClient:
             arguments=arguments,
         )
         logger.info(f"Calling MCP tool: {name}")
-        logger.debug(f"Tool arguments: {arguments}")
+        logger.debug("Tool arguments argument_keys=%s", sorted(arguments))
 
         try:
             result = await self._send_request(
