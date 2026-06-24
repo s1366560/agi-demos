@@ -1948,7 +1948,9 @@ class ChannelMessageRouter:
             connection = manager.connections.get(channel_config_id)
             if not connection or not connection.adapter:
                 logger.warning(
-                    f"[MessageRouter] Connection not found for config {channel_config_id}"
+                    "[MessageRouter] Connection not found for error reply: "
+                    "has_channel_config_id=%s",
+                    bool(channel_config_id),
                 )
                 return
 
@@ -1965,8 +1967,8 @@ class ChannelMessageRouter:
 
         except Exception as e:
             logger.error(
-                f"[MessageRouter] Failed to send error reply: {e}",
-                exc_info=True,
+                "[MessageRouter] Failed to send error reply: error_type=%s",
+                type(e).__name__,
             )
 
     async def _resolve_channel_config_id_from_message(
