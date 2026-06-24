@@ -85,6 +85,12 @@ class _SuccessfulSendAdapter(_FailingSendAdapter):
         return "secret-message-id"
 
 
+class _DisconnectedSendAdapter(_FailingSendAdapter):
+    @property
+    def connected(self) -> bool:
+        return False
+
+
 def _build_message(text: str) -> Message:
     return Message(
         channel="feishu",
@@ -254,4 +260,55 @@ async def test_send_message_success_log_omits_channel_and_message_ids(
     assert "secret-recipient-id" not in caplog.text
     assert "private response body" not in caplog.text
     assert "secret-message-id" not in caplog.text
+    assert "has_channel_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_message_missing_channel_log_omits_channel_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Missing channel logs should not expose requested channel IDs."""
+    service = ChannelService()
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_service",
+    )
+
+    result = await service.send_message(
+        "secret-missing-channel-id",
+        "secret-recipient-id",
+        MessageContent(type=MessageType.TEXT, text="private response body"),
+    )
+
+    assert result is None
+    assert "secret-missing-channel-id" not in caplog.text
+    assert "secret-recipient-id" not in caplog.text
+    assert "private response body" not in caplog.text
+    assert "has_channel_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_message_disconnected_channel_log_omits_channel_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Disconnected channel logs should not expose requested channel IDs."""
+    service = ChannelService()
+    service.register_adapter(_DisconnectedSendAdapter())
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_service",
+    )
+
+    result = await service.send_message(
+        "secret-channel-id",
+        "secret-recipient-id",
+        MessageContent(type=MessageType.TEXT, text="private response body"),
+    )
+
+    assert result is None
+    assert "secret-channel-id" not in caplog.text
+    assert "secret-recipient-id" not in caplog.text
+    assert "private response body" not in caplog.text
     assert "has_channel_id=True" in caplog.text

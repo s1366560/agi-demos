@@ -103,11 +103,11 @@ class ChannelService:
         """
         adapter = self._adapters.get(channel_id)
         if not adapter:
-            logger.error(f"Channel not found: {channel_id}")
+            logger.error("Channel not found: has_channel_id=%s", bool(channel_id))
             return None
 
         if not adapter.connected:
-            logger.error(f"Channel not connected: {channel_id}")
+            logger.error("Channel not connected: has_channel_id=%s", bool(channel_id))
             return None
 
         try:
