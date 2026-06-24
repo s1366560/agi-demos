@@ -77,6 +77,33 @@ class TestRelationshipExtractorLLMResponse:
         assert "relationship-secret-2468" not in caplog.text
         assert "error_type=RuntimeError" in caplog.text
 
+    def test_parse_relationships_response_redacts_invalid_json_details(self, extractor, caplog):
+        """Invalid JSON warnings should not write response text to logs."""
+        secret = "relationship-json-secret-2468"
+        response = (
+            f"provider preface {secret}\n"
+            '{"relationships": ['
+            '{"from_entity": "Ada", "to_entity": "Lab", "relationship_type": "FOUNDED"}'
+            "]}"
+        )
+
+        with caplog.at_level(
+            "WARNING",
+            logger="src.infrastructure.graph.extraction.relationship_extractor",
+        ):
+            result = extractor._parse_relationships_response(response)
+
+        assert result == [
+            {
+                "from_entity": "Ada",
+                "to_entity": "Lab",
+                "relationship_type": "FOUNDED",
+            }
+        ]
+        assert secret not in caplog.text
+        assert "error_type=JSONDecodeError" in caplog.text
+        assert "response_length=" in caplog.text
+
 
 @pytest.mark.unit
 class TestRelationshipExtractorDatetime:
