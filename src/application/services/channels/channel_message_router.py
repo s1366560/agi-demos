@@ -248,10 +248,10 @@ class ChannelMessageRouter:
 
         except Exception as e:
             logger.error(
-                f"[MessageRouter] Media import failed: {e}",
-                exc_info=True,
+                "[MessageRouter] Media import failed: error_type=%s",
+                type(e).__name__,
             )
-            error_msg = _("Sorry, an error occurred while importing the file: {error}").format(error=str(e))
+            error_msg = _("Sorry, an error occurred while importing the file.")
             await self._send_error_reply(message, error_msg)
 
     def _apply_sandbox_path(self, message: Message, sandbox_path: str) -> None:

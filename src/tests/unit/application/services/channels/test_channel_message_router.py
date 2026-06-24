@@ -665,6 +665,64 @@ async def test_do_media_import_start_log_omits_message_identifier(
 
 
 @pytest.mark.unit
+@pytest.mark.asyncio
+async def test_do_media_import_failure_omits_exception_text_from_log_and_reply(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Media import failures should not expose exception details in logs or replies."""
+    router = ChannelMessageRouter()
+    router._send_error_reply = AsyncMock()
+    media_import_service = SimpleNamespace(
+        import_media_to_workspace=AsyncMock(side_effect=RuntimeError("secret-import-token"))
+    )
+    router._media_import_service = media_import_service
+    message = Message(
+        id="secret-domain-message-id",
+        channel="feishu",
+        chat_type=ChatType.P2P,
+        chat_id="chat-1",
+        sender=SenderInfo(id="sender-1", name="Test User"),
+        content=MessageContent(
+            type=MessageType.FILE,
+            file_key="secret-file-key",
+            file_name="private-roadmap.pdf",
+        ),
+        project_id="project-1",
+    )
+    session = MagicMock()
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+    mcp_adapter = SimpleNamespace(sync_from_docker=AsyncMock())
+    app_container = SimpleNamespace(
+        sandbox_adapter=MagicMock(return_value=mcp_adapter),
+        storage_service=MagicMock(return_value=object()),
+    )
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with (
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            return_value=session_ctx,
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
+            return_value=app_container,
+        ),
+    ):
+        await router._do_media_import(message, "conv-1")
+
+    router._send_error_reply.assert_awaited_once()
+    error_reply = router._send_error_reply.await_args.args[1]
+    assert "secret-import-token" not in caplog.text
+    assert "secret-import-token" not in error_reply
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
 def test_apply_sandbox_path_log_omits_sandbox_path_and_filename(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
