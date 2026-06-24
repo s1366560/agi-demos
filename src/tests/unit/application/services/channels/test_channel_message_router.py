@@ -222,6 +222,35 @@ async def test_route_message_error_log_omits_exception_text(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_get_or_create_conversation_database_log_omits_exception_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Conversation DB errors should log error type without exception details."""
+    router = ChannelMessageRouter()
+    message = _build_message(
+        text="hello",
+        raw_data={"_routing": {"channel_config_id": "cfg-1"}},
+    )
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.side_effect = RuntimeError("secret-database-token")
+    caplog.set_level(
+        logging.ERROR,
+        logger="src.application.services.channels.channel_message_router",
+    )
+
+    with patch(
+        "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+        return_value=session_ctx,
+    ):
+        result = await router._get_or_create_conversation(message)
+
+    assert result is None
+    assert "secret-database-token" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_process_media_if_needed_logs_metadata_without_media_identifiers(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

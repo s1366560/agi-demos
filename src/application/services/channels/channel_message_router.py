@@ -452,7 +452,7 @@ class ChannelMessageRouter:
                 return conversation_id
 
         except Exception as e:
-            logger.error(f"[MessageRouter] Database error: {e}")
+            logger.error("[MessageRouter] Database error: error_type=%s", type(e).__name__)
             return None
 
     async def _find_or_create_conversation_db(
