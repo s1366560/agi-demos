@@ -296,6 +296,69 @@ class TestSandboxMCPServerManager:
         assert result.is_error is True
         assert "sandbox down" in result.error_message
 
+    async def test_read_resource_failure_log_omits_uri_and_error_text(self, caplog):
+        mgr, resource = self._make_manager()
+        resource.read_resource.side_effect = RuntimeError("read secret token private://doc")
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.sandbox_mcp_server_manager",
+        )
+
+        result = await mgr.read_resource(
+            project_id="secret-project-id",
+            uri="private://doc",
+            server_name="secret-server-name",
+            tenant_id="tenant-1",
+        )
+
+        assert result is None
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_mcp_server_manager"
+        )
+        assert "read_resource failed" in message
+        assert "secret-project-id" not in message
+        assert "private://doc" not in message
+        assert "secret-server-name" not in message
+        assert "read secret token" not in message
+        assert "has_uri=True" in message
+        assert "has_project_id=True" in message
+        assert "has_server_name=True" in message
+        assert "error_type=RuntimeError" in message
+
+    async def test_list_resources_failure_log_omits_identifiers_and_error_text(self, caplog):
+        mgr, resource = self._make_manager()
+        adapter = AsyncMock()
+        adapter.list_resources.side_effect = RuntimeError(
+            "list resources secret token secret-sandbox-id"
+        )
+        resource._adapter = adapter
+        resource.get_sandbox_id.return_value = "secret-sandbox-id"
+        caplog.set_level(
+            logging.WARNING,
+            logger="src.application.services.sandbox_mcp_server_manager",
+        )
+
+        resources = await mgr.list_resources(
+            project_id="secret-project-id",
+            tenant_id="tenant-1",
+        )
+
+        assert resources == []
+        message = "\n".join(
+            record.getMessage()
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_mcp_server_manager"
+        )
+        assert "list_resources failed" in message
+        assert "secret-project-id" not in message
+        assert "secret-sandbox-id" not in message
+        assert "list resources secret token" not in message
+        assert "has_project_id=True" in message
+        assert "has_tenant_id=True" in message
+        assert "error_type=RuntimeError" in message
+
     async def test_list_servers(self):
         mgr, resource = self._make_manager()
         resource.execute_tool.return_value = self._tool_result(

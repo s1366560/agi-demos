@@ -323,7 +323,14 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             logger.warning("read_resource: port returned None, resource not supported")
             return None
         except Exception as e:
-            logger.warning(f"read_resource failed for '{uri}': {e}")
+            logger.warning(
+                "read_resource failed: has_project_id=%s has_uri=%s "
+                "has_server_name=%s error_type=%s",
+                bool(project_id),
+                bool(uri),
+                bool(server_name),
+                type(e).__name__,
+            )
             return None
 
     async def list_resources(
@@ -349,7 +356,12 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 return cast("list[Any]", await adapter.list_resources(sandbox_id))
             return []
         except Exception as e:
-            logger.warning(f"list_resources failed: {e}")
+            logger.warning(
+                "list_resources failed: has_project_id=%s has_tenant_id=%s error_type=%s",
+                bool(project_id),
+                bool(tenant_id),
+                type(e).__name__,
+            )
             return []
 
     async def list_prompts(
