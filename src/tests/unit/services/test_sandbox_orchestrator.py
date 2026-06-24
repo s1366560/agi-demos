@@ -480,6 +480,31 @@ class TestSandboxOrchestrator:
         # Event publishing is now handled by the API layer
 
     @pytest.mark.asyncio
+    async def test_stop_terminal_error_log_omits_sandbox_id_and_error_text(
+        self, orchestrator, mock_adapter, caplog
+    ):
+        """Test terminal stop failure logs without raw sandbox IDs or exception text."""
+        mock_adapter.call_tool.side_effect = RuntimeError("terminal stop secret token")
+        caplog.set_level(logging.ERROR, logger="src.application.services.sandbox_orchestrator")
+
+        result = await orchestrator.stop_terminal("sb-123")
+
+        assert result is False
+        target_records = [
+            record
+            for record in caplog.records
+            if record.name == "src.application.services.sandbox_orchestrator"
+            and record.levelno >= logging.ERROR
+        ]
+        assert len(target_records) == 1
+        message = target_records[0].getMessage()
+        assert "Failed to stop terminal" in message
+        assert "error_type=RuntimeError" in message
+        assert "sb-123" not in message
+        assert "terminal stop secret token" not in message
+        assert target_records[0].exc_info is None
+
+    @pytest.mark.asyncio
     async def test_get_terminal_status_running(self, orchestrator, mock_adapter):
         """Test getting terminal status when running."""
         mock_adapter.call_tool.return_value = {

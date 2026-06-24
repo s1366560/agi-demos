@@ -321,7 +321,11 @@ class SandboxOrchestrator:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to stop terminal for {sandbox_id}: {e}")
+            logger.error(
+                "Failed to stop terminal: has_sandbox_id=%s error_type=%s",
+                bool(sandbox_id),
+                type(e).__name__,
+            )
             return False
 
     async def get_terminal_status(self, sandbox_id: str) -> TerminalStatus:
