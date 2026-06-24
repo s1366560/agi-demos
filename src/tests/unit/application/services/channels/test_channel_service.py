@@ -386,6 +386,27 @@ async def test_connect_all_failure_log_omits_adapter_name_and_exception_text(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_connect_all_success_log_omits_adapter_name_and_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Connect success logs should not expose adapter names or IDs."""
+    service = ChannelService()
+    service.register_adapter(_SuccessfulSendAdapter())
+    caplog.set_level(
+        logging.INFO,
+        logger="src.application.services.channels.channel_service",
+    )
+    caplog.clear()
+
+    await service.connect_all()
+
+    assert "Secret Channel" not in caplog.text
+    assert "secret-channel-id" not in caplog.text
+    assert "has_channel_id=True" in caplog.text
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_disconnect_all_failure_log_omits_adapter_name_and_exception_text(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

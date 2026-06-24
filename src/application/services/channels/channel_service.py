@@ -79,7 +79,7 @@ class ChannelService:
         for adapter in self._adapters.values():
             try:
                 await adapter.connect()
-                logger.info(f"Connected to {adapter.name}")
+                logger.info("Connected adapter: has_channel_id=%s", bool(adapter.id))
             except Exception as e:
                 logger.error(
                     "Failed to connect adapter: has_channel_id=%s error_type=%s",
