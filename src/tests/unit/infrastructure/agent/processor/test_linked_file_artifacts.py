@@ -152,6 +152,45 @@ async def test_process_text_file_links_falls_back_to_raw_read_for_text_files() -
 
 
 @pytest.mark.unit
+async def test_process_tool_artifacts_export_failure_log_redacts_artifact_info(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    handler = ArtifactHandler(
+        _FailingArtifactService(),  # type: ignore[arg-type]
+        langfuse_context={
+            "project_id": "project-1",
+            "tenant_id": "tenant-1",
+            "conversation_id": "conversation-1",
+        },
+    )
+    secret_tool_name = "secret-export-tool"
+    secret_path = "/workspace/output/secret-report.md"
+    result = _export_result(secret_path, content="# secret report")
+
+    with caplog.at_level(logging.ERROR, logger=LOGGER_NAME):
+        events = [
+            event
+            async for event in handler.process_tool_artifacts(
+                tool_name=secret_tool_name,
+                result=result,
+                tool_execution_id="tool-execution-1",
+            )
+        ]
+
+    assert events == []
+    assert "Failed to process export_artifact result" in caplog.text
+    assert secret_tool_name not in caplog.text
+    assert secret_path not in caplog.text
+    assert "secret-report.md" not in caplog.text
+    assert "artifact secret unavailable" not in caplog.text
+    assert "Traceback" not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+    assert "has_tool_name=True" in caplog.text
+    assert "has_artifact_filename=True" in caplog.text
+    assert "has_artifact_path=True" in caplog.text
+
+
+@pytest.mark.unit
 async def test_process_tool_artifacts_create_failure_log_redacts_tool_and_exception(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

@@ -600,12 +600,19 @@ class ArtifactHandler:
                 return
 
             except Exception as e:
-                import traceback
-
                 logger.error(
-                    f"Failed to process export_artifact result: {e}\n"
-                    f"Artifact info: {artifact_info}\n"
-                    f"Traceback: {traceback.format_exc()}"
+                    " ".join(
+                        (
+                            "Failed to process export_artifact result error_type=%s",
+                            "has_tool_name=%s",
+                            "has_artifact_filename=%s",
+                            "has_artifact_path=%s",
+                        )
+                    ),
+                    type(e).__name__,
+                    bool(tool_name),
+                    bool(artifact_info.get("filename")),
+                    bool(artifact_info.get("path")),
                 )
 
         # Check for batch_export_artifacts results
