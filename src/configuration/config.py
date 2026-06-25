@@ -477,6 +477,16 @@ class Settings(BaseSettings):
         default=True, alias="MCP_TLS_VERIFY"
     )  # set False ONLY for local development; transports also read MCP_TLS_VERIFY directly
 
+    # ACP (Agent Client Protocol) Settings
+    acp_enabled: bool = Field(default=True, alias="ACP_ENABLED")
+    acp_websocket_enabled: bool = Field(default=True, alias="ACP_WEBSOCKET_ENABLED")
+    acp_http_base_url: str = Field(default="http://127.0.0.1:8000", alias="ACP_HTTP_BASE_URL")
+    acp_api_key: str | None = Field(default=None, alias="ACP_API_KEY")
+    acp_default_project_id: str | None = Field(default=None, alias="ACP_DEFAULT_PROJECT_ID")
+    acp_external_agents_config_path: str | None = Field(
+        default=None, alias="ACP_EXTERNAL_AGENTS_CONFIG_PATH"
+    )
+
     # Plan Mode Detection Settings (Hybrid Detection Strategy)
     plan_mode_enabled: bool = Field(default=False, alias="PLAN_MODE_ENABLED")
     plan_mode_detection_strategy: str = Field(

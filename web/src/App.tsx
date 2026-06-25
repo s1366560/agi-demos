@@ -150,6 +150,11 @@ const McpServerList = lazy(() =>
     default: m.McpServerListV2,
   }))
 );
+const AcpDashboard = lazy(() =>
+  import('./pages/tenant/AcpDashboard').then((m) => ({
+    default: m.AcpDashboard,
+  }))
+);
 const UnifiedRuntimes = lazy(() =>
   import('./pages/tenant/UnifiedRuntimes').then((m) => ({ default: m.UnifiedRuntimes }))
 );
@@ -970,6 +975,14 @@ function App() {
                 }
               />
               <Route
+                path="acp"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AcpDashboard />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="pool"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -1544,6 +1557,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <McpServerList />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/acp"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <AcpDashboard />
                   </Suspense>
                 }
               />

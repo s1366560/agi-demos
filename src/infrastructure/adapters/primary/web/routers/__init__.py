@@ -1,6 +1,7 @@
 """FastAPI routers for the MemStack API."""
 
 from src.infrastructure.adapters.primary.web.routers import (
+    acp,
     admin_dlq,
     ai_tools,
     auth,
@@ -43,6 +44,7 @@ from src.infrastructure.adapters.primary.web.routers import (
 # with the new websocket module
 
 __all__ = [
+    "acp",
     "admin_dlq",
     "ai_tools",
     "auth",

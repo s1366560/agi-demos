@@ -22,6 +22,7 @@ export interface TenantTopNavGroup {
 
 const TENANT_NAV_FALLBACK_LABELS: Record<string, string> = {
   'agent-workspace': 'Agent Workspace',
+  acp: 'ACP',
   'agent-configuration': 'Agent Configuration',
   'audit-logs': 'Audit Logs',
   billing: 'Billing',

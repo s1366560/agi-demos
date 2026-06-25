@@ -313,6 +313,7 @@
     "billing": "账单",
     "profile": "个人资料",
     "mcpServers": "MCP",
+    "acp": "ACP",
     "pool": "智能体池",
     "runtimes": "运行时",
     "channels": "渠道集成",
@@ -920,6 +921,89 @@
     "billing": "账单"
   },
   "tenant": {
+    "acp": {
+      "title": "ACP",
+      "subtitle": "管理外部 Agent Client Protocol 智能体配置，并监控运行时会话。",
+      "noTenant": "请选择组织后管理 ACP。",
+      "disabledWarning": "当前后端未启用 ACP。",
+      "deleteConfirm": "确认删除这个 ACP agent 配置？",
+      "actions": {
+        "addAgent": "新增 Agent",
+        "test": "测试 Agent",
+        "runTest": "运行测试"
+      },
+      "tabs": {
+        "agents": "Agents",
+        "sessions": "会话",
+        "events": "事件"
+      },
+      "stats": {
+        "agents": "Agents",
+        "available": "可用",
+        "activeSessions": "活动会话",
+        "missingEnv": "缺失环境变量"
+      },
+      "columns": {
+        "agent": "Agent",
+        "transport": "传输",
+        "status": "状态",
+        "sessions": "会话",
+        "lastLatency": "最近延迟",
+        "lastError": "最近错误",
+        "session": "会话",
+        "createdAt": "创建时间",
+        "lastActivity": "最近活动",
+        "action": "动作",
+        "duration": "耗时",
+        "timestamp": "时间",
+        "error": "错误"
+      },
+      "form": {
+        "createTitle": "创建 ACP Agent",
+        "editTitle": "编辑 ACP Agent",
+        "agentKey": "Agent Key",
+        "transport": "传输",
+        "command": "命令",
+        "args": "参数，每行一个",
+        "url": "WebSocket URL",
+        "env": "环境变量",
+        "headers": "请求头",
+        "addEnv": "添加环境变量",
+        "addHeader": "添加请求头",
+        "envRef": "环境变量引用",
+        "secret": "密钥",
+        "namePlaceholder": "名称",
+        "envRefPlaceholder": "环境变量名",
+        "secretPlaceholder": "留空则保留已保存密钥"
+      },
+      "test": {
+        "title": "测试 {{name}}",
+        "cwd": "工作目录",
+        "projectId": "Project ID",
+        "prompt": "提示词",
+        "timeout": "超时时间（秒）",
+        "success": "ACP 测试成功",
+        "failure": "ACP 测试失败",
+        "duration": "耗时：{{duration}} ms",
+        "updates": "更新数：{{count}}"
+      },
+      "messages": {
+        "created": "ACP agent 已创建。",
+        "updated": "ACP agent 已更新。",
+        "deleted": "ACP agent 已删除。"
+      },
+      "errors": {
+        "loadFailed": "加载 ACP 状态失败。",
+        "saveFailed": "保存 ACP agent 失败。",
+        "deleteFailed": "删除 ACP agent 失败。",
+        "testFailed": "测试 ACP agent 失败。",
+        "agentKeyRequired": "Agent key 必填。",
+        "nameRequired": "名称必填。",
+        "commandRequired": "stdio 传输必须填写命令。",
+        "urlRequired": "WebSocket 传输必须填写 URL。",
+        "cwdRequired": "工作目录必填。"
+      }
+    },
     "create_modal": {
       "title": "创建租户",
       "close": "关闭租户创建",

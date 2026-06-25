@@ -33,6 +33,7 @@ from src.infrastructure.adapters.primary.web.middleware import (
     install_api_access_log_middleware,
 )
 from src.infrastructure.adapters.primary.web.routers import (
+    acp,
     admin_dlq,
     ai_tools,
     artifacts,
@@ -697,6 +698,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(projects.router)
     app.include_router(agent_router)  # Modular agent router
     app.include_router(websocket_router)  # WebSocket for agent chat
+    app.include_router(acp.router)  # Agent Client Protocol
     app.include_router(shares.router)
     app.include_router(memories.router)
     app.include_router(graph.router)

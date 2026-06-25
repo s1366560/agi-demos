@@ -173,6 +173,7 @@ describe('Navigation Configuration', () => {
         '/tenant/tenant-123/patterns'
       );
       expect(tenantItems.find((item) => item.id === 'pool')?.path).toBe('/tenant/tenant-123/pool');
+      expect(tenantItems.find((item) => item.id === 'acp')?.path).toBe('/tenant/tenant-123/acp');
       expect(tenantItems.find((item) => item.id === 'org-settings')?.path).toBe(
         '/tenant/tenant-123/org-settings/info'
       );
@@ -201,6 +202,11 @@ describe('Navigation Configuration', () => {
         'subagents',
       ]);
       expect(tenantItems.find((item) => item.id === 'plugins')).toMatchObject({
+        groupId: 'tenant-extensions-integrations',
+        groupLabel: 'nav.extensionsIntegrations',
+        displayRole: 'overflow',
+      });
+      expect(tenantItems.find((item) => item.id === 'acp')).toMatchObject({
         groupId: 'tenant-extensions-integrations',
         groupLabel: 'nav.extensionsIntegrations',
         displayRole: 'overflow',

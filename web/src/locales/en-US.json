@@ -313,6 +313,7 @@
     "billing": "Billing",
     "profile": "Profile",
     "mcpServers": "MCP",
+    "acp": "ACP",
     "pool": "Agent Pool",
     "runtimes": "Runtimes",
     "channels": "Channels",
@@ -920,6 +921,89 @@
     "billing": "Billing"
   },
   "tenant": {
+    "acp": {
+      "title": "ACP",
+      "subtitle": "Manage external Agent Client Protocol agents and monitor runtime sessions.",
+      "noTenant": "Select an organization to manage ACP.",
+      "disabledWarning": "ACP is disabled on this backend.",
+      "deleteConfirm": "Delete this ACP agent configuration?",
+      "actions": {
+        "addAgent": "Add agent",
+        "test": "Test agent",
+        "runTest": "Run test"
+      },
+      "tabs": {
+        "agents": "Agents",
+        "sessions": "Sessions",
+        "events": "Events"
+      },
+      "stats": {
+        "agents": "Agents",
+        "available": "Available",
+        "activeSessions": "Active sessions",
+        "missingEnv": "Missing env"
+      },
+      "columns": {
+        "agent": "Agent",
+        "transport": "Transport",
+        "status": "Status",
+        "sessions": "Sessions",
+        "lastLatency": "Last latency",
+        "lastError": "Last error",
+        "session": "Session",
+        "createdAt": "Created",
+        "lastActivity": "Last activity",
+        "action": "Action",
+        "duration": "Duration",
+        "timestamp": "Timestamp",
+        "error": "Error"
+      },
+      "form": {
+        "createTitle": "Create ACP agent",
+        "editTitle": "Edit ACP agent",
+        "agentKey": "Agent key",
+        "transport": "Transport",
+        "command": "Command",
+        "args": "Arguments, one per line",
+        "url": "WebSocket URL",
+        "env": "Environment",
+        "headers": "Headers",
+        "addEnv": "Add env",
+        "addHeader": "Add header",
+        "envRef": "Env ref",
+        "secret": "Secret",
+        "namePlaceholder": "Name",
+        "envRefPlaceholder": "Environment variable name",
+        "secretPlaceholder": "Leave blank to keep the stored secret"
+      },
+      "test": {
+        "title": "Test {{name}}",
+        "cwd": "Working directory",
+        "projectId": "Project ID",
+        "prompt": "Prompt",
+        "timeout": "Timeout seconds",
+        "success": "ACP test succeeded",
+        "failure": "ACP test failed",
+        "duration": "Duration: {{duration}} ms",
+        "updates": "Updates: {{count}}"
+      },
+      "messages": {
+        "created": "ACP agent created.",
+        "updated": "ACP agent updated.",
+        "deleted": "ACP agent deleted."
+      },
+      "errors": {
+        "loadFailed": "Failed to load ACP status.",
+        "saveFailed": "Failed to save ACP agent.",
+        "deleteFailed": "Failed to delete ACP agent.",
+        "testFailed": "Failed to test ACP agent.",
+        "agentKeyRequired": "Agent key is required.",
+        "nameRequired": "Name is required.",
+        "commandRequired": "Command is required for stdio transport.",
+        "urlRequired": "URL is required for WebSocket transport.",
+        "cwdRequired": "Working directory is required."
+      }
+    },
     "create_modal": {
       "title": "Create Tenant",
       "close": "Close tenant creation",

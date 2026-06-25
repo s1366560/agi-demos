@@ -672,6 +672,16 @@ const CANONICAL_NAVIGATION_DESTINATIONS: readonly CanonicalDestinationDefinition
     buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/mcp-servers'),
   },
   {
+    id: 'acp',
+    label: 'nav.acp',
+    routeFamily: 'tenant',
+    contexts: ['tenant'],
+    displayRole: 'overflow',
+    groupId: 'tenant-extensions-integrations',
+    relativePath: '/acp',
+    buildPath: (context) => getCanonicalTenantDestinationPath(context.tenantId, '/acp'),
+  },
+  {
     id: 'templates',
     label: 'nav.templates',
     routeFamily: 'tenant',
@@ -1240,6 +1250,7 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
       items: [
         { id: 'plugins', icon: 'extension', label: 'nav.plugins', path: '/plugins' },
         { id: 'mcp-servers', icon: 'cable', label: 'nav.mcpServers', path: '/mcp-servers' },
+        { id: 'acp', icon: 'hub', label: 'nav.acp', path: '/acp' },
         { id: 'templates', icon: 'widgets', label: 'nav.templates', path: '/templates' },
         { id: 'providers', icon: 'model_training', label: 'nav.providers', path: '/providers' },
         { id: 'webhooks', icon: 'webhook', label: 'nav.webhooks', path: '/webhooks' },

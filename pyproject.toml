@@ -47,6 +47,9 @@ dependencies = [
     "aioboto3>=15.5.0",
     # MCP (Model Context Protocol) for tool integration
     "mcp>=1.0.0",
+    # ACP (Agent Client Protocol) for editor/client interoperability
+    "agent-client-protocol>=0.10.1",
+    "websockets>=12.0",
     # Ray for Actor-based agent runtime. Keep Docker actor images and ray-head aligned.
     "ray==2.53.0",
     "lark-oapi",
@@ -58,6 +61,9 @@ dependencies = [
     # i18n: Babel for .po/.mo extraction & compilation
     "babel>=2.14.0",
 ]
+
+[project.scripts]
+memstack-acp = "src.infrastructure.acp.cli:main"
 
 [project.optional-dependencies]
 dev = [

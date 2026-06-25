@@ -7,6 +7,18 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "agent-client-protocol"
+version = "0.10.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/88/a0/3b96cd8374725c69bc3dae9fcc2082f3f6cafec1be35d24d7af0f8c3265f/agent_client_protocol-0.10.1.tar.gz", hash = "sha256:355c65ca19f0568344aafc2c1552b7066a8fc491df23ab28e7e253c6c9a85a25", size = 81924, upload-time = "2026-05-24T18:46:44.444Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7b/18/d8c7ff337cf621ea79a84006a7252ff057bfb5767549bb102cc6649f4ec2/agent_client_protocol-0.10.1-py3-none-any.whl", hash = "sha256:a03d3198f4d772f2e0ec012c00ac1cce131b4710220a3dc9fae3c991d047c750", size = 65401, upload-time = "2026-05-24T18:46:43.202Z" },
+]
+
+[[package]]
 name = "aioboto3"
 version = "15.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1597,6 +1609,7 @@ name = "memstack"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "agent-client-protocol" },
     { name = "aioboto3" },
     { name = "aiosqlite" },
     { name = "alembic" },
@@ -1638,6 +1651,7 @@ dependencies = [
     { name = "sqlalchemy" },
     { name = "tavily-python" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
     { name = "zai-sdk" },
 ]
 
@@ -1672,6 +1686,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agent-client-protocol", specifier = ">=0.10.1" },
     { name = "aioboto3", specifier = ">=15.5.0" },
     { name = "aiosqlite", specifier = ">=0.22.1" },
     { name = "alembic", specifier = ">=1.12.0" },
@@ -1728,6 +1743,7 @@ requires-dist = [
     { name = "tavily-python", specifier = ">=0.5.0" },
     { name = "transformers", marker = "extra == 'evaluation'", specifier = ">=4.35.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.24.0" },
+    { name = "websockets", specifier = ">=12.0" },
     { name = "zai-sdk", specifier = ">=0.2.0" },
 ]
 provides-extras = ["dev", "neo4j", "evaluation"]

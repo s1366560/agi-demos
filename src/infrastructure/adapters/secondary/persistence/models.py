@@ -224,6 +224,37 @@ class PluginConfigModel(IdGeneratorMixin, Base):
     )
 
 
+class ACPExternalAgentConfigModel(IdGeneratorMixin, Base):
+    """Tenant-scoped configuration for external Agent Client Protocol agents."""
+
+    __tablename__ = "acp_external_agent_configs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    agent_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    transport: Mapped[str] = mapped_column(String(32), nullable=False)
+    command: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    args: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    env: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    headers: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "agent_key", name="uq_acp_external_agents_tenant_key"),
+        Index("ix_acp_external_agents_tenant_key", "tenant_id", "agent_key"),
+        Index("ix_acp_external_agents_tenant_enabled", "tenant_id", "enabled"),
+    )
+
+
 class Project(Base):
     __tablename__ = "projects"
 
