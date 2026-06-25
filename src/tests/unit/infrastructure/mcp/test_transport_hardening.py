@@ -649,6 +649,38 @@ class TestSubprocessCancelLadder:
         proc.stdin.write.assert_called_once()
         proc.stdin.drain.assert_not_awaited()
 
+    async def test_send_request_parse_error_log_redacts_exception(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPSubprocessClient(command="echo", args=["stub"])
+        parse_secret = "subprocess-parse-secret"
+        proc = MagicMock()
+        proc.stdin.write = MagicMock()
+        proc.stdin.drain = AsyncMock()
+        proc.stdout.readline = AsyncMock(return_value=f"{{not-json:{parse_secret}}}\n".encode())
+        client._proc = proc  # type: ignore[assignment]
+
+        def raise_parse_error(_payload: str) -> None:
+            raise json.JSONDecodeError(parse_secret, "{}", 0)
+
+        monkeypatch.setattr(
+            "src.infrastructure.mcp.clients.subprocess_client.json.loads",
+            raise_parse_error,
+        )
+
+        with caplog.at_level(logging.ERROR, logger=SUBPROCESS_LOGGER_NAME):
+            result = await client._send_request("tools/call", {"safe": "metadata"}, timeout=0.01)
+
+        assert result is None
+        assert "MCP response parse error" in caplog.text
+        assert "error_type=JSONDecodeError" in caplog.text
+        assert parse_secret not in caplog.text
+        proc.stdin.write.assert_called_once()
+        proc.stdin.drain.assert_awaited_once()
+        proc.stdout.readline.assert_awaited_once()
+
     async def test_send_request_timeout_log_redacts_stderr(
         self,
         caplog: pytest.LogCaptureFixture,
