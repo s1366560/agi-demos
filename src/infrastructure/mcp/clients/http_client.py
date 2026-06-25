@@ -524,7 +524,7 @@ class MCPHttpClient:
             try:
                 await self._exit_stack.aclose()
             except Exception as e:
-                logger.error(f"Error closing SSE resources: {e}")
+                logger.error("Error closing SSE resources error_type=%s", type(e).__name__)
             self._exit_stack = None
             self._http_client = None
             self._read_stream = None
@@ -535,7 +535,7 @@ class MCPHttpClient:
             try:
                 await self._session.close()
             except Exception as e:
-                logger.error(f"Error closing HTTP session: {e}")
+                logger.error("Error closing HTTP session error_type=%s", type(e).__name__)
             self._session = None
 
         self._tools = []

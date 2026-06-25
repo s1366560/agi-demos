@@ -333,6 +333,54 @@ class TestHTTPClientHardening:
         assert error_secret not in caplog.text
         session.post.assert_called_once()
 
+    async def test_disconnect_sse_resource_error_log_redacts_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPHttpClient(url="https://mcp.example.test", transport_type="sse")
+        error_secret = "http-sse-close-secret"
+        exit_stack = MagicMock()
+        exit_stack.aclose = AsyncMock(side_effect=RuntimeError(error_secret))
+        client._exit_stack = exit_stack  # type: ignore[assignment]
+        client._http_client = MagicMock()  # type: ignore[assignment]
+        client._read_stream = object()
+        client._write_stream = object()
+        client._connected = True
+
+        with caplog.at_level(logging.ERROR, logger=HTTP_LOGGER_NAME):
+            await client.disconnect()
+
+        assert "Error closing SSE resources" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert error_secret not in caplog.text
+        exit_stack.aclose.assert_awaited_once()
+        assert client._exit_stack is None
+        assert client._http_client is None
+        assert client._read_stream is None
+        assert client._write_stream is None
+        assert client.is_connected is False
+
+    async def test_disconnect_http_session_error_log_redacts_exception(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        client = MCPHttpClient(url="https://mcp.example.test")
+        error_secret = "http-session-close-secret"
+        session = MagicMock()
+        session.close = AsyncMock(side_effect=RuntimeError(error_secret))
+        client._session = session  # type: ignore[assignment]
+        client._connected = True
+
+        with caplog.at_level(logging.ERROR, logger=HTTP_LOGGER_NAME):
+            await client.disconnect()
+
+        assert "Error closing HTTP session" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert error_secret not in caplog.text
+        session.close.assert_awaited_once()
+        assert client._session is None
+        assert client.is_connected is False
+
 
 class TestSubprocessCancelLadder:
     async def test_connect_initialize_failure_log_redacts_response_and_stderr(
