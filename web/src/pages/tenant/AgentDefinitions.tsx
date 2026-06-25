@@ -585,6 +585,11 @@ export const AgentDefinitions: React.FC = () => {
                     {getScopeLabel(def.project_id)}
                   </Tag>
                   {def.model && <Tag className="text-2xs">{def.model}</Tag>}
+                  {def.execution_backend?.type === 'acp_external' && (
+                    <Tag color="cyan" className="text-2xs">
+                      ACP
+                    </Tag>
+                  )}
                   {def.can_spawn && (
                     <Tag color="blue" className="text-2xs">
                       {t('tenant.agentDefinitions.capabilities.spawn', { defaultValue: 'Spawn' })}

@@ -7,17 +7,31 @@ Handles send_message and stop_session message types.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Protocol, override
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Protocol, cast, override
 
+from sqlalchemy import select
+
+from src.domain.model.agent.execution_backend import execution_backend_from_metadata
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
+from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
+from src.infrastructure.adapters.secondary.persistence.models import UserTenant
 
 if TYPE_CHECKING:
     from src.application.services.agent_service import AgentService
+    from src.domain.model.agent import Agent, AgentExecutionEvent
+    from src.domain.model.agent.execution.event_time import EventTimeGenerator
+    from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
+        SqlAgentExecutionEventRepository,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +42,58 @@ class _RayCancelMethod(Protocol):
 
 class _RayActorLike(Protocol):
     cancel: _RayCancelMethod
+
+
+class _ExternalACPSessionResult(Protocol):
+    session_id: str
+
+
+class _ExternalACPPromptResult(Protocol):
+    updates: list[dict[str, Any]]
+    result: dict[str, Any] | None
+
+
+class _ExternalACPService(Protocol):
+    async def new_session(
+        self,
+        *,
+        agent_id: str,
+        owner_user_id: str,
+        cwd: str,
+        additional_directories: list[str] | None,
+        mcp_servers: list[dict[str, Any]],
+        tenant_id: str | None,
+        field_meta: dict[str, Any] | None,
+    ) -> _ExternalACPSessionResult: ...
+
+    async def prompt(
+        self,
+        *,
+        agent_id: str,
+        session_id: str,
+        owner_user_id: str,
+        prompt: list[dict[str, str]],
+        message_id: str | None,
+        tenant_id: str | None,
+    ) -> _ExternalACPPromptResult: ...
+
+    async def close(
+        self,
+        *,
+        agent_id: str,
+        session_id: str,
+        owner_user_id: str,
+        tenant_id: str | None,
+    ) -> object: ...
+
+
+@dataclass(slots=True)
+class _ExternalACPExecutionState:
+    event_repo: SqlAgentExecutionEventRepository
+    time_gen: EventTimeGenerator
+    user_msg_id: str
+    assistant_msg_id: str
+
 
 _CLIENT_APP_MODEL_CONTEXT_DENYLIST = frozenset(
     {
@@ -350,6 +416,652 @@ async def _resolve_user_preferred_language(context: MessageContext) -> str | Non
     return None
 
 
+async def _load_external_acp_backend(
+    context: MessageContext,
+    *,
+    agent_id: str | None,
+    project_id: str,
+) -> tuple[Agent, dict[str, Any]] | None:
+    if not agent_id:
+        return None
+    registry = context.get_scoped_container().agent_registry()
+    agent = await registry.get_by_id(
+        agent_id,
+        tenant_id=context.tenant_id,
+        project_id=project_id,
+    )
+    if agent is None:
+        return None
+    backend = execution_backend_from_metadata(agent.metadata)
+    if backend["type"] != "acp_external":
+        return None
+    return agent, dict(backend)
+
+
+async def _ensure_external_acp_chat_admin(context: MessageContext) -> None:
+    result = await context.db.execute(
+        refresh_select_statement(
+            select(UserTenant.role).where(
+                UserTenant.user_id == context.user_id,
+                UserTenant.tenant_id == context.tenant_id,
+            )
+        )
+    )
+    role = result.scalar_one_or_none()
+    if role not in {"admin", "owner"}:
+        raise PermissionError("Admin access required for external ACP agents")
+
+
+def _has_external_acp_unsupported_payload(
+    *,
+    attachment_ids: list[str] | None,
+    file_metadata: list[dict[str, Any]] | None,
+    forced_skill_name: str | None,
+    image_attachments: list[str] | None,
+    mentions: list[str] | None,
+) -> bool:
+    return bool(
+        attachment_ids or file_metadata or forced_skill_name or image_attachments or mentions
+    )
+
+
+def _resolve_external_acp_cwd(agent: Agent) -> str:
+    candidates = [
+        getattr(agent, "workspace_dir", None),
+        getattr(getattr(agent, "workspace_config", None), "base_path", None),
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            path = Path(candidate).expanduser()
+            return str(path if path.is_absolute() else Path.cwd() / path)
+    return str(Path.cwd())
+
+
+def _get_external_acp_update(item: dict[str, Any]) -> dict[str, Any] | None:
+    update = item.get("update")
+    if isinstance(update, dict):
+        return update
+    params = item.get("params")
+    if isinstance(params, dict) and isinstance(params.get("update"), dict):
+        return cast(dict[str, Any], params["update"])
+    return None
+
+
+_EXTERNAL_ACP_TOOL_OUTPUT_MAX_CHARS = 2000
+_EXTERNAL_ACP_META_KEYS = (
+    "sessionUpdate",
+    "session_update",
+    "toolCallId",
+    "tool_call_id",
+    "kind",
+    "status",
+    "title",
+)
+
+
+def _text_from_external_acp_content(content: object) -> str:
+    text = ""
+    if isinstance(content, list):
+        text = "".join(_text_from_external_acp_content(item) for item in content)
+    elif isinstance(content, dict):
+        if isinstance(content.get("text"), str):
+            text = str(content["text"])
+        elif isinstance(content.get("content"), str):
+            text = str(content["content"])
+        elif (nested := content.get("content")) is not None:
+            text = _text_from_external_acp_content(nested)
+    elif isinstance(content, str):
+        text = content
+    return text
+
+
+def _compact_external_acp_text(text: str, max_chars: int = _EXTERNAL_ACP_TOOL_OUTPUT_MAX_CHARS) -> str:
+    value = text.strip()
+    if len(value) <= max_chars:
+        return value
+    return value[:max_chars].rstrip() + "\n... [truncated]"
+
+
+def _external_acp_update_meta(update: dict[str, Any]) -> dict[str, Any]:
+    meta: dict[str, Any] = {}
+    for key in _EXTERNAL_ACP_META_KEYS:
+        value = update.get(key)
+        if isinstance(value, str | int | float | bool):
+            meta[key] = value
+    return meta
+
+
+def _external_acp_update_kind(update: dict[str, Any]) -> str:
+    value = update.get("sessionUpdate") or update.get("session_update")
+    return str(value or "")
+
+
+def _external_acp_update_text(update: dict[str, Any]) -> str:
+    return _text_from_external_acp_content(update.get("content"))
+
+
+def _extract_external_acp_result_text(result: dict[str, Any] | None) -> str:
+    if not isinstance(result, dict):
+        return ""
+    for key in ("content", "text", "message", "output"):
+        value = result.get(key)
+        if isinstance(value, str) and value:
+            return value
+    content = result.get("content")
+    if isinstance(content, list):
+        chunks = [_text_from_external_acp_content(item) for item in content]
+        return "".join(chunk for chunk in chunks if chunk)
+    return ""
+
+
+def _external_acp_event_content(event_data: dict[str, Any]) -> str:
+    content = event_data.get("content")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        return "".join(_text_from_external_acp_content(item) for item in content).strip()
+    return ""
+
+
+def _format_external_acp_prompt_with_history(
+    *,
+    user_message: str,
+    history: list[tuple[str, str]],
+    max_chars: int = 6000,
+) -> str:
+    if not history:
+        return user_message
+
+    lines: list[str] = []
+    remaining = max_chars
+    for role, content in reversed(history):
+        normalized = " ".join(content.split())
+        if not normalized:
+            continue
+        prefix = "User" if role == "user" else "Assistant"
+        line = f"{prefix}: {normalized}"
+        if len(line) > remaining:
+            line = line[: max(0, remaining - 1)] + "…"
+        lines.append(line)
+        remaining -= len(line)
+        if remaining <= 0:
+            break
+    lines.reverse()
+
+    if not lines:
+        return user_message
+    return (
+        "Conversation context from previous MemStack turns:\n"
+        + "\n".join(lines)
+        + "\n\nCurrent user request:\n"
+        + user_message
+    )
+
+
+async def _build_external_acp_prompt_text(
+    context: MessageContext,
+    *,
+    conversation_id: str,
+    user_message: str,
+) -> str:
+    from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
+        SqlAgentExecutionEventRepository,
+    )
+
+    event_repo = SqlAgentExecutionEventRepository(context.db)
+    events = await event_repo.get_events(
+        conversation_id=conversation_id,
+        limit=24,
+        event_types={"user_message", "assistant_message"},
+    )
+    history: list[tuple[str, str]] = []
+    for event in events:
+        data = event.event_data if isinstance(event.event_data, dict) else {}
+        role = data.get("role")
+        if role not in {"user", "assistant"}:
+            role = "assistant" if event.event_type == "assistant_message" else "user"
+        content = _external_acp_event_content(data)
+        if content:
+            history.append((str(role), content))
+    return _format_external_acp_prompt_with_history(user_message=user_message, history=history[-8:])
+
+
+def _new_execution_event(
+    *,
+    conversation_id: str,
+    message_id: str,
+    event_type: str,
+    data: dict[str, Any],
+    event_time_us: int,
+    event_counter: int,
+) -> AgentExecutionEvent:
+    from src.domain.model.agent import AgentExecutionEvent
+
+    enriched = {
+        **data,
+        "message_id": data.get("message_id") or message_id,
+        "event_time_us": event_time_us,
+        "event_counter": event_counter,
+    }
+    return AgentExecutionEvent(
+        id=str(uuid.uuid4()),
+        conversation_id=conversation_id,
+        message_id=message_id,
+        event_type=event_type,
+        event_data=enriched,
+        event_time_us=event_time_us,
+        event_counter=event_counter,
+        created_at=datetime.now(UTC),
+    )
+
+
+async def _broadcast_external_acp_event(
+    context: MessageContext,
+    *,
+    conversation_id: str,
+    event_type: str,
+    data: dict[str, Any],
+    event_time_us: int | None = None,
+    event_counter: int | None = None,
+) -> None:
+    await context.connection_manager.broadcast_to_conversation(
+        conversation_id,
+        {
+            "type": event_type,
+            "conversation_id": conversation_id,
+            "data": data,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "event_time_us": event_time_us,
+            "event_counter": event_counter,
+        },
+    )
+
+
+async def _load_external_acp_service(
+    context: MessageContext,
+    *,
+    acp_agent_key: str,
+) -> _ExternalACPService:
+    from src.infrastructure.acp.client import get_external_agent_service
+    from src.infrastructure.acp.tenant_config import runtime_config_from_row
+    from src.infrastructure.adapters.secondary.persistence.sql_acp_external_agent_config_repository import (
+        ACPExternalAgentConfigRepository,
+    )
+
+    config_repo = ACPExternalAgentConfigRepository(context.db)
+    rows = await config_repo.list_by_tenant(context.tenant_id)
+    target_row = next((row for row in rows if row.agent_key == acp_agent_key), None)
+    if target_row is None:
+        raise ValueError("ACP external agent is not configured")
+    if not target_row.enabled:
+        raise ValueError("ACP external agent is disabled")
+
+    service = get_external_agent_service()
+    service.set_tenant_configs(
+        context.tenant_id,
+        [runtime_config_from_row(row) for row in rows],
+    )
+    return cast(_ExternalACPService, service)
+
+
+async def _create_external_acp_user_event(
+    context: MessageContext,
+    *,
+    conversation_id: str,
+    user_message: str,
+    agent: Agent,
+) -> _ExternalACPExecutionState:
+    from src.domain.model.agent.execution.event_time import EventTimeGenerator
+    from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
+        SqlAgentExecutionEventRepository,
+    )
+
+    event_repo = SqlAgentExecutionEventRepository(context.db)
+    last_time_us, last_counter = await event_repo.get_last_event_time(conversation_id)
+    time_gen = EventTimeGenerator(last_time_us=last_time_us, last_counter=last_counter)
+    user_msg_id = str(uuid.uuid4())
+    assistant_msg_id = str(uuid.uuid4())
+
+    next_time_us, next_counter = time_gen.next()
+    user_event = _new_execution_event(
+        conversation_id=conversation_id,
+        message_id=user_msg_id,
+        event_type="user_message",
+        data={
+            "id": user_msg_id,
+            "role": "user",
+            "content": user_message,
+            "created_at": datetime.now(UTC).isoformat(),
+            "agent_id": agent.id,
+        },
+        event_time_us=next_time_us,
+        event_counter=next_counter,
+    )
+    await event_repo.save(user_event)
+    await context.db.commit()
+
+    await _broadcast_external_acp_event(
+        context,
+        conversation_id=conversation_id,
+        event_type="message",
+        data={
+            "id": user_msg_id,
+            "role": "user",
+            "content": user_message,
+            "created_at": user_event.created_at.isoformat(),
+            "agent_id": agent.id,
+        },
+        event_time_us=next_time_us,
+        event_counter=next_counter,
+    )
+    await _broadcast_external_acp_event(
+        context,
+        conversation_id=conversation_id,
+        event_type="text_start",
+        data={"message_id": user_msg_id, "agent_id": agent.id},
+    )
+
+    return _ExternalACPExecutionState(
+        event_repo=event_repo,
+        time_gen=time_gen,
+        user_msg_id=user_msg_id,
+        assistant_msg_id=assistant_msg_id,
+    )
+
+
+def _append_external_acp_update_event(
+    *,
+    live_events: list[tuple[str, dict[str, Any]]],
+    assistant_text_chunks: list[str],
+    update: dict[str, Any],
+    agent_id: str,
+    user_msg_id: str,
+) -> None:
+    kind = _external_acp_update_kind(update)
+    text = _external_acp_update_text(update)
+    if kind == "agent_message_chunk" and text:
+        assistant_text_chunks.append(text)
+        live_events.append(
+            (
+                "text_delta",
+                {
+                    "delta": text,
+                    "message_id": user_msg_id,
+                    "agent_id": agent_id,
+                    "_meta": {"acp": update},
+                },
+            )
+        )
+    elif kind == "agent_thought_chunk" and text:
+        live_events.append(
+            (
+                "thought_delta",
+                {
+                    "delta": text,
+                    "message_id": user_msg_id,
+                    "agent_id": agent_id,
+                    "_meta": {"acp": update},
+                },
+            )
+        )
+    elif kind == "tool_call":
+        call_id = str(update.get("toolCallId") or update.get("tool_call_id") or uuid.uuid4())
+        tool_name = str(update.get("title") or update.get("kind") or "acp_tool")
+        tool_input = {
+            key: value
+            for key in ("title", "kind", "status")
+            if isinstance((value := update.get(key)), str) and value
+        }
+        live_events.append(
+            (
+                "act",
+                {
+                    "tool_name": tool_name,
+                    "tool_input": tool_input or {"type": "acp_tool_call"},
+                    "tool_execution_id": call_id,
+                    "message_id": user_msg_id,
+                    "_meta": {"acp": _external_acp_update_meta(update)},
+                },
+            )
+        )
+    elif kind == "tool_call_update":
+        call_id = str(update.get("toolCallId") or update.get("tool_call_id") or uuid.uuid4())
+        observation = _compact_external_acp_text(text or str(update.get("status") or "updated"))
+        live_events.append(
+            (
+                "observe",
+                {
+                    "tool_name": str(update.get("title") or "acp_tool"),
+                    "tool_execution_id": call_id,
+                    "observation": observation,
+                    "result": observation,
+                    "message_id": user_msg_id,
+                    "_meta": {"acp": _external_acp_update_meta(update)},
+                },
+            )
+        )
+
+
+def _collect_external_acp_live_events(
+    prompt_result: _ExternalACPPromptResult,
+    *,
+    agent: Agent,
+    user_msg_id: str,
+) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
+    assistant_text_chunks: list[str] = []
+    live_events: list[tuple[str, dict[str, Any]]] = []
+    for item in prompt_result.updates:
+        update = _get_external_acp_update(item)
+        if update is not None:
+            _append_external_acp_update_event(
+                live_events=live_events,
+                assistant_text_chunks=assistant_text_chunks,
+                update=update,
+                agent_id=agent.id,
+                user_msg_id=user_msg_id,
+            )
+
+    fallback_text = _extract_external_acp_result_text(prompt_result.result)
+    if not assistant_text_chunks and fallback_text:
+        assistant_text_chunks.append(fallback_text)
+        live_events.append(
+            (
+                "text_delta",
+                {
+                    "delta": fallback_text,
+                    "message_id": user_msg_id,
+                    "agent_id": agent.id,
+                },
+            )
+        )
+    return "".join(assistant_text_chunks), live_events
+
+
+async def _run_external_acp_prompt(
+    service: _ExternalACPService,
+    context: MessageContext,
+    *,
+    acp_agent_key: str,
+    agent: Agent,
+    project_id: str,
+    user_message: str,
+    user_msg_id: str,
+) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
+    session_result = None
+    try:
+        session_result = await service.new_session(
+            agent_id=acp_agent_key,
+            owner_user_id=context.user_id,
+            cwd=_resolve_external_acp_cwd(agent),
+            additional_directories=None,
+            mcp_servers=[],
+            tenant_id=context.tenant_id,
+            field_meta={
+                "memstack": {
+                    "projectId": project_id,
+                    "agentDefinitionId": agent.id,
+                }
+            },
+        )
+        prompt_result = await service.prompt(
+            agent_id=acp_agent_key,
+            session_id=session_result.session_id,
+            owner_user_id=context.user_id,
+            prompt=[{"type": "text", "text": user_message}],
+            message_id=user_msg_id,
+            tenant_id=context.tenant_id,
+        )
+        return _collect_external_acp_live_events(
+            prompt_result,
+            agent=agent,
+            user_msg_id=user_msg_id,
+        )
+    finally:
+        if session_result is not None:
+            with contextlib.suppress(Exception):
+                await service.close(
+                    agent_id=acp_agent_key,
+                    session_id=session_result.session_id,
+                    owner_user_id=context.user_id,
+                    tenant_id=context.tenant_id,
+                )
+
+
+async def _persist_external_acp_completion(
+    context: MessageContext,
+    *,
+    conversation_id: str,
+    state: _ExternalACPExecutionState,
+    live_events: list[tuple[str, dict[str, Any]]],
+    assistant_text: str,
+    agent: Agent,
+    acp_agent_key: str,
+) -> None:
+    persisted_events = []
+    for event_type, data in live_events:
+        next_time_us, next_counter = state.time_gen.next()
+        await _broadcast_external_acp_event(
+            context,
+            conversation_id=conversation_id,
+            event_type=event_type,
+            data=data,
+            event_time_us=next_time_us,
+            event_counter=next_counter,
+        )
+        if event_type not in {"text_delta", "thought_delta"}:
+            persisted_events.append(
+                _new_execution_event(
+                    conversation_id=conversation_id,
+                    message_id=state.user_msg_id,
+                    event_type=event_type,
+                    data=data,
+                    event_time_us=next_time_us,
+                    event_counter=next_counter,
+                )
+            )
+
+    final_event_specs: list[tuple[str, dict[str, Any]]] = [
+        (
+            "text_end",
+            {
+                "full_text": assistant_text,
+                "message_id": state.user_msg_id,
+                "agent_id": agent.id,
+            },
+        ),
+        (
+            "assistant_message",
+            {
+                "id": state.assistant_msg_id,
+                "role": "assistant",
+                "content": assistant_text,
+                "created_at": datetime.now(UTC).isoformat(),
+                "message_id": state.user_msg_id,
+                "agent_id": agent.id,
+                "metadata": {
+                    "source": "acp_external",
+                    "acp_agent_key": acp_agent_key,
+                },
+            },
+        ),
+        (
+            "complete",
+            {
+                "content": assistant_text,
+                "message_id": state.user_msg_id,
+                "assistant_message_id": state.assistant_msg_id,
+                "agent_id": agent.id,
+            },
+        ),
+    ]
+    for event_type, data in final_event_specs:
+        next_time_us, next_counter = state.time_gen.next()
+        if event_type != "assistant_message":
+            await _broadcast_external_acp_event(
+                context,
+                conversation_id=conversation_id,
+                event_type=event_type,
+                data=data,
+                event_time_us=next_time_us,
+                event_counter=next_counter,
+            )
+        persisted_events.append(
+            _new_execution_event(
+                conversation_id=conversation_id,
+                message_id=state.user_msg_id,
+                event_type=event_type,
+                data=data,
+                event_time_us=next_time_us,
+                event_counter=next_counter,
+            )
+        )
+
+    await state.event_repo.save_batch(persisted_events)
+    await context.db.commit()
+
+
+async def _stream_external_acp_agent_definition(
+    context: MessageContext,
+    conversation_id: str,
+    user_message: str,
+    project_id: str,
+    *,
+    agent: Agent,
+    backend: dict[str, Any],
+) -> None:
+    acp_agent_key = str(backend["acp_agent_key"])
+    service = await _load_external_acp_service(context, acp_agent_key=acp_agent_key)
+    prompt_text = await _build_external_acp_prompt_text(
+        context,
+        conversation_id=conversation_id,
+        user_message=user_message,
+    )
+    state = await _create_external_acp_user_event(
+        context,
+        conversation_id=conversation_id,
+        user_message=user_message,
+        agent=agent,
+    )
+    assistant_text, live_events = await _run_external_acp_prompt(
+        service,
+        context,
+        acp_agent_key=acp_agent_key,
+        agent=agent,
+        project_id=project_id,
+        user_message=prompt_text,
+        user_msg_id=state.user_msg_id,
+    )
+    await _persist_external_acp_completion(
+        context,
+        conversation_id=conversation_id,
+        state=state,
+        live_events=live_events,
+        assistant_text=assistant_text,
+        agent=agent,
+        acp_agent_key=acp_agent_key,
+    )
+
+
 async def stream_agent_to_websocket_with_fresh_session(
     context: MessageContext,
     conversation_id: str,
@@ -412,6 +1124,32 @@ async def stream_agent_to_websocket(  # noqa: PLR0913
     event_count = 0
 
     try:
+        external_acp_backend = await _load_external_acp_backend(
+            context,
+            agent_id=agent_id,
+            project_id=project_id,
+        )
+        if external_acp_backend is not None:
+            agent, backend = external_acp_backend
+            await _ensure_external_acp_chat_admin(context)
+            if _has_external_acp_unsupported_payload(
+                attachment_ids=attachment_ids,
+                file_metadata=file_metadata,
+                forced_skill_name=forced_skill_name,
+                image_attachments=image_attachments,
+                mentions=mentions,
+            ):
+                raise ValueError("External ACP agents support text prompts only")
+            await _stream_external_acp_agent_definition(
+                context=context,
+                conversation_id=conversation_id,
+                user_message=user_message,
+                project_id=project_id,
+                agent=agent,
+                backend=backend,
+            )
+            return
+
         async for event in agent_service.stream_chat_v2(
             conversation_id=conversation_id,
             user_message=user_message,

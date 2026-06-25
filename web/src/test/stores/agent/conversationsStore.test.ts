@@ -477,6 +477,22 @@ describe('ConversationsStore', () => {
       });
     });
 
+    it('should create conversation with selected agent override', async () => {
+      const newConversation = createMockConversation('conv-1', 'proj-1', 'Custom Title');
+
+      createConversationMock.mockResolvedValue(newConversation);
+
+      await useConversationsStore
+        .getState()
+        .createConversation('proj-1', 'Custom Title', 'opencode-agent');
+
+      expect(createConversationMock).toHaveBeenCalledWith({
+        project_id: 'proj-1',
+        title: 'Custom Title',
+        agent_config: { selected_agent_id: 'opencode-agent' },
+      });
+    });
+
     it('should prepend new conversation to existing list', async () => {
       const existingConv = createMockConversation('existing', 'proj-1', 'Existing');
 

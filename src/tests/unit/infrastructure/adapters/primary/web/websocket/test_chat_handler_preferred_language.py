@@ -11,10 +11,86 @@ import pytest
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.chat_handler import (
     StopSessionHandler,
+    _append_external_acp_update_event,
+    _ExternalACPExecutionState,
+    _format_external_acp_prompt_with_history,
+    _persist_external_acp_completion,
+    _text_from_external_acp_content,
     stream_agent_to_websocket,
 )
 
 pytestmark = pytest.mark.unit
+
+
+def test_format_external_acp_prompt_with_history_includes_recent_turns() -> None:
+    prompt = _format_external_acp_prompt_with_history(
+        user_message="上一轮 marker 是什么？",
+        history=[
+            ("user", "请记住 marker ACP-STABILITY-742"),
+            ("assistant", "MARKER STORED ACP-STABILITY-742"),
+        ],
+    )
+
+    assert "Conversation context from previous MemStack turns" in prompt
+    assert "User: 请记住 marker ACP-STABILITY-742" in prompt
+    assert "Assistant: MARKER STORED ACP-STABILITY-742" in prompt
+    assert prompt.endswith("Current user request:\n上一轮 marker 是什么？")
+
+
+def test_format_external_acp_prompt_without_history_returns_user_message() -> None:
+    assert (
+        _format_external_acp_prompt_with_history(user_message="hello", history=[])
+        == "hello"
+    )
+
+
+def test_text_from_external_acp_content_extracts_nested_list_blocks() -> None:
+    content = [
+        {"content": {"type": "text", "text": "first "}},
+        {"type": "text", "text": "second"},
+    ]
+
+    assert _text_from_external_acp_content(content) == "first second"
+
+
+def test_external_acp_tool_update_uses_readable_result_without_raw_update() -> None:
+    live_events: list[tuple[str, dict[str, Any]]] = []
+    assistant_text_chunks: list[str] = []
+
+    _append_external_acp_update_event(
+        live_events=live_events,
+        assistant_text_chunks=assistant_text_chunks,
+        update={
+            "sessionUpdate": "tool_call_update",
+            "toolCallId": "tool-1",
+            "title": "read",
+            "status": "completed",
+            "content": [{"content": {"type": "text", "text": "read output"}}],
+        },
+        agent_id="agent-1",
+        user_msg_id="message-1",
+    )
+
+    assert live_events == [
+        (
+            "observe",
+            {
+                "tool_name": "read",
+                "tool_execution_id": "tool-1",
+                "observation": "read output",
+                "result": "read output",
+                "message_id": "message-1",
+                "_meta": {
+                    "acp": {
+                        "sessionUpdate": "tool_call_update",
+                        "toolCallId": "tool-1",
+                        "status": "completed",
+                        "title": "read",
+                    }
+                },
+            },
+        )
+    ]
 
 
 class FakeAgentService:
@@ -49,6 +125,31 @@ class FakeConnectionManager:
         self.broadcasts.append((session_id, event))
 
 
+class FakeEventRepository:
+    def __init__(self) -> None:
+        self.saved_batches: list[list[Any]] = []
+
+    async def save_batch(self, events: list[Any]) -> None:
+        self.saved_batches.append(events)
+
+
+class FakeDb:
+    def __init__(self) -> None:
+        self.committed = False
+
+    async def commit(self) -> None:
+        self.committed = True
+
+
+class FakeTimeGenerator:
+    def __init__(self) -> None:
+        self.counter = 0
+
+    def next(self) -> tuple[int, int]:
+        self.counter += 1
+        return 1_000_000 + self.counter, self.counter
+
+
 class FakeMessageContext:
     session_id = "session-1"
     user_id = "user-1"
@@ -57,6 +158,42 @@ class FakeMessageContext:
 
     def __init__(self) -> None:
         self.connection_manager = FakeConnectionManager()
+
+
+async def test_external_acp_completion_does_not_emit_empty_execution_summary() -> None:
+    event_repo = FakeEventRepository()
+    db = FakeDb()
+    context = SimpleNamespace(connection_manager=FakeConnectionManager(), db=db)
+    state = _ExternalACPExecutionState(
+        event_repo=event_repo,  # type: ignore[arg-type]
+        time_gen=FakeTimeGenerator(),  # type: ignore[arg-type]
+        user_msg_id="user-message-1",
+        assistant_msg_id="assistant-message-1",
+    )
+
+    await _persist_external_acp_completion(
+        context,  # type: ignore[arg-type]
+        conversation_id="conversation-1",
+        state=state,
+        live_events=[],
+        assistant_text="done",
+        agent=SimpleNamespace(id="agent-1"),  # type: ignore[arg-type]
+        acp_agent_key="opencode-local",
+    )
+
+    broadcast_events = [event for _, event in context.connection_manager.broadcasts]
+    complete_broadcast = next(event for event in broadcast_events if event["type"] == "complete")
+    assert "execution_summary" not in complete_broadcast["data"]
+
+    saved_events = event_repo.saved_batches[0]
+    complete_event = next(event for event in saved_events if event.event_type == "complete")
+    assistant_event = next(event for event in saved_events if event.event_type == "assistant_message")
+    assert "execution_summary" not in complete_event.event_data
+    assert assistant_event.event_data["metadata"] == {
+        "source": "acp_external",
+        "acp_agent_key": "opencode-local",
+    }
+    assert db.committed is True
 
 
 class StopConnectionManager:

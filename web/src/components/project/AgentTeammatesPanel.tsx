@@ -167,6 +167,9 @@ export function AgentTeammatesPanel({ projectId }: AgentTeammatesPanelProps) {
                       {agent.can_spawn && (
                         <Tag color="blue">{t('project.agentTeammates.canSpawn')}</Tag>
                       )}
+                      {agent.execution_backend?.type === 'acp_external' && (
+                        <Tag color="cyan">ACP</Tag>
+                      )}
                       {agent.discoverable && <Tag>{t('project.agentTeammates.discoverable')}</Tag>}
                     </div>
                   </div>

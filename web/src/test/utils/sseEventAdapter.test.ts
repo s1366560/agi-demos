@@ -387,6 +387,28 @@ describe('SSE Event Adapter', () => {
       }
     });
 
+    it('should unwrap legacy ACP observe JSON into readable text', () => {
+      const sseEvent: AgentEvent<ObserveEventData> = {
+        type: 'observe',
+        data: {
+          tool_name: 'Read',
+          result: JSON.stringify({
+            acp: {
+              sessionUpdate: 'tool_call_update',
+              content: [{ content: { type: 'text', text: 'read output' } }],
+            },
+          }),
+        },
+      };
+
+      const timelineEvent = sseEventToTimeline(sseEvent);
+
+      expect(timelineEvent?.type).toBe('observe');
+      if (timelineEvent?.type === 'observe') {
+        expect(timelineEvent.toolOutput).toBe('read output');
+      }
+    });
+
     it('should convert work_plan event', () => {
       const sseEvent: AgentEvent<WorkPlanEventData> = {
         type: 'work_plan',

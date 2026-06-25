@@ -15,6 +15,7 @@ from typing import Any
 from src.domain.model.agent.agent_binding import AgentBinding
 from src.domain.model.agent.agent_source import AgentSource
 from src.domain.model.agent.delegate_config import DelegateConfig
+from src.domain.model.agent.execution_backend import execution_backend_from_metadata
 from src.domain.model.agent.identity import AgentIdentity
 from src.domain.model.agent.session_policy import SessionPolicy
 from src.domain.model.agent.spawn_policy import SpawnPolicy
@@ -485,6 +486,7 @@ class Agent:
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "metadata": self.metadata,
+            "execution_backend": execution_backend_from_metadata(self.metadata),
         }
 
     @classmethod

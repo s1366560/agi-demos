@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Modal, Form, Input, Select, Tabs, InputNumber, Switch, Tag, message, Slider } from 'antd';
 
+import { acpService } from '../../services/acpService';
 import { agentService } from '../../services/agentService';
 import { mcpAPI } from '../../services/mcpService';
 import { skillAPI } from '../../services/skillService';
@@ -30,10 +31,12 @@ import {
 } from './agentDefinitionPolicyForm';
 
 import type { SkillResponse, MCPServerResponse, ToolInfo } from '../../types/agent';
+import type { TenantExternalACPAgent } from '../../types/acp';
 import type {
   AgentDefinition,
   AgentDefinitionDelegateCapabilityTier,
   AgentDefinitionDmScope,
+  AgentExecutionBackendType,
   CreateDefinitionRequest,
   UpdateDefinitionRequest,
   WorkspaceConfig,
@@ -90,6 +93,8 @@ interface AgentDefinitionFormValues {
   agent_to_agent_allowlist?: string[] | null | undefined;
   discoverable?: boolean | undefined;
   max_retries?: number | undefined;
+  execution_backend_type?: AgentExecutionBackendType | undefined;
+  execution_backend_acp_agent_key?: string | undefined;
   workspace_config?: WorkspaceConfigFormValues | undefined;
   spawn_policy_max_active_runs?: number | undefined;
   spawn_policy_max_children_per_requester?: number | undefined;
@@ -204,11 +209,14 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
   const [availableTools, setAvailableTools] = useState<ToolInfo[]>([]);
   const [availableSkills, setAvailableSkills] = useState<SkillResponse[]>([]);
   const [availableMcpServers, setAvailableMcpServers] = useState<MCPServerResponse[]>([]);
+  const [availableAcpAgents, setAvailableAcpAgents] = useState<TenantExternalACPAgent[]>([]);
   const [loadingResources, setLoadingResources] = useState(false);
 
   const isSubmitting = useDefinitionSubmitting();
   const createDefinition = useCreateDefinition();
   const updateDefinition = useUpdateDefinition();
+  const executionBackendType = Form.useWatch('execution_backend_type', form) ?? 'memstack';
+  const isExternalAcpBackend = executionBackendType === 'acp_external';
 
   const isEditMode = !!definition;
   const scopeOptions = useMemo(() => {
@@ -244,6 +252,17 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
 
     return options;
   }, [definition?.project_id, projectOptions, t]);
+  const acpAgentOptions = useMemo(
+    () =>
+      availableAcpAgents
+        .filter((agent) => agent.enabled)
+        .map((agent) => ({
+          label: `${agent.name} (${agent.agentKey})`,
+          value: agent.agentKey,
+          disabled: !agent.available,
+        })),
+    [availableAcpAgents]
+  );
 
   // Track previous state to avoid unnecessary resets
   const prevDefinitionRef = useRef<AgentDefinition | null>(null);
@@ -255,14 +274,16 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
       const fetchResources = async () => {
         setLoadingResources(true);
         try {
-          const [toolsRes, skillsRes, mcpRes] = await Promise.all([
+          const [toolsRes, skillsRes, mcpRes, acpAgents] = await Promise.all([
             agentService.listTools(),
             skillAPI.list(tenantId ? { limit: 100, tenant_id: tenantId } : { limit: 100 }),
             mcpAPI.list({ limit: 100 }),
+            tenantId ? acpService.listAgents(tenantId) : Promise.resolve([]),
           ]);
           setAvailableTools(toolsRes.tools);
           setAvailableSkills(skillsRes.skills);
           setAvailableMcpServers(mcpRes);
+          setAvailableAcpAgents(acpAgents);
         } catch (error) {
           console.error('Failed to fetch resources:', error);
           message.error(
@@ -305,6 +326,8 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           agent_to_agent_enabled: definition.agent_to_agent_enabled,
           discoverable: definition.discoverable,
           max_retries: definition.max_retries,
+          execution_backend_type: definition.execution_backend?.type ?? 'memstack',
+          execution_backend_acp_agent_key: definition.execution_backend?.acp_agent_key,
           workspace_config: toWorkspaceConfigFormValues(definition.workspace_config),
         };
 
@@ -404,6 +427,7 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
         form.resetFields();
         form.setFieldsValue({
           scope_id: initialProjectId ?? TENANT_SCOPE_VALUE,
+          execution_backend_type: 'memstack',
         });
         setKeywords([]);
       }
@@ -452,6 +476,13 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           tool_policy: toolPolicy,
           session_policy: sessionPolicy,
           delegate_config: delegateConfig,
+          execution_backend:
+            values.execution_backend_type === 'acp_external'
+              ? {
+                  type: 'acp_external',
+                  acp_agent_key: values.execution_backend_acp_agent_key,
+                }
+              : { type: 'memstack' },
           metadata: stripLegacyPolicyMetadata(definition.metadata) ?? {},
         };
         if (tenantId) {
@@ -488,6 +519,13 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
           tool_policy: toolPolicy,
           session_policy: sessionPolicy,
           delegate_config: delegateConfig,
+          execution_backend:
+            values.execution_backend_type === 'acp_external'
+              ? {
+                  type: 'acp_external',
+                  acp_agent_key: values.execution_backend_acp_agent_key,
+                }
+              : { type: 'memstack' },
         };
         if (tenantId) {
           await createDefinition(data, { tenant_id: tenantId });
@@ -612,13 +650,64 @@ export const AgentDefinitionModal: React.FC<AgentDefinitionModalProps> = ({
             />
           </Form.Item>
 
+          <Form.Item
+            name="execution_backend_type"
+            label={t('tenant.agentDefinitions.modal.executionBackend', {
+              defaultValue: 'Execution Backend',
+            })}
+            initialValue="memstack"
+          >
+            <Select
+              options={[
+                {
+                  label: t('tenant.agentDefinitions.modal.executionBackendMemstack', {
+                    defaultValue: 'MemStack Native',
+                  }),
+                  value: 'memstack',
+                },
+                {
+                  label: t('tenant.agentDefinitions.modal.executionBackendAcp', {
+                    defaultValue: 'External ACP Agent',
+                  }),
+                  value: 'acp_external',
+                },
+              ]}
+            />
+          </Form.Item>
+
+          {isExternalAcpBackend && (
+            <Form.Item
+              name="execution_backend_acp_agent_key"
+              label={t('tenant.agentDefinitions.modal.externalAcpAgent', {
+                defaultValue: 'External ACP Agent',
+              })}
+              rules={[
+                {
+                  required: true,
+                  message: t('tenant.agentDefinitions.modal.externalAcpAgentRequired', {
+                    defaultValue: 'Select an external ACP agent',
+                  }),
+                },
+              ]}
+            >
+              <Select
+                showSearch={{ filterOption: filterSelectOption }}
+                loading={loadingResources}
+                options={acpAgentOptions}
+                placeholder={t('tenant.agentDefinitions.modal.externalAcpAgentPlaceholder', {
+                  defaultValue: 'Select an external ACP agent',
+                })}
+              />
+            </Form.Item>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <Form.Item
               name="model"
               label={t('tenant.agentDefinitions.modal.model', 'Model')}
               initialValue="inherit"
             >
-              <Select>
+              <Select disabled={isExternalAcpBackend}>
                 {LLM_MODELS.map((model) => (
                   <Option key={model.value} value={model.value}>
                     {model.label}

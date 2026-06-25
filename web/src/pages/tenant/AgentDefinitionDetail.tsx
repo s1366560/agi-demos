@@ -352,6 +352,9 @@ export const AgentDefinitionDetail: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2">
             <Badge status={definition.enabled ? 'success' : 'default'} />
             <Tag>{definition.source}</Tag>
+            {definition.execution_backend?.type === 'acp_external' ? (
+              <Tag color="cyan">ACP</Tag>
+            ) : null}
             {definition.project_id ? <Tag>{definition.project_id}</Tag> : null}
           </div>
           <h1 className={`mt-3 break-words text-2xl font-semibold ${pageText}`}>
@@ -429,6 +432,21 @@ export const AgentDefinitionDetail: React.FC = () => {
             <InfoRow label="Tenant ID" value={definition.tenant_id} mono />
             <InfoRow label="Project ID" value={definition.project_id} mono />
             <InfoRow label="Source" value={definition.source} />
+            <InfoRow
+              label={t('tenant.agentDefinitions.modal.executionBackend', {
+                defaultValue: 'Execution Backend',
+              })}
+              value={
+                definition.execution_backend?.type === 'acp_external'
+                  ? t('tenant.agentDefinitions.detail.executionBackend.externalAcp', {
+                      agentKey: definition.execution_backend.acp_agent_key ?? '',
+                      defaultValue: 'External ACP ({{agentKey}})',
+                    })
+                  : t('tenant.agentDefinitions.detail.executionBackend.memstack', {
+                      defaultValue: 'MemStack Native',
+                    })
+              }
+            />
             <InfoRow label="Discoverable" value={String(definition.discoverable)} />
             <InfoRow label="Enabled" value={String(definition.enabled)} />
           </Section>

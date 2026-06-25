@@ -1226,6 +1226,10 @@
           "metrics": "指标",
           "timestamps": "时间戳",
           "metadata": "元数据"
+        },
+        "executionBackend": {
+          "externalAcp": "External ACP（{{agentKey}}）",
+          "memstack": "MemStack 原生"
         }
       },
       "stats": {

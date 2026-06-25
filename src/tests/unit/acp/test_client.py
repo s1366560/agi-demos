@@ -1,7 +1,10 @@
+import asyncio
 import json
 import os
 import sys
+from types import SimpleNamespace
 
+import pytest
 from acp.exceptions import RequestError
 
 from src.infrastructure.acp.cli import (
@@ -11,7 +14,12 @@ from src.infrastructure.acp.cli import (
     _request_id,
     _request_metadata,
 )
-from src.infrastructure.acp.client import ExternalACPAgentService, load_external_agent_configs
+from src.infrastructure.acp.client import (
+    ExternalACPAgentConfig,
+    ExternalACPAgentService,
+    ExternalACPPromptResult,
+    load_external_agent_configs,
+)
 
 
 def test_load_external_agent_configs_from_json(tmp_path) -> None:
@@ -149,6 +157,81 @@ async def test_stdio_bridge_reject_handles_closed_stdin(monkeypatch) -> None:
     monkeypatch.setattr(sys, "stdin", ClosedStdin())
 
     await _reject_all_stdin(RequestError.internal_error({"details": "closed"}))
+
+
+async def test_external_agent_prompt_timeout_cancels_transport(monkeypatch) -> None:
+    class SlowTransport:
+        def __init__(self) -> None:
+            self.cancelled = False
+
+        async def initialize(self) -> None:
+            return None
+
+        async def new_session(
+            self,
+            *,
+            cwd: str,
+            additional_directories: list[str] | None,
+            mcp_servers: list[dict],
+            field_meta: dict | None = None,
+        ) -> str:
+            del cwd, additional_directories, mcp_servers, field_meta
+            return "remote-session"
+
+        async def prompt(
+            self,
+            *,
+            remote_session_id: str,
+            prompt: list[dict],
+            message_id: str | None,
+        ) -> ExternalACPPromptResult:
+            del remote_session_id, prompt, message_id
+            await asyncio.sleep(60)
+            return ExternalACPPromptResult()
+
+        async def cancel(self, remote_session_id: str) -> None:
+            del remote_session_id
+            self.cancelled = True
+
+        async def close(self, remote_session_id: str) -> None:
+            del remote_session_id
+
+    monkeypatch.setattr(
+        "src.infrastructure.acp.client.get_settings",
+        lambda: SimpleNamespace(acp_external_prompt_timeout_seconds=0.01),
+    )
+    service = ExternalACPAgentService(
+        [
+            ExternalACPAgentConfig(
+                id="slow",
+                name="Slow Agent",
+                transport="stdio",
+                command="slow-agent",
+            )
+        ]
+    )
+    transport = SlowTransport()
+    monkeypatch.setattr(service, "_build_transport", lambda _config: transport)
+
+    session = await service.new_session(
+        agent_id="slow",
+        owner_user_id="user-1",
+        cwd="/tmp",
+        additional_directories=None,
+        mcp_servers=[],
+    )
+
+    with pytest.raises(TimeoutError, match="session/prompt timed out"):
+        await service.prompt(
+            agent_id="slow",
+            session_id=session.session_id,
+            owner_user_id="user-1",
+            prompt=[{"type": "text", "text": "hello"}],
+            message_id="message-1",
+        )
+
+    assert transport.cancelled
+    assert service.list_agents()[0].last_error == "session/prompt timed out after 0.01s"
 
 
 def _fixture_config(payload: dict) -> str:

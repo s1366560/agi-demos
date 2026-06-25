@@ -18,6 +18,11 @@ from src.domain.model.agent.agent_definition import (
     Agent,
 )
 from src.domain.model.agent.delegate_config import DelegateConfig
+from src.domain.model.agent.execution_backend import (
+    execution_backend_from_metadata,
+    metadata_with_execution_backend,
+    normalize_execution_backend,
+)
 from src.domain.model.agent.session_policy import SessionPolicy
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger
 from src.domain.model.agent.workspace_config import WorkspaceConfig
@@ -31,6 +36,9 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, UserProject
+from src.infrastructure.adapters.secondary.persistence.sql_acp_external_agent_config_repository import (
+    ACPExternalAgentConfigRepository,
+)
 from src.infrastructure.agent.tools._agent_definition_policy import (
     normalize_new_agent_a2a,
     normalize_updated_agent_a2a,
@@ -83,6 +91,7 @@ class CreateDefinitionBody(BaseModel):
     max_retries: int = 0
     fallback_models: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] | None = None
+    execution_backend: dict[str, Any] | None = None
     session_policy: dict[str, Any] | None = None
     delegate_config: dict[str, Any] | None = None
     spawn_policy: dict[str, Any] | None = None
@@ -115,6 +124,7 @@ class UpdateDefinitionBody(BaseModel):
     max_retries: int | None = None
     fallback_models: list[str] | None = None
     metadata: dict[str, Any] | None = None
+    execution_backend: dict[str, Any] | None = None
     session_policy: dict[str, Any] | None = None
     delegate_config: dict[str, Any] | None = None
     spawn_policy: dict[str, Any] | None = None
@@ -193,6 +203,39 @@ async def _ensure_existing_definition_access(
     )
 
 
+async def _validate_execution_backend(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    execution_backend: object,
+) -> dict[str, Any]:
+    backend = normalize_execution_backend(execution_backend)
+    if backend["type"] != "acp_external":
+        return dict(backend)
+
+    agent_key = backend.get("acp_agent_key")
+    if not agent_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Invalid ACP external agent selection"),
+        )
+    row = await ACPExternalAgentConfigRepository(db).get_by_tenant_and_key(
+        tenant_id,
+        agent_key,
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Invalid ACP external agent selection"),
+        )
+    if not row.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("ACP external agent is disabled"),
+        )
+    return dict(backend)
+
+
 async def _accessible_definition_project_ids(
     db: AsyncSession,
     *,
@@ -258,6 +301,12 @@ async def create_definition(
         )
         spawn_policy = Agent._spawn_policy_from_dict(body.spawn_policy)
         tool_policy = Agent._tool_policy_from_dict(body.tool_policy)
+        execution_backend = await _validate_execution_backend(
+            db,
+            tenant_id=tenant_id,
+            execution_backend=body.execution_backend,
+        )
+        metadata = metadata_with_execution_backend(body.metadata, execution_backend)
         agent_to_agent_allowlist = normalize_new_agent_a2a(
             enabled=body.agent_to_agent_enabled,
             allowlist=body.agent_to_agent_allowlist,
@@ -290,7 +339,7 @@ async def create_definition(
             max_retries=body.max_retries,
             fallback_models=body.fallback_models,
             metadata=_with_max_iterations_metadata(
-                body.metadata,
+                metadata,
                 explicit=body.max_iterations != LEGACY_DEFAULT_MAX_ITERATIONS,
             ),
             session_policy=session_policy,
@@ -530,6 +579,21 @@ async def update_definition(
         )
 
         updates = body.model_dump(exclude_unset=True)
+        if "execution_backend" in updates:
+            execution_backend = await _validate_execution_backend(
+                db,
+                tenant_id=tenant_id,
+                execution_backend=updates.pop("execution_backend"),
+            )
+            updates["metadata"] = metadata_with_execution_backend(
+                updates.get("metadata", existing.metadata),
+                execution_backend,
+            )
+        elif "metadata" in updates:
+            updates["metadata"] = metadata_with_execution_backend(
+                updates.get("metadata"),
+                execution_backend_from_metadata(existing.metadata),
+            )
         if "max_iterations" in updates:
             updates["metadata"] = _with_max_iterations_metadata(
                 updates.get("metadata", existing.metadata),
@@ -662,10 +726,26 @@ async def set_definition_enabled(
         ) from e
 
 
+def _normalize_collection_updates(updates: dict[str, Any]) -> None:
+    list_defaults: dict[str, list[str]] = {
+        "persona_files": [],
+        "allowed_tools": ["*"],
+        "allowed_skills": [],
+        "allowed_mcp_servers": [],
+        "fallback_models": [],
+        "trigger_examples": [],
+        "trigger_keywords": [],
+    }
+    for key, default in list_defaults.items():
+        if key in updates and updates[key] is None:
+            updates[key] = list(default)
+
+
 def _apply_updates(
     agent: Agent,
     updates: dict[str, Any],
 ) -> None:
+    _normalize_collection_updates(updates)
     trigger_fields = {
         "trigger_description",
         "trigger_examples",

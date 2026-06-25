@@ -30,11 +30,15 @@ class UpdateConversationTitleRequest(BaseModel):
 class UpdateConversationConfigRequest(BaseModel):
     """Request to update conversation-level LLM configuration.
 
-    Allows persisting per-conversation model override and LLM parameter overrides.
-    These are loaded as defaults for every chat turn in this conversation, but can be
-    overridden per-request via ``app_model_context``.
+    Allows persisting per-conversation agent selection, model override, and LLM
+    parameter overrides. These are loaded as defaults for every chat turn in this
+    conversation, but can be overridden per-request via ``app_model_context``.
     """
 
+    selected_agent_id: str | None = Field(
+        None,
+        description="Agent Definition ID to use as this conversation's default selected agent.",
+    )
     llm_model_override: str | None = Field(
         None,
         description="Model name to use for this conversation (e.g. 'gpt-4o', 'gemini-2.0-flash'). "

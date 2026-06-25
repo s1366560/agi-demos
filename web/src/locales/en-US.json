@@ -1150,6 +1150,10 @@
           "metrics": "Metrics",
           "timestamps": "Timestamps",
           "metadata": "Metadata"
+        },
+        "executionBackend": {
+          "externalAcp": "External ACP ({{agentKey}})",
+          "memstack": "MemStack Native"
         }
       },
       "stats": {

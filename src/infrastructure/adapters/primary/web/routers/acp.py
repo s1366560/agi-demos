@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.configuration.config import get_settings
 from src.configuration.di_container import DIContainer
 from src.infrastructure.acp.client import (
-    ExternalACPAgentConfig,
     ExternalACPAgentSummary,
     ExternalACPOperationEvent,
     ExternalACPPromptResult,
@@ -28,6 +27,9 @@ from src.infrastructure.acp.client import (
 from src.infrastructure.acp.event_mapper import ACPUpdate, update_to_payload
 from src.infrastructure.acp.jsonrpc import ACPWebSocketJSONRPCPeer
 from src.infrastructure.acp.server import MemStackACPAgent
+from src.infrastructure.acp.tenant_config import (
+    runtime_config_from_row,
+)
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.primary.web.websocket.auth import (
@@ -214,7 +216,9 @@ def _store_config_values(
             continue
         existing_entry = existing.get(normalized_name)
         existing_secret = existing_entry if isinstance(existing_entry, dict) else {}
-        existing_encrypted = existing_secret.get("value") if existing_secret.get("type") == "secret" else None
+        existing_encrypted = (
+            existing_secret.get("value") if existing_secret.get("type") == "secret" else None
+        )
         if value.value == _SECRET_UNCHANGED_SENTINEL and isinstance(existing_encrypted, str):
             stored[normalized_name] = {"type": "secret", "value": existing_encrypted}
             continue
@@ -223,47 +227,11 @@ def _store_config_values(
                 stored[normalized_name] = {"type": "secret", "value": existing_encrypted}
                 continue
             raise ValueError("ACP secret values are required when creating a secret entry")
-        stored[normalized_name] = {"type": "secret", "value": encryption_service.encrypt(value.value)}
+        stored[normalized_name] = {
+            "type": "secret",
+            "value": encryption_service.encrypt(value.value),
+        }
     return stored
-
-
-def _decrypt_stored_values(
-    raw_values: dict[str, Any],
-) -> tuple[dict[str, str], dict[str, str]]:
-    env_refs: dict[str, str] = {}
-    secrets: dict[str, str] = {}
-    encryption_service = get_encryption_service()
-    for name, raw_value in raw_values.items():
-        if not isinstance(raw_value, dict):
-            continue
-        value_type = raw_value.get("type")
-        stored_value = raw_value.get("value")
-        if not isinstance(stored_value, str) or not stored_value:
-            continue
-        if value_type == "env_ref":
-            env_refs[name] = stored_value
-        elif value_type == "secret":
-            secrets[name] = encryption_service.decrypt(stored_value)
-    return env_refs, secrets
-
-
-def _runtime_config_from_row(row: ACPExternalAgentConfigModel) -> ExternalACPAgentConfig:
-    env_refs, env_values = _decrypt_stored_values(row.env or {})
-    header_refs, header_values = _decrypt_stored_values(row.headers or {})
-    return ExternalACPAgentConfig(
-        id=row.agent_key,
-        name=row.name,
-        transport=cast(Any, row.transport),
-        command=row.command,
-        args=list(row.args or []),
-        url=row.url,
-        env=env_refs,
-        headers_env=header_refs,
-        env_values=env_values,
-        headers=header_values,
-        enabled=row.enabled,
-        source="tenant",
-    )
 
 
 def _build_field_meta(
@@ -325,7 +293,7 @@ async def _refresh_tenant_agent_cache(
     rows = await ACPExternalAgentConfigRepository(db).list_by_tenant(tenant_id)
     get_external_agent_service().set_tenant_configs(
         tenant_id,
-        [_runtime_config_from_row(row) for row in rows],
+        [runtime_config_from_row(row) for row in rows],
     )
     summaries = get_external_agent_service().list_agents(tenant_id=tenant_id)
     return rows, summaries
@@ -408,10 +376,7 @@ async def get_tenant_acp_status(
 ) -> TenantACPStatusResponse:
     await require_tenant_access(db, cast(Any, current_user), tenant_id)
     rows, summaries = await _refresh_tenant_agent_cache(db, tenant_id)
-    agents = [
-        _response_from_row(row, _summary_for_agent(summaries, row.agent_key))
-        for row in rows
-    ]
+    agents = [_response_from_row(row, _summary_for_agent(summaries, row.agent_key)) for row in rows]
     settings = get_settings()
     return TenantACPStatusResponse(
         enabled=settings.acp_enabled,
@@ -439,10 +404,7 @@ async def list_tenant_external_agents(
 ) -> list[TenantExternalACPAgentResponse]:
     await require_tenant_access(db, cast(Any, current_user), tenant_id)
     rows, summaries = await _refresh_tenant_agent_cache(db, tenant_id)
-    return [
-        _response_from_row(row, _summary_for_agent(summaries, row.agent_key))
-        for row in rows
-    ]
+    return [_response_from_row(row, _summary_for_agent(summaries, row.agent_key)) for row in rows]
 
 
 @router.post(
@@ -499,7 +461,9 @@ async def get_tenant_external_agent(
     if row is None:
         raise HTTPException(status_code=404, detail=_("External ACP agent not found"))
     await _refresh_tenant_agent_cache(db, tenant_id)
-    summary = _summary_for_agent(get_external_agent_service().list_agents(tenant_id=tenant_id), agent_key)
+    summary = _summary_for_agent(
+        get_external_agent_service().list_agents(tenant_id=tenant_id), agent_key
+    )
     return _response_from_row(row, summary)
 
 

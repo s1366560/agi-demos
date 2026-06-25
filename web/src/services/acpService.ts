@@ -14,13 +14,42 @@ import type {
 
 const BASE_URL = '/acp/tenants';
 
+type TenantExternalACPAgentListResponse =
+  | TenantExternalACPAgent[]
+  | {
+      agents?: TenantExternalACPAgent[] | undefined;
+      items?: TenantExternalACPAgent[] | undefined;
+      externalAgents?: TenantExternalACPAgent[] | undefined;
+    };
+
+function normalizeAgentList(
+  response: TenantExternalACPAgentListResponse
+): TenantExternalACPAgent[] {
+  if (Array.isArray(response)) {
+    return response;
+  }
+  if (Array.isArray(response.agents)) {
+    return response.agents;
+  }
+  if (Array.isArray(response.items)) {
+    return response.items;
+  }
+  if (Array.isArray(response.externalAgents)) {
+    return response.externalAgents;
+  }
+  return [];
+}
+
 export const acpService = {
   getStatus(tenantId: string): Promise<TenantACPStatus> {
     return httpClient.get<TenantACPStatus>(`${BASE_URL}/${tenantId}/status`);
   },
 
-  listAgents(tenantId: string): Promise<TenantExternalACPAgent[]> {
-    return httpClient.get<TenantExternalACPAgent[]>(`${BASE_URL}/${tenantId}/external-agents`);
+  async listAgents(tenantId: string): Promise<TenantExternalACPAgent[]> {
+    const response = await httpClient.get<TenantExternalACPAgentListResponse>(
+      `${BASE_URL}/${tenantId}/external-agents`
+    );
+    return normalizeAgentList(response);
   },
 
   createAgent(

@@ -200,6 +200,7 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
               enabledDefinitions.map((agent, index) => {
                 const isSelected = agent.id === activeAgentId;
                 const isFocused = index === selectedIndex;
+                const isExternalAcp = agent.execution_backend?.type === 'acp_external';
                 return (
                   <button
                     key={agent.id}
@@ -232,6 +233,11 @@ export const AgentSwitcher: React.FC<AgentSwitcherProps> = ({
                         >
                           {agent.source === 'database' ? 'DB' : 'System'}
                         </span>
+                        {isExternalAcp && (
+                          <span className="text-2xs leading-none px-1.5 py-0.5 rounded-sm border bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/20 dark:text-cyan-300 dark:border-cyan-800/50">
+                            ACP
+                          </span>
+                        )}
                         <span className="text-2xs leading-none text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                           {t('agent.enabled', 'Enabled')}

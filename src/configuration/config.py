@@ -486,6 +486,9 @@ class Settings(BaseSettings):
     acp_external_agents_config_path: str | None = Field(
         default=None, alias="ACP_EXTERNAL_AGENTS_CONFIG_PATH"
     )
+    acp_external_prompt_timeout_seconds: float = Field(
+        default=120.0, alias="ACP_EXTERNAL_PROMPT_TIMEOUT_SECONDS"
+    )
 
     # Plan Mode Detection Settings (Hybrid Detection Strategy)
     plan_mode_enabled: bool = Field(default=False, alias="PLAN_MODE_ENABLED")

@@ -166,6 +166,7 @@ function hasStableOrderingMetadata(data: unknown): boolean {
  * MCP-style result with content array
  */
 interface McpResultContent {
+  content?: unknown;
   text?: string | undefined;
 }
 
@@ -185,18 +186,61 @@ function isMcpResult(value: unknown): value is McpResult {
   );
 }
 
+function extractContentText(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    const text = value.map((item) => extractContentText(item)).filter(Boolean).join('');
+    return text || undefined;
+  }
+  if (!value || typeof value !== 'object') return undefined;
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.text === 'string') return record.text;
+  if ('content' in record) return extractContentText(record.content);
+  return undefined;
+}
+
+function parseJsonObject(value: string): Record<string, unknown> | null {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{')) return null;
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractLegacyAcpObservationText(value: unknown): string | undefined {
+  const record =
+    typeof value === 'string'
+      ? parseJsonObject(value)
+      : value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : null;
+  if (!record || !('acp' in record)) return undefined;
+
+  const acp = record.acp;
+  if (!acp || typeof acp !== 'object' || Array.isArray(acp)) return undefined;
+
+  const acpRecord = acp as Record<string, unknown>;
+  return extractContentText(acpRecord.content) ?? extractContentText(acpRecord.status);
+}
+
 function stringifyObservationValue(value: unknown): string | undefined {
   if (typeof value === 'string') {
-    return value;
+    return extractLegacyAcpObservationText(value) ?? value;
   }
   if (value === null || value === undefined) {
     return undefined;
   }
+  const acpText = extractLegacyAcpObservationText(value);
+  if (acpText) return acpText;
   if (isMcpResult(value)) {
-    const content = value.content;
-    return content !== undefined && content.length > 0
-      ? (content[0]?.text ?? JSON.stringify(value))
-      : JSON.stringify(value);
+    return extractContentText(value.content) ?? JSON.stringify(value);
   }
   return JSON.stringify(value);
 }

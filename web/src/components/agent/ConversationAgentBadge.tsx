@@ -58,6 +58,7 @@ export function ConversationAgentBadge({ conversation }: ConversationAgentBadgeP
   if (!agentId) return null;
 
   const label = definition?.display_name || definition?.name || `Agent ${agentId.slice(0, 8)}`;
+  const isExternalAcp = definition?.execution_backend?.type === 'acp_external';
 
   return (
     <span
@@ -67,6 +68,7 @@ export function ConversationAgentBadge({ conversation }: ConversationAgentBadgeP
     >
       <Bot size={12} />
       <span className="max-w-[12rem] truncate">{label}</span>
+      {isExternalAcp && <span className="text-[10px] font-semibold text-cyan-600">ACP</span>}
     </span>
   );
 }

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -35,6 +36,8 @@ from pydantic import BaseModel, Field, ValidationError
 from src.configuration.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
+
+_STDIO_STREAM_LIMIT_BYTES = 8 * 1024 * 1024
 
 
 class ExternalACPAgentConfig(BaseModel):
@@ -212,6 +215,7 @@ class StdioExternalACPTransport(ExternalACPTransport):
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            limit=_STDIO_STREAM_LIMIT_BYTES,
             env=env,
         )
         if self._process.stdin is None or self._process.stdout is None:
@@ -615,11 +619,17 @@ class ExternalACPAgentService:
     ) -> ExternalACPPromptResult:
         started = time.perf_counter()
         session = self._require_session(agent_id, session_id, owner_user_id, tenant_id=tenant_id)
+        timeout_seconds = get_settings().acp_external_prompt_timeout_seconds
         try:
-            result = await session.transport.prompt(
+            prompt_call = session.transport.prompt(
                 remote_session_id=session.remote_session_id,
                 prompt=prompt,
                 message_id=message_id,
+            )
+            result = (
+                await asyncio.wait_for(prompt_call, timeout=timeout_seconds)
+                if timeout_seconds > 0
+                else await prompt_call
             )
             session.last_activity = datetime.now(UTC)
             metrics = self._metrics_for(tenant_id, agent_id)
@@ -633,6 +643,19 @@ class ExternalACPAgentService:
                 status="success",
             )
             return result
+        except TimeoutError as exc:
+            error_message = f"session/prompt timed out after {timeout_seconds:g}s"
+            with contextlib.suppress(Exception):
+                await session.transport.cancel(session.remote_session_id)
+            self._record_event(
+                tenant_id,
+                agent_id,
+                "session/prompt",
+                started,
+                status="error",
+                error=error_message,
+            )
+            raise TimeoutError(error_message) from exc
         except Exception as exc:
             self._record_event(
                 tenant_id,

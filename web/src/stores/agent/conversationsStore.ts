@@ -60,7 +60,11 @@ interface ConversationsState {
     signalOrOptions?: AbortSignal | ListConversationsOptions
   ) => Promise<void>;
   loadMoreConversations: (projectId: string, status?: ConversationStatus) => Promise<void>;
-  createConversation: (projectId: string, title?: string) => Promise<Conversation>;
+  createConversation: (
+    projectId: string,
+    title?: string,
+    selectedAgentId?: string
+  ) => Promise<Conversation>;
   getConversation: (conversationId: string, projectId: string) => Promise<Conversation | null>;
   deleteConversation: (conversationId: string, projectId: string) => Promise<void>;
   renameConversation: (conversationId: string, projectId: string, title: string) => Promise<void>;
@@ -361,13 +365,17 @@ export const useConversationsStore = create<ConversationsState>()(
        * @param title - Optional title (default "New Chat")
        * @returns The created conversation
        */
-      createConversation: async (projectId: string, title = 'New Chat') => {
+      createConversation: async (
+        projectId: string,
+        title = 'New Chat',
+        selectedAgentId = DEFAULT_GENERAL_AGENT_ID
+      ) => {
         set({ conversationsLoading: true, conversationsError: null });
         try {
           const request: CreateConversationRequest = {
             project_id: projectId,
             title,
-            agent_config: { selected_agent_id: DEFAULT_GENERAL_AGENT_ID },
+            agent_config: { selected_agent_id: selectedAgentId },
           };
           const conversation = await agentService.createConversation(request);
           const { conversations } = get();

@@ -44,6 +44,31 @@ function getPreferredLanguage(): 'en-US' | 'zh-CN' {
   return language === 'zh-CN' || language === 'zh' ? 'zh-CN' : 'en-US';
 }
 
+async function syncConversationSelectedAgent(
+  conversationId: string,
+  projectId: string,
+  selectedAgentId: string | undefined
+): Promise<void> {
+  if (!selectedAgentId) {
+    return;
+  }
+
+  const conversationStore = useConversationsStore.getState();
+  const currentConversation = conversationStore.currentConversation;
+  const currentSelectedAgentId =
+    currentConversation?.id === conversationId
+      ? currentConversation.agent_config?.['selected_agent_id']
+      : undefined;
+  if (currentSelectedAgentId === selectedAgentId) {
+    return;
+  }
+
+  const updatedConversation = await agentService.updateConversationConfig(conversationId, projectId, {
+    selected_agent_id: selectedAgentId,
+  });
+  useConversationsStore.getState().updateCurrentConversation(updatedConversation);
+}
+
 export interface MessageSendActionDeps {
   get: () => {
     activeConversationId: string | null;
@@ -88,7 +113,7 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
         try {
           const newConv = await useConversationsStore
             .getState()
-            .createConversation(projectId, content.slice(0, 30) + '...');
+            .createConversation(projectId, content.slice(0, 30) + '...', additionalHandlers?.agentId);
           conversationId = newConv.id;
           isNewConversation = true;
           resetCanvasForConversationScope();
@@ -109,6 +134,22 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
           const msg = error instanceof Error ? error.message : String(error);
           const createErr = `Failed to create conversation: ${msg}`;
           useStreamingStore.getState().setAgentError(createErr);
+          return null;
+        }
+      }
+
+      if (!isNewConversation) {
+        try {
+          await syncConversationSelectedAgent(
+            conversationId,
+            projectId,
+            additionalHandlers?.agentId
+          );
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          useStreamingStore
+            .getState()
+            .setAgentError(`Failed to update conversation agent: ${msg}`);
           return null;
         }
       }
@@ -207,14 +248,15 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
         streamHandlerDeps
       );
 
-      // For new conversations, return ID immediately and start stream in background
+      // For new conversations, wait until the WebSocket send is written before navigation.
+      // The chat() promise resolves after send_message is queued, not after the assistant finishes.
       if (isNewConversation) {
-        // Get app model context from conversation state (SEP-1865)
-        const convState = get().conversationStates.get(conversationId);
-        const appCtx = convState?.appModelContext || undefined;
+        try {
+          // Get app model context from conversation state (SEP-1865)
+          const convState = get().conversationStates.get(conversationId);
+          const appCtx = convState?.appModelContext || undefined;
 
-        agentService
-          .chat(
+          await agentService.chat(
             {
               conversation_id: conversationId,
               message: content,
@@ -228,16 +270,17 @@ export function createMessageSendActions(deps: MessageSendActionDeps) {
               mentions: additionalHandlers?.mentions,
             },
             handler
-          )
-          .catch(() => {
-            const { updateConversationState } = get();
-            updateConversationState(handlerConversationId, {
-              error: 'Failed to connect to chat stream',
-              isStreaming: false,
-              streamStatus: 'error',
-            });
+          );
+          return conversationId;
+        } catch {
+          const { updateConversationState } = get();
+          updateConversationState(handlerConversationId, {
+            error: 'Failed to connect to chat stream',
+            isStreaming: false,
+            streamStatus: 'error',
           });
-        return conversationId;
+          return null;
+        }
       }
 
       // For existing conversations, wait for stream to complete

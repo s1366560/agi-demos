@@ -12,6 +12,7 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { useAgentV3Store } from '../../stores/agentV3';
+import { useConversationsStore } from '../../stores/agent/conversationsStore';
 import { useTimelineStore } from '../../stores/agent/timelineStore';
 import { useStreamingStore } from '../../stores/agent/streamingStore';
 import { useExecutionStore } from '../../stores/agent/executionStore';
@@ -44,6 +45,7 @@ vi.mock('../../services/agentService', () => ({
       })
     ),
     createConversation: vi.fn(() => Promise.resolve({ id: 'new-conv', project_id: 'proj-123' })),
+    updateConversationConfig: vi.fn(),
     deleteConversation: vi.fn(() => Promise.resolve()),
     chat: vi.fn(),
     stopChat: vi.fn(),
@@ -85,6 +87,7 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
     useTimelineStore.getState().resetAgentTimeline();
     useStreamingStore.getState().resetAgentStreaming();
     useExecutionStore.getState().resetAgentExecution();
+    useConversationsStore.getState().reset();
 
     vi.clearAllMocks();
   });
@@ -134,6 +137,91 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
       if (timeline[0].type === 'user_message') {
         expect(timeline[0].content).toBe('Hello');
       }
+    });
+
+    it('should create new conversation with selected agent id', async () => {
+      const { result } = renderHook(() => useAgentV3Store());
+
+      const { agentService } = await import('../../services/agentService');
+      vi.mocked(agentService.createConversation).mockResolvedValue({
+        id: 'conv-1',
+        project_id: 'proj-123',
+        title: 'Test',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as any);
+      vi.mocked(agentService.chat).mockResolvedValue();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello', 'proj-123', { agentId: 'opencode-agent' });
+      });
+
+      expect(agentService.createConversation).toHaveBeenCalledWith({
+        project_id: 'proj-123',
+        title: 'Hello...',
+        agent_config: { selected_agent_id: 'opencode-agent' },
+      });
+      expect(agentService.chat).toHaveBeenCalledWith(
+        expect.objectContaining({ agent_id: 'opencode-agent' }),
+        expect.any(Object)
+      );
+    });
+
+    it('should persist selected agent id before sending to an existing conversation', async () => {
+      const { result } = renderHook(() => useAgentV3Store());
+
+      const { agentService } = await import('../../services/agentService');
+      const existingConversation = {
+        id: 'conv-existing',
+        project_id: 'proj-123',
+        tenant_id: 'tenant-1',
+        user_id: 'user-1',
+        title: 'Existing',
+        status: 'active',
+        message_count: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        agent_config: { selected_agent_id: 'builtin:all-access' },
+      } as const;
+      const updatedConversation = {
+        ...existingConversation,
+        agent_config: { selected_agent_id: 'opencode-agent' },
+      };
+
+      act(() => {
+        useAgentV3Store.setState({
+          activeConversationId: existingConversation.id,
+          conversationStates: new Map([
+            [existingConversation.id, createDefaultConversationState()],
+          ]),
+        });
+        useConversationsStore.setState({
+          conversations: [existingConversation as any],
+          currentConversation: existingConversation as any,
+        });
+      });
+      vi.mocked(agentService.updateConversationConfig).mockResolvedValue(updatedConversation as any);
+      vi.mocked(agentService.chat).mockResolvedValue();
+
+      await act(async () => {
+        await result.current.sendMessage('Hello', 'proj-123', { agentId: 'opencode-agent' });
+      });
+
+      expect(agentService.updateConversationConfig).toHaveBeenCalledWith(
+        'conv-existing',
+        'proj-123',
+        { selected_agent_id: 'opencode-agent' }
+      );
+      expect(agentService.chat).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversation_id: 'conv-existing',
+          agent_id: 'opencode-agent',
+        }),
+        expect.any(Object)
+      );
+      expect(useConversationsStore.getState().currentConversation?.agent_config).toEqual({
+        selected_agent_id: 'opencode-agent',
+      });
     });
 
     it('should set correct sequence number for user message', async () => {

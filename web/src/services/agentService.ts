@@ -59,6 +59,7 @@ const SILENT_AGENT_EVENT_TYPES = new Set<string>([
 ]);
 const CONTROL_AGENT_EVENT_TYPES = new Set<string>(['connected', 'pong', 'ack']);
 const IDLE_DISCONNECT_DELAY_MS = 5000;
+const SEND_ACK_TIMEOUT_MS = 8000;
 
 interface ProjectTenantSubscriptionKey {
   projectId: string;
@@ -130,6 +131,10 @@ class AgentServiceImpl implements AgentService {
   private performanceMetrics: Map<string, number[]> = new Map();
   private readonly MAX_METRICS_SAMPLES = 100;
   private idleDisconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pendingSendAcks: Map<
+    string,
+    { resolve: () => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }
+  > = new Map();
 
   constructor() {
     this.wsConnection = new WebSocketConnection({
@@ -173,6 +178,46 @@ class AgentServiceImpl implements AgentService {
     return this.wsConnection.send(message);
   }
 
+  private waitForSendAck(conversationId: string): Promise<void> {
+    const existing = this.pendingSendAcks.get(conversationId);
+    if (existing) {
+      clearTimeout(existing.timeout);
+      existing.reject(new Error('Superseded by a newer send_message request'));
+      this.pendingSendAcks.delete(conversationId);
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingSendAcks.delete(conversationId);
+        reject(new Error('Timed out waiting for send_message acknowledgment'));
+      }, SEND_ACK_TIMEOUT_MS);
+
+      this.pendingSendAcks.set(conversationId, { resolve, reject, timeout });
+    });
+  }
+
+  private resolveSendAck(message: ServerMessage): void {
+    if (message.action !== 'send_message' || !message.conversation_id) {
+      return;
+    }
+    const pending = this.pendingSendAcks.get(message.conversation_id);
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending.timeout);
+    this.pendingSendAcks.delete(message.conversation_id);
+    pending.resolve();
+  }
+
+  private cancelSendAck(conversationId: string): void {
+    const pending = this.pendingSendAcks.get(conversationId);
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending.timeout);
+    this.pendingSendAcks.delete(conversationId);
+  }
+
   private handleMessage(message: ServerMessage): void {
     const { type, conversation_id, data } = message;
 
@@ -189,6 +234,7 @@ class AgentServiceImpl implements AgentService {
     }
 
     if (type === 'ack') {
+      this.resolveSendAck(message);
       return;
     }
 
@@ -344,7 +390,11 @@ class AgentServiceImpl implements AgentService {
   updateConversationConfig(
     conversationId: string,
     projectId: string,
-    config: { llm_model_override?: string | null; llm_overrides?: Record<string, unknown> | null }
+    config: {
+      selected_agent_id?: string | null;
+      llm_model_override?: string | null;
+      llm_overrides?: Record<string, unknown> | null;
+    }
   ): Promise<Conversation> {
     return restApi.updateConversationConfig(conversationId, projectId, config);
   }
@@ -608,6 +658,7 @@ class AgentServiceImpl implements AgentService {
     this.handlers.set(conversation_id, handler);
     this.subscriptions.add(conversation_id);
 
+    const sendAck = this.waitForSendAck(conversation_id);
     const sent = this.send({
       type: 'send_message',
       conversation_id,
@@ -623,6 +674,7 @@ class AgentServiceImpl implements AgentService {
     });
 
     if (!sent) {
+      this.cancelSendAck(conversation_id);
       handler.onError?.({
         type: 'error',
         data: {
@@ -632,6 +684,7 @@ class AgentServiceImpl implements AgentService {
       });
       throw new Error('WebSocket not connected');
     }
+    await sendAck;
   }
 
   subscribe(conversationId: string, handler: AgentStreamHandler, options?: SubscribeOptions): void {

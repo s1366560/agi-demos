@@ -4,6 +4,13 @@ export type AgentSource = 'filesystem' | 'database' | 'builtin';
 
 export type SpawnStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
+export type AgentExecutionBackendType = 'memstack' | 'acp_external';
+
+export interface AgentExecutionBackend {
+  type: AgentExecutionBackendType;
+  acp_agent_key?: string | undefined;
+}
+
 export interface AgentTrigger {
   keywords?: string[] | undefined;
   semantic?: string | undefined;
@@ -107,6 +114,7 @@ export interface AgentDefinition {
   created_at: string;
   updated_at: string | null;
   metadata: Record<string, unknown>;
+  execution_backend?: AgentExecutionBackend | undefined;
 }
 
 export interface SpawnRecord {
@@ -204,6 +212,7 @@ export interface CreateDefinitionRequest {
   tool_policy?: AgentDefinitionToolPolicy | null | undefined;
   session_policy?: AgentDefinitionSessionPolicy | null | undefined;
   delegate_config?: AgentDefinitionDelegateConfig | null | undefined;
+  execution_backend?: AgentExecutionBackend | undefined;
   metadata?: Record<string, unknown> | undefined;
 }
 
@@ -236,6 +245,7 @@ export interface UpdateDefinitionRequest {
   tool_policy?: AgentDefinitionToolPolicy | null | undefined;
   session_policy?: AgentDefinitionSessionPolicy | null | undefined;
   delegate_config?: AgentDefinitionDelegateConfig | null | undefined;
+  execution_backend?: AgentExecutionBackend | undefined;
   metadata?: Record<string, unknown> | undefined;
 }
 

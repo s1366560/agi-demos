@@ -42,6 +42,7 @@ import {
   useHasEarlier,
 } from '@/stores/agent/timelineStore';
 import { useAgentV3Store } from '@/stores/agentV3';
+import { useDefinitions } from '@/stores/agentDefinitions';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useProjectStore } from '@/stores/project';
 import { useSandboxStore } from '@/stores/sandbox';
@@ -313,6 +314,12 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const [activeAgentId, setActiveAgentId] = useState<string | undefined>(
       DEFAULT_GENERAL_AGENT_ID
     );
+    const agentDefinitions = useDefinitions();
+    const activeAgentDefinition = useMemo(
+      () => agentDefinitions.find((definition) => definition.id === activeAgentId) ?? null,
+      [agentDefinitions, activeAgentId]
+    );
+    const isExternalAcpAgent = activeAgentDefinition?.execution_backend?.type === 'acp_external';
 
     useEffect(() => {
       const selectedAgentId = currentConversation?.agent_config?.['selected_agent_id'];
@@ -626,6 +633,21 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         mentions?: string[]
       ) => {
         if (!projectId) return;
+        if (
+          isExternalAcpAgent &&
+          (fileMetadata?.length ||
+            forcedSkillName ||
+            forcedSubAgentName ||
+            imageAttachments?.length ||
+            mentions?.length)
+        ) {
+          void message.error(
+            t('agent.chat.externalAcpTextOnly', {
+              defaultValue: 'External ACP agents support text prompts only.',
+            })
+          );
+          return;
+        }
 
         let finalContent = content;
         if (forcedSubAgentName) {
@@ -656,6 +678,8 @@ ${content}`;
         basePath,
         navigationSuffix,
         activeAgentId,
+        isExternalAcpAgent,
+        t,
       ]
     );
 

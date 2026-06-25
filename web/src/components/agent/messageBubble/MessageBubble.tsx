@@ -461,10 +461,21 @@ const ExecutionSummaryPanel: React.FC<{
   }
 
   const taskSummary = summary.tasks;
+  const hasVisibleSummary =
+    summary.stepCount > 0 ||
+    summary.artifactCount > 0 ||
+    summary.callCount > 0 ||
+    summary.totalTokens.total > 0 ||
+    Boolean(taskSummary && taskSummary.total > 0);
+  if (!hasVisibleSummary) {
+    return null;
+  }
 
   return (
     <div className="mb-3 flex flex-wrap gap-2">
-      <SummaryPill label="Steps" value={formatCount(summary.stepCount, countFormatter)} />
+      {summary.stepCount > 0 ? (
+        <SummaryPill label="Steps" value={formatCount(summary.stepCount, countFormatter)} />
+      ) : null}
       {taskSummary ? (
         <SummaryPill
           label="Tasks"

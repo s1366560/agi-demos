@@ -13,6 +13,7 @@ from src.domain.model.agent.agent_definition import Agent, AgentModel
 from src.domain.model.agent.delegate_config import DelegateConfig
 from src.domain.model.agent.session_policy import SessionPolicy
 from src.domain.model.agent.spawn_policy import SpawnPolicy
+from src.domain.model.agent.subagent import AgentTrigger
 from src.domain.model.agent.tool_policy import ToolPolicy, ToolPolicyPrecedence
 from src.domain.model.agent.workspace_config import WorkspaceConfig
 from src.infrastructure.adapters.primary.web.routers.agent.definitions_router import (
@@ -821,6 +822,61 @@ class TestDefinitionsRouterA2AConfig:
         assert updated_agent.model == AgentModel.INHERIT
         assert isinstance(updated_agent.workspace_config, WorkspaceConfig)
         assert response["model"] == AgentModel.INHERIT.value
+
+    @pytest.mark.asyncio
+    async def test_update_definition_normalizes_null_collection_fields(self):
+        registry = _make_registry()
+        db = _make_db()
+        existing = _make_agent(
+            persona_files=["persona.md"],
+            allowed_tools=["read"],
+            allowed_skills=["skill-a"],
+            allowed_mcp_servers=["server-a"],
+            fallback_models=["model-a"],
+        )
+        existing.trigger = AgentTrigger(
+            description=existing.trigger.description,
+            examples=["before"],
+            keywords=["before"],
+        )
+        registry.get_by_id = AsyncMock(return_value=existing)
+
+        with (
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.get_container_with_db",
+                return_value=_make_container(registry),
+            ),
+            patch(
+                "src.infrastructure.adapters.primary.web.routers.agent.definitions_router.require_tenant_access",
+                AsyncMock(),
+            ),
+        ):
+            response = await update_definition(
+                "agent-1",
+                UpdateDefinitionBody(
+                    persona_files=None,
+                    allowed_tools=None,
+                    allowed_skills=None,
+                    allowed_mcp_servers=None,
+                    fallback_models=None,
+                    trigger_examples=None,
+                    trigger_keywords=None,
+                ),
+                request=MagicMock(),
+                current_user=SimpleNamespace(id="user-1"),
+                tenant_id="tenant-1",
+                db=db,
+            )
+
+        updated_agent = registry.update.await_args.args[0]
+        assert updated_agent.persona_files == []
+        assert updated_agent.allowed_tools == ["*"]
+        assert updated_agent.allowed_skills == []
+        assert updated_agent.allowed_mcp_servers == []
+        assert updated_agent.fallback_models == []
+        assert updated_agent.trigger.examples == []
+        assert updated_agent.trigger.keywords == []
+        assert response["allowed_tools"] == ["*"]
 
     @pytest.mark.asyncio
     async def test_update_definition_accepts_structured_spawn_and_tool_policy(self):

@@ -112,6 +112,19 @@ const mockAssistantSummaryEvent: any = {
   },
 };
 
+const mockAssistantEmptySummaryEvent: any = {
+  id: '2-empty-summary',
+  type: 'assistant_message',
+  content: 'External ACP response',
+  timestamp: Date.now(),
+  metadata: {
+    executionSummary: {
+      source: 'acp_external',
+      acp_agent_key: 'opencode-local',
+    },
+  },
+};
+
 const mockTextDeltaEvent: any = {
   id: '3',
   type: 'text_delta',
@@ -275,6 +288,14 @@ describe('MessageBubble Compound Component', () => {
       expect(screen.getByText('Tasks')).toBeInTheDocument();
       expect(screen.getByText('2/3')).toBeInTheDocument();
       expect(screen.getByText('$0.123456')).toBeInTheDocument();
+    });
+
+    it('should hide empty assistant execution summary metadata', () => {
+      render(<MessageBubble event={mockAssistantEmptySummaryEvent} />);
+
+      expect(screen.getByText('External ACP response')).toBeInTheDocument();
+      expect(screen.queryByText('Steps')).not.toBeInTheDocument();
+      expect(screen.queryByText('0')).not.toBeInTheDocument();
     });
 
     it('should render text delta event', () => {
