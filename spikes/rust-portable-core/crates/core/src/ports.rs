@@ -12,6 +12,8 @@ pub enum CoreError {
     Embedding(String),
     #[error("storage error: {0}")]
     Storage(String),
+    #[error("tool error: {0}")]
+    Tool(String),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
@@ -40,6 +42,23 @@ pub trait LlmPort: Send + Sync {
 #[async_trait]
 pub trait EmbeddingPort: Send + Sync {
     async fn embed(&self, text: &str) -> CoreResult<Vec<f32>>;
+}
+
+/// Hexagonal port for hosting **sandboxed third-party tools** (L1 third-party /
+/// MCP). The host runtime is platform-swappable behind this trait:
+/// - server / desktop -> Wasmtime (JIT, fuel/epoch quotas)
+/// - iOS (no JIT) / mobile -> Wasmi or Wasmer
+/// - browser (core is itself wasm) -> Wasmi (wasm-in-wasm) or a Web-Worker proxy
+///
+/// Trusted *built-in* tools do NOT go through here — they are plain `dyn Trait`
+/// registrations compiled into the core (native speed, no sandbox). This is the
+/// trust axis: never run untrusted code in-process; only behind a wasm sandbox.
+#[async_trait]
+pub trait ToolHost: Send + Sync {
+    /// Capability surface: the tool names this host can dispatch.
+    fn list_tools(&self) -> Vec<String>;
+    /// Invoke a sandboxed tool with a JSON input, returning a JSON output.
+    async fn call(&self, tool: &str, input_json: &str) -> CoreResult<String>;
 }
 
 /// Mirrors `MemoryRepository` in

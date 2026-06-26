@@ -17,6 +17,6 @@ pub mod util;
 
 pub use model::{Entity, Episode, Memory, SourceType};
 pub use ports::{
-    Clock, CoreError, CoreResult, EmbeddingPort, LlmPort, MemoryDraft, MemoryRepository,
+    Clock, CoreError, CoreResult, EmbeddingPort, LlmPort, MemoryDraft, MemoryRepository, ToolHost,
 };
 pub use service::MemoryService;

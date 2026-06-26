@@ -20,6 +20,7 @@
 | 5 | A **real embedded DB** can back the same port on device | ✅ PASS | `adapters-sqlite` (rusqlite, **bundled C SQLite**) implements `MemoryRepository`, overrides `search_by_project` to push the filter into SQL; test green |
 | 6 | Adapters are genuinely **swapped per platform** (not one-size-fits-all) | ✅ PASS (by construction) | bundled-SQLite **cannot** target `wasm32-unknown-unknown` (`stdio.h` not found) → browser must use a different storage adapter behind the *same* port. This is the hexagonal boundary working as intended. |
 | 7 | Core packages as a **native mobile library** (Swift/Kotlin) | ✅ PASS (codegen + iOS arch) / ⛓️ blocked on SDK | `bindings-uffi` (UniFFI) compiles against the real core; **Swift + Kotlin** bindings generated (`generated/`); core + in-mem adapter cross-compile to `aarch64-apple-ios`. Final device `.a`/`.so` needs full **Xcode iOS SDK** / **Android NDK** (not installed here) |
+| 8 | The **plugin host itself is a portable port** (untrusted tools sandboxed in WASM, host runs on every target *incl. browser*) | ✅ PASS | `adapters-wasmi` implements a new `ToolHost` port over the pure-Rust **wasmi** interpreter, runs a sandboxed `.wat` tool (test green), and **also compiles to `wasm32-unknown-unknown`** — i.e. the same host runs natively *and* wasm-in-wasm inside the browser core. Wasmtime would swap in for server/desktop speed behind the same port. |
 
 **Still open** (next slices, not yet done): final iOS `.a` / Android `.so` device
 artifacts (need Xcode iOS SDK + NDK installs), Tauri desktop shell, `sqlite-vec`
@@ -50,6 +51,7 @@ spikes/rust-portable-core/
 │   │   └── src/{model,ports,service,util,lib}.rs
 │   ├── adapters-mem/           # In-memory + stub adapters (+ the runtime-agnostic test)
 │   ├── adapters-sqlite/        # On-DEVICE storage: embedded SQLite via rusqlite (bundled C)
+│   ├── adapters-wasmi/         # PLUGIN HOST: ToolHost port over pure-Rust wasmi (sandboxes untrusted tools; compiles to wasm32 too)
 │   ├── bindings-wasm/          # BROWSER/JS binding via wasm-bindgen (future_to_promise)
 │   └── bindings-uffi/          # MOBILE binding via UniFFI -> generates Swift (iOS) + Kotlin (Android)
 ├── apps/
@@ -152,6 +154,40 @@ func search(projectId: String, query: String, limit: UInt32) -> String         /
 > `generated/` is checked in as **evidence** of the native surface; normally it
 > is a build artifact.
 
+### 6. Plugin host — sandboxed third-party tools (extensibility axis)
+
+MemStack is itself a plugin platform (L1 Tool / L2 Skill / L3 SubAgent / MCP are
+all extension points). The spike's second axis proves that **untrusted** tools
+can be hosted **behind a port**, on every target:
+
+```bash
+# native: invoke a sandboxed .wat tool through the ToolHost port
+cargo test -p memstack-adapters-wasmi
+
+# the host ITSELF compiles to wasm -> same untrusted tool runs inside the
+# browser core (wasm-in-wasm), no server round-trip required:
+cargo build -p memstack-adapters-wasmi --target wasm32-unknown-unknown
+```
+
+`adapters-wasmi` adds a `ToolHost` port to the core and implements it with the
+pure-Rust **wasmi** interpreter. Trust × platform decisions both fold into this
+one port:
+
+- **Trust axis** — trusted built-in tools are plain `dyn Trait` compiled into the
+  core (native speed); untrusted third-party / MCP tools run *only* inside the
+  wasm sandbox. (Iron rule: never load untrusted code via `cdylib`/in-process
+  dynamic libs.)
+- **Platform axis** — the host runtime is swapped behind the port: **Wasmtime**
+  on server/desktop (JIT + fuel/epoch quotas), **wasmi/wasmer** on iOS (no JIT),
+  **wasmi** in the browser (wasm-in-wasm) or a Web-Worker / server proxy. `wasmi`
+  is the *universal-portable* fallback because it compiles to every target the
+  core does — proven above.
+
+> **core-as-guest vs core-as-host.** Claims 3–4 proved *core-as-guest* (the whole
+> core compiled to wasm). This slice adds *core-as-host* (the core embeds a
+> runtime to load tool plugins). They only tension in the browser, where the core
+> is already wasm; `wasmi` resolves it by interpreting wasm *inside* wasm.
+
 ## The platform-adapter boundary (important finding)
 
 `adapters-sqlite` uses `rusqlite { features = ["bundled"] }`, which compiles the
@@ -189,7 +225,10 @@ port is satisfied by **different** adapters per platform:
 2. **Tauri desktop** — wrap `core` in a Tauri app to prove the PC shell.
 3. **`sqlite-vec`** — replace the toy hash-embedding search with a real on-device
    vector index.
-4. **Scorecard** — measure binary/wasm size, cold-start, and ingest/search
+4. **Wasmtime host + WIT contracts** — add a Wasmtime-backed `ToolHost` adapter
+   for server/desktop speed (fuel/epoch quotas) and define the tool ABI as a
+   WIT / Component-Model interface instead of the raw numeric `.wat` used here.
+5. **Scorecard** — measure binary/wasm size, cold-start, and ingest/search
    latency vs the current Python service; fill the go/no-go thresholds in
    `~/.copilot/session-state/.../files/rust-spike-plan.md`.
 
@@ -198,7 +237,10 @@ port is satisfied by **different** adapters per platform:
 The make-or-break risk (**runtime-agnostic core → one codebase, server + browser
 + device**) is **confirmed** with working, tested artifacts across server,
 browser-WASM, an embedded database, and a native **mobile** binding (Swift +
-Kotlin generated from the same core; iOS-arch cross-compile verified). Nothing
-observed contradicts the plan's recommendation of **Rust as the portable-core
-language**. Remaining work is breadth (final device artifacts behind SDK/NDK
-installs, Tauri desktop) and quantified metrics — not a fundamental unknown.
+Kotlin generated from the same core; iOS-arch cross-compile verified). The
+**extensibility axis** is also confirmed: untrusted tools run sandboxed behind a
+`ToolHost` port whose wasm host compiles to every target (incl. the browser
+core). Nothing observed contradicts the plan's recommendation of **Rust as the
+portable-core language**. Remaining work is breadth (final device artifacts
+behind SDK/NDK installs, Tauri desktop, a Wasmtime host adapter + WIT contracts)
+and quantified metrics — not a fundamental unknown.

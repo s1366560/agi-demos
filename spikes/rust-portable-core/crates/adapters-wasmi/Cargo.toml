@@ -1,0 +1,20 @@
+[package]
+name = "memstack-adapters-wasmi"
+description = "Plugin-host adapter: runs sandboxed third-party tools via the pure-Rust wasmi interpreter (the universal-portable ToolHost)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+memstack-core = { path = "../core" }
+async-trait.workspace = true
+serde_json.workspace = true
+# Pure-Rust wasm interpreter: compiles to ANY target (incl. wasm32 itself) ->
+# one portable plugin host for server/desktop/mobile/browser. Wasmtime would
+# replace it on server/desktop for speed; iOS (no JIT) keeps wasmi.
+wasmi = "1"
+# Compile inline `.wat` -> wasm bytes at runtime (pure Rust, cross-compiles).
+wat = "1"
+
+[dev-dependencies]
+futures.workspace = true
