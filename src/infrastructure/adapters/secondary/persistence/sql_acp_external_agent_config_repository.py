@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -46,7 +47,7 @@ class ACPExternalAgentConfigRepository:
         result = await self._session.execute(refresh_select_statement(stmt))
         return result.scalar_one_or_none()
 
-    async def create_or_restore(
+    async def create_or_restore(  # noqa: PLR0913
         self,
         *,
         tenant_id: str,
@@ -59,6 +60,9 @@ class ACPExternalAgentConfigRepository:
         env: dict[str, object],
         headers: dict[str, object],
         enabled: bool,
+        runner_pool_key: str | None = None,
+        required_labels: Mapping[str, object] | None = None,
+        cwd_policy: Mapping[str, object] | None = None,
     ) -> ACPExternalAgentConfigModel:
         existing = await self.get_by_tenant_and_key(
             tenant_id,
@@ -77,6 +81,9 @@ class ACPExternalAgentConfigRepository:
                 url=url,
                 env=env,
                 headers=headers,
+                runner_pool_key=runner_pool_key,
+                required_labels=dict(required_labels or {}),
+                cwd_policy=dict(cwd_policy or {}),
                 enabled=enabled,
             )
             self._session.add(existing)
@@ -88,6 +95,9 @@ class ACPExternalAgentConfigRepository:
             existing.url = url
             existing.env = env
             existing.headers = headers
+            existing.runner_pool_key = runner_pool_key
+            existing.required_labels = dict(required_labels or {})
+            existing.cwd_policy = dict(cwd_policy or {})
             existing.enabled = enabled
             existing.deleted_at = None
             existing.updated_at = datetime.now(UTC)
@@ -107,6 +117,9 @@ class ACPExternalAgentConfigRepository:
         env: dict[str, object],
         headers: dict[str, object],
         enabled: bool,
+        runner_pool_key: str | None = None,
+        required_labels: Mapping[str, object] | None = None,
+        cwd_policy: Mapping[str, object] | None = None,
     ) -> ACPExternalAgentConfigModel:
         config.name = name
         config.transport = transport
@@ -115,6 +128,9 @@ class ACPExternalAgentConfigRepository:
         config.url = url
         config.env = env
         config.headers = headers
+        config.runner_pool_key = runner_pool_key
+        config.required_labels = dict(required_labels or {})
+        config.cwd_policy = dict(cwd_policy or {})
         config.enabled = enabled
         config.updated_at = datetime.now(UTC)
         await self._session.flush()

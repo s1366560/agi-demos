@@ -85,11 +85,19 @@ def test_tenant_config_secret_values_are_encrypted_masked_and_resolved() -> None
             url=None,
             env=stored,
             headers={},
+            tenant_id="tenant-1",
+            runner_pool_key="pool-1",
+            required_labels={"gpu": "false", "tier": 1},
+            cwd_policy={"allowed_roots": ["/workspace"]},
             enabled=True,
         )
     )
     assert runtime.env_values["API_KEY"] == "plain-secret"
     assert runtime.env["PATH_REF"] == "LOCAL_PATH_ENV"
+    assert runtime.tenant_id == "tenant-1"
+    assert runtime.runner_pool_key == "pool-1"
+    assert runtime.required_labels == {"gpu": "false", "tier": "1"}
+    assert runtime.cwd_policy == {"allowed_roots": ["/workspace"]}
 
 
 async def test_tenant_agent_service_tracks_metrics(monkeypatch) -> None:

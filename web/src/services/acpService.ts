@@ -1,6 +1,8 @@
 import { httpClient } from '@/services/client/httpClient';
 
 import type {
+  ACPRunnerInstance,
+  ACPRunnerPool,
   ACPExternalSession,
   ExternalACPPromptResult,
   ExternalACPSessionResult,
@@ -43,6 +45,14 @@ function normalizeAgentList(
 export const acpService = {
   getStatus(tenantId: string): Promise<TenantACPStatus> {
     return httpClient.get<TenantACPStatus>(`${BASE_URL}/${tenantId}/status`);
+  },
+
+  listRunnerPools(tenantId: string): Promise<ACPRunnerPool[]> {
+    return httpClient.get<ACPRunnerPool[]>(`${BASE_URL}/${tenantId}/runner-pools`);
+  },
+
+  listRunnerInstances(tenantId: string): Promise<ACPRunnerInstance[]> {
+    return httpClient.get<ACPRunnerInstance[]>(`${BASE_URL}/${tenantId}/runner-instances`);
   },
 
   async listAgents(tenantId: string): Promise<TenantExternalACPAgent[]> {

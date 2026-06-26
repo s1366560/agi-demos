@@ -100,6 +100,27 @@ def test_external_agent_summary_available_when_env_present(monkeypatch) -> None:
     assert summary.missing_env == []
 
 
+def test_runner_backed_external_agent_does_not_require_control_plane_env(monkeypatch) -> None:
+    monkeypatch.delenv("LOCAL_AGENT_API_KEY", raising=False)
+    service = ExternalACPAgentService(
+        [
+            ExternalACPAgentConfig(
+                id="runner-agent",
+                name="Runner Agent",
+                transport="stdio",
+                command="agent",
+                env={"API_KEY": "LOCAL_AGENT_API_KEY"},
+                runner_pool_key="pool-1",
+            )
+        ]
+    )
+
+    summary = service.list_agents()[0]
+
+    assert summary.available
+    assert summary.missing_env == []
+
+
 def test_stdio_bridge_url_resolution() -> None:
     assert _acp_websocket_url("http://127.0.0.1:8000") == "ws://127.0.0.1:8000/api/v1/acp/ws"
     assert _acp_websocket_url("https://memstack.test/base") == (

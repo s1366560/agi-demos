@@ -36,6 +36,7 @@ import {
   type ACPConfigValue,
   type ACPConfigValueType,
   type ACPExternalSession,
+  type ACPRunnerPool,
   type ACPTransport,
   type ACPOperationEvent,
   type TenantACPStatus,
@@ -62,6 +63,9 @@ interface AgentFormValues {
   command?: string | undefined;
   argsText?: string | undefined;
   url?: string | undefined;
+  runnerPoolKey?: string | undefined;
+  requiredLabelsText?: string | undefined;
+  cwdPolicyText?: string | undefined;
   enabled: boolean;
   envEntries: ConfigEntryFormValue[];
   headerEntries: ConfigEntryFormValue[];
@@ -118,6 +122,16 @@ function parseArgs(text: string | undefined): string[] {
     .filter(Boolean);
 }
 
+function parseJsonObject(text: string | undefined, fallback: Record<string, unknown>) {
+  const trimmed = text?.trim();
+  if (!trimmed) return fallback;
+  const parsed: unknown = JSON.parse(trimmed);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Expected a JSON object');
+  }
+  return parsed as Record<string, unknown>;
+}
+
 function agentToFormValues(agent: TenantExternalACPAgent): AgentFormValues {
   return {
     agentKey: agent.agentKey,
@@ -126,6 +140,13 @@ function agentToFormValues(agent: TenantExternalACPAgent): AgentFormValues {
     command: agent.command ?? undefined,
     argsText: agent.args.join('\n'),
     url: agent.url ?? undefined,
+    runnerPoolKey: agent.runnerPoolKey ?? undefined,
+    requiredLabelsText:
+      Object.keys(agent.requiredLabels ?? {}).length > 0
+        ? JSON.stringify(agent.requiredLabels, null, 2)
+        : '',
+    cwdPolicyText:
+      Object.keys(agent.cwdPolicy ?? {}).length > 0 ? JSON.stringify(agent.cwdPolicy, null, 2) : '',
     enabled: agent.enabled,
     envEntries: recordToEntries(agent.env),
     headerEntries: recordToEntries(agent.headers),
@@ -138,6 +159,7 @@ export const AcpDashboard: React.FC = () => {
   const currentTenant = useTenantStore((state) => state.currentTenant);
   const tenantId = urlTenantId || currentTenant?.id || null;
   const [statusData, setStatusData] = useState<TenantACPStatus | null>(null);
+  const [runnerPools, setRunnerPools] = useState<ACPRunnerPool[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -158,7 +180,9 @@ export const AcpDashboard: React.FC = () => {
     setLoading(true);
     try {
       const response = await acpService.getStatus(tenantId);
+      const pools = await acpService.listRunnerPools(tenantId);
       setStatusData(response);
+      setRunnerPools(pools);
     } catch (error) {
       message.error(error instanceof Error ? error.message : t('tenant.acp.errors.loadFailed'));
     } finally {
@@ -217,16 +241,25 @@ export const AcpDashboard: React.FC = () => {
   const submitAgent = useCallback(async () => {
     if (!tenantId) return;
     const values = await form.validateFields();
-    const payload: UpsertTenantACPAgentRequest = {
-      name: values.name,
-      transport: values.transport,
-      command: values.command || null,
-      args: parseArgs(values.argsText),
-      url: values.url || null,
-      enabled: values.enabled,
-      env: entriesToRecord(values.envEntries, editingAgent?.env),
-      headers: entriesToRecord(values.headerEntries, editingAgent?.headers),
-    };
+    let payload: UpsertTenantACPAgentRequest;
+    try {
+      payload = {
+        name: values.name,
+        transport: values.transport,
+        command: values.command || null,
+        args: parseArgs(values.argsText),
+        url: values.url || null,
+        enabled: values.enabled,
+        env: entriesToRecord(values.envEntries, editingAgent?.env),
+        headers: entriesToRecord(values.headerEntries, editingAgent?.headers),
+        runnerPoolKey: values.runnerPoolKey || null,
+        requiredLabels: parseJsonObject(values.requiredLabelsText, {}) as Record<string, string>,
+        cwdPolicy: parseJsonObject(values.cwdPolicyText, {}),
+      };
+    } catch {
+      message.error(t('tenant.acp.errors.invalidJson', { defaultValue: 'Invalid JSON object' }));
+      return;
+    }
     setSaving(true);
     try {
       if (editingAgent) {
@@ -305,6 +338,13 @@ export const AcpDashboard: React.FC = () => {
         key: 'transport',
         width: 120,
         render: (transport: ACPTransport) => <Tag>{transport}</Tag>,
+      },
+      {
+        title: t('tenant.acp.columns.runnerPool', { defaultValue: 'Runner Pool' }),
+        dataIndex: 'runnerPoolKey',
+        key: 'runnerPoolKey',
+        width: 150,
+        render: (value?: string | null) => value || <Tag>direct</Tag>,
       },
       {
         title: t('tenant.acp.columns.status'),
@@ -650,6 +690,34 @@ export const AcpDashboard: React.FC = () => {
                 { value: 'websocket', label: 'websocket' },
               ]}
             />
+          </Form.Item>
+          <Form.Item
+            name="runnerPoolKey"
+            label={t('tenant.acp.form.runnerPool', { defaultValue: 'Runner Pool' })}
+            extra={t('tenant.acp.form.runnerPoolHelp', {
+              defaultValue: 'Leave empty to run this ACP agent directly in the API process.',
+            })}
+          >
+            <Select
+              allowClear
+              placeholder={t('tenant.acp.form.directRunner', { defaultValue: 'Direct transport' })}
+              options={runnerPools.map((pool) => ({
+                value: pool.poolKey,
+                label: `${pool.name} (${pool.mode})`,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="requiredLabelsText"
+            label={t('tenant.acp.form.requiredLabels', { defaultValue: 'Required labels JSON' })}
+          >
+            <Input.TextArea rows={3} placeholder={'{"region":"local"}'} />
+          </Form.Item>
+          <Form.Item
+            name="cwdPolicyText"
+            label={t('tenant.acp.form.cwdPolicy', { defaultValue: 'CWD policy JSON' })}
+          >
+            <Input.TextArea rows={3} placeholder={'{"allowed_roots":["/workspace"]}'} />
           </Form.Item>
           <Form.Item noStyle shouldUpdate>
             {({ getFieldValue }) => {

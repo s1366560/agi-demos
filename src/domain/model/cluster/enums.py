@@ -11,6 +11,7 @@ class ClusterProvider(str, Enum):
     tke = "tke"  # Tencent Kubernetes Engine
     custom = "custom"  # Self-managed K8s
     docker = "docker"  # Docker-based (dev/test)
+    self_hosted = "self_hosted"  # Customer-managed local or private machine
 
 
 class ClusterStatus(str, Enum):

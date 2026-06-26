@@ -19,6 +19,9 @@ export interface TenantExternalACPAgent {
   url?: string | null | undefined;
   env: Record<string, ACPConfigValue>;
   headers: Record<string, ACPConfigValue>;
+  runnerPoolKey?: string | null | undefined;
+  requiredLabels?: Record<string, string> | undefined;
+  cwdPolicy?: Record<string, unknown> | undefined;
   enabled: boolean;
   source: string;
   available: boolean;
@@ -77,7 +80,62 @@ export interface UpsertTenantACPAgentRequest {
   url?: string | null | undefined;
   env?: Record<string, ACPConfigValue> | undefined;
   headers?: Record<string, ACPConfigValue> | undefined;
+  runnerPoolKey?: string | null | undefined;
+  requiredLabels?: Record<string, string> | undefined;
+  cwdPolicy?: Record<string, unknown> | undefined;
   enabled?: boolean | undefined;
+}
+
+export type ACPRunnerPoolMode = 'kubernetes' | 'self_hosted';
+
+export interface ACPRunnerPool {
+  id: string;
+  tenantId: string;
+  clusterId: string;
+  poolKey: string;
+  name: string;
+  mode: ACPRunnerPoolMode;
+  enabled: boolean;
+  labels: Record<string, string>;
+  capacityPolicy: Record<string, unknown>;
+  schedulingPolicy: Record<string, unknown>;
+  runnerCount: number;
+  readyRunnerCount: number;
+  activeSessionCount: number;
+  createdAt?: string | null | undefined;
+  updatedAt?: string | null | undefined;
+}
+
+export interface ACPRunnerInstance {
+  id: string;
+  tenantId: string;
+  poolId: string;
+  runnerId: string;
+  status: string;
+  version?: string | null | undefined;
+  capabilities: Record<string, unknown>;
+  currentSessions: number;
+  maxSessions: number;
+  lastHeartbeatAt?: string | null | undefined;
+  connectionId?: string | null | undefined;
+  lastError?: string | null | undefined;
+}
+
+export interface UpsertACPRunnerPoolRequest {
+  poolKey?: string | undefined;
+  name: string;
+  mode: ACPRunnerPoolMode;
+  enabled: boolean;
+  labels?: Record<string, string> | undefined;
+  capacityPolicy?: Record<string, unknown> | undefined;
+  schedulingPolicy?: Record<string, unknown> | undefined;
+}
+
+export interface ACPRunnerTokenResponse {
+  token: string;
+  expiresAt?: string | null | undefined;
+  connectUrl: string;
+  installCommand: string;
 }
 
 export interface TenantACPSessionRequest {

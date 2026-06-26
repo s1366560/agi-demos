@@ -10,6 +10,7 @@ import type { TenantACPStatus, TenantACPTestResponse } from '@/types/acp';
 
 const acpServiceMock = vi.hoisted(() => ({
   getStatus: vi.fn(),
+  listRunnerPools: vi.fn(),
   updateAgent: vi.fn(),
   testAgent: vi.fn(),
 }));
@@ -96,6 +97,7 @@ describe('AcpDashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     acpServiceMock.getStatus.mockResolvedValue(statusFixture());
+    acpServiceMock.listRunnerPools.mockResolvedValue([]);
     acpServiceMock.updateAgent.mockResolvedValue(statusFixture().agents[0]);
     acpServiceMock.testAgent.mockResolvedValue({
       success: true,

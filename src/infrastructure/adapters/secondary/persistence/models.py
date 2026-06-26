@@ -241,6 +241,9 @@ class ACPExternalAgentConfigModel(IdGeneratorMixin, Base):
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
     env: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     headers: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    runner_pool_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    required_labels: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    cwd_policy: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(
@@ -252,6 +255,123 @@ class ACPExternalAgentConfigModel(IdGeneratorMixin, Base):
         UniqueConstraint("tenant_id", "agent_key", name="uq_acp_external_agents_tenant_key"),
         Index("ix_acp_external_agents_tenant_key", "tenant_id", "agent_key"),
         Index("ix_acp_external_agents_tenant_enabled", "tenant_id", "enabled"),
+    )
+
+
+class ACPRunnerPoolModel(IdGeneratorMixin, Base):
+    """Tenant-scoped pool of ACP runners attached to a compute cluster."""
+
+    __tablename__ = "acp_runner_pools"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    cluster_id: Mapped[str] = mapped_column(
+        String, ForeignKey("clusters.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    pool_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    labels: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    capacity_policy: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    scheduling_policy: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "pool_key", name="uq_acp_runner_pools_tenant_key"),
+        Index("ix_acp_runner_pools_cluster", "cluster_id"),
+        Index("ix_acp_runner_pools_tenant_enabled", "tenant_id", "enabled"),
+    )
+
+
+class ACPRunnerInstanceModel(IdGeneratorMixin, Base):
+    """Heartbeat and capacity state for one connected ACP runner process."""
+
+    __tablename__ = "acp_runner_instances"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    pool_id: Mapped[str] = mapped_column(
+        String, ForeignKey("acp_runner_pools.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    runner_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="offline")
+    version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    capabilities: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    current_sessions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    max_sessions: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    connection_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("pool_id", "runner_id", name="uq_acp_runner_instances_pool_runner"),
+        Index("ix_acp_runner_instances_pool_status", "pool_id", "status"),
+    )
+
+
+class ACPRunnerTokenModel(IdGeneratorMixin, Base):
+    """Hashed registration token for outbound ACP runner connections."""
+
+    __tablename__ = "acp_runner_tokens"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    pool_id: Mapped[str] = mapped_column(
+        String, ForeignKey("acp_runner_pools.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ACPRunnerSessionModel(IdGeneratorMixin, Base):
+    """Persistent mapping from MemStack ACP session IDs to runner ownership."""
+
+    __tablename__ = "acp_runner_sessions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    session_id: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    pool_id: Mapped[str] = mapped_column(
+        String, ForeignKey("acp_runner_pools.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    runner_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    agent_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    owner_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    remote_session_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_acp_runner_sessions_runner", "tenant_id", "runner_id", "status"),
+        Index("ix_acp_runner_sessions_pool", "pool_id", "status"),
     )
 
 

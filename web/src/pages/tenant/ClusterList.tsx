@@ -45,6 +45,7 @@ const CLUSTER_PROVIDER_OPTIONS = [
   { value: 'ack', label: 'Alibaba ACK' },
   { value: 'tke', label: 'Tencent TKE' },
   { value: 'custom', label: 'Custom Kubernetes' },
+  { value: 'self_hosted', label: 'Self-hosted' },
 ] as const;
 
 interface FormValues {

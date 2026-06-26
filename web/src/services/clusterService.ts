@@ -1,5 +1,11 @@
 import { httpClient } from './client/httpClient';
 
+import type {
+  ACPRunnerPool,
+  ACPRunnerTokenResponse,
+  UpsertACPRunnerPoolRequest,
+} from '@/types/acp';
+
 const BASE_URL = '/clusters';
 
 export interface ClusterCreate {
@@ -64,4 +70,28 @@ export const clusterService = {
   delete: (id: string) => httpClient.delete(`${BASE_URL}/${id}`),
 
   getHealth: (id: string) => httpClient.get<ClusterHealthResponse>(`${BASE_URL}/${id}/health`),
+
+  listAcpRunnerPools: (clusterId: string) =>
+    httpClient.get<ACPRunnerPool[]>(`${BASE_URL}/${clusterId}/acp-runner-pools`),
+
+  createAcpRunnerPool: (
+    clusterId: string,
+    data: UpsertACPRunnerPoolRequest & { poolKey: string }
+  ) => httpClient.post<ACPRunnerPool>(`${BASE_URL}/${clusterId}/acp-runner-pools`, data),
+
+  updateAcpRunnerPool: (
+    clusterId: string,
+    poolKey: string,
+    data: UpsertACPRunnerPoolRequest
+  ) => httpClient.put<ACPRunnerPool>(`${BASE_URL}/${clusterId}/acp-runner-pools/${poolKey}`, data),
+
+  createAcpRunnerToken: (
+    clusterId: string,
+    poolKey: string,
+    data?: { name?: string; expiresInHours?: number }
+  ) =>
+    httpClient.post<ACPRunnerTokenResponse>(
+      `${BASE_URL}/${clusterId}/acp-runner-pools/${poolKey}/registration-token`,
+      data ?? {}
+    ),
 };

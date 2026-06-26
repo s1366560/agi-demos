@@ -36,6 +36,7 @@ def runtime_config_from_row(row: ACPExternalAgentConfigModel) -> ExternalACPAgen
     header_refs, header_values = decrypt_stored_config_values(row.headers or {})
     return ExternalACPAgentConfig(
         id=row.agent_key,
+        tenant_id=row.tenant_id,
         name=row.name,
         transport=cast(Any, row.transport),
         command=row.command,
@@ -45,6 +46,13 @@ def runtime_config_from_row(row: ACPExternalAgentConfigModel) -> ExternalACPAgen
         headers_env=header_refs,
         env_values=env_values,
         headers=header_values,
+        runner_pool_key=getattr(row, "runner_pool_key", None),
+        required_labels={
+            str(key): str(value)
+            for key, value in (getattr(row, "required_labels", {}) or {}).items()
+            if value is not None
+        },
+        cwd_policy=dict(getattr(row, "cwd_policy", {}) or {}),
         enabled=row.enabled,
         source="tenant",
     )

@@ -44,6 +44,7 @@ class ExternalACPAgentConfig(BaseModel):
     """Configuration for an external ACP agent."""
 
     id: str
+    tenant_id: str | None = None
     name: str
     transport: Literal["stdio", "websocket"]
     command: str | None = None
@@ -53,6 +54,9 @@ class ExternalACPAgentConfig(BaseModel):
     headers_env: dict[str, str] = Field(default_factory=dict)
     env_values: dict[str, str] = Field(default_factory=dict)
     headers: dict[str, str] = Field(default_factory=dict)
+    runner_pool_key: str | None = None
+    required_labels: dict[str, str] = Field(default_factory=dict)
+    cwd_policy: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
     source: Literal["legacy", "tenant"] = "legacy"
 
@@ -583,6 +587,12 @@ class ExternalACPAgentService:
                 created_at=now,
                 last_activity=now,
             )
+            bind_local_session = getattr(transport, "bind_local_session", None)
+            if bind_local_session is not None:
+                await bind_local_session(
+                    local_session_id=local_session_id,
+                    owner_user_id=owner_user_id,
+                )
             metrics = self._metrics_for(tenant_id, agent_id)
             metrics.total_sessions += 1
             self._record_event(
@@ -647,6 +657,10 @@ class ExternalACPAgentService:
             error_message = f"session/prompt timed out after {timeout_seconds:g}s"
             with contextlib.suppress(Exception):
                 await session.transport.cancel(session.remote_session_id)
+            mark_session_error = getattr(session.transport, "mark_session_error", None)
+            if mark_session_error is not None:
+                with contextlib.suppress(Exception):
+                    await mark_session_error(local_session_id=session_id, error=error_message)
             self._record_event(
                 tenant_id,
                 agent_id,
@@ -657,6 +671,10 @@ class ExternalACPAgentService:
             )
             raise TimeoutError(error_message) from exc
         except Exception as exc:
+            mark_session_error = getattr(session.transport, "mark_session_error", None)
+            if mark_session_error is not None:
+                with contextlib.suppress(Exception):
+                    await mark_session_error(local_session_id=session_id, error=str(exc))
             self._record_event(
                 tenant_id,
                 agent_id,
@@ -710,6 +728,10 @@ class ExternalACPAgentService:
         session = self._require_session(agent_id, session_id, owner_user_id, tenant_id=tenant_id)
         try:
             await session.transport.close(session.remote_session_id)
+            mark_local_session_status = getattr(session.transport, "mark_local_session_status", None)
+            if mark_local_session_status is not None:
+                with contextlib.suppress(Exception):
+                    await mark_local_session_status(local_session_id=session_id, status="closed")
             self._record_event(
                 tenant_id,
                 agent_id,
@@ -718,6 +740,10 @@ class ExternalACPAgentService:
                 status="success",
             )
         except Exception as exc:
+            mark_session_error = getattr(session.transport, "mark_session_error", None)
+            if mark_session_error is not None:
+                with contextlib.suppress(Exception):
+                    await mark_session_error(local_session_id=session_id, error=str(exc))
             self._record_event(
                 tenant_id,
                 agent_id,
@@ -768,11 +794,17 @@ class ExternalACPAgentService:
         return session
 
     def _build_transport(self, config: ExternalACPAgentConfig) -> ExternalACPTransport:
+        if config.runner_pool_key:
+            from src.infrastructure.acp.runner_gateway import RunnerExternalACPTransport
+
+            return RunnerExternalACPTransport(config)
         if config.transport == "stdio":
             return StdioExternalACPTransport(config)
         return WebSocketExternalACPTransport(config)
 
     def _missing_env(self, config: ExternalACPAgentConfig) -> list[str]:
+        if config.runner_pool_key:
+            return []
         refs = list(config.env.values()) + list(config.headers_env.values())
         return sorted(ref for ref in refs if ref and ref not in os.environ)
 

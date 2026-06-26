@@ -14,9 +14,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.schemas.acp_runner_schemas import (
+    ACPRunnerInstanceResponse,
+    ACPRunnerPoolResponse,
+)
 from src.configuration.config import get_settings
 from src.configuration.di_container import DIContainer
 from src.infrastructure.acp.client import (
+    ExternalACPAgentConfig,
     ExternalACPAgentSummary,
     ExternalACPOperationEvent,
     ExternalACPPromptResult,
@@ -26,6 +31,7 @@ from src.infrastructure.acp.client import (
 )
 from src.infrastructure.acp.event_mapper import ACPUpdate, update_to_payload
 from src.infrastructure.acp.jsonrpc import ACPWebSocketJSONRPCPeer
+from src.infrastructure.acp.runner_gateway import get_acp_runner_gateway
 from src.infrastructure.acp.server import MemStackACPAgent
 from src.infrastructure.acp.tenant_config import (
     runtime_config_from_row,
@@ -40,10 +46,15 @@ from src.infrastructure.adapters.primary.web.websocket.auth import (
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory, get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
     ACPExternalAgentConfigModel,
+    ACPRunnerInstanceModel,
+    ACPRunnerPoolModel,
     User,
 )
 from src.infrastructure.adapters.secondary.persistence.sql_acp_external_agent_config_repository import (
     ACPExternalAgentConfigRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_acp_runner_repository import (
+    ACPRunnerRepository,
 )
 from src.infrastructure.i18n import gettext as _
 from src.infrastructure.security.encryption_service import get_encryption_service
@@ -87,6 +98,9 @@ class TenantExternalACPAgentCreateRequest(BaseModel):
     url: str | None = None
     env: dict[str, ACPConfigValue] = Field(default_factory=dict)
     headers: dict[str, ACPConfigValue] = Field(default_factory=dict)
+    runner_pool_key: str | None = Field(default=None, alias="runnerPoolKey")
+    required_labels: dict[str, str] = Field(default_factory=dict, alias="requiredLabels")
+    cwd_policy: dict[str, Any] = Field(default_factory=dict, alias="cwdPolicy")
     enabled: bool = True
 
 
@@ -98,6 +112,9 @@ class TenantExternalACPAgentUpdateRequest(BaseModel):
     url: str | None = None
     env: dict[str, ACPConfigValue] = Field(default_factory=dict)
     headers: dict[str, ACPConfigValue] = Field(default_factory=dict)
+    runner_pool_key: str | None = Field(default=None, alias="runnerPoolKey")
+    required_labels: dict[str, str] = Field(default_factory=dict, alias="requiredLabels")
+    cwd_policy: dict[str, Any] = Field(default_factory=dict, alias="cwdPolicy")
     enabled: bool = True
 
 
@@ -111,6 +128,9 @@ class TenantExternalACPAgentResponse(BaseModel):
     url: str | None = None
     env: dict[str, ACPConfigValue] = Field(default_factory=dict)
     headers: dict[str, ACPConfigValue] = Field(default_factory=dict)
+    runner_pool_key: str | None = Field(default=None, alias="runnerPoolKey")
+    required_labels: dict[str, str] = Field(default_factory=dict, alias="requiredLabels")
+    cwd_policy: dict[str, Any] = Field(default_factory=dict, alias="cwdPolicy")
     enabled: bool
     source: str = "tenant"
     available: bool
@@ -169,6 +189,21 @@ def _validate_agent_shape(
         raise ValueError("stdio ACP agent requires command")
     if transport == "websocket" and not url:
         raise ValueError("websocket ACP agent requires url")
+
+
+async def _validate_runner_pool(
+    db: AsyncSession,
+    tenant_id: str,
+    runner_pool_key: str | None,
+) -> None:
+    if not runner_pool_key:
+        return
+    row = await ACPRunnerRepository(db).get_pool_by_tenant_key(
+        tenant_id=tenant_id,
+        pool_key=runner_pool_key,
+    )
+    if row is None:
+        raise ValueError("ACP runner pool not found")
 
 
 def _ensure_absolute_cwd(cwd: str) -> None:
@@ -270,6 +305,12 @@ def _response_from_row(
         url=row.url,
         env=_stored_config_values_for_response(row.env or {}),
         headers=_stored_config_values_for_response(row.headers or {}),
+        runnerPoolKey=getattr(row, "runner_pool_key", None),
+        requiredLabels={
+            str(key): str(value)
+            for key, value in (getattr(row, "required_labels", {}) or {}).items()
+        },
+        cwdPolicy=dict(getattr(row, "cwd_policy", {}) or {}),
         enabled=row.enabled,
         source=summary.source if summary else "tenant",
         available=summary.available if summary else row.enabled,
@@ -293,10 +334,66 @@ async def _refresh_tenant_agent_cache(
     rows = await ACPExternalAgentConfigRepository(db).list_by_tenant(tenant_id)
     get_external_agent_service().set_tenant_configs(
         tenant_id,
-        [runtime_config_from_row(row) for row in rows],
+        [_runtime_config_from_row(row) for row in rows],
     )
     summaries = get_external_agent_service().list_agents(tenant_id=tenant_id)
     return rows, summaries
+
+
+def _runtime_config_from_row(row: ACPExternalAgentConfigModel) -> ExternalACPAgentConfig:
+    """Backward-compatible test helper for runtime config conversion."""
+    return runtime_config_from_row(row)
+
+
+def _pool_response(
+    pool: ACPRunnerPoolModel,
+    instances: list[ACPRunnerInstanceModel],
+) -> ACPRunnerPoolResponse:
+    pool_instances = [instance for instance in instances if instance.pool_id == pool.id]
+    ready = [instance for instance in pool_instances if instance.status == "ready"]
+    return ACPRunnerPoolResponse(
+        id=pool.id,
+        tenantId=pool.tenant_id,
+        clusterId=pool.cluster_id,
+        poolKey=pool.pool_key,
+        name=pool.name,
+        mode=pool.mode,
+        enabled=pool.enabled,
+        labels=dict(pool.labels or {}),
+        capacityPolicy=dict(pool.capacity_policy or {}),
+        schedulingPolicy=dict(pool.scheduling_policy or {}),
+        runnerCount=len(pool_instances),
+        readyRunnerCount=len(ready),
+        activeSessionCount=sum(int(instance.current_sessions or 0) for instance in pool_instances),
+        createdAt=pool.created_at,
+        updatedAt=pool.updated_at,
+    )
+
+
+def _instance_response(instance: ACPRunnerInstanceModel) -> ACPRunnerInstanceResponse:
+    return ACPRunnerInstanceResponse(
+        id=instance.id,
+        tenantId=instance.tenant_id,
+        poolId=instance.pool_id,
+        runnerId=instance.runner_id,
+        status=instance.status,
+        version=instance.version,
+        capabilities=dict(instance.capabilities or {}),
+        currentSessions=instance.current_sessions,
+        maxSessions=instance.max_sessions,
+        lastHeartbeatAt=instance.last_heartbeat_at,
+        connectionId=instance.connection_id,
+        lastError=instance.last_error,
+    )
+
+
+def _extract_runner_token(websocket: WebSocket, token: str | None) -> str | None:
+    if token:
+        return token
+    authorization = websocket.headers.get("authorization", "")
+    if authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+    return None
 
 
 def _extract_text_from_prompt_result(result: ExternalACPPromptResult) -> str:
@@ -365,6 +462,19 @@ async def acp_websocket_endpoint(
     await peer.serve()
 
 
+@router.websocket("/runners/connect")
+async def acp_runner_connect_endpoint(
+    websocket: WebSocket,
+    token: str | None = Query(None, description="ACP runner registration token"),
+) -> None:
+    """Outbound WebSocket endpoint used by self-hosted and Kubernetes ACP runners."""
+    runner_token = _extract_runner_token(websocket, token)
+    if not runner_token:
+        await websocket.close(code=4001, reason="ACP runner token required")
+        return
+    await get_acp_runner_gateway().serve(websocket, runner_token)
+
+
 @router.get(
     "/tenants/{tenant_id}/status",
     response_model=TenantACPStatusResponse,
@@ -391,6 +501,36 @@ async def get_tenant_acp_status(
         sessions=get_external_agent_service().list_sessions(tenant_id=tenant_id),
         recentEvents=get_external_agent_service().recent_events(tenant_id=tenant_id),
     )
+
+
+@router.get(
+    "/tenants/{tenant_id}/runner-pools",
+    response_model=list[ACPRunnerPoolResponse],
+)
+async def list_tenant_acp_runner_pools(
+    tenant_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[ACPRunnerPoolResponse]:
+    await require_tenant_access(db, cast(Any, current_user), tenant_id)
+    repo = ACPRunnerRepository(db)
+    pools = await repo.list_pools_by_tenant(tenant_id)
+    instances = await repo.list_instances_by_tenant(tenant_id)
+    return [_pool_response(pool, instances) for pool in pools]
+
+
+@router.get(
+    "/tenants/{tenant_id}/runner-instances",
+    response_model=list[ACPRunnerInstanceResponse],
+)
+async def list_tenant_acp_runner_instances(
+    tenant_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[ACPRunnerInstanceResponse]:
+    await require_tenant_access(db, cast(Any, current_user), tenant_id)
+    instances = await ACPRunnerRepository(db).list_instances_by_tenant(tenant_id)
+    return [_instance_response(instance) for instance in instances]
 
 
 @router.get(
@@ -425,6 +565,7 @@ async def create_tenant_external_agent(
             command=payload.command,
             url=payload.url,
         )
+        await _validate_runner_pool(db, tenant_id, payload.runner_pool_key)
         repo = ACPExternalAgentConfigRepository(db)
         row = await repo.create_or_restore(
             tenant_id=tenant_id,
@@ -437,6 +578,9 @@ async def create_tenant_external_agent(
             env=_store_config_values(payload.env, None),
             headers=_store_config_values(payload.headers, None),
             enabled=payload.enabled,
+            runner_pool_key=payload.runner_pool_key,
+            required_labels=payload.required_labels,
+            cwd_policy=payload.cwd_policy,
         )
         await db.commit()
     except ValueError as exc:
@@ -489,6 +633,7 @@ async def update_tenant_external_agent(
             command=payload.command,
             url=payload.url,
         )
+        await _validate_runner_pool(db, tenant_id, payload.runner_pool_key)
         row = await repo.update(
             row,
             name=payload.name,
@@ -499,6 +644,9 @@ async def update_tenant_external_agent(
             env=_store_config_values(payload.env, row.env or {}),
             headers=_store_config_values(payload.headers, row.headers or {}),
             enabled=payload.enabled,
+            runner_pool_key=payload.runner_pool_key,
+            required_labels=payload.required_labels,
+            cwd_policy=payload.cwd_policy,
         )
         await db.commit()
     except ValueError as exc:

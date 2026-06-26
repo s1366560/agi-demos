@@ -64,6 +64,7 @@ dependencies = [
 
 [project.scripts]
 memstack-acp = "src.infrastructure.acp.cli:main"
+memstack-acp-runner = "src.infrastructure.acp.runner_cli:main"
 
 [project.optional-dependencies]
 dev = [

@@ -2,11 +2,19 @@
 
 import logging
 from typing import Any, cast
+from urllib.parse import urlparse, urlunparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.schemas.acp_runner_schemas import (
+    ACPRunnerPoolCreate,
+    ACPRunnerPoolResponse,
+    ACPRunnerPoolUpdate,
+    ACPRunnerTokenRequest,
+    ACPRunnerTokenResponse,
+)
 from src.application.schemas.cluster_schemas import (
     ClusterCreate,
     ClusterHealthResponse,
@@ -14,6 +22,7 @@ from src.application.schemas.cluster_schemas import (
     ClusterResponse,
     ClusterUpdate,
 )
+from src.configuration.config import get_settings
 from src.configuration.di_container import DIContainer
 from src.domain.model.cluster.cluster import Cluster
 from src.domain.model.cluster.enums import ClusterStatus
@@ -23,7 +32,14 @@ from src.infrastructure.adapters.primary.web.dependencies import (
 )
 from src.infrastructure.adapters.primary.web.routers.agent.access import require_tenant_access
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
+from src.infrastructure.adapters.secondary.persistence.models import (
+    ACPRunnerInstanceModel,
+    ACPRunnerPoolModel,
+    User as DBUser,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_acp_runner_repository import (
+    ACPRunnerRepository,
+)
 from src.infrastructure.i18n import gettext as _
 
 
@@ -103,6 +119,7 @@ def _cluster_health_response(cluster: Cluster) -> ClusterHealthResponse:
         or _as_int(provider_config.get("nodes"))
         or 0
     )
+
     cpu_usage = _as_float(health.get("cpu_usage"))
     if cpu_usage is None:
         cpu_usage = _usage_percent(health.get("used_cpu"), health.get("total_cpu"))
@@ -120,6 +137,60 @@ def _cluster_health_response(cluster: Cluster) -> ClusterHealthResponse:
         memory_usage=memory_usage,
         checked_at=cluster.last_health_check,
     )
+
+
+def _pool_response(
+    pool: ACPRunnerPoolModel,
+    instances: list[ACPRunnerInstanceModel],
+) -> ACPRunnerPoolResponse:
+    pool_instances = [instance for instance in instances if instance.pool_id == pool.id]
+    ready = [instance for instance in pool_instances if instance.status == "ready"]
+    return ACPRunnerPoolResponse(
+        id=pool.id,
+        tenantId=pool.tenant_id,
+        clusterId=pool.cluster_id,
+        poolKey=pool.pool_key,
+        name=pool.name,
+        mode=pool.mode,
+        enabled=pool.enabled,
+        labels=dict(pool.labels or {}),
+        capacityPolicy=dict(pool.capacity_policy or {}),
+        schedulingPolicy=dict(pool.scheduling_policy or {}),
+        runnerCount=len(pool_instances),
+        readyRunnerCount=len(ready),
+        activeSessionCount=sum(int(instance.current_sessions or 0) for instance in pool_instances),
+        createdAt=pool.created_at,
+        updatedAt=pool.updated_at,
+    )
+
+
+async def _require_cluster_for_tenant(
+    request: Request,
+    db: AsyncSession,
+    *,
+    cluster_id: str,
+    tenant_id: str,
+) -> Cluster:
+    container = get_container_with_db(request, db)
+    service = container.cluster_service()
+    cluster = await service.get_cluster(cluster_id, tenant_id=tenant_id)
+    if not cluster:
+        raise _cluster_not_found_error()
+    return cluster
+
+
+def _runner_connect_url() -> str:
+    base_url = get_settings().acp_http_base_url
+    parsed = urlparse(base_url)
+    scheme = "wss" if parsed.scheme in {"https", "wss"} else "ws"
+    path = parsed.path.rstrip("/")
+    if not path.endswith("/api/v1/acp/runners/connect"):
+        path = f"{path}/api/v1/acp/runners/connect"
+    return urlunparse((scheme, parsed.netloc, path, "", "", ""))
+
+
+def _runner_install_command(connect_url: str, token: str) -> str:
+    return f"memstack-acp-runner --connect {connect_url} --token {token}"
 
 
 class HealthStatusUpdate(BaseModel):
@@ -286,6 +357,138 @@ async def delete_cluster(
     except Exception as e:
         logger.exception("Error deleting cluster")
         raise HTTPException(status_code=500, detail=_("Internal server error")) from e
+
+
+@router.get(
+    "/{cluster_id}/acp-runner-pools",
+    response_model=list[ACPRunnerPoolResponse],
+)
+async def list_cluster_acp_runner_pools(
+    cluster_id: str,
+    request: Request,
+    tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
+) -> list[ACPRunnerPoolResponse]:
+    """List ACP runner pools attached to a cluster."""
+    await _require_cluster_for_tenant(request, db, cluster_id=cluster_id, tenant_id=tenant_id)
+    repo = ACPRunnerRepository(db)
+    pools = await repo.list_pools_by_cluster(tenant_id=tenant_id, cluster_id=cluster_id)
+    instances = await repo.list_instances_by_tenant(tenant_id)
+    return [_pool_response(pool, instances) for pool in pools]
+
+
+@router.post(
+    "/{cluster_id}/acp-runner-pools",
+    response_model=ACPRunnerPoolResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_cluster_acp_runner_pool(
+    cluster_id: str,
+    request: Request,
+    data: ACPRunnerPoolCreate,
+    tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ACPRunnerPoolResponse:
+    """Create an ACP runner pool attached to a cluster."""
+    await _require_cluster_admin(db, current_user, tenant_id)
+    await _require_cluster_for_tenant(request, db, cluster_id=cluster_id, tenant_id=tenant_id)
+    repo = ACPRunnerRepository(db)
+    existing = await repo.get_pool_by_tenant_key(tenant_id=tenant_id, pool_key=data.pool_key)
+    if existing is not None:
+        raise HTTPException(status_code=409, detail=_("ACP runner pool already exists"))
+    pool = await repo.create_pool(
+        tenant_id=tenant_id,
+        cluster_id=cluster_id,
+        pool_key=data.pool_key,
+        name=data.name,
+        mode=data.mode,
+        enabled=data.enabled,
+        labels=data.labels,
+        capacity_policy=data.capacity_policy,
+        scheduling_policy=data.scheduling_policy,
+        created_by=current_user.id,
+    )
+    await db.commit()
+    return _pool_response(pool, [])
+
+
+@router.put(
+    "/{cluster_id}/acp-runner-pools/{pool_key}",
+    response_model=ACPRunnerPoolResponse,
+)
+async def update_cluster_acp_runner_pool(
+    cluster_id: str,
+    pool_key: str,
+    request: Request,
+    data: ACPRunnerPoolUpdate,
+    tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ACPRunnerPoolResponse:
+    """Update an ACP runner pool attached to a cluster."""
+    await _require_cluster_admin(db, current_user, tenant_id)
+    await _require_cluster_for_tenant(request, db, cluster_id=cluster_id, tenant_id=tenant_id)
+    repo = ACPRunnerRepository(db)
+    pool = await repo.get_pool_by_cluster_key(
+        tenant_id=tenant_id,
+        cluster_id=cluster_id,
+        pool_key=pool_key,
+    )
+    if pool is None:
+        raise HTTPException(status_code=404, detail=_("ACP runner pool not found"))
+    pool = await repo.update_pool(
+        pool,
+        name=data.name,
+        mode=data.mode,
+        enabled=data.enabled,
+        labels=data.labels,
+        capacity_policy=data.capacity_policy,
+        scheduling_policy=data.scheduling_policy,
+    )
+    await db.commit()
+    instances = await repo.list_instances_by_pool(pool.id)
+    return _pool_response(pool, instances)
+
+
+@router.post(
+    "/{cluster_id}/acp-runner-pools/{pool_key}/registration-token",
+    response_model=ACPRunnerTokenResponse,
+)
+async def create_cluster_acp_runner_registration_token(
+    cluster_id: str,
+    pool_key: str,
+    request: Request,
+    data: ACPRunnerTokenRequest,
+    tenant_id: str = Depends(get_current_user_tenant),
+    current_user: DBUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ACPRunnerTokenResponse:
+    """Create a plaintext registration token shown once to tenant admins."""
+    await _require_cluster_admin(db, current_user, tenant_id)
+    await _require_cluster_for_tenant(request, db, cluster_id=cluster_id, tenant_id=tenant_id)
+    repo = ACPRunnerRepository(db)
+    pool = await repo.get_pool_by_cluster_key(
+        tenant_id=tenant_id,
+        cluster_id=cluster_id,
+        pool_key=pool_key,
+    )
+    if pool is None:
+        raise HTTPException(status_code=404, detail=_("ACP runner pool not found"))
+    token_row, token = await repo.create_registration_token(
+        pool=pool,
+        created_by=current_user.id,
+        name=data.name,
+        expires_in_hours=data.expires_in_hours,
+    )
+    await db.commit()
+    connect_url = _runner_connect_url()
+    return ACPRunnerTokenResponse(
+        token=token,
+        expiresAt=token_row.expires_at,
+        connectUrl=connect_url,
+        installCommand=_runner_install_command(connect_url, token),
+    )
 
 
 @router.get(

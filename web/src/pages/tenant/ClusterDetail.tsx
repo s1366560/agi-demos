@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -22,7 +22,11 @@ import {
   Modal,
   Form,
   Input,
+  InputNumber,
   Select,
+  Switch,
+  Table,
+  Alert,
 } from 'antd';
 import { Server, Network, HardDrive } from 'lucide-react';
 
@@ -34,6 +38,9 @@ import {
   useClusterActions,
 } from '../../stores/cluster';
 
+import { clusterService } from '../../services/clusterService';
+
+import type { ACPRunnerPool, ACPRunnerTokenResponse } from '@/types/acp';
 import type { ClusterUpdate } from '../../services/clusterService';
 
 const { TextArea } = Input;
@@ -46,6 +53,7 @@ const CLUSTER_PROVIDER_OPTIONS = [
   { value: 'ack', label: 'Alibaba ACK' },
   { value: 'tke', label: 'Tencent TKE' },
   { value: 'custom', label: 'Custom Kubernetes' },
+  { value: 'self_hosted', label: 'Self-hosted' },
 ] as const;
 
 interface ClusterEditFormValues {
@@ -53,6 +61,16 @@ interface ClusterEditFormValues {
   compute_provider?: string | undefined;
   proxy_endpoint?: string | undefined;
   provider_config?: string | undefined;
+}
+
+interface RunnerPoolFormValues {
+  poolKey: string;
+  name: string;
+  mode: 'kubernetes' | 'self_hosted';
+  enabled: boolean;
+  labelsText?: string | undefined;
+  capacityPolicyText?: string | undefined;
+  schedulingPolicyText?: string | undefined;
 }
 
 const parseProviderConfig = (value: string | undefined): Record<string, unknown> | undefined => {
@@ -66,6 +84,18 @@ const parseProviderConfig = (value: string | undefined): Record<string, unknown>
     throw new Error('Provider config must be a JSON object');
   }
 
+  return parsed as Record<string, unknown>;
+};
+
+const parseJsonObject = (value: string | undefined): Record<string, unknown> => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return {};
+  }
+  const parsed: unknown = JSON.parse(trimmed);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Expected JSON object');
+  }
   return parsed as Record<string, unknown>;
 };
 
@@ -84,7 +114,11 @@ export const ClusterDetail: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [runnerModalVisible, setRunnerModalVisible] = useState(false);
+  const [runnerPools, setRunnerPools] = useState<ACPRunnerPool[]>([]);
+  const [runnerToken, setRunnerToken] = useState<ACPRunnerTokenResponse | null>(null);
   const [form] = Form.useForm<ClusterEditFormValues>();
+  const [runnerForm] = Form.useForm<RunnerPoolFormValues>();
 
   const cluster = useCurrentCluster();
   const clusterHealth = useClusterHealth();
@@ -93,16 +127,23 @@ export const ClusterDetail: React.FC = () => {
   const { getCluster, updateCluster, deleteCluster, getClusterHealth, clearError, reset } =
     useClusterActions();
 
+  const loadRunnerPools = useCallback(async (id: string) => {
+    const pools = await clusterService.listAcpRunnerPools(id);
+    setRunnerPools(pools);
+  }, []);
+
   useEffect(() => {
     if (clusterId) {
       void getCluster(clusterId);
       void getClusterHealth(clusterId);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- load runner pools on mount, same pattern as getCluster/getClusterHealth
+      void loadRunnerPools(clusterId);
     }
     return () => {
       clearError();
       reset();
     };
-  }, [clusterId, getCluster, getClusterHealth, clearError, reset]);
+  }, [clusterId, getCluster, getClusterHealth, loadRunnerPools, clearError, reset]);
 
   const handleBack = () => {
     void navigate('/clusters');
@@ -160,6 +201,61 @@ export const ClusterDetail: React.FC = () => {
       await getClusterHealth(clusterId);
       message.success(t('tenant.clusters.healthDrawer.title') + ' refreshed');
     }
+  };
+
+  const handleCreateRunnerPool = () => {
+    setRunnerToken(null);
+    runnerForm.setFieldsValue({
+      mode: 'self_hosted',
+      enabled: true,
+      labelsText: '{}',
+      capacityPolicyText: '{"max_sessions":1}',
+      schedulingPolicyText: '{}',
+    });
+    setRunnerModalVisible(true);
+  };
+
+  const handleRunnerPoolSubmit = async () => {
+    if (!clusterId) return;
+    try {
+      const values = await runnerForm.validateFields();
+      const labels = parseJsonObject(values.labelsText) as Record<string, string>;
+      const created = await clusterService.createAcpRunnerPool(clusterId, {
+        poolKey: values.poolKey,
+        name: values.name,
+        mode: values.mode,
+        enabled: values.enabled,
+        labels,
+        capacityPolicy: parseJsonObject(values.capacityPolicyText),
+        schedulingPolicy: parseJsonObject(values.schedulingPolicyText),
+      });
+      message.success(t('tenant.clusters.acpRunners.created', { defaultValue: 'Runner pool created' }));
+      await loadRunnerPools(clusterId);
+      const token = await clusterService.createAcpRunnerToken(clusterId, created.poolKey, {
+        expiresInHours: 24,
+      });
+      setRunnerToken(token);
+    } catch {
+      message.error(t('tenant.clusters.invalidJsonError'));
+    }
+  };
+
+  const handleGenerateRunnerToken = async (pool: ACPRunnerPool) => {
+    if (!clusterId) return;
+    runnerForm.setFieldsValue({
+      poolKey: pool.poolKey,
+      name: pool.name,
+      mode: pool.mode,
+      enabled: pool.enabled,
+      labelsText: JSON.stringify(pool.labels ?? {}, null, 2),
+      capacityPolicyText: JSON.stringify(pool.capacityPolicy ?? {}, null, 2),
+      schedulingPolicyText: JSON.stringify(pool.schedulingPolicy ?? {}, null, 2),
+    });
+    const token = await clusterService.createAcpRunnerToken(clusterId, pool.poolKey, {
+      expiresInHours: 24,
+    });
+    setRunnerToken(token);
+    setRunnerModalVisible(true);
   };
 
   const getStatusColor = (status: string) => {
@@ -378,6 +474,56 @@ export const ClusterDetail: React.FC = () => {
         </Descriptions>
       </Card>
 
+      <Card
+        title={t('tenant.clusters.acpRunners.title', { defaultValue: 'ACP Runners' })}
+        extra={
+          <Button type="primary" onClick={handleCreateRunnerPool}>
+            {t('tenant.clusters.acpRunners.addPool', { defaultValue: 'Add Pool' })}
+          </Button>
+        }
+      >
+        <Table
+          rowKey="poolKey"
+          dataSource={runnerPools}
+          pagination={false}
+          columns={[
+            {
+              title: t('tenant.clusters.acpRunners.pool', { defaultValue: 'Pool' }),
+              dataIndex: 'name',
+              render: (_value, pool) => (
+                <Space direction="vertical" size={0}>
+                  <Text strong>{pool.name}</Text>
+                  <Text type="secondary">{pool.poolKey}</Text>
+                </Space>
+              ),
+            },
+            {
+              title: t('tenant.clusters.acpRunners.mode', { defaultValue: 'Mode' }),
+              dataIndex: 'mode',
+              render: (mode: string) => <Tag>{mode}</Tag>,
+            },
+            {
+              title: t('tenant.clusters.acpRunners.runners', { defaultValue: 'Runners' }),
+              dataIndex: 'readyRunnerCount',
+              render: (_value, pool) => `${pool.readyRunnerCount}/${pool.runnerCount}`,
+            },
+            {
+              title: t('tenant.clusters.acpRunners.sessions', { defaultValue: 'Sessions' }),
+              dataIndex: 'activeSessionCount',
+            },
+            {
+              title: t('common.actions.label'),
+              key: 'actions',
+              render: (_value, pool) => (
+                <Button onClick={() => void handleGenerateRunnerToken(pool)}>
+                  {t('tenant.clusters.acpRunners.token', { defaultValue: 'Registration Token' })}
+                </Button>
+              ),
+            },
+          ]}
+        />
+      </Card>
+
       {/* Provider Config */}
       {Object.keys(cluster.provider_config).length > 0 && (
         <Card title={t('tenant.clusters.detail.providerConfig')}>
@@ -459,6 +605,88 @@ export const ClusterDetail: React.FC = () => {
             <TextArea rows={4} placeholder={t('tenant.clusters.form.metadataPlaceholder')} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title={t('tenant.clusters.acpRunners.createTitle', {
+          defaultValue: 'ACP Runner Pool',
+        })}
+        open={runnerModalVisible}
+        onOk={() => {
+          if (runnerToken) {
+            setRunnerModalVisible(false);
+            setRunnerToken(null);
+            return;
+          }
+          void handleRunnerPoolSubmit();
+        }}
+        onCancel={() => {
+          setRunnerModalVisible(false);
+          setRunnerToken(null);
+        }}
+        width={720}
+      >
+        <Form form={runnerForm} layout="vertical">
+          <Form.Item
+            name="poolKey"
+            label={t('tenant.clusters.acpRunners.poolKey', { defaultValue: 'Pool Key' })}
+            rules={[{ required: !runnerToken, message: 'Pool key is required' }]}
+          >
+            <Input disabled={Boolean(runnerToken)} placeholder="local-laptop" />
+          </Form.Item>
+          <Form.Item
+            name="name"
+            label={t('common.forms.name')}
+            rules={[{ required: !runnerToken, message: 'Name is required' }]}
+          >
+            <Input disabled={Boolean(runnerToken)} />
+          </Form.Item>
+          <Form.Item name="mode" label="Mode">
+            <Select
+              disabled={Boolean(runnerToken)}
+              options={[
+                { value: 'self_hosted', label: 'Self-hosted' },
+                { value: 'kubernetes', label: 'Kubernetes' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="enabled" label={t('common.forms.status')} valuePropName="checked">
+            <Switch disabled={Boolean(runnerToken)} />
+          </Form.Item>
+          <Form.Item name="labelsText" label="Labels JSON">
+            <Input.TextArea disabled={Boolean(runnerToken)} rows={3} />
+          </Form.Item>
+          <Form.Item name="capacityPolicyText" label="Capacity policy JSON">
+            <Input.TextArea disabled={Boolean(runnerToken)} rows={3} />
+          </Form.Item>
+          <Form.Item name="schedulingPolicyText" label="Scheduling policy JSON">
+            <Input.TextArea disabled={Boolean(runnerToken)} rows={3} />
+          </Form.Item>
+          <Form.Item label="Token expiry">
+            <InputNumber disabled value={24} addonAfter="hours" style={{ width: '100%' }} />
+          </Form.Item>
+        </Form>
+        {runnerToken ? (
+          <Alert
+            className="mt-4"
+            type="success"
+            showIcon
+            message={t('tenant.clusters.acpRunners.tokenReady', {
+              defaultValue: 'Registration token created. Copy it now; it will not be shown again.',
+            })}
+            description={
+              <Space direction="vertical" className="w-full">
+                <Input.TextArea value={runnerToken.installCommand} autoSize readOnly />
+                <Text type="secondary">
+                  {t('tenant.clusters.acpRunners.expiresAt', {
+                    defaultValue: 'Expires at',
+                  })}
+                  : {runnerToken.expiresAt ? new Date(runnerToken.expiresAt).toLocaleString() : '-'}
+                </Text>
+              </Space>
+            }
+          />
+        ) : null}
       </Modal>
     </div>
   );
