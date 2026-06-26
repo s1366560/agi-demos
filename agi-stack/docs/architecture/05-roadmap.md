@@ -70,7 +70,7 @@ graph LR
 4. **Tauri 桌面**:包核心证 PC 外壳。
 5. **完整 go/no-go 评分卡**:补齐 §3 未测项。
 6. **Agent 核心健壮/编排切片**:在现有 Spike 上加一个最小 ReAct 会话 —— 轮次边界 checkpoint(`AtomicU64` 版本 + 增量写)、崩溃恢复重放、单个 HITL suspend/resume。验证 [06](06-agent-core-design.md) 的健壮/可编排两质量在 native + WASM 两版一致([ADR-0004](../adr/0004-plan-as-append-only-dag.md)/[0005](../adr/0005-round-boundary-checkpoint.md))。**注**:热插拔(ArcSwap 工具换表零中断 + 扩展 enable/disable + shape 分类)已由 `crates/plugin-host` + `hotplug-demo` 单独证伪(见 [04 #9](04-spike-evidence.md)),此切片只需把它接入 ReAct 轮次边界。
-7. **可插拔 Harness 切片**:把内置 ReAct 循环抽为 `RuntimeHarness` trait + `HarnessRegistry::select`(`auto` 优先级 + 回退),为后续 CLI-backend/第三方 harness 固化 `PreparedAttempt`/`RuntimePlan` 契约([07 §4](07-plugin-runtime-architecture.md)、[ADR-0008](../adr/0008-agent-runtime-as-pluggable-harness.md))。
+7. **可插拔 Harness 切片**:✅ **已落地** —— 把内置 ReAct 循环抽为 `RuntimeHarness` trait + `HarnessRegistry::select`(`auto` 优先级 + policy pin + 回退,runtime 每轮重解析),内置 `EmbeddedHarness` 包 `ReActEngine`,为后续 CLI-backend/第三方 harness 固化 `PreparedAttempt` 契约([07 §4](07-plugin-runtime-architecture.md)、[ADR-0008](../adr/0008-agent-runtime-as-pluggable-harness.md))。core-only、零 tokio、同编 `wasm32`;core 7 单测 + `adapters-mem` 2 端到端测试(见 [04 #14](04-spike-evidence.md))。`PreparedAttempt`/`RuntimePlan` 富契约(tool 归一、outcome 分类)待第二个非 embedded harness(CLI backend)落地再固化。
 
 ## 5. 退出准则
 
