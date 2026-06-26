@@ -73,7 +73,7 @@ graph TD
   - [`crates/adapters-device`](crates/adapters-device) —— 本地优先 SQLite 适配器(`rusqlite` bundled,跨编移动端):持久化 memory repo + checkpoint + 暴力余弦向量索引,证**端上耐久崩溃恢复**。
   - [`crates/bindings-uniffi`](crates/bindings-uniffi) —— UniFFI 移动端绑定:把同一核心(+SQLite 设备适配器)封为 `MobileCore`(`ingest`/`search`/`semantic_search`),`cdylib`→Android `.so`、`staticlib`→iOS `.a`,UniFFI 生成 Swift/Kotlin 原生包。
   - [`apps/server`](apps/server) —— 真实 axum 服务器,把上述端口装配为 DI 图,暴露 episodes/memory(关键词+语义)/agent run/plugins/control-plane 全端点。
-- 验证:`cargo test --workspace` **25 测试绿**(core 2 · plugin-host 14 · adapters-mem 6 · adapters-device 3);`agistack-server` 启动后 curl 验证健康、记忆摄取与检索、ReAct 智能体回合、CP/DP 声明式 reconcile(含重复名 NACK 保留 last-good)、插件 enable/disable 全部通过;同一核心 `cargo build --target wasm32-unknown-unknown` 通过;`bindings-uniffi` 经 Android NDK 交叉编译产出**真实 `aarch64-linux-android` `.so`(release 1.5 MB,stripped,`file` 验为 ELF ARM aarch64)** 并由 UniFFI 生成 Kotlin 原生包(iOS `.a` 待 full Xcode SDK)。
+- 验证:`cargo test --workspace` **25 测试绿**(core 2 · plugin-host 14 · adapters-mem 6 · adapters-device 3);`agistack-server` 启动后 curl 验证健康、记忆摄取与检索、ReAct 智能体回合、CP/DP 声明式 reconcile(含重复名 NACK 保留 last-good)、插件 enable/disable 全部通过;同一核心 `cargo build --target wasm32-unknown-unknown` 通过;`bindings-uniffi` 经 Android NDK 交叉编译产出**真实 `aarch64-linux-android` `.so`(release 1.5 MB,stripped,`file` 验为 ELF ARM aarch64)** 并由 UniFFI 生成 Kotlin 原生包;经 full Xcode 交叉编译 `aarch64-apple-ios`(+ `-sim`)产出静态库、组装 **XCFramework** 并生成 Swift 包,且在 **iPhone 17 模拟器上实跑冒烟**(摄取 + 关键词检索 + 语义检索全绿)。
 - 后续 Phase 2+ 实现仍以 [`docs/`](docs/) 架构文档为权威依据。
 
 ## 构建与运行(Phase 1 工作区)
@@ -98,9 +98,14 @@ CC_aarch64_linux_android="$TC/aarch64-linux-android21-clang" \
 AR_aarch64_linux_android="$TC/llvm-ar" \
   cargo build -p agistack-bindings-uniffi --target aarch64-linux-android --release
 file target/aarch64-linux-android/release/libagistack_mobile.so   # ELF ARM aarch64, ~1.5 MB
-# 生成 Kotlin 原生包(同法 --language swift 生成 iOS,需 full Xcode 才能链 .a)
+# 生成 Kotlin 原生包
 cargo run -p agistack-bindings-uniffi --bin uniffi-bindgen -- generate \
   --library target/debug/libagistack_mobile.dylib --language kotlin --out-dir target/kotlin
+
+# iOS 设备产物(需 full Xcode):交叉编 device + simulator 两 arm64 静态库、生成 Swift 绑定、
+#   组装 XCFramework,并(若有已启动模拟器)把冒烟测试 spawn 到模拟器实跑。
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+./scripts/build-ios.sh            # 产出 target/AgistackMobile.xcframework + 模拟器实跑 SMOKE_OK
 
 # 启动服务器(默认 127.0.0.1:8088,可用 AGISTACK_ADDR 覆盖)
 cargo run -p agistack-server

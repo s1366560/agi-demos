@@ -35,7 +35,7 @@ graph LR
 | 1 | **运行时无关 async**:core 不绑 tokio 却能在 native/WASM/UniFFI 三处都跑 | ✅ 证伪通过 |
 | 2 | **WASM + 本地存储/向量**:wa-sqlite/sqlite-vec 是否可用?否则降级 IndexedDB + 内存 hnsw | ⏳ 部分(内存路径已通,wa-sqlite 待接) |
 | 3 | **端上向量检索**:sqlite-vec / usearch / hnsw-rs 在 iOS/Android 交叉编译 | ⏳ 待办 |
-| 4 | **UniFFI 复杂类型 + async + 回调**:`Memory`(嵌套 list)能否干净导出?宿主端口能否回注? | ✅ codegen + Android 设备产物(`crates/bindings-uniffi` 经 NDK 交叉编译产出真实 `aarch64-linux-android` `.so` + UniFFI 生成 Kotlin 包,见 [04 #12](04-spike-evidence.md))/ ⏳ iOS 真机待 full Xcode SDK |
+| 4 | **UniFFI 复杂类型 + async + 回调**:`Memory`(嵌套 list)能否干净导出?宿主端口能否回注? | ✅ 双端设备产物(`crates/bindings-uniffi`:Android 经 NDK 产真实 `aarch64-linux-android` `.so` + Kotlin 包,见 [04 #12](04-spike-evidence.md);iOS 经 full Xcode 产 XCFramework + Swift 包并在 iPhone 17 模拟器实跑,见 [04 #13](04-spike-evidence.md)) |
 | 5 | **图依赖**:端上无 Neo4j,entities/relationships 用 SQLite 关系表或内存 petgraph 近似 | 🎯 待验证 |
 | 6 | **端上 LLM**(可选):llama.cpp/Candle 移动端体积与可行性 | 🎯 后续 |
 | 7 | **可移植插件宿主**:核心能否在不破坏"运行时无关+四端可移植"前提下宿主沙箱工具?WASM-in-WASM(浏览器,Wasmi)成立? | ✅ 证伪通过(见 [04 #8](04-spike-evidence.md)) |
@@ -50,10 +50,10 @@ graph LR
 | 指标 | 采集方式 | 建议 go 阈值 | 当前 |
 |---|---|---|---|
 | WASM 体积(gzip) | `wasm-opt -Oz` 后测 | ≤ 2.5 MB(切片) | ✅ ~49 KB |
-| iOS lib / Android .so | 链接产物 | ≤ 8 MB/arch(不含本地模型) | ✅ Android 1.5 MB(aarch64 release,见 [04 #12](04-spike-evidence.md))/ ⏳ iOS 待 full Xcode |
+| iOS lib / Android .so | 链接产物 | ≤ 8 MB/arch(不含本地模型) | ✅ Android 1.5 MB(aarch64 release,见 [04 #12](04-spike-evidence.md));iOS XCFramework 已构建 + 模拟器实跑,链接后体积待 app 实测(见 [04 #13](04-spike-evidence.md)) |
 | 单步提取延迟(剔 LLM 网络) | 核心打点 | ≤ 50 ms | ✅ ~0.49 ms |
 | 端上向量检索(N=10k, dim=768) | sqlite-vec/hnsw 计时 | P50 ≤ 20 ms | ⏳ 未测 |
-| 移动端冷启动首调 | app 内打点 | ≤ 300 ms | ⏳ 未测 |
+| 移动端冷启动首调 | app 内打点 | ≤ 300 ms | ⏳ iPhone 17 模拟器已跑通,精确计时待 app 内打点 |
 | 跨 FFI 复杂类型往返 | 微基准 | 无频繁拷贝瓶颈 | ⏳ 未测 |
 | 每端口平台胶水 LOC | 统计 | 低且可复制 | ✅ ≈ 一个文件 |
 | async 跨 UniFFI/WASM | 是否需 hack | 原生支持、不阻塞主线程 | ✅ 原生支持 |
@@ -65,7 +65,7 @@ graph LR
 ## 4. 近期待办(Spike 收尾 → Phase 1)
 
 1. **Wasmtime 宿主 + WIT 契约**:为服务器/桌面加 Wasmtime 后端 `ToolHost`(fuel/epoch 配额),工具 ABI 升级为 WIT / Component Model(`wit-bindgen`/`cargo-component`),替代 PoC 的裸 `.wat`。
-2. **移动端设备产物**:**Android `.so` 已产出** —— `crates/bindings-uniffi` 经 Android NDK r30 交叉编译 `aarch64-linux-android`,release **1.5 MB**(stripped,含 SQLite C),`file` 验为 ELF ARM aarch64,UniFFI 生成 Kotlin 原生包(见 [04 #12](04-spike-evidence.md));**iOS `.a` 待装 full Xcode(iOS SDK)**;后续上模拟器/真机跑通并接 `cargo-ndk` 固化构建。
+2. **移动端设备产物**:**双端均已产出** —— Android 经 NDK r30 交叉编译 `aarch64-linux-android`,release **1.5 MB**(stripped,含 SQLite C),`file` 验 ELF ARM aarch64 + Kotlin 包(见 [04 #12](04-spike-evidence.md));iOS 经 full Xcode 交叉编译 `aarch64-apple-ios`(+ `-sim`)、组装 **XCFramework** + Swift 包,并在 **iPhone 17 模拟器实跑**冒烟(摄取/关键词/语义检索全绿,见 [04 #13](04-spike-evidence.md),一键 `scripts/build-ios.sh`);后续接 **真机签名分发** + `cargo-ndk`/CI 固化构建,并补端上向量检索与冷启动量化。
 3. **`sqlite-vec` 真向量检索**:替换切片里的玩具 hash-embedding。
 4. **Tauri 桌面**:包核心证 PC 外壳。
 5. **完整 go/no-go 评分卡**:补齐 §3 未测项。

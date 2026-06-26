@@ -1,6 +1,6 @@
 # 04 · 决策 Spike 已验证结论
 
-> 本架构不是空想:其两条主轴([01](01-portable-core.md) 可移植核心、[02](02-extensibility.md) 可扩展性)均已用**可运行、可测试**的 Rust Spike 证伪通过;第三主轴的**热插拔**能力([06](06-agent-core-design.md)/[07](07-plugin-runtime-architecture.md))亦已由跨层热插拔 demo 证伪(见 #9);**控制流/数据流分离**([08](08-control-data-plane-separation.md))由 CP→DP xDS 风格 reconcile demo 证伪(见 #10)。Spike 代码在仓库根 `spikes/rust-portable-core/`(`README.md` 含完整命令与结论)。**Phase 1 已把这些模式提升为生产级 Cargo workspace**(本根 `agi-stack/` 下的 `crates/` + `apps/`,`cargo test --workspace` 25 测试绿、服务器全端点 curl 验证,含会话崩溃恢复——见 #11)。
+> 本架构不是空想:其两条主轴([01](01-portable-core.md) 可移植核心、[02](02-extensibility.md) 可扩展性)均已用**可运行、可测试**的 Rust Spike 证伪通过;第三主轴的**热插拔**能力([06](06-agent-core-design.md)/[07](07-plugin-runtime-architecture.md))亦已由跨层热插拔 demo 证伪(见 #9);**控制流/数据流分离**([08](08-control-data-plane-separation.md))由 CP→DP xDS 风格 reconcile demo 证伪(见 #10)。Spike 代码在仓库根 `spikes/rust-portable-core/`(`README.md` 含完整命令与结论)。**Phase 1 已把这些模式提升为生产级 Cargo workspace**(本根 `agi-stack/` 下的 `crates/` + `apps/`,`cargo test --workspace` 25 测试绿、服务器全端点 curl 验证,含会话崩溃恢复——见 #11);移动端**两端均已产出真实设备产物**:Android `.so`(#12)、iOS XCFramework 并在 iPhone 17 模拟器实跑(#13)。
 
 切片选定:**Episode → Memory 提取 + 语义存储/检索**,锚定真实代码 `src/domain/model/memory/{episode,memory}.py`、`src/domain/ports/repositories/memory_repository.py`。故意覆盖所有跨平台难点:纯领域实体、存储端口双实现、一步 async LLM 边界、语义检索、跨 WASM/UniFFI 序列化。
 
@@ -14,12 +14,13 @@
 | 4 | WASM 构建**可被 JS 调用**且**小** | ✅ 通过 | wasm-pack nodejs 构建 + node smoke 测试 round-trip;体积 **95 KB raw / ~49 KB gzip** |
 | 5 | **真实嵌入式 DB** 可背同一端口 | ✅ 通过 | `adapters-sqlite`(rusqlite bundled C)实现 `MemoryRepository`,SQL 下推 `search_by_project`,测试绿 |
 | 6 | 适配器**确按平台替换**(非一刀切) | ✅ 通过(by construction) | bundled-SQLite **无法**编 `wasm32`(`stdio.h` 缺)→ 浏览器必须换存储适配器,六边形边界生效 |
-| 7 | 核心打包为**原生移动库**(Swift/Kotlin) | ✅ 通过(codegen + iOS arch)/ ⏳ 设备产物阻塞 | `bindings-uffi`(UniFFI)对真实核心编译;Swift+Kotlin 绑定已生成;核心交叉编到 `aarch64-apple-ios`。最终 `.a`/`.so` 需 full Xcode SDK / Android NDK(本机未装) |
+| 7 | 核心打包为**原生移动库**(Swift/Kotlin) | ✅ 通过(双端真实设备产物) | `bindings-uffi`(spike)证 codegen;生产 `crates/bindings-uniffi` 进一步产出**真实设备产物**:Android `.so`(见 #12)与 iOS XCFramework + 模拟器实跑(见 #13)。`.a`(iOS)/`.so`(Android)双端均已构建 |
 | 8 | **插件宿主自身是可移植端口**(不可信工具 WASM 沙箱,宿主跑全平台含浏览器) | ✅ 通过 | `adapters-wasmi` 经 `ToolHost` 端口跑通沙箱 `.wat` 工具(测试绿),且**同样编到 `wasm32`** —— 同一宿主 native + wasm-in-wasm 双目标。Wasmtime 后续可在同端口后换入提速 |
 | 9 | **跨层热插拔**:WASM 工具运行时热替换 + 扩展清单 enable/disable,且**飞行中轮次见旧版本**(轮次边界原子应用) | ✅ 通过 | `crates/plugin-host`(`ArcSwap<ToolRegistry>` + `PluginHost` enable/disable + `PluginShape` 分类)+ `adapters-wasmi` 运行时 `WasmTool::from_bytes`;`tests/{registry,lifecycle,hot_swap}` 共 9 测试绿;`hotplug-demo` 演示 v1→v2 热换(新调用得 v2、持旧快照的飞行句柄仍得 v1)、enable/disable、shape 分类 |
 | 10 | **控制流/数据流分离**:控制面发期望态(SSOT),数据面**声明式 level-triggered reconcile** 自算 diff 收敛;xDS 风格 version/nonce + **ACK/NACK + last-good**(坏配置不致瘫);同版本重放幂等 no-op;陈旧版本拒绝 | ✅ 通过 | `crates/plugin-host/src/{control_plane,reconcile}.rs`(`ControlPlane`/`ConfigSnapshot{type_url,version,nonce}`/`DataPlaneReconciler`/`ConfigAck::{Ack,Nack}`,纯同步、无 tokio);`tests/control_data_plane.rs` **6 测试绿**(声明式 diff 收敛、NACK 留 last-good、同版本幂等 `Arc::ptr_eq` 无 churn、最终一致、陈旧拒绝、type-check);`cp-dp-demo` 四步叙事(v1→v2 声明式 +score−echo、重连幂等 no-op、坏 v3 NACK 留 v2)。对应 [ADR-0009](../adr/0009-control-data-plane-separation.md)/[ADR-0010](../adr/0010-xds-style-config-distribution.md),设计综述见 [08-control-data-plane-separation](08-control-data-plane-separation.md) |
 | 11 | **Phase 1 生产工作区**:把上述 Spike 模式提升为一致、可测试、可运行的基座 —— 运行时无关核心 + 热插拔插件宿主 + 内存/SQLite 双适配器 + 真实 axum 服务器全部装配为一张 DI 图,且**会话崩溃恢复不重调已完成工具** | ✅ 通过 | 生产 workspace `agi-stack/`(非 spike):`cargo test --workspace` **25 测试绿**(`core` 2 · `plugin-host` 14 · `adapters-mem` 6 · `adapters-device` 3);`adapters-mem/tests/agent_recovery.rs` 证轮次边界 checkpoint 恢复后 `CountingToolHost` 计数为 0(已完成工具不重调),`adapters-device/tests/device.rs` 证 SQLite 耐久路径恢复;`agistack-server` 启动后 curl 验证 `/health`、`POST /v1/episodes`、`GET /v1/memories/search`(关键词+`semantic=true`)、`GET /v1/memories/:id`(+404)、`POST /v1/agent/run`(ReAct 回合)、`POST /v1/control-plane/publish`(声明式 +/− diff,**重复名 NACK 保留 last-good**)、`POST /v1/plugins/{enable,disable}`。一份 `core` 同时 `cargo build --target wasm32-unknown-unknown` 通过 |
-| 12 | **移动端真实设备产物**:同一核心(+SQLite 设备适配器)经 UniFFI 封为原生移动包,交叉编译为**真实 Android `.so`** 并生成 Kotlin 绑定(iOS `.a` 路径同构,仅缺 SDK) | ✅ 通过(Android)/ ⏳ iOS 待 Xcode | `crates/bindings-uniffi`(UniFFI 0.28,`MobileCore::{new,ingest,search,semantic_search}`,`crate-type=["staticlib","cdylib","lib"]`)经 **Android NDK r30** 交叉编译 `aarch64-linux-android`:产出 `libagistack_mobile.so`,`file` 验为 **ELF 64-bit ARM aarch64**,release **1.5 MB**(stripped,**含 NDK clang 编译的 SQLite C**)、debug 51 MB;`uniffi-bindgen --library … --language kotlin` 生成 53 KB 惯用 Kotlin(`open class MobileCore : MobileCoreInterface`,`ingest/search/semanticSearch`,`loadIndirect("agistack_mobile")`)。`staticlib`(iOS `.a`)与 Swift 生成路径同构,仅缺 full Xcode SDK(本机仅 Command Line Tools)。复现见 [05 §4 #2](05-roadmap.md) / README「构建与运行」 |
+| 12 | **移动端真实设备产物**:同一核心(+SQLite 设备适配器)经 UniFFI 封为原生移动包,交叉编译为**真实 Android `.so`** 并生成 Kotlin 绑定 | ✅ 通过(Android) | `crates/bindings-uniffi`(UniFFI 0.28,`MobileCore::{new,ingest,search,semantic_search}`,`crate-type=["staticlib","cdylib","lib"]`)经 **Android NDK r30** 交叉编译 `aarch64-linux-android`:产出 `libagistack_mobile.so`,`file` 验为 **ELF 64-bit ARM aarch64**,release **1.5 MB**(stripped,**含 NDK clang 编译的 SQLite C**)、debug 51 MB;`uniffi-bindgen --library … --language kotlin` 生成 53 KB 惯用 Kotlin(`open class MobileCore : MobileCoreInterface`,`ingest/search/semanticSearch`,`loadIndirect("agistack_mobile")`)。iOS 同构路径见 #13。复现见 [05 §4 #2](05-roadmap.md) / README「构建与运行」 |
+| 13 | **iOS 真实设备产物 + 模拟器实跑**:同一 `crates/bindings-uniffi` 经 full Xcode 交叉编译 iOS 双 arm64 切片、组装 XCFramework,并在 **iPhone 17 模拟器内实跑**完整流水线(非仅编译) | ✅ 通过 | full **Xcode 26.6**(iPhoneOS 26.5 / iPhoneSimulator 26.5 SDK):`cargo build --target {aarch64-apple-ios, aarch64-apple-ios-sim} --release` 各产出 arm64 `libagistack_mobile.a`(`lipo -info` 验,**含 Apple clang 编译的 SQLite C**);`uniffi-bindgen --language swift` 生成惯用 Swift(`MobileCore(dbPath:)` + `ingest/search/semanticSearch`);`xcodebuild -create-xcframework` 组装含 `ios-arm64`(device)+ `ios-arm64-simulator` 两切片的 `AgistackMobile.xcframework`;Swift 冒烟经 `xcrun simctl spawn booted` 在 **iPhone 17 模拟器**实跑:摄取 Memory(64 维 embedding + 标签抽取,落**模拟器内 SQLite**)→ 关键词检索命中 → 向量语义检索命中 → `SMOKE_OK`。一键复现:[`scripts/build-ios.sh`](../../scripts/build-ios.sh) + [`scripts/ios-smoketest.swift`](../../scripts/ios-smoketest.swift) |
 
 > 复现命令:`cd spikes/rust-portable-core && cargo test`(plugin-host registry 5 + lifecycle 3 + control_data_plane 6 + wasmi hot_swap 1 + 既有适配器测试,全绿);`cargo run -p hotplug-demo`(打印四段叙事:native 注册 → manifest enable + shape → WASM 热换 v1→v2 + 飞行隔离 → enable/disable 生命周期);`cargo run -p cp-dp-demo`(打印 CP→DP 四步:v1 add{echo,len} → v2 声明式 diff(+score,−echo) → 重连同版本幂等 no-op → 坏 v3 NACK 留 last-good v2)。呼应 [ADR-0005](../adr/0005-round-boundary-checkpoint.md) 轮次边界、[ADR-0006](../adr/0006-hot-plug-via-arcswap-and-proxy-wasm-abi.md)/[ADR-0007](../adr/0007-capability-registration-plugin-model.md) 热插拔机制与 [ADR-0009](../adr/0009-control-data-plane-separation.md)/[ADR-0010](../adr/0010-xds-style-config-distribution.md) CP/DP 分离;设计综述见 [07-plugin-runtime-architecture](07-plugin-runtime-architecture.md) 与 [08-control-data-plane-separation](08-control-data-plane-separation.md)。
 
@@ -35,22 +36,22 @@
 | 单步 search 延迟 | — | **~0.51 ms**(同上) | ✅ |
 | async 跨 runtime | 原生、不阻塞 | 核心仅 `async-trait`+`futures`,**零 tokio**,`block_on` 即可在 WASM/FFI 跑通 | ✅ 风险 #1 证伪 |
 | 每端口平台胶水 | 低且可复制 | server/wasm/sqlite/uffi 各 adapter ≈ 一个文件;核心跨目标**零改动** | ✅ |
-| iOS lib / Android .so 体积 | ≤ 8 MB/arch | 未测 — 需 full Xcode SDK / NDK | ⏳ 环境阻塞 |
+| iOS lib / Android .so 体积 | ≤ 8 MB/arch | Android **1.5 MB**(linked `.so`,stripped);iOS `.a` 为未链归档(40 MB,最终链接后同量级,待 app 实测) | ✅ Android / ⏳ iOS 链接后体积待 app 实测 |
 | 端上向量检索(N=10k) | P50 ≤ 20 ms | 未测 — 待接 sqlite-vec | ⏳ 待办 |
-| 移动端冷启动首调 | ≤ 300 ms | 未测 — 需设备/模拟器 | ⏳ 待办 |
+| 移动端冷启动首调 | ≤ 300 ms | 已在 iPhone 17 模拟器跑通(冒烟即时返回);精确冷启动计时待 app 内打点 | ⏳ 计时待办 |
 
 ## 3. 工具链备注(复现实验所需)
 
 - `rustc`/`cargo` **1.96**:Homebrew(仅 host)+ rustup(加 `wasm32-unknown-unknown`、`aarch64-apple-ios`、`aarch64-apple-ios-sim`)。跨目标须用 `~/.cargo/bin`。
 - `wasm-pack` 0.15、`wasm-bindgen` 0.2。
 - `uniffi` 0.28(proc-macro 模式 `setup_scaffolding!`,library-mode bindgen)。
-- `rusqlite` 0.32(`bundled`)需 C 编译器;iOS 设备构建另需 **full Xcode iOS SDK**。
+- `rusqlite` 0.32(`bundled`)需 C 编译器;Android 设备构建用 NDK clang、iOS 设备构建用 **full Xcode**(本机 Xcode 26.6,iPhoneOS 26.5 / iPhoneSimulator 26.5 SDK)。
 - `wasmi` 1.1 + `wat` 1(插件宿主 PoC + 跨层热插拔 demo,纯 Rust)。
 - 热插拔 demo 用 `arc-swap` 1(`crates/plugin-host` 注册中心原子换表),无新增系统依赖,全平台可编。
 - **wasm-opt bulk-memory 坑**:`bindings-wasm/Cargo.toml` 加 `[package.metadata.wasm-pack.profile.release] wasm-opt=['-Oz','--enable-bulk-memory','--enable-nontrapping-float-to-int']`。
 
 ## 4. 总评
 
-make-or-break 风险(**运行时无关核心 → 一份代码,server + 浏览器 + 设备**)已**确认**,有跨 server / 浏览器-WASM / 嵌入式 DB / 原生移动绑定的可运行、可测试产物。**可扩展性轴**亦确认:不可信工具经 `ToolHost` 端口沙箱化,其 WASM 宿主编到每个目标(含浏览器核心)。**热插拔轴**进一步确认:工具表 `ArcSwap` 原子换 + 扩展清单 enable/disable + 形态分类均跑通,且飞行中轮次按轮次边界见旧版本(确定性强于 OpenClaw 的重启式模型,见 [07](07-plugin-runtime-architecture.md))。**控制流/数据流分离轴**亦确认:控制面 SSOT + 数据面声明式 level-triggered reconcile + xDS 风格 version/nonce + ACK/NACK + last-good 跑通,reconciler 纯同步(无 tokio)故端上同实现;此即 Istio 的 Rust 数据面 ztunnel 同构机制(见 [08](08-control-data-plane-separation.md))。无任何观察与"Rust 作可移植核心语言"的建议相悖。
+make-or-break 风险(**运行时无关核心 → 一份代码,server + 浏览器 + 设备**)已**确认**,有跨 server / 浏览器-WASM / 嵌入式 DB / 原生移动绑定的可运行、可测试产物,**移动两端(Android `.so` + iOS XCFramework)均已交叉编译为真实设备产物,iOS 更在 iPhone 17 模拟器内实跑通过**(见 #12/#13)。**可扩展性轴**亦确认:不可信工具经 `ToolHost` 端口沙箱化,其 WASM 宿主编到每个目标(含浏览器核心)。**热插拔轴**进一步确认:工具表 `ArcSwap` 原子换 + 扩展清单 enable/disable + 形态分类均跑通,且飞行中轮次按轮次边界见旧版本(确定性强于 OpenClaw 的重启式模型,见 [07](07-plugin-runtime-architecture.md))。**控制流/数据流分离轴**亦确认:控制面 SSOT + 数据面声明式 level-triggered reconcile + xDS 风格 version/nonce + ACK/NACK + last-good 跑通,reconciler 纯同步(无 tokio)故端上同实现;此即 Istio 的 Rust 数据面 ztunnel 同构机制(见 [08](08-control-data-plane-separation.md))。无任何观察与"Rust 作可移植核心语言"的建议相悖。
 
-剩余为**广度**(SDK/NDK 后的设备产物、Tauri 桌面、Wasmtime 宿主 + WIT 契约)与**量化指标**,非根本性未知。详见 [05-roadmap](05-roadmap.md)。
+剩余为**广度**(iOS 真机签名分发、Tauri 桌面、Wasmtime 宿主 + WIT 契约)与**量化指标**,非根本性未知。详见 [05-roadmap](05-roadmap.md)。
