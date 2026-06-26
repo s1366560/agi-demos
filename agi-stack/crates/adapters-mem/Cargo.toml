@@ -1,0 +1,13 @@
+[package]
+name = "agistack-adapters-mem"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+futures.workspace = true

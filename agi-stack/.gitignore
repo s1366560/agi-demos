@@ -1,3 +1,13 @@
 # Obsidian editor state (local vault config, not part of the docs)
 .obsidian/
 docs/.obsidian/
+
+# Rust build artifacts (the workspace lives under this root)
+/target/
+**/*.rs.bk
+
+# Local SQLite data files produced by the device adapter / server
+*.db
+*.db-shm
+*.db-wal
+
