@@ -16,8 +16,56 @@ use serde::{Deserialize, Serialize};
 pub enum AgentAction {
     /// Invoke a registered tool with a JSON input (the **Act** step).
     CallTool { tool: String, input_json: String },
+    /// Suspend the loop and ask a human (the **HITL** step, ADR-0004/0005). The
+    /// decision *to* ask is the agent's; the engine only suspends at the round
+    /// boundary and persists the request.
+    RequestHuman { request: HitlRequest },
     /// Terminate the loop with a final answer.
     Finish { answer: String },
+}
+
+/// The four kinds of human-in-the-loop interruption, mirroring the Python
+/// system's HITL types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HitlKind {
+    /// "I need more information to proceed."
+    Clarification,
+    /// "Choose between these options."
+    Decision,
+    /// "Provide a secret/credential." (Production seals the answer as
+    /// `response_data_encrypted`; this spike carries it in plaintext — noted
+    /// future.)
+    EnvVar,
+    /// "Approve this side-effecting action."
+    Permission,
+}
+
+/// A request for human input raised at a round boundary. `id` keys the eventual
+/// [`HitlResponse`] so a resumed loop reuses the answer instead of re-asking
+/// (the HITL analog of [`CompletedCall`], ADR-0005).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HitlRequest {
+    pub id: String,
+    pub kind: HitlKind,
+    pub prompt: String,
+}
+
+impl HitlRequest {
+    pub fn new(id: impl Into<String>, kind: HitlKind, prompt: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            kind,
+            prompt: prompt.into(),
+        }
+    }
+}
+
+/// A human's answer to a [`HitlRequest`], persisted so resume is idempotent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HitlResponse {
+    pub id: String,
+    pub answer: String,
 }
 
 /// The role of a transcript line, mirroring the ReAct trichotomy plus the final
@@ -31,6 +79,8 @@ pub enum Role {
     Action,
     /// A tool result fed back to the model ("Observe").
     Observation,
+    /// A human's answer to a HITL request, fed back into the loop.
+    Human,
     /// The final answer that ended the loop.
     Answer,
 }
@@ -67,10 +117,13 @@ pub struct CompletedCall {
 
 /// Lifecycle of an agent session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
     /// Loop is active (or interrupted mid-flight and resumable).
     Running,
+    /// Loop is **suspended** awaiting a human answer (HITL). Resumable via
+    /// [`crate::ReActEngine::resume`] once the answer arrives.
+    AwaitingInput,
     /// Loop ended with an answer.
     Finished,
     /// Loop hit a terminal error / round budget.
@@ -99,6 +152,16 @@ pub struct SessionState {
     pub transcript: Vec<TranscriptEntry>,
     #[serde(default)]
     pub completed_tool_calls: Vec<CompletedCall>,
+    /// Set while [`status`](Self::status) is [`AwaitingInput`]: the unanswered
+    /// HITL request the loop suspended on.
+    ///
+    /// [`AwaitingInput`]: SessionStatus::AwaitingInput
+    #[serde(default)]
+    pub pending_hitl: Option<HitlRequest>,
+    /// Answered HITL requests, keyed by id. On resume the engine reuses these
+    /// instead of re-asking — the HITL analog of `completed_tool_calls`.
+    #[serde(default)]
+    pub hitl_responses: Vec<HitlResponse>,
     #[serde(default)]
     pub answer: Option<String>,
     #[serde(default)]
@@ -114,6 +177,8 @@ impl SessionState {
             round: 0,
             transcript: Vec::new(),
             completed_tool_calls: Vec::new(),
+            pending_hitl: None,
+            hitl_responses: Vec::new(),
             answer: None,
             status: SessionStatus::Running,
         }
@@ -136,5 +201,25 @@ impl SessionState {
             .iter()
             .find(|c| c.round == round && c.tool == tool && c.input_json == input_json)
             .map(|c| c.output_json.as_str())
+    }
+
+    /// The recorded human answer for a HITL request id, if it has been answered.
+    pub fn hitl_answer(&self, id: &str) -> Option<&str> {
+        self.hitl_responses
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| r.answer.as_str())
+    }
+
+    /// Record (or replace) a human answer for a HITL request id. Idempotent: a
+    /// repeated answer for the same id overwrites rather than duplicates.
+    pub fn record_hitl_answer(&mut self, id: impl Into<String>, answer: impl Into<String>) {
+        let id = id.into();
+        let answer = answer.into();
+        if let Some(existing) = self.hitl_responses.iter_mut().find(|r| r.id == id) {
+            existing.answer = answer;
+        } else {
+            self.hitl_responses.push(HitlResponse { id, answer });
+        }
     }
 }

@@ -18,9 +18,9 @@
 use std::sync::Arc;
 
 use crate::agent::types::{
-    AgentAction, CompletedCall, Role, SessionState, SessionStatus, TranscriptEntry,
+    AgentAction, CompletedCall, HitlRequest, Role, SessionState, SessionStatus, TranscriptEntry,
 };
-use crate::ports::{CheckpointStore, Clock, CoreResult, LlmPort, ToolHost};
+use crate::ports::{CheckpointStore, Clock, CoreError, CoreResult, LlmPort, ToolHost};
 
 /// Drives a single agent session to completion (or until the round budget is
 /// exhausted), persisting a checkpoint at every step.
@@ -137,6 +137,36 @@ impl ReActEngine {
                         output,
                     ));
                 }
+                AgentAction::RequestHuman { request } => {
+                    // The "ask" is recorded once (dedup-safe on replay).
+                    state.push_unique(TranscriptEntry::new(
+                        state.round,
+                        Role::Action,
+                        format!("request_human[{:?}] {}", request.kind, request.prompt),
+                    ));
+
+                    match state.hitl_answer(&request.id).map(|a| a.to_string()) {
+                        // Already answered (we are replaying after a resume): feed
+                        // the human answer as this round's observation and advance.
+                        // The HITL analog of reusing a completed tool call.
+                        Some(answer) => {
+                            state.push_unique(TranscriptEntry::new(
+                                state.round,
+                                Role::Human,
+                                answer,
+                            ));
+                        }
+                        // Unanswered: SUSPEND at the round boundary (ADR-0005).
+                        // Persist the pending request and exit the loop without
+                        // advancing the round, so resume replays this exact round.
+                        None => {
+                            state.pending_hitl = Some(request);
+                            state.status = SessionStatus::AwaitingInput;
+                            self.checkpoints.save(&state).await?;
+                            break;
+                        }
+                    }
+                }
             }
 
             state.round += 1;
@@ -146,4 +176,67 @@ impl ReActEngine {
 
         Ok(state)
     }
+
+    /// Resume a session that is [`AwaitingInput`] by supplying the human answer
+    /// to its pending HITL request, then drive the loop to completion.
+    ///
+    /// The answer is persisted before the loop restarts, so this is **idempotent
+    /// and crash-safe**: a fresh engine (new process) replays the suspended round,
+    /// sees the recorded answer instead of re-asking, and continues — reusing any
+    /// already-completed tool calls exactly as ordinary recovery does (ADR-0005).
+    ///
+    /// Errors if the session is not awaiting input or if `request_id` does not
+    /// match the pending request (a structural guard, not a semantic judgment).
+    ///
+    /// [`AwaitingInput`]: SessionStatus::AwaitingInput
+    pub async fn resume(
+        &self,
+        session_id: &str,
+        request_id: &str,
+        answer: &str,
+    ) -> CoreResult<SessionState> {
+        let mut state = self
+            .checkpoints
+            .load(session_id)
+            .await?
+            .ok_or(CoreError::NotFound)?;
+
+        // Idempotent: nothing to resume if the session already moved on.
+        if state.status != SessionStatus::AwaitingInput {
+            return Ok(state);
+        }
+
+        match &state.pending_hitl {
+            Some(req) if req.id == request_id => {}
+            Some(req) => {
+                return Err(CoreError::Tool(format!(
+                    "resume id mismatch: pending '{}', got '{request_id}'",
+                    req.id
+                )))
+            }
+            None => {
+                return Err(CoreError::Tool(
+                    "session is awaiting input but has no pending request".into(),
+                ))
+            }
+        }
+
+        // Record the answer, clear the suspension, flip back to Running, persist —
+        // then let the (round-indexed) loop replay the suspended round and proceed.
+        state.record_hitl_answer(request_id, answer);
+        state.pending_hitl = None;
+        state.status = SessionStatus::Running;
+        self.checkpoints.save(&state).await?;
+
+        let goal = state.goal.clone();
+        let project_id = state.project_id.clone();
+        self.run(session_id, &goal, project_id.as_deref()).await
+    }
+}
+
+/// The pending HITL request for a suspended session, if any — a convenience for
+/// callers (e.g. an HTTP handler) that need to surface what the loop is waiting
+/// on without inspecting the whole [`SessionState`].
+pub fn pending_request(state: &SessionState) -> Option<&HitlRequest> {
+    state.pending_hitl.as_ref()
 }

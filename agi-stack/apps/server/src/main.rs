@@ -15,7 +15,8 @@
 //!   POST /v1/episodes                  ingest an episode -> memory
 //!   GET  /v1/memories/search           keyword (or ?semantic=true) search
 //!   GET  /v1/memories/:id              fetch one memory
-//!   POST /v1/agent/run                 run/resume a ReAct session over the registry
+//!   POST /v1/agent/run                 run a ReAct session (may suspend on HITL)
+//!   POST /v1/agent/resume              answer a HITL request -> resume to completion
 //!   GET  /v1/plugins                   list registered tools + enabled plugins
 //!   POST /v1/plugins/enable            enable a plugin manifest (hot)
 //!   POST /v1/plugins/disable           disable a plugin by name (hot)
@@ -37,7 +38,9 @@ use agistack_adapters_mem::{
     SystemClock,
 };
 use agistack_core::ports::ToolHost;
-use agistack_core::{Episode, Memory, MemoryService, ReActEngine, SourceType};
+use agistack_core::{
+    Episode, Memory, MemoryService, ReActEngine, SessionState, SessionStatus, SourceType,
+};
 use agistack_plugin_host::{
     ConfigAck, ControlPlane, DataPlaneReconciler, HotPlugRegistry, LenTool, NativeToolFactory,
     PluginHost, PluginManifest, ToolDecl, UpperTool,
@@ -128,6 +131,18 @@ struct AgentRunRequest {
     project_id: Option<String>,
 }
 
+/// Build a self-describing agent response that surfaces a HITL suspension
+/// (`awaiting_input` + the `pending_hitl` request) alongside the full session.
+fn agent_state_json(state: SessionState) -> Value {
+    let awaiting = state.status == SessionStatus::AwaitingInput;
+    let pending = state.pending_hitl.clone();
+    json!({
+        "awaiting_input": awaiting,
+        "pending_hitl": pending,
+        "session": state,
+    })
+}
+
 async fn agent_run(
     State(app): State<AppState>,
     Json(req): Json<AgentRunRequest>,
@@ -137,8 +152,29 @@ async fn agent_run(
         .run(&req.session_id, &req.goal, req.project_id.as_deref())
         .await
         .map_err(internal)?;
-    // SessionState is Serialize; wrap it so the response is self-describing.
-    Ok(Json(json!({ "session": state })))
+    Ok(Json(agent_state_json(state)))
+}
+
+#[derive(Deserialize)]
+struct AgentResumeRequest {
+    session_id: String,
+    request_id: String,
+    answer: String,
+}
+
+/// Resume a session suspended on a HITL request by supplying the human answer,
+/// then drive it to completion (ADR-0004/0005). Idempotent and crash-safe: the
+/// answer is persisted before the loop replays the suspended round.
+async fn agent_resume(
+    State(app): State<AppState>,
+    Json(req): Json<AgentResumeRequest>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let state = app
+        .engine
+        .resume(&req.session_id, &req.request_id, &req.answer)
+        .await
+        .map_err(internal)?;
+    Ok(Json(agent_state_json(state)))
 }
 
 // ---- plugins (enable/disable lifecycle) -----------------------------------
@@ -267,6 +303,7 @@ fn router(state: AppState) -> Router {
         .route("/v1/memories/search", get(search))
         .route("/v1/memories/:id", get(get_memory))
         .route("/v1/agent/run", post(agent_run))
+        .route("/v1/agent/resume", post(agent_resume))
         .route("/v1/plugins", get(plugins_list))
         .route("/v1/plugins/enable", post(plugins_enable))
         .route("/v1/plugins/disable", post(plugins_disable))

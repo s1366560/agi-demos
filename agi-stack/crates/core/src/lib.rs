@@ -21,9 +21,10 @@ pub mod service;
 pub mod util;
 
 pub use agent::{
-    AgentAction, EmbeddedHarness, HarnessCtx, HarnessPolicy, HarnessRegistry, Plan, PlanStep,
-    PreparedAttempt, ReActEngine, Role, RuntimeHarness, SelectionReason, SessionState,
-    SessionStatus, StepStatus, TranscriptEntry, TurnOutcome,
+    pending_request, AgentAction, EmbeddedHarness, HarnessCtx, HarnessPolicy, HarnessRegistry,
+    HitlKind, HitlRequest, HitlResponse, Plan, PlanStep, PreparedAttempt, ReActEngine, Role,
+    RuntimeHarness, SelectionReason, SessionState, SessionStatus, StepStatus, TranscriptEntry,
+    TurnOutcome,
 };
 pub use model::{Entity, Episode, Memory, Project, SourceType};
 pub use ports::{

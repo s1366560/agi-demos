@@ -10,7 +10,8 @@ use agistack_adapters_mem::{FixedClock, HashEmbedding, ScriptedLlm, StubLlm};
 use agistack_core::agent::types::{CompletedCall, Role, TranscriptEntry};
 use agistack_core::ports::{CheckpointStore, CoreResult, ToolHost};
 use agistack_core::{
-    AgentAction, Episode, MemoryService, ReActEngine, SessionState, SessionStatus, SourceType,
+    AgentAction, Episode, HitlKind, HitlRequest, MemoryService, ReActEngine, SessionState,
+    SessionStatus, SourceType,
 };
 use futures::executor::block_on;
 
@@ -144,5 +145,70 @@ fn ckpt_survives_restart_and_engine_reuses_completed_call() {
 
     // The final state was checkpointed durably.
     let final_state = block_on(store.load("s1")).unwrap().unwrap();
+    assert_eq!(final_state.status, SessionStatus::Finished);
+}
+
+/// HITL suspend/resume survives a SQLite round-trip: a loop suspends on a human
+/// request (status + pending request persisted to SQLite), a fresh engine backed
+/// by the SAME store resumes with the answer and finishes — proving the HITL
+/// fields serialize through the durable checkpoint, not just memory.
+#[test]
+fn hitl_suspend_and_resume_survive_sqlite_roundtrip() {
+    let store = Arc::new(SqliteCheckpointStore::in_memory().unwrap());
+    let tools = Arc::new(CountingToolHost {
+        calls: AtomicUsize::new(0),
+    });
+    let script = || {
+        vec![
+            AgentAction::CallTool {
+                tool: "len".into(),
+                input_json: LEN_INPUT.into(),
+            },
+            AgentAction::RequestHuman {
+                request: HitlRequest::new("approve-1", HitlKind::Decision, "ship it?"),
+            },
+            AgentAction::Finish {
+                answer: "shipped".into(),
+            },
+        ]
+    };
+
+    // Engine #1 runs until it suspends on the HITL request.
+    let engine1 = ReActEngine::new(
+        Arc::new(ScriptedLlm::new(script())),
+        tools.clone(),
+        store.clone(),
+        Arc::new(FixedClock(0)),
+    );
+    let suspended = block_on(engine1.run("s-hitl", "ship the build", Some("p1"))).unwrap();
+    assert_eq!(suspended.status, SessionStatus::AwaitingInput);
+    assert_eq!(tools.calls.load(Ordering::SeqCst), 1);
+
+    // The suspension is durably reloadable from SQLite (the restart boundary):
+    // status and the pending request both survived JSON serialization.
+    let reloaded = block_on(store.load("s-hitl")).unwrap().unwrap();
+    assert_eq!(reloaded.status, SessionStatus::AwaitingInput);
+    assert_eq!(reloaded.pending_hitl.as_ref().unwrap().id, "approve-1");
+    assert_eq!(reloaded.pending_hitl.as_ref().unwrap().kind, HitlKind::Decision);
+
+    // Engine #2 (fresh) resumes against the same store and completes.
+    let engine2 = ReActEngine::new(
+        Arc::new(ScriptedLlm::new(script())),
+        tools.clone(),
+        store.clone(),
+        Arc::new(FixedClock(0)),
+    );
+    let done = block_on(engine2.resume("s-hitl", "approve-1", "yes")).unwrap();
+    assert_eq!(done.status, SessionStatus::Finished);
+    assert_eq!(done.answer.as_deref(), Some("shipped"));
+    assert_eq!(
+        tools.calls.load(Ordering::SeqCst),
+        1,
+        "round-0 tool must not be re-run across the SQLite resume"
+    );
+    assert_eq!(done.hitl_answer("approve-1"), Some("yes"));
+
+    // Final state is durably finished.
+    let final_state = block_on(store.load("s-hitl")).unwrap().unwrap();
     assert_eq!(final_state.status, SessionStatus::Finished);
 }

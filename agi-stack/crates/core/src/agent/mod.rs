@@ -17,7 +17,8 @@ pub use harness::{
     SelectionReason, TurnOutcome,
 };
 pub use plan::{Plan, PlanStep, StepStatus};
-pub use react::ReActEngine;
+pub use react::{pending_request, ReActEngine};
 pub use types::{
-    AgentAction, CompletedCall, Role, SessionState, SessionStatus, TranscriptEntry,
+    AgentAction, CompletedCall, HitlKind, HitlRequest, HitlResponse, Role, SessionState,
+    SessionStatus, TranscriptEntry,
 };
