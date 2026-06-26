@@ -33,7 +33,7 @@ graph LR
 | # | 风险 | 状态 |
 |---|---|---|
 | 1 | **运行时无关 async**:core 不绑 tokio 却能在 native/WASM/UniFFI 三处都跑 | ✅ 证伪通过 |
-| 2 | **WASM + 本地存储/向量**:wa-sqlite/sqlite-vec 是否可用?否则降级 IndexedDB + 内存 hnsw | ⏳ 部分(内存路径已通,wa-sqlite 待接) |
+| 2 | **WASM + 本地存储/向量**:wa-sqlite/sqlite-vec 是否可用?否则降级 IndexedDB + 内存 hnsw | ⏳ 部分(**生产 `bindings-wasm` 内存路径已通** —— `wasm-bindgen` + `WasmClock` + 内存仓储/向量,node 冒烟 round-trip 绿,见 [04 #16](04-spike-evidence.md);wa-sqlite 持久层待接) |
 | 3 | **端上向量检索**:sqlite-vec / usearch / hnsw-rs 在 iOS/Android 交叉编译 | ⏳ 待办 |
 | 4 | **UniFFI 复杂类型 + async + 回调**:`Memory`(嵌套 list)能否干净导出?宿主端口能否回注? | ✅ 双端设备产物(`crates/bindings-uniffi`:Android 经 NDK 产真实 `aarch64-linux-android` `.so` + Kotlin 包,见 [04 #12](04-spike-evidence.md);iOS 经 full Xcode 产 XCFramework + Swift 包并在 iPhone 17 模拟器实跑,见 [04 #13](04-spike-evidence.md)) |
 | 5 | **图依赖**:端上无 Neo4j,entities/relationships 用 SQLite 关系表或内存 petgraph 近似 | 🎯 待验证 |
@@ -49,7 +49,7 @@ graph LR
 
 | 指标 | 采集方式 | 建议 go 阈值 | 当前 |
 |---|---|---|---|
-| WASM 体积(gzip) | `wasm-opt -Oz` 后测 | ≤ 2.5 MB(切片) | ✅ ~49 KB |
+| WASM 体积(gzip) | `wasm-opt -Oz` 后测 | ≤ 2.5 MB(切片) | ✅ spike ~49 KB · **生产 `bindings-wasm` 60 KB gzip / 124 KB raw**(含向量+语义,见 [04 #16](04-spike-evidence.md)) |
 | iOS lib / Android .so | 链接产物 | ≤ 8 MB/arch(不含本地模型) | ✅ Android 1.5 MB(aarch64 release,见 [04 #12](04-spike-evidence.md));iOS XCFramework 已构建 + 模拟器实跑,链接后体积待 app 实测(见 [04 #13](04-spike-evidence.md)) |
 | 单步提取延迟(剔 LLM 网络) | 核心打点 | ≤ 50 ms | ✅ ~0.49 ms |
 | 端上向量检索(N=10k, dim=768) | sqlite-vec/hnsw 计时 | P50 ≤ 20 ms | ⏳ 未测 |
@@ -69,6 +69,7 @@ graph LR
 3. **`sqlite-vec` 真向量检索**:替换切片里的玩具 hash-embedding。
 4. **Tauri 桌面**:包核心证 PC 外壳。
 5. **完整 go/no-go 评分卡**:补齐 §3 未测项。
+8. **Web 包(production wasm-bindgen 绑定)**:✅ **已落地** —— `crates/bindings-wasm` 把生产核心编入浏览器(core-as-guest),`AgistackCore` 暴露 `ingest`/`search`/`semanticSearch`,wasm 侧用真实 `WasmClock`(`Date.now()`);`wasm-pack --target nodejs` + `smoke.cjs` node 冒烟绿,**60 KB gzip**(见 [04 #16](04-spike-evidence.md))。后续接 wa-sqlite/IndexedDB 持久层 + 浏览器内冒烟。
 6. **Agent 核心健壮/编排切片**:✅ **HITL 已落地** —— 在现有核心上加 `AgentAction::RequestHuman` + `resume()`:轮次边界 checkpoint(状态即真相)、崩溃恢复重放、单个 HITL suspend/resume,内存 + SQLite 两路径测试绿且不重调已完成工具(见 [04 #15](04-spike-evidence.md)、[ADR-0004](../adr/0004-plan-as-append-only-dag.md)/[0005](../adr/0005-round-boundary-checkpoint.md));server `POST /v1/agent/resume`。多节点 Plan DAG reconcile 与 native(Kameo)/WASM(`MiniOrchestrator`)两版 parity 待续。**注**:热插拔(ArcSwap 工具换表零中断 + 扩展 enable/disable + shape 分类)已由 `crates/plugin-host` + `hotplug-demo` 单独证伪(见 [04 #9](04-spike-evidence.md))。
 7. **可插拔 Harness 切片**:✅ **已落地** —— 把内置 ReAct 循环抽为 `RuntimeHarness` trait + `HarnessRegistry::select`(`auto` 优先级 + policy pin + 回退,runtime 每轮重解析),内置 `EmbeddedHarness` 包 `ReActEngine`,为后续 CLI-backend/第三方 harness 固化 `PreparedAttempt` 契约([07 §4](07-plugin-runtime-architecture.md)、[ADR-0008](../adr/0008-agent-runtime-as-pluggable-harness.md))。core-only、零 tokio、同编 `wasm32`;core 7 单测 + `adapters-mem` 2 端到端测试(见 [04 #14](04-spike-evidence.md))。`PreparedAttempt`/`RuntimePlan` 富契约(tool 归一、outcome 分类)待第二个非 embedded harness(CLI backend)落地再固化。
 

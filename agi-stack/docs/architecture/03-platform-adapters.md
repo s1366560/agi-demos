@@ -37,7 +37,7 @@
 | 平台 | 适配器 |
 |---|---|
 | native | `std::time::SystemTime` 包装 |
-| wasm | `js_sys::Date::now()` / `performance.now()` |
+| wasm | `js_sys::Date::now()` / `performance.now()`(✅ 生产 `WasmClock`,见 [04 #16](04-spike-evidence.md)) |
 | 测试 | 固定/可控时钟(确定性测试) |
 
 核心**永不**直接 `SystemTime`,一律经此端口 —— 否则 wasm 编译/运行即崩。
@@ -50,7 +50,7 @@
 | 桌面 | Tauri | 直接链核心(Rust 后端 + Web 前端) |
 | iOS | SwiftUI app | UniFFI → 生成 Swift 绑定,链 `.a` |
 | Android | Compose app | UniFFI → 生成 Kotlin 绑定,链 `.so` |
-| Web | JS/TS 前端 | wasm-bindgen → wasm-pack 包 |
+| Web | JS/TS 前端 | wasm-bindgen → wasm-pack 包(✅ `crates/bindings-wasm`,见 [04 #16](04-spike-evidence.md)) |
 
 ## 6. 端口 × 平台 总览
 
