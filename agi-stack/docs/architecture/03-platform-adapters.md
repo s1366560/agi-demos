@@ -16,10 +16,10 @@
 
 | 形态 | 适配器 | 说明 |
 |---|---|---|
-| 云端(默认) | HTTP 调 LiteLLM 兼容端点(`reqwest` / `gloo-net`) | 复用现有多 provider(Gemini/Dashscope/Deepseek/OpenAI/Anthropic) |
-| 端上(离线) | llama.cpp / Candle / ONNX Runtime(ort)/ MLC-LLM | 体积与可行性见 [05 风险](05-roadmap.md);Spike 先用云 API stub |
+| 云端(默认) | HTTP 调 LiteLLM 兼容端点(`reqwest` / `gloo-net`)—— ✅ 已落地 `crates/adapters-http-llm`(`HttpLlm`/`HttpEmbedding`,OpenAI 兼容,见 [04 #20](04-spike-evidence.md)) | 复用现有多 provider(Gemini/Dashscope/Deepseek/OpenAI/Anthropic) |
+| 端上(离线) | llama.cpp / Candle / ONNX Runtime(ort)/ MLC-LLM | 体积与可行性见 [05 风险](05-roadmap.md);端口与 DI 切换骨架已就位,本地大模型标注 future |
 
-抽象为端口的收益:同一编排逻辑,云/端两套 adapter 切换,核心零改动。
+抽象为端口的收益:同一编排逻辑,云/端两套 adapter 切换,核心零改动。**已验证**:`apps/server` 经 `select_llm_and_embedding()` 按环境变量(`AGISTACK_LLM_BASE_URL`…)在缺省**离线 stub**(`StubLlm`+`HashEmbedding`,零网络零 key)与 **HTTP 适配器**间切换;`reqwest`/`tokio` 严格隔离在 adapter 与 server,绝不泄漏回核心 `wasm32` 构建。
 
 ## 3. 插件宿主(`ToolHost`)
 
