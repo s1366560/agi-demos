@@ -17,7 +17,7 @@ graph LR
 | Phase | 内容 | 状态 |
 |---|---|---|
 | **0 · 决策 Spike** | 最小核心切片编到 `服务器 + WASM + 移动端`,量化体积/性能/DX 后定语言 | ✅ 完成(Rust 选定,见 [04](04-spike-evidence.md)) |
-| **1 · 抽取可移植核心** | domain(已纯净)+ application 纯逻辑迁入核心包;ports 落为跨平台 trait | ⏭️ 下一步 |
+| **1 · 抽取可移植核心** | domain(已纯净)+ application 纯逻辑迁入核心包;ports 落为跨平台 trait | 🚧 进行中(生产级 Cargo workspace 已落地于 `agi-stack/`:`core`+`plugin-host`+`adapters-mem`+`adapters-device`+`apps/server`,`cargo test` 25 绿、服务器全端点 curl 验证) |
 | **2 · 平台适配器** | 每个端口两套实现(server 重型栈 / device 嵌入式栈) | 🎯 |
 | **2.5 · 扩展性/插件宿主** | 落 `ToolHost`/`PluginRuntime` 端口 + WIT 工具契约;内置工具走 `dyn Trait`;第三方/MCP 走 WASM 沙箱;Skill 落为数据 + Rhai;**热插拔生命周期**(ArcSwap 原子换表 + CP/DP 配置推送 + proxy-wasm 风格 ABI,见 [06 §2](06-agent-core-design.md));**多层插件运行时**(typed 能力注册 + 插件形态分类 + 可插拔 Harness,见 [07](07-plugin-runtime-architecture.md));**控制面→数据面 reconcile**(xDS 风格 version/nonce + ACK/NACK + last-good,见 [08](08-control-data-plane-separation.md))。**绞杀点:现有 30+ 工具与 MCP 沙箱在此分批迁移到统一插件契约** | 🎯(热插拔 + CP/DP reconcile PoC 已验证,见 [02](02-extensibility.md)、[04 #9/#10](04-spike-evidence.md)) |
 | **3 · AI/LLM 抽象** | LLM、embedding、向量检索的 cloud↔on-device 双适配 | 🎯 |
@@ -39,7 +39,7 @@ graph LR
 | 5 | **图依赖**:端上无 Neo4j,entities/relationships 用 SQLite 关系表或内存 petgraph 近似 | 🎯 待验证 |
 | 6 | **端上 LLM**(可选):llama.cpp/Candle 移动端体积与可行性 | 🎯 后续 |
 | 7 | **可移植插件宿主**:核心能否在不破坏"运行时无关+四端可移植"前提下宿主沙箱工具?WASM-in-WASM(浏览器,Wasmi)成立? | ✅ 证伪通过(见 [04 #8](04-spike-evidence.md)) |
-| 8 | **会话 checkpoint 崩溃恢复**:轮次边界快照能否在不重复已完成工具的前提下恢复长会话?端上(无 tokio,WASM 无 FS)增量持久化是否成立? | 🎯 待验证([06 §4](06-agent-core-design.md)、[ADR-0005](../adr/0005-round-boundary-checkpoint.md)) |
+| 8 | **会话 checkpoint 崩溃恢复**:轮次边界快照能否在不重复已完成工具的前提下恢复长会话?端上(无 tokio,WASM 无 FS)增量持久化是否成立? | ✅ 证伪通过(`ReActEngine` 轮次边界增量 + 边界 checkpoint;`adapters-mem/tests/agent_recovery.rs` 证内存路径杀进程→恢复**不重调已完成工具**[`CountingToolHost` 计数为 0],`adapters-device/tests/device.rs` 证 SQLite 耐久路径恢复;见 [04 #11](04-spike-evidence.md)、[06 §4](06-agent-core-design.md)、[ADR-0005](../adr/0005-round-boundary-checkpoint.md)) |
 | 9 | **热换工具零中断**:ArcSwap 换表 + CP/DP 推送能否在不打断在途会话的前提下启用/禁用/升级工具? | ✅ 部分证伪(换表机制已通,CP/DP 网络下发待办)——`hotplug-demo` 证 v1→v2 热换 + 飞行轮次见旧版本 + enable/disable + shape 分类(见 [04 #9](04-spike-evidence.md)、[07](07-plugin-runtime-architecture.md)、[ADR-0006](../adr/0006-hot-plug-via-arcswap-and-proxy-wasm-abi.md)/[0007](../adr/0007-capability-registration-plugin-model.md)) |
 | 11 | **可插拔 Harness**:Agent 执行循环能否做成可第三方替换的 `RuntimeHarness`(embedded vs CLI-backend),`auto` 选择 + 回退,且 runtime 按 `(provider,model)` scoped? | 🎯 待验证([07 §4](07-plugin-runtime-architecture.md)、[ADR-0008](../adr/0008-agent-runtime-as-pluggable-harness.md)) |
 | 10 | **Plan 动态 DAG + HITL**:append-only DAG 的 reconcile 幂等、suspend/resume(四类 HITL)在重型(Kameo)与轻量(`MiniOrchestrator`)两版是否一致? | 🎯 待验证([06 §5](06-agent-core-design.md)、[ADR-0004](../adr/0004-plan-as-append-only-dag.md)) |
@@ -57,7 +57,7 @@ graph LR
 | 跨 FFI 复杂类型往返 | 微基准 | 无频繁拷贝瓶颈 | ⏳ 未测 |
 | 每端口平台胶水 LOC | 统计 | 低且可复制 | ✅ ≈ 一个文件 |
 | async 跨 UniFFI/WASM | 是否需 hack | 原生支持、不阻塞主线程 | ✅ 原生支持 |
-| 会话崩溃恢复正确性 | 杀进程→恢复→比对 | 不丢轮次、不重复已完成工具 | ⏳ 未测 |
+| 会话崩溃恢复正确性 | 杀进程→恢复→比对 | 不丢轮次、不重复已完成工具 | ✅ 通过(内存 + SQLite 两路径,见 [04 #11](04-spike-evidence.md)) |
 | 热换工具中断 | 在途会话期间换表计时 | 在途轮次零中断,新轮次毫秒级见新表 | ✅ 部分(demo 证飞行隔离:新调用得 v2、持旧快照仍得 v1;在途轮次中断的会话级量化待 Agent 切片) |
 | HITL 暂停→恢复往返 | suspend→外部信号→resume | 四类 HITL 均可暂停/恢复,状态不丢 | ⏳ 未测 |
 | CP→DP 配置收敛/坏配置隔离 | reconcile 测试 + `cp-dp-demo` | 坏配置 NACK 不改 last-good;同版本零 churn(`Arc::ptr_eq`);漏推/乱序自愈 | ✅ 证伪通过(6 测试) |

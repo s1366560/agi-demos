@@ -2,7 +2,7 @@
 
 > **新一代可移植智能体核心** —— 一份核心代码,编译/打包后同时跑在**云端服务器**与**端侧(浏览器 WASM / PC / 移动端)**,本地优先(local-first)、可离线;并以**信任 × 平台**两轴承载可扩展的工具/技能/子智能体/MCP 插件生态。
 
-本目录是 **新架构的根**。当前阶段(Phase 0)只放**架构文档**;后续 Cargo workspace 代码将落在此根下。
+本目录是 **新架构的根**。架构文档在 [`docs/`](docs/);**Phase 1 生产级 Cargo workspace 已落地于此根下**([`crates/`](crates/) + [`apps/`](apps/),`cargo test` 25 测试绿、`agistack-server` 全端点 curl 验证 —— 见下方[「现状」](#现状)与[「构建与运行」](#构建与运行phase-1-工作区))。
 
 ---
 
@@ -65,8 +65,41 @@ graph TD
 
 ## 现状
 
-- **Phase 0(进行中)**:决策 Spike + 架构文档。可移植核心、插件宿主、跨层热插拔、控制面→数据面 reconcile 四条主轴均已用可运行、可测试的 Rust Spike **证伪通过**(见 `spikes/rust-portable-core/`,仓库根)。
-- 本架构文档由会话规划稿 `plan.md` 与 `rust-spike-plan.md` 整理而来,是后续 Phase 1+ 实现的权威依据。
+- **Phase 0(已完成)**:决策 Spike + 架构文档。可移植核心、插件宿主、跨层热插拔、控制面→数据面 reconcile 四条主轴均已用可运行、可测试的 Rust Spike **证伪通过**(见 `spikes/rust-portable-core/`,仓库根)。
+- **Phase 1(进行中)**:已在本根下落地**生产级 Cargo workspace**,把 Spike 验证过的模式提升为一致、可测试、可运行的基座:
+  - [`crates/core`](crates/core) —— 运行时无关的可移植核心:领域模型(`Memory`/`Episode`)、六边形端口(`MemoryRepository`/`LlmPort`/`VectorIndexPort`/`ToolHost`/`CheckpointStore`/`Clock` …)、`MemoryService` 编排、`ReActEngine`(轮次边界 checkpoint + 崩溃恢复)。零 tokio、零 `std::time`。
+  - [`crates/plugin-host`](crates/plugin-host) —— 热插拔插件宿主:`ArcSwap<ToolRegistry>` 原子换表、`PluginHost` enable/disable 生命周期、`PluginShape` 分类、`ControlPlane` + `DataPlaneReconciler`(xDS 风格版本化 + 声明式 level-triggered reconcile + ACK/NACK + last-good)。
+  - [`crates/adapters-mem`](crates/adapters-mem) —— 内存端适配器(含 `StubLlm`/`ScriptedLlm` 确定性替身),证崩溃恢复不重复已完成工具。
+  - [`crates/adapters-device`](crates/adapters-device) —— 本地优先 SQLite 适配器(`rusqlite` bundled,跨编移动端):持久化 memory repo + checkpoint + 暴力余弦向量索引,证**端上耐久崩溃恢复**。
+  - [`apps/server`](apps/server) —— 真实 axum 服务器,把上述端口装配为 DI 图,暴露 episodes/memory(关键词+语义)/agent run/plugins/control-plane 全端点。
+- 验证:`cargo test --workspace` **25 测试绿**(core 2 · plugin-host 14 · adapters-mem 6 · adapters-device 3);`agistack-server` 启动后 curl 验证健康、记忆摄取与检索、ReAct 智能体回合、CP/DP 声明式 reconcile(含重复名 NACK 保留 last-good)、插件 enable/disable 全部通过。
+- 后续 Phase 2+ 实现仍以 [`docs/`](docs/) 架构文档为权威依据。
+
+## 构建与运行(Phase 1 工作区)
+
+```bash
+cd agi-stack
+
+# 整工作区构建 + 测试(25 测试绿)
+cargo test --workspace
+
+# 同一核心编为浏览器 WASM(证运行时无关)
+cargo build -p agistack-core --target wasm32-unknown-unknown
+
+# 启动服务器(默认 127.0.0.1:8088,可用 AGISTACK_ADDR 覆盖)
+cargo run -p agistack-server
+
+# 端点冒烟(另开终端)
+curl -s localhost:8088/health
+curl -s -X POST localhost:8088/v1/episodes -H 'content-type: application/json' \
+  -d '{"project_id":"p1","author_id":"u1","content":"Vector databases enable semantic memory"}'
+curl -s "localhost:8088/v1/memories/search?project_id=p1&q=semantic&semantic=true"
+curl -s -X POST localhost:8088/v1/agent/run -H 'content-type: application/json' \
+  -d '{"session_id":"s1","goal":"measure hello","project_id":"p1"}'
+curl -s -X POST localhost:8088/v1/control-plane/publish -H 'content-type: application/json' \
+  -d '{"tools":[{"name":"len","trust":"builtin"},{"name":"echo","trust":"builtin"}]}'
+```
+
 
 ## 参考
 
