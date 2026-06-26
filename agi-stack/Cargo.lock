@@ -59,6 +59,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "agistack-bench"
+version = "0.1.0"
+dependencies = [
+ "agistack-adapters-mem",
+ "agistack-core",
+ "futures",
+]
+
+[[package]]
 name = "agistack-bindings-uniffi"
 version = "0.1.0"
 dependencies = [

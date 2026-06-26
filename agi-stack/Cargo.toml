@@ -10,6 +10,7 @@ members = [
     "crates/bindings-uniffi",
     "crates/bindings-wasm",
     "apps/server",
+    "apps/bench",
 ]
 
 # The Tauri desktop shell is deliberately *excluded* from the workspace: it pulls
