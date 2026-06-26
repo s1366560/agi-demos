@@ -21,6 +21,7 @@
 | 6 | Adapters are genuinely **swapped per platform** (not one-size-fits-all) | ✅ PASS (by construction) | bundled-SQLite **cannot** target `wasm32-unknown-unknown` (`stdio.h` not found) → browser must use a different storage adapter behind the *same* port. This is the hexagonal boundary working as intended. |
 | 7 | Core packages as a **native mobile library** (Swift/Kotlin) | ✅ PASS (codegen + iOS arch) / ⛓️ blocked on SDK | `bindings-uffi` (UniFFI) compiles against the real core; **Swift + Kotlin** bindings generated (`generated/`); core + in-mem adapter cross-compile to `aarch64-apple-ios`. Final device `.a`/`.so` needs full **Xcode iOS SDK** / **Android NDK** (not installed here) |
 | 8 | The **plugin host itself is a portable port** (untrusted tools sandboxed in WASM, host runs on every target *incl. browser*) | ✅ PASS | `adapters-wasmi` implements a new `ToolHost` port over the pure-Rust **wasmi** interpreter, runs a sandboxed `.wat` tool (test green), and **also compiles to `wasm32-unknown-unknown`** — i.e. the same host runs natively *and* wasm-in-wasm inside the browser core. Wasmtime would swap in for server/desktop speed behind the same port. |
+| 9 | **Cross-layer hot-plug**: runtime WASM-tool hot-swap + extension manifest enable/disable, with **in-flight rounds pinned to the old version** (round-boundary atomic apply) | ✅ PASS | `crates/plugin-host` (`ArcSwap<ToolRegistry>` registry + `PluginHost` enable/disable + `PluginShape` classification) and runtime `WasmTool::from_bytes` in `adapters-wasmi`; **9 tests green** (`tests/registry.rs` 5, `tests/lifecycle.rs` 3, `tests/hot_swap.rs` 1). `cargo run -p hotplug-demo` shows v1→v2 hot-swap (new call gets v2, a handle holding the old snapshot still gets v1), enable/disable lifecycle, and shape classification. Mirrors OpenClaw's registry lifecycle but **stronger**: the swap binds to the ReAct round boundary. |
 
 **Still open** (next slices, not yet done): final iOS `.a` / Android `.so` device
 artifacts (need Xcode iOS SDK + NDK installs), Tauri desktop shell, `sqlite-vec`
@@ -51,11 +52,13 @@ spikes/rust-portable-core/
 │   │   └── src/{model,ports,service,util,lib}.rs
 │   ├── adapters-mem/           # In-memory + stub adapters (+ the runtime-agnostic test)
 │   ├── adapters-sqlite/        # On-DEVICE storage: embedded SQLite via rusqlite (bundled C)
-│   ├── adapters-wasmi/         # PLUGIN HOST: ToolHost port over pure-Rust wasmi (sandboxes untrusted tools; compiles to wasm32 too)
+│   ├── adapters-wasmi/          # PLUGIN HOST: ToolHost port over pure-Rust wasmi (sandboxes untrusted tools; compiles to wasm32 too) + runtime-loadable WasmTool (hot-swap)
 │   ├── bindings-wasm/          # BROWSER/JS binding via wasm-bindgen (future_to_promise)
 │   └── bindings-uffi/          # MOBILE binding via UniFFI -> generates Swift (iOS) + Kotlin (Android)
+├── crates/plugin-host/          # HOT-PLUG: ArcSwap<ToolRegistry> + PluginHost enable/disable + PluginManifest/PluginShape (OpenClaw-style capability registry)
 ├── apps/
-│   └── server/                 # SERVER target: axum + tokio (runtime lives ONLY here)
+│   ├── server/                  # SERVER target: axum + tokio (runtime lives ONLY here)
+│   └── hotplug-demo/            # DEMO: native register -> manifest enable+shape -> WASM v1->v2 hot-swap+in-flight isolation -> enable/disable
 └── harness/
     └── node-smoke.cjs          # Node smoke test for the wasm-pack build
 ```
@@ -188,6 +191,51 @@ one port:
 > runtime to load tool plugins). They only tension in the browser, where the core
 > is already wasm; `wasmi` resolves it by interpreting wasm *inside* wasm.
 
+### 7. Cross-layer hot-plug demo (hot-swap + extension lifecycle)
+
+Building on the plugin host, this slice proves the core can **hot-swap tools and
+enable/disable extensions at runtime** without restarting — and that the swap is
+safe for in-flight work. It mirrors OpenClaw's plugin-registry lifecycle
+(`openclaw/openclaw:src/plugins/runtime.ts`) but binds the swap to the ReAct
+round boundary, which is strictly stronger.
+
+```bash
+# the hot-plug registry + lifecycle + wasm hot-swap tests (9 total, all green):
+cargo test -p memstack-plugin-host          # registry.rs (5) + lifecycle.rs (3)
+cargo test -p memstack-adapters-wasmi        # incl. hot_swap.rs (v1 n*3+7 -> v2 n*10)
+
+# runnable narrative:
+cargo run -p hotplug-demo
+```
+
+`crates/plugin-host` adds an OpenClaw-style capability registry over the core:
+
+- **`HotPlugRegistry`** — `Arc<ArcSwap<ToolRegistry>>` holding a name-sorted
+  `Vec<Arc<dyn Tool>>`. `register/replace/unregister` rebuild a new immutable
+  `Arc<ToolRegistry>` via `rcu` and atomically swap the pointer; reads are
+  lock-free. `snapshot()` = `load_full()` — **holding a snapshot pins the old
+  version**, so a round that started before a swap keeps calling the old tool.
+- **`PluginHost`** — `enable(manifest)` instantiates the manifest's declared
+  tools through a `ToolFactory` and registers them, tracking `plugin_id ->
+  [tool_names]`; `disable(plugin_id)` unregisters that set. Pure set arithmetic +
+  pointer swap (deterministic; the *semantic* "is this tool applicable" stays an
+  agent decision per the Agent-First rule).
+- **`PluginManifest` / `PluginShape`** — JSON manifest mirroring OpenClaw's
+  `openclaw` package field (tools/skills/providers); `shape()` classifies by
+  actual capability kinds: `PlainCapability` / `HybridCapability` / `HookOnly` /
+  `NonCapability`.
+
+`adapters-wasmi` gains **`WasmTool`** — a `plugin_host::Tool` loaded from wasm
+**bytes at runtime** (`from_bytes` / `from_wat`, export `run(i32)->i32`),
+replacing the construction-time baked tool. The demo loads v1 (`n*3+7`), swaps in
+v2 (`n*10`) live, and asserts a pre-swap snapshot still resolves v1.
+
+> **Design write-up:** the synthesis behind this slice (capability registration,
+> plugin shapes, pluggable harness, hot-plug lifecycle state machine) lives in
+> `agi-stack/docs/architecture/07-plugin-runtime-architecture.md`, with the
+> source-level OpenClaw evidence in
+> `agi-stack/docs/research/openclaw-runtime-internals.md`.
+
 ## The platform-adapter boundary (important finding)
 
 `adapters-sqlite` uses `rusqlite { features = ["bundled"] }`, which compiles the
@@ -240,7 +288,11 @@ browser-WASM, an embedded database, and a native **mobile** binding (Swift +
 Kotlin generated from the same core; iOS-arch cross-compile verified). The
 **extensibility axis** is also confirmed: untrusted tools run sandboxed behind a
 `ToolHost` port whose wasm host compiles to every target (incl. the browser
-core). Nothing observed contradicts the plan's recommendation of **Rust as the
-portable-core language**. Remaining work is breadth (final device artifacts
-behind SDK/NDK installs, Tauri desktop, a Wasmtime host adapter + WIT contracts)
-and quantified metrics — not a fundamental unknown.
+core). The **hot-plug axis** is confirmed too: a `ToolRegistry` behind `ArcSwap`
+hot-swaps tools and enables/disables extensions at runtime, with in-flight rounds
+pinned to the old version at the round boundary — a deterministic strengthening of
+OpenClaw's restart-based model. Nothing observed contradicts the plan's
+recommendation of **Rust as the portable-core language**. Remaining work is
+breadth (final device artifacts behind SDK/NDK installs, Tauri desktop, a
+Wasmtime host adapter + WIT contracts) and quantified metrics — not a fundamental
+unknown.

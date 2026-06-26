@@ -1,0 +1,19 @@
+[package]
+name = "memstack-plugin-host"
+description = "Multi-layer, hot-pluggable capability registry (Tool/Skill/Extension layers) with an OpenClaw-style manifest + enable/disable lifecycle. Runtime-agnostic: ArcSwap atomic swap, no tokio/std::time."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+memstack-core = { path = "../core" }
+async-trait.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+# Lock-free atomic registry swap (ADR-0006): readers never block; an in-flight
+# call holding an older snapshot keeps using the old tool version until the next
+# round boundary (ADR-0005).
+arc-swap.workspace = true
+
+[dev-dependencies]
+futures.workspace = true

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/adapters-mem", "crates/adapters-sqlite", "crates/adapters-wasmi", "crates/bindings-wasm", "crates/bindings-uffi", "apps/server"]
+members = ["crates/core", "crates/plugin-host", "crates/adapters-mem", "crates/adapters-sqlite", "crates/adapters-wasmi", "crates/bindings-wasm", "crates/bindings-uffi", "apps/server", "apps/hotplug-demo"]
 
 [workspace.package]
 edition = "2021"
@@ -13,6 +13,10 @@ serde_json = "1"
 async-trait = "0.1"
 futures = "0.3"
 thiserror = "1"
+# Lock-free atomic pointer swap — the mechanism behind hot-pluggable registry
+# (ADR-0006). Compiles to every target incl. wasm32; no tokio/std::time, so it
+# keeps the runtime-agnostic-core invariant intact.
+arc-swap = "1"
 
 # Keep release builds small — relevant for the WASM / mobile size budgets in the spike plan.
 [profile.release]

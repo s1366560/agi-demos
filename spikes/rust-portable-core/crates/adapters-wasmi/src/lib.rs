@@ -20,6 +20,7 @@ use async_trait::async_trait;
 use wasmi::{Engine, Linker, Module, Store};
 
 use memstack_core::ports::{CoreError, CoreResult, ToolHost};
+use memstack_plugin_host::tool::{Tool, Trust};
 
 /// A minimal untrusted "tool", shipped as inline WAT and compiled to wasm at
 /// construction time. `score(len) = len * 3 + 7`. Numeric in/out keeps the PoC
@@ -80,6 +81,88 @@ impl ToolHost for WasmiToolHost {
             .map_err(|e| CoreError::Tool(e.to_string()))?;
 
         Ok(serde_json::json!({ "tool": "score", "input_len": len, "score": out }).to_string())
+    }
+}
+
+/// A single **hot-swappable** sandboxed tool: one `.wasm` module exposing
+/// `run(i32) -> i32`, loaded from raw bytes *at runtime* (not baked in at
+/// construction). This is what makes hot-swap real — the demo loads v1 bytes,
+/// then later loads v2 bytes and atomically replaces the registry entry.
+///
+/// Implements [`memstack_plugin_host::tool::Tool`] so it plugs into the same
+/// `HotPlugRegistry` as native tools, classified as [`Trust::SandboxedWasm`].
+pub struct WasmTool {
+    name: String,
+    version: String,
+    engine: Engine,
+    module: Module,
+}
+
+impl WasmTool {
+    /// Load a sandboxed tool from raw wasm bytes (e.g. fetched from a plugin
+    /// registry / MCP package). The module must export `run(i32) -> i32`.
+    pub fn from_bytes(
+        name: impl Into<String>,
+        version: impl Into<String>,
+        wasm: &[u8],
+    ) -> CoreResult<Self> {
+        let engine = Engine::default();
+        let module = Module::new(&engine, wasm).map_err(|e| CoreError::Tool(e.to_string()))?;
+        Ok(Self {
+            name: name.into(),
+            version: version.into(),
+            engine,
+            module,
+        })
+    }
+
+    /// Convenience for the spike: compile inline WAT to wasm bytes, then load.
+    pub fn from_wat(
+        name: impl Into<String>,
+        version: impl Into<String>,
+        wat_src: &str,
+    ) -> CoreResult<Self> {
+        let wasm = wat::parse_str(wat_src).map_err(|e| CoreError::Tool(e.to_string()))?;
+        Self::from_bytes(name, version, &wasm[..])
+    }
+}
+
+#[async_trait]
+impl Tool for WasmTool {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn version(&self) -> &str {
+        &self.version
+    }
+    fn trust(&self) -> Trust {
+        Trust::SandboxedWasm
+    }
+    async fn invoke(&self, input_json: &str) -> CoreResult<String> {
+        let v: serde_json::Value =
+            serde_json::from_str(input_json).map_err(|e| CoreError::Tool(e.to_string()))?;
+        let n = v.get("n").and_then(|x| x.as_i64()).unwrap_or(0) as i32;
+
+        // Fresh, isolated instance per call (no shared mutable state).
+        let mut store = Store::new(&self.engine, ());
+        let linker = <Linker<()>>::new(&self.engine);
+        let instance = linker
+            .instantiate_and_start(&mut store, &self.module)
+            .map_err(|e| CoreError::Tool(e.to_string()))?;
+        let run = instance
+            .get_typed_func::<i32, i32>(&store, "run")
+            .map_err(|e| CoreError::Tool(e.to_string()))?;
+        let out = run
+            .call(&mut store, n)
+            .map_err(|e| CoreError::Tool(e.to_string()))?;
+
+        Ok(serde_json::json!({
+            "tool": self.name,
+            "version": self.version,
+            "n": n,
+            "out": out,
+        })
+        .to_string())
     }
 }
 
