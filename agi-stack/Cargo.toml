@@ -10,6 +10,15 @@ members = [
     "apps/server",
 ]
 
+# The Tauri desktop shell is deliberately *excluded* from the workspace: it pulls
+# the heavy tauri/wry/tao tree (and tokio), which would bloat every
+# `cargo test --workspace`. It links the same core + device adapters by path and
+# is built explicitly (Wave D / Wave K build matrix). Keeping it out preserves the
+# fast, runtime-agnostic core test loop (ADR-0001).
+exclude = [
+    "apps/desktop/src-tauri",
+]
+
 [workspace.package]
 edition = "2021"
 version = "0.1.0"

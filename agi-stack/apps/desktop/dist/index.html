@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agistack Desktop</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        margin: 0; padding: 24px; max-width: 720px; margin-inline: auto;
+      }
+      h1 { font-size: 18px; font-weight: 600; }
+      .muted { color: #888; font-size: 13px; }
+      input, button {
+        font: inherit; padding: 8px 10px; border-radius: 4px;
+        border: 1px solid #8884; height: 36px; box-sizing: border-box;
+      }
+      button { cursor: pointer; }
+      .row { display: flex; gap: 8px; margin: 8px 0; }
+      .row input { flex: 1; }
+      pre {
+        background: #8881; padding: 12px; border-radius: 6px;
+        white-space: pre-wrap; word-break: break-word; font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Agistack Desktop</h1>
+    <p class="muted">
+      The same portable Rust core (memory service) running in a Tauri shell over
+      embedded SQLite device adapters.
+    </p>
+
+    <div class="row">
+      <input id="content" placeholder="Episode content to ingest…" />
+      <button id="ingest">Ingest</button>
+    </div>
+    <div class="row">
+      <input id="query" placeholder="Search query…" />
+      <button id="search">Keyword</button>
+      <button id="semantic">Semantic</button>
+    </div>
+    <pre id="out">Ready.</pre>
+
+    <script>
+      const invoke = window.__TAURI__.core.invoke;
+      const out = document.getElementById("out");
+      const project = "p1";
+      const show = (label, v) => {
+        out.textContent = label + "\n" + JSON.stringify(JSON.parse(v), null, 2);
+      };
+      const fail = (e) => { out.textContent = "Error: " + e; };
+
+      document.getElementById("ingest").onclick = () =>
+        invoke("ingest", {
+          projectId: project,
+          authorId: "u1",
+          content: document.getElementById("content").value,
+        }).then((v) => show("Ingested:", v)).catch(fail);
+
+      document.getElementById("search").onclick = () =>
+        invoke("search", {
+          projectId: project,
+          q: document.getElementById("query").value,
+          limit: 10,
+        }).then((v) => show("Keyword results:", v)).catch(fail);
+
+      document.getElementById("semantic").onclick = () =>
+        invoke("semantic_search", {
+          projectId: project,
+          q: document.getElementById("query").value,
+          limit: 10,
+        }).then((v) => show("Semantic results:", v)).catch(fail);
+    </script>
+  </body>
+</html>
