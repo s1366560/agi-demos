@@ -10,6 +10,14 @@ async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 arc-swap.workspace = true
+rhai.workspace = true
 
 [dev-dependencies]
 futures.workspace = true
+
+# wasm32 (browser) needs the getrandom `wasm_js` backend feature enabled to
+# satisfy rhai/ahash's `runtime-rng` at runtime (browser has Web Crypto). Paired
+# with the `--cfg getrandom_backend="wasm_js"` rustflag in `.cargo/config.toml`.
+# Native targets (server/desktop/iOS/Android) use the OS RNG and don't need this.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }

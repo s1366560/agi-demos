@@ -38,6 +38,12 @@ thiserror = "1"
 # (ADR-0006). Compiles to every target incl. wasm32; carries no tokio / std::time,
 # so it keeps the runtime-agnostic-core invariant (ADR-0001) intact.
 arc-swap = "1"
+# Pure-Rust embedded scripting for L2 Skill trigger/condition logic
+# (02-extensibility.md §5b.6: "Skill = data + Rhai"). No IO/FS/network ambient
+# authority; instruction-count sandboxing (no std::time), AST source is serde
+# data so a Skill ships to the edge and compiles there. `sync` makes its types
+# Send+Sync to live alongside the Send+Sync registry. Builds on wasm32.
+rhai = { version = "1", features = ["sync"] }
 
 # Release profile tuned for the WASM / mobile size budgets in 05-roadmap.md §3.
 [profile.release]

@@ -12,6 +12,9 @@
 //!     -> [`tool::PluginShape`], classified from a manifest's *actual* contributions.
 //!   - **Manifest / package contract** -> [`manifest::PluginManifest`].
 //!   - **Enable / disable lifecycle** -> [`host::PluginHost`].
+//!   - **L2 Skill = data + Rhai** -> [`skill::SkillEngine`]: declarative tool
+//!     compositions ([`skill::Skill`]) gated by a sandboxed Rhai trigger,
+//!     composing tools already in the registry (`02-extensibility.md` §5b.6).
 //!
 //! On top of that hot-plug core sits the **control-flow / data-flow split**
 //! (Istio + Kubernetes):
@@ -33,8 +36,11 @@
 //! at the next **round boundary** (ADR-0005). This is what makes hot-swap safe.
 //!
 //! Portability invariant (sustains ADR-0001/0003): no tokio, no `std::time`, no
-//! task spawning. `arc-swap` compiles to every target the core does, including
-//! `wasm32`, so the same registry runs on server, desktop, mobile, and in-browser.
+//! task spawning. `arc-swap` and `rhai` (instruction-count sandbox, not
+//! wall-clock) compile to every target the core does, including `wasm32`, so the
+//! same registry + skill engine run on server, desktop, mobile, and in-browser.
+//! (On `wasm32-unknown-unknown`, rhai's transitive `getrandom` uses the `wasm_js`
+//! backend — see `.cargo/config.toml`; native targets use the OS RNG.)
 
 pub mod control_plane;
 pub mod host;
@@ -42,6 +48,7 @@ pub mod manifest;
 pub mod native;
 pub mod reconcile;
 pub mod registry;
+pub mod skill;
 pub mod tool;
 pub mod toolhost;
 
@@ -51,4 +58,5 @@ pub use manifest::{CapabilityKind, PluginManifest, ToolDecl};
 pub use native::{EchoTool, LenTool, NativeToolFactory, UpperTool};
 pub use reconcile::{DataPlaneReconciler, ReconcileOutcome};
 pub use registry::{HotPlugRegistry, ToolRegistry};
+pub use skill::{Skill, SkillContext, SkillEngine};
 pub use tool::{PluginShape, Tool, Trust};
