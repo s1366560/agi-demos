@@ -1,0 +1,17 @@
+[package]
+name = "memstack-adapters-sqlite"
+description = "Embedded SQLite repository adapter (the on-device storage path)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+memstack-core = { path = "../core" }
+async-trait.workspace = true
+serde_json.workspace = true
+# `bundled` compiles SQLite from source -> no system dependency, cross-compiles to mobile.
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+[dev-dependencies]
+memstack-adapters-mem = { path = "../adapters-mem" }
+futures.workspace = true

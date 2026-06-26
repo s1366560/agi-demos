@@ -1,0 +1,15 @@
+[package]
+name = "memstack-adapters-mem"
+description = "Runtime-agnostic in-memory + stub adapters for the spike (compile everywhere)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+memstack-core = { path = "../core" }
+async-trait.workspace = true
+
+[dev-dependencies]
+# Used only to prove the core async pipeline runs under a generic executor
+# (i.e. without tokio). This is the risk #1 falsification test.
+futures.workspace = true
