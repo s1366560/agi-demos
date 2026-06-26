@@ -59,7 +59,7 @@ pub trait ToolHost: Send + Sync {
 
 1. **注册中心原子换表**(ShenYu Copy-on-Write):`Arc<ArcSwap<ToolRegistry>>` 包裹已排序工具列表,变更 = clone→增删/重排→单次原子写,**读路径无锁**;新表在**轮次边界**生效([ADR-0005](../adr/0005-round-boundary-checkpoint.md)),不打断飞行轮次。
 2. **跨宿主稳定 ABI**(proxy-wasm 三级上下文):`WasmRuntime→WasmToolModule→WasmToolInvocation`,Wasmtime 与 Wasmi 实现同一套 hostcall;异步工具用 `on_http_call_response` 回调(≈ `ActionPause`/resume)。
-3. **CP/DP 配置推送**(Kong Hybrid Mode):云端控制面 → 端上数据面推 `ToolRegistrySnapshot{tools, version}`,DP 比对 `version`/hash **幂等 apply**,断线全量重传;服务器 gRPC/WS,端上 HTTP long-poll。
+3. **CP/DP 配置推送**(Kong Hybrid Mode):云端控制面 → 端上数据面推 `ToolRegistrySnapshot{tools, version}`,DP 比对 `version`/hash **幂等 apply**,断线全量重传;服务器 gRPC/WS,端上 HTTP long-poll。**此 CP/DP 推送已升格为一等架构轴并形式化** —— 见 [08-control-data-plane-separation](08-control-data-plane-separation.md):控制面=SSOT、数据面**声明式 level-triggered reconcile**(自算 diff)、xDS 风格 version/nonce + **ACK/NACK + last-good**([ADR-0009](../adr/0009-control-data-plane-separation.md)/[0010](../adr/0010-xds-style-config-distribution.md))。
 
 > **热插拔本质 = ABI 边界 + 原子替换**:`dyn Tool`/WASM 是边界,`ArcSwap` 是原子换,WASM 线性内存隔离保证新旧版本并存、旧实例 drain 后 RAII drop。
 

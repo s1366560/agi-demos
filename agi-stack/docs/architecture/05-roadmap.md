@@ -19,12 +19,14 @@ graph LR
 | **0 · 决策 Spike** | 最小核心切片编到 `服务器 + WASM + 移动端`,量化体积/性能/DX 后定语言 | ✅ 完成(Rust 选定,见 [04](04-spike-evidence.md)) |
 | **1 · 抽取可移植核心** | domain(已纯净)+ application 纯逻辑迁入核心包;ports 落为跨平台 trait | ⏭️ 下一步 |
 | **2 · 平台适配器** | 每个端口两套实现(server 重型栈 / device 嵌入式栈) | 🎯 |
-| **2.5 · 扩展性/插件宿主** | 落 `ToolHost`/`PluginRuntime` 端口 + WIT 工具契约;内置工具走 `dyn Trait`;第三方/MCP 走 WASM 沙箱;Skill 落为数据 + Rhai;**热插拔生命周期**(ArcSwap 原子换表 + CP/DP 配置推送 + proxy-wasm 风格 ABI,见 [06 §2](06-agent-core-design.md));**多层插件运行时**(typed 能力注册 + 插件形态分类 + 可插拔 Harness,见 [07](07-plugin-runtime-architecture.md))。**绞杀点:现有 30+ 工具与 MCP 沙箱在此分批迁移到统一插件契约** | 🎯(热插拔 PoC 已验证,见 [02](02-extensibility.md)、[04 #9](04-spike-evidence.md)) |
+| **2.5 · 扩展性/插件宿主** | 落 `ToolHost`/`PluginRuntime` 端口 + WIT 工具契约;内置工具走 `dyn Trait`;第三方/MCP 走 WASM 沙箱;Skill 落为数据 + Rhai;**热插拔生命周期**(ArcSwap 原子换表 + CP/DP 配置推送 + proxy-wasm 风格 ABI,见 [06 §2](06-agent-core-design.md));**多层插件运行时**(typed 能力注册 + 插件形态分类 + 可插拔 Harness,见 [07](07-plugin-runtime-architecture.md));**控制面→数据面 reconcile**(xDS 风格 version/nonce + ACK/NACK + last-good,见 [08](08-control-data-plane-separation.md))。**绞杀点:现有 30+ 工具与 MCP 沙箱在此分批迁移到统一插件契约** | 🎯(热插拔 + CP/DP reconcile PoC 已验证,见 [02](02-extensibility.md)、[04 #9/#10](04-spike-evidence.md)) |
 | **3 · AI/LLM 抽象** | LLM、embedding、向量检索的 cloud↔on-device 双适配 | 🎯 |
-| **4 · 同步层** | local-first 同步、冲突解决、离线优先 | 🎯 |
+| **4 · 同步层** | local-first 同步、冲突解决、离线优先;**= 数据面断连自治**(最终一致 + 重连全量重同步,衔接 [08 §7](08-control-data-plane-separation.md) CP/DP 分离) | 🎯 |
 | **5 · 逐平台上线** | 先服务器对齐现有功能(绞杀替换旧 Python),再 PC → 移动端 → web-WASM | 🎯 |
 
 > **核心引擎质量(健壮 · 可编排)横跨多阶段**:会话 checkpoint/崩溃恢复(健壮)落在 Phase 1 核心 + 服务器/端上 runner;Plan append-only DAG 编排、HITL suspend/resume、retry/memoization(可编排)落在核心编排层。机制来源与综合设计见 [06-agent-core-design](06-agent-core-design.md),决策见 [ADR-0004](../adr/0004-plan-as-append-only-dag.md)/[0005](../adr/0005-round-boundary-checkpoint.md)/[0006](../adr/0006-hot-plug-via-arcswap-and-proxy-wasm-abi.md)。
+>
+> **控制流/数据流分离(第三系统轴)亦横跨多阶段**:配置 reconcile 协议(控制面=SSOT、数据面 level-triggered 收敛)落在 Phase 2.5;数据面断连自治(最终一致 + 重连重同步)落在 Phase 4 同步层。综合设计见 [08-control-data-plane-separation](08-control-data-plane-separation.md),决策见 [ADR-0009](../adr/0009-control-data-plane-separation.md)/[0010](../adr/0010-xds-style-config-distribution.md)。
 
 ## 2. 必须证伪的高风险项(按优先级)
 
@@ -41,6 +43,7 @@ graph LR
 | 9 | **热换工具零中断**:ArcSwap 换表 + CP/DP 推送能否在不打断在途会话的前提下启用/禁用/升级工具? | ✅ 部分证伪(换表机制已通,CP/DP 网络下发待办)——`hotplug-demo` 证 v1→v2 热换 + 飞行轮次见旧版本 + enable/disable + shape 分类(见 [04 #9](04-spike-evidence.md)、[07](07-plugin-runtime-architecture.md)、[ADR-0006](../adr/0006-hot-plug-via-arcswap-and-proxy-wasm-abi.md)/[0007](../adr/0007-capability-registration-plugin-model.md)) |
 | 11 | **可插拔 Harness**:Agent 执行循环能否做成可第三方替换的 `RuntimeHarness`(embedded vs CLI-backend),`auto` 选择 + 回退,且 runtime 按 `(provider,model)` scoped? | 🎯 待验证([07 §4](07-plugin-runtime-architecture.md)、[ADR-0008](../adr/0008-agent-runtime-as-pluggable-harness.md)) |
 | 10 | **Plan 动态 DAG + HITL**:append-only DAG 的 reconcile 幂等、suspend/resume(四类 HITL)在重型(Kameo)与轻量(`MiniOrchestrator`)两版是否一致? | 🎯 待验证([06 §5](06-agent-core-design.md)、[ADR-0004](../adr/0004-plan-as-append-only-dag.md)) |
+| 12 | **控制流/数据流分离**:控制面发期望态(SSOT)、数据面 level-triggered 自算 diff 收敛;坏配置 NACK 保留 last-good 不致瘫;同版本幂等、陈旧拒绝;断连重连全量重同步 —— 纯同步 reconciler 端上(无 tokio)是否成立? | ✅ 证伪通过(`cp-dp-demo` + `control_data_plane` 6 测试;见 [04 #10](04-spike-evidence.md)、[08](08-control-data-plane-separation.md)、[ADR-0009](../adr/0009-control-data-plane-separation.md)/[0010](../adr/0010-xds-style-config-distribution.md)) |
 
 ## 3. 量化指标与 go/no-go 阈值(示例,需团队定档)
 
@@ -57,6 +60,7 @@ graph LR
 | 会话崩溃恢复正确性 | 杀进程→恢复→比对 | 不丢轮次、不重复已完成工具 | ⏳ 未测 |
 | 热换工具中断 | 在途会话期间换表计时 | 在途轮次零中断,新轮次毫秒级见新表 | ✅ 部分(demo 证飞行隔离:新调用得 v2、持旧快照仍得 v1;在途轮次中断的会话级量化待 Agent 切片) |
 | HITL 暂停→恢复往返 | suspend→外部信号→resume | 四类 HITL 均可暂停/恢复,状态不丢 | ⏳ 未测 |
+| CP→DP 配置收敛/坏配置隔离 | reconcile 测试 + `cp-dp-demo` | 坏配置 NACK 不改 last-good;同版本零 churn(`Arc::ptr_eq`);漏推/乱序自愈 | ✅ 证伪通过(6 测试) |
 
 ## 4. 近期待办(Spike 收尾 → Phase 1)
 

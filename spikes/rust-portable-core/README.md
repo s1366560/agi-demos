@@ -22,6 +22,7 @@
 | 7 | Core packages as a **native mobile library** (Swift/Kotlin) | ✅ PASS (codegen + iOS arch) / ⛓️ blocked on SDK | `bindings-uffi` (UniFFI) compiles against the real core; **Swift + Kotlin** bindings generated (`generated/`); core + in-mem adapter cross-compile to `aarch64-apple-ios`. Final device `.a`/`.so` needs full **Xcode iOS SDK** / **Android NDK** (not installed here) |
 | 8 | The **plugin host itself is a portable port** (untrusted tools sandboxed in WASM, host runs on every target *incl. browser*) | ✅ PASS | `adapters-wasmi` implements a new `ToolHost` port over the pure-Rust **wasmi** interpreter, runs a sandboxed `.wat` tool (test green), and **also compiles to `wasm32-unknown-unknown`** — i.e. the same host runs natively *and* wasm-in-wasm inside the browser core. Wasmtime would swap in for server/desktop speed behind the same port. |
 | 9 | **Cross-layer hot-plug**: runtime WASM-tool hot-swap + extension manifest enable/disable, with **in-flight rounds pinned to the old version** (round-boundary atomic apply) | ✅ PASS | `crates/plugin-host` (`ArcSwap<ToolRegistry>` registry + `PluginHost` enable/disable + `PluginShape` classification) and runtime `WasmTool::from_bytes` in `adapters-wasmi`; **9 tests green** (`tests/registry.rs` 5, `tests/lifecycle.rs` 3, `tests/hot_swap.rs` 1). `cargo run -p hotplug-demo` shows v1→v2 hot-swap (new call gets v2, a handle holding the old snapshot still gets v1), enable/disable lifecycle, and shape classification. Mirrors OpenClaw's registry lifecycle but **stronger**: the swap binds to the ReAct round boundary. |
+| 10 | **Control-plane / data-plane separation**: control plane ships **desired state** (SSOT), data plane runs a **declarative, level-triggered reconcile** (computes its own diff); xDS-style `version`/`nonce` + **ACK/NACK + last-good** (a bad config can't brick the DP); same-version replay is an idempotent no-op; stale versions rejected | ✅ PASS | `crates/plugin-host/src/{control_plane,reconcile}.rs` (`ControlPlane` / `ConfigSnapshot{type_url,version,nonce}` / `DataPlaneReconciler` / `ConfigAck::{Ack,Nack}`, **pure-sync, no tokio** → runs on device too). `tests/control_data_plane.rs` **6 tests green** (declarative diff convergence, NACK keeps last-good, same-version idempotent via `Arc::ptr_eq` = no churn, eventual consistency, stale rejection, type-check). `cargo run -p cp-dp-demo` narrates v1→v2 declarative diff (+score −echo), reconnect idempotent no-op, broken v3 NACK keeping v2. This is the same mechanism as Istio's **Rust** data plane *ztunnel*. Design write-up in `agi-stack/docs/architecture/08-control-data-plane-separation.md`. |
 
 **Still open** (next slices, not yet done): final iOS `.a` / Android `.so` device
 artifacts (need Xcode iOS SDK + NDK installs), Tauri desktop shell, `sqlite-vec`
@@ -56,9 +57,11 @@ spikes/rust-portable-core/
 │   ├── bindings-wasm/          # BROWSER/JS binding via wasm-bindgen (future_to_promise)
 │   └── bindings-uffi/          # MOBILE binding via UniFFI -> generates Swift (iOS) + Kotlin (Android)
 ├── crates/plugin-host/          # HOT-PLUG: ArcSwap<ToolRegistry> + PluginHost enable/disable + PluginManifest/PluginShape (OpenClaw-style capability registry)
+│                                #   + control_plane.rs / reconcile.rs (CP=SSOT + xDS-style versioned snapshot + declarative DP reconcile, pure-sync)
 ├── apps/
 │   ├── server/                  # SERVER target: axum + tokio (runtime lives ONLY here)
-│   └── hotplug-demo/            # DEMO: native register -> manifest enable+shape -> WASM v1->v2 hot-swap+in-flight isolation -> enable/disable
+│   ├── hotplug-demo/            # DEMO: native register -> manifest enable+shape -> WASM v1->v2 hot-swap+in-flight isolation -> enable/disable
+│   └── cp-dp-demo/              # DEMO: control plane publishes desired state -> data plane reconciles (diff/ACK/NACK/last-good/idempotent replay)
 └── harness/
     └── node-smoke.cjs          # Node smoke test for the wasm-pack build
 ```
@@ -236,6 +239,49 @@ v2 (`n*10`) live, and asserts a pre-swap snapshot still resolves v1.
 > source-level OpenClaw evidence in
 > `agi-stack/docs/research/openclaw-runtime-internals.md`.
 
+### 8. Control-plane → data-plane reconcile demo (xDS-style config distribution)
+
+The final slice proves the **control-flow / data-flow separation** axis: a cloud
+**control plane** holds the authoritative desired config (SSOT) and ships it as a
+versioned, typed snapshot; an on-device **data plane** runs a **declarative,
+level-triggered reconcile** — it computes its own add/remove/update diff and
+converges, ACK/NACK-ing each version. It mirrors Istio/Envoy xDS and, crucially,
+its **Rust** data plane *ztunnel* (`istio/ztunnel:src/xds/client.rs`), so the
+mechanism ports 1:1.
+
+```bash
+# the CP/DP reconcile protocol tests (6, all green):
+cargo test -p memstack-plugin-host --test control_data_plane
+
+# runnable 4-step narrative:
+cargo run -p cp-dp-demo
+```
+
+`crates/plugin-host` adds two pure-sync modules over the hot-plug registry:
+
+- **`control_plane.rs`** — `ControlPlane` holds the authoritative `desired:
+  Vec<ToolDecl>`; `publish()` is the only mutator and **monotonically bumps
+  `version`** (like a K8s `resourceVersion`). `snapshot()` emits a
+  `ConfigSnapshot{ type_url, version, nonce, resources }` mirroring Envoy's
+  `DiscoveryResponse`; reconnect re-sends the same version with a fresh nonce.
+  `ConfigAck::{Ack{version,nonce}, Nack{version,nonce,error}}`.
+- **`reconcile.rs`** — `DataPlaneReconciler` holds the observed `HotPlugRegistry`
+  + `applied_version` + `last_good`. `reconcile(snapshot, factory)` type-checks →
+  rejects stale versions → computes `desired − observed = added`, `observed −
+  desired = removed`, version-change = `updated` → **validate-build-ALL before
+  mutating** → atomically `ArcSwap`s the new registry → ACK. On any build failure
+  it NACKs and leaves `last_good` untouched. **No tokio, no `std::time`** —
+  transport is out-of-core, so the very same reconciler runs on server, desktop,
+  mobile and browser. Protocol/transport separation *is* CP/DP separation applied
+  to the spike's own code.
+
+> **Design write-up:** the synthesis (control flow vs data flow, CP=SSOT,
+> declarative level-triggered reconcile, xDS-style version/nonce + ACK/NACK +
+> last-good, local-first = data-plane disconnect autonomy) lives in
+> `agi-stack/docs/architecture/08-control-data-plane-separation.md`, with the
+> source-level K8s/Istio evidence in
+> `agi-stack/docs/research/istio-k8s-control-data-plane.md` (ADR-0009/0010).
+
 ## The platform-adapter boundary (important finding)
 
 `adapters-sqlite` uses `rusqlite { features = ["bundled"] }`, which compiles the
@@ -291,7 +337,12 @@ Kotlin generated from the same core; iOS-arch cross-compile verified). The
 core). The **hot-plug axis** is confirmed too: a `ToolRegistry` behind `ArcSwap`
 hot-swaps tools and enables/disables extensions at runtime, with in-flight rounds
 pinned to the old version at the round boundary — a deterministic strengthening of
-OpenClaw's restart-based model. Nothing observed contradicts the plan's
+OpenClaw's restart-based model. The **control-flow / data-flow separation axis**
+is confirmed as well: a control plane holds desired config as the SSOT and the
+data plane runs a pure-sync, level-triggered reconcile with xDS-style
+version/nonce + ACK/NACK + last-good (a bad config can't brick it) — the same
+mechanism as Istio's Rust data plane *ztunnel*, and because the reconciler carries
+no runtime it runs on device too. Nothing observed contradicts the plan's
 recommendation of **Rust as the portable-core language**. Remaining work is
 breadth (final device artifacts behind SDK/NDK installs, Tauri desktop, a
 Wasmtime host adapter + WIT contracts) and quantified metrics — not a fundamental

@@ -2,7 +2,7 @@
 
 - 状态:**已接受**(设计决策,基于网关调研;ToolHost 端口已 Spike 证伪)
 - 日期:2026-06
-- 关联:[06-agent-core-design §2](../architecture/06-agent-core-design.md)、[research/gateways-internals](../research/gateways-internals.md)、[ADR-0003](0003-plugin-host-as-hexagonal-port.md)
+- 关联:[06-agent-core-design §2](../architecture/06-agent-core-design.md)、[research/gateways-internals](../research/gateways-internals.md)、[ADR-0003](0003-plugin-host-as-hexagonal-port.md);本 ADR 第 3 点的 CP/DP 配置推送已被 [ADR-0009](0009-control-data-plane-separation.md)/[ADR-0010](0010-xds-style-config-distribution.md) 升格并形式化(version/nonce + ACK/NACK + last-good)
 
 ## 背景
 
@@ -29,6 +29,8 @@
 
 ### 3. CP/DP 配置推送(借鉴 Kong Hybrid Mode)
 云端 `ToolConfig` 控制面 → 边缘/端上 `ToolHost` 数据面:推送 `ToolRegistrySnapshot{ tools, version: u64 }`,DP 比对 `version`/hash **幂等 apply**(跳过重复),断线重连全量重传。传输按平台:服务器 gRPC streaming / WebSocket;端上(iOS 后台限制)HTTP long-poll。
+
+> **后续形式化(见 [ADR-0009](0009-control-data-plane-separation.md)/[ADR-0010](0010-xds-style-config-distribution.md))**:此处的"hash 幂等推送"草图已被升格为一等架构轴并补齐 Istio/K8s 机制:控制面 = SSOT、数据面**声明式 level-triggered reconcile**(自算 diff)、xDS 风格 `ConfigSnapshot{type_url,version,nonce}` + **ACK/NACK + last-good**(坏配置不致瘫)。本点描述的"换载体"机制不变,下发协议以 0009/0010 为准。
 
 ## 后果
 

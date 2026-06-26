@@ -51,7 +51,7 @@ graph LR
 | 三级上下文 `VMContext→PluginContext→HttpContext` | proxy-wasm `tetratelabs/proxy-wasm-go-sdk` | **直接映射 `ToolHost`**:`WasmRuntime`(VM)→ `WasmToolModule`(含工具配置)→ `WasmToolInvocation`(单次调用) |
 | proxy-wasm ABI 版本化(v0.1→v0.2.1) | `proxy-wasm/spec` | 定义**稳定的 Rust trait ABI**:`on_module_start(cfg)` / `on_invoke(req)->Status` / `on_tick()`;Wasmtime(服务器)与 Wasmi(端上)实现**同一套 hostcall** |
 | `ActionContinue / ActionPause` + 异步 hostcall 回调 | Higress `ai-agent/main.go` | WASM 工具通过 hostcall 发起异步请求,host 持 `Waker`,结果到达后 resume —— in-proxy ReAct 已证此模式可行 |
-| CP/DP 分离 + WebSocket 推送 + config hash | Kong `control_plane.lua` / `data_plane.lua` | 云端 `ToolConfig` 控制面 → 边缘/端上 `ToolHost` 数据面:推 `ToolRegistrySnapshot{tools, version}`,DP 比对 `version`/hash **幂等 apply**,断线重连全量重传 |
+| CP/DP 分离 + WebSocket 推送 + config hash | Kong `control_plane.lua` / `data_plane.lua` | 云端 `ToolConfig` 控制面 → 边缘/端上 `ToolHost` 数据面:推 `ToolRegistrySnapshot{tools, version}`,DP 比对 `version`/hash **幂等 apply**,断线重连全量重传(此 CP/DP 推送已由 [08](08-control-data-plane-separation.md) / [ADR-0010](../adr/0010-xds-style-config-distribution.md) 形式化为 xDS 风格 version/nonce + ACK/NACK + last-good) |
 
 **热换工具流程(零重启,借鉴 Envoy ECDS + ShenYu swap)**:
 ```
@@ -160,6 +160,8 @@ graph TB
 | retry 计时 | `tokio::time` | 宿主注入时间 + `wasm-bindgen` `setTimeout`(核心禁 `std::time`) |
 | 配置推送 | gRPC streaming / WebSocket | WebSocket / HTTP long-poll(iOS 后台限制) |
 
+> **此"重/轻 runner"分叉对齐 Istio 数据面拓扑**:服务器重型 = sidecar/waypoint(按需 L7 重型代理),端上轻量 = ztunnel(L4 常开薄执行器,且 ztunnel 本身就是 **Rust** 数据面)。控制流/数据流如何分离、配置如何版本化下发到这两类 runner,见 [08-control-data-plane-separation §6](08-control-data-plane-separation.md)。
+
 ---
 
 ## 7. 设计不变量(实现时必须守住)
@@ -178,3 +180,4 @@ graph TB
 - 证据基(源码级引用):[`../research/gateways-internals.md`](../research/gateways-internals.md)、[`flink-internals`](../research/flink-internals.md)、[`argo-internals`](../research/argo-internals.md)
 - 决策记录:[ADR-0004 Plan append-only DAG](../adr/0004-plan-as-append-only-dag.md)、[ADR-0005 轮次边界 checkpoint](../adr/0005-round-boundary-checkpoint.md)、[ADR-0006 ArcSwap + proxy-wasm 热插拔](../adr/0006-hot-plug-via-arcswap-and-proxy-wasm-abi.md)
 - 上游主轴:[02-extensibility](02-extensibility.md)(信任 × 平台)、[05-roadmap](05-roadmap.md)(落地阶段与 go/no-go)
+- 下游收口:[07-plugin-runtime-architecture](07-plugin-runtime-architecture.md)(多层插件运行时)、[08-control-data-plane-separation](08-control-data-plane-separation.md)(控制流/数据流分离,形式化 §2 的 CP/DP 推送与 §6 的重/轻分叉)
