@@ -2,7 +2,7 @@
 
 > **新一代可移植智能体核心** —— 一份核心代码,编译/打包后同时跑在**云端服务器**与**端侧(浏览器 WASM / PC / 移动端)**,本地优先(local-first)、可离线;并以**信任 × 平台**两轴承载可扩展的工具/技能/子智能体/MCP 插件生态。
 
-本目录是 **新架构的根**。架构文档在 [`docs/`](docs/);**Phase 1 生产级 Cargo workspace 已落地于此根下**([`crates/`](crates/) + [`apps/`](apps/),`cargo test` 25 测试绿、`agistack-server` 全端点 curl 验证 —— 见下方[「现状」](#现状)与[「构建与运行」](#构建与运行phase-1-工作区))。
+本目录是 **新架构的根**。架构文档在 [`docs/`](docs/);**Phase 1 生产级 Cargo workspace 已落地于此根下**([`crates/`](crates/) + [`apps/`](apps/),`cargo test` 71 测试绿、`agistack-server` 全端点 curl 验证 —— 见下方[「现状」](#现状)与[「构建与运行」](#构建与运行phase-1-工作区))。
 
 ---
 

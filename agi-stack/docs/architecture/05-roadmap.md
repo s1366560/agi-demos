@@ -17,11 +17,11 @@ graph LR
 | Phase | 内容 | 状态 |
 |---|---|---|
 | **0 · 决策 Spike** | 最小核心切片编到 `服务器 + WASM + 移动端`,量化体积/性能/DX 后定语言 | ✅ 完成(Rust 选定,见 [04](04-spike-evidence.md)) |
-| **1 · 抽取可移植核心** | domain(已纯净)+ application 纯逻辑迁入核心包;ports 落为跨平台 trait | 🚧 进行中(生产级 Cargo workspace 已落地于 `agi-stack/`:`core`+`plugin-host`+`adapters-mem`+`adapters-device`+`apps/server`,`cargo test` 25 绿、服务器全端点 curl 验证) |
-| **2 · 平台适配器** | 每个端口两套实现(server 重型栈 / device 嵌入式栈) | 🎯 |
+| **1 · 抽取可移植核心** | domain(已纯净)+ application 纯逻辑迁入核心包;ports 落为跨平台 trait | 🚧 进行中(生产级 Cargo workspace 已落地于 `agi-stack/`:`core`+`plugin-host`+`adapters-{mem,device,wasmtime,http-llm}`+`bindings-{wasm,uniffi}`+`apps/{server,desktop,bench}`,`cargo test --workspace` **71 绿**、服务器全端点 curl 验证;完整 86K LOC Python→Rust 绞杀迁移为多季度工程,标注 future) |
+| **2 · 平台适配器** | 每个端口两套实现(server 重型栈 / device 嵌入式栈) | 🎯→✅ 大部分已落地(`adapters-mem` 内存栈、`adapters-device` SQLite+HNSW、`adapters-wasmtime` 沙箱宿主、`adapters-http-llm` 云 LLM、`bindings-wasm` 浏览器、`bindings-uniffi` 移动双端均已编译+测试,见 [04 #11–#20](04-spike-evidence.md);生产 Postgres+pgvector 重型栈标注 future) |
 | **2.5 · 扩展性/插件宿主** | 落 `ToolHost`/`PluginRuntime` 端口 + WIT 工具契约;内置工具走 `dyn Trait`;第三方/MCP 走 WASM 沙箱;Skill 落为数据 + Rhai;**热插拔生命周期**(ArcSwap 原子换表 + CP/DP 配置推送 + proxy-wasm 风格 ABI,见 [06 §2](06-agent-core-design.md));**多层插件运行时**(typed 能力注册 + 插件形态分类 + 可插拔 Harness,见 [07](07-plugin-runtime-architecture.md));**控制面→数据面 reconcile**(xDS 风格 version/nonce + ACK/NACK + last-good,见 [08](08-control-data-plane-separation.md))。**绞杀点:现有 30+ 工具与 MCP 沙箱在此分批迁移到统一插件契约** | 🎯→✅ 大部分已落地(热插拔 + CP/DP reconcile + Wasmtime 沙箱宿主 + **L2 Rhai Skill 引擎**均已验证,见 [02](02-extensibility.md)、[04 #9/#10/#18/#23](04-spike-evidence.md);MCP-over-WASM、30+ 工具实际绞杀迁移标注 future) |
-| **3 · AI/LLM 抽象** | LLM、embedding、向量检索的 cloud↔on-device 双适配 | 🎯 部分(**HTTP LLM/Embedding 适配器**(OpenAI/LiteLLM 兼容)+ **cloud↔local DI 切换**已落地、mock-server 测试绿,见 [04 #20](04-spike-evidence.md);**端上向量检索**(HNSW)已落地,见 [04 #19](04-spike-evidence.md);端上本地 LLM(llama.cpp/Candle)标注 future) |
-| **4 · 同步层** | local-first 同步、冲突解决、离线优先;**= 数据面断连自治**(最终一致 + 重连全量重同步,衔接 [08 §7](08-control-data-plane-separation.md) CP/DP 分离) | 🎯 部分(**version-vector delta + LWW-register `reconcile`** 已落地、离线分叉→重连→最终一致跑通、CRDT 交换/幂等律证伪,见 [04 #21](04-spike-evidence.md);CRDT 富类型(RGA/计数器)与真实持久化传输标注 future) |
+| **3 · AI/LLM 抽象** | LLM、embedding、向量检索的 cloud↔on-device 双适配 | 🎯→✅ 部分(**HTTP LLM/Embedding 适配器**(OpenAI/LiteLLM 兼容)+ **cloud↔local DI 切换**已落地、mock-server 测试绿,见 [04 #20](04-spike-evidence.md);**端上向量检索**(HNSW)已落地,见 [04 #19](04-spike-evidence.md);端上本地 LLM(llama.cpp/Candle)标注 future) |
+| **4 · 同步层** | local-first 同步、冲突解决、离线优先;**= 数据面断连自治**(最终一致 + 重连全量重同步,衔接 [08 §7](08-control-data-plane-separation.md) CP/DP 分离) | 🎯→✅ 部分(**version-vector delta + LWW-register `reconcile`** 已落地、离线分叉→重连→最终一致跑通、CRDT 交换/幂等律证伪,见 [04 #21](04-spike-evidence.md);CRDT 富类型(RGA/计数器)与真实持久化传输标注 future) |
 | **5 · 逐平台上线** | 先服务器对齐现有功能(绞杀替换旧 Python),再 PC → 移动端 → web-WASM | 🎯→✅ 构建矩阵已落地([`Makefile`](../../Makefile) 一键构建 server/web/桌面/Android/iOS 五端产物 + 出厂矩阵 [09](09-shipping-matrix.md),见 [04 #24](04-spike-evidence.md));Python 逐能力实际绞杀替换为多季度工程,标注 future |
 
 > **核心引擎质量(健壮 · 可编排)横跨多阶段**:会话 checkpoint/崩溃恢复(健壮)落在 Phase 1 核心 + 服务器/端上 runner;Plan append-only DAG 编排、HITL suspend/resume、retry/memoization(可编排)落在核心编排层。机制来源与综合设计见 [06-agent-core-design](06-agent-core-design.md),决策见 [ADR-0004](../adr/0004-plan-as-append-only-dag.md)/[0005](../adr/0005-round-boundary-checkpoint.md)/[0006](../adr/0006-hot-plug-via-arcswap-and-proxy-wasm-abi.md)。
@@ -33,11 +33,11 @@ graph LR
 | # | 风险 | 状态 |
 |---|---|---|
 | 1 | **运行时无关 async**:core 不绑 tokio 却能在 native/WASM/UniFFI 三处都跑 | ✅ 证伪通过 |
-| 2 | **WASM + 本地存储/向量**:wa-sqlite/sqlite-vec 是否可用?否则降级 IndexedDB + 内存 hnsw | ⏳ 部分(**生产 `bindings-wasm` 内存路径已通** —— `wasm-bindgen` + `WasmClock` + 内存仓储/向量,node 冒烟 round-trip 绿,见 [04 #16](04-spike-evidence.md);wa-sqlite 持久层待接) |
+| 2 | **WASM + 本地存储/向量**:wa-sqlite/sqlite-vec 是否可用?否则降级 IndexedDB + 内存 hnsw | ✅ 部分证伪(**生产 `bindings-wasm` 内存路径已通** —— `wasm-bindgen` + `WasmClock` + 内存仓储/向量,node 冒烟 round-trip 绿,见 [04 #16](04-spike-evidence.md);wa-sqlite/IndexedDB 持久层标注 future) |
 | 3 | **端上向量检索**:sqlite-vec / usearch / hnsw-rs 在 iOS/Android 交叉编译 | ✅ 通过(纯 Rust **HNSW** `instant-distance` 替 `sqlite-vec` C 扩展以保跨端可移植;`adapters-device` N=10k P50 **2.43 ms**、31× 加速,见 [04 #19](04-spike-evidence.md)) |
 | 4 | **UniFFI 复杂类型 + async + 回调**:`Memory`(嵌套 list)能否干净导出?宿主端口能否回注? | ✅ 双端设备产物(`crates/bindings-uniffi`:Android 经 NDK 产真实 `aarch64-linux-android` `.so` + Kotlin 包,见 [04 #12](04-spike-evidence.md);iOS 经 full Xcode 产 XCFramework + Swift 包并在 iPhone 17 模拟器实跑,见 [04 #13](04-spike-evidence.md)) |
-| 5 | **图依赖**:端上无 Neo4j,entities/relationships 用 SQLite 关系表或内存 petgraph 近似 | 🎯 待验证 |
-| 6 | **端上 LLM**(可选):llama.cpp/Candle 移动端体积与可行性 | 🎯 后续 |
+| 5 | **图依赖**:端上无 Neo4j,entities/relationships 用 SQLite 关系表或内存 petgraph 近似 | future(A 方案):端上图存储为广度项,设计已定(SQLite 关系表 / 内存 `petgraph` 近似替代 Neo4j),实现留后续;不阻断核心四端可移植 |
+| 6 | **端上 LLM**(可选):llama.cpp/Candle 移动端体积与可行性 | future(A 方案):端上本地推理(数百 MB 模型)留后续;云端 LLM 经 [04 #20](04-spike-evidence.md) HTTP 适配器已通,`LlmPort` 抽象使端上实现可后插 |
 | 7 | **可移植插件宿主**:核心能否在不破坏"运行时无关+四端可移植"前提下宿主沙箱工具?WASM-in-WASM(浏览器,Wasmi)成立? | ✅ 证伪通过(见 [04 #8](04-spike-evidence.md)) |
 | 8 | **会话 checkpoint 崩溃恢复**:轮次边界快照能否在不重复已完成工具的前提下恢复长会话?端上(无 tokio,WASM 无 FS)增量持久化是否成立? | ✅ 证伪通过(`ReActEngine` 轮次边界增量 + 边界 checkpoint;`adapters-mem/tests/agent_recovery.rs` 证内存路径杀进程→恢复**不重调已完成工具**[`CountingToolHost` 计数为 0],`adapters-device/tests/device.rs` 证 SQLite 耐久路径恢复;见 [04 #11](04-spike-evidence.md)、[06 §4](06-agent-core-design.md)、[ADR-0005](../adr/0005-round-boundary-checkpoint.md)) |
 | 9 | **热换工具零中断**:ArcSwap 换表 + CP/DP 推送能否在不打断在途会话的前提下启用/禁用/升级工具? | ✅ 部分证伪(换表机制已通,CP/DP 网络下发待办)——`hotplug-demo` 证 v1→v2 热换 + 飞行轮次见旧版本 + enable/disable + shape 分类(见 [04 #9](04-spike-evidence.md)、[07](07-plugin-runtime-architecture.md)、[ADR-0006](../adr/0006-hot-plug-via-arcswap-and-proxy-wasm-abi.md)/[0007](../adr/0007-capability-registration-plugin-model.md)) |
@@ -85,7 +85,7 @@ graph LR
 
 ## 5. 退出准则
 
-- 全部高风险项有明确结论(通过/变通/阻断)。✅ §2 表 #1–#12 均已 ✅(部分为"部分证伪 + future 标注"),无 🎯/⏳ 根本性残留。
+- 全部高风险项有明确结论(通过/变通/阻断)。✅ §2 表 #1–#12 各项均有结论:或 ✅ 证伪通过 / 部分证伪,或 future(A 方案)显式标注(#5 端上图依赖、#6 端上 LLM),无 🎯/⏳ 未决残留。
 - 指标对照 §3 阈值,产出 go/no-go 建议。✅ 评分卡 `apps/bench` **已出「GO」**(14/14 ✅,见 [04 #22](04-spike-evidence.md))。
 - 若 no-go → 退回 Kotlin Multiplatform 同款 Spike,复用本切片与指标表对照。**(当前为 GO,不触发回退。)**
 
