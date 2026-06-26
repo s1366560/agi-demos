@@ -71,8 +71,9 @@ graph TD
   - [`crates/plugin-host`](crates/plugin-host) —— 热插拔插件宿主:`ArcSwap<ToolRegistry>` 原子换表、`PluginHost` enable/disable 生命周期、`PluginShape` 分类、`ControlPlane` + `DataPlaneReconciler`(xDS 风格版本化 + 声明式 level-triggered reconcile + ACK/NACK + last-good)。
   - [`crates/adapters-mem`](crates/adapters-mem) —— 内存端适配器(含 `StubLlm`/`ScriptedLlm` 确定性替身),证崩溃恢复不重复已完成工具。
   - [`crates/adapters-device`](crates/adapters-device) —— 本地优先 SQLite 适配器(`rusqlite` bundled,跨编移动端):持久化 memory repo + checkpoint + 暴力余弦向量索引,证**端上耐久崩溃恢复**。
+  - [`crates/bindings-uniffi`](crates/bindings-uniffi) —— UniFFI 移动端绑定:把同一核心(+SQLite 设备适配器)封为 `MobileCore`(`ingest`/`search`/`semantic_search`),`cdylib`→Android `.so`、`staticlib`→iOS `.a`,UniFFI 生成 Swift/Kotlin 原生包。
   - [`apps/server`](apps/server) —— 真实 axum 服务器,把上述端口装配为 DI 图,暴露 episodes/memory(关键词+语义)/agent run/plugins/control-plane 全端点。
-- 验证:`cargo test --workspace` **25 测试绿**(core 2 · plugin-host 14 · adapters-mem 6 · adapters-device 3);`agistack-server` 启动后 curl 验证健康、记忆摄取与检索、ReAct 智能体回合、CP/DP 声明式 reconcile(含重复名 NACK 保留 last-good)、插件 enable/disable 全部通过。
+- 验证:`cargo test --workspace` **25 测试绿**(core 2 · plugin-host 14 · adapters-mem 6 · adapters-device 3);`agistack-server` 启动后 curl 验证健康、记忆摄取与检索、ReAct 智能体回合、CP/DP 声明式 reconcile(含重复名 NACK 保留 last-good)、插件 enable/disable 全部通过;同一核心 `cargo build --target wasm32-unknown-unknown` 通过;`bindings-uniffi` 经 Android NDK 交叉编译产出**真实 `aarch64-linux-android` `.so`(release 1.5 MB,stripped,`file` 验为 ELF ARM aarch64)** 并由 UniFFI 生成 Kotlin 原生包(iOS `.a` 待 full Xcode SDK)。
 - 后续 Phase 2+ 实现仍以 [`docs/`](docs/) 架构文档为权威依据。
 
 ## 构建与运行(Phase 1 工作区)
@@ -85,6 +86,21 @@ cargo test --workspace
 
 # 同一核心编为浏览器 WASM(证运行时无关)
 cargo build -p agistack-core --target wasm32-unknown-unknown
+
+# 交叉编译移动端设备产物(真实 aarch64 Android .so)
+#   需 Android NDK(本机用 ~/Library/Android/sdk/ndk/30.x);生产建议 cargo-ndk。
+rustup target add aarch64-linux-android
+NDK="$HOME/Library/Android/sdk/ndk/30.0.14904198"
+TC="$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin"
+ANDROID_NDK_HOME="$NDK" ANDROID_NDK_ROOT="$NDK" \
+CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TC/aarch64-linux-android21-clang" \
+CC_aarch64_linux_android="$TC/aarch64-linux-android21-clang" \
+AR_aarch64_linux_android="$TC/llvm-ar" \
+  cargo build -p agistack-bindings-uniffi --target aarch64-linux-android --release
+file target/aarch64-linux-android/release/libagistack_mobile.so   # ELF ARM aarch64, ~1.5 MB
+# 生成 Kotlin 原生包(同法 --language swift 生成 iOS,需 full Xcode 才能链 .a)
+cargo run -p agistack-bindings-uniffi --bin uniffi-bindgen -- generate \
+  --library target/debug/libagistack_mobile.dylib --language kotlin --out-dir target/kotlin
 
 # 启动服务器(默认 127.0.0.1:8088,可用 AGISTACK_ADDR 覆盖)
 cargo run -p agistack-server
