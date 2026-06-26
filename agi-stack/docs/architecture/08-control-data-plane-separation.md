@@ -191,6 +191,8 @@ graph LR
 
 > **最终一致是特性不是缺陷**:无跨 DP 全局事务,各端独立收敛到最新 version。这正是 local-first 容忍断连所必需的,与 [ADR-0006](../adr/0006-hot-plug-via-arcswap-and-proxy-wasm-abi.md) 的"断线重连全量重传"一脉相承,现由 Istio/K8s 形式化。
 
+> **数据面 payload 同步(已 Spike 验证)**:上表是*配置* CP/DP(控制面推、数据面 reconcile)。对称的*数据*侧 —— 两端离线各自变更**业务负载**(memory/episode)后的收敛 —— 由 `crates/core/src/sync.rs` 的纯核心 `reconcile` 落地:**version-vector delta**(只发对端缺的)+ **LWW-register 总序**消解冲突,`merge` 满足 CRDT 交换/结合/幂等律。离线分叉→重连→最终一致已测(core 6 + adapters-mem 2),core-only 零 tokio/std::time 同编 `wasm32`。详见 [04 证据 #21](04-spike-evidence.md)。
+
 ---
 
 ## 8. Istio/K8s → agi-stack 总映射
