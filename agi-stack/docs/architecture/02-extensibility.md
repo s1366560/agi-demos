@@ -119,3 +119,7 @@ graph TB
 2. 插件宿主**永远**藏在 `ToolHost` 端口之后,核心不 import 任何具体运行时(Wasmtime/Wasmi)。
 3. 内置工具与第三方工具对核心**呈现同一调用面**(`ToolHost::call` 或内置注册中心),路由由信任级别决定,核心逻辑不分叉。
 4. 第三方工具契约用 **WIT**(Component Model),与宿主运行时解耦;PoC 期可用裸 wat 过渡。
+
+---
+
+> **延伸 · 多层插件运行时**:本篇定"扩展点该走哪种机制(信任 × 平台)"。当扩展点扩展到十几类(工具/技能/Provider/Channel/Hook/甚至替换整个 Agent 循环的 Harness)时,如何用**统一的能力注册模型 + 插件形态分类 + 可插拔 Harness + 热插拔生命周期**把它们组织起来,见 [07-plugin-runtime-architecture](07-plugin-runtime-architecture.md)(学习 OpenClaw 多端运行时后的综合,已由 [04 #9](04-spike-evidence.md) Spike 证伪)。
