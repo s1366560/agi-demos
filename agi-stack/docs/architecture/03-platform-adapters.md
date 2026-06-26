@@ -7,7 +7,7 @@
 | 平台 | 存储适配器 | 向量检索 | Spike 状态 |
 |---|---|---|---|
 | 服务器 | Postgres + pgvector + Neo4j + Redis | pgvector | `adapters-mem` 桩代替(prod 待接) |
-| 桌面 / iOS / Android | 嵌入式 SQLite/libsql(`rusqlite` bundled) | sqlite-vec / hnsw-rs | ✅ `adapters-sqlite` 已实现 |
+| 桌面 / iOS / Android | 嵌入式 SQLite/libsql(`rusqlite` bundled) | **HNSW**(`instant-distance`,纯 Rust)/ SQLite 暴力兜底 | ✅ `adapters-device` 已实现:`HnswVectorIndex` ANN(N=10k P50 **2.43 ms**,见 [04 #19](04-spike-evidence.md))+ `SqliteVectorIndex` 暴力基线;**不选 `sqlite-vec` C 扩展**以保跨端可移植 |
 | 浏览器 | IndexedDB / wa-sqlite | 内存 hnsw | ✅ 内存路径(`adapters-mem`);prod 待接 wa-sqlite |
 
 > **重要发现(Spike 实测)**:`rusqlite { bundled }` 编译 SQLite C 源,**完美适配原生设备**(iOS/Android/桌面),但**无法**编到 `wasm32-unknown-unknown`(`stdio.h` 缺失,裸 wasm 无 libc)。这不是失败 —— 正是六边形边界在起作用:**同一 `MemoryRepository` 端口由不同适配器满足**。
@@ -69,7 +69,7 @@ graph TD
         CLK --> A4[SystemTime]
     end
     subgraph DEV["移动端/桌面"]
-        MR --> B1[SQLite+sqlite-vec]
+        MR --> B1[SQLite + HNSW instant-distance]
         LLM --> B2[llama.cpp/HTTP]
         TH --> B3[Wasmi/Wasmer]
         CLK --> B4[SystemTime]

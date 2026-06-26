@@ -34,7 +34,7 @@ graph LR
 |---|---|---|
 | 1 | **运行时无关 async**:core 不绑 tokio 却能在 native/WASM/UniFFI 三处都跑 | ✅ 证伪通过 |
 | 2 | **WASM + 本地存储/向量**:wa-sqlite/sqlite-vec 是否可用?否则降级 IndexedDB + 内存 hnsw | ⏳ 部分(**生产 `bindings-wasm` 内存路径已通** —— `wasm-bindgen` + `WasmClock` + 内存仓储/向量,node 冒烟 round-trip 绿,见 [04 #16](04-spike-evidence.md);wa-sqlite 持久层待接) |
-| 3 | **端上向量检索**:sqlite-vec / usearch / hnsw-rs 在 iOS/Android 交叉编译 | ⏳ 待办 |
+| 3 | **端上向量检索**:sqlite-vec / usearch / hnsw-rs 在 iOS/Android 交叉编译 | ✅ 通过(纯 Rust **HNSW** `instant-distance` 替 `sqlite-vec` C 扩展以保跨端可移植;`adapters-device` N=10k P50 **2.43 ms**、31× 加速,见 [04 #19](04-spike-evidence.md)) |
 | 4 | **UniFFI 复杂类型 + async + 回调**:`Memory`(嵌套 list)能否干净导出?宿主端口能否回注? | ✅ 双端设备产物(`crates/bindings-uniffi`:Android 经 NDK 产真实 `aarch64-linux-android` `.so` + Kotlin 包,见 [04 #12](04-spike-evidence.md);iOS 经 full Xcode 产 XCFramework + Swift 包并在 iPhone 17 模拟器实跑,见 [04 #13](04-spike-evidence.md)) |
 | 5 | **图依赖**:端上无 Neo4j,entities/relationships 用 SQLite 关系表或内存 petgraph 近似 | 🎯 待验证 |
 | 6 | **端上 LLM**(可选):llama.cpp/Candle 移动端体积与可行性 | 🎯 后续 |
@@ -52,7 +52,7 @@ graph LR
 | WASM 体积(gzip) | `wasm-opt -Oz` 后测 | ≤ 2.5 MB(切片) | ✅ spike ~49 KB · **生产 `bindings-wasm` 60 KB gzip / 124 KB raw**(含向量+语义,见 [04 #16](04-spike-evidence.md)) |
 | iOS lib / Android .so | 链接产物 | ≤ 8 MB/arch(不含本地模型) | ✅ Android 1.5 MB(aarch64 release,见 [04 #12](04-spike-evidence.md));iOS XCFramework 已构建 + 模拟器实跑,链接后体积待 app 实测(见 [04 #13](04-spike-evidence.md)) |
 | 单步提取延迟(剔 LLM 网络) | 核心打点 | ≤ 50 ms | ✅ ~0.49 ms |
-| 端上向量检索(N=10k, dim=768) | sqlite-vec/hnsw 计时 | P50 ≤ 20 ms | ⏳ 未测 |
+| 端上向量检索(N=10k, dim=768) | sqlite-vec/hnsw 计时 | P50 ≤ 20 ms | ✅ **HNSW 2.43 ms**(dim=256;暴力 75 ms,31× 加速,recall@10 89.5%,见 [04 #19](04-spike-evidence.md)) |
 | 移动端冷启动首调 | app 内打点 | ≤ 300 ms | ⏳ iPhone 17 模拟器已跑通,精确计时待 app 内打点 |
 | 跨 FFI 复杂类型往返 | 微基准 | 无频繁拷贝瓶颈 | ⏳ 未测 |
 | 每端口平台胶水 LOC | 统计 | 低且可复制 | ✅ ≈ 一个文件 |
@@ -66,7 +66,7 @@ graph LR
 
 1. **Wasmtime 宿主 + WIT 契约**:✅ **已落地** —— `crates/adapters-wasmtime` 为服务器/桌面提供 Wasmtime 后端的不可信工具宿主:`WasmtimeTool` 实 `plugin_host::Tool`(`Trust::SandboxedWasm`),每调用新 `Store` + **fuel(确定性逐指令预算)+ epoch(墙钟中断)双配额**;`from_bytes` **运行时加载 wasm 字节**(替代 PoC 的构造期裸 `.wat`);工具契约升格为 typed [`wit/tool.wit`](../../crates/adapters-wasmtime/wit/tool.wit)(`tool` world / `scorer` 接口),可运行样例经等价 core-module ABI 实现(完整 Component Model guest 需 `cargo-component`,按评分卡 A 方案标注 future)。`WasmtimeToolFactory` 实 `ToolFactory` 经 manifest `wat` 建沙箱工具,接 `PluginHost::enable`/CP-DP reconcile。**5 单测绿**(加载执行、`ArcSwap` 热换 + 飞行隔离、fuel 耗尽 trap、epoch deadline 确定性 trap、factory 全生命周期);`apps/server` 启动注册沙箱 `score` 工具,经 `POST /v1/tools/call` 端到端跑通。Wasmtime 为 **native-only**,iOS(无 JIT)/浏览器留 Wasmi 兜底;根 `cargo test --workspace` 升至 **42 绿**、core `wasm32` 仍绿(见 [04 #18](04-spike-evidence.md)、[ADR-0002](../adr/0002-untrusted-plugins-wasm-only.md)/[0003](../adr/0003-plugin-host-as-hexagonal-port.md))。后续接 `cargo-component` 完整 Component Model guest CI 固化。
 2. **移动端设备产物**:**双端均已产出** —— Android 经 NDK r30 交叉编译 `aarch64-linux-android`,release **1.5 MB**(stripped,含 SQLite C),`file` 验 ELF ARM aarch64 + Kotlin 包(见 [04 #12](04-spike-evidence.md));iOS 经 full Xcode 交叉编译 `aarch64-apple-ios`(+ `-sim`)、组装 **XCFramework** + Swift 包,并在 **iPhone 17 模拟器实跑**冒烟(摄取/关键词/语义检索全绿,见 [04 #13](04-spike-evidence.md),一键 `scripts/build-ios.sh`);后续接 **真机签名分发** + `cargo-ndk`/CI 固化构建,并补端上向量检索与冷启动量化。
-3. **`sqlite-vec` 真向量检索**:替换切片里的玩具 hash-embedding。
+3. **端上真向量检索(HNSW)**:✅ **已落地** —— 设备向量索引从暴力 SQLite 余弦扫描升级为纯 Rust **HNSW 近似最近邻**(`crates/adapters-device/src/hnsw.rs`,`instant-distance`),玩具按词 hash-embedding 升为高维**字符 n-gram 哈希**(`adapters-mem::NgramHashEmbedding`)。**刻意不选 `sqlite-vec`**:其 C 扩展 `dlopen` 跨 iOS/Android 正是可移植核心要规避的脆弱性,纯 Rust HNSW 跨所有设备目标零改动(`sqlite-vec` 留作 server 侧同端口可选)。HNSW 即时图不可变,以「写后惰性重建」满足可变 `VectorIndexPort`。`examples/vector_bench.rs` 实测 N=10k dim=256:暴力 P50 **75.2 ms** vs HNSW P50 **2.43 ms**(**31× 加速**,recall@10 **89.5%** 于对抗性随机向量),稳达 ≤20 ms 阈值;跨适配器 parity 测证 HNSW top-1 == 暴力 top-1。根 `cargo test --workspace` 升至 **47 绿**、core `wasm32` 仍绿(`instant-distance`/`rusqlite` 仅入 `adapters-device`)。后续:更高维(768)+ 真 embedding 模型 + 增量插入 HNSW(替一次性重建);`sqlite-vec` server 侧可选。见 [04 #19](04-spike-evidence.md)、[03 §1](03-platform-adapters.md)。
 4. **Tauri 桌面**:✅ **已落地** —— `apps/desktop/src-tauri`(`agistack-desktop`)把生产核心 + SQLite **设备**适配器链入 Tauri 2 桌面外壳,`ingest`/`search`/`semantic_search` 暴露为 Tauri 命令、极简 HTML 前端经 `window.__TAURI__.core.invoke` 调用;命令逻辑抽到可**无头**单测的 `DesktopCore`(`futures::executor::block_on` 驱动、零 tokio)。`cargo build` 全树编译链接通过(tauri 2.11 + 系统 WebKit),`cargo test` 1 绿无头 round-trip;crate 故意**排除出 workspace** 以免重依赖拖慢 `cargo test --workspace`(仍 37 绿)(见 [04 #17](04-spike-evidence.md)、[03 §5](03-platform-adapters.md))。后续接 `tauri-cli` 完整 bundle 打包 + OS app-data 路径解析。
 5. **完整 go/no-go 评分卡**:补齐 §3 未测项。
 8. **Web 包(production wasm-bindgen 绑定)**:✅ **已落地** —— `crates/bindings-wasm` 把生产核心编入浏览器(core-as-guest),`AgistackCore` 暴露 `ingest`/`search`/`semanticSearch`,wasm 侧用真实 `WasmClock`(`Date.now()`);`wasm-pack --target nodejs` + `smoke.cjs` node 冒烟绿,**60 KB gzip**(见 [04 #16](04-spike-evidence.md))。后续接 wa-sqlite/IndexedDB 持久层 + 浏览器内冒烟。
