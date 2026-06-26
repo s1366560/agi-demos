@@ -84,3 +84,13 @@
 | `infrastructure/mcp`(`MCPSandboxAdapter`/`LocalSandboxAdapter`) | 分层沙箱:WASM-MCP(可上端)+ Subprocess/Docker-MCP(仅服务器) |
 | FastAPI routers | `apps/server`(axum) |
 | Ray Actor worker | 服务器侧 Actor runner(Kameo),核心保持运行时无关 |
+
+## 6. 三条设计主轴(后续文档导航)
+
+本总览给出"为什么 Rust"。具体设计沿三条主轴展开:
+
+1. **可移植性**(平台轴)—— 一份核心跑四端:[01-portable-core](01-portable-core.md)、[03-platform-adapters](03-platform-adapters.md)。
+2. **可扩展性**(信任 × 平台)—— 工具/技能/MCP 插件生态:[02-extensibility](02-extensibility.md)。
+3. **核心引擎质量**(健壮 · 可扩展 · 热插拔 · 可编排)—— 学习网关/Flink/Argo 内部设计后的综合:[06-agent-core-design](06-agent-core-design.md),证据基见 [`../research/`](../research/README.md)。
+
+落地路径与 go/no-go 见 [05-roadmap](05-roadmap.md);已验证证据见 [04-spike-evidence](04-spike-evidence.md);关键决策见 [`../adr/`](../adr/)。

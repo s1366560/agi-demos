@@ -53,6 +53,16 @@ pub trait ToolHost: Send + Sync {
 **统一可移植兜底**:`Wasmi`(纯 Rust 解释器)可编到**任意目标(含 wasm 自身)**,作"全平台一致宿主";`Wasmtime` 仅服务器/桌面作高性能升级。
 → **同一第三方工具 `.wasm`(WIT 契约)写一次,服务器 Wasmtime 跑、端上 Wasmi 跑。** 已 Spike 证伪通过([04](04-spike-evidence.md))。
 
+### 3.1 热插拔生命周期(运行时换工具,不重启)
+
+`ToolHost` 只解决"谁宿主";**怎么换、怎么下发**是热插拔生命周期。借鉴网关内部设计(详见 [research/gateways-internals](../research/gateways-internals.md)、[06 §2](06-agent-core-design.md)、[ADR-0006](../adr/0006-hot-plug-via-arcswap-and-proxy-wasm-abi.md)),三件事组成:
+
+1. **注册中心原子换表**(ShenYu Copy-on-Write):`Arc<ArcSwap<ToolRegistry>>` 包裹已排序工具列表,变更 = clone→增删/重排→单次原子写,**读路径无锁**;新表在**轮次边界**生效([ADR-0005](../adr/0005-round-boundary-checkpoint.md)),不打断飞行轮次。
+2. **跨宿主稳定 ABI**(proxy-wasm 三级上下文):`WasmRuntime→WasmToolModule→WasmToolInvocation`,Wasmtime 与 Wasmi 实现同一套 hostcall;异步工具用 `on_http_call_response` 回调(≈ `ActionPause`/resume)。
+3. **CP/DP 配置推送**(Kong Hybrid Mode):云端控制面 → 端上数据面推 `ToolRegistrySnapshot{tools, version}`,DP 比对 `version`/hash **幂等 apply**,断线全量重传;服务器 gRPC/WS,端上 HTTP long-poll。
+
+> **热插拔本质 = ABI 边界 + 原子替换**:`dyn Tool`/WASM 是边界,`ArcSwap` 是原子换,WASM 线性内存隔离保证新旧版本并存、旧实例 drain 后 RAII drop。
+
 ## 4. core-as-guest vs core-as-host(本质澄清,影响重大)
 
 ```mermaid

@@ -45,6 +45,8 @@ graph TD
 - **轴一 · 可移植性**:核心绝不绑定运行时(无 tokio、无 `std::time`),靠替换适配器适配四端。已 Spike 证伪通过。
 - **轴二 · 可扩展性**:可信内置工具走 `dyn Trait`(原生速度);不可信第三方/MCP 工具**只走 WASM 沙箱**(铁律:绝不进 cdylib)。插件宿主本身是端口 `ToolHost`,按平台换运行时。已 Spike 证伪通过。
 
+> 在两轴之上,核心引擎本身还需**运行时质量**:**健壮 · 可扩展 · 热插拔 · 可编排**。我们学习开源网关(ShenYu/Kong/Higress)、Flink、Argo 的**内部设计**(非集成),提炼出"轮次边界 = checkpoint = reconcile = 配置热应用"这一收敛原语。详见 [`docs/architecture/06-agent-core-design.md`](docs/architecture/06-agent-core-design.md),证据基见 [`docs/research/`](docs/research/README.md)。
+
 ## 文档导航
 
 | 文档 | 内容 |
@@ -55,7 +57,9 @@ graph TD
 | [`docs/architecture/03-platform-adapters.md`](docs/architecture/03-platform-adapters.md) | 按平台适配器矩阵:存储 / LLM / 向量 / 插件宿主 |
 | [`docs/architecture/04-spike-evidence.md`](docs/architecture/04-spike-evidence.md) | 决策 Spike 已验证的结论与实测指标 |
 | [`docs/architecture/05-roadmap.md`](docs/architecture/05-roadmap.md) | 绞杀者式落地路径、风险、go/no-go |
-| [`docs/adr/`](docs/adr/) | 架构决策记录(ADR):语言选型、WASM-only、插件宿主端口化 |
+| [`docs/architecture/06-agent-core-design.md`](docs/architecture/06-agent-core-design.md) | 第三条主轴:健壮 · 可扩展 · 热插拔 · 可编排的 Agent 核心 |
+| [`docs/research/`](docs/research/README.md) | 证据基:网关 / Flink / Argo 内部设计源码级调研 |
+| [`docs/adr/`](docs/adr/) | 架构决策记录(ADR):语言选型、WASM-only、插件宿主端口化、Plan DAG、轮次 checkpoint、热插拔机制 |
 
 ## 现状
 
