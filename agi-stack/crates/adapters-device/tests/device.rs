@@ -5,10 +5,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use agistack_adapters_device::{SqliteCheckpointStore, SqliteMemoryRepository, SqliteVectorIndex};
-use agistack_adapters_mem::{FixedClock, HashEmbedding, ScriptedLlm, StubLlm};
+use agistack_adapters_device::{
+    HnswVectorIndex, SqliteCheckpointStore, SqliteMemoryRepository, SqliteVectorIndex,
+};
+use agistack_adapters_mem::{FixedClock, HashEmbedding, NgramHashEmbedding, ScriptedLlm, StubLlm};
 use agistack_core::agent::types::{CompletedCall, Role, TranscriptEntry};
-use agistack_core::ports::{CheckpointStore, CoreResult, ToolHost};
+use agistack_core::ports::{CheckpointStore, CoreResult, EmbeddingPort, ToolHost, VectorIndexPort};
 use agistack_core::{
     AgentAction, Episode, HitlKind, HitlRequest, MemoryService, ReActEngine, SessionState,
     SessionStatus, SourceType,
@@ -76,6 +78,45 @@ fn sqlite_vector_index_semantic_search_is_durable() {
         block_on(service.semantic_search("p1", "semantic similarity embeddings", 2)).unwrap();
     assert!(!hits.is_empty());
     assert_eq!(hits[0].id, target.id);
+}
+
+/// Cross-adapter parity: the HNSW ANN index must return the **same top-1** as the
+/// exact brute-force [`SqliteVectorIndex`] for a realistic corpus embedded with
+/// [`NgramHashEmbedding`]. This is the correctness gate behind the speed win the
+/// `vector_bench` example measures — fast is only useful if it is also right.
+#[test]
+fn hnsw_matches_brute_force_top1_on_ngram_corpus() {
+    let embed = NgramHashEmbedding::new(256, 3);
+    let brute = SqliteVectorIndex::in_memory().unwrap();
+    let ann = HnswVectorIndex::new();
+
+    let corpus = [
+        ("m1", "local-first apps sync data across devices"),
+        ("m2", "vector embeddings drive semantic similarity search"),
+        ("m3", "a recipe for sourdough bread and garlic butter"),
+        ("m4", "rust compiles to webassembly for the browser"),
+        ("m5", "approximate nearest neighbour graphs speed up retrieval"),
+        ("m6", "quarterly revenue forecast and budget planning"),
+    ];
+    for (id, text) in corpus {
+        let v = block_on(embed.embed(text)).unwrap();
+        block_on(brute.upsert("p1", id, &v)).unwrap();
+        block_on(ann.upsert("p1", id, &v)).unwrap();
+    }
+
+    for query in [
+        "nearest neighbour search retrieval",
+        "embeddings for semantic search",
+        "bread recipe",
+        "webassembly in the browser",
+    ] {
+        let q = block_on(embed.embed(query)).unwrap();
+        let b = block_on(brute.query("p1", &q, 1)).unwrap();
+        let a = block_on(ann.query("p1", &q, 1)).unwrap();
+        assert_eq!(b[0].id, a[0].id, "top-1 mismatch for query {query:?}");
+        // Both report cosine similarity in the same orientation (higher = closer).
+        assert!((b[0].score - a[0].score).abs() < 1e-4);
+    }
 }
 
 /// A `ToolHost` that counts invocations — to prove the resumed engine reuses the

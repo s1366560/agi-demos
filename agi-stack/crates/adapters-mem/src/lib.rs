@@ -11,6 +11,8 @@
 //!   - [`repo::InMemoryMemoryRepository`]  — [`agistack_core::MemoryRepository`]
 //!   - [`llm::StubLlm`] / [`llm::ScriptedLlm`] — [`agistack_core::LlmPort`]
 //!   - [`embedding::HashEmbedding`]        — [`agistack_core::EmbeddingPort`]
+//!     (toy bag-of-words hash); [`embedding::NgramHashEmbedding`] adds char
+//!     n-gram sub-word signal at higher dim for the on-device vector bench
 //!   - [`vector::InMemoryVectorIndex`]     — [`agistack_core::VectorIndexPort`]
 //!   - [`checkpoint::InMemoryCheckpointStore`] — [`agistack_core::CheckpointStore`]
 //!   - [`changelog::InMemoryChangeLog`]    — [`agistack_core::ChangeLog`]
@@ -29,7 +31,7 @@ pub use checkpoint::InMemoryCheckpointStore;
 #[cfg(not(target_arch = "wasm32"))]
 pub use clock::SystemClock;
 pub use clock::FixedClock;
-pub use embedding::HashEmbedding;
+pub use embedding::{HashEmbedding, NgramHashEmbedding};
 pub use llm::{ScriptedLlm, StubLlm};
 pub use repo::InMemoryMemoryRepository;
 pub use vector::InMemoryVectorIndex;

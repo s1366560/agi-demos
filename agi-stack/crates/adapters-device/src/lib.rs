@@ -14,12 +14,16 @@
 //!   - [`checkpoint::SqliteCheckpointStore`] — [`agistack_core::CheckpointStore`]
 //!     (durable agent crash recovery, ADR-0005)
 //!   - [`vector::SqliteVectorIndex`]        — [`agistack_core::VectorIndexPort`]
-//!     (brute-force cosine today; sqlite-vec-backed in a production device build)
+//!     (durable brute-force cosine scan; the simple, always-correct baseline)
+//!   - [`hnsw::HnswVectorIndex`]            — [`agistack_core::VectorIndexPort`]
+//!     (pure-Rust HNSW ANN for sub-linear on-device search; `05-roadmap §4 #3`)
 
 pub mod checkpoint;
+pub mod hnsw;
 pub mod repo;
 pub mod vector;
 
 pub use checkpoint::SqliteCheckpointStore;
+pub use hnsw::HnswVectorIndex;
 pub use repo::SqliteMemoryRepository;
 pub use vector::SqliteVectorIndex;
