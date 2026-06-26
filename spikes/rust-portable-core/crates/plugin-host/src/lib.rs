@@ -13,6 +13,15 @@
 //!   - **Enable / disable lifecycle** (OpenClaw `manage-plugins`)
 //!     -> [`host::PluginHost`].
 //!
+//! On top of that hot-plug core sits the **control-flow / data-flow split**
+//! (Istio + Kubernetes, see `08-control-data-plane-separation.md`):
+//!   - [`control_plane::ControlPlane`] is the authoritative desired-state holder
+//!     (K8s API-server-as-SSOT) that emits versioned, typed
+//!     [`control_plane::ConfigSnapshot`]s (Istio/Envoy xDS `DiscoveryResponse`).
+//!   - [`reconcile::DataPlaneReconciler`] is the level-triggered, declarative
+//!     reconciler that converges this registry toward a pushed snapshot and
+//!     ACK/NACKs it, keeping the last-good config on rejection.
+//!
 //! Hot-plug mechanism (ADR-0006): the registry is an `Arc<ArcSwap<ToolRegistry>>`.
 //! Mutations are *clone -> modify -> atomic swap*; reads are lock-free. A call
 //! that captured an older [`registry::ToolRegistry`] snapshot keeps using the old
@@ -24,13 +33,17 @@
 //! task spawning. `arc-swap` compiles to every target the core does, including
 //! `wasm32`, so the same registry runs on server, desktop, mobile, and in-browser.
 
+pub mod control_plane;
 pub mod host;
 pub mod manifest;
 pub mod native;
+pub mod reconcile;
 pub mod registry;
 pub mod tool;
 
+pub use control_plane::{ConfigAck, ConfigSnapshot, ControlPlane, TOOL_REGISTRY_TYPE_URL};
 pub use host::{PluginHost, ToolFactory};
 pub use manifest::{CapabilityKind, PluginManifest, ToolDecl};
+pub use reconcile::{DataPlaneReconciler, ReconcileOutcome};
 pub use registry::{HotPlugRegistry, ToolRegistry};
 pub use tool::{PluginShape, Tool, Trust};

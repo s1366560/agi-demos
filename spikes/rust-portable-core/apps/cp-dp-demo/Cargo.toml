@@ -1,0 +1,16 @@
+[package]
+name = "cp-dp-demo"
+description = "Runnable narrative: cloud control plane pushes versioned xDS-style config snapshots; an edge data plane reconciles declaratively (level-triggered) and ACK/NACKs with last-good. Runtime-agnostic core path."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "cp-dp-demo"
+path = "src/main.rs"
+
+[dependencies]
+memstack-core = { path = "../../crates/core" }
+memstack-plugin-host = { path = "../../crates/plugin-host" }
+memstack-adapters-wasmi = { path = "../../crates/adapters-wasmi" }
+futures.workspace = true

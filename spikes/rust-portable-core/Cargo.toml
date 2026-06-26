@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/plugin-host", "crates/adapters-mem", "crates/adapters-sqlite", "crates/adapters-wasmi", "crates/bindings-wasm", "crates/bindings-uffi", "apps/server", "apps/hotplug-demo"]
+members = ["crates/core", "crates/plugin-host", "crates/adapters-mem", "crates/adapters-sqlite", "crates/adapters-wasmi", "crates/bindings-wasm", "crates/bindings-uffi", "apps/server", "apps/hotplug-demo", "apps/cp-dp-demo"]
 
 [workspace.package]
 edition = "2021"
