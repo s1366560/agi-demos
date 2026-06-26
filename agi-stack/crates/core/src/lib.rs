@@ -18,6 +18,7 @@ pub mod agent;
 pub mod model;
 pub mod ports;
 pub mod service;
+pub mod sync;
 pub mod util;
 
 pub use agent::{
@@ -32,3 +33,4 @@ pub use ports::{
     MemoryDraft, MemoryRepository, ScoredId, ToolHost, VectorIndexPort,
 };
 pub use service::MemoryService;
+pub use sync::{reconcile, Replica, SyncRecord, VersionVector};
