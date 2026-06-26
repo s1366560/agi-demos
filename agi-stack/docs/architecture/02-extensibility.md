@@ -98,7 +98,7 @@ graph TB
 
 ## 6. Skill = 数据 + Rhai;L4 监督 = 原生 Actor
 
-- **Skill 声明式**:JSON/TOML 数据(serde)全平台可移植;触发/条件逻辑嵌 **Rhai**(纯 Rust、~3MB、AST 可序列化下发端上离线执行),避免为每个技能编译代码。
+- **Skill 声明式**:JSON/TOML 数据(serde)全平台可移植;触发/条件逻辑嵌 **Rhai**(纯 Rust、~3MB、AST 可序列化下发端上离线执行),避免为每个技能编译代码。✅ **已落地**:`crates/plugin-host/src/skill.rs`(`Skill`/`SkillContext`/`SkillEngine`)—— 沙箱化 Rhai 触发器(指令预算 `set_max_operations(50_000)` + 禁 `eval` + expr-depth/string/array/map 上限,**无墙钟/std::time**)+ 组合注册中心**已准入**工具,**信任轴守恒**(配置层无原生码、只能编排已准入工具,语义路由仍归 agent),样例 `skills/weather-skill.json` 经 `include_str!` 端到端测试,**9 测试绿、同编 `wasm32`**(`getrandom` `wasm_js` 后端),见 [04 #23](04-spike-evidence.md)。
 - **L4 运行时监督**:`SessionProcessor / DoomLoopDetector / CostTracker / 重启退避` 契合 **Actor 监督树(Kameo)**。但 Actor 需 Tokio → **仅原生侧**作 "runner" 叠加在核心之上;**核心保持运行时无关**(wasm 侧用单线程协作执行器驱动同一逻辑),与 Spike "tokio 仅限 server" 一致。
 
 ## 7. 性能梯队(指导"哪类扩展走哪条路")
