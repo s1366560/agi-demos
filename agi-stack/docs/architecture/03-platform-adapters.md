@@ -47,7 +47,7 @@
 | 平台 | 外壳 | 绑定方式 |
 |---|---|---|
 | 服务器 | axum 二进制 | 直接链核心 |
-| 桌面 | Tauri | 直接链核心(Rust 后端 + Web 前端) |
+| 桌面 | Tauri | 直接链核心(Rust 后端 + Web 前端)(✅ `apps/desktop`,见 [04 #17](04-spike-evidence.md)) |
 | iOS | SwiftUI app | UniFFI → 生成 Swift 绑定,链 `.a` |
 | Android | Compose app | UniFFI → 生成 Kotlin 绑定,链 `.so` |
 | Web | JS/TS 前端 | wasm-bindgen → wasm-pack 包(✅ `crates/bindings-wasm`,见 [04 #16](04-spike-evidence.md)) |
