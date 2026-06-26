@@ -6,6 +6,7 @@ members = [
     "crates/adapters-mem",
     "crates/adapters-device",
     "crates/bindings-uniffi",
+    "crates/bindings-wasm",
     "apps/server",
 ]
 
