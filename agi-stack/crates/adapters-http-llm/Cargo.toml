@@ -1,0 +1,20 @@
+[package]
+name = "agistack-adapters-http-llm"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Native-only (server/desktop) adapter: talks to an OpenAI-/LiteLLM-compatible
+# HTTP endpoint. Pulls reqwest + a TLS stack, so it is deliberately kept OUT of
+# the core wasm path (the browser uses a fetch-based binding instead). This is
+# the cloud half of the LLM/embedding port; the on-device half (llama.cpp/Candle)
+# is noted future (05-roadmap §4).
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync"] }

@@ -39,7 +39,8 @@ use agistack_adapters_mem::{
     SystemClock,
 };
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
-use agistack_core::ports::ToolHost;
+use agistack_adapters_http_llm::{HttpEmbedding, HttpLlm};
+use agistack_core::ports::{EmbeddingPort, LlmPort, ToolHost};
 use agistack_core::{
     Episode, Memory, MemoryService, ReActEngine, SessionState, SessionStatus, SourceType,
 };
@@ -259,7 +260,38 @@ async fn cp_publish(
 
 // ---- wiring ---------------------------------------------------------------
 
+/// Resolve the LLM + embedding ports from the environment — the cloud↔local
+/// seam. Default is the offline stub pair so `cargo run` and tests need no
+/// network or keys; setting `AGISTACK_LLM_BASE_URL` swaps in the HTTP adapter
+/// (optionally `AGISTACK_LLM_MODEL`, `AGISTACK_EMBED_MODEL`, `AGISTACK_LLM_API_KEY`).
+fn select_llm_and_embedding() -> (Arc<dyn LlmPort>, Arc<dyn EmbeddingPort>) {
+    match std::env::var("AGISTACK_LLM_BASE_URL") {
+        Ok(base) if !base.is_empty() => {
+            let chat_model = std::env::var("AGISTACK_LLM_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
+            let embed_model =
+                std::env::var("AGISTACK_EMBED_MODEL").unwrap_or_else(|_| "text-embedding-3-small".into());
+            let key = std::env::var("AGISTACK_LLM_API_KEY").ok();
+            let mut llm = HttpLlm::new(base.clone(), chat_model);
+            let mut emb = HttpEmbedding::new(base, embed_model);
+            if let Some(k) = key {
+                llm = llm.with_api_key(k.clone());
+                emb = emb.with_api_key(k);
+            }
+            eprintln!("[agistack] LLM port: HTTP (cloud) via AGISTACK_LLM_BASE_URL");
+            (Arc::new(llm), Arc::new(emb))
+        }
+        _ => (Arc::new(StubLlm), Arc::new(HashEmbedding::new(64))),
+    }
+}
+
 fn build_state() -> AppState {
+    // Cloud↔local DI switch at the composition root (Phase 3, 03 §2): when
+    // `AGISTACK_LLM_BASE_URL` is set, route the LLM/embedding ports to a real
+    // OpenAI-/LiteLLM-compatible endpoint (`adapters-http-llm`); otherwise use
+    // the deterministic offline stubs. The core never sees which — it only holds
+    // `Arc<dyn LlmPort>` / `Arc<dyn EmbeddingPort>` (ADR-0001).
+    let (llm, embedding) = select_llm_and_embedding();
+
     // Shared hot-pluggable registry — the single data-plane tool set used by the
     // agent, the plugin lifecycle, and the CP/DP reconciler alike.
     let registry = HotPlugRegistry::new();
@@ -277,8 +309,8 @@ fn build_state() -> AppState {
     let memory = Arc::new(
         MemoryService::new(
             Arc::new(InMemoryMemoryRepository::new()),
-            Arc::new(StubLlm),
-            Arc::new(HashEmbedding::new(64)),
+            llm.clone(),
+            embedding,
             Arc::new(SystemClock),
         )
         .with_vectors(Arc::new(InMemoryVectorIndex::new())),
@@ -286,7 +318,7 @@ fn build_state() -> AppState {
 
     let tool_host: Arc<dyn ToolHost> = Arc::new(registry.clone());
     let engine = Arc::new(ReActEngine::new(
-        Arc::new(StubLlm),
+        llm,
         tool_host,
         Arc::new(InMemoryCheckpointStore::new()),
         Arc::new(SystemClock),
