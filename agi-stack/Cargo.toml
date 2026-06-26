@@ -5,6 +5,7 @@ members = [
     "crates/plugin-host",
     "crates/adapters-mem",
     "crates/adapters-device",
+    "crates/adapters-wasmtime",
     "crates/bindings-uniffi",
     "crates/bindings-wasm",
     "apps/server",

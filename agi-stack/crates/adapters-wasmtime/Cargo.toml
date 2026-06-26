@@ -1,0 +1,23 @@
+[package]
+name = "agistack-adapters-wasmtime"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Wasmtime-backed sandboxed-tool adapter: runs untrusted tools with fuel + epoch quotas (server/desktop native path; ADR-0002/0003)."
+
+[dependencies]
+# The production WASM host for the *native* server/desktop path: Cranelift JIT +
+# fuel/epoch resource quotas + pooling allocator. iOS (no JIT) and the browser
+# keep the Wasmi interpreter fallback (03-platform-adapters §3). Native-only by
+# construction, so this never enters the core's wasm32 build.
+wasmtime = "46"
+agistack-core = { path = "../core" }
+agistack-plugin-host = { path = "../plugin-host" }
+async-trait.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+# Single-threaded executor to drive the async Tool::invoke in tests (no tokio,
+# mirroring the core's runtime-agnostic contract).
+futures.workspace = true

@@ -20,6 +20,7 @@
 //!   GET  /v1/plugins                   list registered tools + enabled plugins
 //!   POST /v1/plugins/enable            enable a plugin manifest (hot)
 //!   POST /v1/plugins/disable           disable a plugin by name (hot)
+//!   POST /v1/tools/call               invoke one tool via the ToolHost (sandboxes wasm)
 //!   POST /v1/control-plane/publish     CP publishes desired tools -> DP reconcile -> ACK/NACK
 
 use std::sync::{Arc, Mutex};
@@ -37,6 +38,7 @@ use agistack_adapters_mem::{
     HashEmbedding, InMemoryCheckpointStore, InMemoryMemoryRepository, InMemoryVectorIndex, StubLlm,
     SystemClock,
 };
+use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
 use agistack_core::ports::ToolHost;
 use agistack_core::{
     Episode, Memory, MemoryService, ReActEngine, SessionState, SessionStatus, SourceType,
@@ -263,6 +265,14 @@ fn build_state() -> AppState {
     let registry = HotPlugRegistry::new();
     registry.register_tool(Arc::new(LenTool));
     registry.register_tool(Arc::new(UpperTool));
+    // Native server tier hosts an untrusted tool in a Wasmtime sandbox (fuel +
+    // epoch quotas). The same scorer `.wasm` runs under Wasmi on wasm/iOS — only
+    // the host runtime differs (ADR-0002/0003). `wasmtime` is native-only and,
+    // like `tokio`, never leaks back into the core or its port signatures.
+    registry.register_tool(Arc::new(
+        WasmtimeTool::from_wat("score", "1.0.0", SCORE_V1_WAT, DEFAULT_FUEL)
+            .expect("built-in scorer WAT is valid"),
+    ));
 
     let memory = Arc::new(
         MemoryService::new(
@@ -296,6 +306,31 @@ fn build_state() -> AppState {
     }
 }
 
+// ---- direct tool call (exercises the native ToolHost dispatch) -------------
+
+#[derive(Deserialize)]
+struct ToolCallRequest {
+    tool: String,
+    input: Value,
+}
+
+/// Invoke a single tool by name through the [`ToolHost`] port. This is the path
+/// that lands an untrusted call inside its sandbox: calling `score` here runs the
+/// Wasmtime guest under its fuel/epoch quotas, transparently to the caller.
+async fn tools_call(
+    State(app): State<AppState>,
+    Json(req): Json<ToolCallRequest>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let input_json = req.input.to_string();
+    let out = app
+        .registry
+        .call(&req.tool, &input_json)
+        .await
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let output: Value = serde_json::from_str(&out).unwrap_or(Value::String(out));
+    Ok(Json(json!({ "tool": req.tool, "output": output })))
+}
+
 fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(|| async { "ok" }))
@@ -307,6 +342,7 @@ fn router(state: AppState) -> Router {
         .route("/v1/plugins", get(plugins_list))
         .route("/v1/plugins/enable", post(plugins_enable))
         .route("/v1/plugins/disable", post(plugins_disable))
+        .route("/v1/tools/call", post(tools_call))
         .route("/v1/control-plane/publish", post(cp_publish))
         .with_state(state)
 }
