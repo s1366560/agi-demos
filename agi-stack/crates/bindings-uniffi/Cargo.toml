@@ -1,0 +1,24 @@
+[package]
+name = "agistack-bindings-uniffi"
+description = "UniFFI binding: exposes the portable agi-stack core as a native mobile package (Swift/Kotlin)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "agistack_mobile"
+# staticlib -> iOS .a ; cdylib -> Android .so / host introspection ; lib -> rust users
+crate-type = ["staticlib", "cdylib", "lib"]
+
+[dependencies]
+agistack-core = { path = "../core" }
+agistack-adapters-device = { path = "../adapters-device" }
+agistack-adapters-mem = { path = "../adapters-mem" }
+serde_json.workspace = true
+futures.workspace = true
+uniffi = { version = "0.28", features = ["cli"] }
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
