@@ -1,0 +1,4 @@
+module memstack_mobileFFI {
+    header "memstack_mobileFFI.h"
+    export *
+}

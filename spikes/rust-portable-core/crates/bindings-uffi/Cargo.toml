@@ -1,0 +1,23 @@
+[package]
+name = "memstack-bindings-uffi"
+description = "UniFFI binding: exposes the portable core as a native mobile package (Swift/Kotlin)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+name = "memstack_mobile"
+# staticlib -> iOS .a ; cdylib -> Android .so / host introspection ; lib -> rust users
+crate-type = ["staticlib", "cdylib", "lib"]
+
+[dependencies]
+memstack-core = { path = "../core" }
+memstack-adapters-sqlite = { path = "../adapters-sqlite" }
+memstack-adapters-mem = { path = "../adapters-mem" }
+serde_json.workspace = true
+futures.workspace = true
+uniffi = { version = "0.28", features = ["cli"] }
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"

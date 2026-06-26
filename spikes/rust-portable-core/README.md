@@ -19,10 +19,12 @@
 | 4 | WASM build is **usable from JS** and **small** | ✅ PASS | `wasm-pack` nodejs build + `harness/node-smoke.cjs` round-trips ingest→search. Size **95 KB raw / ~49 KB gzip** |
 | 5 | A **real embedded DB** can back the same port on device | ✅ PASS | `adapters-sqlite` (rusqlite, **bundled C SQLite**) implements `MemoryRepository`, overrides `search_by_project` to push the filter into SQL; test green |
 | 6 | Adapters are genuinely **swapped per platform** (not one-size-fits-all) | ✅ PASS (by construction) | bundled-SQLite **cannot** target `wasm32-unknown-unknown` (`stdio.h` not found) → browser must use a different storage adapter behind the *same* port. This is the hexagonal boundary working as intended. |
+| 7 | Core packages as a **native mobile library** (Swift/Kotlin) | ✅ PASS (codegen + iOS arch) / ⛓️ blocked on SDK | `bindings-uffi` (UniFFI) compiles against the real core; **Swift + Kotlin** bindings generated (`generated/`); core + in-mem adapter cross-compile to `aarch64-apple-ios`. Final device `.a`/`.so` needs full **Xcode iOS SDK** / **Android NDK** (not installed here) |
 
-**Still open** (next slices, not yet done): UniFFI iOS/Android bindings, Tauri
-desktop shell, `sqlite-vec` real vector search, performance/size scorecard vs
-the Python baseline. See *Open items* below.
+**Still open** (next slices, not yet done): final iOS `.a` / Android `.so` device
+artifacts (need Xcode iOS SDK + NDK installs), Tauri desktop shell, `sqlite-vec`
+real vector search, performance/size scorecard vs the Python baseline. See
+*Open items* below.
 
 ## Why this is the crux
 
@@ -48,7 +50,8 @@ spikes/rust-portable-core/
 │   │   └── src/{model,ports,service,util,lib}.rs
 │   ├── adapters-mem/           # In-memory + stub adapters (+ the runtime-agnostic test)
 │   ├── adapters-sqlite/        # On-DEVICE storage: embedded SQLite via rusqlite (bundled C)
-│   └── bindings-wasm/          # BROWSER/JS binding via wasm-bindgen (future_to_promise)
+│   ├── bindings-wasm/          # BROWSER/JS binding via wasm-bindgen (future_to_promise)
+│   └── bindings-uffi/          # MOBILE binding via UniFFI -> generates Swift (iOS) + Kotlin (Android)
 ├── apps/
 │   └── server/                 # SERVER target: axum + tokio (runtime lives ONLY here)
 └── harness/
@@ -110,6 +113,45 @@ node harness/node-smoke.cjs
 cargo test -p memstack-adapters-sqlite   # compiles bundled SQLite from C (~30-60s first time)
 ```
 
+### 5. Mobile native package (UniFFI → Swift / Kotlin)
+
+```bash
+# build the host lib once (used for library-mode binding generation):
+cargo build -p memstack-bindings-uffi
+
+# generate idiomatic native bindings from the SAME core:
+cargo run -p memstack-bindings-uffi --bin uniffi-bindgen -- \
+  generate --library target/debug/libmemstack_mobile.dylib --language swift  --out-dir generated/swift
+cargo run -p memstack-bindings-uffi --bin uniffi-bindgen -- \
+  generate --library target/debug/libmemstack_mobile.dylib --language kotlin --out-dir generated/kotlin
+
+# cross-compile the core for the iOS architecture (pure-Rust path, no Apple SDK needed):
+cargo build -p memstack-core -p memstack-adapters-mem --target aarch64-apple-ios --release
+
+# full device static lib (needs full Xcode iOS SDK installed — see note):
+cargo build -p memstack-bindings-uffi --target aarch64-apple-ios --release   # -> libmemstack_mobile.a
+```
+
+The generated Swift API the iOS app calls (auto-derived from the Rust core, see
+`generated/swift/`):
+
+```swift
+public convenience init(dbPath: String)                                        // open on-device store
+func ingest(projectId: String, authorId: String, content: String) -> String   // -> Memory JSON
+func search(projectId: String, query: String, limit: UInt32) -> String         // -> [Memory] JSON
+```
+
+> **Device-artifact prerequisites (environment, not architecture):**
+> - **iOS `.a`** needs the `iphoneos` SDK, which ships only with **full Xcode**
+>   (this machine has Command Line Tools only → `xcrun --sdk iphoneos` fails when
+>   `cc` compiles bundled SQLite). The pure-Rust core *does* cross-compile to
+>   `aarch64-apple-ios` here; only the C-SQLite step is gated on the SDK.
+> - **Android `.so`** needs the **Android NDK** (not installed). Kotlin bindings
+>   still generate without it (codegen is host-side).
+>
+> `generated/` is checked in as **evidence** of the native surface; normally it
+> is a build artifact.
+
 ## The platform-adapter boundary (important finding)
 
 `adapters-sqlite` uses `rusqlite { features = ["bundled"] }`, which compiles the
@@ -132,15 +174,18 @@ port is satisfied by **different** adapters per platform:
 ## Toolchain notes
 
 - `rustc`/`cargo` **1.96** via both Homebrew (host-only) and rustup (added
-  `wasm32-unknown-unknown`). Use `~/.cargo/bin` for anything cross-target.
+  `wasm32-unknown-unknown`, `aarch64-apple-ios`, `aarch64-apple-ios-sim`). Use
+  `~/.cargo/bin` for anything cross-target.
 - `wasm-pack` 0.15, `wasm-bindgen` 0.2.
-- `rusqlite` 0.32 (`bundled`) needs a C compiler (Xcode CLT present).
+- `uniffi` 0.28 (proc-macro mode via `setup_scaffolding!`, library-mode bindgen).
+- `rusqlite` 0.32 (`bundled`) needs a C compiler (Xcode CLT present); the iOS
+  device build additionally needs the **full Xcode iOS SDK**.
 
 ## Open items (next spike slices)
 
-1. **UniFFI mobile** — generate Swift/Kotlin bindings from `core`; build an iOS
-   static lib (xcrun present) and an Android `.so` (needs **Android NDK** — not
-   yet installed; flag before doing).
+1. **Mobile device artifacts** — codegen + iOS-arch compile are DONE. Remaining:
+   build the final iOS `.a` (install **full Xcode** for the `iphoneos` SDK) and
+   the Android `.so` (install **Android NDK**), then run on a simulator/emulator.
 2. **Tauri desktop** — wrap `core` in a Tauri app to prove the PC shell.
 3. **`sqlite-vec`** — replace the toy hash-embedding search with a real on-device
    vector index.
@@ -151,7 +196,9 @@ port is satisfied by **different** adapters per platform:
 ## Verdict so far
 
 The make-or-break risk (**runtime-agnostic core → one codebase, server + browser
-+ device**) is **confirmed** with working, tested artifacts across three distinct
-compile targets and a real embedded database. Nothing observed contradicts the
-plan's recommendation of **Rust as the portable-core language**. Remaining work
-is breadth (more targets) and quantified metrics, not a fundamental unknown.
++ device**) is **confirmed** with working, tested artifacts across server,
+browser-WASM, an embedded database, and a native **mobile** binding (Swift +
+Kotlin generated from the same core; iOS-arch cross-compile verified). Nothing
+observed contradicts the plan's recommendation of **Rust as the portable-core
+language**. Remaining work is breadth (final device artifacts behind SDK/NDK
+installs, Tauri desktop) and quantified metrics — not a fundamental unknown.
