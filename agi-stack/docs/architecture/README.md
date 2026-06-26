@@ -13,6 +13,7 @@
 7. **[06-agent-core-design.md](06-agent-core-design.md)** —— 第三条主轴:健壮 · 可扩展 · 热插拔 · 可编排的 Agent 核心(学习网关/Flink/Argo 内部设计后的综合)。
 8. **[07-plugin-runtime-architecture.md](07-plugin-runtime-architecture.md)** —— 多层插件运行时:能力注册模型、插件形态分类、可插拔 Harness(embedded vs CLI-backend)、热插拔生命周期状态机(学习 OpenClaw 多端运行时后的综合)。
 9. **[08-control-data-plane-separation.md](08-control-data-plane-separation.md)** —— 控制流/数据流分离:控制面 = SSOT、声明式 level-triggered reconcile、xDS 风格版本化 typed 分发(version/nonce + ACK/NACK + last-good)、local-first = 数据面断连自治(学习 Kubernetes/Istio 控制面-数据面分离后的综合)。
+10. **[09-shipping-matrix.md](09-shipping-matrix.md)** —— 逐平台出厂矩阵:一份可移植核心 → server/web/桌面/Android/iOS 五类产物,各对应 [`Makefile`](../../Makefile) 一键 target,标注产物/体积/证据(Phase 5 可码部分)。
 
 ## 调研沉淀(证据基)
 
