@@ -21,8 +21,9 @@ pub mod service;
 pub mod util;
 
 pub use agent::{
-    AgentAction, Plan, PlanStep, ReActEngine, Role, SessionState, SessionStatus, StepStatus,
-    TranscriptEntry,
+    AgentAction, EmbeddedHarness, HarnessCtx, HarnessPolicy, HarnessRegistry, Plan, PlanStep,
+    PreparedAttempt, ReActEngine, Role, RuntimeHarness, SelectionReason, SessionState,
+    SessionStatus, StepStatus, TranscriptEntry, TurnOutcome,
 };
 pub use model::{Entity, Episode, Memory, Project, SourceType};
 pub use ports::{
