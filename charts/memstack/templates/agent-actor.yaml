@@ -37,8 +37,15 @@ spec:
               value: {{ include "memstack.redisHost" . | quote }}
             - name: REDIS_PORT
               value: {{ .Values.redis.service.port | quote }}
+            {{- if .Values.redis.auth.enabled }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "memstack.redisDatabaseSecretName" . }}
+                  key: password
+            {{- end }}
             - name: REDIS_URL
-              value: redis://$(REDIS_HOST):$(REDIS_PORT)/0
+              value: {{ include "memstack.redisUrl" . | quote }}
             - name: POSTGRES_HOST
               value: {{ include "memstack.postgresHost" . | quote }}
             - name: POSTGRES_PORT
@@ -50,12 +57,12 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "memstack.secretName" . }}
-                  key: postgres-password
+                  name: {{ include "memstack.postgresPasswordSecretName" . }}
+                  key: {{ include "memstack.postgresPasswordSecretKey" . }}
             - name: DATABASE_URL
               value: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)
             - name: NEO4J_URI
-              value: bolt://{{ include "memstack.neo4jHost" . }}:{{ .Values.neo4j.service.boltPort }}
+              value: {{ include "memstack.neo4jUri" . | quote }}
             - name: NEO4J_USER
               value: {{ .Values.neo4j.auth.username | quote }}
             - name: NEO4J_PASSWORD

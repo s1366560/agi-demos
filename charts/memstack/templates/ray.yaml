@@ -68,10 +68,10 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "memstack.secretName" . }}
-                  key: postgres-password
+                  name: {{ include "memstack.postgresPasswordSecretName" . }}
+                  key: {{ include "memstack.postgresPasswordSecretKey" . }}
             - name: NEO4J_URI
-              value: bolt://{{ include "memstack.neo4jHost" . }}:{{ .Values.neo4j.service.boltPort }}
+              value: {{ include "memstack.neo4jUri" . | quote }}
             - name: NEO4J_USER
               value: {{ .Values.neo4j.auth.username | quote }}
             - name: NEO4J_PASSWORD

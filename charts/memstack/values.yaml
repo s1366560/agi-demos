@@ -60,6 +60,11 @@ api:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  pdb:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
   extraEnv: {}
   extraEnvFrom: []
 
@@ -80,6 +85,11 @@ web:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+  topologySpreadConstraints: []
+  pdb:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
   extraEnv: {}
 
 ingress:
@@ -118,6 +128,10 @@ postgres:
 
 redis:
   enabled: true
+  auth:
+    enabled: false
+    existingSecret: ""
+    password: ""
   image:
     repository: redis
     tag: 7-alpine
@@ -129,6 +143,7 @@ redis:
     - --maxmemory-policy
     - allkeys-lru
   service:
+    name: ""
     port: 6379
   persistence:
     enabled: true
@@ -137,12 +152,46 @@ redis:
     accessModes:
       - ReadWriteOnce
   resources: {}
+  enterprise:
+    cluster:
+      name: ""
+      nodes: 3
+      uiServiceType: ClusterIP
+      persistentSpec:
+        enabled: true
+        volumeSize: 8Gi
+        storageClassName: ""
+      redisEnterpriseNodeResources: {}
+      bootstrapperResources: {}
+      redisEnterpriseServicesRiggerResources: {}
+      podAntiAffinity: {}
+      extraSpec: {}
+    database:
+      name: ""
+      memorySize: 1GB
+      replication: true
+      persistence: aofEverySecond
+      rackAware: false
+      shardCount: 1
+      proxyPolicy: single
+      extraSpec: {}
   external:
     host: ""
     port: 6379
 
 neo4j:
   enabled: true
+  official:
+    clusterName: memstack-neo4j
+    headlessServiceName: ""
+    acceptLicenseAgreement: "yes"
+    minimumClusterSize: 3
+    resources:
+      cpu: "1000m"
+      memory: "2Gi"
+    storageClass: ""
+    storageSize: 8Gi
+    loadBalancer: include
   image:
     repository: neo4j
     tag: 5.26-community
@@ -150,6 +199,7 @@ neo4j:
   auth:
     username: neo4j
     password: password
+    existingSecret: ""
   plugins: '["apoc"]'
   unrestrictedProcedures: apoc.*
   heapMaxSize: 1G
@@ -183,6 +233,7 @@ minio:
     rootPassword: minioadmin
   bucket: memstack-files
   service:
+    name: minio
     apiPort: 9000
     consolePort: 9001
   persistence:
@@ -194,6 +245,107 @@ minio:
   resources: {}
   external:
     endpointUrl: ""
+
+cnpg-operator:
+  replicaCount: 1
+
+postgres-cluster:
+  type: postgresql
+  version:
+    postgresql: "16"
+  cluster:
+    instances: 3
+    storage:
+      size: 8Gi
+      storageClass: ""
+    resources: {}
+    initdb:
+      database: memstack
+      owner: postgres
+      postInitSQL:
+        - CREATE EXTENSION IF NOT EXISTS vector;
+  backups:
+    enabled: false
+
+neo4j-core-1: &neo4jCoreDefaults
+  disableLookups: true
+  nameOverride: neo4j-1
+  podSpec:
+    loadbalancer: include
+  neo4j:
+    name: memstack-neo4j
+    edition: enterprise
+    acceptLicenseAgreement: "yes"
+    minimumClusterSize: 3
+    passwordFromSecret: memstack-neo4j-auth
+    resources:
+      cpu: "1000m"
+      memory: "2Gi"
+  services:
+    neo4j:
+      enabled: false
+    admin:
+      enabled: true
+  volumes:
+    data:
+      mode: defaultStorageClass
+      defaultStorageClass:
+        accessModes:
+          - ReadWriteOnce
+        requests:
+          storage: 8Gi
+  config:
+    server.config.strict_validation.enabled: "false"
+    server.memory.heap.max_size: "1G"
+    server.memory.pagecache.size: "512M"
+    dbms.security.procedures.unrestricted: apoc.*
+  apoc_config: {}
+  logInitialPassword: false
+
+neo4j-core-2:
+  <<: *neo4jCoreDefaults
+  nameOverride: neo4j-2
+
+neo4j-core-3:
+  <<: *neo4jCoreDefaults
+  nameOverride: neo4j-3
+
+neo4j-headless:
+  neo4j:
+    name: memstack-neo4j
+    edition: enterprise
+  ports:
+    https:
+      enabled: false
+  spec:
+    type: ClusterIP
+    clusterIP: None
+
+minio-operator:
+  operator:
+    replicaCount: 1
+
+minio-tenant:
+  tenant:
+    name: memstack-minio
+    configSecret:
+      name: memstack-minio-env
+      accessKey: minioadmin
+      secretKey: minioadmin
+    pools:
+      - servers: 4
+        name: pool-0
+        volumesPerServer: 1
+        size: 8Gi
+        resources: {}
+    certificate:
+      requestAutoCert: false
+    buckets:
+      - name: memstack-files
+        region: us-east-1
+    metrics:
+      enabled: false
+    exposeServices: {}
 
 ray:
   enabled: false

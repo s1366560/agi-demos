@@ -15,3 +15,48 @@ sources:
   - https://github.com/memstack/memstack
 maintainers:
   - name: MemStack
+dependencies:
+  - name: cloudnative-pg
+    alias: cnpg-operator
+    version: 0.28.3
+    repository: https://cloudnative-pg.github.io/charts
+    condition: postgres.enabled
+  - name: cluster
+    alias: postgres-cluster
+    version: 0.7.0
+    repository: https://cloudnative-pg.github.io/charts
+    condition: postgres.enabled
+  - name: redis-enterprise-operator
+    version: 8.0.20-23
+    repository: https://helm.redis.io
+    condition: redis.enabled
+  - name: neo4j
+    alias: neo4j-core-1
+    version: 2026.5.0
+    repository: https://helm.neo4j.com/neo4j
+    condition: neo4j.enabled
+  - name: neo4j
+    alias: neo4j-core-2
+    version: 2026.5.0
+    repository: https://helm.neo4j.com/neo4j
+    condition: neo4j.enabled
+  - name: neo4j
+    alias: neo4j-core-3
+    version: 2026.5.0
+    repository: https://helm.neo4j.com/neo4j
+    condition: neo4j.enabled
+  - name: neo4j-headless-service
+    alias: neo4j-headless
+    version: 2026.5.0
+    repository: https://helm.neo4j.com/neo4j
+    condition: neo4j.enabled
+  - name: operator
+    alias: minio-operator
+    version: 7.1.1
+    repository: https://operator.min.io
+    condition: minio.enabled
+  - name: tenant
+    alias: minio-tenant
+    version: 7.1.1
+    repository: https://operator.min.io
+    condition: minio.enabled

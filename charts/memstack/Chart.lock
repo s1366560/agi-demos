@@ -1,0 +1,30 @@
+dependencies:
+- name: cloudnative-pg
+  repository: https://cloudnative-pg.github.io/charts
+  version: 0.28.3
+- name: cluster
+  repository: https://cloudnative-pg.github.io/charts
+  version: 0.7.0
+- name: redis-enterprise-operator
+  repository: https://helm.redis.io
+  version: 8.0.20-23
+- name: neo4j
+  repository: https://helm.neo4j.com/neo4j
+  version: 2026.5.0
+- name: neo4j
+  repository: https://helm.neo4j.com/neo4j
+  version: 2026.5.0
+- name: neo4j
+  repository: https://helm.neo4j.com/neo4j
+  version: 2026.5.0
+- name: neo4j-headless-service
+  repository: https://helm.neo4j.com/neo4j
+  version: 2026.5.0
+- name: operator
+  repository: https://operator.min.io
+  version: 7.1.1
+- name: tenant
+  repository: https://operator.min.io
+  version: 7.1.1
+digest: sha256:3babddb6c1e87eb0317d359b6ac9c62e64a6aafc67ef28a106216966d7611477
+generated: "2026-06-25T13:24:57.124001+08:00"

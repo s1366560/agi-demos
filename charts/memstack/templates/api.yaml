@@ -39,7 +39,7 @@ spec:
         {{- include "memstack.waitForPort" (dict "name" "redis" "host" (include "memstack.redisHost" .) "port" .Values.redis.service.port "Values" .Values) | nindent 8 }}
         {{- include "memstack.waitForPort" (dict "name" "neo4j" "host" (include "memstack.neo4jHost" .) "port" .Values.neo4j.service.boltPort "Values" .Values) | nindent 8 }}
         {{- if .Values.minio.enabled }}
-        {{- include "memstack.waitForPort" (dict "name" "minio" "host" (printf "%s-minio" (include "memstack.fullname" .)) "port" .Values.minio.service.apiPort "Values" .Values) | nindent 8 }}
+        {{- include "memstack.waitForPort" (dict "name" "minio" "host" (include "memstack.minioHost" .) "port" .Values.minio.service.apiPort "Values" .Values) | nindent 8 }}
         {{- end }}
       {{- end }}
       containers:
@@ -86,18 +86,25 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "memstack.secretName" . }}
-                  key: postgres-password
+                  name: {{ include "memstack.postgresPasswordSecretName" . }}
+                  key: {{ include "memstack.postgresPasswordSecretKey" . }}
             - name: DATABASE_URL
               value: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)
             - name: REDIS_HOST
               value: {{ include "memstack.redisHost" . | quote }}
             - name: REDIS_PORT
               value: {{ .Values.redis.service.port | quote }}
+            {{- if .Values.redis.auth.enabled }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "memstack.redisDatabaseSecretName" . }}
+                  key: password
+            {{- end }}
             - name: REDIS_URL
-              value: redis://$(REDIS_HOST):$(REDIS_PORT)/0
+              value: {{ include "memstack.redisUrl" . | quote }}
             - name: NEO4J_URI
-              value: bolt://{{ include "memstack.neo4jHost" . }}:{{ .Values.neo4j.service.boltPort }}
+              value: {{ include "memstack.neo4jUri" . | quote }}
             - name: NEO4J_USER
               value: {{ .Values.neo4j.auth.username | quote }}
             - name: NEO4J_PASSWORD
@@ -168,6 +175,10 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.api.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.api.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
@@ -190,4 +201,25 @@ spec:
   selector:
     {{- include "memstack.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: api
+{{- if .Values.api.pdb.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "memstack.fullname" . }}-api
+  labels:
+    {{- include "memstack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  {{- with .Values.api.pdb.minAvailable }}
+  minAvailable: {{ . }}
+  {{- end }}
+  {{- with .Values.api.pdb.maxUnavailable }}
+  maxUnavailable: {{ . }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "memstack.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+{{- end }}
 {{- end }}

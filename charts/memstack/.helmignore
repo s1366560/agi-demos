@@ -3,6 +3,4 @@
 .DS_Store
 *.swp
 *.tmp
-*.tgz
-charts/
 templates/tests/

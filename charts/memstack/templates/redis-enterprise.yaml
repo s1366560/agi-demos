@@ -1,0 +1,58 @@
+{{- if .Values.redis.enabled }}
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: {{ include "memstack.redisEnterpriseClusterName" . }}
+  labels:
+    {{- include "memstack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  nodes: {{ .Values.redis.enterprise.cluster.nodes }}
+  uiServiceType: {{ .Values.redis.enterprise.cluster.uiServiceType }}
+  {{- with .Values.redis.enterprise.cluster.persistentSpec }}
+  persistentSpec:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.redis.enterprise.cluster.redisEnterpriseNodeResources }}
+  redisEnterpriseNodeResources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.redis.enterprise.cluster.bootstrapperResources }}
+  bootstrapperResources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.redis.enterprise.cluster.redisEnterpriseServicesRiggerResources }}
+  redisEnterpriseServicesRiggerResources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.redis.enterprise.cluster.podAntiAffinity }}
+  podAntiAffinity:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.redis.enterprise.cluster.extraSpec }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+---
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: {{ include "memstack.redisDatabaseName" . }}
+  labels:
+    {{- include "memstack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  redisEnterpriseCluster:
+    name: {{ include "memstack.redisEnterpriseClusterName" . }}
+  memorySize: {{ .Values.redis.enterprise.database.memorySize | quote }}
+  databaseSecretName: {{ include "memstack.redisDatabaseSecretName" . }}
+  databaseServicePort: {{ .Values.redis.service.port }}
+  defaultUser: true
+  replication: {{ .Values.redis.enterprise.database.replication }}
+  persistence: {{ .Values.redis.enterprise.database.persistence }}
+  rackAware: {{ .Values.redis.enterprise.database.rackAware }}
+  shardCount: {{ .Values.redis.enterprise.database.shardCount }}
+  proxyPolicy: {{ .Values.redis.enterprise.database.proxyPolicy }}
+  {{- with .Values.redis.enterprise.database.extraSpec }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}

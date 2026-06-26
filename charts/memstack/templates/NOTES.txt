@@ -3,8 +3,10 @@ MemStack has been installed.
 Services:
   API: {{ include "memstack.fullname" . }}-api:{{ .Values.api.service.port }}
   Web: {{ include "memstack.fullname" . }}-web:{{ .Values.web.service.port }}
-  Neo4j: {{ include "memstack.fullname" . }}-neo4j:{{ .Values.neo4j.service.httpPort }}
-  MinIO: {{ include "memstack.fullname" . }}-minio:{{ .Values.minio.service.apiPort }}
+  PostgreSQL: {{ include "memstack.postgresHost" . }}:{{ .Values.postgres.service.port }}
+  Redis: {{ include "memstack.redisHost" . }}:{{ .Values.redis.service.port }}
+  Neo4j: {{ include "memstack.neo4jUri" . }}
+  MinIO: {{ include "memstack.minioEndpoint" . }}
 
 Check the deployment:
   kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}

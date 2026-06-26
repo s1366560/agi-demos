@@ -133,6 +133,10 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.web.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.web.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
@@ -155,4 +159,25 @@ spec:
   selector:
     {{- include "memstack.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: web
+{{- if .Values.web.pdb.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "memstack.fullname" . }}-web
+  labels:
+    {{- include "memstack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  {{- with .Values.web.pdb.minAvailable }}
+  minAvailable: {{ . }}
+  {{- end }}
+  {{- with .Values.web.pdb.maxUnavailable }}
+  maxUnavailable: {{ . }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "memstack.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web
+{{- end }}
 {{- end }}
