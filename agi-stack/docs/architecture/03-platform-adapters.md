@@ -27,9 +27,9 @@
 
 | 平台 | 运行时适配器 | Spike 状态 |
 |---|---|---|
-| 服务器 / 桌面 | Wasmtime(JIT、fuel/epoch) | 🎯 `adapters-wasmtime`(待落地) |
+| 服务器 / 桌面 | Wasmtime(JIT、fuel/epoch) | ✅ `adapters-wasmtime` 已验证(fuel+epoch 双配额 + WIT 契约 + 运行时字节加载;5 测试绿;server `/v1/tools/call` 端到端;见 [04 #18](04-spike-evidence.md)) |
 | iOS | Wasmi / Wasmer(禁 JIT) | ✅ `adapters-wasmi` 已验证(通用兜底) |
-| Android | Wasmtime / Wasmer | 🎯 待落地 |
+| Android | Wasmtime / Wasmer | 🎯 待落地(可复用 `adapters-wasmtime`,NDK 内可 JIT) |
 | 浏览器 | Web Worker / 服务器代理 / Wasmi 解释 | ✅ Wasmi 路径已验证(可编到 wasm) |
 
 ## 4. 时钟(`Clock`)

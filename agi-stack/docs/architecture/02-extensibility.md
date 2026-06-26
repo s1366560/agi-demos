@@ -51,7 +51,7 @@ pub trait ToolHost: Send + Sync {
 | 浏览器 | 核心**自身**编为 WASM(core-as-guest) | 不能在 wasm 内再起重型 wasm 运行时 → 第三方工具走 **Web Worker / 服务器代理**,或 **Wasmi**(wasm 解释 wasm) | 见 §4 |
 
 **统一可移植兜底**:`Wasmi`(纯 Rust 解释器)可编到**任意目标(含 wasm 自身)**,作"全平台一致宿主";`Wasmtime` 仅服务器/桌面作高性能升级。
-→ **同一第三方工具 `.wasm`(WIT 契约)写一次,服务器 Wasmtime 跑、端上 Wasmi 跑。** 已 Spike 证伪通过([04](04-spike-evidence.md))。
+→ **同一第三方工具 `.wasm`(WIT 契约)写一次,服务器 Wasmtime 跑、端上 Wasmi 跑。** 已 Spike 证伪通过(服务器 Wasmtime + fuel/epoch 配额见 [04 #18](04-spike-evidence.md),端上/浏览器 Wasmi 见 [04 #8](04-spike-evidence.md))。
 
 ### 3.1 热插拔生命周期(运行时换工具,不重启)
 
