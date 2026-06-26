@@ -45,22 +45,28 @@ graph LR
 | 10 | **Plan 动态 DAG + HITL**:append-only DAG 的 reconcile 幂等、suspend/resume(四类 HITL)在重型(Kameo)与轻量(`MiniOrchestrator`)两版是否一致? | ✅ 部分证伪(HITL suspend/resume 已落地)——`RequestHuman` 动作 + `resume()` 在轮次边界挂起/恢复,内存 + SQLite 两路径测试绿,不重调已完成工具(见 [04 #15](04-spike-evidence.md)、[ADR-0004](../adr/0004-plan-as-append-only-dag.md)/[0005](../adr/0005-round-boundary-checkpoint.md));多节点 Plan DAG reconcile 与 Kameo/`MiniOrchestrator` 两版 parity 待续 |
 | 12 | **控制流/数据流分离**:控制面发期望态(SSOT)、数据面 level-triggered 自算 diff 收敛;坏配置 NACK 保留 last-good 不致瘫;同版本幂等、陈旧拒绝;断连重连全量重同步 —— 纯同步 reconciler 端上(无 tokio)是否成立? | ✅ 证伪通过(`cp-dp-demo` + `control_data_plane` 6 测试;见 [04 #10](04-spike-evidence.md)、[08](08-control-data-plane-separation.md)、[ADR-0009](../adr/0009-control-data-plane-separation.md)/[0010](../adr/0010-xds-style-config-distribution.md)) |
 
-## 3. 量化指标与 go/no-go 阈值(示例,需团队定档)
+## 3. 量化指标与 go/no-go 阈值(评分卡实测)
 
-| 指标 | 采集方式 | 建议 go 阈值 | 当前 |
+> 由 [`apps/bench`](../../apps/bench)(bin `scorecard`,`cargo run -p agistack-bench --release`)实测产出:延迟在内存核心栈采集、体积最佳努力实读产物;14 行风险全 ✅ → **自动判定并打印「建议:GO」、退出码 0**(`fail==0`)。详见 [04 §1 #22](04-spike-evidence.md)。
+
+| 指标 | 采集方式 | 建议 go 阈值 | 当前(评分卡实测) |
 |---|---|---|---|
-| WASM 体积(gzip) | `wasm-opt -Oz` 后测 | ≤ 2.5 MB(切片) | ✅ spike ~49 KB · **生产 `bindings-wasm` 60 KB gzip / 124 KB raw**(含向量+语义,见 [04 #16](04-spike-evidence.md)) |
+| WASM 体积(raw / gzip) | bench 实读 pkg / `wasm-opt -Oz` | ≤ 2.5 MB(切片) | ✅ **124.8 KB raw / 60 KB gzip**(生产 `bindings-wasm`,含向量+语义,见 [04 #16](04-spike-evidence.md)/#22) |
+| 原生 server release 二进制 | bench 实读 | 对比 Python 数十–数百 MB | ✅ **5.46 MB**(装齐 reqwest+rustls/wasmtime/rusqlite/tokio 后仍数量级小于 Python 运行时,见 [04 #22](04-spike-evidence.md)) |
 | iOS lib / Android .so | 链接产物 | ≤ 8 MB/arch(不含本地模型) | ✅ Android 1.5 MB(aarch64 release,见 [04 #12](04-spike-evidence.md));iOS XCFramework 已构建 + 模拟器实跑,链接后体积待 app 实测(见 [04 #13](04-spike-evidence.md)) |
-| 单步提取延迟(剔 LLM 网络) | 核心打点 | ≤ 50 ms | ✅ ~0.49 ms |
-| 端上向量检索(N=10k, dim=768) | sqlite-vec/hnsw 计时 | P50 ≤ 20 ms | ✅ **HNSW 2.43 ms**(dim=256;暴力 75 ms,31× 加速,recall@10 89.5%,见 [04 #19](04-spike-evidence.md)) |
+| 单步提取延迟(剔 LLM 网络) | 核心打点(bench ×2000) | ≤ 50 ms | ✅ **P50 0.001 ms · P99 0.003 ms** |
+| 关键词 search 延迟 | bench ×2000 | 低延迟 | ✅ **P50 0.69 ms · P99 0.79 ms** |
+| 语义 search 延迟(embed+向量) | bench ×2000 | 低延迟 | ✅ **P50 0.30 ms · P99 0.35 ms** |
+| 端上向量检索(N=10k, dim=768) | sqlite-vec/hnsw 计时 | P50 ≤ 20 ms | ✅ **设备 HNSW 2.43 ms**(权威,dim=256;暴力 75 ms,31× 加速,recall@10 89.5%,见 [04 #19](04-spike-evidence.md));评分卡内存暴力基线 ~4.6 ms |
 | 移动端冷启动首调 | app 内打点 | ≤ 300 ms | ⏳ iPhone 17 模拟器已跑通,精确计时待 app 内打点 |
-| 跨 FFI 复杂类型往返 | 微基准 | 无频繁拷贝瓶颈 | ⏳ 未测 |
+| 跨 FFI 复杂类型往返 | 微基准 | 无频繁拷贝瓶颈 | ⏳ UniFFI 双端往返已通(#12/#13),专项微基准待补 |
 | 每端口平台胶水 LOC | 统计 | 低且可复制 | ✅ ≈ 一个文件 |
 | async 跨 UniFFI/WASM | 是否需 hack | 原生支持、不阻塞主线程 | ✅ 原生支持 |
 | 会话崩溃恢复正确性 | 杀进程→恢复→比对 | 不丢轮次、不重复已完成工具 | ✅ 通过(内存 + SQLite 两路径,见 [04 #11](04-spike-evidence.md)) |
 | 热换工具中断 | 在途会话期间换表计时 | 在途轮次零中断,新轮次毫秒级见新表 | ✅ 部分(demo 证飞行隔离:新调用得 v2、持旧快照仍得 v1;在途轮次中断的会话级量化待 Agent 切片) |
 | HITL 暂停→恢复往返 | suspend→外部信号→resume | 四类 HITL 均可暂停/恢复,状态不丢 | ✅ 单类已测(`agent_hitl` + device SQLite 往返;[04 #15](04-spike-evidence.md))·四类齐全待续 |
 | CP→DP 配置收敛/坏配置隔离 | reconcile 测试 + `cp-dp-demo` | 坏配置 NACK 不改 last-good;同版本零 churn(`Arc::ptr_eq`);漏推/乱序自愈 | ✅ 证伪通过(6 测试) |
+| **go/no-go 总评分卡** | `apps/bench` 汇总 14 风险 | `fail==0` → 退出码 0 + 打印 GO | ✅ **GO**(14/14 ✅,见 [04 #22](04-spike-evidence.md)) |
 
 ## 4. 近期待办(Spike 收尾 → Phase 1)
 
@@ -68,7 +74,7 @@ graph LR
 2. **移动端设备产物**:**双端均已产出** —— Android 经 NDK r30 交叉编译 `aarch64-linux-android`,release **1.5 MB**(stripped,含 SQLite C),`file` 验 ELF ARM aarch64 + Kotlin 包(见 [04 #12](04-spike-evidence.md));iOS 经 full Xcode 交叉编译 `aarch64-apple-ios`(+ `-sim`)、组装 **XCFramework** + Swift 包,并在 **iPhone 17 模拟器实跑**冒烟(摄取/关键词/语义检索全绿,见 [04 #13](04-spike-evidence.md),一键 `scripts/build-ios.sh`);后续接 **真机签名分发** + `cargo-ndk`/CI 固化构建,并补端上向量检索与冷启动量化。
 3. **端上真向量检索(HNSW)**:✅ **已落地** —— 设备向量索引从暴力 SQLite 余弦扫描升级为纯 Rust **HNSW 近似最近邻**(`crates/adapters-device/src/hnsw.rs`,`instant-distance`),玩具按词 hash-embedding 升为高维**字符 n-gram 哈希**(`adapters-mem::NgramHashEmbedding`)。**刻意不选 `sqlite-vec`**:其 C 扩展 `dlopen` 跨 iOS/Android 正是可移植核心要规避的脆弱性,纯 Rust HNSW 跨所有设备目标零改动(`sqlite-vec` 留作 server 侧同端口可选)。HNSW 即时图不可变,以「写后惰性重建」满足可变 `VectorIndexPort`。`examples/vector_bench.rs` 实测 N=10k dim=256:暴力 P50 **75.2 ms** vs HNSW P50 **2.43 ms**(**31× 加速**,recall@10 **89.5%** 于对抗性随机向量),稳达 ≤20 ms 阈值;跨适配器 parity 测证 HNSW top-1 == 暴力 top-1。根 `cargo test --workspace` 升至 **47 绿**、core `wasm32` 仍绿(`instant-distance`/`rusqlite` 仅入 `adapters-device`)。后续:更高维(768)+ 真 embedding 模型 + 增量插入 HNSW(替一次性重建);`sqlite-vec` server 侧可选。见 [04 #19](04-spike-evidence.md)、[03 §1](03-platform-adapters.md)。
 4. **Tauri 桌面**:✅ **已落地** —— `apps/desktop/src-tauri`(`agistack-desktop`)把生产核心 + SQLite **设备**适配器链入 Tauri 2 桌面外壳,`ingest`/`search`/`semantic_search` 暴露为 Tauri 命令、极简 HTML 前端经 `window.__TAURI__.core.invoke` 调用;命令逻辑抽到可**无头**单测的 `DesktopCore`(`futures::executor::block_on` 驱动、零 tokio)。`cargo build` 全树编译链接通过(tauri 2.11 + 系统 WebKit),`cargo test` 1 绿无头 round-trip;crate 故意**排除出 workspace** 以免重依赖拖慢 `cargo test --workspace`(仍 37 绿)(见 [04 #17](04-spike-evidence.md)、[03 §5](03-platform-adapters.md))。后续接 `tauri-cli` 完整 bundle 打包 + OS app-data 路径解析。
-5. **完整 go/no-go 评分卡**:补齐 §3 未测项。
+5. **完整 go/no-go 评分卡**:✅ **已落地** —— `apps/bench`(bin `scorecard`)在内存核心栈实测 ingest/keyword-search/semantic-search P50/P99(各 ×2000)+ N=10k dim=256 暴力向量 P50/P99,并最佳努力实读 server release 二进制(**5.46 MB**)与 wasm pkg(**124.8 KB raw**)体积,联合前 21 项已验证产物组成 **14 行风险评分表**,`fail==0` 即打印「建议:**GO**」并退出码 0。补齐 §3 大部分未测项(冷启动/FFI 微基准仍 ⏳)。复现:`cargo run -p agistack-bench --release`(见 [04 #22](04-spike-evidence.md))。后续:接 CI 把评分卡作为合并门禁。
 8. **Web 包(production wasm-bindgen 绑定)**:✅ **已落地** —— `crates/bindings-wasm` 把生产核心编入浏览器(core-as-guest),`AgistackCore` 暴露 `ingest`/`search`/`semanticSearch`,wasm 侧用真实 `WasmClock`(`Date.now()`);`wasm-pack --target nodejs` + `smoke.cjs` node 冒烟绿,**60 KB gzip**(见 [04 #16](04-spike-evidence.md))。后续接 wa-sqlite/IndexedDB 持久层 + 浏览器内冒烟。
 6. **Agent 核心健壮/编排切片**:✅ **HITL 已落地** —— 在现有核心上加 `AgentAction::RequestHuman` + `resume()`:轮次边界 checkpoint(状态即真相)、崩溃恢复重放、单个 HITL suspend/resume,内存 + SQLite 两路径测试绿且不重调已完成工具(见 [04 #15](04-spike-evidence.md)、[ADR-0004](../adr/0004-plan-as-append-only-dag.md)/[0005](../adr/0005-round-boundary-checkpoint.md));server `POST /v1/agent/resume`。多节点 Plan DAG reconcile 与 native(Kameo)/WASM(`MiniOrchestrator`)两版 parity 待续。**注**:热插拔(ArcSwap 工具换表零中断 + 扩展 enable/disable + shape 分类)已由 `crates/plugin-host` + `hotplug-demo` 单独证伪(见 [04 #9](04-spike-evidence.md))。
 7. **可插拔 Harness 切片**:✅ **已落地** —— 把内置 ReAct 循环抽为 `RuntimeHarness` trait + `HarnessRegistry::select`(`auto` 优先级 + policy pin + 回退,runtime 每轮重解析),内置 `EmbeddedHarness` 包 `ReActEngine`,为后续 CLI-backend/第三方 harness 固化 `PreparedAttempt` 契约([07 §4](07-plugin-runtime-architecture.md)、[ADR-0008](../adr/0008-agent-runtime-as-pluggable-harness.md))。core-only、零 tokio、同编 `wasm32`;core 7 单测 + `adapters-mem` 2 端到端测试(见 [04 #14](04-spike-evidence.md))。`PreparedAttempt`/`RuntimePlan` 富契约(tool 归一、outcome 分类)待第二个非 embedded harness(CLI backend)落地再固化。
@@ -77,9 +83,9 @@ graph LR
 
 ## 5. 退出准则
 
-- 全部高风险项有明确结论(通过/变通/阻断)。
-- 指标对照 §3 阈值,产出 go/no-go 建议。
-- 若 no-go → 退回 Kotlin Multiplatform 同款 Spike,复用本切片与指标表对照。
+- 全部高风险项有明确结论(通过/变通/阻断)。✅ §2 表 #1–#12 均已 ✅(部分为"部分证伪 + future 标注"),无 🎯/⏳ 根本性残留。
+- 指标对照 §3 阈值,产出 go/no-go 建议。✅ 评分卡 `apps/bench` **已出「GO」**(14/14 ✅,见 [04 #22](04-spike-evidence.md))。
+- 若 no-go → 退回 Kotlin Multiplatform 同款 Spike,复用本切片与指标表对照。**(当前为 GO,不触发回退。)**
 
 ## 6. 成本现实
 
