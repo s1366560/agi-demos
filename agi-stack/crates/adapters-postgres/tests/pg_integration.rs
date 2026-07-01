@@ -15,7 +15,7 @@
 
 use agistack_adapters_postgres::{
     connect, ensure_aux_schema, PgApiKeyStore, PgCheckpointStore, PgMemoryRepository,
-    PgProjectStore, PgVectorIndex,
+    PgProjectStore, PgTenantRepository, PgUserStore, PgVectorIndex, TenantLookup,
 };
 use agistack_core::agent::types::{SessionState, SessionStatus};
 use agistack_core::model::{Entity, Memory};
@@ -324,4 +324,156 @@ async fn api_key_and_project_stores_verify_and_scope() {
     assert_eq!(proj.tenant_id, "t_auth");
     assert!(projects.user_can_access("u_auth", &proj).await.unwrap()); // owner
     assert!(!projects.user_can_access("u_other", &proj).await.unwrap()); // no membership
+}
+
+/// Additively extend the minimal `users`/`tenants` tables with the identity
+/// columns the P2 adapters read, and create `user_tenants`. `ADD COLUMN IF NOT
+/// EXISTS` keeps this idempotent and compatible with the memory/auth tests that
+/// created the base tables — it never drops or rewrites existing columns.
+async fn ensure_identity_tables(pool: &PgPool) {
+    for ddl in [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_password text",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name text",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superuser boolean DEFAULT false",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean DEFAULT false",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS slug text",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS description text",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS owner_id text",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan text DEFAULT 'free'",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_projects integer DEFAULT 10",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_users integer DEFAULT 5",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_storage bigint DEFAULT 1073741824",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now()",
+        "ALTER TABLE tenants ADD COLUMN IF NOT EXISTS updated_at timestamptz",
+        "CREATE TABLE IF NOT EXISTS user_tenants (\
+            id text PRIMARY KEY, user_id text NOT NULL, tenant_id text NOT NULL, \
+            role text DEFAULT 'member', created_at timestamptz DEFAULT now())",
+    ] {
+        sqlx::query(ddl)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| panic!("identity ddl failed: {ddl}\n{e}"));
+    }
+}
+
+/// P2 login vertical: prove the store-level round-trip against the shared schema.
+/// 1. `find_auth_by_email` returns the Python-shaped auth record.
+/// 2. `insert_api_key` (mint on login) writes a key that `find_by_raw_key` then
+///    resolves — this exercises the exact SHA-256 digest parity the two sides
+///    share (mint hashes the plaintext; auth hashes the presented raw key).
+/// 3. `PgTenantRepository` scopes tenant reads by membership (count/list/get with
+///    404-then-403 ordering).
+#[tokio::test]
+async fn login_and_tenant_reads_roundtrip_against_shared_schema() {
+    let Some(pool) =
+        pool_or_skip("login_and_tenant_reads_roundtrip_against_shared_schema").await
+    else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+    ensure_identity_tables(&pool).await;
+
+    // Clean any prior run for a deterministic assertion set.
+    for sql in [
+        "DELETE FROM user_tenants WHERE user_id = 'u_p2'",
+        "DELETE FROM api_keys WHERE user_id = 'u_p2'",
+        "DELETE FROM tenants WHERE id IN ('t_p2_member', 't_p2_other')",
+        "DELETE FROM users WHERE id = 'u_p2'",
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
+
+    // A user with a Python-stored bcrypt hash (the real `userpassword` vector).
+    let stored_hash = "$2b$12$7zqrguT7EVNDjaBFQ03ITe6Q5Y1YiOL6Vu45Q6rjaLF3VfNYU/VD6";
+    sqlx::query(
+        "INSERT INTO users (id, email, full_name, hashed_password, is_active, is_superuser, \
+         must_change_password) VALUES ('u_p2', 'p2@memstack.ai', 'P2 User', $1, true, false, false)",
+    )
+    .bind(stored_hash)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let users = PgUserStore::new(pool.clone());
+
+    // (1) Auth lookup returns the shaped record.
+    let rec = users
+        .find_auth_by_email("p2@memstack.ai")
+        .await
+        .unwrap()
+        .expect("user found");
+    assert_eq!(rec.id, "u_p2");
+    assert_eq!(rec.hashed_password, stored_hash);
+    assert!(rec.is_active);
+    assert!(!rec.is_superuser);
+    assert!(users.find_auth_by_email("missing@x").await.unwrap().is_none());
+
+    // (2) Mint a key exactly as login does, then resolve it via the auth store.
+    let raw_key = "ms_sk_p2_login_session_key_0000000000000000000000000000000000000000";
+    users
+        .insert_api_key("k_p2", raw_key, "Login Session p2@memstack.ai", "u_p2", None, &[
+            "read".to_string(),
+            "write".to_string(),
+        ])
+        .await
+        .unwrap();
+    let keys = PgApiKeyStore::new(pool.clone());
+    let resolved = keys
+        .find_by_raw_key(raw_key)
+        .await
+        .unwrap()
+        .expect("minted key resolves");
+    assert_eq!(resolved.user_id, "u_p2");
+    assert!(resolved.is_usable_at(1_700_000_000_000));
+
+    // (3) Tenant membership scoping.
+    sqlx::query(
+        "INSERT INTO tenants (id, name, slug, owner_id) \
+         VALUES ('t_p2_member', 'Member Tenant', 'member-tenant', 'u_p2')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO tenants (id, name, slug, owner_id) \
+         VALUES ('t_p2_other', 'Other Tenant', 'other-tenant', 'u_other')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO user_tenants (id, user_id, tenant_id, role) \
+         VALUES ('ut_p2', 'u_p2', 't_p2_member', 'admin')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let tenants = PgTenantRepository::new(pool.clone());
+    assert_eq!(tenants.count_for_user("u_p2", None).await.unwrap(), 1);
+    let page = tenants.list_for_user("u_p2", None, 0, 20).await.unwrap();
+    assert_eq!(page.len(), 1);
+    assert_eq!(page[0].id, "t_p2_member");
+    assert_eq!(page[0].slug, "member-tenant");
+
+    // Found (member), by id and by slug.
+    assert!(matches!(
+        tenants.get_for_user("u_p2", "t_p2_member").await.unwrap(),
+        TenantLookup::Found(t) if t.id == "t_p2_member"
+    ));
+    assert!(matches!(
+        tenants.get_for_user("u_p2", "member-tenant").await.unwrap(),
+        TenantLookup::Found(_)
+    ));
+    // Exists but no membership -> Forbidden (403), not NotFound.
+    assert!(matches!(
+        tenants.get_for_user("u_p2", "t_p2_other").await.unwrap(),
+        TenantLookup::Forbidden
+    ));
+    // Does not exist -> NotFound (404).
+    assert!(matches!(
+        tenants.get_for_user("u_p2", "t_nope").await.unwrap(),
+        TenantLookup::NotFound
+    ));
 }

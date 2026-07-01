@@ -11,6 +11,7 @@ agistack-adapters-mem = { path = "../../crates/adapters-mem" }
 agistack-adapters-device = { path = "../../crates/adapters-device" }
 agistack-adapters-http-llm = { path = "../../crates/adapters-http-llm" }
 agistack-adapters-postgres = { path = "../../crates/adapters-postgres" }
+agistack-adapters-secrets = { path = "../../crates/adapters-secrets" }
 agistack-adapters-wasmtime = { path = "../../crates/adapters-wasmtime" }
 axum = "0.7"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
@@ -18,3 +19,6 @@ serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+
+[dev-dependencies]
+serde_urlencoded = "0.7"

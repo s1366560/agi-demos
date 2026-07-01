@@ -8,6 +8,7 @@ members = [
     "crates/adapters-http-llm",
     "crates/adapters-cli-harness",
     "crates/adapters-postgres",
+    "crates/adapters-secrets",
     "crates/adapters-wasmtime",
     "crates/bindings-uniffi",
     "crates/bindings-wasm",

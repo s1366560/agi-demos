@@ -32,6 +32,12 @@ pub const STRANGLED_PREFIXES: &[&str] = &[
     "/api/v1/memories",
     "/api/v1/episodes",
     "/api/v1/recall",
+    // P2 login vertical (surgical — coarse prefix match, so only fully-covered
+    // paths are listed). `/auth/token` and `/auth/oauth/*` are complete in Rust;
+    // other `/auth/*` siblings (force-change-password, me, ...) and `/tenants/*`
+    // stay in Python until their whole resource is covered (see identity.rs).
+    "/api/v1/auth/token",
+    "/api/v1/auth/oauth",
 ];
 
 /// Max proxied body size (request or response) — 25 MiB, generous for JSON
@@ -220,10 +226,15 @@ mod unit {
         assert!(is_strangled("/api/v1/memories/abc123"));
         assert!(is_strangled("/api/v1/episodes/"));
         assert!(is_strangled("/api/v1/recall/short"));
+        // P2 login vertical.
+        assert!(is_strangled("/api/v1/auth/token"));
+        assert!(is_strangled("/api/v1/auth/oauth/google/callback"));
         for p in [
             "/api/v1/memories",
             "/api/v1/episodes/",
             "/api/v1/recall/short",
+            "/api/v1/auth/token",
+            "/api/v1/auth/oauth/github/callback",
         ] {
             assert_eq!(upstream_for(p, &ups()), "http://rust:8088");
         }
@@ -233,7 +244,13 @@ mod unit {
     fn everything_else_routes_to_python() {
         for p in [
             "/api/v1/projects",
-            "/api/v1/auth/token",
+            // Other `/auth/*` siblings remain in Python (surgical strangling).
+            "/api/v1/auth/force-change-password",
+            "/api/v1/auth/me",
+            "/api/v1/auth/tokens", // not a segment boundary of `/auth/token`
+            // Tenants read is implemented but its flip is deferred.
+            "/api/v1/tenants",
+            "/api/v1/tenants/t1",
             "/api/v1/agent/ws",
             "/api/v1/memories_admin", // not a segment boundary -> not strangled
             "/health",

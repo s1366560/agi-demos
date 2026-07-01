@@ -30,11 +30,15 @@ pub use sqlx::postgres::PgPool;
 mod auth_store;
 mod checkpoint;
 mod memory_repo;
+mod tenant_repo;
+mod user_store;
 mod vector_index;
 
 pub use auth_store::{ApiKeyRecord, PgApiKeyStore, PgProjectStore, ProjectRecord};
 pub use checkpoint::PgCheckpointStore;
 pub use memory_repo::PgMemoryRepository;
+pub use tenant_repo::{PgTenantRepository, TenantLookup, TenantRecord};
+pub use user_store::{PgUserStore, UserAuthRecord};
 pub use vector_index::PgVectorIndex;
 
 use agistack_core::ports::{CoreError, CoreResult};

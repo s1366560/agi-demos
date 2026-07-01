@@ -35,6 +35,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 mod auth;
+mod identity;
+mod identity_api;
 mod prod_api;
 
 use agistack_adapters_mem::{
@@ -43,7 +45,7 @@ use agistack_adapters_mem::{
 };
 use agistack_adapters_postgres::{
     connect, ensure_aux_schema, PgApiKeyStore, PgCheckpointStore, PgMemoryRepository,
-    PgProjectStore, PgVectorIndex,
+    PgProjectStore, PgTenantRepository, PgUserStore, PgVectorIndex,
 };
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
 use agistack_adapters_http_llm::{HttpEmbedding, HttpLlm};
@@ -57,6 +59,7 @@ use agistack_plugin_host::{
 };
 
 use crate::auth::{DevAuthenticator, PgAuthenticator, SharedAuthenticator};
+use crate::identity::{DevIdentityService, PgIdentityService, SharedIdentity};
 
 /// Shared, cheaply-cloneable application state. Every `Arc`/`HotPlugRegistry`
 /// field is a shared handle, so all routes operate on the same registry, memory
@@ -72,6 +75,9 @@ pub(crate) struct AppState {
     /// Production authenticator backing the `/api/v1` strangled surface
     /// (Postgres in production, dev stub offline). See [`crate::auth`].
     pub(crate) auth: SharedAuthenticator,
+    /// P2 identity service: login (`/auth/token`) + tenant reads. Postgres in
+    /// production, dev stub offline. See [`crate::identity`].
+    pub(crate) identity: SharedIdentity,
 }
 
 fn internal<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
@@ -322,7 +328,12 @@ fn build_registry() -> HotPlugRegistry {
 async fn build_memory_and_auth(
     llm: Arc<dyn LlmPort>,
     embedding: Arc<dyn EmbeddingPort>,
-) -> (Arc<MemoryService>, Arc<dyn CheckpointStore>, SharedAuthenticator) {
+) -> (
+    Arc<MemoryService>,
+    Arc<dyn CheckpointStore>,
+    SharedAuthenticator,
+    SharedIdentity,
+) {
     match std::env::var("DATABASE_URL") {
         Ok(url) if !url.is_empty() => {
             let pool = connect(&url)
@@ -345,12 +356,17 @@ async fn build_memory_and_auth(
             );
             let checkpoint: Arc<dyn CheckpointStore> =
                 Arc::new(PgCheckpointStore::new(pool.clone()));
+            // P2 identity over the same shared schema (users/api_keys/tenants).
+            let identity: SharedIdentity = Arc::new(PgIdentityService::new(
+                PgUserStore::new(pool.clone()),
+                PgTenantRepository::new(pool.clone()),
+            ));
             let authenticator: SharedAuthenticator = Arc::new(PgAuthenticator::new(
                 PgApiKeyStore::new(pool.clone()),
                 PgProjectStore::new(pool),
             ));
             eprintln!("[agistack] persistence: PostgreSQL (production, shared Python schema)");
-            (memory, checkpoint, authenticator)
+            (memory, checkpoint, authenticator, identity)
         }
         _ => {
             let memory = Arc::new(
@@ -364,8 +380,9 @@ async fn build_memory_and_auth(
             );
             let checkpoint: Arc<dyn CheckpointStore> = Arc::new(InMemoryCheckpointStore::new());
             let authenticator: SharedAuthenticator = Arc::new(DevAuthenticator::new("dev-user"));
+            let identity: SharedIdentity = Arc::new(DevIdentityService::new("dev-user"));
             eprintln!("[agistack] persistence: in-memory (dev); auth: dev stub (any ms_sk_ key)");
-            (memory, checkpoint, authenticator)
+            (memory, checkpoint, authenticator, identity)
         }
     }
 }
@@ -382,7 +399,7 @@ async fn build_state() -> AppState {
 
     // Persistence + auth: Postgres (production) or in-memory (dev), selected by
     // `DATABASE_URL`. This is the strangler cutover switch.
-    let (memory, checkpoint, auth) = build_memory_and_auth(llm.clone(), embedding).await;
+    let (memory, checkpoint, auth, identity) = build_memory_and_auth(llm.clone(), embedding).await;
 
     let tool_host: Arc<dyn ToolHost> = Arc::new(registry.clone());
     let engine = Arc::new(ReActEngine::new(
@@ -404,6 +421,7 @@ async fn build_state() -> AppState {
         control,
         reconciler,
         auth,
+        identity,
     }
 }
 
@@ -433,14 +451,20 @@ async fn tools_call(
 }
 
 fn router(state: AppState) -> Router {
-    // The production `/api/v1` surface (strangled memory/episodes/recall) sits
-    // behind the F2 auth middleware, which verifies the `ms_sk_` bearer against
-    // `api_keys` and injects a scoped `Identity`. The legacy `/v1/*` demo routes
-    // stay open for local exercising.
-    let prod = prod_api::router().layer(axum::middleware::from_fn_with_state(
-        state.clone(),
-        auth::require_api_key,
-    ));
+    // The production `/api/v1` surface splits by authentication:
+    //   * authed — strangled memory/episodes/recall (P1) + tenant reads (P2) —
+    //     sits behind the F2 auth middleware, which verifies the `ms_sk_` bearer
+    //     against `api_keys` and injects a scoped `Identity`.
+    //   * public — login + oauth stub (P2) — must NOT sit behind the key
+    //     middleware (you can't present a key before you have one).
+    // The legacy `/v1/*` demo routes stay open for local exercising.
+    let authed = prod_api::router()
+        .merge(identity_api::router_authed())
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_api_key,
+        ));
+    let public = identity_api::router_public();
 
     Router::new()
         .route("/health", get(|| async { "ok" }))
@@ -454,7 +478,8 @@ fn router(state: AppState) -> Router {
         .route("/v1/plugins/disable", post(plugins_disable))
         .route("/v1/tools/call", post(tools_call))
         .route("/v1/control-plane/publish", post(cp_publish))
-        .merge(prod)
+        .merge(public)
+        .merge(authed)
         .with_state(state)
 }
 
