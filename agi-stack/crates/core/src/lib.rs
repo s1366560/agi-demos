@@ -15,6 +15,7 @@
 //! `wasm32-unknown-unknown`, iOS and Android.
 
 pub mod agent;
+pub mod community;
 pub mod graph;
 pub mod model;
 pub mod ports;
@@ -29,6 +30,9 @@ pub use agent::{
     OutcomeKind, Plan, PlanStep, PlanStore, PreparedAttempt, ReActEngine, Role, RuntimeHarness,
     RuntimePlan, SelectionReason, SessionState, SessionStatus, StepOutcome, StepRunner, StepStatus,
     SupervisorPort, SupervisorVerdict, TranscriptEntry, TriggerReason, TurnOutcome,
+};
+pub use community::{
+    detect_communities, modularity, Community, CommunityEdge, DEFAULT_MIN_COMMUNITY_SIZE,
 };
 pub use graph::{
     hybrid_rank, jaccard, mmr_rerank, rrf_fuse, time_decay, tokenize, Candidate, RankedId,
