@@ -1,0 +1,8 @@
+# getrandom 0.3 (pulled transitively by rhai -> ahash `runtime-rng`) requires an
+# explicit backend on wasm32-unknown-unknown. The only wasm32-unknown-unknown
+# consumer here is the browser (core / skills-as-guest), which exposes Web Crypto,
+# so the supported `wasm_js` backend is the correct configuration. This cfg is
+# inert for crates that don't use getrandom (the core wasm32 portability gate
+# ignores it), and native targets (server/desktop/iOS/Android) are unaffected.
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

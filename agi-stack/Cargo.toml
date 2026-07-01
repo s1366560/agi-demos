@@ -1,0 +1,65 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/plugin-host",
+    "crates/adapters-mem",
+    "crates/adapters-device",
+    "crates/adapters-http-llm",
+    "crates/adapters-cli-harness",
+    "crates/adapters-postgres",
+    "crates/adapters-neo4j",
+    "crates/adapters-redis",
+    "crates/adapters-s3",
+    "crates/adapters-mcp",
+    "crates/adapters-docker",
+    "crates/adapters-smtp",
+    "crates/adapters-secrets",
+    "crates/adapters-wasmtime",
+    "crates/parity",
+    "crates/bindings-uniffi",
+    "crates/bindings-wasm",
+    "apps/server",
+    "apps/gateway",
+    "apps/bench",
+]
+
+# The Tauri desktop shell is deliberately *excluded* from the workspace: it pulls
+# the heavy tauri/wry/tao tree (and tokio), which would bloat every
+# `cargo test --workspace`. It links the same core + device adapters by path and
+# is built explicitly (Wave D / Wave K build matrix). Keeping it out preserves the
+# fast, runtime-agnostic core test loop (ADR-0001).
+exclude = [
+    "apps/desktop/src-tauri",
+]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "MIT"
+rust-version = "1.81"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+async-trait = "0.1"
+futures = "0.3"
+thiserror = "1"
+# Lock-free atomic pointer swap — the mechanism behind the hot-pluggable registry
+# (ADR-0006). Compiles to every target incl. wasm32; carries no tokio / std::time,
+# so it keeps the runtime-agnostic-core invariant (ADR-0001) intact.
+arc-swap = "1"
+# Pure-Rust embedded scripting for L2 Skill trigger/condition logic
+# (02-extensibility.md §5b.6: "Skill = data + Rhai"). No IO/FS/network ambient
+# authority; instruction-count sandboxing (no std::time), AST source is serde
+# data so a Skill ships to the edge and compiles there. `sync` makes its types
+# Send+Sync to live alongside the Send+Sync registry. Builds on wasm32.
+rhai = { version = "1", features = ["sync"] }
+
+# Release profile tuned for the WASM / mobile size budgets in 05-roadmap.md §3.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

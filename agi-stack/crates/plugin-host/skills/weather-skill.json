@@ -1,0 +1,7 @@
+{
+  "name": "weather-skill",
+  "version": "1.0.0",
+  "description": "A declarative L2 skill: fires on weather intent (keyword OR semantic), then composes registered L1 tools. Pure data + a sandboxed Rhai trigger — authored once, shipped to server/desktop/mobile/browser as configuration, compiled on-device.",
+  "trigger": "query.contains(\"weather\") || query.contains(\"forecast\") || semantic_score > 0.82",
+  "steps": ["upper", "len"]
+}

@@ -1,0 +1,29 @@
+// The typed capability contract a sandboxed agi-stack tool fulfils.
+//
+// This is the *contract of record* that replaces the spike's ad-hoc inline WAT
+// (02-extensibility.md, ADR-0002/0003): every untrusted third-party / MCP tool
+// is a guest that exports this `tool` world, and the host (Wasmtime on
+// server/desktop, Wasmi on iOS/browser) imports it through the same WIT, so a
+// tool authored once runs on every platform.
+//
+// The runnable sample in this crate realises the world through the equivalent
+// **core-module ABI** (`score: func(param i32) -> i32`), because building a
+// full Component Model guest needs `cargo-component` / `wasm-tools`, which the
+// scorecard scope (Option A) defers to "designed, noted future". The host
+// enforces the same fuel/epoch quotas either way — that is the property that
+// actually makes untrusted code safe, and it is proven here today.
+
+package agistack:tool@0.1.0;
+
+/// A relevance scorer — the minimal untrusted-tool shape. The host lowers the
+/// JSON envelope (`{ "text": "..." }`) to the input length and lifts the score
+/// back into JSON, so the guest stays a pure, side-effect-free numeric kernel.
+interface scorer {
+    /// Score a text of the given length. Pure: no host imports, no I/O — the
+    /// sandbox grants the guest nothing it is not explicitly handed.
+    score: func(text-len: u32) -> s32;
+}
+
+world tool {
+    export scorer;
+}

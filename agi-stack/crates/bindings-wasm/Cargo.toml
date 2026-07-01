@@ -1,0 +1,23 @@
+[package]
+name = "agistack-bindings-wasm"
+description = "wasm-bindgen web binding: the portable core embedded in the browser (core-as-guest)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+agistack-core = { path = "../core" }
+agistack-adapters-mem = { path = "../adapters-mem" }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+serde_json.workspace = true
+
+# Newer rustc/LLVM emit bulk-memory ops by default; tell the bundled wasm-opt to
+# accept them while still optimizing for size (05-roadmap.md §3 budget).
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ['-Oz', '--enable-bulk-memory', '--enable-nontrapping-float-to-int']

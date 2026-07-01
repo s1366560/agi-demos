@@ -1,0 +1,30 @@
+[package]
+name = "agistack-adapters-s3"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Native/server-ONLY adapter: the **production object store** behind the
+# `ObjectStore` port (plan.md Section 15.1 / F6). It talks S3 — against AWS S3 in
+# production and against the SAME MinIO the Python backend uses in dev — for
+# artifacts / attachments / instance-files, so the strangler can move blob
+# read/write from Python to Rust with zero data migration (shared bucket).
+#
+# Why a dedicated crate: `aws-sdk-s3` drags in the whole aws-smithy + tokio +
+# hyper stack. Exactly like `adapters-postgres` / `adapters-redis`, it is kept
+# OUT of the core/wasm path so the core stays runtime-agnostic and
+# wasm-compilable (ADR-0001). Nothing here ever appears in a port signature — the
+# core only sees `dyn ObjectStore`. The in-memory tier
+# (`agistack-adapters-mem`) is the browser/device sibling and the parity oracle.
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+aws-sdk-s3 = "1"
+aws-config = "1"
+aws-credential-types = "1"
+aws-smithy-types = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+agistack-adapters-mem = { path = "../adapters-mem" }
+futures.workspace = true

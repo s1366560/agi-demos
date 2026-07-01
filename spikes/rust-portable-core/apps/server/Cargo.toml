@@ -1,0 +1,18 @@
+[package]
+name = "memstack-server"
+description = "Native axum server wiring the portable core (tokio lives here, NOT in core)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+memstack-core = { path = "../../crates/core" }
+memstack-adapters-mem = { path = "../../crates/adapters-mem" }
+axum = "0.7"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+serde.workspace = true
+
+# The server is allowed to use a concrete runtime; the point of the spike is that
+# the *core* it depends on does not.
+[package.metadata.spike]
+note = "tokio is intentionally confined to this app crate"

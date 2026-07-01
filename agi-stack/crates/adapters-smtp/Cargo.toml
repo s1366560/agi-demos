@@ -1,0 +1,31 @@
+[package]
+name = "agistack-adapters-smtp"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Native/server-ONLY adapter: the **transactional email** tier behind the
+# `EmailSender` port (F10, `10-production-migration.md` §3). It drives a real SMTP
+# server via `lettre` to deliver invitation / notification emails — the Rust
+# re-expression of the Python SMTP path (`smtp_config`, notification services).
+#
+# Why a dedicated crate: `lettre` pulls in an async SMTP client (tokio + a TLS
+# stack). Exactly like `adapters-postgres` / `adapters-http-llm` / `adapters-docker`
+# it is kept OUT of the core/wasm path so the core stays runtime-agnostic and
+# wasm-compilable (ADR-0001). Nothing here appears in a port signature — the core
+# only sees `dyn EmailSender`. The in-memory tier
+# (`agistack-adapters-mem::InMemoryEmailSender`) is the test/device sibling and
+# the behavioural oracle. The browser/device tier never sends SMTP directly.
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+# default-features off drops the native-tls/openssl default; we keep the async
+# tokio transport + message builder and add a rustls TLS backend for production
+# submission (tests send plaintext to a local relay).
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls-tls"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+agistack-adapters-mem = { path = "../adapters-mem" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde_json.workspace = true

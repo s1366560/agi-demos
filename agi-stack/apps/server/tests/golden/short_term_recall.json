@@ -1,0 +1,13 @@
+{
+  "results": [
+    {
+      "uuid": "11111111-1111-4111-8111-111111111111",
+      "name": "Portable core",
+      "content": "Rust compiles to every target.",
+      "created_at": "2023-11-14T22:13:20Z",
+      "metadata": {}
+    }
+  ],
+  "total": 1,
+  "window_minutes": 1440
+}

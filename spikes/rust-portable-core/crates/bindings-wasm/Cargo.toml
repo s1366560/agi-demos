@@ -1,0 +1,22 @@
+[package]
+name = "memstack-bindings-wasm"
+description = "wasm-bindgen web binding exposing the portable core to JS/TS."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+memstack-core = { path = "../core" }
+memstack-adapters-mem = { path = "../adapters-mem" }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+serde_json.workspace = true
+
+# Newer rustc/LLVM emit bulk-memory ops by default; tell the bundled wasm-opt to
+# accept them while still optimizing for size.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ['-Oz', '--enable-bulk-memory', '--enable-nontrapping-float-to-int']

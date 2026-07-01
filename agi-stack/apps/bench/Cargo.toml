@@ -1,0 +1,14 @@
+[package]
+name = "agistack-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "scorecard"
+path = "src/main.rs"
+
+[dependencies]
+agistack-core = { path = "../../crates/core" }
+agistack-adapters-mem = { path = "../../crates/adapters-mem" }
+futures.workspace = true

@@ -1,0 +1,23 @@
+[package]
+name = "agistack-adapters-secrets"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Native/server-ONLY adapter: the **credential primitives** for the P2 identity
+# vertical of the Python -> Rust strangler migration (plan.md Section 15.2). It
+# provides exactly the two secret operations the Python `AuthService`
+# (`src/application/services/auth_service_v2.py`) performs at login time:
+#   * `verify_password` — bcrypt `$2b$` check, byte-compatible with
+#     `bcrypt.checkpw(...)` so a password hashed by Python verifies here.
+#   * `generate_api_key` — `ms_sk_` + 64 hex chars from 32 CSPRNG bytes, identical
+#     in shape to `secrets.token_bytes(32).hex()`.
+#
+# Why a dedicated crate: `bcrypt` pulls in blowfish + a CSPRNG; like
+# `adapters-postgres`/`adapters-http-llm` it is kept OUT of the core/wasm path so
+# the core stays runtime-agnostic and wasm-compilable (ADR-0001). Identity
+# issuance is a *server* concern — the browser/device tier never mints keys.
+# Nothing here appears in a core port signature.
+[dependencies]
+bcrypt = "0.15"
+getrandom = "0.2"

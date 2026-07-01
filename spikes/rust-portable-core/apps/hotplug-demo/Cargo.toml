@@ -1,0 +1,16 @@
+[package]
+name = "hotplug-demo"
+description = "Runnable narrative: native built-in + manifest-driven enable/disable + live WASM tool hot-swap with in-flight isolation."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "hotplug-demo"
+path = "src/main.rs"
+
+[dependencies]
+memstack-core = { path = "../../crates/core" }
+memstack-plugin-host = { path = "../../crates/plugin-host" }
+memstack-adapters-wasmi = { path = "../../crates/adapters-wasmi" }
+futures.workspace = true

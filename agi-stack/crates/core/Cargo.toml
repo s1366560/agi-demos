@@ -1,0 +1,21 @@
+[package]
+name = "agistack-core"
+description = "Runtime-agnostic portable core (domain + application) for agi-stack: Memory/Episode/Agent domain, hexagonal ports, MemoryService, and the ReAct + Plan-DAG orchestration."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# Proves the core async pipeline runs under a *generic* executor (no tokio),
+# sustaining the runtime-agnostic invariant (ADR-0001, risk #1).
+futures.workspace = true
+
+# NOTE: intentionally NO tokio / no std::time / no task spawning here.
+# `agistack-core` must compile unchanged to native, wasm32-unknown-unknown,
+# iOS and Android. Every side effect is expressed as a port (see `ports`).

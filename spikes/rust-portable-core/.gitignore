@@ -1,0 +1,7 @@
+/target
+**/*.rs.bk
+Cargo.lock.bak
+# wasm-pack output (regenerated via `wasm-pack build`)
+**/pkg/
+# node harness deps (if any)
+harness/node_modules/

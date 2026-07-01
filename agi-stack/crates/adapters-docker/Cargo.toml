@@ -1,0 +1,28 @@
+[package]
+name = "agistack-adapters-docker"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Native/server-ONLY adapter: the **sandbox provisioning** tier behind the
+# `ContainerRuntime` port (F9, `10-production-migration.md` §3). It drives a real
+# Docker daemon (via the local socket) to create/start/stop/remove the isolated
+# containers that host a remote MCP `ToolHost` — the Rust re-expression of the
+# Python `MCPSandboxAdapter` container lifecycle.
+#
+# Why a dedicated crate: `bollard` drags in the whole hyper + tokio HTTP stack.
+# Exactly like `adapters-postgres` / `adapters-redis` / `adapters-s3`, it is kept
+# OUT of the core/wasm path so the core stays runtime-agnostic and
+# wasm-compilable (ADR-0001). Nothing here ever appears in a port signature — the
+# core only sees `dyn ContainerRuntime`. The in-memory tier
+# (`agistack-adapters-mem::InMemoryContainerRuntime`) is the test/device sibling
+# and the state-machine conformance oracle.
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+bollard = "0.17"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+agistack-adapters-mem = { path = "../adapters-mem" }
+futures.workspace = true

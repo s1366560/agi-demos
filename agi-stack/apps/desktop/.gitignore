@@ -1,0 +1,10 @@
+# The repo-root Python .gitignore excludes `dist/` (sdist build output).
+# The Tauri shell's frontend has no bundler/build step, so `dist/index.html`
+# is checked-in source — re-include it here.
+!dist/
+
+# Tauri build outputs. This app crate is intentionally excluded from the cargo
+# workspace (heavy tauri/wry/tao + tokio tree), so it has its own nested
+# target/ and an auto-generated ACL schema dir.
+src-tauri/target/
+src-tauri/gen/schemas/

@@ -1,0 +1,34 @@
+//! `agistack-adapters-device`: **embedded SQLite adapters** — the on-device
+//! (local-first) tier of agi-stack's hexagonal ports.
+//!
+//! Same ports as `agistack-adapters-mem`, but durable: data survives process
+//! restarts, which is what makes on-device crash recovery and offline operation
+//! real. Bundled SQLite compiles from source, so these cross-compile to iOS and
+//! Android unchanged. On the server the same ports are backed by
+//! Postgres/pgvector instead — the portable core never notices the difference
+//! (`02-platform-adapters.md`).
+//!
+//! Provided adapters:
+//!   - [`repo::SqliteMemoryRepository`]     — [`agistack_core::MemoryRepository`]
+//!     (overrides `search_by_project` with a SQL `LIKE` push-down)
+//!   - [`checkpoint::SqliteCheckpointStore`] — [`agistack_core::CheckpointStore`]
+//!     (durable agent crash recovery, ADR-0005)
+//!   - [`vector::SqliteVectorIndex`]        — [`agistack_core::VectorIndexPort`]
+//!     (durable brute-force cosine scan; the simple, always-correct baseline)
+//!   - [`hnsw::HnswVectorIndex`]            — [`agistack_core::VectorIndexPort`]
+//!     (pure-Rust HNSW ANN for sub-linear on-device search; `05-roadmap §4 #3`)
+//!   - [`graph::SqliteGraphStore`]          — [`agistack_core::GraphStore`]
+//!     (durable on-device knowledge graph; SQLite tables + `petgraph` traversal,
+//!     the local-first analogue of the server's Neo4j; decision 4)
+
+pub mod checkpoint;
+pub mod graph;
+pub mod hnsw;
+pub mod repo;
+pub mod vector;
+
+pub use checkpoint::SqliteCheckpointStore;
+pub use graph::SqliteGraphStore;
+pub use hnsw::HnswVectorIndex;
+pub use repo::SqliteMemoryRepository;
+pub use vector::SqliteVectorIndex;

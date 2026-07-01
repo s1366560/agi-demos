@@ -1,0 +1,22 @@
+[package]
+name = "agistack-gateway"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# The strangler-fig gateway (plan.md Section 14.1). A thin reverse proxy that
+# fronts BOTH backends during migration: already-strangled capabilities
+# (memory / episodes / recall) go to the Rust `agistack-server`; everything else
+# still goes to the legacy Python backend. Flipping a capability = moving its
+# prefix from the Python list to the Rust list — the frontend never changes.
+#
+# Native-only (tokio + reqwest + a TLS stack); it is an edge process, never part
+# of the portable core.
+[dependencies]
+axum = "0.7"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+bytes = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "sync"] }
