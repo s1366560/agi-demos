@@ -57,7 +57,7 @@ graph LR
 | **F7 · 流式 LLM + WS 事件桥** | `adapters-http-llm` 扩流式 token(**决策 2:先 OpenAI/Anthropic 两家**,余下 future);WS ConnectionManager(1000+ 并发、广播、背压、重连、事件回放)。`axum::ws` + `tokio-tungstenite` | 🎯 future(P3·P4·P6) |
 | **F8 · Neo4j 图适配器** | 节点 Entity/Episodic/Community、边 MENTIONS;向量 + 全文索引;`project_id`/`tenant_id` 收敛。`neo4rs`(社区异步驱动) | ✅ **已落地**(`Neo4jGraphStore` 实 `GraphStore`,对活 Docker Neo4j 跨层 parity 实测;[04 #32](04-spike-evidence.md))。Episodic/Community/向量+全文索引留 future |
 | **F9 · Docker/MCP 沙箱** | 容器生命周期(create/start/health/stop);MCP WebSocket JSON-RPC 2.0(:8765);desktop(KasmVNC)/terminal(ttyd)代理。`bollard` + `tokio-tungstenite` | 🚧 **两半均落地,余代理**:① **MCP WS 工具传输**——[`crates/adapters-mcp`](../../crates/adapters-mcp)(`tokio-tungstenite`,server-only)`WsMcpToolHost` 实**既有 `ToolHost` 端口**,对**运行中的 `sandbox-mcp-server` 实测**握手 + 52 工具 write→read 往返([04 #35](04-spike-evidence.md));② **容器生命周期**——新增 `ContainerRuntime` 端口 + [`crates/adapters-docker`](../../crates/adapters-docker)(`bollard 0.17`,server-only)`DockerContainerRuntime` create/start/status/stop/remove + 托管标签 `list`,**对运行中的 Docker daemon 用 `redis:7-alpine` 真起真停实测**状态序列 `[Created,Running,Exited]` 与内存状态机预言机一致([04 #36](04-spike-evidence.md))。**余** desktop/terminal/noVNC WS 代理 + 镜像 pull + 端口/隧道分配留 P5 |
-| **F10 · SMTP/邮件(决策 3)** | 邀请邮件 + 模板渲染;因 P2 决定迁邮件邀请,从 P7 上提为多波共享基础。`lettre`,server-only | 🎯 future(P2·P7) |
+| **F10 · SMTP/邮件(决策 3)** | [`crates/adapters-smtp`](../../crates/adapters-smtp)(`lettre 0.11`,server-only):`SmtpEmailSender` 实 `EmailSender` 端口(`send(&EmailMessage)`,信封 from/to/subject/text/html),`plaintext(host,port)`(本地中继/mailpit)/ `relay(host,user,pass)`(生产 TLS 提交)/ `with_default_from` 兜底;有 HTML → `alternative_plain_html` 多部分。绞杀可把 P2 邀请 + P7-G4 通知的邮件出口从 Python 翻到 Rust;因 P2 决定迁邮件邀请,从 P7 上提为多波共享基础 | ✅ **已落地**(`EmailSender` 端口 + 内存/lettre 双适配器,对活 mailpit 邮筒真发真收 + 内存预言机信封一致性实测;[04 #37](04-spike-evidence.md))。生产 TLS 提交路径 + 模板渲染 + Feishu/webhook 通道留 P7-G4 |
 | **F11 · 分布式执行层(决策 1,替 Ray)** | tokio + gRPC(`tonic`)actor/执行层替 Ray Actors(会话级 actor + 监督重启 `max_restarts=5` 语义 + 跨节点分发 + 背压)。`tokio` + `tonic` + 可选 `kameo`。**全计划最高风险单点** | 🎯 future(P3·P6) |
 
 > **F1–F4 已在 P1 落地(F4 为最小切片);F5–F11 为多波共享的 server-only 适配器**,随依赖波次落地(逐波用途见 §6、决策记录见 §8)。其中 **F10(SMTP)因决策 3、F11(分布式执行层替 Ray)因决策 1** 而新增。全部 F5–F11 严格 server-only:`core` 仍零 tokio/零 `std::time`、同编 `wasm32`;端上永远走轻量适配器(内存/SQLite/Wasmi/单线程执行器),不依赖 F5–F11。
@@ -86,7 +86,7 @@ P1 选记忆域先行:Rust `MemoryService` 已最成熟,且这是价值高、依
 | 波次 | 能力 | 主要端点(实测校准) | 新增/依赖适配器 | 难度 | 状态 |
 |---|---|---|---|---|---|
 | **P1** | 记忆与情节 | `/memories`·`/episodes`·`/recall`(~14) | **F1 Postgres+pgvector** | 低-中 | ✅ 本波落地 |
-| **P2** | 身份/租户/项目 | auth·tenants·projects·invitations·trust·shares(~43–58) | F2 ✅ · F10 SMTP | 中 | 🚧 登录垂直已落地(`/auth/token` 绞杀 + tenants 读就绪;详见 §6.1、[04 #29](04-spike-evidence.md)) |
+| **P2** | 身份/租户/项目 | auth·tenants·projects·invitations·trust·shares(~43–58) | F2 ✅ · F10 SMTP ✅ | 中 | 🚧 登录垂直已落地(`/auth/token` 绞杀 + tenants 读就绪;邀请邮件出口 F10 就绪;详见 §6.1、[04 #29](04-spike-evidence.md)) |
 | **P3** | Agent 运行时与会话 | `/agent/*`(84 子)+ `/agent/ws`(1 WS,共 85) | F5 · F7 · **F11**(替 Ray)· Wave L/M/N ✅ | 极高 | 🎯 future(详见 §6.2;硬化地基 Wave L/M/N 已绿) |
 | **P4** | 知识图谱 | graph(10)·enhanced_search(7)(~17) | F8 Neo4j / 端 SQLite+petgraph | 高 | 🚧 端上图 + 生产 Neo4j 层已落地(`GraphStore` + 排序数学 + **三适配器**内存/SQLite/Neo4j + 跨层 parity;详见 §6.3、[04 #31](04-spike-evidence.md)/[#32](04-spike-evidence.md);抽取/社区/端点 future) |
 | **P5** | 沙箱与 MCP | project_sandbox·skills·channels·terminal(~89) | F9 Docker/MCP · F6 | 高 | 🎯 future(详见 §6.4;`plugin-host` 已就位) |
@@ -106,7 +106,7 @@ P1 选记忆域先行:Rust `MemoryService` 已最成熟,且这是价值高、依
 
 - **端点(~43–58)**:auth(12,含 device-code RFC 8628 ×3)· tenants(20)· projects(12,含级联删)· invitations(4)· trust(~6)· shares(4)。
 - **Python 表**:`users`·`api_keys`·`tenants`·`projects`·`user_tenants`·`user_projects`·`invitations`·`memory_shares`·`trust_policies`·`decision_records`。
-- **新增适配器**:扩 `adapters-postgres` 覆盖上述表;`adapters-auth-secrets`(bcrypt / `getrandom` token / `jsonwebtoken` JWT);device-code 经 F5 Redis(600s TTL);邮件邀请经 **F10 SMTP(`lettre`)**。
+- **新增适配器**:扩 `adapters-postgres` 覆盖上述表;`adapters-auth-secrets`(bcrypt / `getrandom` token / `jsonwebtoken` JWT);device-code 经 F5 Redis(600s TTL);邮件邀请经 **F10 SMTP(`lettre`,✅ [04 #37](04-spike-evidence.md) 已就绪)**。
 - **Rust 现状**:✅ F2 `ms_sk_` SHA256 中间件 + project 访问检查;✅ **本会话落地登录垂直**(见下)——bcrypt 密码校验、`/auth/token` 登录、`/auth/oauth/{provider}/callback`(501 parity)、tenants 只读(list/get,含 404-then-403);**缺** 租户/项目写 CRUD、RBAC、级联删、invitation/share token、device-code 全流程、真实 OAuth、SMTP。
 - **Parity 风险**:①**级联删**——删项目连带 15+ 表,须事务 + FK 顺序与 Python 一致;②Pydantic→serde 字段别名(`user_id`←`id`,`populate_by_name`);③bcrypt 须与 passlib 输出逐字一致(固定测试向量);④OAuth 端点 Python 现为 501 stub → Rust 拥有端点但字节对齐仍返 501。
 - **子任务**:`p2-auth-secrets` ✅ → `p2-tenant-repo` ✅ → `p2-project-repo`(级联删)→ `p2-endpoints`(登录垂直 ✅;余下 device-code + 写 CRUD + SMTP 邀请 future)→ `p2-rbac` → `p2-gateway-parity`(`/auth/token`·`/auth/oauth` 已翻 ✅;tenants 翻转 deferred)→ `p2-docs` ✅。
