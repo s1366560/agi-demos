@@ -198,6 +198,54 @@ pub trait EventStream: Send + Sync {
     ) -> CoreResult<Vec<StreamEntry>>;
 }
 
+/// Metadata about a stored object (a blob's `size` in bytes and optional MIME
+/// `content_type`), returned by [`ObjectStore::stat`]. Mirrors the subset of an
+/// S3 `HeadObject` response the artifact/attachment paths actually read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObjectMeta {
+    pub size: u64,
+    pub content_type: Option<String>,
+}
+
+/// Blob storage keyed by an opaque string `key` (e.g.
+/// `artifacts/{project}/{id}`). The Rust re-expression of the Python
+/// **object-storage** path (F6, `10-production-migration.md` §3) behind
+/// artifacts / attachments / instance-files: opaque bytes in, opaque bytes out,
+/// listed by key prefix.
+///
+/// The server adapter is S3/MinIO (`aws-sdk-s3`, server-only); an in-memory
+/// adapter backs tests and the browser/device tier. Both sit behind this one
+/// port, so the portable core never learns which is underneath. Keeping the
+/// value a raw byte vector (plus optional `content_type`) keeps the core
+/// decoupled from any concrete artifact schema — every adapter stores the
+/// identical bytes, so contents match across tiers.
+///
+/// `get`/`stat` return `None` for a missing key (never an error), mirroring the
+/// Python "404 on absent object" behaviour and making cross-adapter parity a
+/// simple `Option` compare. An object stored without a `content_type` reports
+/// S3/MinIO's canonical default `application/octet-stream` on `stat` (both tiers
+/// normalize to it), so the metadata never diverges by adapter.
+#[async_trait]
+pub trait ObjectStore: Send + Sync {
+    /// Store `bytes` under `key` (overwriting any existing object), tagging it
+    /// with an optional MIME `content_type` (S3 `Content-Type`).
+    async fn put(&self, key: &str, bytes: Vec<u8>, content_type: Option<&str>) -> CoreResult<()>;
+
+    /// Fetch the bytes stored under `key`, or `None` if the key is absent.
+    async fn get(&self, key: &str) -> CoreResult<Option<Vec<u8>>>;
+
+    /// Return metadata for `key` without transferring the body, or `None` if the
+    /// key is absent.
+    async fn stat(&self, key: &str) -> CoreResult<Option<ObjectMeta>>;
+
+    /// Delete `key`. Deleting an absent key is a no-op success (S3 semantics).
+    async fn delete(&self, key: &str) -> CoreResult<()>;
+
+    /// List all keys beginning with `prefix` (empty = all), sorted ascending for
+    /// deterministic, cross-adapter-comparable results.
+    async fn list(&self, prefix: &str) -> CoreResult<Vec<String>>;
+}
+
 /// Mirrors `MemoryRepository` in
 /// `src/domain/ports/repositories/memory_repository.py` — including the default
 /// `search_by_project` fallback.
