@@ -88,7 +88,7 @@ P1 选记忆域先行:Rust `MemoryService` 已最成熟,且这是价值高、依
 | **P1** | 记忆与情节 | `/memories`·`/episodes`·`/recall`(~14) | **F1 Postgres+pgvector** | 低-中 | ✅ 本波落地 |
 | **P2** | 身份/租户/项目 | auth·tenants·projects·invitations·trust·shares(~43–58) | F2 ✅ · F10 SMTP | 中 | 🚧 登录垂直已落地(`/auth/token` 绞杀 + tenants 读就绪;详见 §6.1、[04 #29](04-spike-evidence.md)) |
 | **P3** | Agent 运行时与会话 | `/agent/*`(84 子)+ `/agent/ws`(1 WS,共 85) | F5 · F7 · **F11**(替 Ray)· Wave L/M/N ✅ | 极高 | 🎯 future(详见 §6.2;硬化地基 Wave L/M/N 已绿) |
-| **P4** | 知识图谱 | graph(10)·enhanced_search(7)(~17) | F8 Neo4j / 端 SQLite+petgraph | 高 | 🎯 future(详见 §6.3) |
+| **P4** | 知识图谱 | graph(10)·enhanced_search(7)(~17) | F8 Neo4j / 端 SQLite+petgraph | 高 | 🚧 端上图切片已落地(`GraphStore` + 排序数学 + 双适配器 + 跨层 parity;详见 §6.3、[04 #31](04-spike-evidence.md);Neo4j/抽取/端点 future) |
 | **P5** | 沙箱与 MCP | project_sandbox·skills·channels·terminal(~89) | F9 Docker/MCP · F6 | 高 | 🎯 future(详见 §6.4;`plugin-host` 已就位) |
 | **P6** | 工作区与多 agent | workspaces·tasks·plans·blackboard·topology(71) | 复用 P3 流/事件 · F5 | 高 | 🎯 future(详见 §6.5) |
 | **P7** | 长尾 | genes·instances·llm_providers·observability·…(~220) | F6 · 各自 SDK | 中 | 🎯 future(详见 §6.6,6 组并行) |
@@ -142,10 +142,10 @@ P1 选记忆域先行:Rust `MemoryService` 已最成熟,且这是价值高、依
 - **图存储**:Neo4j 节点 `Entity`(name/type/summary/uuid/project_id/tenant_id/name_embedding)·`Episodic`·`Community`;边 `MENTIONS`(fact/score);向量索引 + 全文索引。
 - **抽取管线(LLM reflexion)**:LiteLLM(temp 0.0)抽 JSON → 去重(Phase1 SHA256 name+type;Phase2 向量 ≥0.92)→ EntityNode+embedding;reflexion 默认 2 轮补漏。
 - **混合检索**:查询扩展 → 向量(RRF k=60)+ 关键词(全文)→ RRF 融合(`0.6×vec + 0.4×kw`)→ 时间衰减(半衰期 30d)→ MMR 重排(λ=0.7)。
-- **Rust 现状**:❌ 无图适配器;`adapters-http-llm` 可复用做抽取/embedding。
-- **Parity 风险**:Neo4j DateTime/graph 类型 ISO 序列化、向量 float 数组字节序、UUID/tenant 过滤;RRF 权重/衰减/MMR 须逐位复现;**端上图近似(petgraph/SQLite)与 Neo4j 的容差须显式定义**(端上 local-first 近似,非字节对齐)。
-- **子任务**:`p4-neo4j-adapter`(F8)→ `p4-extraction`(reflexion + 去重)→ `p4-hybrid-search`(RRF + 衰减 + MMR)→ `p4-community`(Louvain,`graphrs` 或自实现)→ `p4-device-graph`(**决策 4**:SQLite 关系表 + `petgraph` 遍历,纯 Rust 同编 `wasm32`)→ `p4-endpoints` → `p4-parity` → `p4-gateway` → `p4-docs`。
-- **决策 4(纳入端上图)**:端上 KG 以 SQLite + `petgraph` 近似落地(风险 #5,可移植)。**龙**:Louvain 浮点精度、`neo4rs` 特性差距、**端上 LLM 推理(风险 #6,llama.cpp/Candle 数百 MB 模型)仍 future**。
+- **Rust 现状**:✅ **可移植切片已落地**(决策 4)—— `GraphStore` 端口 + `GraphEntity`/`Relationship`/`Subgraph` 模型 + 纯 Rust 排序数学 [`crates/core/src/graph.rs`](../../crates/core/src/graph.rs)(RRF/时间衰减/MMR/Jaccard **逐字复刻 Python** 常量公式)+ 双适配器 `InMemoryGraphStore`(`petgraph`,`wasm32`)/`SqliteGraphStore`(SQLite + `petgraph`,端上耐久),跨层 parity 测证内存与 SQLite 一致(core 14 + mem 9 + device 5 + 跨层 1,[04 #31](04-spike-evidence.md));**缺** Neo4j 生产驱动、LLM reflexion 抽取、Louvain 社区、REST 端点。`adapters-http-llm` 可复用做抽取/embedding。
+- **Parity 风险**:Neo4j DateTime/graph 类型 ISO 序列化、向量 float 数组字节序、UUID/tenant 过滤;RRF 权重/衰减/MMR 须逐位复现(**排序数学已在 core 逐字复刻并测**);**端上图近似(petgraph/SQLite)与 Neo4j 的容差已显式定义**——排序层字节一致,子图/遍历为 local-first 近似(存储基底不同)。
+- **子任务**:`p4-neo4j-adapter`(F8,🎯 future)→ `p4-extraction`(reflexion + 去重,🎯 future)→ `p4-hybrid-search`(RRF + 衰减 + MMR,✅ **已落地** core 排序数学)→ `p4-community`(Louvain,🎯 future)→ `p4-device-graph`(**决策 4**:SQLite 关系表 + `petgraph` 遍历,纯 Rust 同编 `wasm32`,✅ **已落地**)→ `p4-endpoints`(🎯 future)→ `p4-parity` → `p4-gateway` → `p4-docs`。
+- **决策 4(纳入端上图)**:✅ 端上 KG 已以 SQLite + `petgraph` 近似 + core 排序数学落地(风险 #5 可移植部分退役,[05 §2](05-roadmap.md))。**龙/future**:Louvain 浮点精度、`neo4rs` 特性差距、Neo4j 生产驱动、LLM reflexion 抽取管线、**端上 LLM 推理(风险 #6,llama.cpp/Candle 数百 MB 模型)仍 future**。
 
 ### 6.4 P5 · 沙箱与 MCP(依赖 F9 Docker/MCP + F6 存储 + `plugin-host` ✅)
 
