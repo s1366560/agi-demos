@@ -1,0 +1,30 @@
+[package]
+name = "agistack-adapters-neo4j"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Native/server-ONLY adapter: the **production knowledge-graph tier** of the
+# `GraphStore` port (plan.md Section 15.4 / F8). It talks to the SAME Neo4j the
+# Python backend uses (`src/infrastructure/graph/`, `:Entity` nodes + `MENTIONS`
+# edges) via the community async Bolt driver `neo4rs`, so the strangler can flip
+# graph reads/writes from Python to Rust with no data migration.
+#
+# Why a dedicated crate: `neo4rs` drags in tokio + a TLS/Bolt stack. Exactly like
+# `adapters-postgres` and `adapters-http-llm`, this is kept OUT of the core/wasm
+# path so the core stays runtime-agnostic and wasm-compilable (ADR-0001). Nothing
+# here ever appears in a port signature — the core only sees `dyn GraphStore`.
+#
+# It is the third adapter behind the ONE `GraphStore` port: `InMemoryGraphStore`
+# (browser/test), `SqliteGraphStore` (device), and this `Neo4jGraphStore`
+# (server). Its subgraph traversal delegates to the very same depth-bounded BFS
+# the other two tiers run, so structural results match across all three.
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+neo4rs = "0.8"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+agistack-adapters-mem = { path = "../adapters-mem" }
+futures.workspace = true
