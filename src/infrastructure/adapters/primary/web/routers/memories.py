@@ -1,6 +1,5 @@
 """Memories API endpoints."""
 
-import json
 import logging
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
@@ -12,14 +11,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.domain.ports.services.graph_service_port import GraphServicePort
+from src.domain.ports.services.graph_store_port import GraphStorePort as GraphServicePort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_graph_service,
-    get_graphiti_client,
+    get_graph_store as get_graph_service,
     get_workflow_engine,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -322,18 +320,6 @@ async def _has_memory_share_edit_permission(
     )
 
 
-def _decode_graph_json_property(value: Any) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str):
-        try:
-            decoded = json.loads(value)
-        except json.JSONDecodeError:
-            return {}
-        return decoded if isinstance(decoded, dict) else {}
-    return {}
-
-
 async def _get_memory_graph_context(
     memory_id: str,
     graph_service: GraphServicePort | None,
@@ -341,89 +327,7 @@ async def _get_memory_graph_context(
     """Load graph entities and relationships connected to a memory episode."""
     if graph_service is None:
         return [], []
-
-    driver = getattr(graph_service, "driver", None)
-    if driver is None:
-        return [], []
-
-    try:
-        entity_records, _, _ = await driver.execute_query(
-            """
-            MATCH (episode:Episodic)
-            WHERE episode.memory_id = $memory_id OR episode.uuid = $memory_id
-            MATCH (episode)-[:MENTIONS]->(entity:Entity)
-            RETURN DISTINCT
-                entity.uuid AS id,
-                entity.name AS name,
-                coalesce(entity.entity_type, 'Entity') AS type,
-                entity.summary AS summary,
-                entity.attributes AS attributes
-            ORDER BY name
-            """,
-            memory_id=memory_id,
-        )
-        entities = [
-            {
-                "id": record["id"],
-                "uuid": record["id"],
-                "name": record["name"] or record["id"],
-                "type": record["type"] or "Entity",
-                "entity_type": record["type"] or "Entity",
-                "summary": record["summary"] or "",
-                "properties": _decode_graph_json_property(record["attributes"]),
-                "confidence": 1.0,
-            }
-            for record in entity_records
-            if record["id"] is not None
-        ]
-
-        relationship_records, _, _ = await driver.execute_query(
-            """
-            MATCH (episode:Episodic)
-            WHERE episode.memory_id = $memory_id OR episode.uuid = $memory_id
-            MATCH (episode)-[:MENTIONS]->(source:Entity)
-            MATCH (episode)-[:MENTIONS]->(target:Entity)
-            MATCH (source)-[relationship]->(target)
-            WHERE source <> target AND NOT type(relationship) IN ['MENTIONS', 'BELONGS_TO']
-            RETURN DISTINCT
-                coalesce(relationship.uuid, elementId(relationship)) AS id,
-                source.uuid AS source_id,
-                target.uuid AS target_id,
-                type(relationship) AS type,
-                relationship.fact AS fact,
-                relationship.summary AS summary,
-                relationship.weight AS weight,
-                relationship.episodes AS episodes
-            ORDER BY type
-            """,
-            memory_id=memory_id,
-        )
-        relationships = [
-            {
-                "id": record["id"],
-                "uuid": record["id"],
-                "source_id": record["source_id"],
-                "target_id": record["target_id"],
-                "source_uuid": record["source_id"],
-                "target_uuid": record["target_id"],
-                "type": record["type"],
-                "relationship_type": record["type"],
-                "properties": {
-                    "fact": record["fact"] or "",
-                    "summary": record["summary"] or "",
-                    "weight": record["weight"],
-                    "episodes": record["episodes"] or [],
-                },
-                "confidence": record["weight"] if record["weight"] is not None else 1.0,
-            }
-            for record in relationship_records
-            if record["source_id"] is not None and record["target_id"] is not None
-        ]
-    except Exception as e:
-        logger.warning("Failed to load graph context for memory %s: %s", memory_id, e)
-        return [], []
-
-    return entities, relationships
+    return await graph_service.get_memory_graph_context(memory_id)
 
 
 async def _has_project_admin_access(
@@ -642,7 +546,6 @@ async def create_memory(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any = Depends(get_graphiti_client),
     graph_service: GraphServicePort | None = Depends(get_graph_service),
     workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
 ) -> Any:
@@ -685,36 +588,20 @@ async def create_memory(
         # 2. Add to Graphiti for graph building (async)
         try:
             # Pre-create EpisodicNode in Neo4j to avoid race conditions
-            await graphiti_client.driver.execute_query(
-                """
-                MERGE (e:Episodic {uuid: $uuid})
-                SET e:Node,
-                    e.name = $name,
-                    e.content = $content,
-                    e.source_description = $source_description,
-                    e.source = $source,
-                    e.created_at = datetime($created_at),
-                    e.valid_at = datetime($created_at),
-                    e.group_id = $group_id,
-                    e.tenant_id = $tenant_id,
-                    e.project_id = $project_id,
-                    e.user_id = $user_id,
-                    e.memory_id = $memory_id,
-                    e.status = 'Processing',
-                    e.entity_edges = []
-                """,
-                uuid=memory.id,
-                name=memory.title or str(memory.id),
-                content=memory.content,
-                source_description="User input",
-                source="text",
-                created_at=memory.created_at.isoformat(),
-                group_id=project_id,
-                tenant_id=project.tenant_id,
-                project_id=project_id,
-                user_id=current_user.id,
-                memory_id=memory.id,
-            )
+            if graph_service is not None:
+                await graph_service.ensure_episodic_node(
+                    uuid=memory.id,
+                    name=memory.title or str(memory.id),
+                    content=memory.content,
+                    source_description="User input",
+                    source="text",
+                    created_at_iso=memory.created_at.isoformat(),
+                    group_id=project_id,
+                    tenant_id=project.tenant_id,
+                    project_id=project_id,
+                    user_id=current_user.id,
+                    memory_id=memory.id,
+                )
 
             task_id = str(uuid4())
             task_payload = {

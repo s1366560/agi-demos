@@ -3,6 +3,8 @@
 from src.domain.ports.services.authorization_port import AuthorizationPort
 from src.domain.ports.services.queue_port import QueuePort
 from src.domain.ports.services.graph_service_port import GraphServicePort
+from src.domain.ports.services.graph_store_port import GraphStorePort
+from src.domain.ports.services.retrieval_store_port import RetrievalStorePort
 from src.domain.ports.services.agent_service_port import AgentServicePort
 from src.domain.ports.services.storage_service_port import StorageServicePort, UploadResult
 from src.domain.ports.services.hitl_message_bus_port import (
@@ -38,6 +40,8 @@ __all__ = [
     "AuthorizationPort",
     "QueuePort",
     "GraphServicePort",
+    "GraphStorePort",
+    "RetrievalStorePort",
     "AgentServicePort",
     "StorageServicePort",
     "UploadResult",

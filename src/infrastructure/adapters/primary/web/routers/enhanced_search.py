@@ -8,13 +8,18 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.ports.services.graph_service_port import GraphServicePort
+from src.domain.ports.services.graph_store_port import (
+    GraphStorePort,
+    GraphStorePort as GraphServicePort,
+)
+from src.domain.ports.services.retrieval_store_port import RetrievalStorePort
 
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_graph_service,
-    get_neo4j_client,
+    get_graph_store,
+    get_graph_store as get_graph_service,
+    get_retrieval_store,
 )
 from src.infrastructure.adapters.primary.web.routers.graph import (
     _ensure_graph_project_access,
@@ -25,7 +30,6 @@ from src.infrastructure.adapters.primary.web.routers.graph import (
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, User
-from src.infrastructure.graph.neo4j_client import Neo4jClient
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
@@ -140,35 +144,6 @@ def _parse_optional_datetime(value: str | None, field: str) -> datetime | None:
                 status_code=400, detail=_("Invalid 'since' datetime format")
             ) from None
         raise HTTPException(status_code=400, detail=_("Invalid 'until' datetime format")) from None
-
-
-async def _graph_project_filter(
-    node_alias: str,
-    project_id: str | None,
-    current_user: User,
-    db: AsyncSession,
-    tenant_id: str | None = None,
-) -> tuple[list[str], dict[str, Any], bool]:
-    is_superuser, allowed_project_ids = await _graph_project_scope(
-        project_id,
-        current_user,
-        db,
-        tenant_id=tenant_id,
-    )
-    if not is_superuser and not allowed_project_ids:
-        return [], {}, True
-
-    if project_id:
-        return [f"{node_alias}.project_id = $project_id"], {"project_id": project_id}, False
-
-    if not is_superuser:
-        return (
-            [f"{node_alias}.project_id IN $project_ids"],
-            {"project_ids": allowed_project_ids},
-            False,
-        )
-
-    return [], {}, False
 
 
 def _empty_temporal_response(since: str | None, until: str | None) -> dict[str, Any]:
@@ -293,7 +268,7 @@ async def search_by_graph_traversal(
     project_id: str | None = Body(None, description="Project filter"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Search by traversing the knowledge graph from a starting entity.
@@ -302,81 +277,46 @@ async def search_by_graph_traversal(
     Useful for exploring connections and discovering related content.
     """
     try:
-        if not neo4j_client:
-            raise HTTPException(status_code=503, detail=_("Neo4j client not available"))
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
 
-        start_result = await neo4j_client.execute_query(
-            """
-            MATCH (start:Entity {uuid: $uuid})
-            RETURN properties(start) as props
-            """,
-            uuid=start_entity_uuid,
-        )
-        if not start_result.records:
+        start_project_id = await graph_store.get_entity_project_id(start_entity_uuid)
+        if start_project_id is None:
             raise HTTPException(status_code=404, detail=_("Entity not found"))
 
-        start_project_id = start_result.records[0]["props"].get("project_id")
         effective_project_id = project_id or start_project_id
         if project_id:
-            _scope_result = await _graph_project_scope(
-                project_id,
-                current_user,
-                db,
-                tenant_id=tenant_id,
-            )
+            await _graph_project_scope(project_id, current_user, db, tenant_id=tenant_id)
             if start_project_id != project_id:
                 return {"results": [], "total": 0, "search_type": "graph_traversal"}
         else:
-            _scope_result = await _graph_project_scope(
-                effective_project_id,
-                current_user,
-                db,
-                tenant_id=tenant_id,
-            )
+            await _graph_project_scope(effective_project_id, current_user, db, tenant_id=tenant_id)
 
-        query = f"""
-        MATCH path = (start:Entity {{uuid: $uuid}})-[*1..{max_depth}]-(related)
-        WHERE ('Entity' IN labels(related) OR 'Episodic' IN labels(related) OR 'Community' IN labels(related))
-        AND related.project_id = $project_id
-        AND (
-            size($relationship_types) = 0 OR
-            all(rel IN relationships(path) WHERE type(rel) IN $relationship_types)
-        )
-        RETURN DISTINCT related, properties(related) as props, labels(related) as labels
-        LIMIT $limit
-        """
-
-        result = await neo4j_client.execute_query(
-            query,
-            uuid=start_entity_uuid,
-            project_id=effective_project_id,
-            relationship_types=relationship_types or [],
+        rows = await graph_store.graph_traversal_search(
+            start_entity_uuid=start_entity_uuid,
+            max_depth=max_depth,
+            relationship_types=relationship_types,
             limit=limit,
+            project_id=effective_project_id,
         )
 
         items = []
-        for r in result.records:
-            props = {key: _sanitize_graph_value(value) for key, value in r["props"].items()}
-            labels = r["labels"]
-
+        for row in rows:
+            props = {key: _sanitize_graph_value(value) for key, value in row["props"].items()}
+            labels = row.get("labels", [])
             entity_type = _entity_type_from_props_or_labels(props, labels)
-
-            logger.debug(
-                f"Graph traversal - Node {props.get('uuid')} with labels: {labels} -> entity_type: {entity_type}"
-            )
-
             items.append(
                 {
                     "uuid": props.get("uuid", ""),
                     "name": props.get("name", ""),
-                    "type": entity_type,  # At root level
+                    "type": entity_type,
                     "summary": props.get("summary", ""),
                     "content": props.get("content", ""),
                     "created_at": props.get("created_at"),
                     "metadata": {
                         "uuid": props.get("uuid", ""),
                         "name": props.get("name", ""),
-                        "type": entity_type,  # Also in metadata for consistency
+                        "type": entity_type,
                         "created_at": props.get("created_at"),
                     },
                 }
@@ -402,7 +342,7 @@ async def search_by_community(
     include_episodes: bool = Body(True, description="Include episodes in results"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Search within a community for related content.
@@ -410,78 +350,20 @@ async def search_by_community(
     This finds all entities and optionally episodes within a specific community.
     """
     try:
-        if not neo4j_client:
-            raise HTTPException(status_code=503, detail=_("Neo4j client not available"))
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
 
-        community_result = await neo4j_client.execute_query(
-            """
-            MATCH (c:Community {uuid: $uuid})
-            RETURN properties(c) as props
-            """,
-            uuid=community_uuid,
-        )
-        if not community_result.records:
+        community_project_id = await graph_store.get_community_project_id(community_uuid)
+        if community_project_id is None:
             raise HTTPException(status_code=404, detail=_("Community not found"))
-
-        community_project_id = community_result.records[0]["props"].get("project_id")
         await _ensure_graph_project_access(community_project_id, current_user, db)
 
-        # Get entities in community
-        entity_query = """
-        MATCH (c:Community {uuid: $uuid})
-        MATCH (e:Entity)-[:BELONGS_TO]->(c)
-        WHERE e.project_id = $project_id
-        RETURN properties(e) as props, 'Entity' as type
-        """
-
-        result = await neo4j_client.execute_query(
-            entity_query,
-            uuid=community_uuid,
+        items = await graph_store.community_search(
+            community_uuid=community_uuid,
             project_id=community_project_id,
+            include_episodes=include_episodes,
+            limit=limit,
         )
-
-        items = []
-        for r in result.records:
-            props = r["props"]
-            items.append(
-                {
-                    "uuid": props.get("uuid", ""),
-                    "name": props.get("name", ""),
-                    "type": "entity",
-                    "summary": props.get("summary", ""),
-                    "created_at": props.get("created_at"),
-                }
-            )
-
-        # Optionally include episodes
-        if include_episodes:
-            episode_query = """
-            MATCH (c:Community {uuid: $uuid})
-            MATCH (e:Entity)-[:BELONGS_TO]->(c)
-            MATCH (ep:Episodic)-[:MENTIONS]->(e)
-            WHERE ep.project_id = $project_id
-            RETURN DISTINCT properties(ep) as props, 'Episodic' as type
-            LIMIT $limit
-            """
-
-            ep_result = await neo4j_client.execute_query(
-                episode_query,
-                uuid=community_uuid,
-                project_id=community_project_id,
-                limit=limit,
-            )
-
-            for r in ep_result.records:
-                props = r["props"]
-                items.append(
-                    {
-                        "uuid": props.get("uuid", ""),
-                        "name": props.get("name", ""),
-                        "type": "episode",
-                        "content": props.get("content", ""),
-                        "created_at": props.get("created_at"),
-                    }
-                )
 
         return {
             "results": items[:limit],
@@ -506,7 +388,7 @@ async def search_temporal(
     project_id: str | None = Body(None, description="Project filter"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Search within a temporal window.
@@ -515,66 +397,32 @@ async def search_temporal(
     Useful for finding memories from specific periods.
     """
     try:
-        if neo4j_client is None:
-            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
         parsed_since = _parse_optional_datetime(since, "since")
         parsed_until = _parse_optional_datetime(until, "until")
 
-        # Build temporal filter
-        conditions, scope_params, scope_empty = await _graph_project_filter(
-            "e", project_id, current_user, db, tenant_id=tenant_id
+        # Resolve scope + access (empty scope => no accessible projects).
+        is_superuser, allowed_project_ids = await _graph_project_scope(
+            project_id, current_user, db, tenant_id=tenant_id
         )
-        if scope_empty:
+        if not is_superuser and not allowed_project_ids:
             return _empty_temporal_response(since, until)
 
-        params: dict[str, Any] = {"limit": limit, **scope_params}
-        query_text = query.strip()
-        if query_text:
-            conditions.append(
-                "("
-                + "toLower(coalesce(e.content, '') + ' ' + "
-                + "coalesce(e.name, '') + ' ' + "
-                + "coalesce(e.summary, '')) CONTAINS toLower($query)"
-                + ")"
-            )
-            params["query"] = query_text
+        scope_project_id = project_id
+        scope_project_ids: list[str] | None = None
+        if not project_id and not is_superuser:
+            scope_project_ids = allowed_project_ids
 
-        if parsed_since:
-            conditions.append("e.created_at >= datetime($since)")
-            params["since"] = parsed_since.isoformat()
-
-        if parsed_until:
-            conditions.append("e.created_at <= datetime($until)")
-            params["until"] = parsed_until.isoformat()
-
-        if tenant_id:
-            conditions.append("e.tenant_id = $tenant_id")
-            params["tenant_id"] = tenant_id
-
-        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-
-        search_query = f"""
-        MATCH (e:Episodic)
-        {where_clause}
-        RETURN properties(e) as props, 'episode' as type
-        ORDER BY e.created_at DESC
-        LIMIT $limit
-        """
-
-        result = await neo4j_client.execute_query(search_query, **params)
-
-        items = []
-        for r in result.records:
-            props = r["props"]
-            items.append(
-                {
-                    "uuid": props.get("uuid", ""),
-                    "name": props.get("name", ""),
-                    "type": "episode",
-                    "content": props.get("content", ""),
-                    "created_at": props.get("created_at"),
-                }
-            )
+        items = await graph_store.temporal_search(
+            query=query.strip() or None,
+            since_iso=parsed_since.isoformat() if parsed_since else None,
+            until_iso=parsed_until.isoformat() if parsed_until else None,
+            limit=limit,
+            project_id=scope_project_id,
+            tenant_id=tenant_id,
+            project_ids=scope_project_ids,
+        )
 
         return {
             "results": items,
@@ -605,7 +453,7 @@ async def search_with_facets(
     project_id: str | None = Body(None, description="Project filter"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Search with faceted filtering.
@@ -614,73 +462,44 @@ async def search_with_facets(
     for UI filtering controls.
     """
     try:
-        if neo4j_client is None:
-            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
         parsed_since = _parse_optional_datetime(since, "since")
 
-        # Build filters
-        conditions, scope_params, scope_empty = await _graph_project_filter(
-            "e", project_id, current_user, db, tenant_id=tenant_id
+        # Resolve scope + access (empty scope => no accessible projects).
+        is_superuser, allowed_project_ids = await _graph_project_scope(
+            project_id, current_user, db, tenant_id=tenant_id
         )
-        if scope_empty:
+        if not is_superuser and not allowed_project_ids:
             return _empty_faceted_response(limit, offset)
 
-        params: dict[str, Any] = {"limit": limit, "offset": offset, **scope_params}
-        query_text = query.strip()
-        if query_text:
-            conditions.append(
-                "("
-                + "toLower(coalesce(e.name, '') + ' ' + "
-                + "coalesce(e.summary, '') + ' ' + "
-                + "coalesce(e.entity_type, '')) CONTAINS toLower($query)"
-                + ")"
-            )
-            params["query"] = query_text
+        scope_project_id = project_id
+        scope_project_ids: list[str] | None = None
+        if not project_id and not is_superuser:
+            scope_project_ids = allowed_project_ids
 
-        if entity_types:
-            conditions.append("e.entity_type IN $entity_types")
-            params["entity_types"] = entity_types
-
-        if tags:
-            conditions.append("any(tag IN $tags WHERE tag IN coalesce(e.tags, []))")
-            params["tags"] = tags
-
-        if parsed_since:
-            conditions.append("e.created_at >= datetime($since)")
-            params["since"] = parsed_since.isoformat()
-
-        if tenant_id:
-            conditions.append("e.tenant_id = $tenant_id")
-            params["tenant_id"] = tenant_id
-
-        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-
-        search_query = f"""
-        MATCH (e:Entity)
-        {where_clause}
-        RETURN properties(e) as props, labels(e) as labels, 'entity' as type
-        SKIP $offset
-        LIMIT $limit
-        """
-
-        result = await neo4j_client.execute_query(search_query, **params)
+        rows = await graph_store.faceted_search(
+            query=query.strip() or None,
+            entity_types=entity_types,
+            tags=tags,
+            since_iso=parsed_since.isoformat() if parsed_since else None,
+            limit=limit,
+            offset=offset,
+            project_id=scope_project_id,
+            tenant_id=tenant_id,
+            project_ids=scope_project_ids,
+        )
 
         items = []
-        for r in result.records:
-            props = r["props"]
-            labels = r["labels"]
-
+        for row in rows:
+            labels = row.pop("labels", [])
+            props = row
             entity_type = _entity_type_from_props_or_labels(props, labels)
-
-            logger.debug(
-                f"Faceted search - Node {props.get('uuid')} with labels: {labels} -> entity_type: {entity_type}"
-            )
-
             items.append(
                 {
                     "uuid": props.get("uuid", ""),
                     "name": props.get("name", ""),
-                    "type": entity_type,  # Use actual entity type at root level
+                    "type": entity_type,
                     "entity_type": entity_type,
                     "summary": props.get("summary", ""),
                     "created_at": props.get("created_at"),
@@ -810,6 +629,7 @@ async def memory_search(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     graph_service: GraphServicePort | None = Depends(get_graph_service),
+    retrieval_store: RetrievalStorePort | None = Depends(get_retrieval_store),
 ) -> dict[str, Any]:
     """
     Search memories using hybrid search.
@@ -825,19 +645,41 @@ async def memory_search(
         if not query:
             raise HTTPException(status_code=400, detail=_("Query is required"))
 
-        if not graph_service:
+        if not graph_service and not retrieval_store:
             raise HTTPException(status_code=503, detail=_("Graph service not available"))
 
-        # Use NativeGraphAdapter's search method
-        results = await _search_graph_service_for_scope(
-            graph_service,
-            query=query,
-            tenant_id=None,
-            project_id=project_id,
-            limit=limit,
-            current_user=current_user,
-            db=db,
-        )
+        results: list[Any] = []
+        if retrieval_store is not None and project_id:
+            retrieval_results = await retrieval_store.hybrid_search(
+                query=query,
+                project_id=project_id,
+                limit=limit,
+            )
+            results.extend(
+                {
+                    "uuid": item.id,
+                    "name": item.metadata.get("title") or item.source_id or item.id,
+                    "content": item.content,
+                    "type": "episode",
+                    "score": item.score,
+                    "created_at": item.created_at,
+                    "source": item.source_type,
+                    "source_description": item.category,
+                }
+                for item in retrieval_results
+            )
+
+        if graph_service is not None and len(results) < limit:
+            graph_results = await _search_graph_service_for_scope(
+                graph_service,
+                query=query,
+                tenant_id=None,
+                project_id=project_id,
+                limit=limit - len(results),
+                current_user=current_user,
+                db=db,
+            )
+            results.extend(graph_results)
 
         # Convert results to response format
         formatted_results = []

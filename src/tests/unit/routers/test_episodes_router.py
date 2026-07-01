@@ -23,6 +23,21 @@ def _without_scope(payload: dict) -> dict:
     }
 
 
+def _episode_props(uuid: str = "ep_123", name: str = "Test Episode") -> dict:
+    return {
+        "uuid": uuid,
+        "name": name,
+        "content": "Test content",
+        "source_description": "text",
+        "created_at": datetime.now(UTC).isoformat(),
+        "valid_at": datetime.now(UTC).isoformat(),
+        "tenant_id": "tenant_123",
+        "project_id": "proj_123",
+        "user_id": "user_123",
+        "status": "completed",
+    }
+
+
 @pytest.mark.unit
 class TestEpisodesRouter:
     """Test cases for episodes router endpoints."""
@@ -30,23 +45,17 @@ class TestEpisodesRouter:
     @pytest.mark.asyncio
     async def test_create_episode_success(self, client, mock_graphiti_client, sample_episode_data):
         """Test successful episode creation."""
-        from unittest.mock import Mock
-        from uuid import uuid4
-
-        # Mock response - return a proper result object
         mock_episode = Mock()
         mock_episode.uuid = str(uuid4())
         mock_result = Mock()
         mock_result.episode = mock_episode
         mock_graphiti_client.add_episode = AsyncMock(return_value=mock_result)
 
-        # Make request
         response = client.post(
             "/api/v1/episodes/",
             json=_without_scope(sample_episode_data),
         )
 
-        # Assert
         assert response.status_code == status.HTTP_202_ACCEPTED
         data = response.json()
         assert data["status"] == "processing"
@@ -127,75 +136,43 @@ class TestEpisodesRouter:
         self, client, mock_graphiti_client, sample_episode_data
     ):
         """Test episode creation with auto-generated name."""
-        from unittest.mock import Mock
-        from uuid import uuid4
-
-        # Remove name from data
         episode_data = _without_scope(sample_episode_data)
         del episode_data["name"]
 
-        # Mock response - return a proper result object
         mock_episode = Mock()
         mock_episode.uuid = str(uuid4())
         mock_result = Mock()
         mock_result.episode = mock_episode
         mock_graphiti_client.add_episode = AsyncMock(return_value=mock_result)
 
-        # Make request
         response = client.post("/api/v1/episodes/", json=episode_data)
 
-        # Assert
         assert response.status_code == status.HTTP_202_ACCEPTED
         mock_graphiti_client.add_episode.assert_called_once()
-        # Name should be auto-generated from content
-        call_args = mock_graphiti_client.add_episode.call_args
-        assert call_args is not None
+        assert mock_graphiti_client.add_episode.call_args is not None
 
     @pytest.mark.asyncio
     async def test_create_episode_failure(self, client, mock_graphiti_client, sample_episode_data):
         """Test episode creation failure handling."""
-        # Mock failure
         mock_graphiti_client.add_episode = AsyncMock(
             side_effect=Exception("Database error secret-dsn")
         )
 
-        # Make request
         response = client.post("/api/v1/episodes/", json=_without_scope(sample_episode_data))
 
-        # Assert
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert response.json()["detail"] == "Failed to create episode"
         assert "secret-dsn" not in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_get_episode_success(self, client, mock_graphiti_client):
-        """Test successful episode retrieval."""
-        # Mock response
-        mock_records = [
-            {
-                "props": {
-                    "uuid": "ep_123",
-                    "name": "Test Episode",
-                    "content": "Test content",
-                    "source_description": "text",
-                    "created_at": datetime.now(UTC).isoformat(),
-                    "valid_at": datetime.now(UTC).isoformat(),
-                    "tenant_id": "tenant_123",
-                    "project_id": "proj_123",
-                    "user_id": "user_123",
-                    "status": "completed",
-                }
-            }
-        ]
+        """Test successful episode retrieval delegates to get_episode_by_name."""
+        mock_graphiti_client.get_episode_by_name = AsyncMock(
+            return_value=_episode_props(uuid="ep_123", name="Test Episode")
+        )
 
-        mock_result = Mock()
-        mock_result.records = mock_records
-        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=mock_result)
-
-        # Make request
         response = client.get("/api/v1/episodes/by-name/Test Episode")
 
-        # Assert
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["uuid"] == "ep_123"
@@ -206,52 +183,32 @@ class TestEpisodesRouter:
     @pytest.mark.asyncio
     async def test_get_episode_not_found(self, client, mock_graphiti_client):
         """Test episode retrieval when episode not found."""
-        # Mock empty response
-        mock_result = Mock()
-        mock_result.records = []
-        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=mock_result)
+        mock_graphiti_client.get_episode_by_name = AsyncMock(return_value=None)
 
-        # Make request
         response = client.get("/api/v1/episodes/by-name/Nonexistent Episode")
 
-        # Assert
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert "Episode not found" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_list_episodes_success(self, client, mock_graphiti_client):
-        """Test successful episode listing."""
-        # Mock count response
-        count_record = Mock()
-        count_record.__getitem__ = lambda self, key: 10  # total
-        count_result = Mock()
-        count_result.records = [count_record]
-
-        # Mock list response
-        list_records = []
-        for i in range(5):
-            props = {
+        """Test successful episode listing delegates to list_episodes."""
+        episodes = [
+            {
                 "uuid": f"ep_{i}",
                 "name": f"Episode {i}",
                 "content": f"Content {i}",
                 "created_at": datetime.now(UTC).isoformat(),
                 "status": "completed",
             }
-            record = Mock()
-            record.__getitem__ = lambda self, key: props
-            list_records.append(record)
-
-        list_result = Mock()
-        list_result.records = list_records
-
-        mock_graphiti_client.driver.execute_query = AsyncMock(
-            side_effect=[count_result, list_result]
+            for i in range(5)
+        ]
+        mock_graphiti_client.list_episodes = AsyncMock(
+            return_value={"episodes": episodes, "total": 10}
         )
 
-        # Make request
         response = client.get("/api/v1/episodes/?limit=5&offset=0")
 
-        # Assert
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "episodes" in data
@@ -267,55 +224,38 @@ class TestEpisodesRouter:
         mock_graphiti_client,
         test_project_db,
     ):
-        """Test episode listing with filters."""
-        # Mock count response
-        count_record = Mock()
-        count_record.__getitem__ = lambda self, key: 5  # total
-        count_result = Mock()
-        count_result.records = [count_record]
-
-        # Mock list response (empty)
-        list_result = Mock()
-        list_result.records = []
-
-        mock_graphiti_client.driver.execute_query = AsyncMock(
-            side_effect=[count_result, list_result]
+        """Test episode listing forwards filters to the store."""
+        mock_graphiti_client.list_episodes = AsyncMock(
+            return_value={"episodes": [], "total": 5}
         )
 
-        # Make request with filters
         response = client.get(
             "/api/v1/episodes/"
             f"?tenant_id={test_project_db.tenant_id}&project_id={test_project_db.id}&limit=10"
         )
 
-        # Assert
         assert response.status_code == status.HTTP_200_OK
-        # Verify query was called with filters
-        assert mock_graphiti_client.driver.execute_query.call_count == 2
+        # store called once (count+list collapsed into one primitive call)
+        mock_graphiti_client.list_episodes.assert_awaited_once()
+        kwargs = mock_graphiti_client.list_episodes.call_args.kwargs
+        assert kwargs["project_id"] == test_project_db.id
 
     @pytest.mark.asyncio
     async def test_list_episodes_rejects_invalid_sort_field(self, client, mock_graphiti_client):
-        """Sort fields are whitelisted before interpolation into Cypher."""
+        """Sort fields are whitelisted before reaching the store."""
         response = client.get("/api/v1/episodes/?sort_by=name) DETACH DELETE e //")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.json()["detail"] == "Invalid sort field"
-        mock_graphiti_client.driver.execute_query.assert_not_called()
+        mock_graphiti_client.list_episodes.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_delete_episode_success(self, client, mock_graphiti_client):
-        """Test successful episode deletion."""
-        # Mock response - need subscriptable record
-        record = Mock()
-        record.__getitem__ = lambda self, key: 1  # deleted count
-        mock_result = Mock()
-        mock_result.records = [record]
-        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=mock_result)
+        """Test successful episode deletion delegates to delete_episode_by_name."""
+        mock_graphiti_client.delete_episode_by_name = AsyncMock(return_value=1)
 
-        # Make request
         response = client.delete("/api/v1/episodes/by-name/Test Episode")
 
-        # Assert
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["status"] == "success"
@@ -329,27 +269,25 @@ class TestEpisodesRouter:
         test_user,
         mock_graphiti_client,
     ):
-        """Direct delete calls include tenant and project membership filters."""
-        record = Mock()
-        record.__getitem__ = lambda self, key: 1
-        mock_result = Mock()
-        mock_result.records = [record]
-        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=mock_result)
+        """Direct delete forwards tenant + project membership to the store."""
+        captured: dict = {}
+
+        async def _capture(name, **kwargs):
+            captured.update(kwargs)
+            return 1
+
+        mock_graphiti_client.delete_episode_by_name = AsyncMock(side_effect=_capture)
 
         response = await delete_episode(
             "Test Episode",
             current_user=test_user,
             db=test_db,
-            graphiti_client=mock_graphiti_client,
+            graph_store=mock_graphiti_client,
         )
 
-        query = mock_graphiti_client.driver.execute_query.call_args.args[0]
-        kwargs = mock_graphiti_client.driver.execute_query.call_args.kwargs
         assert response["status"] == "success"
-        assert "e.tenant_id = $tenant_id" in query
-        assert "e.project_id IN $project_ids" in query
-        assert kwargs["tenant_id"] == test_project_db.tenant_id
-        assert test_project_db.id in kwargs["project_ids"]
+        assert captured["tenant_id"] == test_project_db.tenant_id
+        assert test_project_db.id in (captured["project_ids"] or [])
 
     @pytest.mark.asyncio
     async def test_get_episode_failure_returns_sanitized_error(
@@ -360,7 +298,7 @@ class TestEpisodesRouter:
         mock_graphiti_client,
     ):
         """Episode retrieval failures do not expose internal exception text."""
-        mock_graphiti_client.driver.execute_query = AsyncMock(
+        mock_graphiti_client.get_episode_by_name = AsyncMock(
             side_effect=RuntimeError("internal connection secret")
         )
 
@@ -369,7 +307,7 @@ class TestEpisodesRouter:
                 "Test Episode",
                 current_user=test_user,
                 db=test_db,
-                graphiti_client=mock_graphiti_client,
+                graph_store=mock_graphiti_client,
             )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -384,7 +322,7 @@ class TestEpisodesRouter:
         mock_graphiti_client,
     ):
         """Episode list failures do not expose internal exception text."""
-        mock_graphiti_client.driver.execute_query = AsyncMock(
+        mock_graphiti_client.list_episodes = AsyncMock(
             side_effect=RuntimeError("internal list secret")
         )
 
@@ -398,7 +336,7 @@ class TestEpisodesRouter:
                 sort_desc=True,
                 current_user=test_user,
                 db=test_db,
-                graphiti_client=mock_graphiti_client,
+                graph_store=mock_graphiti_client,
             )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -413,7 +351,7 @@ class TestEpisodesRouter:
         mock_graphiti_client,
     ):
         """Episode deletion failures do not expose internal exception text."""
-        mock_graphiti_client.driver.execute_query = AsyncMock(
+        mock_graphiti_client.delete_episode_by_name = AsyncMock(
             side_effect=RuntimeError("internal delete secret")
         )
 
@@ -422,7 +360,7 @@ class TestEpisodesRouter:
                 "Test Episode",
                 current_user=test_user,
                 db=test_db,
-                graphiti_client=mock_graphiti_client,
+                graph_store=mock_graphiti_client,
             )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -431,33 +369,20 @@ class TestEpisodesRouter:
     @pytest.mark.asyncio
     async def test_delete_episode_not_found(self, client, mock_graphiti_client):
         """Test episode deletion when episode not found."""
-        # Mock response - no episodes deleted
-        record = Mock()
-        record.__getitem__ = lambda self, key: 0  # deleted count
-        mock_result = Mock()
-        mock_result.records = [record]
-        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=mock_result)
+        mock_graphiti_client.delete_episode_by_name = AsyncMock(return_value=0)
 
-        # Make request
         response = client.delete("/api/v1/episodes/by-name/Nonexistent Episode")
 
-        # Assert
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert "Episode not found" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_health_check_success(self, authenticated_client, mock_graphiti_client):
-        """Test health check endpoint."""
-        # Mock response - execute_query needs to return a result with records()
-        mock_result = Mock()
-        mock_result.records = []
-        mock_graphiti_client.driver = Mock()
-        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=mock_result)
+        """Test health check endpoint delegates to health_probe."""
+        mock_graphiti_client.health_probe = AsyncMock(return_value=True)
 
-        # Make request
         response = authenticated_client.get("/api/v1/episodes/health")
 
-        # Assert
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["status"] == "healthy"
@@ -466,19 +391,12 @@ class TestEpisodesRouter:
     @pytest.mark.asyncio
     async def test_health_check_failure(self, authenticated_client, mock_graphiti_client):
         """Test health check when service is unhealthy."""
-        # Mock failure
-        mock_graphiti_client.driver = Mock()
-        mock_graphiti_client.driver.execute_query = AsyncMock(
-            side_effect=Exception("Connection error secret-neo4j")
-        )
+        mock_graphiti_client.health_probe = AsyncMock(return_value=False)
 
-        # Make request
         response = authenticated_client.get("/api/v1/episodes/health")
 
-        # Assert
         assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
         assert response.json()["detail"] == "Service unhealthy"
-        assert "secret-neo4j" not in response.json()["detail"]
 
 
 @pytest.mark.unit
@@ -488,9 +406,7 @@ class TestEpisodesRouterIntegration:
     @pytest.mark.asyncio
     async def test_episode_workflow(self, client, mock_graphiti_client, sample_episode_data):
         """Test complete episode workflow: create -> get -> list -> delete."""
-        from uuid import uuid4
-
-        # 1. Create episode - return proper result object
+        # 1. Create episode
         mock_episode = Mock()
         mock_episode.uuid = str(uuid4())
         mock_result = Mock()
@@ -503,47 +419,32 @@ class TestEpisodesRouterIntegration:
         episode_id = create_response.json()["id"]
 
         # 2. Get episode
-        mock_records = []
-        props = {
-            "uuid": episode_id,
-            "name": episode_payload["name"],
-            "content": episode_payload["content"],
-            "created_at": datetime.now(UTC).isoformat(),
-            "status": "processing",
-        }
-        record = Mock()
-        record.__getitem__ = lambda self, key: props
-        mock_records.append(record)
-
-        mock_result = Mock()
-        mock_result.records = mock_records
-        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=mock_result)
-
+        mock_graphiti_client.get_episode_by_name = AsyncMock(
+            return_value=_episode_props(uuid=episode_id, name=episode_payload["name"])
+        )
         get_response = client.get(f"/api/v1/episodes/by-name/{episode_payload['name']}")
         assert get_response.status_code == status.HTTP_200_OK
 
         # 3. List episodes
-        count_record = Mock()
-        count_record.__getitem__ = lambda self, key: 1  # total
-        count_result = Mock()
-        count_result.records = [count_record]
-
-        list_result = Mock()
-        list_result.records = mock_records
-        mock_graphiti_client.driver.execute_query = AsyncMock(
-            side_effect=[count_result, list_result]
+        mock_graphiti_client.list_episodes = AsyncMock(
+            return_value={
+                "episodes": [
+                    {
+                        "uuid": episode_id,
+                        "name": episode_payload["name"],
+                        "content": episode_payload["content"],
+                        "created_at": datetime.now(UTC).isoformat(),
+                        "status": "processing",
+                    }
+                ],
+                "total": 1,
+            }
         )
-
         list_response = client.get("/api/v1/episodes/")
         assert list_response.status_code == status.HTTP_200_OK
         assert len(list_response.json()["episodes"]) == 1
 
         # 4. Delete episode
-        delete_record = Mock()
-        delete_record.__getitem__ = lambda self, key: 1  # deleted
-        delete_result = Mock()
-        delete_result.records = [delete_record]
-        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=delete_result)
-
+        mock_graphiti_client.delete_episode_by_name = AsyncMock(return_value=1)
         delete_response = client.delete(f"/api/v1/episodes/by-name/{episode_payload['name']}")
         assert delete_response.status_code == status.HTTP_200_OK

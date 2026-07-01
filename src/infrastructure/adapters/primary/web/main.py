@@ -56,6 +56,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     events,
     genes,
     graph,
+    graph_stores,
     instance_channels,
     instance_files,
     instance_templates,
@@ -71,6 +72,7 @@ from src.infrastructure.adapters.primary.web.routers import (
     projects,
     recall,
     reflection,
+    retrieval_stores,
     sandbox,
     schema,
     security_ws,
@@ -193,6 +195,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:  # noqa: PLR0915,
     # Wire Redis into graph service for cached embedding support
     if redis_client and graph_service and hasattr(graph_service, "set_redis_client"):
         graph_service.set_redis_client(redis_client)  # type: ignore[arg-type]  # runtime type is Redis
+    try:
+        from src.infrastructure.retrieval.registry import register_env_default_retrieval_store
+        from src.infrastructure.retrieval.stores import MemstackPgvectorRetrievalStore
+
+        retrieval_store = MemstackPgvectorRetrievalStore(
+            session_factory=async_session_factory,
+            embedding_service=getattr(graph_service, "embedder", None),
+        )
+        register_env_default_retrieval_store(retrieval_store)
+        app.state.retrieval_store = retrieval_store
+        logger.info("Registered env-default retrieval backend in registry")
+    except Exception:
+        logger.exception("Failed to register env-default retrieval backend")
 
     # Initialize DI Container
     container = initialize_container(
@@ -702,6 +717,8 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     app.include_router(shares.router)
     app.include_router(memories.router)
     app.include_router(graph.router)
+    app.include_router(graph_stores.router)
+    app.include_router(retrieval_stores.router)
     app.include_router(schema.router)
     app.include_router(llm_providers.router)  # LiteLLM provider management
 

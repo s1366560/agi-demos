@@ -4,6 +4,12 @@ import { httpClient } from './client/httpClient';
 import type {
   ProjectCreate,
   ProjectUpdate,
+  BackendStore,
+  BackendStoreCreate,
+  BackendStoreTestRequest,
+  BackendStoreTestResponse,
+  BackendStoreTypeInfo,
+  BackendStoreUpdate,
   MemoryCreate,
   MemoryUpdate,
   MemoryQuery,
@@ -134,6 +140,83 @@ interface TenantProviderAssignment {
   updated_at: string;
 }
 
+interface StoreApiEnvelope<T> {
+  success: boolean;
+  data?: T | undefined;
+  version?: string | null | undefined;
+  error?: string | undefined;
+  detail?: string | undefined;
+}
+
+const unwrapStoreData = <T>(response: StoreApiEnvelope<T>): T => {
+  if (!response.success) {
+    throw new Error(response.error ?? response.detail ?? 'Store request failed');
+  }
+  if (response.data === undefined) {
+    throw new Error('Store response did not include data');
+  }
+  return response.data;
+};
+
+const unwrapStoreTest = (response: StoreApiEnvelope<unknown>): BackendStoreTestResponse => ({
+  success: response.success,
+  version: response.version ?? null,
+  error: response.error ?? response.detail,
+});
+
+const createBackendStoreAPI = (baseUrl: '/graph-stores' | '/retrieval-stores') => ({
+  types: async (): Promise<BackendStoreTypeInfo[]> => {
+    return unwrapStoreData(
+      await api.get<StoreApiEnvelope<BackendStoreTypeInfo[]>>(`${baseUrl}/types`)
+    );
+  },
+  list: async (tenantId: string): Promise<BackendStore[]> => {
+    return unwrapStoreData(
+      await api.get<StoreApiEnvelope<BackendStore[]>>(baseUrl, { params: { tenant_id: tenantId } })
+    );
+  },
+  create: async (tenantId: string, data: BackendStoreCreate): Promise<BackendStore> => {
+    return unwrapStoreData(
+      await api.post<StoreApiEnvelope<BackendStore>>(baseUrl, data, {
+        params: { tenant_id: tenantId },
+      })
+    );
+  },
+  update: async (
+    tenantId: string,
+    storeId: string,
+    data: BackendStoreUpdate
+  ): Promise<BackendStore> => {
+    return unwrapStoreData(
+      await api.put<StoreApiEnvelope<BackendStore>>(`${baseUrl}/${storeId}`, data, {
+        params: { tenant_id: tenantId },
+      })
+    );
+  },
+  delete: async (tenantId: string, storeId: string): Promise<void> => {
+    await api.delete(`${baseUrl}/${storeId}`, { params: { tenant_id: tenantId } });
+  },
+  testRaw: async (
+    tenantId: string,
+    data: BackendStoreTestRequest
+  ): Promise<BackendStoreTestResponse> => {
+    return unwrapStoreTest(
+      await api.post<StoreApiEnvelope<unknown>>(`${baseUrl}/test`, data, {
+        params: { tenant_id: tenantId },
+      })
+    );
+  },
+  testById: async (tenantId: string, storeId: string): Promise<BackendStoreTestResponse> => {
+    return unwrapStoreTest(
+      await api.post<StoreApiEnvelope<unknown>>(
+        `${baseUrl}/${storeId}/test`,
+        {},
+        { params: { tenant_id: tenantId } }
+      )
+    );
+  },
+});
+
 export const authAPI = {
   login: async (email: string, password: string): Promise<LoginResponse> => {
     const formData = new FormData();
@@ -220,6 +303,9 @@ export const authAPI = {
     });
   },
 };
+
+export const graphStoreAPI = createBackendStoreAPI('/graph-stores');
+export const retrievalStoreAPI = createBackendStoreAPI('/retrieval-stores');
 
 export const tenantAPI = {
   list: async (params = {}): Promise<TenantListResponse> => {

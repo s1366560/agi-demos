@@ -9,9 +9,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Use Cases & DI Container
+from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_graphiti_client,
+    get_graph_store,
 )
 from src.infrastructure.adapters.primary.web.routers.graph import _graph_project_scope
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -55,12 +56,14 @@ async def short_term_recall(
     payload: ShortTermRecallQuery,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> ShortTermRecallResponse:
     """
     Recall short-term episodic memories within the given time window.
     """
     try:
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend unavailable"))
         logger.info(
             "Short-term recall by user %s: window=%sm project=%s",
             current_user.id,
@@ -70,13 +73,6 @@ async def short_term_recall(
 
         # Calculate time window
         since_date = datetime.now(UTC) - timedelta(minutes=payload.window_minutes)
-
-        # Build query
-        conditions = ["e.created_at >= datetime($since_date)"]
-        params: dict[str, Any] = {
-            "since_date": since_date.isoformat(),
-            "limit": payload.limit,
-        }
 
         is_superuser, allowed_project_ids = await _graph_project_scope(
             payload.project_id,
@@ -91,32 +87,23 @@ async def short_term_recall(
                 window_minutes=payload.window_minutes,
             )
 
-        if payload.project_id:
-            conditions.append("e.project_id = $project_id")
-            params["project_id"] = payload.project_id
-        elif not is_superuser:
-            conditions.append("e.project_id IN $project_ids")
-            params["project_ids"] = allowed_project_ids
+        # Scope resolution: explicit project wins; otherwise the caller's
+        # accessible project set (None for superusers = no project filter).
+        scope_project_id = payload.project_id
+        scope_project_ids: list[str] | None = None
+        if not payload.project_id and not is_superuser:
+            scope_project_ids = allowed_project_ids
 
-        if payload.tenant_id:
-            conditions.append("e.tenant_id = $tenant_id")
-            params["tenant_id"] = payload.tenant_id
-
-        where_clause = "WHERE " + " AND ".join(conditions)
-
-        query = f"""
-        MATCH (e:Episodic)
-        {where_clause}
-        RETURN properties(e) as props
-        ORDER BY e.created_at DESC
-        LIMIT $limit
-        """
-
-        result = await graphiti_client.driver.execute_query(query, **params)
+        episodes = await graph_store.recall_recent_episodes(
+            since_iso=since_date.isoformat(),
+            limit=payload.limit,
+            tenant_id=payload.tenant_id,
+            project_id=scope_project_id,
+            project_ids=scope_project_ids,
+        )
 
         items = []
-        for r in result.records:
-            props = r["props"]
+        for props in episodes:
             # Convert Neo4j DateTime to ISO string if needed
             created_at = props.get("created_at")
             if created_at is not None and hasattr(created_at, "isoformat"):

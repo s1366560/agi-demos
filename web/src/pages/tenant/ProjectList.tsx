@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Database,
   LayoutGrid,
   List,
   MoreVertical,
@@ -172,13 +173,22 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           </h1>
           <p className="text-sm text-slate-500">{t('tenant.projects.subtitle')}</p>
         </div>
-        <Link
-          to={`${tenantBasePath}/projects/new`}
-          className="bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-primary/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity]"
-        >
-          <Plus size={16} />
-          {t('tenant.projects.create')}
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to={`${tenantBasePath}/backend-stores`}
+            className="flex items-center gap-2 rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition-[color,background-color,border-color,box-shadow,opacity] hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <Database size={16} />
+            {t('tenant.backendStores.title', { defaultValue: 'Backend stores' })}
+          </Link>
+          <Link
+            to={`${tenantBasePath}/projects/new`}
+            className="bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-lg shadow-primary/20 flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,opacity]"
+          >
+            <Plus size={16} />
+            {t('tenant.projects.create')}
+          </Link>
+        </div>
       </div>
 
       {/* Toolbar: Search & Filters */}

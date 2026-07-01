@@ -24,6 +24,19 @@ async def test_create_native_graph_adapter_uses_reflexion_settings(monkeypatch: 
         graph_reflexion_max_iterations = 4
         auto_clear_mismatched_embeddings = False
 
+        # Graph store config (effective_* resolve to NEO4J_* fallbacks)
+        @property
+        def effective_graph_store_uri(self) -> str:
+            return self.neo4j_uri
+
+        @property
+        def effective_graph_store_user(self) -> str:
+            return self.neo4j_user
+
+        @property
+        def effective_graph_store_password(self) -> str:
+            return self.neo4j_password
+
     class FakeNeo4jClient:
         def __init__(self, *, uri: str, user: str, password: str) -> None:
             captured["neo4j"] = (uri, user, password)

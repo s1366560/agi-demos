@@ -5,6 +5,8 @@ import { useNavigate, Link } from 'react-router-dom';
 
 import { AlertCircle, Brain, Loader2, Network, Settings } from 'lucide-react';
 
+import { BackendStoreSelectors } from '@/components/project/BackendStoreSelectors';
+
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
@@ -29,6 +31,8 @@ export const NewProject: React.FC = () => {
       similarity_threshold: 0.7,
       community_detection: true,
     },
+    graph_store_id: null as string | null,
+    retrieval_store_id: null as string | null,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -112,6 +116,20 @@ export const NewProject: React.FC = () => {
             </div>
           </div>
         </div>
+
+        <BackendStoreSelectors
+          tenantId={currentTenant?.id}
+          graphStoreId={formData.graph_store_id}
+          retrievalStoreId={formData.retrieval_store_id}
+          disabled={isLoading}
+          onChange={(patch) => {
+            setFormData({
+              ...formData,
+              graph_store_id: patch.graph_store_id ?? formData.graph_store_id,
+              retrieval_store_id: patch.retrieval_store_id ?? formData.retrieval_store_id,
+            });
+          }}
+        />
 
         {/* Configuration Split */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, cast
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 
 from src.application.schemas.project import (
+    BackendStoreSummary,
     ProjectCreate,
     ProjectListResponse,
     ProjectMemberUpdate,
@@ -24,9 +25,10 @@ from src.application.schemas.project import (
     ProjectUpdate,
     SystemStatus,
 )
+from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_graphiti_client,
+    get_graph_store,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -41,7 +43,15 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserTenant,
     WorkspaceModel,
 )
+from src.infrastructure.adapters.secondary.persistence.sql_graph_store_repository import (
+    SqlGraphStoreRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_retrieval_store_repository import (
+    SqlRetrievalStoreRepository,
+)
+from src.infrastructure.graph.registry import ENV_STORE_ID_PREFIX
 from src.infrastructure.i18n import gettext as _
+from src.infrastructure.retrieval.registry import ENV_RETRIEVAL_STORE_ID_PREFIX
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 logger = logging.getLogger(__name__)
@@ -51,6 +61,110 @@ DEFAULT_PROJECT_NAMES = ("Default project", "默认项目")
 class AddProjectMemberRequest(BaseModel):
     user_id: str
     role: str | None = "member"
+
+
+def _store_summary(display: Any) -> BackendStoreSummary:
+    data = display.to_dict() if hasattr(display, "to_dict") else dict(display)
+    source: Literal["env", "user"] = "env" if data.get("source") == "env" else "user"
+    return BackendStoreSummary(
+        id=str(data.get("id", "")),
+        name=str(data.get("name", "")),
+        engine_type=str(data.get("engine_type", "")),
+        source=source,
+        status=str(data.get("status") or "unknown"),
+    )
+
+
+async def _normalize_graph_store_binding(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    store_id: str | None,
+) -> str | None:
+    if not store_id or store_id.startswith(ENV_STORE_ID_PREFIX):
+        return None
+    repo = SqlGraphStoreRepository(db)
+    if await repo.find_by_id(tenant_id, store_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Graph store not found in tenant"),
+        )
+    return store_id
+
+
+async def _normalize_retrieval_store_binding(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    store_id: str | None,
+) -> str | None:
+    if not store_id or store_id.startswith(ENV_RETRIEVAL_STORE_ID_PREFIX):
+        return None
+    repo = SqlRetrievalStoreRepository(db)
+    if await repo.find_by_id(tenant_id, store_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_("Retrieval store not found in tenant"),
+        )
+    return store_id
+
+
+async def _attach_backend_summaries(
+    response: ProjectResponse,
+    project: Project,
+    db: AsyncSession,
+) -> ProjectResponse:
+    from src.application.services.graph_store_service import GraphStoreService
+    from src.application.services.retrieval_store_service import RetrievalStoreService
+    from src.infrastructure.graph.backend_factory import build_default_factory
+    from src.infrastructure.graph.registry import get_graph_backend_registry
+    from src.infrastructure.retrieval.backend_factory import build_default_retrieval_factory
+    from src.infrastructure.retrieval.registry import get_retrieval_backend_registry
+
+    graph_service = GraphStoreService(
+        repo=SqlGraphStoreRepository(db),
+        registry=get_graph_backend_registry(),
+        factory=build_default_factory(),
+    )
+    retrieval_service = RetrievalStoreService(
+        repo=SqlRetrievalStoreRepository(db),
+        registry=get_retrieval_backend_registry(),
+        factory=build_default_retrieval_factory(),
+    )
+
+    if project.graph_store_id:
+        try:
+            response.graph_store = _store_summary(
+                await graph_service.resolve_store_view(project.tenant_id, project.graph_store_id)
+            )
+        except Exception:
+            logger.warning("Failed to resolve project graph store %s", project.graph_store_id)
+    else:
+        response.graph_store = _store_summary(graph_service.env_default_store_view(project.tenant_id))
+
+    if project.retrieval_store_id:
+        try:
+            response.retrieval_store = _store_summary(
+                await retrieval_service.resolve_store_view(
+                    project.tenant_id,
+                    project.retrieval_store_id,
+                )
+            )
+        except Exception:
+            logger.warning(
+                "Failed to resolve project retrieval store %s",
+                project.retrieval_store_id,
+            )
+    else:
+        response.retrieval_store = _store_summary(
+            retrieval_service.env_default_store_view(project.tenant_id)
+        )
+    return response
+
+
+async def _project_response(project: Project, db: AsyncSession) -> ProjectResponse:
+    response = ProjectResponse.model_validate(project)
+    return await _attach_backend_summaries(response, project, db)
 
 
 def _order_project_list_query(query: Select[Any]) -> Select[Any]:
@@ -191,6 +305,17 @@ async def create_project(
                 detail=_("User does not have permission to create projects in this tenant"),
             )
 
+        graph_store_id = await _normalize_graph_store_binding(
+            db,
+            tenant_id=project_data.tenant_id,
+            store_id=project_data.graph_store_id,
+        )
+        retrieval_store_id = await _normalize_retrieval_store_binding(
+            db,
+            tenant_id=project_data.tenant_id,
+            store_id=project_data.retrieval_store_id,
+        )
+
         # Create project
         project = Project(
             id=str(uuid4()),
@@ -200,6 +325,8 @@ async def create_project(
             owner_id=current_user.id,
             memory_rules=project_data.memory_rules.model_dump(),
             graph_config=project_data.graph_config.model_dump(),
+            graph_store_id=graph_store_id,
+            retrieval_store_id=retrieval_store_id,
             is_public=project_data.is_public,
             agent_conversation_mode=project_data.agent_conversation_mode,
         )
@@ -225,7 +352,7 @@ async def create_project(
         )
         project = result.scalar_one()
 
-        return ProjectResponse.model_validate(project)
+        return await _project_response(project, db)
     except HTTPException:
         raise
     except Exception as e:
@@ -234,7 +361,7 @@ async def create_project(
 
 
 @router.get("/", response_model=ProjectListResponse)
-async def list_projects(  # noqa: C901,PLR0912,PLR0915
+async def list_projects(  # noqa: C901, PLR0915
     tenant_id: str | None = Query(None, description="Filter by tenant ID"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
@@ -245,7 +372,7 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
     owner_id: str | None = Query(None, description="Filter by owner ID"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> ProjectListResponse:
     """List projects for the current user."""
     # Get project IDs user has access to
@@ -349,29 +476,11 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
             row.project_id: int(row._mapping["count"]) for row in member_stats_result.fetchall()
         }
 
-        # Graph stats: bulk fetch entity counts per project via Cypher
+        # Graph stats: bulk fetch entity counts per project via the store
         node_stats: dict[str, int] = {}
-        if graphiti_client and project_ids_in_page:
+        if graph_store is not None and project_ids_in_page:
             try:
-                cypher_count_query = """
-                    MATCH (n:Entity)
-                    WHERE n.project_id IN $project_ids
-                    RETURN n.project_id AS project_id, count(n) AS cnt
-                """
-                result = await graphiti_client.driver.execute_query(
-                    cypher_count_query, project_ids=project_ids_in_page
-                )
-                if hasattr(result, "records") and result.records:
-                    for record in result.records:
-                        pid = record.get("project_id")
-                        if pid is not None:
-                            node_stats[str(pid)] = int(record.get("cnt", 0))
-                elif result:
-                    for record in result:
-                        if hasattr(record, "get"):
-                            pid = record.get("project_id")
-                            if pid is not None:
-                                node_stats[str(pid)] = int(record.get("cnt", 0))
+                node_stats = await graph_store.count_entities_by_project(project_ids_in_page)
             except Exception as exc:
                 logger.warning("Failed to fetch bulk graph stats: %s", exc)
 
@@ -403,6 +512,7 @@ async def list_projects(  # noqa: C901,PLR0912,PLR0915
                 member_count=int(member_count),
                 last_active=last_active,
             )
+            p_resp = await _attach_backend_summaries(p_resp, project, db)
             project_responses.append(p_resp)
 
     return ProjectListResponse(
@@ -451,7 +561,7 @@ async def get_project(
             detail=_("Project not found in requested tenant"),
         )
 
-    return ProjectResponse.model_validate(project)
+    return await _project_response(project, db)
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -490,6 +600,18 @@ async def update_project(
 
     # Update fields
     update_data = project_data.model_dump(exclude_unset=True)
+    if "graph_store_id" in update_data:
+        update_data["graph_store_id"] = await _normalize_graph_store_binding(
+            db,
+            tenant_id=project.tenant_id,
+            store_id=update_data.get("graph_store_id"),
+        )
+    if "retrieval_store_id" in update_data:
+        update_data["retrieval_store_id"] = await _normalize_retrieval_store_binding(
+            db,
+            tenant_id=project.tenant_id,
+            store_id=update_data.get("retrieval_store_id"),
+        )
     for field, value in update_data.items():
         if field == "memory_rules":
             project.memory_rules = value
@@ -510,7 +632,7 @@ async def update_project(
     )
     project = result.scalar_one()
 
-    return ProjectResponse.model_validate(project)
+    return await _project_response(project, db)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -793,29 +915,15 @@ async def list_project_members(
     return {"members": members, "total": len(members)}
 
 
-async def _query_active_nodes(graphiti_client: Any, project_id: str) -> int:
-    """Query Graphiti for active nodes in the last 7 days."""
+async def _query_active_nodes(graph_store: GraphStorePort | None, project_id: str) -> int:
+    """Query the graph store for active nodes in the last 7 days."""
+    if graph_store is None:
+        return 0
     try:
         threshold_date = (datetime.now(UTC) - timedelta(days=7)).isoformat()
-        query = """
-            MATCH (n:Node)
-            WHERE n.project_id = $project_id
-            AND n.valid_at >= $threshold
-            RETURN count(n) as active_count
-        """
-        result = await graphiti_client.driver.execute_query(
-            query, project_id=project_id, threshold=threshold_date
-        )
-        if hasattr(result, "records") and result.records:
-            for record in result.records:
-                return cast(int, record.get("active_count", 0))
-        elif result and len(result) > 0:
-            for record in result:
-                if hasattr(record, "get"):
-                    return cast(int, record.get("active_count", 0))
-        return 0
+        return await graph_store.count_active_nodes(project_id, threshold_date)
     except Exception as e:
-        logger.error(f"Failed to get active nodes from Graphiti: {e}")
+        logger.error(f"Failed to get active nodes from graph store: {e}")
         return 0
 
 
@@ -862,7 +970,7 @@ async def get_project_stats(
     project_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> ProjectStats:
     """Get project statistics for the dashboard."""
     # Use project_id directly
@@ -912,7 +1020,7 @@ async def get_project_stats(
         member_count = member_count_result.scalar()
 
         # Get active nodes (from Graphiti)
-        active_nodes = await _query_active_nodes(graphiti_client, project_id)
+        active_nodes = await _query_active_nodes(graph_store, project_id)
         logger.info(f"Found {active_nodes} active nodes for project {project_id}")
 
         # Get tenant limit for storage
@@ -981,7 +1089,7 @@ async def get_trending_entities(
     limit: int = Query(default=10, ge=1, le=50),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> TrendingResponse:
     """Get trending entities in a project's knowledge graph."""
     try:
@@ -1001,31 +1109,20 @@ async def get_trending_entities(
 
         entities: list[TrendingEntity] = []
         try:
-            query = """
-                MATCH (n:Entity)
-                WHERE n.project_id = $project_id
-                OPTIONAL MATCH (n)-[r]-()
-                WITH n, count(r) as rel_count
-                ORDER BY rel_count DESC
-                LIMIT $limit
-                RETURN n.name as name,
-                       coalesce(n.entity_type, 'unknown') as entity_type,
-                       rel_count as mention_count,
-                       n.summary as summary
-            """
-            result = await graphiti_client.driver.execute_query(
-                query, project_id=project_id, limit=limit
-            )
-            if hasattr(result, "records"):
-                for record in result.records:
-                    entities.append(
-                        TrendingEntity(
-                            name=record.get("name", ""),
-                            entity_type=record.get("entity_type", "unknown"),
-                            mention_count=record.get("mention_count", 0),
-                            summary=record.get("summary"),
-                        )
+            if graph_store is None:
+                raise HTTPException(status_code=503, detail=_("Graph backend unavailable"))
+            rows = await graph_store.trending_entities(project_id, limit=limit)
+            for record in rows:
+                entities.append(
+                    TrendingEntity(
+                        name=record.get("name", ""),
+                        entity_type=record.get("entity_type", "unknown"),
+                        mention_count=record.get("mention_count", 0),
+                        summary=record.get("summary"),
                     )
+                )
+        except HTTPException:
+            raise
         except Exception as e:
             logger.warning(f"Failed to query trending entities: {e}")
 

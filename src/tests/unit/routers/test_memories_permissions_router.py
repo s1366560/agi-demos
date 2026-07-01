@@ -108,9 +108,6 @@ class TestMemoryCreateRouter:
         test_user: User,
     ) -> None:
         """Memory creation failures do not expose internal exception text."""
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock(side_effect=RuntimeError("neo4j secret"))
         workflow_engine = Mock()
         workflow_engine.start_workflow = AsyncMock()
         monkeypatch.setattr(test_db, "commit", AsyncMock(side_effect=RuntimeError("db secret")))
@@ -125,7 +122,6 @@ class TestMemoryCreateRouter:
                 background_tasks=BackgroundTasks(),
                 current_user=test_user,
                 db=test_db,
-                graphiti_client=graphiti_client,
                 graph_service=None,
                 workflow_engine=workflow_engine,
             )
@@ -134,46 +130,51 @@ class TestMemoryCreateRouter:
         assert exc_info.value.detail == "Failed to create memory"
 
 
-class _GraphContextDriver:
-    async def execute_query(self, query: str, **_params):
-        if "relationship.fact" in query:
-            return (
-                [
-                    {
-                        "id": "relationship-1",
-                        "source_id": "entity-1",
-                        "target_id": "entity-2",
-                        "type": "WORKS_AT",
-                        "fact": "Alice works at OpenAI",
-                        "summary": "",
-                        "weight": 0.9,
-                        "episodes": ["memory-read-graph"],
-                    }
-                ],
-                None,
-                None,
-            )
+def _graph_context_entities() -> list[dict]:
+    return [
+        {
+            "id": "entity-1",
+            "uuid": "entity-1",
+            "name": "Alice",
+            "type": "Person",
+            "entity_type": "Person",
+            "summary": "Researcher",
+            "properties": {"role": "researcher"},
+            "confidence": 1.0,
+        },
+        {
+            "id": "entity-2",
+            "uuid": "entity-2",
+            "name": "OpenAI",
+            "type": "Organization",
+            "entity_type": "Organization",
+            "summary": "",
+            "properties": {},
+            "confidence": 1.0,
+        },
+    ]
 
-        return (
-            [
-                {
-                    "id": "entity-1",
-                    "name": "Alice",
-                    "type": "Person",
-                    "summary": "Researcher",
-                    "attributes": '{"role": "researcher"}',
-                },
-                {
-                    "id": "entity-2",
-                    "name": "OpenAI",
-                    "type": "Organization",
-                    "summary": "",
-                    "attributes": None,
-                },
-            ],
-            None,
-            None,
-        )
+
+def _graph_context_relationships() -> list[dict]:
+    return [
+        {
+            "id": "relationship-1",
+            "uuid": "relationship-1",
+            "source_id": "entity-1",
+            "target_id": "entity-2",
+            "source_uuid": "entity-1",
+            "target_uuid": "entity-2",
+            "type": "WORKS_AT",
+            "relationship_type": "WORKS_AT",
+            "properties": {
+                "fact": "Alice works at OpenAI",
+                "summary": "",
+                "weight": 0.9,
+                "episodes": ["memory-read-graph"],
+            },
+            "confidence": 0.9,
+        }
+    ]
 
 
 @pytest.mark.unit
@@ -181,7 +182,9 @@ class TestMemoryReadRouter:
     @pytest.mark.asyncio
     async def test_loads_graph_context_from_memory_episode(self) -> None:
         graph_service = Mock()
-        graph_service.driver = _GraphContextDriver()
+        graph_service.get_memory_graph_context = AsyncMock(
+            return_value=(_graph_context_entities(), _graph_context_relationships())
+        )
 
         entities, relationships = await _get_memory_graph_context(
             "memory-read-graph",
@@ -191,25 +194,7 @@ class TestMemoryReadRouter:
         assert [entity["name"] for entity in entities] == ["Alice", "OpenAI"]
         assert entities[0]["id"] == "entity-1"
         assert entities[0]["properties"] == {"role": "researcher"}
-        assert relationships == [
-            {
-                "id": "relationship-1",
-                "uuid": "relationship-1",
-                "source_id": "entity-1",
-                "target_id": "entity-2",
-                "source_uuid": "entity-1",
-                "target_uuid": "entity-2",
-                "type": "WORKS_AT",
-                "relationship_type": "WORKS_AT",
-                "properties": {
-                    "fact": "Alice works at OpenAI",
-                    "summary": "",
-                    "weight": 0.9,
-                    "episodes": ["memory-read-graph"],
-                },
-                "confidence": 0.9,
-            }
-        ]
+        assert relationships == _graph_context_relationships()
 
     @pytest.mark.asyncio
     async def test_get_memory_merges_graph_context_into_response(
@@ -223,7 +208,9 @@ class TestMemoryReadRouter:
         await test_db.commit()
 
         graph_service = Mock()
-        graph_service.driver = _GraphContextDriver()
+        graph_service.get_memory_graph_context = AsyncMock(
+            return_value=(_graph_context_entities(), _graph_context_relationships())
+        )
 
         response = await get_memory(
             memory.id,

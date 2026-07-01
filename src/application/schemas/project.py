@@ -98,6 +98,14 @@ class ProjectCreate(BaseModel):
     graph_config: GraphConfig = Field(
         default_factory=GraphConfig, description="Graph configuration"
     )
+    graph_store_id: str | None = Field(
+        default=None,
+        description="Optional graph backend binding; null/env id means tenant default",
+    )
+    retrieval_store_id: str | None = Field(
+        default=None,
+        description="Optional retrieval backend binding; null/env id means tenant default",
+    )
     sandbox_config: SandboxConfigSchema = Field(
         default_factory=SandboxConfigSchema, description="Sandbox configuration"
     )
@@ -150,6 +158,8 @@ class ProjectUpdate(BaseModel):
     )
     memory_rules: MemoryRulesConfig | None = Field(default=None, description="Memory rules")
     graph_config: GraphConfig | None = Field(default=None, description="Graph configuration")
+    graph_store_id: str | None = Field(default=None, description="Graph backend binding")
+    retrieval_store_id: str | None = Field(default=None, description="Retrieval backend binding")
     sandbox_config: SandboxConfigSchema | None = Field(
         default=None, description="Sandbox configuration"
     )
@@ -229,6 +239,16 @@ class ProjectStats(BaseModel):
     )
 
 
+class BackendStoreSummary(BaseModel):
+    """API-safe project backend binding summary."""
+
+    id: str = Field(..., description="Effective store id")
+    name: str = Field(..., description="Display name")
+    engine_type: str = Field(..., description="Backend engine type")
+    source: Literal["env", "user"] = Field(default="user", description="Store source")
+    status: str = Field(default="unknown", description="Store status")
+
+
 class ProjectResponse(BaseModel):
     """Response model for project operations."""
 
@@ -243,6 +263,16 @@ class ProjectResponse(BaseModel):
     )
     graph_config: GraphConfig = Field(
         default_factory=GraphConfig, description="Graph configuration"
+    )
+    graph_store_id: str | None = Field(default=None, description="Persisted graph store binding")
+    retrieval_store_id: str | None = Field(
+        default=None, description="Persisted retrieval store binding"
+    )
+    graph_store: BackendStoreSummary | None = Field(
+        default=None, description="Effective graph backend summary"
+    )
+    retrieval_store: BackendStoreSummary | None = Field(
+        default=None, description="Effective retrieval backend summary"
     )
     sandbox_config: SandboxConfigSchema = Field(
         default_factory=SandboxConfigSchema, description="Sandbox configuration"

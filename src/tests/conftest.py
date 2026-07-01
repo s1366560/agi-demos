@@ -415,7 +415,7 @@ def mock_neo4j_client():
 
 
 @pytest.fixture
-def mock_graph_service(mock_neo4j_client):
+def mock_graph_service(mock_neo4j_client):  # noqa: PLR0915
     """Create a mock GraphServicePort (NativeGraphAdapter).
 
     This mock simulates the NativeGraphAdapter interface used by routers
@@ -457,6 +457,103 @@ def mock_graph_service(mock_neo4j_client):
             }
         ]
     )
+
+    # Mock GraphStorePort primitives (used by migrated routers). Return typed
+    # DTOs / plain values so endpoints render correctly under the test client.
+    from src.domain.model.graph.dtos import (
+        GraphCommunityDTO,
+        GraphEntityDTO,
+        GraphExportDTO,
+        GraphGraphDataDTO,
+        GraphSearchHit,
+    )
+
+    service.initialize_schema = AsyncMock(return_value=None)
+    service.vector_search = AsyncMock(return_value=[])
+    service.fulltext_search = AsyncMock(return_value=[])
+    service.related_entities = AsyncMock(return_value=[])
+    service.community_read = AsyncMock(return_value=[])
+    service.graph_snapshot = AsyncMock(return_value=GraphGraphDataDTO())
+    service.data_export = AsyncMock(
+        return_value=GraphExportDTO(exported_at="t", tenant_id=None, project_id=None)
+    )
+    service.count_nodes = AsyncMock(return_value=0)
+    service.count_stats = AsyncMock(
+        return_value={
+            "entities": 0,
+            "episodes": 0,
+            "communities": 0,
+            "relationships": 0,
+            "total_nodes": 0,
+        }
+    )
+    service.count_episodes_by_age = AsyncMock(return_value=0)
+    service.delete_episodes_by_age = AsyncMock(return_value=0)
+    service.list_episodes = AsyncMock(return_value={"episodes": [], "total": 0})
+    service.get_episode_by_name = AsyncMock(return_value=None)
+    service.delete_episode_by_name = AsyncMock(return_value=0)
+    service.recall_recent_episodes = AsyncMock(return_value=[])
+    service.ensure_episodic_node = AsyncMock(return_value=None)
+    service.get_memory_graph_context = AsyncMock(return_value=([], []))
+    service.count_entities_by_project = AsyncMock(return_value={})
+    service.count_active_nodes = AsyncMock(return_value=0)
+    service.trending_entities = AsyncMock(return_value=[])
+    service.get_entity_project_id = AsyncMock(return_value=None)
+    service.get_community_project_id = AsyncMock(return_value=None)
+    service.graph_traversal_search = AsyncMock(return_value=[])
+    service.community_search = AsyncMock(return_value=[])
+    service.temporal_search = AsyncMock(return_value=[])
+    service.faceted_search = AsyncMock(return_value=[])
+    service.list_entities = AsyncMock(return_value={"entities": [], "total": 0})
+    service.list_communities = AsyncMock(return_value={"communities": [], "total": 0})
+    service.get_entity_types = AsyncMock(return_value=[])
+    service.get_entity = AsyncMock(return_value=None)
+    service.get_community = AsyncMock(return_value=None)
+    service.get_entity_relationships = AsyncMock(
+        return_value={"relationships": [], "total": 0}
+    )
+    service.get_community_members = AsyncMock(return_value={"members": [], "total": 0})
+    service.get_graph_visualization = AsyncMock(return_value=[])
+    service.get_subgraph = AsyncMock(return_value=[])
+    service.rebuild_communities = AsyncMock(
+        return_value={"communities_count": 0, "entities_processed": 0}
+    )
+    service.count_scoped_nodes = AsyncMock(return_value=0)
+    service.count_old_episodes = AsyncMock(return_value=0)
+    service.find_duplicate_entities = AsyncMock(return_value=[])
+    service.find_stale_edges = AsyncMock(return_value={})
+    service.delete_stale_edges = AsyncMock(return_value=0)
+    service.count_missing_embeddings = AsyncMock(return_value=0)
+    service.get_existing_embedding_dimension = AsyncMock(return_value=None)
+    service.detect_mixed_dimensions = AsyncMock(
+        return_value={
+            "has_mixed_dimensions": False,
+            "counts": {},
+            "dimensions": [],
+            "total_embeddings": 0,
+        }
+    )
+    service.validate_embeddings = AsyncMock(
+        return_value={
+            "valid": True,
+            "total_embeddings": 0,
+            "dimension_mismatches": 0,
+            "zero_vectors": 0,
+            "expected_dimension": 0,
+        }
+    )
+    service.rebuild_embeddings = AsyncMock(
+        return_value={"processed": 0, "updated": 0, "failed": 0}
+    )
+    service.clear_entity_embeddings = AsyncMock(return_value=0)
+    service.get_vector_index_dimension = AsyncMock(return_value=None)
+    service.create_vector_index = AsyncMock(return_value=None)
+    service.get_embedding_dimension_distribution = AsyncMock(return_value=({}, 0))
+    service.delete_entity = AsyncMock(return_value=True)
+    service.delete_project = AsyncMock(return_value=0)
+    service.health_probe = AsyncMock(return_value=True)
+    # silence "unused import" for DTO types kept for clarity
+    _ = (GraphCommunityDTO, GraphEntityDTO, GraphSearchHit)
 
     return service
 
@@ -555,6 +652,7 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
     from src.infrastructure.adapters.primary.web.dependencies import (
         get_current_user,
         get_graph_service,
+        get_graph_store,
         get_neo4j_client,
     )
     from src.infrastructure.adapters.primary.web.main import create_app
@@ -614,6 +712,7 @@ def test_app(mock_neo4j_client, mock_graph_service, test_engine, mock_workflow_e
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_neo4j_client] = override_get_neo4j_client
     app.dependency_overrides[get_graph_service] = override_get_graph_service
+    app.dependency_overrides[get_graph_store] = override_get_graph_service
     app.dependency_overrides[get_current_user] = override_get_current_user
 
     return app

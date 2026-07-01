@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 from src.infrastructure.adapters.primary.web.routers.graph import (
     SubgraphRequest,
@@ -16,28 +16,17 @@ class FakeNeo4jDateTime:
         return "2026-05-16T04:58:00+00:00"
 
 
-class FakeNeo4jClient:
-    def __init__(self, records: list[dict[str, Any]]) -> None:
-        self.records = records
-        self.calls: list[dict[str, Any]] = []
-
-    async def execute_query(self, query: str, **params: Any) -> SimpleNamespace:
-        self.calls.append({"query": query, "params": params})
-        return SimpleNamespace(records=self.records)
-
-
-class SequentialNeo4jClient:
-    def __init__(self, results: list[list[dict[str, Any]]]) -> None:
-        self.results = results
-        self.calls: list[dict[str, Any]] = []
-
-    async def execute_query(self, query: str, **params: Any) -> SimpleNamespace:
-        self.calls.append({"query": query, "params": params})
-        records = self.results.pop(0)
-        return SimpleNamespace(records=records)
+def _store() -> Mock:
+    store = Mock()
+    store.get_graph_visualization = AsyncMock(return_value=[])
+    store.get_subgraph = AsyncMock(return_value=[])
+    store.list_entities = AsyncMock(return_value={"entities": [], "total": 0})
+    store.list_communities = AsyncMock(return_value={"communities": [], "total": 0})
+    store.get_entity_types = AsyncMock(return_value=[])
+    return store
 
 
-async def test_get_graph_serializes_neo4j_datetime_properties() -> None:
+async def test_get_graph_assembles_elements_from_rows() -> None:
     source_props = {
         "uuid": "source-1",
         "name": "Source",
@@ -46,30 +35,27 @@ async def test_get_graph_serializes_neo4j_datetime_properties() -> None:
         "metadata": {"seen_at": FakeNeo4jDateTime()},
         "name_embedding": [0.1, 0.2],
     }
-    edge_props = {
-        "created_at": FakeNeo4jDateTime(),
-        "fact_embedding": [0.3],
-    }
-    client = FakeNeo4jClient(
-        [
-            {
-                "source_id": "source-id",
-                "source_labels": ["Entity"],
-                "source_props": source_props,
-                "edge_id": "edge-id",
-                "edge_type": "RELATES_TO",
-                "edge_props": edge_props,
-                "target_id": "target-id",
-                "target_labels": ["Entity"],
-                "target_props": {"uuid": "target-1", "name": "Target"},
-            }
-        ]
-    )
+    edge_props = {"created_at": FakeNeo4jDateTime(), "fact_embedding": [0.3]}
+    rows = [
+        {
+            "source_id": "source-id",
+            "source_labels": ["Entity"],
+            "source_props": source_props,
+            "edge_id": "edge-id",
+            "edge_type": "RELATES_TO",
+            "edge_props": edge_props,
+            "target_id": "target-id",
+            "target_labels": ["Entity"],
+            "target_props": {"uuid": "target-1", "name": "Target"},
+        }
+    ]
+    store = _store()
+    store.get_graph_visualization = AsyncMock(return_value=rows)
 
     response = await get_graph(
         project_id="project-1",
         current_user=SimpleNamespace(is_superuser=True),
-        neo4j_client=client,
+        graph_store=store,
     )
 
     node = response["elements"]["nodes"][0]["data"]
@@ -82,76 +68,72 @@ async def test_get_graph_serializes_neo4j_datetime_properties() -> None:
     assert "fact_embedding" not in response["elements"]["edges"][0]["data"]
 
 
-async def test_get_graph_filters_by_tenant_for_superuser_scope() -> None:
-    client = FakeNeo4jClient([])
+async def test_get_graph_forwards_tenant_scope_for_superuser() -> None:
+    store = _store()
 
     response = await get_graph(
         tenant_id="tenant-1",
         project_id=None,
         current_user=SimpleNamespace(is_superuser=True),
-        neo4j_client=client,
+        graph_store=store,
     )
 
     assert response == {"elements": {"nodes": [], "edges": []}}
-    query = client.calls[0]["query"]
-    assert "n.tenant_id = $tenant_id" in query
-    assert "m.tenant_id = $tenant_id" in query
-    assert client.calls[0]["params"]["tenant_id"] == "tenant-1"
+    kwargs = store.get_graph_visualization.await_args.kwargs
+    assert kwargs["tenant_id"] == "tenant-1"
+    assert kwargs["is_superuser"] is True
 
 
-async def test_get_graph_filters_rows_by_since_timestamp() -> None:
-    client = FakeNeo4jClient([])
+async def test_get_graph_forwards_since_filter() -> None:
+    store = _store()
 
     response = await get_graph(
         project_id="project-1",
         since="2026-05-16T04:58:00+00:00",
         current_user=SimpleNamespace(is_superuser=True),
-        neo4j_client=client,
+        graph_store=store,
     )
 
     assert response == {"elements": {"nodes": [], "edges": []}}
-    query = client.calls[0]["query"]
-    assert "$since IS NULL" in query
-    assert "toString(n.updated_at)" in query
-    assert "toString(m.updated_at)" in query
-    assert "toString(r.updated_at)" in query
-    assert client.calls[0]["params"]["since"] == "2026-05-16T04:58:00+00:00"
+    kwargs = store.get_graph_visualization.await_args.kwargs
+    assert kwargs["since"] == "2026-05-16T04:58:00+00:00"
+    assert kwargs["project_id"] == "project-1"
 
 
-async def test_get_subgraph_serializes_node_and_edge_neo4j_datetime_properties() -> None:
-    client = FakeNeo4jClient(
-        [
-            {
-                "source_id": "source-id",
-                "source_labels": ["Entity"],
-                "source_props": {
-                    "uuid": "source-1",
-                    "name": "Source",
-                    "created_at": FakeNeo4jDateTime(),
-                    "name_embedding": [0.1],
-                },
-                "edge_id": "edge-id",
-                "edge_type": "RELATES_TO",
-                "edge_props": {
-                    "created_at": FakeNeo4jDateTime(),
-                    "fact_embedding": [0.2],
-                },
-                "target_id": "target-id",
-                "target_labels": ["Entity"],
-                "target_props": {
-                    "uuid": "target-1",
-                    "name": "Target",
-                    "created_at": FakeNeo4jDateTime(),
-                    "name_embedding": [0.3],
-                },
-            }
-        ]
-    )
+async def test_get_subgraph_assembles_elements_from_rows() -> None:
+    rows = [
+        {
+            "source_id": "source-id",
+            "source_labels": ["Entity"],
+            "source_props": {
+                "uuid": "source-1",
+                "name": "Source",
+                "created_at": FakeNeo4jDateTime(),
+                "name_embedding": [0.1],
+            },
+            "edge_id": "edge-id",
+            "edge_type": "RELATES_TO",
+            "edge_props": {
+                "created_at": FakeNeo4jDateTime(),
+                "fact_embedding": [0.2],
+            },
+            "target_id": "target-id",
+            "target_labels": ["Entity"],
+            "target_props": {
+                "uuid": "target-1",
+                "name": "Target",
+                "created_at": FakeNeo4jDateTime(),
+                "name_embedding": [0.3],
+            },
+        }
+    ]
+    store = _store()
+    store.get_subgraph = AsyncMock(return_value=rows)
 
     response = await get_subgraph(
         SubgraphRequest(node_uuids=["source-1"], project_id="project-1"),
         current_user=SimpleNamespace(is_superuser=True),
-        neo4j_client=client,
+        graph_store=store,
     )
 
     nodes = response["elements"]["nodes"]
@@ -163,90 +145,83 @@ async def test_get_subgraph_serializes_node_and_edge_neo4j_datetime_properties()
     assert "fact_embedding" not in edge
 
 
-async def test_list_entities_filters_by_entity_type_property_for_historical_nodes() -> None:
-    client = SequentialNeo4jClient(
-        [
-            [{"total": 1}],
-            [
-                {
-                    "props": {
-                        "uuid": "person-1",
-                        "name": "Ada",
-                        "entity_type": "Person",
-                    },
-                    "labels": ["Entity", "Node"],
-                }
-            ],
-        ]
+async def test_list_entities_forwards_entity_type_filter() -> None:
+    store = _store()
+    store.list_entities = AsyncMock(
+        return_value={
+            "entities": [{"uuid": "person-1", "name": "Ada", "entity_type": "Person"}],
+            "total": 1,
+        }
     )
 
     response = await list_entities(
         project_id="project-1",
         entity_type="Person",
         current_user=SimpleNamespace(is_superuser=True),
-        neo4j_client=client,
+        graph_store=store,
     )
 
     assert response["total"] == 1
     assert response["entities"][0]["entity_type"] == "Person"
-    assert "e.entity_type = $entity_type" in client.calls[0]["query"]
-    assert client.calls[0]["params"]["entity_type"] == "Person"
+    kwargs = store.list_entities.await_args.kwargs
+    assert kwargs["entity_type"] == "Person"
 
 
-async def test_list_entities_filters_by_tenant_for_superuser_scope() -> None:
-    client = SequentialNeo4jClient([[{"total": 0}], []])
+async def test_list_entities_forwards_tenant_scope_for_superuser() -> None:
+    store = _store()
 
     response = await list_entities(
         tenant_id="tenant-1",
         project_id=None,
         current_user=SimpleNamespace(is_superuser=True),
-        neo4j_client=client,
+        graph_store=store,
     )
 
     assert response["total"] == 0
-    assert "e.tenant_id = $tenant_id" in client.calls[0]["query"]
-    assert client.calls[0]["params"]["tenant_id"] == "tenant-1"
+    kwargs = store.list_entities.await_args.kwargs
+    assert kwargs["tenant_id"] == "tenant-1"
 
 
-async def test_list_communities_filters_by_tenant_for_superuser_scope() -> None:
-    client = SequentialNeo4jClient([[{"total": 0}], []])
+async def test_list_communities_forwards_tenant_scope_for_superuser() -> None:
+    store = _store()
 
     response = await list_communities(
         tenant_id="tenant-1",
         project_id=None,
         current_user=SimpleNamespace(is_superuser=True),
-        neo4j_client=client,
+        graph_store=store,
     )
 
     assert response["total"] == 0
-    assert "c.tenant_id = $tenant_id" in client.calls[0]["query"]
-    assert client.calls[0]["params"]["tenant_id"] == "tenant-1"
+    kwargs = store.list_communities.await_args.kwargs
+    assert kwargs["tenant_id"] == "tenant-1"
 
 
-async def test_get_entity_types_counts_entity_type_property_for_historical_nodes() -> None:
-    client = FakeNeo4jClient([{"entity_type": "Person", "entity_count": 2}])
+async def test_get_entity_types_returns_store_counts() -> None:
+    store = _store()
+    store.get_entity_types = AsyncMock(
+        return_value=[{"entity_type": "Person", "count": 2}]
+    )
 
     response = await get_entity_types(
         project_id="project-1",
         current_user=SimpleNamespace(is_superuser=True),
-        neo4j_client=client,
+        graph_store=store,
     )
 
     assert response == {"entity_types": [{"entity_type": "Person", "count": 2}], "total": 1}
-    assert "coalesce(" in client.calls[0]["query"]
-    assert "head([label IN labels(e)" in client.calls[0]["query"]
 
 
-async def test_get_entity_types_filters_by_tenant_for_superuser_scope() -> None:
-    client = FakeNeo4jClient([])
+async def test_get_entity_types_forwards_tenant_scope_for_superuser() -> None:
+    store = _store()
 
     response = await get_entity_types(
         tenant_id="tenant-1",
         project_id=None,
         current_user=SimpleNamespace(is_superuser=True),
-        neo4j_client=client,
+        graph_store=store,
     )
 
     assert response == {"entity_types": [], "total": 0}
-    assert "e.tenant_id = $tenant_id" in client.calls[0]["query"]
-    assert client.calls[0]["params"]["tenant_id"] == "tenant-1"
+    kwargs = store.get_entity_types.await_args.kwargs
+    assert kwargs["tenant_id"] == "tenant-1"

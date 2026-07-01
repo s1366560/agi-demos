@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from src.infrastructure.graph import NativeGraphAdapter
+    from src.infrastructure.graph.neo4j_client import Neo4jClient
 
 from src.configuration.config import get_settings
 from src.domain.llm_providers.llm_types import LLMClient
@@ -29,12 +30,15 @@ EMBEDDING_DIMS = {
 
 async def create_native_graph_adapter(
     tenant_id: str | None = None,
+    neo4j_client: "Neo4jClient | None" = None,
 ) -> "NativeGraphAdapter":
     """
     Create NativeGraphAdapter for knowledge graph operations.
 
     Args:
         tenant_id: Optional tenant ID for multi-tenant provider resolution
+        neo4j_client: Optional pre-built Neo4j client (for per-project backends
+            with custom connection params). When None, one is built from settings.
 
     Returns:
         Configured NativeGraphAdapter instance
@@ -45,12 +49,14 @@ async def create_native_graph_adapter(
 
     settings = get_settings()
 
-    # Create Neo4j client
-    neo4j_client = Neo4jClient(
-        uri=settings.neo4j_uri,
-        user=settings.neo4j_user,
-        password=settings.neo4j_password,
-    )
+    # Use the provided client, or build one from resolved graph-store config.
+    if neo4j_client is None:
+        # Create Neo4j client (use resolved graph-store config; falls back to NEO4J_*)
+        neo4j_client = Neo4jClient(
+            uri=settings.effective_graph_store_uri,
+            user=settings.effective_graph_store_user,
+            password=settings.effective_graph_store_password,
+        )
 
     # Initialize Neo4j indices
     await neo4j_client.build_indices()

@@ -1,0 +1,75 @@
+# Three-node ArcadeDB HA cluster for pluggable graph-backend failover validation.
+#
+# Usage:
+#   docker compose -f docker-compose.arcadedb-ha.yml up -d
+#   ARCADEDB_HA_ENABLE_FAILOVER=1 \
+#     PYTHONPATH=. uv run pytest src/tests/integration/graph/test_arcadedb_ha.py -v
+#   docker compose -f docker-compose.arcadedb-ha.yml down -v
+#
+# Notes:
+# - Every server has a unique arcadedb.server.name as required for HA.
+# - The serverList uses the documented named-peer object form:
+#   name@host:{raft:2434,http:2480,priority:N}
+# - The highest-priority node is used as the local failover kill candidate.
+
+x-arcadedb-ha-common: &arcadedb-ha-common
+  image: arcadedata/arcadedb:latest
+  healthcheck:
+    test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:2480/ || exit 1"]
+    interval: 10s
+    timeout: 5s
+    retries: 20
+    start_period: 50s
+  deploy:
+    resources:
+      limits:
+        cpus: '2.0'
+        memory: 2G
+      reservations:
+        cpus: '0.5'
+        memory: 1G
+
+services:
+  arcadedb-ha-1:
+    <<: *arcadedb-ha-common
+    container_name: memstack-arcadedb-ha-1
+    hostname: arcadedb-ha-1
+    ports:
+      - "7689:7687"
+      - "2481:2480"
+      - "24341:2434"
+    environment:
+      - JAVA_OPTS=-Darcadedb.server.name=arcadedb1 -Darcadedb.server.rootPassword=arcadepw -Darcadedb.server.defaultDatabases=memstack[root|arcadepw] -Darcadedb.server.plugins=Neo4j-Bolt:com.arcadedb.bolt.BoltProtocolPlugin -Darcadedb.ha.enabled=true -Darcadedb.ha.clusterName=memstack-arcadedb-ha -Darcadedb.ha.serverList=arcadedb1@arcadedb-ha-1:{raft:2434,http:2480,priority:10},arcadedb2@arcadedb-ha-2:{raft:2434,http:2480,priority:5},arcadedb3@arcadedb-ha-3:{raft:2434,http:2480,priority:1}
+    volumes:
+      - arcadedb_ha_1:/home/arcadedb/database
+
+  arcadedb-ha-2:
+    <<: *arcadedb-ha-common
+    container_name: memstack-arcadedb-ha-2
+    hostname: arcadedb-ha-2
+    ports:
+      - "7690:7687"
+      - "2482:2480"
+      - "24342:2434"
+    environment:
+      - JAVA_OPTS=-Darcadedb.server.name=arcadedb2 -Darcadedb.server.rootPassword=arcadepw -Darcadedb.server.defaultDatabases=memstack[root|arcadepw] -Darcadedb.server.plugins=Neo4j-Bolt:com.arcadedb.bolt.BoltProtocolPlugin -Darcadedb.ha.enabled=true -Darcadedb.ha.clusterName=memstack-arcadedb-ha -Darcadedb.ha.serverList=arcadedb1@arcadedb-ha-1:{raft:2434,http:2480,priority:10},arcadedb2@arcadedb-ha-2:{raft:2434,http:2480,priority:5},arcadedb3@arcadedb-ha-3:{raft:2434,http:2480,priority:1}
+    volumes:
+      - arcadedb_ha_2:/home/arcadedb/database
+
+  arcadedb-ha-3:
+    <<: *arcadedb-ha-common
+    container_name: memstack-arcadedb-ha-3
+    hostname: arcadedb-ha-3
+    ports:
+      - "7691:7687"
+      - "2483:2480"
+      - "24343:2434"
+    environment:
+      - JAVA_OPTS=-Darcadedb.server.name=arcadedb3 -Darcadedb.server.rootPassword=arcadepw -Darcadedb.server.defaultDatabases=memstack[root|arcadepw] -Darcadedb.server.plugins=Neo4j-Bolt:com.arcadedb.bolt.BoltProtocolPlugin -Darcadedb.ha.enabled=true -Darcadedb.ha.clusterName=memstack-arcadedb-ha -Darcadedb.ha.serverList=arcadedb1@arcadedb-ha-1:{raft:2434,http:2480,priority:10},arcadedb2@arcadedb-ha-2:{raft:2434,http:2480,priority:5},arcadedb3@arcadedb-ha-3:{raft:2434,http:2480,priority:1}
+    volumes:
+      - arcadedb_ha_3:/home/arcadedb/database
+
+volumes:
+  arcadedb_ha_1:
+  arcadedb_ha_2:
+  arcadedb_ha_3:

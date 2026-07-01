@@ -5,6 +5,8 @@ import { useNavigate, Link, useParams } from 'react-router-dom';
 
 import { AlertCircle, Brain, Loader2, Network, Settings } from 'lucide-react';
 
+import { BackendStoreSelectors } from '@/components/project/BackendStoreSelectors';
+
 import { useProjectStore } from '../../stores/project';
 import { useTenantStore } from '../../stores/tenant';
 
@@ -20,6 +22,8 @@ interface ProjectEditFormData {
   status: ProjectFormStatus;
   memory_rules: MemoryRulesConfig;
   graph_config: GraphConfig;
+  graph_store_id: string | null;
+  retrieval_store_id: string | null;
 }
 
 const defaultMemoryRules: MemoryRulesConfig = {
@@ -42,6 +46,8 @@ const defaultFormData: ProjectEditFormData = {
   status: 'active',
   memory_rules: defaultMemoryRules,
   graph_config: defaultGraphConfig,
+  graph_store_id: null,
+  retrieval_store_id: null,
 };
 
 const isProjectFormStatus = (value: string): value is ProjectFormStatus =>
@@ -65,6 +71,8 @@ const toProjectFormData = (project: Partial<Project>): ProjectEditFormData => ({
     community_detection:
       project.graph_config?.community_detection ?? defaultGraphConfig.community_detection,
   },
+  graph_store_id: project.graph_store_id ?? null,
+  retrieval_store_id: project.retrieval_store_id ?? null,
 });
 
 export const EditProject: React.FC = () => {
@@ -106,6 +114,8 @@ export const EditProject: React.FC = () => {
         description: formData.description,
         memory_rules: formData.memory_rules,
         graph_config: formData.graph_config,
+        graph_store_id: formData.graph_store_id,
+        retrieval_store_id: formData.retrieval_store_id,
       };
       await updateProject(tenantId, projectId, projectData);
       void navigate(`/tenant/${tenantId}/projects`);
@@ -206,6 +216,20 @@ export const EditProject: React.FC = () => {
             </div>
           </div>
         </div>
+
+        <BackendStoreSelectors
+          tenantId={tenantId ?? currentTenant?.id}
+          graphStoreId={formData.graph_store_id}
+          retrievalStoreId={formData.retrieval_store_id}
+          disabled={isLoading}
+          onChange={(patch) => {
+            setFormData({
+              ...formData,
+              graph_store_id: patch.graph_store_id ?? formData.graph_store_id,
+              retrieval_store_id: patch.retrieval_store_id ?? formData.retrieval_store_id,
+            });
+          }}
+        />
 
         {/* Configuration Split */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

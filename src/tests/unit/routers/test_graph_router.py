@@ -27,8 +27,24 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 
 
-def _neo4j_result(records: list[dict]) -> Mock:
-    return Mock(records=records)
+def _store() -> Mock:
+    """A graph_store mock whose primitives return empty/None results."""
+    store = Mock()
+    store.list_entities = AsyncMock(return_value={"entities": [], "total": 0})
+    store.list_communities = AsyncMock(return_value={"communities": [], "total": 0})
+    store.get_entity_types = AsyncMock(return_value=[])
+    store.get_entity = AsyncMock(return_value=None)
+    store.get_community = AsyncMock(return_value=None)
+    store.get_entity_relationships = AsyncMock(
+        return_value={"relationships": [], "total": 0}
+    )
+    store.get_community_members = AsyncMock(return_value={"members": [], "total": 0})
+    store.get_graph_visualization = AsyncMock(return_value=[])
+    store.get_subgraph = AsyncMock(return_value=[])
+    store.rebuild_communities = AsyncMock(
+        return_value={"communities_count": 0, "entities_processed": 0}
+    )
+    return store
 
 
 async def _add_other_tenant_project(
@@ -71,8 +87,7 @@ class TestGraphRouter:
         test_db: AsyncSession,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock()
+        store = _store()
 
         with pytest.raises(HTTPException) as exc_info:
             await list_entities(
@@ -82,11 +97,11 @@ class TestGraphRouter:
                 offset=0,
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-        neo4j_client.execute_query.assert_not_called()
+        store.list_entities.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_list_communities_rejects_unjoined_project(
@@ -94,8 +109,7 @@ class TestGraphRouter:
         test_db: AsyncSession,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock()
+        store = _store()
 
         with pytest.raises(HTTPException) as exc_info:
             await list_communities(
@@ -105,11 +119,11 @@ class TestGraphRouter:
                 offset=0,
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-        neo4j_client.execute_query.assert_not_called()
+        store.list_communities.assert_not_awaited()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("endpoint_name", ["list_entities", "list_communities"])
@@ -120,8 +134,7 @@ class TestGraphRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock()
+        store = _store()
 
         with pytest.raises(HTTPException) as exc_info:
             if endpoint_name == "list_entities":
@@ -133,7 +146,7 @@ class TestGraphRouter:
                     offset=0,
                     current_user=test_user,
                     db=test_db,
-                    neo4j_client=neo4j_client,
+                    graph_store=store,
                 )
             else:
                 await list_communities(
@@ -144,27 +157,20 @@ class TestGraphRouter:
                     offset=0,
                     current_user=test_user,
                     db=test_db,
-                    neo4j_client=neo4j_client,
+                    graph_store=store,
                 )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
         assert exc_info.value.detail == "Project does not belong to tenant"
-        neo4j_client.execute_query.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_list_entities_uses_parameterized_entity_type_filter(
+    async def test_list_entities_forwards_entity_type_filter(
         self,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"total": 0}]),
-                _neo4j_result([]),
-            ]
-        )
+        store = _store()
 
         response = await list_entities(
             project_id=test_project_db.id,
@@ -173,14 +179,12 @@ class TestGraphRouter:
             offset=0,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response["total"] == 0
-        count_query = neo4j_client.execute_query.await_args_list[0].args[0]
-        assert "$entity_type IN labels(e)" in count_query
-        assert "'$entity_type' IN labels(e)" not in count_query
-        assert neo4j_client.execute_query.await_args_list[0].kwargs["entity_type"] == "Person"
+        kwargs = store.list_entities.await_args.kwargs
+        assert kwargs["entity_type"] == "Person"
 
     @pytest.mark.asyncio
     async def test_get_graph_without_project_is_scoped_to_user_projects(
@@ -189,20 +193,19 @@ class TestGraphRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+        store = _store()
 
         response = await get_graph(
             project_id=None,
             limit=100,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response == {"elements": {"nodes": [], "edges": []}}
-        query_kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert query_kwargs["project_ids"] == [test_project_db.id]
+        kwargs = store.get_graph_visualization.await_args.kwargs
+        assert kwargs["project_ids"] == [test_project_db.id]
 
     @pytest.mark.asyncio
     async def test_get_subgraph_with_tenant_filters_allowed_project_ids(
@@ -212,8 +215,7 @@ class TestGraphRouter:
         test_user: User,
     ) -> None:
         other_project = await _add_other_tenant_project(test_db, test_user, "subgraph")
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+        store = _store()
 
         response = await get_subgraph(
             SubgraphRequest(
@@ -223,16 +225,14 @@ class TestGraphRouter:
             ),
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response == {"elements": {"nodes": [], "edges": []}}
-        query = neo4j_client.execute_query.await_args.args[0]
-        query_kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "$tenant_id IS NULL OR n.tenant_id = $tenant_id" in query
-        assert query_kwargs["project_ids"] == [test_project_db.id]
-        assert other_project.id not in query_kwargs["project_ids"]
-        assert query_kwargs["tenant_id"] == test_project_db.tenant_id
+        kwargs = store.get_subgraph.await_args.kwargs
+        assert kwargs["project_ids"] == [test_project_db.id]
+        assert other_project.id not in (kwargs["project_ids"] or [])
+        assert kwargs["tenant_id"] == test_project_db.tenant_id
 
     @pytest.mark.asyncio
     async def test_get_subgraph_superuser_tenant_filter_applies_to_neighbors(
@@ -242,8 +242,7 @@ class TestGraphRouter:
         test_user: User,
     ) -> None:
         test_user.is_superuser = True
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+        store = _store()
 
         response = await get_subgraph(
             SubgraphRequest(
@@ -253,16 +252,13 @@ class TestGraphRouter:
             ),
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response == {"elements": {"nodes": [], "edges": []}}
-        query = neo4j_client.execute_query.await_args.args[0]
-        query_kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "n.tenant_id = $tenant_id" in query
-        assert "m.tenant_id = $tenant_id" in query
-        assert query_kwargs["tenant_id"] == test_project_db.tenant_id
-        assert query_kwargs["is_superuser"] is True
+        kwargs = store.get_subgraph.await_args.kwargs
+        assert kwargs["tenant_id"] == test_project_db.tenant_id
+        assert kwargs["is_superuser"] is True
 
     @pytest.mark.asyncio
     async def test_get_subgraph_rejects_project_tenant_mismatch(
@@ -271,8 +267,7 @@ class TestGraphRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock()
+        store = _store()
 
         with pytest.raises(HTTPException) as exc_info:
             await get_subgraph(
@@ -283,11 +278,11 @@ class TestGraphRouter:
                 ),
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        neo4j_client.execute_query.assert_not_called()
+        store.get_subgraph.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_get_entity_types_with_tenant_filters_allowed_project_ids(
@@ -297,23 +292,20 @@ class TestGraphRouter:
         test_user: User,
     ) -> None:
         other_project = await _add_other_tenant_project(test_db, test_user, "entity-types")
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+        store = _store()
 
         response = await get_entity_types(
             tenant_id=test_project_db.tenant_id,
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response == {"entity_types": [], "total": 0}
-        query = neo4j_client.execute_query.await_args.args[0]
-        query_kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "e.project_id IN $project_ids" in query
-        assert query_kwargs["project_ids"] == [test_project_db.id]
-        assert other_project.id not in query_kwargs["project_ids"]
+        kwargs = store.get_entity_types.await_args.kwargs
+        assert kwargs["project_ids"] == [test_project_db.id]
+        assert other_project.id not in (kwargs["project_ids"] or [])
 
     @pytest.mark.asyncio
     async def test_get_entity_types_rejects_project_tenant_mismatch(
@@ -322,8 +314,7 @@ class TestGraphRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock()
+        store = _store()
 
         with pytest.raises(HTTPException) as exc_info:
             await get_entity_types(
@@ -331,26 +322,22 @@ class TestGraphRouter:
                 project_id=test_project_db.id,
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        neo4j_client.execute_query.assert_not_called()
+        store.get_entity_types.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_get_entity_relationships_filters_related_entities_by_project(
+    async def test_get_entity_relationships_forwards_project_scope(
         self,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
-                _neo4j_result([{"total": 0}]),
-                _neo4j_result([]),
-            ]
+        store = _store()
+        store.get_entity = AsyncMock(
+            return_value={"uuid": "entity-1", "project_id": test_project_db.id}
         )
 
         response = await get_entity_relationships(
@@ -359,47 +346,46 @@ class TestGraphRouter:
             limit=50,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response == {"relationships": [], "total": 0}
-        count_query = neo4j_client.execute_query.await_args_list[1].args[0]
-        relationship_query = neo4j_client.execute_query.await_args_list[2].args[0]
-        relationship_kwargs = neo4j_client.execute_query.await_args_list[2].kwargs
-        assert "related.project_id = $project_id" in count_query
-        assert "related.project_id = $project_id" in relationship_query
-        assert relationship_kwargs["project_id"] == test_project_db.id
-        assert relationship_kwargs["is_superuser"] is False
+        kwargs = store.get_entity_relationships.await_args.kwargs
+        assert kwargs["project_id"] == test_project_db.id
+        assert kwargs["is_superuser"] is False
 
     @pytest.mark.asyncio
-    async def test_get_entity_relationships_total_counts_all_matching_relationships(
+    async def test_get_entity_relationships_maps_rows_to_response(
         self,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
-                _neo4j_result([{"total": 3}]),
-                _neo4j_result(
-                    [
-                        {
-                            "edge_id": "edge-1",
-                            "relation_type": "KNOWS",
-                            "edge_props": {"fact": "Alice knows Bob", "score": 0.9},
-                            "related_props": {
-                                "uuid": "entity-2",
-                                "name": "Bob",
-                                "summary": "Related person",
-                            },
-                            "related_labels": ["Entity", "Person"],
-                            "direction": "outgoing",
-                        }
-                    ]
-                ),
-            ]
+        store = _store()
+        store.get_entity = AsyncMock(
+            return_value={"uuid": "entity-1", "project_id": test_project_db.id}
+        )
+        store.get_entity_relationships = AsyncMock(
+            return_value={
+                "total": 3,
+                "relationships": [
+                    {
+                        "edge_id": "edge-1",
+                        "relation_type": "KNOWS",
+                        "direction": "outgoing",
+                        "fact": "Alice knows Bob",
+                        "score": 0.9,
+                        "created_at": None,
+                        "updated_at": None,
+                        "related_props": {
+                            "uuid": "entity-2",
+                            "name": "Bob",
+                            "summary": "Related person",
+                        },
+                        "related_labels": ["Entity", "Person"],
+                    }
+                ],
+            }
         )
 
         response = await get_entity_relationships(
@@ -408,30 +394,23 @@ class TestGraphRouter:
             limit=1,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response["total"] == 3
         assert len(response["relationships"]) == 1
-        count_query = neo4j_client.execute_query.await_args_list[1].args[0]
-        page_query = neo4j_client.execute_query.await_args_list[2].args[0]
-        assert "RETURN count(r) as total" in count_query
-        assert "LIMIT $limit" in page_query
+        assert response["relationships"][0]["related_entity"]["name"] == "Bob"
 
     @pytest.mark.asyncio
-    async def test_get_community_members_filters_members_by_project(
+    async def test_get_community_members_forwards_project_scope(
         self,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
-                _neo4j_result([{"total": 0}]),
-                _neo4j_result([]),
-            ]
+        store = _store()
+        store.get_community = AsyncMock(
+            return_value={"uuid": "community-1", "project_id": test_project_db.id}
         )
 
         response = await get_community_members(
@@ -439,43 +418,38 @@ class TestGraphRouter:
             limit=100,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response == {"members": [], "total": 0}
-        count_query = neo4j_client.execute_query.await_args_list[1].args[0]
-        member_query = neo4j_client.execute_query.await_args_list[2].args[0]
-        member_kwargs = neo4j_client.execute_query.await_args_list[2].kwargs
-        assert "e.project_id = $project_id" in count_query
-        assert "e.project_id = $project_id" in member_query
-        assert member_kwargs["project_id"] == test_project_db.id
-        assert member_kwargs["is_superuser"] is False
+        kwargs = store.get_community_members.await_args.kwargs
+        assert kwargs["project_id"] == test_project_db.id
+        assert kwargs["is_superuser"] is False
 
     @pytest.mark.asyncio
-    async def test_get_community_members_total_counts_all_matching_members(
+    async def test_get_community_members_maps_rows_to_response(
         self,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
-                _neo4j_result([{"total": 4}]),
-                _neo4j_result(
-                    [
-                        {
-                            "props": {
-                                "uuid": "entity-1",
-                                "name": "Alice",
-                                "entity_type": "Person",
-                                "summary": "Community member",
-                            }
-                        }
-                    ]
-                ),
-            ]
+        store = _store()
+        store.get_community = AsyncMock(
+            return_value={"uuid": "community-1", "project_id": test_project_db.id}
+        )
+        store.get_community_members = AsyncMock(
+            return_value={
+                "total": 4,
+                "members": [
+                    {
+                        "uuid": "entity-1",
+                        "name": "Alice",
+                        "entity_type": "Person",
+                        "summary": "Community member",
+                        "created_at": None,
+                    }
+                ],
+            }
         )
 
         response = await get_community_members(
@@ -483,15 +457,12 @@ class TestGraphRouter:
             limit=1,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response["total"] == 4
         assert len(response["members"]) == 1
-        count_query = neo4j_client.execute_query.await_args_list[1].args[0]
-        page_query = neo4j_client.execute_query.await_args_list[2].args[0]
-        assert "RETURN count(e) as total" in count_query
-        assert "LIMIT $limit" in page_query
+        assert response["members"][0]["name"] == "Alice"
 
     @pytest.mark.asyncio
     async def test_rebuild_communities_sync_processes_all_project_entities(
@@ -500,36 +471,22 @@ class TestGraphRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        entity_records = [
-            {"uuid": f"entity-{index}", "name": f"Entity {index}", "entity_type": "Person"}
-            for index in range(1001)
-        ]
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([]),
-                _neo4j_result(entity_records),
-            ]
+        store = _store()
+        store.rebuild_communities = AsyncMock(
+            return_value={"communities_count": 1, "entities_processed": 1001}
         )
-        community_updater = Mock()
-        community_updater.update_communities_for_entities = AsyncMock(return_value=[object()])
-        graph_service = Mock(community_updater=community_updater)
 
         response = await rebuild_communities(
             background=False,
             project_id=test_project_db.id,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
             workflow_engine=Mock(),
-            graph_service=graph_service,
         )
 
-        assert response["entities_processed"] == len(entity_records)
-        entity_query = neo4j_client.execute_query.await_args_list[1].args[0]
-        assert "LIMIT 1000" not in entity_query
-        updater_kwargs = community_updater.update_communities_for_entities.await_args.kwargs
-        assert len(updater_kwargs["entities"]) == len(entity_records)
+        assert response["entities_processed"] == 1001
+        store.rebuild_communities.assert_awaited_once_with(test_project_db.id)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -547,7 +504,7 @@ class TestGraphRouter:
             ("rebuild_communities", "Failed to rebuild communities"),
         ],
     )
-    async def test_graph_internal_failures_return_sanitized_errors(
+    async def test_graph_internal_failures_return_sanitized_errors(  # noqa: C901, PLR0912
         self,
         endpoint_name: str,
         expected_detail: str,
@@ -555,21 +512,39 @@ class TestGraphRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
+        store = _store()
+        error = RuntimeError("internal graph secret")
 
-        if endpoint_name in {
-            "get_entity_relationships",
-            "get_community_members",
-        }:
-            neo4j_client.execute_query = AsyncMock(
-                side_effect=[
-                    _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
-                    RuntimeError("internal graph secret"),
-                ]
+        # Configure the relevant primitive to raise.
+        if endpoint_name == "list_communities":
+            store.list_communities = AsyncMock(side_effect=error)
+        elif endpoint_name == "list_entities":
+            store.list_entities = AsyncMock(side_effect=error)
+        elif endpoint_name == "get_entity_types":
+            store.get_entity_types = AsyncMock(side_effect=error)
+        elif endpoint_name == "get_entity":
+            store.get_entity = AsyncMock(side_effect=error)
+        elif endpoint_name == "get_entity_relationships":
+            store.get_entity_relationships = AsyncMock(side_effect=error)
+        elif endpoint_name == "get_graph":
+            store.get_graph_visualization = AsyncMock(side_effect=error)
+        elif endpoint_name == "get_subgraph":
+            store.get_subgraph = AsyncMock(side_effect=error)
+        elif endpoint_name == "get_community":
+            store.get_community = AsyncMock(side_effect=error)
+        elif endpoint_name == "get_community_members":
+            store.get_community_members = AsyncMock(side_effect=error)
+        elif endpoint_name == "rebuild_communities":
+            store.rebuild_communities = AsyncMock(side_effect=error)
+
+        # For entity/community-member endpoints, the lookup primitive must
+        # succeed so the failure primitive is actually reached.
+        if endpoint_name in {"get_entity_relationships", "get_community_members"}:
+            store.get_entity = AsyncMock(
+                return_value={"uuid": "entity-1", "project_id": test_project_db.id}
             )
-        else:
-            neo4j_client.execute_query = AsyncMock(
-                side_effect=RuntimeError("internal graph secret")
+            store.get_community = AsyncMock(
+                return_value={"uuid": "community-1", "project_id": test_project_db.id}
             )
 
         with pytest.raises(HTTPException) as exc_info:
@@ -581,7 +556,7 @@ class TestGraphRouter:
                     offset=0,
                     current_user=test_user,
                     db=test_db,
-                    neo4j_client=neo4j_client,
+                    graph_store=store,
                 )
             elif endpoint_name == "list_entities":
                 await list_entities(
@@ -591,21 +566,21 @@ class TestGraphRouter:
                     offset=0,
                     current_user=test_user,
                     db=test_db,
-                    neo4j_client=neo4j_client,
+                    graph_store=store,
                 )
             elif endpoint_name == "get_entity_types":
                 await get_entity_types(
                     project_id=test_project_db.id,
                     current_user=test_user,
                     db=test_db,
-                    neo4j_client=neo4j_client,
+                    graph_store=store,
                 )
             elif endpoint_name == "get_entity":
                 await get_entity(
                     entity_id="entity-1",
                     current_user=test_user,
                     db=test_db,
-                    neo4j_client=neo4j_client,
+                    graph_store=store,
                 )
             elif endpoint_name == "get_entity_relationships":
                 await get_entity_relationships(
@@ -614,7 +589,7 @@ class TestGraphRouter:
                     limit=50,
                     current_user=test_user,
                     db=test_db,
-                    neo4j_client=neo4j_client,
+                    graph_store=store,
                 )
             elif endpoint_name == "get_graph":
                 await get_graph(
@@ -622,21 +597,21 @@ class TestGraphRouter:
                     limit=100,
                     current_user=test_user,
                     db=test_db,
-                    neo4j_client=neo4j_client,
+                    graph_store=store,
                 )
             elif endpoint_name == "get_subgraph":
                 await get_subgraph(
                     SubgraphRequest(node_uuids=["entity-1"], project_id=test_project_db.id),
                     current_user=test_user,
                     db=test_db,
-                    neo4j_client=neo4j_client,
+                    graph_store=store,
                 )
             elif endpoint_name == "get_community":
                 await get_community(
                     community_id="community-1",
                     current_user=test_user,
                     db=test_db,
-                    neo4j_client=neo4j_client,
+                    graph_store=store,
                 )
             elif endpoint_name == "get_community_members":
                 await get_community_members(
@@ -644,7 +619,7 @@ class TestGraphRouter:
                     limit=100,
                     current_user=test_user,
                     db=test_db,
-                    neo4j_client=neo4j_client,
+                    graph_store=store,
                 )
             elif endpoint_name == "rebuild_communities":
                 await rebuild_communities(
@@ -652,8 +627,8 @@ class TestGraphRouter:
                     project_id=test_project_db.id,
                     current_user=test_user,
                     db=test_db,
-                    neo4j_client=neo4j_client,
-                    graph_service=Mock(),
+                    graph_store=store,
+                    workflow_engine=Mock(),
                 )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR

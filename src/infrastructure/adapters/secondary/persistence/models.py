@@ -385,6 +385,11 @@ class Project(Base):
     owner_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     memory_rules: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     graph_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # Pluggable graph backend binding (NULL = tenant/env default backend).
+    # No hard FK: env/virtual stores use synthetic ids; integrity is app-enforced.
+    graph_store_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Pluggable retrieval backend binding (NULL = tenant/env default backend).
+    retrieval_store_id: Mapped[str | None] = mapped_column(String, nullable=True)
     sandbox_type: Mapped[str] = mapped_column(
         String(20), default="cloud", nullable=False
     )  # cloud, local
@@ -2679,6 +2684,88 @@ class ClusterModel(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_clusters_tenant_name"),
         Index("ix_clusters_tenant_status", "tenant_id", "status"),
+    )
+
+
+class GraphStoreModel(Base):
+    """Pluggable graph backend registered to a tenant (graph_stores table).
+
+    Models a graph backend connection (engine + encrypted connection config +
+    index config) that projects can bind to via ``Project.graph_store_id``.
+    Mirrors the WeKnora ``vector_stores`` design and the local ``ClusterModel``
+    (engine_type-like field + encrypted credentials + soft-delete).
+    """
+
+    __tablename__ = "graph_stores"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    engine_type: Mapped[str] = mapped_column(String(50), nullable=False, default="neo4j")
+    connection_config_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    index_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="disconnected")
+    health_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_health_check: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    detected_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_by: Mapped[str] = mapped_column(String, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_graph_stores_tenant_name"),
+        Index("ix_graph_stores_tenant_status", "tenant_id", "status"),
+        Index("ix_graph_stores_tenant_engine", "tenant_id", "engine_type"),
+    )
+
+
+class RetrievalStoreModel(Base):
+    """Pluggable retrieval backend registered to a tenant.
+
+    Models a vector/keyword retrieval backend connection (engine + encrypted
+    config + index config) that projects can bind to via
+    ``Project.retrieval_store_id``. The shape intentionally mirrors
+    ``GraphStoreModel`` and WeKnora's ``vector_stores`` table.
+    """
+
+    __tablename__ = "retrieval_stores"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    engine_type: Mapped[str] = mapped_column(String(50), nullable=False, default="memstack_pgvector")
+    connection_config_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    index_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="disconnected")
+    health_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_health_check: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    detected_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_by: Mapped[str] = mapped_column(String, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_retrieval_stores_tenant_name"),
+        Index("ix_retrieval_stores_tenant_status", "tenant_id", "status"),
+        Index("ix_retrieval_stores_tenant_engine", "tenant_id", "engine_type"),
     )
 
 

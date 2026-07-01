@@ -58,6 +58,73 @@ export interface ProjectStats {
   last_active: string | null;
 }
 
+export interface BackendStoreSummary {
+  id: string;
+  name: string;
+  engine_type: string;
+  source: 'env' | 'user';
+  status: string;
+}
+
+export type BackendStoreSource = 'env' | 'user';
+
+export interface BackendStoreFieldDefinition {
+  name: string;
+  type: string;
+  required?: boolean | undefined;
+  default?: unknown;
+  sensitive?: boolean | undefined;
+}
+
+export interface BackendStoreTypeInfo {
+  type: string;
+  display_name: string;
+  connection_fields: BackendStoreFieldDefinition[];
+  index_fields: BackendStoreFieldDefinition[];
+  status?: string | undefined;
+  source?: string | undefined;
+}
+
+export interface BackendStore {
+  id: string;
+  tenant_id: string;
+  name: string;
+  engine_type: string;
+  status: string;
+  health_status?: string | null | undefined;
+  detected_version?: string | null | undefined;
+  connection_config: Record<string, unknown>;
+  index_config: Record<string, unknown>;
+  created_at?: string | null | undefined;
+  updated_at?: string | null | undefined;
+  source: BackendStoreSource;
+  readonly: boolean;
+}
+
+export interface BackendStoreCreate {
+  name: string;
+  engine_type: string;
+  connection_config: Record<string, unknown>;
+  index_config?: Record<string, unknown> | undefined;
+}
+
+export interface BackendStoreUpdate {
+  name?: string | undefined;
+  connection_config?: Record<string, unknown> | undefined;
+  index_config?: Record<string, unknown> | undefined;
+}
+
+export interface BackendStoreTestRequest {
+  engine_type: string;
+  connection_config: Record<string, unknown>;
+}
+
+export interface BackendStoreTestResponse {
+  success: boolean;
+  version?: string | null | undefined;
+  error?: string | undefined;
+}
+
 export interface Project {
   id: string;
   tenant_id: string;
@@ -67,6 +134,10 @@ export interface Project {
   member_ids: string[];
   memory_rules: MemoryRulesConfig;
   graph_config: GraphConfig;
+  graph_store_id?: string | null | undefined;
+  retrieval_store_id?: string | null | undefined;
+  graph_store?: BackendStoreSummary | null | undefined;
+  retrieval_store?: BackendStoreSummary | null | undefined;
   is_public: boolean;
   created_at: string;
   updated_at?: string | undefined;
@@ -200,6 +271,8 @@ export interface ProjectCreate {
   tenant_id: string;
   memory_rules?: MemoryRulesConfig | undefined;
   graph_config?: GraphConfig | undefined;
+  graph_store_id?: string | null | undefined;
+  retrieval_store_id?: string | null | undefined;
   is_public?: boolean | undefined;
 }
 
@@ -208,6 +281,8 @@ export interface ProjectUpdate {
   description?: string | undefined;
   memory_rules?: MemoryRulesConfig | undefined;
   graph_config?: GraphConfig | undefined;
+  graph_store_id?: string | null | undefined;
+  retrieval_store_id?: string | null | undefined;
   is_public?: boolean | undefined;
 }
 

@@ -20,6 +20,7 @@
 .PHONY: help install update clean init reset fresh restart
 .PHONY: obs-start obs-stop obs-status obs-logs obs-ui
 .PHONY: drone-up drone-down drone-logs
+.PHONY: reranker-build reranker-up reranker-down reranker-restart reranker-logs reranker-status reranker-test
 .PHONY: sandbox-build sandbox-run sandbox-stop sandbox-restart sandbox-status sandbox-logs sandbox-shell sandbox-clean sandbox-reset sandbox-test
 .PHONY: ray-up ray-up-dev ray-down ray-reload agent-actor-up
 .PHONY: plugin-template-build plugin-feishu-validate plugin-build-all
@@ -34,10 +35,12 @@ COMPOSE_RAY ?= docker-compose.ray.yml
 COMPOSE_RAY_DEV ?= docker-compose.ray.override.yml
 COMPOSE_ACTOR ?= docker-compose.agent-actor.yml
 COMPOSE_OBS ?= docker-compose.observability.yml
+COMPOSE_RERANKER ?= docker-compose.reranker.yml
 COMPOSE_CMD ?= docker compose -f $(COMPOSE_BASE)
 COMPOSE_ALL ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_ACTOR)
 COMPOSE_RAY_DEV_CMD ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_RAY_DEV)
 COMPOSE_DRONE ?= docker compose -f $(COMPOSE_BASE) -f .memstack/plugins/drone/docker-compose.yml
+COMPOSE_RERANKER_CMD ?= COMPOSE_IGNORE_ORPHANS=True docker compose -f $(COMPOSE_RERANKER)
 OBS_SHARED_SERVICES ?= postgres redis minio minio-setup
 OBS_STACK_SERVICES ?= langfuse-db-init langfuse-storage-setup langfuse-clickhouse langfuse-web langfuse-worker prometheus grafana otel-collector jaeger
 HELM_CHART ?= charts/memstack
@@ -45,6 +48,18 @@ HELM_RELEASE ?= memstack
 HELM_NAMESPACE ?= memstack
 HELM_TIMEOUT ?= 15m
 HELM_PACKAGE_DIR ?= dist/helm
+RERANKER_PORT ?= 8081
+RERANKER_URL ?= http://localhost:$(RERANKER_PORT)
+RERANKER_LOG ?= logs/reranker.log
+RERANKER_PID ?= logs/reranker.pid
+RERANKER_TMUX_SESSION ?= memstack-reranker-dev
+RERANK_MODEL_ID ?= BAAI/bge-reranker-base
+RERANK_BATCH_SIZE ?= 8
+RERANK_MAX_LENGTH ?= 512
+RERANK_HOST ?= 0.0.0.0
+RERANKER_LOG_LEVEL ?= info
+RERANKER_SHELL_CMD ?= sh docker/reranker/run-shell.sh
+WEB_DEV_CMD ?= node_modules/.bin/vite --host 0.0.0.0 --port 3000
 
 help: ## Show this help message
 	@echo "MemStack Development Commands"
@@ -63,6 +78,7 @@ help: ## Show this help message
 	@echo "  infra          - Start infrastructure only"
 	@echo "  logs           - View all service logs"
 	@echo "  drone-up       - Start optional Drone CI services"
+	@echo "  reranker-up    - Start local reranker API"
 	@echo ""
 	@echo " Ray Actors:"
 	@echo "  ray-up         - Start Ray cluster (production)"
@@ -161,6 +177,8 @@ help-full: ## Show all available commands
 	@echo "  docker-down      - Stop Docker services"
 	@echo "  docker-logs      - Show Docker logs"
 	@echo "  docker-clean     - Clean containers/volumes"
+	@echo "  reranker-up      - Start local reranker API"
+	@echo "  reranker-test    - Smoke-test local reranker API"
 	@echo "  ray-up           - Start Ray cluster"
 	@echo "  ray-down         - Stop Ray cluster"
 	@echo "  agent-actor-up   - Start Ray agent actor worker"
@@ -316,7 +334,7 @@ dev-all: dev-infra-dev db-init
 	@echo "   Ray Actor Worker: running in Docker (logs: docker compose logs -f agent-actor-worker)"
 	@mkdir -p logs
 	@nohup env RAY_ADDRESS=ray://localhost:10001 RAY_NAMESPACE=memstack uv run uvicorn src.infrastructure.adapters.primary.web.main:app --host 0.0.0.0 --port 8000  > logs/api.log 2>&1 & echo $$! > logs/api.pid
-	@(cd web && nohup pnpm run dev > ../logs/web.log 2>&1) & echo $$! > logs/web.pid
+	@(cd web && nohup $(WEB_DEV_CMD) > ../logs/web.log 2>&1) & echo $$! > logs/web.pid
 	@sleep 3
 	@echo " Services started!"
 	@echo ""
@@ -366,7 +384,7 @@ dev-web: ## Start web development server
 		echo " Port 3000 is already in use. Stop existing process first with: make dev-web-stop"; \
 		exit 1; \
 	fi
-	cd web && pnpm run dev
+	cd web && $(WEB_DEV_CMD)
 
 dev-web-stop: ## Stop web development server (kill process on port 3000)
 	@echo " Stopping web development server..."
@@ -441,6 +459,7 @@ status: ## Show status of all services
 	@lsof -i :9090 2>/dev/null | grep -q LISTEN && echo "  9090 (Prometheus):  In use" || echo "  9090 (Prometheus):  Free"
 	@lsof -i :6080 2>/dev/null | grep -q LISTEN && echo "  6080 (Desktop):  In use" || echo "  6080 (Desktop):  Free"
 	@lsof -i :7681 2>/dev/null | grep -q LISTEN && echo "  7681 (Terminal):  In use" || echo "  7681 (Terminal):  Free"
+	@lsof -i :$(RERANKER_PORT) 2>/dev/null | grep -q LISTEN && echo "  $(RERANKER_PORT) (Reranker):  In use" || echo "  $(RERANKER_PORT) (Reranker):  Free"
 
 # =============================================================================
 # Testing
@@ -776,6 +795,125 @@ docker-clean: ## Clean up containers, volumes, and orphans
 	@echo " Cleaning Docker containers and volumes..."
 	@$(COMPOSE_ALL) down -v --remove-orphans
 	@echo " Docker containers and volumes cleaned"
+
+reranker-build: ## Build local reranker API image
+	@echo " Building reranker image..."
+	@$(COMPOSE_RERANKER_CMD) build reranker
+	@echo " Reranker image built"
+
+reranker-up: ## Start local reranker API
+	@echo " Starting local reranker API..."
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		mkdir -p logs; \
+		if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(RERANKER_TMUX_SESSION)" 2>/dev/null; then \
+			echo " Reranker API already running via tmux session $(RERANKER_TMUX_SESSION)"; \
+		elif [ -f "$(RERANKER_PID)" ] && kill -0 $$(cat "$(RERANKER_PID)") 2>/dev/null; then \
+			echo " Reranker API already running via shell (PID: $$(cat "$(RERANKER_PID)"))"; \
+		else \
+			rm -f "$(RERANKER_PID)"; \
+			$(COMPOSE_RERANKER_CMD) down >/dev/null 2>&1 || true; \
+			if lsof -nP -iTCP:$(RERANKER_PORT) -sTCP:LISTEN >/dev/null 2>&1; then \
+				echo " Port $(RERANKER_PORT) is already in use. Stop that process or set RERANKER_PORT=<port>."; \
+				exit 1; \
+			fi; \
+			if command -v tmux >/dev/null 2>&1; then \
+				tmux new-session -d -s "$(RERANKER_TMUX_SESSION)" -c "$(CURDIR)" \
+					'env LOG_LEVEL="$(RERANKER_LOG_LEVEL)" RERANK_BATCH_SIZE="$(RERANK_BATCH_SIZE)" RERANK_HOST="$(RERANK_HOST)" RERANK_MAX_LENGTH="$(RERANK_MAX_LENGTH)" RERANK_MODEL_ID="$(RERANK_MODEL_ID)" RERANK_PORT="$(RERANKER_PORT)" TOKENIZERS_PARALLELISM=false $(RERANKER_SHELL_CMD) > "$(RERANKER_LOG)" 2>&1'; \
+				tmux display-message -p -t "$(RERANKER_TMUX_SESSION)" "#{pane_pid}" > "$(RERANKER_PID)"; \
+				echo " Reranker API starting via tmux shell on macOS (MPS if available)"; \
+				echo "   tmux: $(RERANKER_TMUX_SESSION)"; \
+			else \
+				nohup env \
+					LOG_LEVEL="$(RERANKER_LOG_LEVEL)" \
+					RERANK_BATCH_SIZE="$(RERANK_BATCH_SIZE)" \
+					RERANK_HOST="$(RERANK_HOST)" \
+					RERANK_MAX_LENGTH="$(RERANK_MAX_LENGTH)" \
+					RERANK_MODEL_ID="$(RERANK_MODEL_ID)" \
+					RERANK_PORT="$(RERANKER_PORT)" \
+					TOKENIZERS_PARALLELISM=false \
+					$(RERANKER_SHELL_CMD) > "$(RERANKER_LOG)" 2>&1 & \
+				echo $$! > "$(RERANKER_PID)"; \
+				echo " Reranker API starting via shell on macOS (MPS if available)"; \
+			fi; \
+			echo "   PID: $$(cat "$(RERANKER_PID)")"; \
+		fi; \
+	else \
+		$(COMPOSE_RERANKER_CMD) up -d reranker; \
+		echo " Reranker API starting via Docker"; \
+	fi
+	@echo "   API: $(RERANKER_URL)"
+	@echo "   Health: $(RERANKER_URL)/health"
+	@echo "   Logs: make reranker-logs"
+	@echo "   Smoke test: make reranker-test"
+
+reranker-down: ## Stop local reranker API
+	@echo " Stopping local reranker API..."
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(RERANKER_TMUX_SESSION)" 2>/dev/null; then \
+			tmux kill-session -t "$(RERANKER_TMUX_SESSION)"; \
+			rm -f "$(RERANKER_PID)"; \
+			echo " Shell reranker tmux session stopped"; \
+		elif [ -f "$(RERANKER_PID)" ]; then \
+			PID=$$(cat "$(RERANKER_PID)"); \
+			kill -TERM $$PID 2>/dev/null || true; \
+			sleep 1; \
+			kill -0 $$PID 2>/dev/null && kill -9 $$PID 2>/dev/null || true; \
+			rm -f "$(RERANKER_PID)"; \
+			echo " Shell reranker stopped"; \
+		else \
+			echo "  No shell reranker PID file found"; \
+		fi; \
+	fi
+	@$(COMPOSE_RERANKER_CMD) down 2>/dev/null || true
+	@echo " Reranker API stopped"
+
+reranker-restart: reranker-down reranker-up ## Restart local reranker API
+
+reranker-logs: ## Follow local reranker API logs
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		test -f "$(RERANKER_LOG)" || { echo " No shell reranker log found at $(RERANKER_LOG)"; exit 1; }; \
+		tail -f "$(RERANKER_LOG)"; \
+	else \
+		$(COMPOSE_RERANKER_CMD) logs -f reranker; \
+	fi
+
+reranker-status: ## Show local reranker API container status
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		echo "Mode: shell (macOS)"; \
+		if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(RERANKER_TMUX_SESSION)" 2>/dev/null; then \
+			echo "Status: running (tmux: $(RERANKER_TMUX_SESSION), pane PID: $$(tmux display-message -p -t "$(RERANKER_TMUX_SESSION)" "#{pane_pid}"))"; \
+		elif [ -f "$(RERANKER_PID)" ] && kill -0 $$(cat "$(RERANKER_PID)") 2>/dev/null; then \
+			echo "Status: running (PID: $$(cat "$(RERANKER_PID)"))"; \
+		else \
+			echo "Status: not running"; \
+		fi; \
+		lsof -nP -iTCP:$(RERANKER_PORT) -sTCP:LISTEN 2>/dev/null || true; \
+	else \
+		$(COMPOSE_RERANKER_CMD) ps reranker; \
+	fi
+
+reranker-test: ## Smoke-test local reranker API
+	@echo " Waiting for reranker API at $(RERANKER_URL)..."
+	@for i in $$(seq 1 90); do \
+		if curl -fsS "$(RERANKER_URL)/health" >/dev/null 2>&1; then \
+			echo " Reranker API is healthy"; \
+			break; \
+		fi; \
+		if [ "$$i" = "90" ]; then \
+			echo " Reranker API did not become healthy"; \
+			if [ "$$(uname -s)" = "Darwin" ]; then \
+				tail -n 80 "$(RERANKER_LOG)" 2>/dev/null || true; \
+			else \
+				$(COMPOSE_RERANKER_CMD) logs --tail=80 reranker; \
+			fi; \
+			exit 1; \
+		fi; \
+		sleep 2; \
+	done
+	@curl -fsS "$(RERANKER_URL)/rerank" \
+		-H "Content-Type: application/json" \
+		-d '{"query":"Where is Paris?","documents":["Paris is the capital of France.","Python is a programming language.","Beijing is the capital of China."],"top_n":2}' \
+		| python3 -m json.tool
 
 # =============================================================================
 # Observability Stack (OpenTelemetry, Jaeger, Prometheus, Grafana)

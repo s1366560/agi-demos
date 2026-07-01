@@ -41,6 +41,33 @@ async def test_create_project_internal_error_is_sanitized(
 
 
 @pytest.mark.unit
+async def test_create_project_returns_effective_backend_summaries(
+    test_db: AsyncSession,
+    test_tenant_db: Tenant,
+    test_user: User,
+) -> None:
+    response = await create_project(
+        ProjectCreate(
+            name="Backend Bound Project",
+            tenant_id=test_tenant_db.id,
+            graph_store_id="__env_neo4j__",
+            retrieval_store_id="__env_memstack_pgvector__",
+        ),
+        current_user=test_user,
+        db=test_db,
+    )
+
+    assert response.graph_store_id is None
+    assert response.retrieval_store_id is None
+    assert response.graph_store is not None
+    assert response.graph_store.source == "env"
+    assert response.graph_store.engine_type == "neo4j"
+    assert response.retrieval_store is not None
+    assert response.retrieval_store.source == "env"
+    assert response.retrieval_store.engine_type == "memstack_pgvector"
+
+
+@pytest.mark.unit
 async def test_get_project_rejects_requested_tenant_mismatch(
     test_db: AsyncSession,
     test_tenant_db: Tenant,

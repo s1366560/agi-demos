@@ -16,10 +16,31 @@ class Settings(BaseSettings):
     api_workers: int = Field(default=4, alias="API_WORKERS")
     api_allowed_origins: str | list[str] = Field(default=["*"], alias="API_ALLOWED_ORIGINS")
 
-    # Database Settings
+    # Graph Store Settings (pluggable graph backend; NEO4J_* are deprecated aliases)
+    graph_store_backend: str = Field(default="neo4j", alias="GRAPH_STORE_BACKEND")
+    graph_store_uri: str | None = Field(default=None, alias="GRAPH_STORE_URI")
+    graph_store_user: str | None = Field(default=None, alias="GRAPH_STORE_USER")
+    graph_store_password: str | None = Field(default=None, alias="GRAPH_STORE_PASSWORD")
+
+    # Database Settings (NEO4J_* kept as deprecated fallbacks for graph_store_*)
     neo4j_uri: str = Field(default="bolt://localhost:7687", alias="NEO4J_URI")
     neo4j_user: str = Field(default="neo4j", alias="NEO4J_USER")
     neo4j_password: str = Field(default="password", alias="NEO4J_PASSWORD")
+
+    @property
+    def effective_graph_store_uri(self) -> str:
+        """Resolved graph store URI (GRAPH_STORE_URI wins; falls back to NEO4J_URI)."""
+        return self.graph_store_uri or self.neo4j_uri
+
+    @property
+    def effective_graph_store_user(self) -> str:
+        """Resolved graph store user (GRAPH_STORE_USER wins; falls back to NEO4J_USER)."""
+        return self.graph_store_user or self.neo4j_user
+
+    @property
+    def effective_graph_store_password(self) -> str:
+        """Resolved graph store password (falls back to NEO4J_PASSWORD)."""
+        return self.graph_store_password or self.neo4j_password
 
     postgres_host: str = Field(default="localhost", alias="POSTGRES_HOST")
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
@@ -84,6 +105,14 @@ class Settings(BaseSettings):
     # API Key Settings
     require_api_key: bool = Field(default=True, alias="REQUIRE_API_KEY")
     api_key_header_name: str = Field(default="Authorization", alias="API_KEY_HEADER_NAME")
+    retrieval_store_private_host_allowlist: str = Field(
+        default="",
+        alias="RETRIEVAL_STORE_PRIVATE_HOST_ALLOWLIST",
+        description=(
+            "Comma-separated host/IP allowlist for retrieval backend connection tests that "
+            "need private network targets. Loopback is also allowed in local dev/test."
+        ),
+    )
 
     # Logging
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

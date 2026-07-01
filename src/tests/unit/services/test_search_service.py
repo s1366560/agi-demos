@@ -8,10 +8,10 @@ from src.application.services.search_service import SearchService
 from src.domain.model.memory.episode import Episode
 from src.domain.model.memory.memory import Memory
 from src.domain.ports.repositories.memory_repository import MemoryRepository
-from src.domain.ports.services.graph_service_port import GraphServicePort
+from src.tests._helpers import NullGraphStoreStub
 
 
-class _GraphServiceStub(GraphServicePort):
+class _GraphServiceStub(NullGraphStoreStub):
     def __init__(self, items: list[dict[str, Any]]) -> None:
         self._items = items
         self.search_calls: list[dict[str, Any]] = []

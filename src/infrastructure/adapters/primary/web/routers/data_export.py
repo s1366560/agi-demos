@@ -1,7 +1,6 @@
 """Data export and management API routes."""
 
 import logging
-from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -10,10 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Use Cases & DI Container
+from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_db,
-    get_graphiti_client,
+    get_graph_store,
 )
 from src.infrastructure.adapters.primary.web.routers.agent.access import (
     has_global_admin_access,
@@ -31,48 +31,6 @@ from src.infrastructure.i18n import gettext as _
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/data", tags=["data"])
-
-
-def _records(result: Any) -> Sequence[Any]:
-    try:
-        recs = getattr(result, "records", None)
-        if isinstance(recs, (list, tuple)):
-            return cast(Sequence[Any], recs)
-        if isinstance(result, (list, tuple)):
-            return cast(Sequence[Any], result)
-        return []
-    except Exception:
-        return []
-
-
-def _first_value(recs: Any, key: str) -> Any:
-    if not recs:
-        return 0
-    r0 = recs[0]
-    return _extract_value(r0, key)
-
-
-def _extract_value(r0: Any, key: str) -> Any:
-    """Extract a value from a record by key."""
-    if isinstance(r0, dict):
-        return cast(dict[str, Any], r0).get(key, 0)
-    if hasattr(r0, "__getitem__"):
-        try:
-            return r0[key]
-        except Exception:
-            pass
-    getter = getattr(r0, "get", None)
-    if callable(getter):
-        try:
-            typed_getter = cast(Callable[[str, Any], Any], getter)
-            return typed_getter(key, 0)
-        except Exception:
-            return 0
-    if isinstance(r0, (list, tuple)):
-        seq = cast(Sequence[Any], r0)
-        if seq:
-            return seq[0]
-    return 0
 
 
 async def _is_global_admin(db: AsyncSession, current_user: User) -> bool:
@@ -171,43 +129,6 @@ async def _resolve_graph_export_scope(
     return project_tenant_id, requested_project_id
 
 
-def _node_scope_clause(var_name: str, project_id: str | None, tenant_id: str | None) -> str:
-    if project_id:
-        return f"WHERE {var_name}.project_id = $project_id"
-    if tenant_id:
-        return f"WHERE {var_name}.tenant_id = $tenant_id"
-    return ""
-
-
-def _project_node_scope_condition(var_name: str, project_id: str | None) -> str:
-    if project_id is None:
-        return ""
-    return f"""(
-        {var_name}.project_id = $project_id OR EXISTS {{
-            MATCH ({var_name})<-[:MENTIONS]-(project_episode:Episodic)
-            WHERE project_episode.project_id = $project_id
-        }}
-    )"""
-
-
-def _entity_scope_clause(var_name: str, project_id: str | None, tenant_id: str | None) -> str:
-    project_condition = _project_node_scope_condition(var_name, project_id)
-    if project_condition:
-        return f"WHERE {project_condition}"
-    if tenant_id:
-        return f"WHERE {var_name}.tenant_id = $tenant_id"
-    return ""
-
-
-def _scoped_episode_query(prefix: str, project_id: str | None, tenant_id: str | None) -> str:
-    scope = _node_scope_clause("e", project_id, tenant_id)
-    return f"""
-    MATCH (e:Episodic)
-    {scope}
-    {prefix}
-    """
-
-
 def _cleanup_body_value(body: dict[str, Any] | None, key: str, fallback: Any) -> Any:
     if body is not None and key in body:
         return body[key]
@@ -256,36 +177,6 @@ def _normalize_cleanup_days(value: Any) -> int:
     return days
 
 
-async def _append_relationship_export(
-    data: dict[str, Any],
-    graphiti_client: Any,
-    params: dict[str, str | None],
-    effective_project_id: str | None,
-    effective_tenant_id: str | None,
-) -> None:
-    rel_query = """
-    MATCH (a)-[r]->(b)
-    WHERE ('Entity' IN labels(a) OR 'Episodic' IN labels(a) OR 'Community' IN labels(a))
-    AND ('Entity' IN labels(b) OR 'Episodic' IN labels(b) OR 'Community' IN labels(b))
-    """
-
-    if effective_project_id:
-        a_scope = _project_node_scope_condition("a", effective_project_id)
-        b_scope = _project_node_scope_condition("b", effective_project_id)
-        rel_query += f" AND {a_scope} AND {b_scope}"
-    elif effective_tenant_id:
-        rel_query += " AND a.tenant_id = $tenant_id AND b.tenant_id = $tenant_id"
-
-    rel_query += " RETURN properties(r) as props, type(r) as rel_type, elementId(r) as edge_id"
-
-    result = await graphiti_client.driver.execute_query(rel_query, **params)
-
-    for r in _records(result):
-        data["relationships"].append(
-            {"edge_id": r["edge_id"], "type": r["rel_type"], "properties": r["props"]}
-        )
-
-
 # --- Endpoints ---
 
 
@@ -299,7 +190,7 @@ async def export_data(
     include_communities: bool = Body(True, description="Include community data"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Export graph data as JSON.
@@ -311,71 +202,17 @@ async def export_data(
             db,
             current_user,
         )
-        data: dict[str, Any] = {
-            "exported_at": datetime.now(UTC).isoformat(),
-            "tenant_id": effective_tenant_id,
-            "project_id": effective_project_id,
-            "episodes": [],
-            "entities": [],
-            "relationships": [],
-            "communities": [],
-        }
-
-        params = {"tenant_id": effective_tenant_id, "project_id": effective_project_id}
-
-        if include_episodes:
-            episode_scope = _node_scope_clause("e", effective_project_id, effective_tenant_id)
-            episode_query = f"""
-            MATCH (e:Episodic)
-            {episode_scope}
-            RETURN properties(e) as props
-            ORDER BY e.created_at DESC
-            """
-
-            result = await graphiti_client.driver.execute_query(episode_query, **params)
-
-            for r in _records(result):
-                data["episodes"].append(r["props"])
-
-        if include_entities:
-            entity_scope = _entity_scope_clause("e", effective_project_id, effective_tenant_id)
-            entity_query = f"""
-            MATCH (e:Entity)
-            {entity_scope}
-            RETURN properties(e) as props, labels(e) as labels
-            """
-
-            result = await graphiti_client.driver.execute_query(entity_query, **params)
-
-            for r in _records(result):
-                props = r["props"]
-                props["labels"] = r["labels"]
-                data["entities"].append(props)
-
-        if include_relationships:
-            await _append_relationship_export(
-                data,
-                graphiti_client,
-                params,
-                effective_project_id,
-                effective_tenant_id,
-            )
-
-        if include_communities:
-            community_scope = _node_scope_clause("c", effective_project_id, effective_tenant_id)
-            community_query = f"""
-            MATCH (c:Community)
-            {community_scope}
-            RETURN properties(c) as props
-            ORDER BY c.member_count DESC
-            """
-
-            result = await graphiti_client.driver.execute_query(community_query, **params)
-
-            for r in _records(result):
-                data["communities"].append(r["props"])
-
-        return data
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend unavailable"))
+        export = await graph_store.data_export(
+            tenant_id=effective_tenant_id,
+            project_id=effective_project_id,
+            include_episodes=include_episodes,
+            include_entities=include_entities,
+            include_relationships=include_relationships,
+            include_communities=include_communities,
+        )
+        return export.to_dict()
 
     except HTTPException:
         raise
@@ -390,7 +227,7 @@ async def get_graph_stats(
     project_id: str | None = Query(None, description="Filter by project ID"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Get graph statistics.
@@ -408,67 +245,14 @@ async def get_graph_stats(
             db,
             current_user,
         )
-        params = {"tenant_id": effective_tenant_id, "project_id": effective_project_id}
-
-        # Entity count
-        entity_scope = _entity_scope_clause("e", effective_project_id, effective_tenant_id)
-        entity_query = f"""
-        MATCH (e:Entity)
-        {entity_scope}
-        RETURN count(e) as count
-        """
-        entity_result = await graphiti_client.driver.execute_query(entity_query, **params)
-        recs = _records(entity_result)
-        entity_count = _first_value(recs, "count")
-
-        # Episode count
-        episode_scope = _node_scope_clause("e", effective_project_id, effective_tenant_id)
-        episode_query = f"""
-        MATCH (e:Episodic)
-        {episode_scope}
-        RETURN count(e) as count
-        """
-        episode_result = await graphiti_client.driver.execute_query(episode_query, **params)
-        recs = _records(episode_result)
-        episode_count = _first_value(recs, "count")
-
-        # Community count
-        community_scope = _node_scope_clause("c", effective_project_id, effective_tenant_id)
-        community_query = f"""
-        MATCH (c:Community)
-        {community_scope}
-        RETURN count(c) as count
-        """
-        community_result = await graphiti_client.driver.execute_query(community_query, **params)
-        recs = _records(community_result)
-        community_count = _first_value(recs, "count")
-
-        # Relationship count
-        rel_query = """
-        MATCH (a)-[r]->(b)
-        WHERE ('Entity' IN labels(a) OR 'Episodic' IN labels(a) OR 'Community' IN labels(a))
-        AND ('Entity' IN labels(b) OR 'Episodic' IN labels(b) OR 'Community' IN labels(b))
-        """
-
-        if effective_project_id:
-            a_scope = _project_node_scope_condition("a", effective_project_id)
-            b_scope = _project_node_scope_condition("b", effective_project_id)
-            rel_query += f" AND {a_scope} AND {b_scope}"
-        elif effective_tenant_id:
-            rel_query += " AND a.tenant_id = $tenant_id AND b.tenant_id = $tenant_id"
-
-        rel_query += " RETURN count(r) as count"
-
-        rel_result = await graphiti_client.driver.execute_query(rel_query, **params)
-        recs = _records(rel_result)
-        rel_count = _first_value(recs, "count")
-
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend unavailable"))
+        counts = await graph_store.count_stats(
+            tenant_id=effective_tenant_id,
+            project_id=effective_project_id,
+        )
         return {
-            "entities": entity_count,
-            "episodes": episode_count,
-            "communities": community_count,
-            "relationships": rel_count,
-            "total_nodes": entity_count + episode_count + community_count,
+            **counts,
             "tenant_id": effective_tenant_id,
             "project_id": effective_project_id,
         }
@@ -491,7 +275,7 @@ async def cleanup_data(
     body: dict[str, Any] | None = Body(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Clean up old graph data.
@@ -515,55 +299,32 @@ async def cleanup_data(
             current_user,
             require_admin=not effective_dry_run,
         )
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend unavailable"))
 
         cutoff_date = datetime.now(UTC) - timedelta(days=int(effective_days))
-
-        count_query = _scoped_episode_query(
-            """
-        WHERE e.created_at < datetime($cutoff_date)
-        RETURN count(e) as count
-        """,
-            effective_project,
-            effective_tenant,
-        )
-        result = await graphiti_client.driver.execute_query(
-            count_query,
-            tenant_id=effective_tenant,
-            project_id=effective_project,
-            cutoff_date=cutoff_date.isoformat(),
-        )
-        recs = _records(result)
-        count = _first_value(recs, "count")
+        cutoff_iso = cutoff_date.isoformat()
 
         if effective_dry_run:
+            count = await graph_store.count_episodes_by_age(
+                cutoff_iso=cutoff_iso,
+                tenant_id=effective_tenant,
+                project_id=effective_project,
+            )
             return {
                 "dry_run": True,
                 "would_delete": count,
-                "cutoff_date": cutoff_date.isoformat(),
+                "cutoff_date": cutoff_iso,
                 "tenant_id": effective_tenant,
                 "project_id": effective_project,
                 "message": f"Would delete {count} episodes older than {effective_days} days",
             }
         else:
-            # Actually delete (DETACH DELETE removes nodes and their relationships)
-            delete_query = _scoped_episode_query(
-                """
-            WHERE e.created_at < datetime($cutoff_date)
-            DETACH DELETE e
-            RETURN count(e) as deleted
-            """,
-                effective_project,
-                effective_tenant,
-            )
-            result = await graphiti_client.driver.execute_query(
-                delete_query,
+            deleted = await graph_store.delete_episodes_by_age(
+                cutoff_iso=cutoff_iso,
                 tenant_id=effective_tenant,
                 project_id=effective_project,
-                cutoff_date=cutoff_date.isoformat(),
             )
-            recs = _records(result)
-            deleted = _first_value(recs, "deleted")
-
             logger.warning(
                 "Deleted %s episodes older than %s days for tenant: %s project: %s",
                 deleted,
@@ -571,11 +332,10 @@ async def cleanup_data(
                 effective_tenant,
                 effective_project,
             )
-
             return {
                 "dry_run": False,
                 "deleted": deleted,
-                "cutoff_date": cutoff_date.isoformat(),
+                "cutoff_date": cutoff_iso,
                 "tenant_id": effective_tenant,
                 "project_id": effective_project,
                 "message": f"Deleted {deleted} episodes older than {effective_days} days",

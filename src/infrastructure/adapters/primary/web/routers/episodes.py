@@ -11,12 +11,13 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.memory.episode import Episode, SourceType
+from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_graphiti_client,
+    get_graph_store,
     get_workflow_engine,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
@@ -171,7 +172,7 @@ async def create_episode(
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
     workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
 ) -> EpisodeResponse:
     """
@@ -288,7 +289,9 @@ async def create_episode(
                 project_id=resolved_project_id,
                 user_id=actor_user_id,
             )
-            result = await graphiti_client.add_episode(graph_episode)
+            if graph_store is None:
+                raise HTTPException(status_code=503, detail=_("Graph backend unavailable"))
+            result = await graph_store.add_episode(graph_episode)
             result_id = getattr(result, "id", None)
             legacy_episode = getattr(result, "episode", None)
             legacy_id = getattr(legacy_episode, "uuid", None) if legacy_episode else None
@@ -326,22 +329,15 @@ async def get_episode(
     episode_name: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> EpisodeDetail:
     """
     Get episode details by name.
     """
     try:
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend unavailable"))
         tenant_id = await _get_default_episode_tenant_id(db, current_user)
-        tenant_filter = "" if tenant_id is None else "e.tenant_id = $tenant_id"
-        project_filter = "" if current_user.is_superuser else "e.project_id IN $project_ids"
-        where_parts = [part for part in (tenant_filter, project_filter) if part]
-        where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
-        query = f"""
-        MATCH (e:Episodic {{name: $name}})
-        {where_clause}
-        RETURN properties(e) as props
-        """
         project_ids: list[str] = []
         if not current_user.is_superuser:
             project_result = await db.execute(
@@ -351,17 +347,14 @@ async def get_episode(
             )
             project_ids = list(project_result.scalars().all())
 
-        result = await graphiti_client.driver.execute_query(
-            query,
-            name=episode_name,
+        props = await graph_store.get_episode_by_name(
+            episode_name,
             tenant_id=tenant_id,
-            project_ids=project_ids,
+            project_ids=project_ids if not current_user.is_superuser else None,
         )
 
-        if not result.records:
+        if not props:
             raise HTTPException(status_code=404, detail=_("Episode not found"))
-
-        props = result.records[0]["props"]
 
         return EpisodeDetail(
             uuid=props.get("uuid", ""),
@@ -394,7 +387,7 @@ async def list_episodes(
     sort_desc: bool = Query(True, description="Sort descending if True"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     List episodes with filtering and pagination.
@@ -405,6 +398,8 @@ async def list_episodes(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=_("Invalid sort field"),
             )
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend unavailable"))
 
         default_tenant_id = await _get_default_episode_tenant_id(db, current_user)
         resolved_tenant_id, resolved_project_id = await _resolve_episode_scope(
@@ -415,74 +410,56 @@ async def list_episodes(
             requested_project_id=project_id,
         )
 
-        conditions: list[str] = []
-        query_params: dict[str, Any] = {}
-        if (
-            resolved_tenant_id != "neo4j"
-            or tenant_id
-            or project_id
-            or not current_user.is_superuser
-        ):
-            conditions.append("e.tenant_id = $tenant_id")
-            query_params["tenant_id"] = resolved_tenant_id
+        # Resolve the caller's accessible project set when scoping is needed.
+        store_project_ids: list[str] | None = None
         if resolved_project_id:
-            conditions.append("e.project_id = $project_id")
-            query_params["project_id"] = resolved_project_id
+            # Single explicit project filter handled by project_id below.
+            pass
         elif not current_user.is_superuser:
             project_result = await db.execute(
                 refresh_select_statement(
                     select(UserProject.project_id).where(UserProject.user_id == current_user.id)
                 )
             )
-            project_ids = list(project_result.scalars().all())
-            conditions.append("e.project_id IN $project_ids")
-            query_params["project_ids"] = project_ids
-        if user_id:
-            conditions.append("e.user_id = $user_id")
-            query_params["user_id"] = user_id
+            store_project_ids = list(project_result.scalars().all())
 
-        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+        # Match the legacy condition behavior: tenant filter applied except for
+        # the superuser-with-no-explicit-tenant/project default case.
+        store_tenant_id: str | None = resolved_tenant_id
+        if (
+            resolved_tenant_id == "neo4j"
+            and not tenant_id
+            and not project_id
+            and current_user.is_superuser
+        ):
+            store_tenant_id = None
 
-        # Count
-        count_query = f"MATCH (e:Episodic) {where_clause} RETURN count(e) as total"
-        count_result = await graphiti_client.driver.execute_query(count_query, **query_params)
-        total = count_result.records[0]["total"] if count_result.records else 0
-
-        # List
-        order_clause = "DESC" if sort_desc else "ASC"
-        list_query = f"""
-        MATCH (e:Episodic)
-        {where_clause}
-        RETURN properties(e) as props
-        ORDER BY e.{sort_by} {order_clause}
-        SKIP $offset
-        LIMIT $limit
-        """
-
-        result = await graphiti_client.driver.execute_query(
-            list_query,
-            **query_params,
+        page = await graph_store.list_episodes(
+            tenant_id=store_tenant_id,
+            project_id=resolved_project_id or None,
+            project_ids=store_project_ids,
+            user_id=user_id,
+            sort_by=sort_by,
+            sort_desc=sort_desc,
             offset=offset,
             limit=limit,
         )
-
-        episodes = []
-        for r in result.records:
-            props = r["props"]
-            episodes.append(
-                {
-                    "uuid": props.get("uuid", ""),
-                    "name": props.get("name", ""),
-                    "content": props.get("content", ""),
-                    "source_description": props.get("source_description"),
-                    "created_at": props.get("created_at"),
-                    "valid_at": props.get("valid_at"),
-                    "tenant_id": props.get("tenant_id"),
-                    "project_id": props.get("project_id"),
-                    "user_id": props.get("user_id"),
-                    "status": props.get("status", "unknown"),
-                }
-            )
+        episodes = [
+            {
+                "uuid": props.get("uuid", ""),
+                "name": props.get("name", ""),
+                "content": props.get("content", ""),
+                "source_description": props.get("source_description"),
+                "created_at": props.get("created_at"),
+                "valid_at": props.get("valid_at"),
+                "tenant_id": props.get("tenant_id"),
+                "project_id": props.get("project_id"),
+                "user_id": props.get("user_id"),
+                "status": props.get("status", "unknown"),
+            }
+            for props in page["episodes"]
+        ]
+        total = page["total"]
 
         return {
             "episodes": episodes,
@@ -504,7 +481,7 @@ async def delete_episode(
     episode_name: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Delete an episode and its relationships.
@@ -513,11 +490,9 @@ async def delete_episode(
     associated relationships. Entities will be preserved.
     """
     try:
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend unavailable"))
         tenant_id = await _get_default_episode_tenant_id(db, current_user)
-        tenant_filter = "" if tenant_id is None else "e.tenant_id = $tenant_id"
-        project_filter = "" if current_user.is_superuser else "e.project_id IN $project_ids"
-        where_parts = [part for part in (tenant_filter, project_filter) if part]
-        where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
         project_ids: list[str] = []
         if not current_user.is_superuser:
             project_result = await db.execute(
@@ -527,20 +502,11 @@ async def delete_episode(
             )
             project_ids = list(project_result.scalars().all())
 
-        query = f"""
-        MATCH (e:Episodic {{name: $name}})
-        {where_clause}
-        DETACH DELETE e
-        RETURN count(e) as deleted
-        """
-
-        result = await graphiti_client.driver.execute_query(
-            query,
-            name=episode_name,
+        deleted = await graph_store.delete_episode_by_name(
+            episode_name,
             tenant_id=tenant_id,
-            project_ids=project_ids,
+            project_ids=project_ids if not current_user.is_superuser else None,
         )
-        deleted = result.records[0]["deleted"] if result.records else 0
 
         if deleted == 0:
             raise HTTPException(status_code=404, detail=_("Episode not found"))
@@ -557,14 +523,14 @@ async def delete_episode(
 @router.get("/health", response_model=dict)
 async def health_check(
     current_user: User = Depends(get_current_user),
-    graphiti_client: Any = Depends(get_graphiti_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Health check endpoint for episode service.
     """
     try:
-        # Simple check - can we execute a query?
-        await graphiti_client.driver.execute_query("RETURN 1 as test")
+        if graph_store is None or not await graph_store.health_probe():
+            raise HTTPException(status_code=503, detail=_("Service unhealthy"))
         return {"status": "healthy", "timestamp": datetime.now(UTC).isoformat()}
     except Exception as e:
         logger.exception("Episode service health check failed")

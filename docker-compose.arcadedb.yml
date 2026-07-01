@@ -1,0 +1,56 @@
+# ArcadeDB graph backend for the pluggable graph-backend POC (Phase 4).
+#
+# ArcadeDB 26.2.1+ ships a Neo4j-Bolt plugin that must be EXPLICITLY enabled via
+# ``arcadedb.server.plugins``. Once enabled, ArcadeDB accepts Bolt connections on
+# port 7687 and speaks OpenCypher, so it is reachable via the standard ``neo4j``
+# async driver (same client we use for Neo4j).
+#
+# Two hard-won gotchas (verified against arcadedata/arcadedb:latest):
+#   1. ``arcadedb.server.rootPassword`` MUST be >= 8 characters (shorter => the
+#      server throws ``ServerSecurityException: User password too short`` and
+#      exits at startup).
+#   2. The image has NO ``curl``. Healthchecks must use ``wget`` (which exists).
+#      The unauthenticated endpoint ``/`` returns 200 once HTTP is up.
+#
+# Ports:
+#   - 7688 -> ArcadeDB BOLT (7687 inside container; 7688 on host to avoid
+#            clashing with the Neo4j dev instance on 7687)
+#   - 2480 -> ArcadeDB HTTP / Studio
+#
+# Usage:
+#   docker compose -f docker-compose.arcadedb.yml up -d
+#   ARCADEDB_URI=bolt://localhost:7688 \
+#     PYTHONPATH=. uv run pytest src/tests/integration/graph/test_arcadedb_poc.py -v
+#   docker compose -f docker-compose.arcadedb.yml down -v
+
+services:
+  arcadedb:
+    image: arcadedata/arcadedb:latest
+    container_name: memstack-arcadedb
+    ports:
+      - "7688:7687" # ArcadeDB BOLT (Bolt-compatible; mapped to 7688 to avoid Neo4j clash)
+      - "2480:2480" # ArcadeDB HTTP / Studio
+    environment:
+      # rootPassword must be >= 8 chars. The Bolt plugin must be explicitly
+      # registered (format: "<PluginName>:<fqcn>[,<PluginName>:<fqcn>]...").
+      - JAVA_OPTS=-Darcadedb.server.rootPassword=arcadepw -Darcadedb.server.plugins=Neo4j-Bolt:com.arcadedb.bolt.BoltProtocolPlugin
+    volumes:
+      - arcadedb_data:/home/arcadedb/database
+    healthcheck:
+      # Image has no curl; use wget. "/" is an unauthenticated 200 endpoint.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:2480/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+volumes:
+  arcadedb_data:

@@ -27,6 +27,7 @@ def mock_neo4j_client():
     client.save_edge = AsyncMock()
     client.find_node_by_uuid = AsyncMock(return_value=None)
     client.driver = MagicMock()
+    client.close = AsyncMock()
     return client
 
 
@@ -92,12 +93,14 @@ class TestNativeGraphAdapterProperties:
     """Tests for adapter properties."""
 
     def test_client_property(self, adapter, mock_neo4j_client):
-        """Test client property returns Neo4j client."""
+        """Test client property returns Neo4j client (lifecycle/close only)."""
         assert adapter.client is mock_neo4j_client
 
-    def test_driver_property(self, adapter, mock_neo4j_client):
-        """Test driver property returns Neo4j driver."""
-        assert adapter.driver is mock_neo4j_client.driver
+    @pytest.mark.asyncio
+    async def test_close_delegates_to_client(self, adapter, mock_neo4j_client):
+        """close() forwards to the underlying Neo4j client."""
+        await adapter.close()
+        mock_neo4j_client.close.assert_awaited_once()
 
     def test_embedder_property(self, adapter, mock_embedding_service):
         """Test embedder property returns embedding service."""

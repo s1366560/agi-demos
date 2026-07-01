@@ -31,6 +31,13 @@ async def initialize_graph_service() -> NativeGraphAdapter | None:
     try:
         graph_service = await create_native_graph_adapter()
         logger.info("NativeGraphAdapter created successfully")
+        # Register the env-default backend in the pluggable-backend registry.
+        # Routers resolve per-project backends through this registry; projects
+        # with a null graph_store_id fall back to this env default.
+        from src.infrastructure.graph.registry import register_env_default_store
+
+        register_env_default_store(graph_service)
+        logger.info("Registered env-default graph backend in registry")
         return graph_service
     except NoActiveProviderError:
         logger.warning(
@@ -44,7 +51,11 @@ async def initialize_graph_service() -> NativeGraphAdapter | None:
         raise
 
 async def shutdown_graph_service(graph_service: NativeGraphAdapter) -> None:
-    """Shutdown graph service and close Neo4j connection."""
-    if hasattr(graph_service, "client") and hasattr(graph_service.client, "close"):
+    """Shutdown graph service and close the graph backend connection."""
+    # Prefer the canonical close() lifecycle hook; fall back to the raw client.
+    if hasattr(graph_service, "close") and callable(graph_service.close):
+        await graph_service.close()
+        logger.info("Graph backend connection closed")
+    elif hasattr(graph_service, "client") and hasattr(graph_service.client, "close"):
         await graph_service.client.close()
         logger.info("Neo4j connection closed")

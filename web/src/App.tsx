@@ -48,6 +48,9 @@ const TenantOverview = lazy(() =>
 const ProjectList = lazy(() =>
   import('./pages/tenant/ProjectList').then((m) => ({ default: m.ProjectList }))
 );
+const BackendStores = lazy(() =>
+  import('./pages/tenant/BackendStores').then((m) => ({ default: m.BackendStores }))
+);
 const UserList = lazy(() =>
   import('./pages/tenant/UserList').then((m) => ({ default: m.UserList }))
 );
@@ -767,6 +770,14 @@ function App() {
                 }
               />
               <Route
+                path="backend-stores"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <BackendStores />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="users"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -1331,6 +1342,14 @@ function App() {
                 element={
                   <Suspense fallback={<PageLoader />}>
                     <EditProject />
+                  </Suspense>
+                }
+              />
+              <Route
+                path=":tenantId/backend-stores"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <BackendStores />
                   </Suspense>
                 }
               />

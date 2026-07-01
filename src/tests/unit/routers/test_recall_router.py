@@ -49,6 +49,12 @@ async def _add_other_tenant_project(
     return other_project
 
 
+def _make_graph_store() -> Mock:
+    store = Mock()
+    store.recall_recent_episodes = AsyncMock(return_value=[])
+    return store
+
+
 @pytest.mark.unit
 class TestRecallRouter:
     @pytest.mark.asyncio
@@ -57,20 +63,18 @@ class TestRecallRouter:
         test_db: AsyncSession,
         test_user: User,
     ) -> None:
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock()
+        graph_store = _make_graph_store()
 
         with pytest.raises(HTTPException) as exc_info:
             await short_term_recall(
                 ShortTermRecallQuery(window_minutes=60, limit=10, project_id="not-a-member"),
                 current_user=test_user,
                 db=test_db,
-                graphiti_client=graphiti_client,
+                graph_store=graph_store,
             )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-        graphiti_client.driver.execute_query.assert_not_called()
+        graph_store.recall_recent_episodes.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_short_term_recall_without_project_is_scoped_to_user_projects(
@@ -79,22 +83,19 @@ class TestRecallRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock(return_value=Mock(records=[]))
+        graph_store = _make_graph_store()
 
         response = await short_term_recall(
             ShortTermRecallQuery(window_minutes=60, limit=10),
             current_user=test_user,
             db=test_db,
-            graphiti_client=graphiti_client,
+            graph_store=graph_store,
         )
 
         assert response.total == 0
-        query = graphiti_client.driver.execute_query.await_args.args[0]
-        kwargs = graphiti_client.driver.execute_query.await_args.kwargs
-        assert "e.project_id IN $project_ids" in query
+        kwargs = graph_store.recall_recent_episodes.await_args.kwargs
         assert kwargs["project_ids"] == [test_project_db.id]
+        assert kwargs["project_id"] is None
 
     @pytest.mark.asyncio
     async def test_short_term_recall_keeps_explicit_project_filter(
@@ -103,9 +104,7 @@ class TestRecallRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock(return_value=Mock(records=[]))
+        graph_store = _make_graph_store()
 
         await short_term_recall(
             ShortTermRecallQuery(
@@ -116,13 +115,10 @@ class TestRecallRouter:
             ),
             current_user=test_user,
             db=test_db,
-            graphiti_client=graphiti_client,
+            graph_store=graph_store,
         )
 
-        query = graphiti_client.driver.execute_query.await_args.args[0]
-        kwargs = graphiti_client.driver.execute_query.await_args.kwargs
-        assert "e.project_id = $project_id" in query
-        assert "e.tenant_id = $tenant_id" in query
+        kwargs = graph_store.recall_recent_episodes.await_args.kwargs
         assert kwargs["project_id"] == test_project_db.id
         assert kwargs["tenant_id"] == test_project_db.tenant_id
 
@@ -134,9 +130,7 @@ class TestRecallRouter:
         test_user: User,
     ) -> None:
         other_project = await _add_other_tenant_project(test_db, test_user)
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock(return_value=Mock(records=[]))
+        graph_store = _make_graph_store()
 
         response = await short_term_recall(
             ShortTermRecallQuery(
@@ -146,16 +140,13 @@ class TestRecallRouter:
             ),
             current_user=test_user,
             db=test_db,
-            graphiti_client=graphiti_client,
+            graph_store=graph_store,
         )
 
         assert response.total == 0
-        query = graphiti_client.driver.execute_query.await_args.args[0]
-        kwargs = graphiti_client.driver.execute_query.await_args.kwargs
-        assert "e.project_id IN $project_ids" in query
-        assert "e.tenant_id = $tenant_id" in query
+        kwargs = graph_store.recall_recent_episodes.await_args.kwargs
         assert kwargs["project_ids"] == [test_project_db.id]
-        assert other_project.id not in kwargs["project_ids"]
+        assert other_project.id not in (kwargs["project_ids"] or [])
         assert kwargs["tenant_id"] == test_project_db.tenant_id
 
     @pytest.mark.asyncio
@@ -165,9 +156,7 @@ class TestRecallRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock()
+        graph_store = _make_graph_store()
 
         with pytest.raises(HTTPException) as exc_info:
             await short_term_recall(
@@ -179,11 +168,11 @@ class TestRecallRouter:
                 ),
                 current_user=test_user,
                 db=test_db,
-                graphiti_client=graphiti_client,
+                graph_store=graph_store,
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        graphiti_client.driver.execute_query.assert_not_called()
+        graph_store.recall_recent_episodes.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_short_term_recall_sanitizes_internal_errors(
@@ -192,9 +181,8 @@ class TestRecallRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock(
+        graph_store = _make_graph_store()
+        graph_store.recall_recent_episodes = AsyncMock(
             side_effect=RuntimeError("internal neo4j secret")
         )
 
@@ -203,7 +191,7 @@ class TestRecallRouter:
                 ShortTermRecallQuery(window_minutes=60, limit=10, project_id=test_project_db.id),
                 current_user=test_user,
                 db=test_db,
-                graphiti_client=graphiti_client,
+                graph_store=graph_store,
             )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR

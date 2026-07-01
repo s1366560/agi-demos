@@ -1,12 +1,13 @@
 """Shared access helpers for Agent API endpoints."""
 
+from typing import Any
+
 from fastapi import HTTPException
 from sqlalchemy import inspect as sa_inspect, select
 from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.roles import RoleDefinition
-from src.domain.model.auth.user import User
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.models import (
     Role,
@@ -17,7 +18,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 from src.infrastructure.i18n import gettext as _
 
 
-def _get_user_state(current_user: User) -> dict[str, object]:
+def _get_user_state(current_user: Any) -> dict[str, object]:  # noqa: ANN401
     """Return already-loaded user state without triggering ORM lazy loads."""
     try:
         state = sa_inspect(current_user)
@@ -30,7 +31,7 @@ def _get_user_state(current_user: User) -> dict[str, object]:
     return getattr(current_user, "__dict__", {})
 
 
-def _get_user_id(current_user: User) -> str:
+def _get_user_id(current_user: Any) -> str:  # noqa: ANN401
     """Return the user id without triggering ORM lazy loads."""
     try:
         state = sa_inspect(current_user)
@@ -48,7 +49,7 @@ def _get_user_id(current_user: User) -> str:
     return str(current_user.id)
 
 
-def is_global_admin(current_user: User) -> bool:
+def is_global_admin(current_user: Any) -> bool:  # noqa: ANN401
     """Return whether the current user has global admin access."""
     user_state = _get_user_state(current_user)
     if user_state.get("is_superuser") is True:
@@ -69,7 +70,7 @@ def is_global_admin(current_user: User) -> bool:
 
 async def has_global_admin_access(
     db: AsyncSession,
-    current_user: User,
+    current_user: Any,  # noqa: ANN401
 ) -> bool:
     """Return whether the current user has persisted global admin access."""
     if is_global_admin(current_user):
@@ -102,7 +103,7 @@ async def _ensure_tenant_exists(
 
 async def get_tenant_role(
     db: AsyncSession,
-    current_user: User,
+    current_user: Any,  # noqa: ANN401
     tenant_id: str,
 ) -> str | None:
     """Return the caller's tenant role, or None when they are not a member."""
@@ -124,7 +125,7 @@ async def get_tenant_role(
 
 async def has_tenant_admin_access(
     db: AsyncSession,
-    current_user: User,
+    current_user: Any,  # noqa: ANN401
     tenant_id: str,
 ) -> bool:
     """Return whether the caller has admin-level access to the tenant."""
@@ -134,7 +135,7 @@ async def has_tenant_admin_access(
 
 async def require_tenant_access(
     db: AsyncSession,
-    current_user: User,
+    current_user: Any,  # noqa: ANN401
     tenant_id: str,
     *,
     require_admin: bool = False,

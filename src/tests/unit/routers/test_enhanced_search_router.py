@@ -22,13 +22,19 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 
 
-def _neo4j_result(records: list[dict]) -> Mock:
-    return Mock(records=records)
+def _store_with_entity_project(project_id: str | None) -> Mock:
+    """A graph_store whose start entity lives in the given project."""
+    store = Mock()
+    store.get_entity_project_id = AsyncMock(return_value=project_id)
+    store.graph_traversal_search = AsyncMock(return_value=[])
+    return store
 
 
-class FakeNeo4jDateTime:
-    def isoformat(self) -> str:
-        return "2026-05-17T12:34:56+00:00"
+def _store_with_community_project(project_id: str | None) -> Mock:
+    store = Mock()
+    store.get_community_project_id = AsyncMock(return_value=project_id)
+    store.community_search = AsyncMock(return_value=[])
+    return store
 
 
 async def _add_other_tenant_project(
@@ -66,21 +72,16 @@ async def _add_other_tenant_project(
 @pytest.mark.unit
 class TestEnhancedSearchRouter:
     @pytest.mark.asyncio
-    async def test_graph_traversal_uses_parameterized_relationship_types(
+    async def test_graph_traversal_forwards_relationship_types_safely(
         self,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
-                _neo4j_result([]),
-            ]
-        )
+        """Relationship types are passed as a parameter (not interpolated) to the store."""
+        store = _store_with_entity_project(test_project_db.id)
 
-        response = await search_by_graph_traversal(
+        await search_by_graph_traversal(
             start_entity_uuid="entity-1",
             max_depth=2,
             relationship_types=['RELATES_TO") MATCH (n) DETACH DELETE n //'],
@@ -89,43 +90,36 @@ class TestEnhancedSearchRouter:
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
-        assert response == {"results": [], "total": 0, "search_type": "graph_traversal"}
-        traversal_query = neo4j_client.execute_query.await_args_list[1].args[0]
-        traversal_kwargs = neo4j_client.execute_query.await_args_list[1].kwargs
-        assert "type(rel) IN $relationship_types" in traversal_query
-        assert "DETACH DELETE" not in traversal_query
-        assert traversal_kwargs["relationship_types"] == [
+        store.graph_traversal_search.assert_awaited_once()
+        kwargs = store.graph_traversal_search.await_args.kwargs
+        assert kwargs["relationship_types"] == [
             'RELATES_TO") MATCH (n) DETACH DELETE n //'
         ]
-        assert traversal_kwargs["project_id"] == test_project_db.id
+        assert kwargs["project_id"] == test_project_db.id
 
     @pytest.mark.asyncio
-    async def test_graph_traversal_serializes_neo4j_datetime_values(
+    async def test_graph_traversal_maps_rows_to_response(
         self,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
-                _neo4j_result(
-                    [
-                        {
-                            "props": {
-                                "uuid": "entity-2",
-                                "name": "Related Entity",
-                                "summary": "A related node",
-                                "created_at": FakeNeo4jDateTime(),
-                            },
-                            "labels": ["Entity", "Organization"],
-                        }
-                    ]
-                ),
+        store = _store_with_entity_project(test_project_db.id)
+        store.graph_traversal_search = AsyncMock(
+            return_value=[
+                {
+                    "props": {
+                        "uuid": "entity-2",
+                        "name": "Related Entity",
+                        "summary": "A related node",
+                        "created_at": "2026-05-17T12:34:56+00:00",
+                        "entity_type": "Organization",
+                    },
+                    "labels": ["Entity", "Organization"],
+                }
             ]
         )
 
@@ -138,7 +132,7 @@ class TestEnhancedSearchRouter:
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response["total"] == 1
@@ -153,22 +147,17 @@ class TestEnhancedSearchRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
-                _neo4j_result(
-                    [
-                        {
-                            "props": {
-                                "uuid": "person-1",
-                                "name": "Ada",
-                                "entity_type": "Person",
-                            },
-                            "labels": ["Entity", "Node"],
-                        }
-                    ]
-                ),
+        store = _store_with_entity_project(test_project_db.id)
+        store.graph_traversal_search = AsyncMock(
+            return_value=[
+                {
+                    "props": {
+                        "uuid": "person-1",
+                        "name": "Ada",
+                        "entity_type": "Person",
+                    },
+                    "labels": ["Entity", "Node"],
+                }
             ]
         )
 
@@ -181,7 +170,7 @@ class TestEnhancedSearchRouter:
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response["results"][0]["type"] == "Person"
@@ -192,10 +181,7 @@ class TestEnhancedSearchRouter:
         test_db: AsyncSession,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            return_value=_neo4j_result([{"props": {"project_id": "not-a-member"}}])
-        )
+        store = _store_with_entity_project("not-a-member")
 
         with pytest.raises(HTTPException) as exc_info:
             await search_by_graph_traversal(
@@ -207,11 +193,11 @@ class TestEnhancedSearchRouter:
                 project_id=None,
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-        assert neo4j_client.execute_query.await_count == 1
+        store.graph_traversal_search.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_graph_traversal_rejects_tenant_mismatch_for_start_project(
@@ -220,10 +206,7 @@ class TestEnhancedSearchRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            return_value=_neo4j_result([{"props": {"project_id": test_project_db.id}}])
-        )
+        store = _store_with_entity_project(test_project_db.id)
 
         with pytest.raises(HTTPException) as exc_info:
             await search_by_graph_traversal(
@@ -235,27 +218,20 @@ class TestEnhancedSearchRouter:
                 project_id=None,
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert neo4j_client.execute_query.await_count == 1
+        store.graph_traversal_search.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_community_search_filters_entities_and_episodes_by_project(
+    async def test_community_search_forwards_project_scope(
         self,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
-                _neo4j_result([]),
-                _neo4j_result([]),
-            ]
-        )
+        store = _store_with_community_project(test_project_db.id)
 
         response = await search_by_community(
             community_uuid="community-1",
@@ -263,17 +239,14 @@ class TestEnhancedSearchRouter:
             include_episodes=True,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response == {"results": [], "total": 0, "search_type": "community"}
-        entity_query = neo4j_client.execute_query.await_args_list[1].args[0]
-        episode_query = neo4j_client.execute_query.await_args_list[2].args[0]
-        assert "e.project_id = $project_id" in entity_query
-        assert "ep.project_id = $project_id" in episode_query
-        assert neo4j_client.execute_query.await_args_list[1].kwargs["project_id"] == (
-            test_project_db.id
-        )
+        store.community_search.assert_awaited_once()
+        kwargs = store.community_search.await_args.kwargs
+        assert kwargs["project_id"] == test_project_db.id
+        assert kwargs["include_episodes"] is True
 
     @pytest.mark.asyncio
     async def test_temporal_search_without_project_is_scoped_to_user_projects(
@@ -282,8 +255,8 @@ class TestEnhancedSearchRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+        store = Mock()
+        store.temporal_search = AsyncMock(return_value=[])
 
         response = await search_temporal(
             query="memory",
@@ -294,14 +267,13 @@ class TestEnhancedSearchRouter:
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response["total"] == 0
-        query = neo4j_client.execute_query.await_args.args[0]
-        kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "e.project_id IN $project_ids" in query
+        kwargs = store.temporal_search.await_args.kwargs
         assert kwargs["project_ids"] == [test_project_db.id]
+        assert kwargs["project_id"] is None
 
     @pytest.mark.asyncio
     async def test_temporal_search_with_tenant_filters_allowed_project_ids(
@@ -311,8 +283,8 @@ class TestEnhancedSearchRouter:
         test_user: User,
     ) -> None:
         other_project = await _add_other_tenant_project(test_db, test_user, "temporal")
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+        store = Mock()
+        store.temporal_search = AsyncMock(return_value=[])
 
         response = await search_temporal(
             query="memory",
@@ -323,27 +295,24 @@ class TestEnhancedSearchRouter:
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response["total"] == 0
-        query = neo4j_client.execute_query.await_args.args[0]
-        kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "e.project_id IN $project_ids" in query
-        assert "e.tenant_id = $tenant_id" in query
+        kwargs = store.temporal_search.await_args.kwargs
         assert kwargs["project_ids"] == [test_project_db.id]
-        assert other_project.id not in kwargs["project_ids"]
+        assert other_project.id not in (kwargs["project_ids"] or [])
         assert kwargs["tenant_id"] == test_project_db.tenant_id
 
     @pytest.mark.asyncio
-    async def test_temporal_search_applies_query_text_filter(
+    async def test_temporal_search_forwards_query_text(
         self,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+        store = Mock()
+        store.temporal_search = AsyncMock(return_value=[])
 
         response = await search_temporal(
             query="  onboarding  ",
@@ -354,17 +323,13 @@ class TestEnhancedSearchRouter:
             project_id=test_project_db.id,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response["total"] == 0
-        query = neo4j_client.execute_query.await_args.args[0]
-        kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "coalesce(e.content, '')" in query
-        assert "coalesce(e.name, '')" in query
-        assert "coalesce(e.summary, '')" in query
-        assert "CONTAINS toLower($query)" in query
+        kwargs = store.temporal_search.await_args.kwargs
         assert kwargs["query"] == "onboarding"
+        assert kwargs["project_id"] == test_project_db.id
 
     @pytest.mark.asyncio
     async def test_faceted_search_without_project_is_scoped_to_user_projects(
@@ -373,8 +338,8 @@ class TestEnhancedSearchRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+        store = Mock()
+        store.faceted_search = AsyncMock(return_value=[])
 
         response = await search_with_facets(
             query="entity",
@@ -387,14 +352,13 @@ class TestEnhancedSearchRouter:
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response["total"] == 0
-        query = neo4j_client.execute_query.await_args.args[0]
-        kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "e.project_id IN $project_ids" in query
+        kwargs = store.faceted_search.await_args.kwargs
         assert kwargs["project_ids"] == [test_project_db.id]
+        assert kwargs["project_id"] is None
 
     @pytest.mark.asyncio
     async def test_faceted_search_with_tenant_filters_allowed_project_ids(
@@ -404,8 +368,8 @@ class TestEnhancedSearchRouter:
         test_user: User,
     ) -> None:
         other_project = await _add_other_tenant_project(test_db, test_user, "faceted")
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+        store = Mock()
+        store.faceted_search = AsyncMock(return_value=[])
 
         response = await search_with_facets(
             query="entity",
@@ -418,27 +382,24 @@ class TestEnhancedSearchRouter:
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response["total"] == 0
-        query = neo4j_client.execute_query.await_args.args[0]
-        kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "e.project_id IN $project_ids" in query
-        assert "e.tenant_id = $tenant_id" in query
+        kwargs = store.faceted_search.await_args.kwargs
         assert kwargs["project_ids"] == [test_project_db.id]
-        assert other_project.id not in kwargs["project_ids"]
+        assert other_project.id not in (kwargs["project_ids"] or [])
         assert kwargs["tenant_id"] == test_project_db.tenant_id
 
     @pytest.mark.asyncio
-    async def test_faceted_search_applies_query_and_tag_filters(
+    async def test_faceted_search_forwards_query_and_tag_filters(
         self,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
+        store = Mock()
+        store.faceted_search = AsyncMock(return_value=[])
 
         response = await search_with_facets(
             query="  platform  ",
@@ -451,17 +412,11 @@ class TestEnhancedSearchRouter:
             project_id=test_project_db.id,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
         assert response["total"] == 0
-        query = neo4j_client.execute_query.await_args.args[0]
-        kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "coalesce(e.name, '')" in query
-        assert "coalesce(e.summary, '')" in query
-        assert "coalesce(e.entity_type, '')" in query
-        assert "CONTAINS toLower($query)" in query
-        assert "any(tag IN $tags WHERE tag IN coalesce(e.tags, []))" in query
+        kwargs = store.faceted_search.await_args.kwargs
         assert kwargs["query"] == "platform"
         assert kwargs["entity_types"] == ["Concept"]
         assert kwargs["tags"] == ["architecture", "performance"]
@@ -626,13 +581,8 @@ class TestEnhancedSearchRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
-                RuntimeError("cypher secret leaked"),
-            ]
-        )
+        store = _store_with_entity_project(test_project_db.id)
+        store.graph_traversal_search = AsyncMock(side_effect=RuntimeError("cypher secret leaked"))
 
         with pytest.raises(HTTPException) as exc_info:
             await search_by_graph_traversal(
@@ -644,7 +594,7 @@ class TestEnhancedSearchRouter:
                 project_id=None,
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -657,13 +607,8 @@ class TestEnhancedSearchRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"props": {"project_id": test_project_db.id}}]),
-                RuntimeError("internal community query failed"),
-            ]
-        )
+        store = _store_with_community_project(test_project_db.id)
+        store.community_search = AsyncMock(side_effect=RuntimeError("internal community query failed"))
 
         with pytest.raises(HTTPException) as exc_info:
             await search_by_community(
@@ -672,7 +617,7 @@ class TestEnhancedSearchRouter:
                 include_episodes=False,
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -685,8 +630,8 @@ class TestEnhancedSearchRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(side_effect=RuntimeError("internal time error"))
+        store = Mock()
+        store.temporal_search = AsyncMock(side_effect=RuntimeError("internal time error"))
 
         with pytest.raises(HTTPException) as exc_info:
             await search_temporal(
@@ -698,7 +643,7 @@ class TestEnhancedSearchRouter:
                 project_id=None,
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -711,8 +656,8 @@ class TestEnhancedSearchRouter:
         test_project_db: Project,
         test_user: User,
     ) -> None:
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(side_effect=RuntimeError("internal facet error"))
+        store = Mock()
+        store.faceted_search = AsyncMock(side_effect=RuntimeError("internal facet error"))
 
         with pytest.raises(HTTPException) as exc_info:
             await search_with_facets(
@@ -726,7 +671,7 @@ class TestEnhancedSearchRouter:
                 project_id=None,
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR

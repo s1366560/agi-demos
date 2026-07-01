@@ -10,13 +10,23 @@ This adapter provides a self-researched knowledge graph system that:
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast, override
 from uuid import uuid4
 
+from src.domain.model.graph.dtos import (
+    GraphCommunityDTO,
+    GraphEntityDTO,
+    GraphExportDTO,
+    GraphGraphDataDTO,
+    GraphNodeDTO,
+    GraphRelationshipDTO,
+    GraphSearchHit,
+)
 from src.domain.model.memory.episode import Episode
-from src.domain.ports.services.graph_service_port import GraphServicePort
+from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.queue_port import QueuePort
 
 from .community.community_updater import CommunityUpdater
@@ -51,9 +61,47 @@ if TYPE_CHECKING:
 EMBEDDING_DIM_CACHE_TTL = 10
 
 
-class NativeGraphAdapter(GraphServicePort):
+def _decode_attributes(value: Any) -> dict[str, Any]:  # noqa: ANN401
+    """Decode a graph entity's ``attributes`` property into a dict.
+
+    Neo4j may store it as a map, a JSON string, or absent. Mirrors the
+    ``_decode_graph_json_property`` helper formerly inlined in the memories router.
     """
-    Native graph adapter implementing GraphServicePort.
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return decoded if isinstance(decoded, dict) else {}
+    return {}
+
+
+def _normalize_embedding_result(result: Any) -> list[float]:  # noqa: ANN401
+    if isinstance(result, list) and result and isinstance(result[0], list):
+        return cast(list[float], result[0])
+    return cast(list[float], result)
+
+
+async def _create_embedding_from_embedder(embedder: Any, text: str) -> list[float]:  # noqa: ANN401
+    """Create an embedding vector from text via an embedder, normalizing the result.
+
+    Supports both ``embed_text`` and ``create`` embedder interfaces.
+    """
+    if hasattr(embedder, "embed_text"):
+        return _normalize_embedding_result(await embedder.embed_text(text))
+    if hasattr(embedder, "create"):
+        try:
+            return _normalize_embedding_result(await embedder.create(input_data=text))
+        except TypeError:
+            return _normalize_embedding_result(await embedder.create(text))
+    raise RuntimeError("Embedding provider not available")
+
+
+class NativeGraphAdapter(GraphStorePort):
+    """
+    Native graph adapter implementing GraphStorePort.
 
     This adapter provides a complete knowledge graph system without
     depending on Graphiti, using self-researched implementations for:
@@ -61,6 +109,11 @@ class NativeGraphAdapter(GraphServicePort):
     - Relationship discovery (LLM-based)
     - Hybrid search (vector + keyword + RRF)
     - Community detection (Louvain algorithm)
+
+    It is the reference implementation of ``GraphStorePort`` and is the only
+    backend today; it will be registered under the ``GraphBackendRegistry``
+    as engine ``"neo4j"`` in Phase 3. New backends (ArcadeDB, AGE) should
+    subclass ``GraphStorePort`` directly rather than this class.
 
     Example:
         adapter = NativeGraphAdapter(
@@ -120,17 +173,21 @@ class NativeGraphAdapter(GraphServicePort):
 
     @property
     def client(self) -> Neo4jClient:
-        """Get the Neo4j client (for compatibility with tools expecting graphiti_client)."""
+        """Get the underlying Neo4j client (internal; lifecycle/close only).
+
+        Prefer the typed ``GraphStorePort`` primitives. This remains for the
+        startup/shutdown lifecycle and is intentionally NOT a raw-driver escape
+        hatch for routers.
+        """
         return self._neo4j_client
 
-    @property
-    def driver(self) -> Any:  # noqa: ANN401
-        """Get the Neo4j driver (for direct driver access)."""
-        return self._neo4j_client.driver
+    async def close(self) -> None:
+        """Close the underlying graph backend connection (lifecycle hook)."""
+        await self._neo4j_client.close()
 
     @property
     def embedder(self) -> EmbeddingService:
-        """Get the embedding service (for compatibility)."""
+        """Get the embedding service (used by embedding-maintenance primitives)."""
         return self._embedding_service
 
     @property
@@ -1426,3 +1483,1920 @@ class NativeGraphAdapter(GraphServicePort):
         """
         results = await self.search(query=query, project_id=project_id, limit=limit)
         return results
+
+    # ==================================================================
+    # GraphStorePort primitives (Phase 2b)
+    #
+    # These methods implement the new semantic store primitives by lifting
+    # the raw Cypher that previously lived in routers / Neo4jClient into the
+    # adapter, returning the typed DTOs from src.domain.model.graph. They let
+    # routers drop their raw ``.driver.execute_query`` bypasses entirely.
+    # ==================================================================
+
+    async def initialize_schema(self) -> None:
+        """Create the standard indices + default vector index for this backend."""
+        await self._neo4j_client.build_indices()
+
+    async def vector_search(
+        self,
+        query_vector: list[float],
+        limit: int = 10,
+        project_id: str | None = None,
+        index_name: str | None = None,
+    ) -> list[GraphSearchHit]:
+        """Vector similarity search over the default entity index."""
+        idx = index_name or "entity_name_vector"
+        raw = await self._neo4j_client.vector_search(
+            index_name=idx,
+            query_vector=query_vector,
+            limit=limit,
+            project_id=project_id,
+        )
+        return [GraphSearchHit(node=h["node"], score=float(h["score"])) for h in raw]
+
+    async def fulltext_search(
+        self,
+        query: str,
+        limit: int = 10,
+        project_id: str | None = None,
+        index_name: str | None = None,
+    ) -> list[GraphSearchHit]:
+        """Fulltext search over the entity name+summary index by default."""
+        idx = index_name or "entity_name_summary"
+        raw = await self._neo4j_client.fulltext_search(
+            index_name=idx,
+            query=query,
+            limit=limit,
+            project_id=project_id,
+        )
+        return [GraphSearchHit(node=h["node"], score=float(h["score"])) for h in raw]
+
+    async def related_entities(
+        self,
+        entity_id: str,
+        project_id: str | None = None,
+        limit: int = 50,
+    ) -> list[GraphEntityDTO]:
+        """Return entities directly related to ``entity_id`` (any edge type)."""
+        scope = ""
+        if project_id:
+            scope = "WHERE b.project_id = $project_id"
+        q = f"""
+            MATCH (a:Entity {{uuid: $entity_id}})-[r]-(b:Entity)
+            {scope}
+            RETURN DISTINCT b
+            LIMIT $limit
+        """
+        params: dict[str, Any] = {"entity_id": entity_id, "limit": limit}
+        if project_id:
+            params["project_id"] = project_id
+        result = await self._neo4j_client.execute_query(q, **params)
+        out: list[GraphEntityDTO] = []
+        for record in result.records:
+            node = record.get("b")
+            if node is None:
+                continue
+            props = dict(node)
+            out.append(
+                GraphEntityDTO(
+                    uuid=props.get("uuid", ""),
+                    name=props.get("name", ""),
+                    entity_type=props.get("entity_type", props.get("type", "Entity")),
+                    summary=props.get("summary", "") or "",
+                    project_id=props.get("project_id"),
+                    extra={k: v for k, v in props.items()
+                           if k not in {"uuid", "name", "entity_type", "summary", "project_id"}},
+                )
+            )
+        return out
+
+    async def community_read(
+        self,
+        project_id: str | None = None,
+        limit: int = 100,
+    ) -> list[GraphCommunityDTO]:
+        """Read communities, optionally scoped to a project."""
+        scope = ""
+        params: dict[str, Any] = {"limit": limit}
+        if project_id:
+            scope = "WHERE c.project_id = $project_id"
+            params["project_id"] = project_id
+        q = f"""
+            MATCH (c:Community)
+            {scope}
+            RETURN c
+            ORDER BY c.member_count DESC
+            LIMIT $limit
+        """
+        result = await self._neo4j_client.execute_query(q, **params)
+        out: list[GraphCommunityDTO] = []
+        for record in result.records:
+            node = record.get("c")
+            if node is None:
+                continue
+            props = dict(node)
+            out.append(
+                GraphCommunityDTO(
+                    uuid=props.get("uuid", ""),
+                    name=props.get("name", ""),
+                    summary=props.get("summary", "") or "",
+                    member_count=int(props.get("member_count", 0) or 0),
+                    project_id=props.get("project_id"),
+                    extra={k: v for k, v in props.items()
+                           if k not in {"uuid", "name", "summary", "member_count", "project_id"}},
+                )
+            )
+        return out
+
+    async def graph_snapshot(self, project_id: str, limit: int = 100) -> GraphGraphDataDTO:
+        """Typed nodes/edges snapshot for a project (graph visualization)."""
+        data = await self.get_graph_data(project_id, limit=limit)
+        nodes = [
+            GraphNodeDTO(
+                id=str(n.get("id", n.get("uuid", ""))),
+                label=str(n.get("label", n.get("name", ""))),
+                type=str(n.get("type", "")),
+                uuid=n.get("uuid"),
+                extra={k: v for k, v in n.items() if k not in {"id", "label", "type", "uuid"}},
+            )
+            for n in data.get("nodes", [])
+        ]
+        edges = [
+            GraphRelationshipDTO(
+                id=str(e.get("id", "")),
+                source=str(e.get("source", "")),
+                target=str(e.get("target", "")),
+                label=str(e.get("label", "")),
+                extra={k: v for k, v in e.items() if k not in {"id", "source", "target", "label"}},
+            )
+            for e in data.get("edges", [])
+        ]
+        return GraphGraphDataDTO(nodes=nodes, edges=edges)
+
+    def _export_scope(self, var: str, project_id: str | None, tenant_id: str | None) -> str:
+        if project_id:
+            return f"WHERE {var}.project_id = $project_id"
+        if tenant_id:
+            return f"WHERE {var}.tenant_id = $tenant_id"
+        return ""
+
+    def _export_entity_scope(self, var: str, project_id: str | None, tenant_id: str | None) -> str:
+        # Entities may be MENTIONed by episodes of a different project;
+        # reproduce the router's MENTION-aware scoping for entities.
+        if project_id:
+            cond = self._project_node_scope_condition(var)
+            return f"WHERE {cond}"
+        if tenant_id:
+            return f"WHERE {var}.tenant_id = $tenant_id"
+        return ""
+
+    async def _export_episodes(self, params: dict[str, Any], scope: str) -> list[dict[str, Any]]:
+        q = f"MATCH (e:Episodic) {scope} RETURN properties(e) as props ORDER BY e.created_at DESC"
+        res = await self._neo4j_client.execute_query(q, **params)
+        return [dict(r["props"]) for r in res.records if r.get("props") is not None]
+
+    async def _export_entities(self, params: dict[str, Any], scope: str) -> list[dict[str, Any]]:
+        q = f"MATCH (e:Entity) {scope} RETURN properties(e) as props, labels(e) as labels"
+        res = await self._neo4j_client.execute_query(q, **params)
+        out: list[dict[str, Any]] = []
+        for r in res.records:
+            if r.get("props") is None:
+                continue
+            props = dict(r["props"])
+            props["labels"] = list(r.get("labels", []))
+            out.append(props)
+        return out
+
+    async def _export_relationships(
+        self, params: dict[str, Any], project_id: str | None, tenant_id: str | None
+    ) -> list[dict[str, Any]]:
+        label_filter = (
+            "('Entity' IN labels(a) OR 'Episodic' IN labels(a) OR 'Community' IN labels(a)) "
+            "AND ('Entity' IN labels(b) OR 'Episodic' IN labels(b) OR 'Community' IN labels(b))"
+        )
+        if project_id:
+            cond_a = self._project_node_scope_condition("a")
+            cond_b = self._project_node_scope_condition("b")
+            scope = f"WHERE {label_filter} AND {cond_a} AND {cond_b}"
+        elif tenant_id:
+            scope = (
+                f"WHERE {label_filter} AND a.tenant_id = $tenant_id "
+                "AND b.tenant_id = $tenant_id"
+            )
+        else:
+            scope = f"WHERE {label_filter}"
+        q = (
+            "MATCH (a)-[r]->(b) "
+            f"{scope} "
+            "RETURN properties(r) as props, type(r) as rel_type, elementId(r) as edge_id"
+        )
+        res = await self._neo4j_client.execute_query(q, **params)
+        return [
+            {"edge_id": r["edge_id"], "type": r["rel_type"], "properties": dict(r["props"])}
+            for r in res.records
+        ]
+
+    async def _export_communities(self, params: dict[str, Any], scope: str) -> list[dict[str, Any]]:
+        q = f"MATCH (c:Community) {scope} RETURN properties(c) as props"
+        res = await self._neo4j_client.execute_query(q, **params)
+        return [dict(r["props"]) for r in res.records if r.get("props") is not None]
+
+    async def data_export(
+        self,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        include_episodes: bool = True,
+        include_entities: bool = True,
+        include_relationships: bool = True,
+        include_communities: bool = True,
+    ) -> GraphExportDTO:
+        """Export graph data as a typed envelope.
+
+        Mirrors the previous ``data_export`` router Cypher while keeping the
+        frozen envelope shape (exported_at/tenant_id/project_id + four lists).
+        Scope is project-first, then tenant.
+        """
+        params: dict[str, Any] = {"tenant_id": tenant_id, "project_id": project_id}
+
+        episodes = (
+            await self._export_episodes(params, self._export_scope("e", project_id, tenant_id))
+            if include_episodes
+            else []
+        )
+        entities = (
+            await self._export_entities(
+                params, self._export_entity_scope("e", project_id, tenant_id)
+            )
+            if include_entities
+            else []
+        )
+        relationships = (
+            await self._export_relationships(params, project_id, tenant_id)
+            if include_relationships
+            else []
+        )
+        communities = (
+            await self._export_communities(
+                params, self._export_scope("c", project_id, tenant_id)
+            )
+            if include_communities
+            else []
+        )
+
+        return GraphExportDTO(
+            exported_at=datetime.now(UTC).isoformat(),
+            tenant_id=tenant_id,
+            project_id=project_id,
+            episodes=episodes,
+            entities=entities,
+            relationships=relationships,
+            communities=communities,
+        )
+
+    async def count_nodes(
+        self,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        label: str | None = None,
+    ) -> int:
+        """Count nodes, optionally filtered by label and project/tenant scope."""
+        # label is structural (a Cypher identifier); validate it to stay safe.
+        label_clause = f":{_validate_identifier(label)}" if label else ""
+        scope = ""
+        if project_id:
+            scope = "WHERE n.project_id = $project_id"
+        elif tenant_id:
+            scope = "WHERE n.tenant_id = $tenant_id"
+        q = f"MATCH (n{label_clause}) {scope} RETURN count(n) AS total"
+        params: dict[str, Any] = {}
+        if project_id:
+            params["project_id"] = project_id
+        elif tenant_id:
+            params["tenant_id"] = tenant_id
+        result = await self._neo4j_client.execute_query(q, **params)
+        if result.records:
+            return int(result.records[0].get("total", 0) or 0)
+        return 0
+
+    async def delete_entity(self, entity_id: str, project_id: str | None = None) -> bool:
+        """Delete an entity node by uuid within the project scope."""
+        scope = "AND e.project_id = $project_id" if project_id else ""
+        q = f"MATCH (e:Entity {{uuid: $entity_id}}) {scope} DETACH DELETE e"
+        params: dict[str, Any] = {"entity_id": entity_id}
+        if project_id:
+            params["project_id"] = project_id
+        await self._neo4j_client.execute_query(q, **params)
+        return True
+
+    async def delete_project(self, project_id: str) -> int:
+        """Delete all graph data for a project; return the number of nodes removed."""
+        q = """
+            MATCH (n {project_id: $project_id})
+            WITH n LIMIT 10000
+            DETACH DELETE n
+            RETURN count(n) AS deleted
+        """
+        result = await self._neo4j_client.execute_query(q, project_id=project_id)
+        if result.records:
+            return int(result.records[0].get("deleted", 0) or 0)
+        return 0
+
+    @staticmethod
+    def _project_node_scope_condition(var: str) -> str:
+        """Cypher predicate matching nodes belonging to a project.
+
+        A node belongs to the project if it has that ``project_id`` OR it is
+        MENTIONed by an Episodic node of that project (entities can be shared).
+        Reproduces ``data_export._project_node_scope_condition``.
+        """
+        return (
+            f"({var}.project_id = $project_id OR EXISTS {{ "
+            f"MATCH ({var})<-[:MENTIONS]-(project_episode:Episodic) "
+            "WHERE project_episode.project_id = $project_id })"
+        )
+
+    async def count_stats(
+        self,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+    ) -> dict[str, int]:
+        """Return per-type node + relationship counts (mirrors the /stats route)."""
+        params: dict[str, Any] = {"tenant_id": tenant_id, "project_id": project_id}
+
+        def _node_scope(var: str) -> str:
+            if project_id:
+                return f"WHERE {var}.project_id = $project_id"
+            if tenant_id:
+                return f"WHERE {var}.tenant_id = $tenant_id"
+            return ""
+
+        async def _count(label: str, scope_fn: Any) -> int:  # noqa: ANN401
+            sc = scope_fn("e")
+            q = f"MATCH (e:{label}) {sc} RETURN count(e) AS count"
+            res = await self._neo4j_client.execute_query(q, **params)
+            return int(res.records[0].get("count", 0) or 0) if res.records else 0
+
+        def _entity_scope_clause(var: str) -> str:
+            if project_id:
+                cond = self._project_node_scope_condition(var)
+                return f"WHERE {cond}"
+            if tenant_id:
+                return f"WHERE {var}.tenant_id = $tenant_id"
+            return ""
+
+        entity_count = await _count("Entity", _entity_scope_clause)
+        episode_count = await _count("Episodic", _node_scope)
+        community_count = await _count("Community", _node_scope)
+
+        label_filter = (
+            "('Entity' IN labels(a) OR 'Episodic' IN labels(a) OR 'Community' IN labels(a)) "
+            "AND ('Entity' IN labels(b) OR 'Episodic' IN labels(b) OR 'Community' IN labels(b))"
+        )
+        if project_id:
+            cond_a = self._project_node_scope_condition("a")
+            cond_b = self._project_node_scope_condition("b")
+            scope = f"WHERE {label_filter} AND {cond_a} AND {cond_b}"
+        elif tenant_id:
+            scope = f"WHERE {label_filter} AND a.tenant_id = $tenant_id AND b.tenant_id = $tenant_id"
+        else:
+            scope = f"WHERE {label_filter}"
+        rel_q = f"MATCH (a)-[r]->(b) {scope} RETURN count(r) AS count"
+        rel_res = await self._neo4j_client.execute_query(rel_q, **params)
+        rel_count = int(rel_res.records[0].get("count", 0) or 0) if rel_res.records else 0
+
+        return {
+            "entities": entity_count,
+            "episodes": episode_count,
+            "communities": community_count,
+            "relationships": rel_count,
+            "total_nodes": entity_count + episode_count + community_count,
+        }
+
+    async def list_episodes(
+        self,
+        *,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        project_ids: list[str] | None = None,
+        user_id: str | None = None,
+        sort_by: str = "created_at",
+        sort_desc: bool = True,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """List episodes with filtering/sorting/pagination.
+
+        Returns {'episodes': [props...], 'total': int}. Mirrors the previous
+        ``episodes`` router Cypher exactly (tenant/project/user filters, sort on
+        created_at|valid_at|name, SKIP/LIMIT).
+        """
+        conditions: list[str] = []
+        params: dict[str, Any] = {}
+        if tenant_id is not None:
+            conditions.append("e.tenant_id = $tenant_id")
+            params["tenant_id"] = tenant_id
+        if project_id:
+            conditions.append("e.project_id = $project_id")
+            params["project_id"] = project_id
+        elif project_ids is not None:
+            conditions.append("e.project_id IN $project_ids")
+            params["project_ids"] = project_ids
+        if user_id:
+            conditions.append("e.user_id = $user_id")
+            params["user_id"] = user_id
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        # sort field is structural (validated by caller against allowlist);
+        # validate defensively to keep Cypher identifier-safe.
+        sort_field = _validate_identifier(sort_by)
+        order = "DESC" if sort_desc else "ASC"
+
+        count_q = f"MATCH (e:Episodic) {where_clause} RETURN count(e) AS total"
+        count_res = await self._neo4j_client.execute_query(count_q, **params)
+        total = int(count_res.records[0].get("total", 0) or 0) if count_res.records else 0
+
+        list_q = (
+            f"MATCH (e:Episodic) {where_clause} "
+            f"RETURN properties(e) AS props ORDER BY e.{sort_field} {order} "
+            "SKIP $offset LIMIT $limit"
+        )
+        params["offset"] = offset
+        params["limit"] = limit
+        res = await self._neo4j_client.execute_query(list_q, **params)
+        episodes = [dict(r["props"]) for r in res.records if r.get("props") is not None]
+        return {"episodes": episodes, "total": total}
+
+    async def get_episode_by_name(
+        self,
+        name: str,
+        *,
+        tenant_id: str | None = None,
+        project_ids: list[str] | None = None,
+    ) -> dict[str, Any] | None:
+        """Return a single episode's properties by name, or None if not found."""
+        conditions: list[str] = []
+        params: dict[str, Any] = {"name": name}
+        if tenant_id is not None:
+            conditions.append("e.tenant_id = $tenant_id")
+            params["tenant_id"] = tenant_id
+        if project_ids is not None:
+            conditions.append("e.project_id IN $project_ids")
+            params["project_ids"] = project_ids
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        q = f"MATCH (e:Episodic {{name: $name}}) {where_clause} RETURN properties(e) AS props"
+        res = await self._neo4j_client.execute_query(q, **params)
+        if not res.records:
+            return None
+        props = res.records[0].get("props")
+        return dict(props) if props is not None else None
+
+    async def delete_episode_by_name(
+        self,
+        name: str,
+        *,
+        tenant_id: str | None = None,
+        project_ids: list[str] | None = None,
+    ) -> int:
+        """Delete an episode by name (DETACH DELETE); return count deleted (0 if absent)."""
+        conditions: list[str] = []
+        params: dict[str, Any] = {"name": name}
+        if tenant_id is not None:
+            conditions.append("e.tenant_id = $tenant_id")
+            params["tenant_id"] = tenant_id
+        if project_ids is not None:
+            conditions.append("e.project_id IN $project_ids")
+            params["project_ids"] = project_ids
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        q = (
+            f"MATCH (e:Episodic {{name: $name}}) {where_clause} "
+            "DETACH DELETE e RETURN count(e) AS deleted"
+        )
+        res = await self._neo4j_client.execute_query(q, **params)
+        return int(res.records[0].get("deleted", 0) or 0) if res.records else 0
+
+    async def recall_recent_episodes(
+        self,
+        *,
+        since_iso: str,
+        limit: int = 100,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        project_ids: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return episodes created at/after an ISO datetime, newest first.
+
+        Mirrors the previous ``recall`` router Cypher (time-window + scope filters).
+        """
+        conditions: list[str] = ["e.created_at >= datetime($since_date)"]
+        params: dict[str, Any] = {"since_date": since_iso, "limit": limit}
+        if project_id:
+            conditions.append("e.project_id = $project_id")
+            params["project_id"] = project_id
+        elif project_ids is not None:
+            conditions.append("e.project_id IN $project_ids")
+            params["project_ids"] = project_ids
+        if tenant_id:
+            conditions.append("e.tenant_id = $tenant_id")
+            params["tenant_id"] = tenant_id
+        where_clause = "WHERE " + " AND ".join(conditions)
+        q = (
+            f"MATCH (e:Episodic) {where_clause} "
+            "RETURN properties(e) AS props ORDER BY e.created_at DESC LIMIT $limit"
+        )
+        res = await self._neo4j_client.execute_query(q, **params)
+        return [dict(r["props"]) for r in res.records if r.get("props") is not None]
+
+    async def ensure_episodic_node(
+        self,
+        *,
+        uuid: str,
+        name: str,
+        content: str,
+        source_description: str,
+        source: str,
+        created_at_iso: str,
+        group_id: str | None,
+        tenant_id: str | None,
+        project_id: str | None,
+        user_id: str | None,
+        memory_id: str | None,
+    ) -> None:
+        """Pre-create an Episodic node (MERGE) to avoid write races.
+
+        Reproduces the pre-create MERGE previously inlined in the ``memories``
+        router. Used to guarantee an episode node exists before background
+        processing begins.
+        """
+        q = """
+            MERGE (e:Episodic {uuid: $uuid})
+            SET e:Node,
+                e.name = $name,
+                e.content = $content,
+                e.source_description = $source_description,
+                e.source = $source,
+                e.created_at = datetime($created_at),
+                e.valid_at = datetime($created_at),
+                e.group_id = $group_id,
+                e.tenant_id = $tenant_id,
+                e.project_id = $project_id,
+                e.user_id = $user_id,
+                e.memory_id = $memory_id,
+                e.status = 'Processing',
+                e.entity_edges = []
+        """
+        await self._neo4j_client.execute_query(
+            q,
+            uuid=uuid,
+            name=name,
+            content=content,
+            source_description=source_description,
+            source=source,
+            created_at=created_at_iso,
+            group_id=group_id,
+            tenant_id=tenant_id,
+            project_id=project_id,
+            user_id=user_id,
+            memory_id=memory_id,
+        )
+
+    async def count_entities_by_project(self, project_ids: list[str]) -> dict[str, int]:
+        """Bulk entity counts per project_id. Returns {project_id: count}.
+
+        Reproduces the previous ``projects`` router bulk-count Cypher.
+        """
+        if not project_ids:
+            return {}
+        q = (
+            "MATCH (n:Entity) WHERE n.project_id IN $project_ids "
+            "RETURN n.project_id AS project_id, count(n) AS cnt"
+        )
+        res = await self._neo4j_client.execute_query(q, project_ids=project_ids)
+        out: dict[str, int] = {}
+        for record in res.records:
+            pid = record.get("project_id")
+            if pid is not None:
+                out[str(pid)] = int(record.get("cnt", 0) or 0)
+        return out
+
+    async def count_active_nodes(
+        self,
+        project_id: str,
+        since_iso: str,
+    ) -> int:
+        """Count nodes valid at/after an ISO datetime within a project.
+
+        Reproduces the previous ``_query_active_nodes`` helper (7-day activity).
+        """
+        q = (
+            "MATCH (n:Node) WHERE n.project_id = $project_id "
+            "AND n.valid_at >= $threshold RETURN count(n) AS active_count"
+        )
+        try:
+            res = await self._neo4j_client.execute_query(
+                q, project_id=project_id, threshold=since_iso
+            )
+            if res.records:
+                return int(res.records[0].get("active_count", 0) or 0)
+        except Exception as e:
+            logger.error("Failed to get active nodes: %s", e)
+        return 0
+
+    async def trending_entities(
+        self,
+        project_id: str,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Return top entities by relationship count for a project.
+
+        Reproduces the previous ``projects`` router trending-entities Cypher.
+        """
+        q = """
+            MATCH (n:Entity)
+            WHERE n.project_id = $project_id
+            OPTIONAL MATCH (n)-[r]-()
+            WITH n, count(r) as rel_count
+            ORDER BY rel_count DESC
+            LIMIT $limit
+            RETURN n.name as name,
+                   coalesce(n.entity_type, 'unknown') as entity_type,
+                   rel_count as mention_count,
+                   n.summary as summary
+        """
+        res = await self._neo4j_client.execute_query(q, project_id=project_id, limit=limit)
+        return [
+            {
+                "name": r.get("name", ""),
+                "entity_type": r.get("entity_type", "unknown"),
+                "mention_count": r.get("mention_count", 0),
+                "summary": r.get("summary"),
+            }
+            for r in res.records
+        ]
+
+    def _scope_conditions(
+        self,
+        var: str,
+        project_id: str | None,
+        tenant_id: str | None,
+        project_ids: list[str] | None,
+    ) -> tuple[list[str], dict[str, Any]]:
+        """Build project/tenant scope conditions for a Cypher node variable.
+
+        Returns (conditions, params). Mirrors the router-side scoping used by the
+        enhanced-search endpoints. project_id wins; otherwise project_ids; tenant
+        is additive.
+        """
+        conditions: list[str] = []
+        params: dict[str, Any] = {}
+        if project_id:
+            conditions.append(f"{var}.project_id = $project_id")
+            params["project_id"] = project_id
+        elif project_ids is not None:
+            conditions.append(f"{var}.project_id IN $project_ids")
+            params["project_ids"] = project_ids
+        if tenant_id:
+            conditions.append(f"{var}.tenant_id = $tenant_id")
+            params["tenant_id"] = tenant_id
+        return conditions, params
+
+    async def get_entity_project_id(self, entity_uuid: str) -> str | None:
+        """Return the project_id of an Entity node, or None if absent."""
+        res = await self._neo4j_client.execute_query(
+            "MATCH (start:Entity {uuid: $uuid}) RETURN properties(start) AS props",
+            uuid=entity_uuid,
+        )
+        if not res.records:
+            return None
+        props = res.records[0].get("props")
+        return props.get("project_id") if props else None
+
+    async def get_community_project_id(self, community_uuid: str) -> str | None:
+        """Return the project_id of a Community node, or None if absent."""
+        res = await self._neo4j_client.execute_query(
+            "MATCH (c:Community {uuid: $uuid}) RETURN properties(c) AS props",
+            uuid=community_uuid,
+        )
+        if not res.records:
+            return None
+        props = res.records[0].get("props")
+        return props.get("project_id") if props else None
+
+    async def graph_traversal_search(
+        self,
+        *,
+        start_entity_uuid: str,
+        max_depth: int,
+        relationship_types: list[str] | None,
+        limit: int,
+        project_id: str,
+    ) -> list[dict[str, Any]]:
+        """Traverse the graph from a starting entity; return related nodes.
+
+        Each result dict carries props + labels so the router can derive a type.
+        Reproduces the previous ``graph-traversal`` Cypher.
+        """
+        q = f"""
+        MATCH path = (start:Entity {{uuid: $uuid}})-[*1..{max_depth}]-(related)
+        WHERE ('Entity' IN labels(related) OR 'Episodic' IN labels(related)
+               OR 'Community' IN labels(related))
+        AND related.project_id = $project_id
+        AND (
+            size($relationship_types) = 0 OR
+            all(rel IN relationships(path) WHERE type(rel) IN $relationship_types)
+        )
+        RETURN DISTINCT related, properties(related) AS props, labels(related) AS labels
+        LIMIT $limit
+        """
+        res = await self._neo4j_client.execute_query(
+            q,
+            uuid=start_entity_uuid,
+            project_id=project_id,
+            relationship_types=relationship_types or [],
+            limit=limit,
+        )
+        return [
+            {"props": dict(r["props"]) if r.get("props") else {}, "labels": list(r.get("labels", []))}
+            for r in res.records
+            if r.get("props") is not None
+        ]
+
+    async def community_search(
+        self,
+        *,
+        community_uuid: str,
+        project_id: str,
+        include_episodes: bool,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Return entities (and optionally episodes) within a community.
+
+        Reproduces the previous ``community`` search Cypher.
+        """
+        items: list[dict[str, Any]] = []
+        entity_q = """
+            MATCH (c:Community {uuid: $uuid})
+            MATCH (e:Entity)-[:BELONGS_TO]->(c)
+            WHERE e.project_id = $project_id
+            RETURN properties(e) AS props
+        """
+        res = await self._neo4j_client.execute_query(
+            entity_q, uuid=community_uuid, project_id=project_id
+        )
+        for r in res.records:
+            props = dict(r["props"]) if r.get("props") else {}
+            items.append(
+                {
+                    "uuid": props.get("uuid", ""),
+                    "name": props.get("name", ""),
+                    "type": "entity",
+                    "summary": props.get("summary", ""),
+                    "created_at": props.get("created_at"),
+                }
+            )
+
+        if include_episodes:
+            ep_q = """
+                MATCH (c:Community {uuid: $uuid})
+                MATCH (e:Entity)-[:BELONGS_TO]->(c)
+                MATCH (ep:Episodic)-[:MENTIONS]->(e)
+                WHERE ep.project_id = $project_id
+                RETURN DISTINCT properties(ep) AS props
+                LIMIT $limit
+            """
+            ep_res = await self._neo4j_client.execute_query(
+                ep_q, uuid=community_uuid, project_id=project_id, limit=limit
+            )
+            for r in ep_res.records:
+                props = dict(r["props"]) if r.get("props") else {}
+                items.append(
+                    {
+                        "uuid": props.get("uuid", ""),
+                        "name": props.get("name", ""),
+                        "type": "episode",
+                        "content": props.get("content", ""),
+                        "created_at": props.get("created_at"),
+                    }
+                )
+        return items[:limit]
+
+    async def temporal_search(
+        self,
+        *,
+        query: str | None,
+        since_iso: str | None,
+        until_iso: str | None,
+        limit: int,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        project_ids: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Search Episodic nodes within a time window + scope.
+
+        Reproduces the previous ``temporal`` search Cypher. Returns episode dicts.
+        """
+        conditions, params = self._scope_conditions("e", project_id, tenant_id, project_ids)
+        params["limit"] = limit
+        if query:
+            conditions.append(
+                "(toLower(coalesce(e.content, '') + ' ' + coalesce(e.name, '') "
+                "+ ' ' + coalesce(e.summary, '')) CONTAINS toLower($query))"
+            )
+            params["query"] = query
+        if since_iso:
+            conditions.append("e.created_at >= datetime($since)")
+            params["since"] = since_iso
+        if until_iso:
+            conditions.append("e.created_at <= datetime($until)")
+            params["until"] = until_iso
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        q = (
+            f"MATCH (e:Episodic) {where_clause} "
+            "RETURN properties(e) AS props ORDER BY e.created_at DESC LIMIT $limit"
+        )
+        res = await self._neo4j_client.execute_query(q, **params)
+        out: list[dict[str, Any]] = []
+        for r in res.records:
+            props = dict(r["props"]) if r.get("props") else {}
+            out.append(
+                {
+                    "uuid": props.get("uuid", ""),
+                    "name": props.get("name", ""),
+                    "type": "episode",
+                    "content": props.get("content", ""),
+                    "created_at": props.get("created_at"),
+                }
+            )
+        return out
+
+    async def faceted_search(
+        self,
+        *,
+        query: str | None,
+        entity_types: list[str] | None,
+        tags: list[str] | None,
+        since_iso: str | None,
+        limit: int,
+        offset: int,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        project_ids: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Search Entity nodes with faceted filters + scope.
+
+        Reproduces the previous ``faceted`` search Cypher. Returns entity dicts
+        (uuid/name/entity_type/summary/created_at + labels for type derivation).
+        """
+        conditions, params = self._scope_conditions("e", project_id, tenant_id, project_ids)
+        params["limit"] = limit
+        params["offset"] = offset
+        if query:
+            conditions.append(
+                "(toLower(coalesce(e.name, '') + ' ' + coalesce(e.summary, '') "
+                "+ ' ' + coalesce(e.entity_type, '')) CONTAINS toLower($query))"
+            )
+            params["query"] = query
+        if entity_types:
+            conditions.append("e.entity_type IN $entity_types")
+            params["entity_types"] = entity_types
+        if tags:
+            conditions.append("any(tag IN $tags WHERE tag IN coalesce(e.tags, []))")
+            params["tags"] = tags
+        if since_iso:
+            conditions.append("e.created_at >= datetime($since)")
+            params["since"] = since_iso
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        q = (
+            f"MATCH (e:Entity) {where_clause} "
+            "RETURN properties(e) AS props, labels(e) AS labels "
+            "SKIP $offset LIMIT $limit"
+        )
+        res = await self._neo4j_client.execute_query(q, **params)
+        out: list[dict[str, Any]] = []
+        for r in res.records:
+            props = dict(r["props"]) if r.get("props") else {}
+            labels = list(r.get("labels", []))
+            out.append({**props, "labels": labels})
+        return out
+
+    # ------------------------------------------------------------------
+    # graph.py router primitives (list/detail/visualization)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _mention_scope_clause(
+        var: str,
+        project_id: str | None,
+        project_ids: list[str] | None,
+    ) -> str:
+        """Entity scoping that also matches entities MENTIONed by project episodes."""
+        if project_id:
+            return (
+                f"({var}.project_id = $project_id OR EXISTS {{ "
+                f"MATCH ({var})<-[:MENTIONS]-(ep:Episodic) "
+                "WHERE ep.project_id = $project_id }})"
+            )
+        if project_ids is not None:
+            return (
+                f"({var}.project_id IN $project_ids OR EXISTS {{ "
+                f"MATCH ({var})<-[:MENTIONS]-(ep:Episodic) "
+                "WHERE ep.project_id IN $project_ids }})"
+            )
+        return ""
+
+    async def list_entities(
+        self,
+        *,
+        entity_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        project_ids: list[str] | None = None,
+        is_superuser: bool = False,
+    ) -> dict[str, Any]:
+        """List entities with filters + pagination; return {'entities', 'total'}.
+
+        Each entity dict carries uuid/name/entity_type/summary/tenant_id/
+        project_id/created_at. Reproduces the ``graph`` router list Cypher.
+        """
+        conditions: list[str] = []
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        mention_clause = self._mention_scope_clause("e", project_id, project_ids)
+        if mention_clause:
+            conditions.append(mention_clause)
+            if project_id:
+                params["project_id"] = project_id
+            elif project_ids is not None:
+                params["project_ids"] = project_ids
+        elif tenant_id and is_superuser:
+            conditions.append("e.tenant_id = $tenant_id")
+            params["tenant_id"] = tenant_id
+        if entity_type:
+            conditions.append("(e.entity_type = $entity_type OR $entity_type IN labels(e))")
+            params["entity_type"] = entity_type
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        count_q = f"MATCH (e:Entity) {where_clause} RETURN count(e) AS total"
+        count_res = await self._neo4j_client.execute_query(count_q, **params)
+        total = int(count_res.records[0].get("total", 0) or 0) if count_res.records else 0
+
+        list_q = (
+            f"MATCH (e:Entity) {where_clause} "
+            "RETURN properties(e) AS props, labels(e) AS labels "
+            "ORDER BY e.created_at DESC SKIP $offset LIMIT $limit"
+        )
+        res = await self._neo4j_client.execute_query(list_q, **params)
+        entities = []
+        for r in res.records:
+            props = dict(r["props"]) if r.get("props") else {}
+            entities.append(
+                {
+                    "uuid": props.get("uuid", ""),
+                    "name": props.get("name", ""),
+                    "entity_type": props.get("entity_type", "Entity"),
+                    "summary": props.get("summary", ""),
+                    "tenant_id": props.get("tenant_id"),
+                    "project_id": props.get("project_id"),
+                    "created_at": props.get("created_at"),
+                }
+            )
+        return {"entities": entities, "total": total}
+
+    async def list_communities(
+        self,
+        *,
+        min_members: int | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        project_ids: list[str] | None = None,
+        is_superuser: bool = False,
+    ) -> dict[str, Any]:
+        """List communities with filters + pagination; return {'communities', 'total'}.
+
+        Reproduces the ``graph`` router list-communities Cypher.
+        """
+        conditions: list[str] = ["coalesce(c.member_count, 0) >= 0"]
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if project_id:
+            conditions.append("c.project_id = $project_id")
+            params["project_id"] = project_id
+        elif tenant_id and is_superuser:
+            conditions.append("c.tenant_id = $tenant_id")
+            params["tenant_id"] = tenant_id
+        elif project_ids is not None:
+            conditions.append("c.project_id IN $project_ids")
+            params["project_ids"] = project_ids
+        if min_members is not None:
+            conditions.append("coalesce(c.member_count, 0) >= $min_members")
+            params["min_members"] = min_members
+        where_clause = "WHERE " + " AND ".join(conditions)
+
+        count_q = f"MATCH (c:Community) {where_clause} RETURN count(c) AS total"
+        count_res = await self._neo4j_client.execute_query(count_q, **params)
+        total = int(count_res.records[0].get("total", 0) or 0) if count_res.records else 0
+
+        list_q = (
+            f"MATCH (c:Community) {where_clause} "
+            "RETURN properties(c) AS props "
+            "ORDER BY coalesce(c.member_count, 0) DESC SKIP $offset LIMIT $limit"
+        )
+        res = await self._neo4j_client.execute_query(list_q, **params)
+        communities = []
+        for r in res.records:
+            props = dict(r["props"]) if r.get("props") else {}
+            communities.append(
+                {
+                    "uuid": props.get("uuid", ""),
+                    "name": props.get("name", ""),
+                    "summary": props.get("summary", ""),
+                    "member_count": props.get("member_count", 0),
+                    "tenant_id": props.get("tenant_id"),
+                    "project_id": props.get("project_id"),
+                    "formed_at": props.get("formed_at"),
+                    "created_at": props.get("created_at"),
+                }
+            )
+        return {"communities": communities, "total": total}
+
+    async def get_entity_types(
+        self,
+        *,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        project_ids: list[str] | None = None,
+        is_superuser: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Return distinct entity types with counts, scoped.
+
+        Reproduces the ``graph`` router entity-types Cypher.
+        """
+        conditions: list[str] = []
+        params: dict[str, Any] = {}
+        mention_clause = self._mention_scope_clause("e", project_id, project_ids)
+        if mention_clause:
+            conditions.append(mention_clause)
+            if project_id:
+                params["project_id"] = project_id
+            elif project_ids is not None:
+                params["project_ids"] = project_ids
+        elif tenant_id and is_superuser:
+            conditions.append("e.tenant_id = $tenant_id")
+            params["tenant_id"] = tenant_id
+        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        q = f"""
+            MATCH (e:Entity) {where_clause}
+            WITH coalesce(
+                e.entity_type,
+                head([label IN labels(e) WHERE NOT label IN ['Entity', 'Node', 'BaseEntity']]),
+                'Entity'
+            ) AS entity_type, count(e) AS entity_count
+            RETURN entity_type, entity_count
+            ORDER BY entity_count DESC
+        """
+        res = await self._neo4j_client.execute_query(q, **params)
+        return [
+            {"entity_type": r["entity_type"], "count": r["entity_count"]}
+            for r in res.records
+        ]
+
+    async def get_entity(self, entity_uuid: str) -> dict[str, Any] | None:
+        """Return an entity's props + labels by uuid, or None if absent."""
+        res = await self._neo4j_client.execute_query(
+            "MATCH (e:Entity {uuid: $uuid}) RETURN properties(e) AS props, labels(e) AS labels",
+            uuid=entity_uuid,
+        )
+        if not res.records:
+            return None
+        props = dict(res.records[0]["props"]) if res.records[0].get("props") else {}
+        props["labels"] = list(res.records[0].get("labels", []))
+        return props
+
+    async def get_community(self, community_uuid: str) -> dict[str, Any] | None:
+        """Return a community's props by uuid, or None if absent."""
+        res = await self._neo4j_client.execute_query(
+            "MATCH (c:Community {uuid: $uuid}) RETURN properties(c) AS props",
+            uuid=community_uuid,
+        )
+        if not res.records:
+            return None
+        props = res.records[0].get("props")
+        return dict(props) if props is not None else {}
+
+    async def get_entity_relationships(
+        self,
+        entity_uuid: str,
+        *,
+        relationship_type: str | None = None,
+        limit: int = 50,
+        project_id: str | None = None,
+        is_superuser: bool = False,
+    ) -> dict[str, Any]:
+        """Return relationships (out+in) for an entity; {'relationships', 'total'}.
+
+        Reproduces the ``graph`` router entity-relationships Cypher.
+        """
+        params: dict[str, Any] = {
+            "uuid": entity_uuid,
+            "limit": limit,
+            "project_id": project_id,
+            "is_superuser": is_superuser,
+        }
+        rel_filter = ""
+        if relationship_type:
+            rel_filter = "AND type(r) = $relationship_type"
+            params["relationship_type"] = relationship_type
+
+        count_q = f"""
+            MATCH (e:Entity {{uuid: $uuid}})
+            MATCH (e)-[r]-(related:Entity)
+            WHERE related IS NOT NULL {rel_filter}
+            AND ($is_superuser OR related.project_id = $project_id)
+            RETURN count(r) AS total
+        """
+        count_res = await self._neo4j_client.execute_query(count_q, **params)
+        total = int(count_res.records[0].get("total", 0) or 0) if count_res.records else 0
+
+        q = f"""
+            MATCH (e:Entity {{uuid: $uuid}})
+            OPTIONAL MATCH (e)-[r]-(related:Entity)
+            WHERE related IS NOT NULL {rel_filter}
+            AND ($is_superuser OR related.project_id = $project_id)
+            RETURN
+                elementId(r) AS edge_id,
+                type(r) AS relation_type,
+                properties(r) AS edge_props,
+                startNode(r) AS start_node,
+                endNode(r) AS end_node,
+                properties(related) AS related_props,
+                labels(related) AS related_labels,
+                CASE
+                    WHEN startNode(r).uuid = $uuid THEN 'outgoing'
+                    ELSE 'incoming'
+                END AS direction
+            LIMIT $limit
+        """
+        res = await self._neo4j_client.execute_query(q, **params)
+        relationships = []
+        for r in res.records:
+            edge_props = dict(r["edge_props"] or {})
+            related_props = dict(r["related_props"] or {})
+            related_labels = list(r.get("related_labels", []))
+            # drop embeddings
+            edge_props.pop("fact_embedding", None)
+            relationships.append(
+                {
+                    "edge_id": r["edge_id"],
+                    "relation_type": r["relation_type"],
+                    "direction": r["direction"],
+                    "fact": edge_props.get("fact", ""),
+                    "score": edge_props.get("score", 0.0),
+                    "created_at": edge_props.get("created_at"),
+                    "updated_at": edge_props.get("updated_at"),
+                    "related_props": related_props,
+                    "related_labels": related_labels,
+                }
+            )
+        return {"relationships": relationships, "total": total}
+
+    async def get_community_members(
+        self,
+        community_uuid: str,
+        *,
+        limit: int = 100,
+        project_id: str | None = None,
+        is_superuser: bool = False,
+    ) -> dict[str, Any]:
+        """Return member entities of a community; {'members', 'total'}."""
+        count_q = """
+            MATCH (e:Entity)-[:BELONGS_TO]->(c:Community {uuid: $uuid})
+            WHERE $is_superuser OR e.project_id = $project_id
+            RETURN count(e) AS total
+        """
+        count_res = await self._neo4j_client.execute_query(
+            count_q, uuid=community_uuid, project_id=project_id, is_superuser=is_superuser
+        )
+        total = int(count_res.records[0].get("total", 0) or 0) if count_res.records else 0
+
+        q = """
+            MATCH (e:Entity)-[:BELONGS_TO]->(c:Community {uuid: $uuid})
+            WHERE $is_superuser OR e.project_id = $project_id
+            RETURN properties(e) AS props
+            LIMIT $limit
+        """
+        res = await self._neo4j_client.execute_query(
+            q, uuid=community_uuid, project_id=project_id, is_superuser=is_superuser, limit=limit
+        )
+        members = []
+        for r in res.records:
+            props = dict(r["props"]) if r.get("props") else {}
+            members.append(
+                {
+                    "uuid": props.get("uuid", ""),
+                    "name": props.get("name", ""),
+                    "entity_type": props.get("entity_type", "Entity"),
+                    "summary": props.get("summary", ""),
+                    "created_at": props.get("created_at"),
+                }
+            )
+        return {"members": members, "total": total}
+
+    async def get_graph_visualization(
+        self,
+        *,
+        limit: int = 100,
+        since: str | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        project_ids: list[str] | None = None,
+        is_superuser: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Return graph elements (nodes/edges) for visualization.
+
+        Returns raw rows (source/target/edge props+labels) so the router can
+        assemble the cytoscape-style {'elements': {'nodes', 'edges'}} payload.
+        Reproduces the ``graph`` router get-graph Cypher.
+        """
+        node_where, target_where, scope_params = self._visualization_scope(
+            tenant_id, project_id, is_superuser, project_ids
+        )
+        params: dict[str, Any] = {"limit": limit, "since": since, **scope_params}
+        q = f"""
+            MATCH (n) {node_where}
+            OPTIONAL MATCH (n)-[r]->(m) {target_where}
+            WITH n, r, m
+            WHERE $since IS NULL
+                OR coalesce(toString(n.updated_at), toString(n.created_at), "") >= $since
+                OR (m IS NOT NULL
+                    AND coalesce(toString(m.updated_at), toString(m.created_at), "") >= $since)
+                OR (r IS NOT NULL
+                    AND coalesce(toString(r.updated_at), toString(r.created_at), "") >= $since)
+            RETURN
+                elementId(n) AS source_id, labels(n) AS source_labels, properties(n) AS source_props,
+                elementId(r) AS edge_id, type(r) AS edge_type, properties(r) AS edge_props,
+                elementId(m) AS target_id, labels(m) AS target_labels, properties(m) AS target_props
+            LIMIT $limit
+        """
+        res = await self._neo4j_client.execute_query(q, **params)
+        return [dict(r) for r in res.records]
+
+    async def get_subgraph(
+        self,
+        *,
+        node_uuids: list[str],
+        include_neighbors: bool,
+        limit: int,
+        project_id: str | None,
+        tenant_id: str | None,
+        project_ids: list[str] | None,
+        is_superuser: bool,
+    ) -> list[dict[str, Any]]:
+        """Return subgraph rows for the given node uuids.
+
+        Reproduces the ``graph`` router subgraph Cypher. Each row carries
+        source/target/edge props+labels for the router to assemble elements.
+        """
+        query = """
+            MATCH (n)
+            WHERE n.uuid IN $node_uuids
+            AND (
+                ($project_id IS NOT NULL AND n.project_id = $project_id) OR
+                ($project_id IS NULL AND $is_superuser
+                    AND ($tenant_id IS NULL OR n.tenant_id = $tenant_id)) OR
+                ($project_id IS NULL AND NOT $is_superuser AND n.project_id IN $project_ids)
+            )
+            WITH n
+        """
+        if include_neighbors:
+            query += """
+                OPTIONAL MATCH (n)-[r]-(m)
+                WHERE ('Entity' IN labels(m) OR 'Episodic' IN labels(m) OR 'Community' IN labels(m))
+                AND (
+                    ($project_id IS NOT NULL AND m.project_id = $project_id) OR
+                    ($project_id IS NULL AND $is_superuser
+                        AND ($tenant_id IS NULL OR m.tenant_id = $tenant_id)) OR
+                    ($project_id IS NULL AND NOT $is_superuser AND m.project_id IN $project_ids)
+                )
+                RETURN
+                    elementId(n) AS source_id, labels(n) AS source_labels, properties(n) AS source_props,
+                    elementId(r) AS edge_id, type(r) AS edge_type, properties(r) AS edge_props,
+                    elementId(m) AS target_id, labels(m) AS target_labels, properties(m) AS target_props
+                LIMIT $limit
+            """
+        else:
+            query += """
+                RETURN
+                    elementId(n) AS source_id, labels(n) AS source_labels, properties(n) AS source_props,
+                    null AS edge_id, null AS edge_type, null AS edge_props,
+                    null AS target_id, null AS target_labels, null AS target_props
+                LIMIT $limit
+            """
+        res = await self._neo4j_client.execute_query(
+            query,
+            node_uuids=node_uuids,
+            project_id=project_id,
+            project_ids=project_ids,
+            tenant_id=tenant_id,
+            is_superuser=is_superuser,
+            limit=limit,
+        )
+        return [dict(r) for r in res.records]
+
+    def _visualization_scope(
+        self,
+        tenant_id: str | None,
+        project_id: str | None,
+        is_superuser: bool,
+        project_ids: list[str] | None,
+    ) -> tuple[str, str, dict[str, Any]]:
+        """Build node/target WHERE clauses + params for visualization queries.
+
+        Mirrors the router's ``_graph_visualization_scope`` helper.
+        """
+        params: dict[str, Any] = {}
+        if project_id:
+            node_where = "WHERE n.project_id = $project_id"
+            target_where = "WHERE m.project_id = $project_id"
+            params["project_id"] = project_id
+        elif is_superuser and tenant_id:
+            node_where = "WHERE n.tenant_id = $tenant_id"
+            target_where = "WHERE m.tenant_id = $tenant_id"
+            params["tenant_id"] = tenant_id
+        elif project_ids is not None:
+            node_where = "WHERE n.project_id IN $project_ids"
+            target_where = "WHERE m.project_id IN $project_ids"
+            params["project_ids"] = project_ids
+        else:
+            node_where = ""
+            target_where = ""
+        return node_where, target_where, params
+
+    async def rebuild_communities(self, project_id: str) -> dict[str, Any]:
+        """Rebuild communities for a project via the Louvain-based updater.
+
+        Reproduces the synchronous path of the ``graph`` router rebuild endpoint:
+        drop existing communities, gather project entities, run the community
+        updater. Returns {'communities_count', 'entities_processed'}.
+        """
+        from src.infrastructure.graph.schemas import EntityNode
+
+        # Remove existing communities for this project.
+        await self._neo4j_client.execute_query(
+            """
+            MATCH (c:Community)
+            WHERE c.project_id = $project_id OR c.group_id = $project_id
+            DETACH DELETE c
+            """,
+            project_id=project_id,
+        )
+
+        entity_result = await self._neo4j_client.execute_query(
+            """
+            MATCH (e:Entity)
+            WHERE e.project_id = $project_id
+            RETURN e.uuid AS uuid, e.name AS name, e.entity_type AS entity_type
+            """,
+            project_id=project_id,
+        )
+        entities = [
+            EntityNode(
+                uuid=record["uuid"],
+                name=record["name"],
+                entity_type=record.get("entity_type", "unknown"),
+                project_id=project_id,
+            )
+            for record in entity_result.records
+        ]
+
+        communities_count = 0
+        community_updater = self._get_community_updater()
+        communities = await community_updater.update_communities_for_entities(
+            entities=entities,
+            project_id=project_id,
+            regenerate_all=True,
+        )
+        communities_count = len(communities) if communities else 0
+        return {"communities_count": communities_count, "entities_processed": len(entities)}
+
+    # ------------------------------------------------------------------
+    # maintenance.py router primitives
+    # ------------------------------------------------------------------
+
+    def _maintenance_node_scope(
+        self,
+        project_id: str | None,
+        is_superuser: bool,
+        allowed_project_ids: list[str],
+    ) -> tuple[str | None, dict[str, Any]]:
+        """Build a node project-scope condition + params for maintenance queries."""
+        if project_id:
+            return "n.project_id = $project_id", {"project_id": project_id}
+        if not is_superuser:
+            return "n.project_id IN $project_ids", {"project_ids": allowed_project_ids}
+        return None, {}
+
+    def _maintenance_edge_scope(
+        self,
+        project_id: str | None,
+        is_superuser: bool,
+        allowed_project_ids: list[str],
+    ) -> tuple[str | None, dict[str, Any]]:
+        """Build an edge (both endpoints) project-scope condition + params."""
+        if project_id:
+            return (
+                "a.project_id = $project_id AND b.project_id = $project_id",
+                {"project_id": project_id},
+            )
+        if not is_superuser:
+            return (
+                "a.project_id IN $project_ids AND b.project_id IN $project_ids",
+                {"project_ids": allowed_project_ids},
+            )
+        return None, {}
+
+    async def count_scoped_nodes(
+        self,
+        label: str,
+        project_id: str | None = None,
+        is_superuser: bool = False,
+        allowed_project_ids: list[str] | None = None,
+    ) -> int:
+        """Count nodes of a label within the maintenance project scope."""
+        safe_label = _validate_identifier(label)
+        cond, params = self._maintenance_node_scope(
+            project_id, is_superuser, allowed_project_ids or []
+        )
+        where = f" WHERE {cond}" if cond else ""
+        q = f"MATCH (n:{safe_label}){where} RETURN count(n) AS count"
+        res = await self._neo4j_client.execute_query(q, **params)
+        return int(res.records[0].get("count", 0) or 0) if res.records else 0
+
+    async def count_old_episodes(
+        self,
+        cutoff_iso: str,
+        project_id: str | None = None,
+        is_superuser: bool = False,
+        allowed_project_ids: list[str] | None = None,
+    ) -> int:
+        """Count episodes older than a cutoff within the maintenance scope."""
+        cond, params = self._maintenance_node_scope(
+            project_id, is_superuser, allowed_project_ids or []
+        )
+        conditions = ["e.created_at < datetime($cutoff_date)"]
+        if cond:
+            conditions.append(cond.replace("n.", "e."))
+        params["cutoff_date"] = cutoff_iso
+        where = "WHERE " + " AND ".join(conditions)
+        q = f"MATCH (e:Episodic) {where} RETURN count(e) AS count"
+        res = await self._neo4j_client.execute_query(q, **params)
+        return int(res.records[0].get("count", 0) or 0) if res.records else 0
+
+    async def find_duplicate_entities(
+        self,
+        project_id: str | None = None,
+        is_superuser: bool = False,
+        allowed_project_ids: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Find entity groups sharing an exact name within the scope (dry-run dedup)."""
+        cond, params = self._maintenance_node_scope(
+            project_id, is_superuser, allowed_project_ids or []
+        )
+        cond = cond.replace("n.", "e.") if cond else None
+        where = f"WHERE {cond}" if cond else ""
+        q = f"""
+            MATCH (e:Entity)
+            {where}
+            WITH e.name AS name, collect(e) AS entities
+            WHERE size(entities) > 1
+            RETURN name, entities
+            LIMIT 100
+        """
+        res = await self._neo4j_client.execute_query(q, **params)
+        return [
+            {
+                "name": r["name"],
+                "count": len(r["entities"]),
+                "uuids": [e.get("uuid", "") for e in r["entities"]],
+            }
+            for r in res.records
+        ]
+
+    async def find_stale_edges(
+        self,
+        cutoff_iso: str,
+        project_id: str | None = None,
+        is_superuser: bool = False,
+        allowed_project_ids: list[str] | None = None,
+    ) -> dict[str, int]:
+        """Return {rel_type: count} of edges older than a cutoff within scope."""
+        cond, params = self._maintenance_edge_scope(
+            project_id, is_superuser, allowed_project_ids or []
+        )
+        conditions = ["r.created_at < datetime($cutoff_date)"]
+        if cond:
+            conditions.append(cond)
+        params["cutoff_date"] = cutoff_iso
+        where = "WHERE " + " AND ".join(conditions)
+        q = f"MATCH (a)-[r]->(b) {where} RETURN type(r) AS rel_type, count(r) AS count"
+        res = await self._neo4j_client.execute_query(q, **params)
+        out: dict[str, int] = {}
+        for r in res.records:
+            out[r["rel_type"]] = int(r["count"])
+        return out
+
+    async def delete_stale_edges(
+        self,
+        cutoff_iso: str,
+        project_id: str | None = None,
+        is_superuser: bool = False,
+        allowed_project_ids: list[str] | None = None,
+    ) -> int:
+        """Delete edges older than a cutoff within scope; return count deleted."""
+        cond, params = self._maintenance_edge_scope(
+            project_id, is_superuser, allowed_project_ids or []
+        )
+        conditions = ["r.created_at < datetime($cutoff_date)"]
+        if cond:
+            conditions.append(cond)
+        params["cutoff_date"] = cutoff_iso
+        where = "WHERE " + " AND ".join(conditions)
+        q = f"MATCH (a)-[r]->(b) {where} DELETE r RETURN count(r) AS deleted"
+        res = await self._neo4j_client.execute_query(q, **params)
+        return int(res.records[0].get("deleted", 0) or 0) if res.records else 0
+
+    async def count_missing_embeddings(
+        self,
+        project_id: str | None = None,
+        is_superuser: bool = False,
+        allowed_project_ids: list[str] | None = None,
+    ) -> int:
+        """Count Entity nodes missing name_embedding within the scope."""
+        cond, params = self._maintenance_node_scope(
+            project_id, is_superuser, allowed_project_ids or []
+        )
+        conditions = ["n.name_embedding IS NULL"]
+        if cond:
+            conditions.append(cond)
+        where = "WHERE " + " AND ".join(conditions)
+        q = f"MATCH (n:Entity) {where} RETURN count(n) AS missing_count"
+        res = await self._neo4j_client.execute_query(q, **params)
+        return int(res.records[0].get("missing_count", 0) or 0) if res.records else 0
+
+    async def get_existing_embedding_dimension(
+        self,
+        project_id: str | None = None,
+        is_superuser: bool = False,
+        allowed_project_ids: list[str] | None = None,
+    ) -> int | None:
+        """Detect the existing embedding dimension in the database, or None."""
+        cond, params = self._maintenance_node_scope(
+            project_id, is_superuser, allowed_project_ids or []
+        )
+
+        conditions = ["n.embedding_dim IS NOT NULL"]
+        if cond:
+            conditions.append(cond)
+        where = "WHERE " + " AND ".join(conditions)
+        q = f"MATCH (n:Entity) {where} WITH n LIMIT 1 RETURN n.embedding_dim AS dim"
+        res = await self._neo4j_client.execute_query(q, **params)
+        dim = int(res.records[0].get("dim", 0) or 0) if res.records else 0
+        if dim:
+            return dim
+
+        conditions = ["n.name_embedding IS NOT NULL"]
+        if cond:
+            conditions.append(cond)
+        where = "WHERE " + " AND ".join(conditions)
+        q = f"MATCH (n:Entity) {where} WITH n LIMIT 1 RETURN size(n.name_embedding) AS dim"
+        res = await self._neo4j_client.execute_query(q, **params)
+        dim = int(res.records[0].get("dim", 0) or 0) if res.records else 0
+        return dim or None
+
+    async def detect_mixed_dimensions(
+        self,
+        project_id: str | None = None,
+        is_superuser: bool = False,
+        allowed_project_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Detect mixed embedding dimensions within the scope."""
+        cond, params = self._maintenance_node_scope(
+            project_id, is_superuser, allowed_project_ids or []
+        )
+        conditions = ["n.name_embedding IS NOT NULL"]
+        if cond:
+            conditions.append(cond)
+        where = "WHERE " + " AND ".join(conditions)
+        q = (
+            f"MATCH (n:Entity) {where} "
+            "WITH coalesce(n.embedding_dim, size(n.name_embedding)) AS dim, "
+            "count(n) AS count RETURN dim, count ORDER BY count DESC"
+        )
+        res = await self._neo4j_client.execute_query(q, **params)
+        counts = {str(r["dim"]): int(r["count"]) for r in res.records}
+        dimensions = [int(d) for d in counts]
+        return {
+            "has_mixed_dimensions": len(dimensions) > 1,
+            "counts": counts,
+            "dimensions": dimensions,
+            "total_embeddings": sum(counts.values()),
+        }
+
+    async def validate_embeddings(
+        self,
+        expected_dim: int,
+        project_id: str | None = None,
+        is_superuser: bool = False,
+        allowed_project_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Validate embeddings (dimension mismatches + zero vectors) in scope."""
+        cond, params = self._maintenance_node_scope(
+            project_id, is_superuser, allowed_project_ids or []
+        )
+        conditions = ["n.name_embedding IS NOT NULL"]
+        if cond:
+            conditions.append(cond)
+        where = "WHERE " + " AND ".join(conditions)
+        params["expected_dim"] = expected_dim
+        q = (
+            f"MATCH (n:Entity) {where} "
+            "WITH n, size(n.name_embedding) AS actual_dim "
+            "RETURN count(n) AS total_embeddings, "
+            "sum(CASE WHEN actual_dim <> $expected_dim THEN 1 ELSE 0 END) "
+            "AS dimension_mismatches, "
+            "sum(CASE WHEN all(value IN n.name_embedding WHERE value = 0.0) "
+            "THEN 1 ELSE 0 END) AS zero_vectors"
+        )
+        res = await self._neo4j_client.execute_query(q, **params)
+        record = res.records[0] if res.records else {}
+        mismatches = int(record.get("dimension_mismatches", 0) or 0)
+        zero_vectors = int(record.get("zero_vectors", 0) or 0)
+        return {
+            "valid": mismatches == 0 and zero_vectors == 0,
+            "total_embeddings": int(record.get("total_embeddings", 0) or 0),
+            "dimension_mismatches": mismatches,
+            "zero_vectors": zero_vectors,
+            "expected_dimension": expected_dim,
+        }
+
+    async def rebuild_embeddings(
+        self,
+        embedder: Any,  # noqa: ANN401
+        project_id: str,
+    ) -> dict[str, int]:
+        """Regenerate all entity embeddings for a project using ``embedder``."""
+        q = """
+            MATCH (n:Entity {project_id: $project_id})
+            RETURN n.uuid AS uuid,
+                   coalesce(n.name, '') AS name,
+                   coalesce(n.summary, '') AS summary
+        """
+        result = await self._neo4j_client.execute_query(q, project_id=project_id)
+        processed = 0
+        updated = 0
+        failed = 0
+        for record in result.records:
+            processed += 1
+            uuid = record.get("uuid")
+            if not uuid:
+                failed += 1
+                continue
+            text = "\n".join(
+                part for part in (record.get("name"), record.get("summary")) if part
+            )
+            try:
+                embedding = await _create_embedding_from_embedder(embedder, text)
+                await self._neo4j_client.execute_query(
+                    """
+                    MATCH (n:Entity {uuid: $uuid, project_id: $project_id})
+                    SET n.name_embedding = $embedding,
+                        n.embedding_dim = $embedding_dim
+                    RETURN count(n) AS updated
+                    """,
+                    uuid=uuid,
+                    project_id=project_id,
+                    embedding=embedding,
+                    embedding_dim=len(embedding),
+                )
+                updated += 1
+            except Exception:
+                failed += 1
+                logger.exception("Failed to rebuild embedding for entity %s", uuid)
+        return {"processed": processed, "updated": updated, "failed": failed}
+
+    async def clear_entity_embeddings(
+        self,
+        project_id: str | None = None,
+    ) -> int:
+        """Clear entity embeddings (optionally project-scoped); return count cleared."""
+        if project_id:
+            q = """
+                MATCH (n:Entity {project_id: $project_id})
+                WHERE n.name_embedding IS NOT NULL
+                REMOVE n.name_embedding, n.embedding_dim
+                RETURN count(n) AS cleared
+            """
+            res = await self._neo4j_client.execute_query(q, project_id=project_id)
+        else:
+            q = """
+                MATCH (n:Entity)
+                WHERE n.name_embedding IS NOT NULL
+                REMOVE n.name_embedding, n.embedding_dim
+                RETURN count(n) AS cleared
+            """
+            res = await self._neo4j_client.execute_query(q)
+        return int(res.records[0].get("cleared", 0) or 0) if res.records else 0
+
+    async def get_vector_index_dimension(self, index_name: str = "entity_name_vector") -> int | None:
+        """Return the dimension of an existing vector index, or None if absent."""
+        return await self._neo4j_client.get_vector_index_dimension(index_name)
+
+    async def create_vector_index(
+        self,
+        index_name: str,
+        label: str,
+        property_name: str,
+        dimensions: int,
+        similarity_function: str = "cosine",
+    ) -> None:
+        """Create a vector index (delegates to the Neo4j client)."""
+        await self._neo4j_client.create_vector_index(
+            index_name=index_name,
+            label=label,
+            property_name=property_name,
+            dimensions=dimensions,
+            similarity_function=similarity_function,
+        )
+
+    async def get_embedding_dimension_distribution(
+        self,
+        project_id: str | None = None,
+        is_superuser: bool = False,
+        allowed_project_ids: list[str] | None = None,
+    ) -> tuple[dict[str, int], int]:
+        """Return ({dim: count}, total) of embeddings within the maintenance scope."""
+        cond, params = self._maintenance_node_scope(
+            project_id, is_superuser, allowed_project_ids or []
+        )
+        conditions = ["n.name_embedding IS NOT NULL"]
+        if cond:
+            conditions.append(cond)
+        where = "WHERE " + " AND ".join(conditions)
+        q = (
+            f"MATCH (n:Entity) {where} "
+            "RETURN count(n) AS total, n.embedding_dim AS dim "
+            "ORDER BY total DESC LIMIT 5"
+        )
+        res = await self._neo4j_client.execute_query(q, **params)
+        distribution: dict[str, int] = {}
+        total = 0
+        for record in res.records:
+            dim = record.get("dim")
+            count = int(record.get("total", 0) or 0)
+            if dim:
+                distribution[str(dim)] = count
+            total += count
+        return distribution, total
+
+    async def get_memory_graph_context(
+        self,
+        memory_id: str,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Load entities + relationships connected to a memory's episode.
+
+        Returns (entities, relationships) as the dict-shaped records the
+        ``memories`` router consumes. Matches the previous inlined Cypher exactly.
+        """
+        try:
+            entity_records, _, _ = await self._neo4j_client.driver.execute_query(
+                """
+                MATCH (episode:Episodic)
+                WHERE episode.memory_id = $memory_id OR episode.uuid = $memory_id
+                MATCH (episode)-[:MENTIONS]->(entity:Entity)
+                RETURN DISTINCT
+                    entity.uuid AS id,
+                    entity.name AS name,
+                    coalesce(entity.entity_type, 'Entity') AS type,
+                    entity.summary AS summary,
+                    entity.attributes AS attributes
+                ORDER BY name
+                """,
+                memory_id=memory_id,
+            )
+            entities = [
+                {
+                    "id": record["id"],
+                    "uuid": record["id"],
+                    "name": record["name"] or record["id"],
+                    "type": record["type"] or "Entity",
+                    "entity_type": record["type"] or "Entity",
+                    "summary": record["summary"] or "",
+                    "properties": _decode_attributes(record["attributes"]),
+                    "confidence": 1.0,
+                }
+                for record in entity_records
+                if record["id"] is not None
+            ]
+
+            relationship_records, _, _ = await self._neo4j_client.driver.execute_query(
+                """
+                MATCH (episode:Episodic)
+                WHERE episode.memory_id = $memory_id OR episode.uuid = $memory_id
+                MATCH (episode)-[:MENTIONS]->(source:Entity)
+                MATCH (episode)-[:MENTIONS]->(target:Entity)
+                MATCH (source)-[relationship]->(target)
+                WHERE source <> target AND NOT type(relationship) IN ['MENTIONS', 'BELONGS_TO']
+                RETURN DISTINCT
+                    coalesce(relationship.uuid, elementId(relationship)) AS id,
+                    source.uuid AS source_id,
+                    target.uuid AS target_id,
+                    type(relationship) AS type,
+                    relationship.fact AS fact,
+                    relationship.summary AS summary,
+                    relationship.weight AS weight,
+                    relationship.episodes AS episodes
+                ORDER BY type
+                """,
+                memory_id=memory_id,
+            )
+            relationships = [
+                {
+                    "id": record["id"],
+                    "uuid": record["id"],
+                    "source_id": record["source_id"],
+                    "target_id": record["target_id"],
+                    "source_uuid": record["source_id"],
+                    "target_uuid": record["target_id"],
+                    "type": record["type"],
+                    "relationship_type": record["type"],
+                    "properties": {
+                        "fact": record["fact"] or "",
+                        "summary": record["summary"] or "",
+                        "weight": record["weight"],
+                        "episodes": record["episodes"] or [],
+                    },
+                    "confidence": record["weight"] if record["weight"] is not None else 1.0,
+                }
+                for record in relationship_records
+                if record["source_id"] is not None and record["target_id"] is not None
+            ]
+            return entities, relationships
+        except Exception as e:
+            logger.warning(
+                "Failed to load graph context for memory %s: %s", memory_id, e
+            )
+            return [], []
+
+    async def count_episodes_by_age(
+        self,
+        cutoff_iso: str,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+    ) -> int:
+        """Count episodes older than a cutoff (ISO datetime), scoped by project/tenant."""
+        sc = ""
+        if project_id:
+            sc = "WHERE e.project_id = $project_id AND e.created_at < datetime($cutoff_date)"
+        elif tenant_id:
+            sc = "WHERE e.tenant_id = $tenant_id AND e.created_at < datetime($cutoff_date)"
+        else:
+            sc = "WHERE e.created_at < datetime($cutoff_date)"
+        q = f"MATCH (e:Episodic) {sc} RETURN count(e) AS count"
+        params: dict[str, Any] = {"cutoff_date": cutoff_iso}
+        if project_id:
+            params["project_id"] = project_id
+        elif tenant_id:
+            params["tenant_id"] = tenant_id
+        res = await self._neo4j_client.execute_query(q, **params)
+        return int(res.records[0].get("count", 0) or 0) if res.records else 0
+
+    async def delete_episodes_by_age(
+        self,
+        cutoff_iso: str,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+    ) -> int:
+        """Delete episodes older than a cutoff (ISO datetime); return count deleted."""
+        sc = ""
+        if project_id:
+            sc = "WHERE e.project_id = $project_id AND e.created_at < datetime($cutoff_date)"
+        elif tenant_id:
+            sc = "WHERE e.tenant_id = $tenant_id AND e.created_at < datetime($cutoff_date)"
+        else:
+            sc = "WHERE e.created_at < datetime($cutoff_date)"
+        q = f"MATCH (e:Episodic) {sc} DETACH DELETE e RETURN count(e) AS deleted"
+        params: dict[str, Any] = {"cutoff_date": cutoff_iso}
+        if project_id:
+            params["project_id"] = project_id
+        elif tenant_id:
+            params["tenant_id"] = tenant_id
+        res = await self._neo4j_client.execute_query(q, **params)
+        return int(res.records[0].get("deleted", 0) or 0) if res.records else 0
+
+    async def health_probe(self) -> bool:
+        """Return True iff the backend responds to a trivial query."""
+        try:
+            result = await self._neo4j_client.execute_query("RETURN 1 AS ok")
+            return bool(result.records) and result.records[0].get("ok", 0) == 1
+        except Exception:
+            logger.warning("Graph backend health probe failed", exc_info=True)
+            return False

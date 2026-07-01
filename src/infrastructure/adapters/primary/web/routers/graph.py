@@ -15,18 +15,16 @@ from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.ports.services.graph_service_port import GraphServicePort
+from src.domain.ports.services.graph_store_port import GraphStorePort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
-    get_graph_service,
-    get_neo4j_client,
+    get_graph_store,
     get_workflow_engine,
 )
 from src.infrastructure.adapters.secondary.common.base_repository import refresh_select_statement
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import Project, User, UserProject
-from src.infrastructure.graph.neo4j_client import Neo4jClient
 from src.infrastructure.i18n import gettext as _
 
 logger = logging.getLogger(__name__)
@@ -94,6 +92,67 @@ def _empty_graph_elements() -> dict[str, Any]:
     return {"elements": {"nodes": [], "edges": []}}
 
 
+def _rows_to_elements(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Assemble graph-visualization rows into a cytoscape elements payload.
+
+    Shared by ``get_graph`` and ``get_subgraph``. Each row carries source/target/
+    edge props+labels (see ``GraphStorePort.get_graph_visualization`` /
+    ``get_subgraph``).
+    """
+    nodes_map: dict[str, dict[str, Any]] = {}
+    edges_list: list[dict[str, Any]] = []
+
+    for r in rows:
+        s_id = r.get("source_id")
+        if s_id:
+            s_props = _sanitize_graph_properties(
+                r.get("source_props") or {}, excluded_keys={"name_embedding"}
+            )
+            if s_id not in nodes_map:
+                nodes_map[s_id] = {
+                    "data": {
+                        "id": s_id,
+                        "label": _graph_node_label(s_props, r.get("source_labels") or []),
+                        "name": s_props.get("name", "Unknown"),
+                        **s_props,
+                    }
+                }
+
+        t_id = r.get("target_id")
+        if t_id:
+            t_props = _sanitize_graph_properties(
+                r.get("target_props") or {}, excluded_keys={"name_embedding"}
+            )
+            if t_id not in nodes_map:
+                nodes_map[t_id] = {
+                    "data": {
+                        "id": t_id,
+                        "label": _graph_node_label(t_props, r.get("target_labels") or []),
+                        "name": t_props.get("name", "Unknown"),
+                        **t_props,
+                    }
+                }
+
+            e_id = r.get("edge_id")
+            if e_id:
+                e_props = _sanitize_graph_properties(
+                    r.get("edge_props") or {}, excluded_keys={"fact_embedding"}
+                )
+                edges_list.append(
+                    {
+                        "data": {
+                            "id": e_id,
+                            "source": s_id,
+                            "target": t_id,
+                            "label": r.get("edge_type"),
+                            **e_props,
+                        }
+                    }
+                )
+
+    return {"elements": {"nodes": list(nodes_map.values()), "edges": edges_list}}
+
+
 def _serialize_datetime(value: Any) -> str | None:
     """Convert Neo4j DateTime to ISO string for JSON serialization."""
     if value is None:
@@ -150,40 +209,6 @@ def _graph_node_label(props: dict[str, Any], labels: list[str]) -> str:
     return next((label for label in labels if label != "Node"), labels[0] if labels else "Entity")
 
 
-def _graph_visualization_scope(
-    tenant_id: str | None,
-    project_id: str | None,
-    is_superuser: bool,
-    allowed_project_ids: list[str],
-) -> tuple[str, str, dict[str, Any]]:
-    node_conditions = [
-        "('Entity' IN labels(n) OR 'Episodic' IN labels(n) OR 'Community' IN labels(n))"
-    ]
-    target_conditions = [
-        "('Entity' IN labels(m) OR 'Episodic' IN labels(m) OR 'Community' IN labels(m))"
-    ]
-    params: dict[str, Any] = {}
-
-    if project_id:
-        node_conditions.append("n.project_id = $project_id")
-        target_conditions.append("m.project_id = $project_id")
-        params["project_id"] = project_id
-    elif tenant_id and is_superuser:
-        node_conditions.append("n.tenant_id = $tenant_id")
-        target_conditions.append("m.tenant_id = $tenant_id")
-        params["tenant_id"] = tenant_id
-    elif not is_superuser:
-        node_conditions.append("n.project_id IN $project_ids")
-        target_conditions.append("m.project_id IN $project_ids")
-        params["project_ids"] = allowed_project_ids
-
-    return (
-        "WHERE " + " AND ".join(node_conditions),
-        "WHERE " + " AND ".join(target_conditions),
-        params,
-    )
-
-
 # --- Schemas ---
 
 
@@ -232,7 +257,7 @@ async def list_communities(
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     List communities in the knowledge graph with filtering and pagination.
@@ -241,76 +266,37 @@ async def list_communities(
     If project_id is provided, filters by that project. Otherwise, returns all communities.
     """
     try:
-        if neo4j_client is None:
-            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
         is_superuser, allowed_project_ids = await _graph_project_scope(
             project_id, current_user, db, tenant_id=tenant_id
         )
         if not is_superuser and not allowed_project_ids:
             return {"communities": [], "total": 0, "limit": limit, "offset": offset}
 
-        conditions = ["coalesce(c.member_count, 0) >= 0"]  # Always include base condition
-        params: dict[str, Any] = {"limit": limit, "offset": offset}
-
-        # Filter by project_id if provided
-        if project_id:
-            conditions.append("c.project_id = $project_id")
-            params["project_id"] = project_id
-        elif tenant_id and is_superuser:
-            conditions.append("c.tenant_id = $tenant_id")
-            params["tenant_id"] = tenant_id
-        elif not is_superuser:
-            conditions.append("c.project_id IN $project_ids")
-            params["project_ids"] = allowed_project_ids
-
-        if min_members is not None:
-            conditions.append("coalesce(c.member_count, 0) >= $min_members")
-            params["min_members"] = min_members
-
-        where_clause = "WHERE " + " AND ".join(conditions)
-
-        # Count query
-        count_query = f"""
-        MATCH (c:Community)
-        {where_clause}
-        RETURN count(c) as total
-        """
-        logger.info(f"Counting communities with project_id={project_id}")
-        count_result = await neo4j_client.execute_query(count_query, **params)
-        total = count_result.records[0]["total"] if count_result.records else 0
-        logger.info(f"Found {total} communities")
-
-        # List query
-        list_query = f"""
-        MATCH (c:Community)
-        {where_clause}
-        RETURN properties(c) as props
-        ORDER BY coalesce(c.member_count, 0) DESC
-        SKIP $offset
-        LIMIT $limit
-        """
-
-        result = await neo4j_client.execute_query(list_query, **params)
-
-        communities = []
-        for r in result.records:
-            props = r["props"]
-            communities.append(
-                {
-                    "uuid": props.get("uuid", ""),
-                    "name": props.get("name", ""),
-                    "summary": props.get("summary", ""),
-                    "member_count": props.get("member_count", 0),
-                    "tenant_id": props.get("tenant_id"),
-                    "project_id": props.get("project_id"),
-                    "formed_at": _serialize_datetime(props.get("formed_at")),
-                    "created_at": _serialize_datetime(props.get("created_at")),
-                }
-            )
-
-        logger.info(f"Returning {len(communities)} communities (offset={offset}, limit={limit})")
-
-        return {"communities": communities, "total": total, "limit": limit, "offset": offset}
+        page = await graph_store.list_communities(
+            min_members=min_members,
+            limit=limit,
+            offset=offset,
+            project_id=project_id,
+            tenant_id=tenant_id if (tenant_id and is_superuser) else None,
+            project_ids=allowed_project_ids if (not project_id and not is_superuser) else None,
+            is_superuser=is_superuser,
+        )
+        communities = [
+            {
+                **c,
+                "formed_at": _serialize_datetime(c.get("formed_at")),
+                "created_at": _serialize_datetime(c.get("created_at")),
+            }
+            for c in page["communities"]
+        ]
+        return {
+            "communities": communities,
+            "total": page["total"],
+            "limit": limit,
+            "offset": offset,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -327,91 +313,32 @@ async def list_entities(
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """List entities in the knowledge graph with filtering and pagination."""
     try:
-        if neo4j_client is None:
-            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
         is_superuser, allowed_project_ids = await _graph_project_scope(
             project_id, current_user, db, tenant_id=tenant_id
         )
         if not is_superuser and not allowed_project_ids:
             return {"entities": [], "total": 0, "limit": limit, "offset": offset}
 
-        conditions = []
-        params: dict[str, Any] = {"limit": limit, "offset": offset}
-
-        if project_id:
-            project_condition = """
-            (
-                e.project_id = $project_id OR
-                EXISTS {
-                    MATCH (e)<-[:MENTIONS]-(ep:Episodic)
-                    WHERE ep.project_id = $project_id
-                }
-            )
-            """
-            conditions.append(project_condition)
-            params["project_id"] = project_id
-        elif tenant_id and is_superuser:
-            conditions.append("e.tenant_id = $tenant_id")
-            params["tenant_id"] = tenant_id
-        elif not is_superuser:
-            project_condition = """
-            (
-                e.project_id IN $project_ids OR
-                EXISTS {
-                    MATCH (e)<-[:MENTIONS]-(ep:Episodic)
-                    WHERE ep.project_id IN $project_ids
-                }
-            )
-            """
-            conditions.append(project_condition)
-            params["project_ids"] = allowed_project_ids
-
-        if entity_type:
-            conditions.append("(e.entity_type = $entity_type OR $entity_type IN labels(e))")
-            params["entity_type"] = entity_type
-
-        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-
-        # Count
-        count_query = f"MATCH (e:Entity) {where_clause} RETURN count(e) as total"
-        count_result = await neo4j_client.execute_query(count_query, **params)
-        total = count_result.records[0]["total"] if count_result.records else 0
-
-        # List
-        list_query = f"""
-        MATCH (e:Entity)
-        {where_clause}
-        RETURN properties(e) as props, labels(e) as labels
-        ORDER BY e.created_at DESC
-        SKIP $offset
-        LIMIT $limit
-        """
-
-        result = await neo4j_client.execute_query(list_query, **params)
-
-        entities = []
-        for r in result.records:
-            props = r["props"]
-            # Get entity_type from props (not from labels - entity_type is a property)
-            e_type = props.get("entity_type", "Entity")
-
-            entities.append(
-                {
-                    "uuid": props.get("uuid", ""),
-                    "name": props.get("name", ""),
-                    "entity_type": e_type,
-                    "summary": props.get("summary", ""),
-                    "tenant_id": props.get("tenant_id"),
-                    "project_id": props.get("project_id"),
-                    "created_at": _serialize_datetime(props.get("created_at")),
-                }
-            )
-
-        return {"entities": entities, "total": total, "limit": limit, "offset": offset}
+        page = await graph_store.list_entities(
+            entity_type=entity_type,
+            limit=limit,
+            offset=offset,
+            project_id=project_id,
+            tenant_id=tenant_id if (tenant_id and is_superuser) else None,
+            project_ids=allowed_project_ids if (not project_id and not is_superuser) else None,
+            is_superuser=is_superuser,
+        )
+        entities = [
+            {**e, "created_at": _serialize_datetime(e.get("created_at"))}
+            for e in page["entities"]
+        ]
+        return {"entities": entities, "total": page["total"], "limit": limit, "offset": offset}
     except HTTPException:
         raise
     except Exception as e:
@@ -425,7 +352,7 @@ async def get_entity_types(
     project_id: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Get all available entity types with their counts.
@@ -433,51 +360,20 @@ async def get_entity_types(
     Useful for populating filter dropdowns with dynamic entity types.
     """
     try:
-        if neo4j_client is None:
-            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
         is_superuser, allowed_project_ids = await _graph_project_scope(
             project_id, current_user, db, tenant_id=tenant_id
         )
         if not is_superuser and not allowed_project_ids:
             return {"entity_types": [], "total": 0}
 
-        conditions = []
-        params: dict[str, Any] = {}
-
-        if project_id:
-            conditions.append(
-                "(e.project_id = $project_id OR EXISTS { MATCH (e)<-[:MENTIONS]-(ep:Episodic) WHERE ep.project_id = $project_id })"
-            )
-            params["project_id"] = project_id
-        elif tenant_id and is_superuser:
-            conditions.append("e.tenant_id = $tenant_id")
-            params["tenant_id"] = tenant_id
-        elif not is_superuser:
-            conditions.append(
-                "(e.project_id IN $project_ids OR EXISTS { MATCH (e)<-[:MENTIONS]-(ep:Episodic) WHERE ep.project_id IN $project_ids })"
-            )
-            params["project_ids"] = allowed_project_ids
-
-        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-
-        query = f"""
-        MATCH (e:Entity)
-        {where_clause}
-        WITH coalesce(
-            e.entity_type,
-            head([label IN labels(e) WHERE NOT label IN ['Entity', 'Node', 'BaseEntity']]),
-            'Entity'
-        ) as entity_type, count(e) as entity_count
-        RETURN entity_type, entity_count
-        ORDER BY entity_count DESC
-        """
-
-        result = await neo4j_client.execute_query(query, **params)
-
-        entity_types = []
-        for r in result.records:
-            entity_types.append({"entity_type": r["entity_type"], "count": r["entity_count"]})
-
+        entity_types = await graph_store.get_entity_types(
+            project_id=project_id,
+            tenant_id=tenant_id if (tenant_id and is_superuser) else None,
+            project_ids=allowed_project_ids if (not project_id and not is_superuser) else None,
+            is_superuser=is_superuser,
+        )
         return {"entity_types": entity_types, "total": len(entity_types)}
     except HTTPException:
         raise
@@ -491,7 +387,7 @@ async def get_entity(
     entity_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Get entity details by UUID.
@@ -503,24 +399,15 @@ async def get_entity(
         Entity details with properties
     """
     try:
-        if neo4j_client is None:
-            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-        query = """
-        MATCH (e:Entity {uuid: $uuid})
-        RETURN properties(e) as props, labels(e) as labels
-        """
-
-        result = await neo4j_client.execute_query(query, uuid=entity_id)
-
-        if not result.records:
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
+        props = await graph_store.get_entity(entity_id)
+        if not props:
             raise HTTPException(status_code=404, detail=_("Entity not found"))
 
-        props = result.records[0]["props"]
         await _ensure_graph_project_access(props.get("project_id"), current_user, db)
 
-        # Get entity_type from props (not from labels - entity_type is a property)
         e_type = props.get("entity_type", "Entity")
-
         return {
             "uuid": props.get("uuid", ""),
             "name": props.get("name", ""),
@@ -544,6 +431,7 @@ async def get_entity(
                     "project_id",
                     "created_at",
                     "updated_at",
+                    "labels",
                 ]
             },
         }
@@ -561,104 +449,44 @@ async def get_entity_relationships(
     limit: int = Query(50, ge=1, le=200, description="Maximum relationships to return"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Get relationships for an entity.
 
     Returns both outgoing and incoming relationships for the specified entity.
-
-    Args:
-        entity_id: Entity UUID
-        relationship_type: Optional relationship type filter
-        limit: Maximum relationships to return
-
-    Returns:
-        List of relationships with source and target entities
     """
     try:
-        if neo4j_client is None:
-            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-        entity_result = await neo4j_client.execute_query(
-            """
-            MATCH (e:Entity {uuid: $uuid})
-            RETURN properties(e) as props
-            """,
-            uuid=entity_id,
-        )
-        if not entity_result.records:
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
+        entity_props = await graph_store.get_entity(entity_id)
+        if not entity_props:
             raise HTTPException(status_code=404, detail=_("Entity not found"))
 
-        entity_project_id = entity_result.records[0]["props"].get("project_id")
+        entity_project_id = entity_props.get("project_id")
         await _ensure_graph_project_access(entity_project_id, current_user, db)
 
-        # Build relationship type filter
-        rel_filter = ""
-        params: dict[str, Any] = {
-            "uuid": entity_id,
-            "limit": limit,
-            "project_id": entity_project_id,
-            "is_superuser": getattr(current_user, "is_superuser", False),
-        }
-
-        if relationship_type:
-            rel_filter = "AND type(r) = $relationship_type"
-            params["relationship_type"] = relationship_type
-
-        count_query = f"""
-        MATCH (e:Entity {{uuid: $uuid}})
-        MATCH (e)-[r]-(related:Entity)
-        WHERE related IS NOT NULL {rel_filter}
-        AND ($is_superuser OR related.project_id = $project_id)
-        RETURN count(r) as total
-        """
-        count_result = await neo4j_client.execute_query(count_query, **params)
-        total = count_result.records[0]["total"] if count_result.records else 0
-
-        # Query for both outgoing and incoming relationships
-        query = f"""
-        MATCH (e:Entity {{uuid: $uuid}})
-        OPTIONAL MATCH (e)-[r]-(related:Entity)
-        WHERE related IS NOT NULL {rel_filter}
-        AND ($is_superuser OR related.project_id = $project_id)
-        RETURN
-            elementId(r) as edge_id,
-            type(r) as relation_type,
-            properties(r) as edge_props,
-            startNode(r) as start_node,
-            endNode(r) as end_node,
-            properties(related) as related_props,
-            labels(related) as related_labels,
-            CASE
-                WHEN startNode(r).uuid = $uuid THEN 'outgoing'
-                ELSE 'incoming'
-            END as direction
-        LIMIT $limit
-        """
-
-        result = await neo4j_client.execute_query(query, **params)
-
+        page = await graph_store.get_entity_relationships(
+            entity_id,
+            relationship_type=relationship_type,
+            limit=limit,
+            project_id=entity_project_id,
+            is_superuser=getattr(current_user, "is_superuser", False),
+        )
         relationships = []
-        for r in result.records:
-            edge_props = r["edge_props"] or {}
-            related_props = r["related_props"]
-            related_labels = r["related_labels"]
-
+        for r in page["relationships"]:
+            related_props = r.get("related_props", {})
+            related_labels = r.get("related_labels", [])
             related_type = _entity_type_from_props_or_labels(related_props, related_labels)
-
-            # Clean up edge properties (remove embeddings)
-            if "fact_embedding" in edge_props:
-                edge_props = {k: v for k, v in edge_props.items() if k != "fact_embedding"}
-
             relationships.append(
                 {
                     "edge_id": r["edge_id"],
                     "relation_type": r["relation_type"],
                     "direction": r["direction"],
-                    "fact": edge_props.get("fact", ""),
-                    "score": edge_props.get("score", 0.0),
-                    "created_at": _serialize_datetime(edge_props.get("created_at")),
-                    "updated_at": _serialize_datetime(edge_props.get("updated_at")),
+                    "fact": r.get("fact", ""),
+                    "score": r.get("score", 0.0),
+                    "created_at": _serialize_datetime(r.get("created_at")),
+                    "updated_at": _serialize_datetime(r.get("updated_at")),
                     "related_entity": {
                         "uuid": related_props.get("uuid", ""),
                         "name": related_props.get("name", ""),
@@ -668,8 +496,7 @@ async def get_entity_relationships(
                     },
                 }
             )
-
-        return {"relationships": relationships, "total": total}
+        return {"relationships": relationships, "total": page["total"]}
     except HTTPException:
         raise
     except Exception as e:
@@ -685,106 +512,27 @@ async def get_graph(
     since: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """Get graph data for visualization."""
     try:
-        if neo4j_client is None:
-            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
         is_superuser, allowed_project_ids = await _graph_project_scope(
             project_id, current_user, db, tenant_id=tenant_id
         )
         if not is_superuser and not allowed_project_ids:
             return _empty_graph_elements()
 
-        node_where, target_where, scope_params = _graph_visualization_scope(
-            tenant_id,
-            project_id,
-            is_superuser,
-            allowed_project_ids,
+        rows = await graph_store.get_graph_visualization(
+            limit=limit,
+            since=since,
+            project_id=project_id,
+            tenant_id=tenant_id if (tenant_id and is_superuser) else None,
+            project_ids=allowed_project_ids if (not project_id and not is_superuser) else None,
+            is_superuser=is_superuser,
         )
-        params: dict[str, Any] = {"limit": limit, "since": since, **scope_params}
-
-        query = f"""
-        MATCH (n)
-        {node_where}
-
-        OPTIONAL MATCH (n)-[r]->(m)
-        {target_where}
-
-        WITH n, r, m
-        WHERE $since IS NULL
-            OR coalesce(toString(n.updated_at), toString(n.created_at), "") >= $since
-            OR (
-                m IS NOT NULL
-                AND coalesce(toString(m.updated_at), toString(m.created_at), "") >= $since
-            )
-            OR (
-                r IS NOT NULL
-                AND coalesce(toString(r.updated_at), toString(r.created_at), "") >= $since
-            )
-        RETURN
-            elementId(n) as source_id, labels(n) as source_labels, properties(n) as source_props,
-            elementId(r) as edge_id, type(r) as edge_type, properties(r) as edge_props,
-            elementId(m) as target_id, labels(m) as target_labels, properties(m) as target_props
-        LIMIT $limit
-        """
-
-        result = await neo4j_client.execute_query(query, **params)
-
-        nodes_map = {}
-        edges_list = []
-
-        for r in result.records:
-            s_id = r["source_id"]
-            s_props = _sanitize_graph_properties(
-                r["source_props"], excluded_keys={"name_embedding"}
-            )
-
-            if s_id not in nodes_map:
-                nodes_map[s_id] = {
-                    "data": {
-                        "id": s_id,
-                        "label": _graph_node_label(s_props, r["source_labels"]),
-                        "name": s_props.get("name", "Unknown"),
-                        **s_props,
-                    }
-                }
-
-            if r["target_id"]:
-                t_id = r["target_id"]
-                t_props = _sanitize_graph_properties(
-                    r["target_props"], excluded_keys={"name_embedding"}
-                )
-
-                if t_id not in nodes_map:
-                    nodes_map[t_id] = {
-                        "data": {
-                            "id": t_id,
-                            "label": _graph_node_label(t_props, r["target_labels"]),
-                            "name": t_props.get("name", "Unknown"),
-                            **t_props,
-                        }
-                    }
-
-                if r["edge_id"]:
-                    e_props = _sanitize_graph_properties(
-                        r["edge_props"], excluded_keys={"fact_embedding"}
-                    )
-
-                    edges_list.append(
-                        {
-                            "data": {
-                                "id": r["edge_id"],
-                                "source": s_id,
-                                "target": t_id,
-                                "label": r["edge_type"],
-                                **e_props,
-                            }
-                        }
-                    )
-
-        return {"elements": {"nodes": list(nodes_map.values()), "edges": edges_list}}
+        return _rows_to_elements(rows)
     except HTTPException:
         raise
     except Exception as e:
@@ -797,12 +545,12 @@ async def get_subgraph(
     params: SubgraphRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """Get subgraph for specific nodes."""
     try:
-        if neo4j_client is None:
-            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
         project_id = params.project_id
         is_superuser, allowed_project_ids = await _graph_project_scope(
             project_id,
@@ -813,116 +561,16 @@ async def get_subgraph(
         if not is_superuser and not allowed_project_ids:
             return _empty_graph_elements()
 
-        query = """
-        MATCH (n)
-        WHERE n.uuid IN $node_uuids
-        AND (
-            ($project_id IS NOT NULL AND n.project_id = $project_id) OR
-            (
-                $project_id IS NULL
-                AND $is_superuser
-                AND ($tenant_id IS NULL OR n.tenant_id = $tenant_id)
-            ) OR
-            ($project_id IS NULL AND NOT $is_superuser AND n.project_id IN $project_ids)
-        )
-
-        WITH n
-        """
-
-        if params.include_neighbors:
-            query += """
-            OPTIONAL MATCH (n)-[r]-(m)
-            WHERE ('Entity' IN labels(m) OR 'Episodic' IN labels(m) OR 'Community' IN labels(m))
-            AND (
-                ($project_id IS NOT NULL AND m.project_id = $project_id) OR
-                (
-                    $project_id IS NULL
-                    AND $is_superuser
-                    AND ($tenant_id IS NULL OR m.tenant_id = $tenant_id)
-                ) OR
-                ($project_id IS NULL AND NOT $is_superuser AND m.project_id IN $project_ids)
-            )
-            RETURN
-                elementId(n) as source_id, labels(n) as source_labels, properties(n) as source_props,
-                elementId(r) as edge_id, type(r) as edge_type, properties(r) as edge_props,
-                elementId(m) as target_id, labels(m) as target_labels, properties(m) as target_props
-            LIMIT $limit
-            """
-        else:
-            query += """
-            RETURN
-                elementId(n) as source_id, labels(n) as source_labels, properties(n) as source_props,
-                null as edge_id, null as edge_type, null as edge_props,
-                null as target_id, null as target_labels, null as target_props
-            LIMIT $limit
-            """
-
-        result = await neo4j_client.execute_query(
-            query,
+        rows = await graph_store.get_subgraph(
             node_uuids=params.node_uuids,
-            project_id=project_id,
-            project_ids=allowed_project_ids,
-            tenant_id=params.tenant_id,
-            is_superuser=is_superuser,
+            include_neighbors=params.include_neighbors,
             limit=params.limit,
+            project_id=project_id,
+            tenant_id=params.tenant_id,
+            project_ids=allowed_project_ids,
+            is_superuser=is_superuser,
         )
-
-        nodes_map = {}
-        edges_list = []
-
-        for r in result.records:
-            # Process source node
-            s_id = r["source_id"]
-            if s_id:
-                s_props = _sanitize_graph_properties(
-                    r["source_props"], excluded_keys={"name_embedding"}
-                )
-
-                if s_id not in nodes_map:
-                    nodes_map[s_id] = {
-                        "data": {
-                            "id": s_id,
-                            "label": _graph_node_label(s_props, r["source_labels"]),
-                            "name": s_props.get("name", "Unknown"),
-                            **s_props,
-                        }
-                    }
-
-            # Process target node and edge if available
-            if r.get("target_id"):
-                t_id = r["target_id"]
-                t_props = _sanitize_graph_properties(
-                    r["target_props"], excluded_keys={"name_embedding"}
-                )
-
-                if t_id not in nodes_map:
-                    nodes_map[t_id] = {
-                        "data": {
-                            "id": t_id,
-                            "label": _graph_node_label(t_props, r["target_labels"]),
-                            "name": t_props.get("name", "Unknown"),
-                            **t_props,
-                        }
-                    }
-
-                if r.get("edge_id"):
-                    e_props = _sanitize_graph_properties(
-                        r["edge_props"], excluded_keys={"fact_embedding"}
-                    )
-
-                    edges_list.append(
-                        {
-                            "data": {
-                                "id": r["edge_id"],
-                                "source": s_id,
-                                "target": t_id,
-                                "label": r["edge_type"],
-                                **e_props,
-                            }
-                        }
-                    )
-
-        return {"elements": {"nodes": list(nodes_map.values()), "edges": edges_list}}
+        return _rows_to_elements(rows)
     except HTTPException:
         raise
     except Exception as e:
@@ -938,7 +586,7 @@ async def get_community(
     community_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Get community details by UUID.
@@ -950,19 +598,12 @@ async def get_community(
         Community details with properties
     """
     try:
-        if neo4j_client is None:
-            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-        query = """
-        MATCH (c:Community {uuid: $uuid})
-        RETURN properties(c) as props
-        """
-
-        result = await neo4j_client.execute_query(query, uuid=community_id)
-
-        if not result.records:
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
+        props = await graph_store.get_community(community_id)
+        if not props:
             raise HTTPException(status_code=404, detail=_("Community not found"))
 
-        props = result.records[0]["props"]
         await _ensure_graph_project_access(props.get("project_id"), current_user, db)
 
         return {
@@ -989,7 +630,7 @@ async def get_community_members(
     limit: int = Query(100, ge=1, le=500, description="Maximum members to return"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
 ) -> dict[str, Any]:
     """
     Get members (entities) of a community.
@@ -1002,67 +643,26 @@ async def get_community_members(
         List of community members with their details
     """
     try:
-        if neo4j_client is None:
-            raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-        community_result = await neo4j_client.execute_query(
-            """
-            MATCH (c:Community {uuid: $uuid})
-            RETURN properties(c) as props
-            """,
-            uuid=community_id,
-        )
-        if not community_result.records:
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
+        community_props = await graph_store.get_community(community_id)
+        if not community_props:
             raise HTTPException(status_code=404, detail=_("Community not found"))
 
-        community_project_id = community_result.records[0]["props"].get("project_id")
+        community_project_id = community_props.get("project_id")
         await _ensure_graph_project_access(community_project_id, current_user, db)
 
-        # Note: Entity-[:BELONGS_TO]->Community (not Community-[:HAS_MEMBER]->Entity)
-        count_query = """
-        MATCH (e:Entity)-[:BELONGS_TO]->(c:Community {uuid: $uuid})
-        WHERE $is_superuser OR e.project_id = $project_id
-        RETURN count(e) as total
-        """
-        count_result = await neo4j_client.execute_query(
-            count_query,
-            uuid=community_id,
-            project_id=community_project_id,
-            is_superuser=getattr(current_user, "is_superuser", False),
-        )
-        total = count_result.records[0]["total"] if count_result.records else 0
-
-        query = """
-        MATCH (e:Entity)-[:BELONGS_TO]->(c:Community {uuid: $uuid})
-        WHERE $is_superuser OR e.project_id = $project_id
-        RETURN properties(e) as props
-        LIMIT $limit
-        """
-
-        result = await neo4j_client.execute_query(
-            query,
-            uuid=community_id,
-            project_id=community_project_id,
-            is_superuser=getattr(current_user, "is_superuser", False),
+        page = await graph_store.get_community_members(
+            community_id,
             limit=limit,
+            project_id=community_project_id,
+            is_superuser=getattr(current_user, "is_superuser", False),
         )
-
-        members = []
-        for r in result.records:
-            props = r["props"]
-            # Get entity_type from props (not from labels)
-            e_type = props.get("entity_type", "Entity")
-
-            members.append(
-                {
-                    "uuid": props.get("uuid", ""),
-                    "name": props.get("name", ""),
-                    "entity_type": e_type,
-                    "summary": props.get("summary", ""),
-                    "created_at": _serialize_datetime(props.get("created_at")),
-                }
-            )
-
-        return {"members": members, "total": total}
+        members = [
+            {**m, "created_at": _serialize_datetime(m.get("created_at"))}
+            for m in page["members"]
+        ]
+        return {"members": members, "total": page["total"]}
     except HTTPException:
         raise
     except Exception as e:
@@ -1076,9 +676,8 @@ async def rebuild_communities(
     project_id: str | None = Query(None, description="Project ID to rebuild communities for"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
+    graph_store: GraphStorePort | None = Depends(get_graph_store),
     workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
-    graph_service: GraphServicePort | None = Depends(get_graph_service),
 ) -> dict[str, Any]:
     """
     Rebuild communities using the Louvain algorithm for the specified project.
@@ -1157,61 +756,16 @@ async def rebuild_communities(
             "task_url": f"/api/v1/tasks/{task_id}",
         }
     else:
-        # For synchronous execution, use the graph service directly
-        from src.infrastructure.graph.schemas import EntityNode
-
-        if not graph_service:
-            raise HTTPException(status_code=500, detail=_("Graph service not initialized"))
+        if graph_store is None:
+            raise HTTPException(status_code=503, detail=_("Graph backend not available"))
 
         try:
-            if neo4j_client is None:
-                raise HTTPException(status_code=503, detail=_("Neo4j not available"))
-            # Remove existing communities
-            await neo4j_client.execute_query(
-                """
-                MATCH (c:Community)
-                WHERE c.project_id = $project_id OR c.group_id = $project_id
-                DETACH DELETE c
-                """,
-                project_id=target_project_id,
-            )
-
-            # Get entities for this project
-            entity_result = await neo4j_client.execute_query(
-                """
-                MATCH (e:Entity)
-                WHERE e.project_id = $project_id
-                RETURN e.uuid as uuid, e.name as name, e.entity_type as entity_type
-                """,
-                project_id=target_project_id,
-            )
-
-            entities = []
-            for record in entity_result.records:
-                entity = EntityNode(
-                    uuid=record["uuid"],
-                    name=record["name"],
-                    entity_type=record.get("entity_type", "unknown"),
-                    project_id=target_project_id,
-                )
-                entities.append(entity)
-
-            # Use community updater if available
-            communities_count = 0
-            community_updater = getattr(graph_service, "community_updater", None)
-            if community_updater is not None:
-                communities = await community_updater.update_communities_for_entities(
-                    entities=entities,
-                    project_id=target_project_id,
-                    regenerate_all=True,
-                )
-                communities_count = len(communities) if communities else 0
-
+            result = await graph_store.rebuild_communities(target_project_id)
             return {
                 "status": "success",
                 "message": "Communities rebuilt successfully",
-                "communities_count": communities_count,
-                "entities_processed": len(entities),
+                "communities_count": result["communities_count"],
+                "entities_processed": result["entities_processed"],
             }
         except Exception as e:
             logger.exception("Failed to rebuild communities")

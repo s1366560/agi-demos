@@ -115,14 +115,21 @@ class TestDataExportRouter:
 
     @pytest.mark.asyncio
     async def test_export_data_all(self, client, mock_graphiti_client):
-        """Test exporting all data types."""
-        # Mock responses
-        mock_result = Mock()
-        mock_result.records = []
-        mock_graphiti_client.driver = Mock()
-        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=mock_result)
+        """Test exporting all data types delegates to the store's data_export."""
+        from src.domain.model.graph.dtos import GraphExportDTO
 
-        # Make request
+        captured = {}
+
+        async def _capture(**kwargs):
+            captured.update(kwargs)
+            return GraphExportDTO(
+                exported_at="t",
+                tenant_id=kwargs.get("tenant_id"),
+                project_id=kwargs.get("project_id"),
+            )
+
+        mock_graphiti_client.data_export = AsyncMock(side_effect=_capture)
+
         response = client.post(
             "/api/v1/data/export",
             json={
@@ -133,7 +140,6 @@ class TestDataExportRouter:
             },
         )
 
-        # Assert
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "exported_at" in data
@@ -141,57 +147,32 @@ class TestDataExportRouter:
         assert "entities" in data
         assert "relationships" in data
         assert "communities" in data
+        assert captured["include_episodes"] is True
+        assert captured["include_relationships"] is True
 
     @pytest.mark.asyncio
     async def test_export_data_filter_by_tenant(self, client, mock_graphiti_client):
-        """Test exporting data with tenant filter."""
-        # Mock response
-        mock_result = Mock()
-        mock_result.records = []
-        mock_graphiti_client.driver = Mock()
-        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=mock_result)
+        """Test exporting data with tenant filter forwards tenant_id to the store."""
+        from src.domain.model.graph.dtos import GraphExportDTO
 
-        # Make request
+        captured = {}
+
+        async def _capture(**kwargs):
+            captured.update(kwargs)
+            return GraphExportDTO(
+                exported_at="t", tenant_id=kwargs.get("tenant_id"), project_id=None
+            )
+
+        mock_graphiti_client.data_export = AsyncMock(side_effect=_capture)
+
         response = client.post(
             "/api/v1/data/export",
             json={"tenant_id": "tenant_123", "include_episodes": True},
         )
 
-        # Assert
         assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert data["tenant_id"] == "tenant_123"
-
-    @pytest.mark.asyncio
-    async def test_export_data_relationships_filter_both_tenants(
-        self,
-        test_db: AsyncSession,
-        test_project_db: Project,
-        test_user: User,
-    ):
-        """Relationship exports cannot leak edges that cross tenant boundaries."""
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([]),
-            ]
-        )
-
-        await export_data(
-            tenant_id=test_project_db.tenant_id,
-            project_id=None,
-            include_episodes=False,
-            include_entities=False,
-            include_relationships=True,
-            include_communities=False,
-            current_user=test_user,
-            db=test_db,
-            graphiti_client=graphiti_client,
-        )
-
-        rel_query = graphiti_client.driver.execute_query.await_args.args[0]
-        assert "a.tenant_id = $tenant_id AND b.tenant_id = $tenant_id" in rel_query
+        assert response.json()["tenant_id"] == "tenant_123"
+        assert captured["tenant_id"] is not None
 
     @pytest.mark.asyncio
     async def test_export_data_filters_by_project(
@@ -200,17 +181,19 @@ class TestDataExportRouter:
         test_project_db: Project,
         test_user: User,
     ):
-        """Project exports only include nodes and relationships inside the requested project."""
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([]),
-                _neo4j_result([]),
-                _neo4j_result([]),
-                _neo4j_result([]),
-            ]
-        )
+        """Project exports forward the resolved project_id to the store primitive."""
+        from src.domain.model.graph.dtos import GraphExportDTO
+
+        graph_store = Mock()
+        captured: dict = {}
+
+        async def _capture(**kwargs):
+            captured.update(kwargs)
+            return GraphExportDTO(
+                exported_at="t", tenant_id=None, project_id=kwargs.get("project_id")
+            )
+
+        graph_store.data_export = AsyncMock(side_effect=_capture)
 
         data = await export_data(
             tenant_id=None,
@@ -221,24 +204,12 @@ class TestDataExportRouter:
             include_communities=True,
             current_user=test_user,
             db=test_db,
-            graphiti_client=graphiti_client,
+            graph_store=graph_store,
         )
 
-        episode_query = graphiti_client.driver.execute_query.await_args_list[0].args[0]
-        entity_query = graphiti_client.driver.execute_query.await_args_list[1].args[0]
-        rel_query = graphiti_client.driver.execute_query.await_args_list[2].args[0]
-        community_query = graphiti_client.driver.execute_query.await_args_list[3].args[0]
-        rel_kwargs = graphiti_client.driver.execute_query.await_args_list[2].kwargs
-
         assert data["project_id"] == test_project_db.id
-        assert "e.project_id = $project_id" in episode_query
-        assert "e.project_id = $project_id" in entity_query
-        assert "project_episode.project_id = $project_id" in entity_query
-        assert "a.project_id = $project_id" in rel_query
-        assert "b.project_id = $project_id" in rel_query
-        assert "project_episode.project_id = $project_id" in rel_query
-        assert "c.project_id = $project_id" in community_query
-        assert rel_kwargs["project_id"] == test_project_db.id
+        assert captured["project_id"] == test_project_db.id
+        assert captured["include_entities"] is True
 
     @pytest.mark.asyncio
     async def test_graph_stats_relationships_filter_both_tenants(
@@ -247,28 +218,31 @@ class TestDataExportRouter:
         test_project_db: Project,
         test_user: User,
     ):
-        """Relationship counts only include edges fully inside the tenant scope."""
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"count": 1}]),
-                _neo4j_result([{"count": 2}]),
-                _neo4j_result([{"count": 3}]),
-                _neo4j_result([{"count": 4}]),
-            ]
-        )
+        """Tenant-scoped stats forward tenant_id to the store."""
+        graph_store = Mock()
+        captured: dict = {}
+
+        async def _capture(**kwargs):
+            captured.update(kwargs)
+            return {
+                "entities": 1,
+                "episodes": 2,
+                "communities": 3,
+                "relationships": 4,
+                "total_nodes": 6,
+            }
+
+        graph_store.count_stats = AsyncMock(side_effect=_capture)
 
         stats = await get_graph_stats(
             tenant_id=test_project_db.tenant_id,
             project_id=None,
             current_user=test_user,
             db=test_db,
-            graphiti_client=graphiti_client,
+            graph_store=graph_store,
         )
 
-        rel_query = graphiti_client.driver.execute_query.await_args_list[3].args[0]
-        assert "a.tenant_id = $tenant_id AND b.tenant_id = $tenant_id" in rel_query
+        assert captured["tenant_id"] == test_project_db.tenant_id
         assert stats["relationships"] == 4
 
     @pytest.mark.asyncio
@@ -278,46 +252,39 @@ class TestDataExportRouter:
         test_project_db: Project,
         test_user: User,
     ):
-        """Graph stats count only nodes and edges inside the requested project."""
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"count": 1}]),
-                _neo4j_result([{"count": 2}]),
-                _neo4j_result([{"count": 3}]),
-                _neo4j_result([{"count": 4}]),
-            ]
-        )
+        """Graph stats forward the resolved project_id to count_stats."""
+        graph_store = Mock()
+        captured: dict = {}
+
+        async def _capture(**kwargs):
+            captured.update(kwargs)
+            return {
+                "entities": 1,
+                "episodes": 2,
+                "communities": 3,
+                "relationships": 4,
+                "total_nodes": 6,
+            }
+
+        graph_store.count_stats = AsyncMock(side_effect=_capture)
 
         stats = await get_graph_stats(
             tenant_id=None,
             project_id=test_project_db.id,
             current_user=test_user,
             db=test_db,
-            graphiti_client=graphiti_client,
+            graph_store=graph_store,
         )
 
-        entity_query = graphiti_client.driver.execute_query.await_args_list[0].args[0]
-        rel_query = graphiti_client.driver.execute_query.await_args_list[3].args[0]
-        rel_kwargs = graphiti_client.driver.execute_query.await_args_list[3].kwargs
-
-        assert "e.project_id = $project_id" in entity_query
-        assert "project_episode.project_id = $project_id" in entity_query
-        assert "a.project_id = $project_id" in rel_query
-        assert "b.project_id = $project_id" in rel_query
-        assert "project_episode.project_id = $project_id" in rel_query
-        assert rel_kwargs["project_id"] == test_project_db.id
+        assert captured["project_id"] == test_project_db.id
         assert stats["project_id"] == test_project_db.id
         assert stats["relationships"] == 4
+        assert stats["total_nodes"] == 6
 
     @pytest.mark.asyncio
     async def test_export_data_failure_returns_error(self, client, mock_graphiti_client):
-        """Test export failures are not reported as empty successful exports."""
-        mock_graphiti_client.driver = Mock()
-        mock_graphiti_client.driver.execute_query = AsyncMock(
-            side_effect=RuntimeError("neo4j down")
-        )
+        """Test export failures surface a sanitized error, not the store exception."""
+        mock_graphiti_client.data_export = AsyncMock(side_effect=RuntimeError("neo4j down"))
 
         response = client.post(
             "/api/v1/data/export",
@@ -329,87 +296,56 @@ class TestDataExportRouter:
 
     @pytest.mark.asyncio
     async def test_get_graph_stats(self, client, mock_graphiti_client):
-        """Test getting graph statistics."""
+        """Test getting graph statistics returns the store's counts."""
+        mock_graphiti_client.count_stats = AsyncMock(
+            return_value={
+                "entities": 100,
+                "episodes": 50,
+                "communities": 10,
+                "relationships": 200,
+                "total_nodes": 160,
+            }
+        )
 
-        # Mock count responses
-        def mock_query(query, **kwargs):
-            result = Mock()
-            if "Entity" in query:
-                # records[0]["count"] needs to work
-                record = Mock()
-                record.__getitem__ = lambda self, key: 100
-                result.records = [record]
-            elif "Episodic" in query:
-                record = Mock()
-                record.__getitem__ = lambda self, key: 50
-                result.records = [record]
-            elif "Community" in query:
-                record = Mock()
-                record.__getitem__ = lambda self, key: 10
-                result.records = [record]
-            else:
-                record = Mock()
-                record.__getitem__ = lambda self, key: 200
-                result.records = [record]
-            return result
-
-        mock_graphiti_client.driver = Mock()
-        mock_graphiti_client.driver.execute_query = AsyncMock(side_effect=mock_query)
-
-        # Make request
         response = client.get("/api/v1/data/stats")
 
-        # Assert
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert "entities" in data
-        assert "episodes" in data
-        assert "communities" in data
-        assert "relationships" in data
-        assert "total_nodes" in data
+        assert data["entities"] == 100
+        assert data["episodes"] == 50
+        assert data["communities"] == 10
+        assert data["relationships"] == 200
+        assert data["total_nodes"] == 160
 
     @pytest.mark.asyncio
     async def test_cleanup_data_dry_run(self, client, mock_graphiti_client):
-        """Test data cleanup in dry run mode."""
-        # Mock count response - use dict for record to support subscript access
-        count_result = Mock()
-        count_result.records = [{"count": 25}]
+        """Dry-run cleanup counts via count_episodes_by_age without deleting."""
+        mock_graphiti_client.count_episodes_by_age = AsyncMock(return_value=25)
+        mock_graphiti_client.delete_episodes_by_age = AsyncMock(return_value=0)
 
-        mock_graphiti_client.driver = Mock()
-        mock_graphiti_client.driver.execute_query = AsyncMock(return_value=count_result)
-
-        # Make request
         response = client.post(
             "/api/v1/data/cleanup?dry_run=true&older_than_days=90",
             json={},
         )
 
-        # Assert
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["dry_run"] is True
         assert data["would_delete"] == 25
         assert "cutoff_date" in data
+        mock_graphiti_client.delete_episodes_by_age.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_cleanup_data_execute(self, client, mock_graphiti_client):
-        """Test actual data cleanup execution."""
-        # Mock responses - use dicts for records to support subscript access
-        responses = [
-            Mock(records=[{"count": 10}]),  # Count query
-            Mock(records=[{"deleted": 10}]),  # Delete query
-        ]
+        """Actual cleanup deletes via delete_episodes_by_age."""
+        mock_graphiti_client.count_episodes_by_age = AsyncMock(return_value=0)
+        mock_graphiti_client.delete_episodes_by_age = AsyncMock(return_value=10)
 
-        mock_graphiti_client.driver = Mock()
-        mock_graphiti_client.driver.execute_query = AsyncMock(side_effect=responses)
-
-        # Make request
         response = client.post(
             "/api/v1/data/cleanup?dry_run=false&older_than_days=30",
             json={},
         )
 
-        # Assert
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["dry_run"] is False
@@ -422,10 +358,16 @@ class TestDataExportRouter:
         test_project_db: Project,
         test_user: User,
     ):
-        """Cleanup dry-runs count only episodes inside the requested project."""
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock(return_value=_neo4j_result([{"count": 5}]))
+        """Cleanup dry-run forwards the resolved project_id to the store."""
+        graph_store = Mock()
+        captured: dict = {}
+
+        async def _count(**kwargs):
+            captured.update(kwargs)
+            return 5
+
+        graph_store.count_episodes_by_age = AsyncMock(side_effect=_count)
+        graph_store.delete_episodes_by_age = AsyncMock(return_value=0)
 
         response = await cleanup_data(
             dry_run=True,
@@ -435,13 +377,10 @@ class TestDataExportRouter:
             body=None,
             current_user=test_user,
             db=test_db,
-            graphiti_client=graphiti_client,
+            graph_store=graph_store,
         )
 
-        query = graphiti_client.driver.execute_query.await_args.args[0]
-        query_kwargs = graphiti_client.driver.execute_query.await_args.kwargs
-        assert "e.project_id = $project_id" in query
-        assert query_kwargs["project_id"] == test_project_db.id
+        assert captured["project_id"] == test_project_db.id
         assert response["project_id"] == test_project_db.id
         assert response["would_delete"] == 5
 
@@ -452,15 +391,16 @@ class TestDataExportRouter:
         test_project_db: Project,
         test_user: User,
     ):
-        """Cleanup execution deletes only episodes inside the requested project."""
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"count": 5}]),
-                _neo4j_result([{"deleted": 5}]),
-            ]
-        )
+        """Cleanup execution forwards the resolved project_id to the store."""
+        graph_store = Mock()
+        captured: dict = {}
+
+        async def _delete(**kwargs):
+            captured.update(kwargs)
+            return 5
+
+        graph_store.count_episodes_by_age = AsyncMock(return_value=0)
+        graph_store.delete_episodes_by_age = AsyncMock(side_effect=_delete)
 
         response = await cleanup_data(
             dry_run=False,
@@ -470,13 +410,10 @@ class TestDataExportRouter:
             body=None,
             current_user=test_user,
             db=test_db,
-            graphiti_client=graphiti_client,
+            graph_store=graph_store,
         )
 
-        delete_query = graphiti_client.driver.execute_query.await_args_list[1].args[0]
-        delete_kwargs = graphiti_client.driver.execute_query.await_args_list[1].kwargs
-        assert "e.project_id = $project_id" in delete_query
-        assert delete_kwargs["project_id"] == test_project_db.id
+        assert captured["project_id"] == test_project_db.id
         assert response["project_id"] == test_project_db.id
         assert response["deleted"] == 5
 
@@ -487,9 +424,9 @@ class TestDataExportRouter:
         test_user: User,
     ):
         """Body overrides cannot bypass the positive older_than_days constraint."""
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock()
+        graph_store = Mock()
+        graph_store.count_episodes_by_age = AsyncMock()
+        graph_store.delete_episodes_by_age = AsyncMock()
 
         with pytest.raises(HTTPException) as exc_info:
             await cleanup_data(
@@ -500,11 +437,11 @@ class TestDataExportRouter:
                 body={"older_than_days": 0},
                 current_user=test_user,
                 db=test_db,
-                graphiti_client=graphiti_client,
+                graph_store=graph_store,
             )
 
         assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-        graphiti_client.driver.execute_query.assert_not_awaited()
+        graph_store.count_episodes_by_age.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_cleanup_data_rejects_invalid_body_dry_run(
@@ -513,9 +450,9 @@ class TestDataExportRouter:
         test_user: User,
     ):
         """Body overrides must use a parseable dry_run boolean."""
-        graphiti_client = Mock()
-        graphiti_client.driver = Mock()
-        graphiti_client.driver.execute_query = AsyncMock()
+        graph_store = Mock()
+        graph_store.count_episodes_by_age = AsyncMock()
+        graph_store.delete_episodes_by_age = AsyncMock()
 
         with pytest.raises(HTTPException) as exc_info:
             await cleanup_data(
@@ -526,17 +463,15 @@ class TestDataExportRouter:
                 body={"dry_run": "maybe"},
                 current_user=test_user,
                 db=test_db,
-                graphiti_client=graphiti_client,
+                graph_store=graph_store,
             )
 
         assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-        graphiti_client.driver.execute_query.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_cleanup_data_failure_returns_sanitized_error(self, client, mock_graphiti_client):
         """Cleanup failures do not expose internal exception text."""
-        mock_graphiti_client.driver = Mock()
-        mock_graphiti_client.driver.execute_query = AsyncMock(
+        mock_graphiti_client.count_episodes_by_age = AsyncMock(
             side_effect=RuntimeError("neo4j credential leaked in stack")
         )
 
@@ -553,28 +488,48 @@ class TestDataExportRouter:
 class TestMaintenanceRouter:
     """Test cases for maintenance router endpoints."""
 
+    def _store(self) -> Mock:
+        store = Mock()
+        store.embedder = SimpleNamespace(embedding_dim=1536)
+        store.find_duplicate_entities = AsyncMock(return_value=[])
+        store.find_stale_edges = AsyncMock(return_value={})
+        store.delete_stale_edges = AsyncMock(return_value=0)
+        store.count_scoped_nodes = AsyncMock(return_value=0)
+        store.count_old_episodes = AsyncMock(return_value=0)
+        store.count_missing_embeddings = AsyncMock(return_value=0)
+        store.get_existing_embedding_dimension = AsyncMock(return_value=None)
+        store.detect_mixed_dimensions = AsyncMock(
+            return_value={
+                "has_mixed_dimensions": False,
+                "counts": {},
+                "dimensions": [],
+                "total_embeddings": 0,
+            }
+        )
+        store.get_vector_index_dimension = AsyncMock(return_value=None)
+        store.get_embedding_dimension_distribution = AsyncMock(return_value=({}, 0))
+        store.clear_entity_embeddings = AsyncMock(return_value=0)
+        store.create_vector_index = AsyncMock(return_value=None)
+        return store
+
     @pytest.mark.asyncio
     async def test_deduplicate_entities_dry_run(self, client, mock_neo4j_client):
-        """Test entity deduplication in dry run mode."""
-        # Mock response with duplicates
-        mock_records = [
-            {
-                "name": "Duplicate Entity",
-                "entities": [{"uuid": "ent_1"}, {"uuid": "ent_2"}],
-            }
-        ]
+        """Test entity deduplication in dry run mode delegates to the store."""
+        # mock_graphiti_client (aliased to mock_graph_service) is wired by the
+        # client fixture; override find_duplicate_entities on it.
+        from src.infrastructure.adapters.primary.web.dependencies import get_graph_store
+        client.app.dependency_overrides[get_graph_store].side_effect = None
+        store = self._store()
+        store.find_duplicate_entities = AsyncMock(
+            return_value=[{"name": "Duplicate Entity", "count": 2, "uuids": ["ent_1", "ent_2"]}]
+        )
+        client.app.dependency_overrides[get_graph_store] = lambda: store
 
-        mock_result = Mock()
-        mock_result.records = mock_records
-        mock_neo4j_client.execute_query = AsyncMock(return_value=mock_result)
-
-        # Make request
         response = client.post(
             "/api/v1/maintenance/deduplicate",
             json={"similarity_threshold": 0.9, "dry_run": True},
         )
 
-        # Assert
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["dry_run"] is True
@@ -589,8 +544,6 @@ class TestMaintenanceRouter:
         mock_workflow_engine,
     ):
         """Incremental refresh cannot submit work for an unjoined project."""
-        neo4j_client = Mock()
-
         with pytest.raises(HTTPException) as exc_info:
             await incremental_refresh(
                 episode_uuids=None,
@@ -598,7 +551,6 @@ class TestMaintenanceRouter:
                 project_id="not-a-member",
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
                 workflow_engine=mock_workflow_engine,
             )
 
@@ -613,8 +565,7 @@ class TestMaintenanceRouter:
         mock_workflow_engine,
     ):
         """Users cannot scan duplicate entities for projects they cannot access."""
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock()
+        store = self._store()
 
         with pytest.raises(HTTPException) as exc_info:
             await deduplicate_entities(
@@ -623,12 +574,12 @@ class TestMaintenanceRouter:
                 project_id="not-a-member",
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
                 workflow_engine=mock_workflow_engine,
             )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-        neo4j_client.execute_query.assert_not_called()
+        store.find_duplicate_entities.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_deduplicate_entities_dry_run_scopes_to_user_projects(
@@ -639,11 +590,9 @@ class TestMaintenanceRouter:
         mock_workflow_engine,
     ):
         """Duplicate detection defaults to the caller's project memberships."""
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            return_value=_neo4j_result(
-                [{"name": "Duplicate Entity", "entities": [{"uuid": "a"}, {"uuid": "b"}]}]
-            )
+        store = self._store()
+        store.find_duplicate_entities = AsyncMock(
+            return_value=[{"name": "Duplicate Entity", "count": 2, "uuids": ["a", "b"]}]
         )
 
         response = await deduplicate_entities(
@@ -652,14 +601,12 @@ class TestMaintenanceRouter:
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
             workflow_engine=mock_workflow_engine,
         )
 
-        query = neo4j_client.execute_query.await_args.args[0]
-        query_kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "e.project_id IN $project_ids" in query
-        assert query_kwargs["project_ids"] == [test_project_db.id]
+        kwargs = store.find_duplicate_entities.await_args.kwargs
+        assert kwargs["allowed_project_ids"] == [test_project_db.id]
         assert response["duplicates_found"] == 1
 
     @pytest.mark.asyncio
@@ -670,10 +617,8 @@ class TestMaintenanceRouter:
         test_user: User,
     ):
         """Stale edge scans are limited to relationships within accessible projects."""
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            return_value=_neo4j_result([{"rel_type": "RELATES_TO", "count": 2}])
-        )
+        store = self._store()
+        store.find_stale_edges = AsyncMock(return_value={"RELATES_TO": 2})
 
         response = await invalidate_stale_edges(
             days_since_update=30,
@@ -681,13 +626,11 @@ class TestMaintenanceRouter:
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
-        query = neo4j_client.execute_query.await_args.args[0]
-        query_kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "a.project_id IN $project_ids AND b.project_id IN $project_ids" in query
-        assert query_kwargs["project_ids"] == [test_project_db.id]
+        kwargs = store.find_stale_edges.await_args.kwargs
+        assert kwargs["allowed_project_ids"] == [test_project_db.id]
         assert response["stale_edges_found"] == 2
 
     @pytest.mark.asyncio
@@ -697,14 +640,10 @@ class TestMaintenanceRouter:
         test_project_db: Project,
         test_user: User,
     ):
-        """Deleting stale edges uses the same project filter as the dry-run scan."""
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"rel_type": "RELATES_TO", "count": 2}]),
-                _neo4j_result([{"deleted": 2}]),
-            ]
-        )
+        """Deleting stale edges forwards the project scope to the store."""
+        store = self._store()
+        store.find_stale_edges = AsyncMock(return_value={})
+        store.delete_stale_edges = AsyncMock(return_value=2)
 
         response = await invalidate_stale_edges(
             days_since_update=30,
@@ -712,13 +651,11 @@ class TestMaintenanceRouter:
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
-        delete_query = neo4j_client.execute_query.await_args_list[1].args[0]
-        delete_kwargs = neo4j_client.execute_query.await_args_list[1].kwargs
-        assert "a.project_id IN $project_ids AND b.project_id IN $project_ids" in delete_query
-        assert delete_kwargs["project_ids"] == [test_project_db.id]
+        kwargs = store.delete_stale_edges.await_args.kwargs
+        assert kwargs["allowed_project_ids"] == [test_project_db.id]
         assert response["deleted"] == 2
 
     @pytest.mark.asyncio
@@ -729,31 +666,20 @@ class TestMaintenanceRouter:
         test_user: User,
     ):
         """Maintenance status only counts graph data in the caller's projects."""
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"count": 10}]),
-                _neo4j_result([{"count": 5}]),
-                _neo4j_result([{"count": 1}]),
-                _neo4j_result([{"count": 0}]),
-            ]
-        )
+        store = self._store()
+        store.count_scoped_nodes = AsyncMock(side_effect=[10, 5, 1])
+        store.count_old_episodes = AsyncMock(return_value=0)
 
         response = await get_maintenance_status(
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
-        for call in neo4j_client.execute_query.await_args_list:
-            assert call.kwargs["project_ids"] == [test_project_db.id]
-        assert (
-            "n.project_id IN $project_ids" in neo4j_client.execute_query.await_args_list[0].args[0]
-        )
-        assert (
-            "e.project_id IN $project_ids" in neo4j_client.execute_query.await_args_list[3].args[0]
-        )
+        # All scoped counts forward the caller's project set.
+        for call in store.count_scoped_nodes.await_args_list:
+            assert call.args[3] == [test_project_db.id]
         assert response["stats"] == {
             "entities": 10,
             "episodes": 5,
@@ -768,19 +694,18 @@ class TestMaintenanceRouter:
         test_user: User,
     ):
         """Project-specific status requires project membership."""
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock()
+        store = self._store()
 
         with pytest.raises(HTTPException) as exc_info:
             await get_maintenance_status(
                 project_id="not-a-member",
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-        neo4j_client.execute_query.assert_not_called()
+        store.count_scoped_nodes.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_get_embedding_status_rejects_unjoined_project(
@@ -789,27 +714,27 @@ class TestMaintenanceRouter:
         test_user: User,
     ):
         """Embedding status cannot be requested for projects outside the caller's scope."""
-        graphiti_client = Mock()
+        store = self._store()
 
         with pytest.raises(HTTPException) as exc_info:
             await get_embedding_status(
                 project_id="not-a-member",
                 current_user=test_user,
                 db=test_db,
-                graphiti_client=graphiti_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
 
     @pytest.mark.asyncio
-    async def test_get_embedding_status_uses_local_dimension_queries(
+    async def test_get_embedding_status_uses_store_dimension_queries(
         self,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        """Graphiti embedding status no longer imports a missing helper module."""
+        """Embedding status delegates dimension + missing-embedding queries to the store."""
 
         class ProviderFactory:
             async def resolve_provider(self, tenant_id: str):
@@ -820,66 +745,50 @@ class TestMaintenanceRouter:
             lambda: ProviderFactory(),
         )
 
-        driver = Mock()
-        driver.execute_query = AsyncMock(
-            side_effect=[
-                _neo4j_result([{"dim": 1536}]),
-                _neo4j_result([{"missing_count": 3}]),
-            ]
-        )
-        graphiti_client = SimpleNamespace(
-            embedder=SimpleNamespace(embedding_dim=1536),
-            driver=driver,
-        )
+        store = self._store()
+        store.get_existing_embedding_dimension = AsyncMock(return_value=1536)
+        store.count_missing_embeddings = AsyncMock(return_value=3)
 
         response = await get_embedding_status(
             project_id=None,
             current_user=test_user,
             db=test_db,
-            graphiti_client=graphiti_client,
+            graph_store=store,
         )
 
-        first_query = driver.execute_query.await_args_list[0].args[0]
-        second_query = driver.execute_query.await_args_list[1].args[0]
-        assert "n.project_id IN $project_ids" in first_query
-        assert "n.project_id IN $project_ids" in second_query
-        assert driver.execute_query.await_args_list[0].kwargs["project_ids"] == [test_project_db.id]
         assert response["existing_dimension"] == 1536
         assert response["missing_embeddings"] == 3
+        assert store.get_existing_embedding_dimension.await_args.args[2] == [
+            test_project_db.id
+        ]
 
     @pytest.mark.asyncio
-    async def test_check_embedding_dimensions_uses_local_detector(
+    async def test_check_embedding_dimensions_uses_store_detector(
         self,
         test_db: AsyncSession,
         test_project_db: Project,
         test_user: User,
     ):
-        """Dimension checks use scoped local Cypher instead of a missing module."""
-        driver = Mock()
-        driver.execute_query = AsyncMock(
-            return_value=_neo4j_result(
-                [
-                    {"dim": 1536, "count": 2},
-                    {"dim": 1024, "count": 1},
-                ]
-            )
-        )
-        graphiti_client = SimpleNamespace(
-            embedder=SimpleNamespace(embedding_dim=1536),
-            driver=driver,
+        """Dimension checks delegate to the store's mixed-dimension detector."""
+        store = self._store()
+        store.detect_mixed_dimensions = AsyncMock(
+            return_value={
+                "has_mixed_dimensions": True,
+                "counts": {"1536": 2, "1024": 1},
+                "dimensions": [1536, 1024],
+                "total_embeddings": 3,
+            }
         )
 
         response = await check_embedding_dimensions(
             project_id=None,
             current_user=test_user,
             db=test_db,
-            graphiti_client=graphiti_client,
+            graph_store=store,
         )
 
-        query = driver.execute_query.await_args.args[0]
-        query_kwargs = driver.execute_query.await_args.kwargs
-        assert "n.project_id = $project_id" in query
-        assert query_kwargs["project_id"] == test_project_db.id
+        kwargs = store.detect_mixed_dimensions.await_args.kwargs
+        assert kwargs["project_id"] == test_project_db.id
         assert response["has_mixed_dimensions"] is True
         assert response["action_required"] == "clear_mixed"
 
@@ -902,23 +811,22 @@ class TestMaintenanceRouter:
             lambda: ProviderFactory(),
         )
 
-        neo4j_client = Mock()
-        neo4j_client.get_vector_index_dimension = AsyncMock(return_value=1536)
-        neo4j_client.execute_query = AsyncMock(
-            return_value=_neo4j_result([{"dim": 1536, "total": 4}])
+        store = self._store()
+        store.get_vector_index_dimension = AsyncMock(return_value=1536)
+        store.get_embedding_dimension_distribution = AsyncMock(
+            return_value=({"1536": 4}, 4)
         )
 
         response = await get_native_embedding_status(
             project_id=None,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
-        query = neo4j_client.execute_query.await_args.args[0]
-        query_kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "n.project_id IN $project_ids" in query
-        assert query_kwargs["project_ids"] == [test_project_db.id]
+        assert store.get_embedding_dimension_distribution.await_args.args[2] == [
+            test_project_db.id
+        ]
         assert response["total_embeddings"] == 4
 
     @pytest.mark.asyncio
@@ -929,9 +837,8 @@ class TestMaintenanceRouter:
         test_user: User,
     ):
         """Dry-run migration returns a report even when no embeddings exist."""
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
-        neo4j_client.create_vector_index = AsyncMock()
+        store = self._store()
+        store.get_embedding_dimension_distribution = AsyncMock(return_value=({}, 0))
 
         response = await migrate_embeddings(
             target_model="openai",
@@ -939,16 +846,16 @@ class TestMaintenanceRouter:
             dry_run=True,
             current_user=test_user,
             db=test_db,
-            neo4j_client=neo4j_client,
+            graph_store=store,
         )
 
-        query = neo4j_client.execute_query.await_args.args[0]
-        query_kwargs = neo4j_client.execute_query.await_args.kwargs
-        assert "n.project_id IN $project_ids" in query
-        assert query_kwargs["project_ids"] == [test_project_db.id]
+        assert store.get_embedding_dimension_distribution.await_args.args[2] == [
+            test_project_db.id
+        ]
         assert response["dry_run"] is True
         assert response["total_embeddings"] == 0
-        neo4j_client.create_vector_index.assert_not_called()
+        store.clear_entity_embeddings.assert_not_awaited()
+        store.create_vector_index.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_migrate_embeddings_execute_requires_single_project_scope(
@@ -978,9 +885,7 @@ class TestMaintenanceRouter:
         )
         await test_db.commit()
 
-        neo4j_client = Mock()
-        neo4j_client.execute_query = AsyncMock(return_value=_neo4j_result([]))
-        neo4j_client.create_vector_index = AsyncMock()
+        store = self._store()
 
         with pytest.raises(HTTPException) as exc_info:
             await migrate_embeddings(
@@ -989,11 +894,12 @@ class TestMaintenanceRouter:
                 dry_run=False,
                 current_user=test_user,
                 db=test_db,
-                neo4j_client=neo4j_client,
+                graph_store=store,
             )
 
         assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        neo4j_client.create_vector_index.assert_not_called()
+        store.clear_entity_embeddings.assert_not_awaited()
+        store.create_vector_index.assert_not_awaited()
 
 
 @pytest.mark.unit

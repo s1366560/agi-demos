@@ -1,0 +1,32 @@
+services:
+  reranker:
+    build:
+      context: ./docker/reranker
+      dockerfile: Dockerfile
+    image: memstack-reranker:dev
+    container_name: memstack-reranker
+    ports:
+      - "${RERANKER_PORT:-8081}:8081"
+    environment:
+      - HF_HOME=/cache/huggingface
+      - LOG_LEVEL=${RERANKER_LOG_LEVEL:-info}
+      - RERANK_BATCH_SIZE=${RERANK_BATCH_SIZE:-8}
+      - RERANK_HOST=0.0.0.0
+      - RERANK_MAX_LENGTH=${RERANK_MAX_LENGTH:-512}
+      - RERANK_MODEL_ID=${RERANK_MODEL_ID:-BAAI/bge-reranker-base}
+      - RERANK_PORT=8081
+      - TOKENIZERS_PARALLELISM=false
+    volumes:
+      - reranker_cache:/cache/huggingface
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 180s
+      retries: 5
+    mem_limit: 4g
+    cpus: "2.0"
+    restart: unless-stopped
+
+volumes:
+  reranker_cache:
