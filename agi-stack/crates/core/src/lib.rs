@@ -15,6 +15,7 @@
 //! `wasm32-unknown-unknown`, iOS and Android.
 
 pub mod agent;
+pub mod graph;
 pub mod model;
 pub mod ports;
 pub mod service;
@@ -29,10 +30,14 @@ pub use agent::{
     StepOutcome, StepRunner, StepStatus, SupervisorPort, SupervisorVerdict, TranscriptEntry,
     TriggerReason, TurnOutcome,
 };
-pub use model::{Entity, Episode, Memory, Project, SourceType};
+pub use graph::{
+    hybrid_rank, jaccard, mmr_rerank, rrf_fuse, time_decay, tokenize, Candidate, RankedId,
+    HALF_LIFE_DAYS, KEYWORD_WEIGHT, MMR_LAMBDA, MS_PER_DAY, RRF_K, VECTOR_WEIGHT,
+};
+pub use model::{Entity, Episode, GraphEntity, Memory, Project, Relationship, SourceType, Subgraph};
 pub use ports::{
-    ChangeEvent, ChangeLog, CheckpointStore, Clock, CoreError, CoreResult, EmbeddingPort, LlmPort,
-    MemoryDraft, MemoryRepository, ScoredId, ToolHost, VectorIndexPort,
+    ChangeEvent, ChangeLog, CheckpointStore, Clock, CoreError, CoreResult, EmbeddingPort,
+    GraphStore, LlmPort, MemoryDraft, MemoryRepository, ScoredId, ToolHost, VectorIndexPort,
 };
 pub use service::MemoryService;
 pub use sync::{reconcile, Replica, SyncRecord, VersionVector};

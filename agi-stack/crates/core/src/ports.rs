@@ -11,7 +11,7 @@
 use async_trait::async_trait;
 
 use crate::agent::types::{AgentAction, SessionState, TranscriptEntry};
-use crate::model::{Entity, Episode, Memory};
+use crate::model::{Entity, Episode, GraphEntity, Memory, Relationship, Subgraph};
 
 /// Errors surfaced across core ports.
 #[derive(Debug, thiserror::Error)]
@@ -28,6 +28,8 @@ pub enum CoreError {
     Tool(String),
     #[error("vector index error: {0}")]
     Vector(String),
+    #[error("graph store error: {0}")]
+    Graph(String),
     #[error("checkpoint error: {0}")]
     Checkpoint(String),
     #[error("plan error: {0}")]
@@ -199,4 +201,54 @@ pub trait MemoryRepository: Send + Sync {
     }
 
     async fn delete(&self, id: &str) -> CoreResult<bool>;
+}
+
+/// Knowledge-graph storage — the local-first analogue of the Python Neo4j layer
+/// (`src/infrastructure/graph/`). The server adapter is Neo4j (`neo4rs`, future
+/// F8); the device adapter is SQLite relational tables traversed in-memory with
+/// `petgraph` (decision 4, `10-production-migration.md` §6.3); an in-memory
+/// adapter backs tests and the browser. All three sit behind this one port so the
+/// portable core never learns which is underneath.
+///
+/// Multi-tenancy is a hard invariant: every method is `project_id`-scoped, exactly
+/// like the Python graph queries filter on `project_id`/`tenant_id`. Ranking of
+/// results is *not* here — that is the deterministic pure math in
+/// [`crate::graph`], shared by every adapter so scores match byte-for-byte.
+#[async_trait]
+pub trait GraphStore: Send + Sync {
+    /// Insert or replace an entity node (by `uuid`, within its `project_id`).
+    async fn upsert_entity(&self, entity: GraphEntity) -> CoreResult<()>;
+
+    /// Insert or replace a relationship edge (by `uuid`). Endpoints are entity
+    /// `uuid`s; adapters need not enforce referential integrity (mirrors Neo4j
+    /// MERGE semantics where edges may precede nodes during extraction).
+    async fn upsert_relationship(&self, rel: Relationship) -> CoreResult<()>;
+
+    /// Fetch one entity by `uuid`, scoped to `project_id`.
+    async fn get_entity(&self, project_id: &str, uuid: &str) -> CoreResult<Option<GraphEntity>>;
+
+    /// Direct (1-hop) neighbours reachable via **outgoing** relationships from
+    /// `uuid`, scoped to `project_id`.
+    async fn neighbors(&self, project_id: &str, uuid: &str) -> CoreResult<Vec<GraphEntity>>;
+
+    /// Breadth-first `max_depth`-hop [`Subgraph`] rooted at `uuid` (the seed is
+    /// included at depth 0), following outgoing relationships, scoped to
+    /// `project_id`. `max_depth == 0` returns just the seed with no edges.
+    async fn subgraph(
+        &self,
+        project_id: &str,
+        uuid: &str,
+        max_depth: usize,
+    ) -> CoreResult<Subgraph>;
+
+    /// Case-insensitive substring search over entity `name`/`summary` — the
+    /// keyword tier of hybrid search and the always-correct baseline (the graph
+    /// analogue of [`MemoryRepository::search_by_project`]). Returns up to `limit`
+    /// entities; ordering is adapter-defined but stable.
+    async fn search_entities(
+        &self,
+        project_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> CoreResult<Vec<GraphEntity>>;
 }

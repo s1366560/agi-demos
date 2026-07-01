@@ -31,6 +31,7 @@ dependencies = [
  "async-trait",
  "futures",
  "instant-distance",
+ "petgraph",
  "rusqlite",
  "serde_json",
 ]
@@ -54,6 +55,7 @@ dependencies = [
  "agistack-core",
  "async-trait",
  "futures",
+ "petgraph",
  "serde_json",
 ]
 

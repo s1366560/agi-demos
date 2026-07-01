@@ -27,6 +27,66 @@ pub struct Entity {
     pub kind: String,
 }
 
+/// A knowledge-graph entity **node** — the richer, uniquely-identified form used
+/// by the graph store (as opposed to the lightweight [`Entity`] reference carried
+/// inside a [`Memory`]). Mirrors the Neo4j `Entity` label in
+/// `src/infrastructure/graph/` (name / entity_type / summary / uuid / project_id
+/// / tenant_id / name_embedding).
+///
+/// On the server these are Neo4j nodes; on device they are rows in a SQLite
+/// relational table traversed in-memory with `petgraph` (decision 4,
+/// `10-production-migration.md` §6.3). The [`crate::ports::GraphStore`] port hides
+/// which — the portable core never notices. Every field that scopes access
+/// (`project_id` / `tenant_id`) is carried so the store can enforce multi-tenancy.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GraphEntity {
+    pub uuid: String,
+    pub name: String,
+    pub entity_type: String,
+    #[serde(default)]
+    pub summary: String,
+    pub project_id: String,
+    #[serde(default)]
+    pub tenant_id: Option<String>,
+    pub created_at_ms: i64,
+    /// Optional dense embedding of `name` (+ `summary`), used by the vector tier
+    /// of hybrid search. Kept `Option` because keyword-only device builds skip it.
+    #[serde(default)]
+    pub name_embedding: Option<Vec<f32>>,
+}
+
+/// A directed relationship between two [`GraphEntity`] nodes, carrying the
+/// extracted `fact` and a confidence `score`. Mirrors the Neo4j `MENTIONS` edge
+/// (`fact` / `score`). `relation_type` defaults to `"MENTIONS"` to match the
+/// Python extractor's dominant edge.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Relationship {
+    pub uuid: String,
+    pub source_uuid: String,
+    pub target_uuid: String,
+    #[serde(default = "default_relation_type")]
+    pub relation_type: String,
+    #[serde(default)]
+    pub fact: String,
+    pub score: f32,
+    pub project_id: String,
+    pub created_at_ms: i64,
+}
+
+fn default_relation_type() -> String {
+    "MENTIONS".to_string()
+}
+
+/// A connected slice of the knowledge graph — the entities reachable from a seed
+/// within a hop budget, plus the relationships that connect them. Returned by
+/// [`crate::ports::GraphStore::subgraph`]; the local-first analogue of a Neo4j
+/// `MATCH path` result.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Subgraph {
+    pub entities: Vec<GraphEntity>,
+    pub relationships: Vec<Relationship>,
+}
+
 /// A discrete interaction to be distilled into memory. Mirrors `Episode` in
 /// `src/domain/model/memory/episode.py`.
 #[derive(Debug, Clone, Serialize, Deserialize)]

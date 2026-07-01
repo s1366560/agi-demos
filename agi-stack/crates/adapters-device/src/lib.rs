@@ -17,13 +17,18 @@
 //!     (durable brute-force cosine scan; the simple, always-correct baseline)
 //!   - [`hnsw::HnswVectorIndex`]            — [`agistack_core::VectorIndexPort`]
 //!     (pure-Rust HNSW ANN for sub-linear on-device search; `05-roadmap §4 #3`)
+//!   - [`graph::SqliteGraphStore`]          — [`agistack_core::GraphStore`]
+//!     (durable on-device knowledge graph; SQLite tables + `petgraph` traversal,
+//!     the local-first analogue of the server's Neo4j; decision 4)
 
 pub mod checkpoint;
+pub mod graph;
 pub mod hnsw;
 pub mod repo;
 pub mod vector;
 
 pub use checkpoint::SqliteCheckpointStore;
+pub use graph::SqliteGraphStore;
 pub use hnsw::HnswVectorIndex;
 pub use repo::SqliteMemoryRepository;
 pub use vector::SqliteVectorIndex;

@@ -253,3 +253,79 @@ fn hitl_suspend_and_resume_survive_sqlite_roundtrip() {
     let final_state = block_on(store.load("s-hitl")).unwrap().unwrap();
     assert_eq!(final_state.status, SessionStatus::Finished);
 }
+
+// --- Cross-tier graph parity: the durable SQLite store and the in-memory store
+// must return byte-identical subgraphs for the same data, proving the one
+// `GraphStore` port hides which tier is underneath (10-production-migration §6.3).
+
+use agistack_adapters_device::SqliteGraphStore;
+use agistack_adapters_mem::InMemoryGraphStore;
+use agistack_core::model::{GraphEntity, Relationship};
+use agistack_core::ports::GraphStore;
+
+fn gent(uuid: &str, name: &str, summary: &str) -> GraphEntity {
+    GraphEntity {
+        uuid: uuid.into(),
+        name: name.into(),
+        entity_type: "Concept".into(),
+        summary: summary.into(),
+        project_id: "p1".into(),
+        tenant_id: None,
+        created_at_ms: 0,
+        name_embedding: None,
+    }
+}
+
+fn grel(uuid: &str, src: &str, dst: &str) -> Relationship {
+    Relationship {
+        uuid: uuid.into(),
+        source_uuid: src.into(),
+        target_uuid: dst.into(),
+        relation_type: "MENTIONS".into(),
+        fact: "".into(),
+        score: 1.0,
+        project_id: "p1".into(),
+        created_at_ms: 0,
+    }
+}
+
+async fn seed(store: &dyn GraphStore) {
+    for (u, n, s) in [
+        ("e1", "Quantum Physics", "study of matter"),
+        ("e2", "Wave Function", "quantum state"),
+        ("e3", "Cooking", "quantum flavor notes"),
+        ("e4", "Gardening", "plants"),
+    ] {
+        store.upsert_entity(gent(u, n, s)).await.unwrap();
+    }
+    for (u, s, d) in [("r1", "e1", "e2"), ("r2", "e2", "e3"), ("r3", "e3", "e4")] {
+        store.upsert_relationship(grel(u, s, d)).await.unwrap();
+    }
+}
+
+#[test]
+fn graph_stores_agree_across_tiers() {
+    block_on(async {
+        let mem = InMemoryGraphStore::new();
+        let sql = SqliteGraphStore::in_memory().unwrap();
+        seed(&mem).await;
+        seed(&sql).await;
+
+        for depth in 0..=4 {
+            let a = mem.subgraph("p1", "e1", depth).await.unwrap();
+            let b = sql.subgraph("p1", "e1", depth).await.unwrap();
+            assert_eq!(a, b, "subgraph parity mismatch at depth {depth}");
+        }
+
+        let mn = mem.neighbors("p1", "e2").await.unwrap();
+        let sn = sql.neighbors("p1", "e2").await.unwrap();
+        assert_eq!(mn, sn, "neighbor parity mismatch");
+
+        let ms = mem.search_entities("p1", "quantum", 10).await.unwrap();
+        let ss = sql.search_entities("p1", "quantum", 10).await.unwrap();
+        let mids: Vec<&str> = ms.iter().map(|e| e.uuid.as_str()).collect();
+        let sids: Vec<&str> = ss.iter().map(|e| e.uuid.as_str()).collect();
+        assert_eq!(mids, sids, "search parity mismatch");
+        assert_eq!(mids, vec!["e1", "e2", "e3"]); // name or summary contains "quantum"
+    });
+}
