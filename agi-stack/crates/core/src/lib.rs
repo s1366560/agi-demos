@@ -22,10 +22,12 @@ pub mod sync;
 pub mod util;
 
 pub use agent::{
-    pending_request, AgentAction, EmbeddedHarness, HarnessCtx, HarnessPolicy, HarnessRegistry,
-    HitlKind, HitlRequest, HitlResponse, Plan, PlanStep, PreparedAttempt, ReActEngine, Role,
-    RuntimeHarness, SelectionReason, SessionState, SessionStatus, StepStatus, TranscriptEntry,
-    TurnOutcome,
+    pending_request, AgentAction, CostBudget, CostTracker, DoomLoopDetector, EmbeddedHarness,
+    HarnessCtx, HarnessPolicy, HarnessRegistry, Health, HitlKind, HitlRequest, HitlResponse,
+    MiniOrchestrator, NextAction, OutcomeKind, Plan, PlanStep, PlanStore, PreparedAttempt,
+    ReActEngine, Role, RuntimeHarness, RuntimePlan, SelectionReason, SessionState, SessionStatus,
+    StepOutcome, StepRunner, StepStatus, SupervisorPort, SupervisorVerdict, TranscriptEntry,
+    TriggerReason, TurnOutcome,
 };
 pub use model::{Entity, Episode, Memory, Project, SourceType};
 pub use ports::{

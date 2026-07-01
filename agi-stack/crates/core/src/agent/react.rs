@@ -17,6 +17,9 @@
 
 use std::sync::Arc;
 
+use crate::agent::doom_loop::{
+    CostBudget, CostTracker, DoomLoopDetector, NextAction, SupervisorPort, TriggerReason,
+};
 use crate::agent::types::{
     AgentAction, CompletedCall, HitlRequest, Role, SessionState, SessionStatus, TranscriptEntry,
 };
@@ -32,6 +35,13 @@ pub struct ReActEngine {
     #[allow(dead_code)]
     clock: Arc<dyn Clock>,
     max_rounds: u64,
+    /// Optional `(window, threshold)` for the structural doom-loop detector.
+    doom_cfg: Option<(usize, usize)>,
+    /// Optional per-session spend ceiling (arithmetic).
+    cost_budget: Option<CostBudget>,
+    /// Optional injected agent that judges a fired trigger (Agent First). Without
+    /// one, a fired trigger is a deterministic structural stop.
+    supervisor: Option<Arc<dyn SupervisorPort>>,
 }
 
 impl ReActEngine {
@@ -47,6 +57,9 @@ impl ReActEngine {
             checkpoints,
             clock,
             max_rounds: 16,
+            doom_cfg: None,
+            cost_budget: None,
+            supervisor: None,
         }
     }
 
@@ -54,6 +67,29 @@ impl ReActEngine {
     /// loops — a structural bound, not a semantic verdict).
     pub fn with_max_rounds(mut self, max_rounds: u64) -> Self {
         self.max_rounds = max_rounds;
+        self
+    }
+
+    /// Arm the structural doom-loop detector: fire when the same action recurs
+    /// `threshold`+ times within `window` observations. Firing only *consults* the
+    /// supervisor (if any); it never decides the outcome itself (Agent First).
+    pub fn with_doom_loop(mut self, window: usize, threshold: usize) -> Self {
+        self.doom_cfg = Some((window, threshold));
+        self
+    }
+
+    /// Arm a per-session cost ceiling (rounds / tool-calls / tokens). Reaching it
+    /// fires the cost trigger — again, a structural fact, not a verdict.
+    pub fn with_cost_budget(mut self, budget: CostBudget) -> Self {
+        self.cost_budget = Some(budget);
+        self
+    }
+
+    /// Inject the supervisor agent consulted when a trigger fires. Its structured
+    /// [`SupervisorVerdict`](crate::agent::doom_loop::SupervisorVerdict) decides
+    /// whether the loop continues or ends — the semantic half of the split.
+    pub fn with_supervisor(mut self, supervisor: Arc<dyn SupervisorPort>) -> Self {
+        self.supervisor = Some(supervisor);
         self
     }
 
@@ -72,6 +108,19 @@ impl ReActEngine {
             None => SessionState::new(session_id, goal, project_id),
         };
 
+        // Robustness instruments (Wave N). Both are structural/deterministic; a
+        // fire only *consults* the supervisor. They live on the stack for this
+        // run so the engine itself stays cheap to clone and runtime-agnostic.
+        let mut detector = self
+            .doom_cfg
+            .map(|(window, threshold)| DoomLoopDetector::new(window, threshold));
+        let mut cost = self.cost_budget.clone().map(|b| {
+            let mut c = CostTracker::new(b);
+            // Span the whole session, not just this process (crash-safe budget).
+            c.seed_rounds(state.round);
+            c
+        });
+
         while state.status == SessionStatus::Running {
             // Circuit-breaker: structural round budget.
             if state.round >= self.max_rounds {
@@ -84,6 +133,9 @@ impl ReActEngine {
                 self.checkpoints.save(&state).await?;
                 break;
             }
+
+            // Did this round's action trip the doom-loop detector?
+            let mut doom_fired = false;
 
             // THINK — delegate the semantic decision to the planner/LLM.
             let available = self.tools.list_tools();
@@ -103,11 +155,20 @@ impl ReActEngine {
                     state.status = SessionStatus::Finished;
                 }
                 AgentAction::CallTool { tool, input_json } => {
+                    let action_key = format!("{tool} {input_json}");
                     state.push_unique(TranscriptEntry::new(
                         state.round,
                         Role::Action,
-                        format!("{tool} {input_json}"),
+                        action_key.clone(),
                     ));
+
+                    // Structural instruments observe the action (deterministic).
+                    if let Some(d) = detector.as_mut() {
+                        doom_fired = d.observe(&action_key);
+                    }
+                    if let Some(c) = cost.as_mut() {
+                        c.record_tool_call();
+                    }
 
                     // Crash recovery: if this exact call already completed in
                     // this round, reuse its output — do NOT re-invoke the tool.
@@ -169,12 +230,101 @@ impl ReActEngine {
                 }
             }
 
+            // Round-boundary robustness check (Wave N). Only for rounds that are
+            // still Running (Finish/HITL already resolved the loop). The trigger is
+            // structural + deterministic; the *verdict* is the supervisor's.
+            if state.status == SessionStatus::Running {
+                let trigger = if doom_fired {
+                    Some(TriggerReason::DoomLoop)
+                } else if let Some(c) = cost.as_mut() {
+                    // Count the completed round, then test the ceiling (arithmetic).
+                    c.record_round();
+                    if c.over_budget() {
+                        Some(TriggerReason::CostCeiling)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(reason) = trigger {
+                    // A fire consults the supervisor; the engine acts on its verdict.
+                    if self.handle_trigger(reason, &mut state).await? {
+                        break;
+                    }
+                }
+            }
+
             state.round += 1;
             // Round-boundary checkpoint (ADR-0005).
             self.checkpoints.save(&state).await?;
         }
 
         Ok(state)
+    }
+
+    /// React to a fired structural trigger. **Agent First:** the engine does not
+    /// decide the outcome — it consults the injected [`SupervisorPort`] and then
+    /// acts on the returned verdict deterministically. The verdict is written to
+    /// the transcript as an audit line (agent judgment is always logged).
+    ///
+    /// Returns `true` if the loop should stop (escalate/reassign), `false` if it
+    /// should continue (the supervisor overruled the structural trigger). With no
+    /// supervisor injected, a fire is a deterministic structural stop.
+    async fn handle_trigger(
+        &self,
+        reason: TriggerReason,
+        state: &mut SessionState,
+    ) -> CoreResult<bool> {
+        match &self.supervisor {
+            Some(supervisor) => {
+                let verdict = supervisor
+                    .review(reason, state.round, &state.transcript)
+                    .await?;
+                // Audit: the agent's judgment is recorded (AGENTS.md logging rule).
+                state.push_unique(TranscriptEntry::new(
+                    state.round,
+                    Role::Thought,
+                    format!(
+                        "supervisor[{reason:?}] health={:?} next={:?}: {}",
+                        verdict.health, verdict.next, verdict.rationale
+                    ),
+                ));
+                match verdict.next {
+                    NextAction::Continue => {
+                        self.checkpoints.save(state).await?;
+                        Ok(false)
+                    }
+                    NextAction::Escalate | NextAction::Reassign => {
+                        let answer =
+                            format!("supervisor {:?}: {}", verdict.next, verdict.rationale);
+                        state.push_unique(TranscriptEntry::new(
+                            state.round,
+                            Role::Answer,
+                            answer.clone(),
+                        ));
+                        state.answer = Some(answer);
+                        state.status = SessionStatus::Failed;
+                        self.checkpoints.save(state).await?;
+                        Ok(true)
+                    }
+                }
+            }
+            None => {
+                // No agent to judge: deterministic structural stop (no verdict).
+                let answer = format!("structural stop: {reason:?}");
+                state.push_unique(TranscriptEntry::new(
+                    state.round,
+                    Role::Answer,
+                    answer.clone(),
+                ));
+                state.answer = Some(answer);
+                state.status = SessionStatus::Failed;
+                self.checkpoints.save(state).await?;
+                Ok(true)
+            }
+        }
     }
 
     /// Resume a session that is [`AwaitingInput`] by supplying the human answer

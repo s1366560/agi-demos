@@ -32,6 +32,8 @@ pub enum CoreError {
     Checkpoint(String),
     #[error("plan error: {0}")]
     Plan(String),
+    #[error("harness error: {0}")]
+    Harness(String),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

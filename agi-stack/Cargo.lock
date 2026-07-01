@@ -12,6 +12,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "agistack-adapters-cli-harness"
+version = "0.1.0"
+dependencies = [
+ "agistack-core",
+ "async-trait",
+ "futures",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "agistack-adapters-device"
 version = "0.1.0"
 dependencies = [

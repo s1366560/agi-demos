@@ -1,0 +1,21 @@
+[package]
+name = "agistack-adapters-cli-harness"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Native-only (server) adapter: the second, non-embedded RuntimeHarness family
+# (ADR-0008 §4). It runs an external agent CLI by spawning a subprocess, feeding
+# the PreparedAttempt as JSON on stdin and parsing a TurnOutcome from stdout. It
+# pulls std::process (subprocess spawning), so it is deliberately kept OUT of the
+# core wasm path — on device/browser the agent is always the embedded harness.
+# Its existence is what makes the RuntimeHarness abstraction non-vacuous: the
+# registry now selects between two real families (in-process vs subprocess).
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+
+[dev-dependencies]
+futures.workspace = true

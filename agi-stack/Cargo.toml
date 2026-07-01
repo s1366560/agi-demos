@@ -6,6 +6,7 @@ members = [
     "crates/adapters-mem",
     "crates/adapters-device",
     "crates/adapters-http-llm",
+    "crates/adapters-cli-harness",
     "crates/adapters-postgres",
     "crates/adapters-wasmtime",
     "crates/bindings-uniffi",

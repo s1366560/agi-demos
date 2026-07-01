@@ -7,15 +7,22 @@
 //! declarative, level-triggered orchestration (ADR-0004); [`harness`] makes the
 //! *execution loop itself* pluggable (ADR-0008).
 
+pub mod doom_loop;
 pub mod harness;
+pub mod orchestrator;
 pub mod plan;
 pub mod react;
 pub mod types;
 
-pub use harness::{
-    EmbeddedHarness, HarnessCtx, HarnessPolicy, HarnessRegistry, PreparedAttempt, RuntimeHarness,
-    SelectionReason, TurnOutcome,
+pub use doom_loop::{
+    CostBudget, CostTracker, DoomLoopDetector, Health, NextAction, SupervisorPort,
+    SupervisorVerdict, TriggerReason,
 };
+pub use harness::{
+    EmbeddedHarness, HarnessCtx, HarnessPolicy, HarnessRegistry, OutcomeKind, PreparedAttempt,
+    RuntimeHarness, RuntimePlan, SelectionReason, TurnOutcome,
+};
+pub use orchestrator::{MiniOrchestrator, PlanStore, StepOutcome, StepRunner};
 pub use plan::{Plan, PlanStep, StepStatus};
 pub use react::{pending_request, ReActEngine};
 pub use types::{

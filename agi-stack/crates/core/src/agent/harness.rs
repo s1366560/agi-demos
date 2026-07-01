@@ -20,7 +20,7 @@
 //! the server, on device, and in the browser. A CLI-backend harness (which would
 //! spawn a subprocess) is server-only and lives outside the core (ADR-0008 §4).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -49,15 +49,21 @@ impl HarnessCtx {
 
 /// A fully host-prepared attempt. The host resolves provider / auth / session /
 /// tools up front and packs them here; the harness does not re-resolve any of it
-/// (ADR-0008 §2). For this stage the prepared surface is the session identity +
-/// goal + selection ctx; the richer `RuntimePlan` (tool normalization, outcome
-/// classification) is deferred until a second, non-embedded harness needs it.
+/// (ADR-0008 §2). Alongside the session identity + goal + selection ctx it carries
+/// a [`RuntimePlan`] — the **host-owned policy bundle** (tool normalization,
+/// outcome classification, silent-tool set) a non-embedded harness applies while
+/// executing. Because the policy is pure data + pure functions it stays in the
+/// core and is shared by every harness family (embedded in-process or CLI
+/// subprocess), which is exactly what makes the [`RuntimeHarness`] abstraction
+/// non-vacuous once a second family exists (ADR-0008 §2).
 #[derive(Debug, Clone)]
 pub struct PreparedAttempt {
     pub session_id: String,
     pub goal: String,
     pub project_id: Option<String>,
     pub ctx: HarnessCtx,
+    /// Host-owned execution policy the harness applies (default is empty).
+    pub runtime_plan: Arc<RuntimePlan>,
 }
 
 impl PreparedAttempt {
@@ -72,6 +78,88 @@ impl PreparedAttempt {
             goal: goal.into(),
             project_id: project_id.map(|p| p.to_string()),
             ctx,
+            runtime_plan: Arc::new(RuntimePlan::new()),
+        }
+    }
+
+    /// Attach a host-owned [`RuntimePlan`] policy bundle (default is empty).
+    pub fn with_runtime_plan(mut self, plan: Arc<RuntimePlan>) -> Self {
+        self.runtime_plan = plan;
+        self
+    }
+}
+
+/// Structural classification of a runtime/subprocess turn result — pure data, no
+/// judgment. A CLI-backend harness maps a process exit code through this; the
+/// engine's *semantic* verdict (why it failed, what to do) is a separate concern
+/// (Wave N's supervisor).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutcomeKind {
+    /// The runtime finished cleanly (exit code 0).
+    Completed,
+    /// The runtime exited with a non-zero code.
+    Failed,
+}
+
+/// The host-owned policy bundle a harness applies while executing a
+/// [`PreparedAttempt`] — "host prepares / harness executes" (ADR-0008 §2).
+///
+/// It is **pure data + pure functions**: no IO, no runtime, no `std::time`. That
+/// is the whole point — the policy proves it does not depend on any concrete
+/// runtime, so it lives in the core and both the embedded and CLI-backend
+/// families share it. It captures three host decisions:
+///   - **tool normalization** — canonicalize advertised tool names/aliases before
+///     handing them to the runtime;
+///   - **silent tools** — which tools' output is suppressed from the transcript;
+///   - **outcome classification** — map a raw exit code to a structural
+///     [`OutcomeKind`] (deterministic; the semantic verdict is Wave N's job).
+#[derive(Debug, Clone, Default)]
+pub struct RuntimePlan {
+    tool_aliases: BTreeMap<String, String>,
+    silent_tools: BTreeSet<String>,
+}
+
+impl RuntimePlan {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Map a tool alias to its canonical name (builder).
+    pub fn with_alias(mut self, from: impl Into<String>, to: impl Into<String>) -> Self {
+        self.tool_aliases.insert(from.into(), to.into());
+        self
+    }
+
+    /// Mark a tool's output as silent/suppressed (builder).
+    pub fn with_silent(mut self, tool: impl Into<String>) -> Self {
+        self.silent_tools.insert(tool.into());
+        self
+    }
+
+    /// Canonicalize one tool name (its alias target, or unchanged).
+    pub fn normalize_tool(&self, name: &str) -> String {
+        self.tool_aliases
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| name.to_string())
+    }
+
+    /// Canonicalize a list of tool names — a pure structural map.
+    pub fn normalize_tools(&self, names: &[String]) -> Vec<String> {
+        names.iter().map(|n| self.normalize_tool(n)).collect()
+    }
+
+    /// Whether a tool's output is suppressed from the user-visible transcript.
+    pub fn is_silent(&self, tool: &str) -> bool {
+        self.silent_tools.contains(tool)
+    }
+
+    /// Classify a raw process exit code — arithmetic/structural, deterministic.
+    pub fn classify_outcome(&self, exit_code: i32) -> OutcomeKind {
+        if exit_code == 0 {
+            OutcomeKind::Completed
+        } else {
+            OutcomeKind::Failed
         }
     }
 }
@@ -485,5 +573,37 @@ mod tests {
         assert_eq!(outcome.runtime_id, "codex");
         assert_eq!(outcome.session.answer.as_deref(), Some("codex"));
         assert_eq!(outcome.session.status, SessionStatus::Finished);
+    }
+
+    #[test]
+    fn runtime_plan_normalizes_tools_and_classifies_outcome() {
+        let plan = RuntimePlan::new()
+            .with_alias("legacy_read", "read")
+            .with_silent("noisy");
+
+        // Alias maps; unknown names pass through unchanged.
+        assert_eq!(plan.normalize_tool("legacy_read"), "read");
+        assert_eq!(plan.normalize_tool("write"), "write");
+        assert_eq!(
+            plan.normalize_tools(&["legacy_read".into(), "write".into()]),
+            vec!["read".to_string(), "write".to_string()]
+        );
+
+        // Silent set membership.
+        assert!(plan.is_silent("noisy"));
+        assert!(!plan.is_silent("read"));
+
+        // Structural exit-code classification (deterministic).
+        assert_eq!(plan.classify_outcome(0), OutcomeKind::Completed);
+        assert_eq!(plan.classify_outcome(1), OutcomeKind::Failed);
+        assert_eq!(plan.classify_outcome(-1), OutcomeKind::Failed);
+    }
+
+    #[test]
+    fn prepared_attempt_carries_runtime_plan() {
+        let plan = Arc::new(RuntimePlan::new().with_alias("x", "y"));
+        let attempt = PreparedAttempt::new("s", "g", None, HarnessCtx::new("p", "m"))
+            .with_runtime_plan(plan);
+        assert_eq!(attempt.runtime_plan.normalize_tool("x"), "y");
     }
 }
