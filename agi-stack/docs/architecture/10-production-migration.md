@@ -50,7 +50,7 @@ graph LR
 |---|---|---|
 | **F1 · 生产持久化** | [`crates/adapters-postgres`](../../crates/adapters-postgres)(sqlx + pgvector,**server-only**,tokio 隔离):`MemoryRepository`/`VectorIndexPort`/`CheckpointStore` + 只读 `ApiKey`/`Project` 查询,对 Python 同一 schema。真库集成测试经 `DATABASE_URL`(有 Docker Postgres 时)跑真库,离线编译测试恒绿 | ✅ P1 落地 |
 | **F2 · 认证/多租户中间件** | [`apps/server/src/auth.rs`](../../apps/server/src/auth.rs)(tower 层,镜像 Python `auth_dependencies.py`):`Authorization: Bearer ms_sk_…` → SHA256 → 查 `api_keys.key_hash` → 校 `is_active`/`expires_at` → 注入 scoped `Identity`;401 路径对齐;**每查询按 `project_id` 收敛**。`PgAuthenticator`(生产)/`DevAuthenticator`(离线,任意 `ms_sk_` → dev 用户)双实现 | ✅ P1 落地 |
-| **F3 · 契约 parity 测试** | 断言 Rust 响应与 Python 字节兼容:`MemoryResponse` 默认字段、i18n 错误信封、尾斜杠(避 307 跨源丢 auth 头) | ✅ P1 覆盖(见 §4) |
+| **F3 · 契约 parity 硬门禁** | [`crates/parity`](../../crates/parity)(**可复用 harness**,仅依赖 `serde_json`、同编 `wasm32`):`compare(golden,actual)` 断言键集(顺序无关)+ 类型 + 标量**格式**(ISO-8601 `Z` vs `+00:00`、UUID 大小写、int vs float);matcher token(`<uuid>`/`<iso8601>`/`<ms_sk>`/`<int>`/`<string?>`…)覆盖动态字段;`is_error_envelope` 校 FastAPI `{"detail":…}`。**回溯应用到 P1/P2** 的真实 wire 形状([`apps/server/tests/golden`](../../apps/server/tests/golden) 6 契约派生 golden + 6 测),负控证门禁非空转 | ✅ 落地(自 P2 起硬门禁,[04 #30](04-spike-evidence.md)) |
 | **F4 · 可观测/灰度** | 结构化日志 + trace + 按路由灰度比例 + 回滚 runbook | 🎯 future(逐波次) |
 | **F5 · Redis Streams 事件总线** | `agent:events:{conv}`(maxlen 1000)· `hitl:responses:{sess}`· `agent:control:*`· `workspace:{id}:{evt}`;xadd/xreadgroup/消费组。`redis` crate,server-only | 🎯 future(P3·P6) |
 | **F6 · 对象存储(S3 兼容)** | artifacts/attachments/instance_files 分片上传、流式下载、refresh-url。`aws-sdk-s3` 或 `object_store` | 🎯 future(P5·P7) |
@@ -241,5 +241,7 @@ graph TD
 ## 10. 证据指针
 
 - [04 证据 #25](04-spike-evidence.md) —— P1 端到端(网关 + Rust 服务器 + mock Python)、F1 真 pgvector、F2 认证 parity。
+- [04 证据 #29](04-spike-evidence.md) —— P2 登录垂直(bcrypt + `/auth/token` + tenants 只读)。
+- [04 证据 #30](04-spike-evidence.md) —— F3 绞杀 parity 硬门禁(`agistack-parity` harness + 6 golden 应用 P1/P2 + 负控)。
 - [05 路线图](05-roadmap.md) §1 Phase 5 —— 由 future 翻「🚧 进行中(P1 生产切片落地)」。
-- 复现:`cargo test --workspace`(**112 绿**,含 gateway e2e + prod_api parity + agent runtime 三轴 Wave L/M/N;pg 集成测试离线跳过);`DATABASE_URL=… cargo test -p agistack-adapters-postgres --test pg_integration`(真库 4 绿);手动 `cargo run -p agistack-server` + `cargo run -p agistack-gateway` 后 curl `/api/v1/memories/`。
+- 复现:`cargo test --workspace`(**148 绿**,含 gateway e2e + prod_api/identity parity + F3 parity harness 14 自测 + 6 golden + agent runtime 三轴 Wave L/M/N;pg 集成测试离线跳过);`cargo test -p agistack-parity`(F3 harness 14 绿);`DATABASE_URL=… cargo test -p agistack-adapters-postgres --test pg_integration`(真库 4 绿);手动 `cargo run -p agistack-server` + `cargo run -p agistack-gateway` 后 curl `/api/v1/memories/`。
