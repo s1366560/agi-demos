@@ -8,6 +8,7 @@
 //! *execution loop itself* pluggable (ADR-0008).
 
 pub mod doom_loop;
+pub mod events;
 pub mod harness;
 pub mod orchestrator;
 pub mod plan;
@@ -18,6 +19,7 @@ pub use doom_loop::{
     CostBudget, CostTracker, DoomLoopDetector, Health, NextAction, SupervisorPort,
     SupervisorVerdict, TriggerReason,
 };
+pub use events::{derive_event_id, AgentEventType, EventCategory, EventEnvelope};
 pub use harness::{
     EmbeddedHarness, HarnessCtx, HarnessPolicy, HarnessRegistry, OutcomeKind, PreparedAttempt,
     RuntimeHarness, RuntimePlan, SelectionReason, TurnOutcome,

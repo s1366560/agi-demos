@@ -15,6 +15,7 @@
 //! `wasm32-unknown-unknown`, iOS and Android.
 
 pub mod agent;
+pub mod community;
 pub mod graph;
 pub mod model;
 pub mod ports;
@@ -23,18 +24,23 @@ pub mod sync;
 pub mod util;
 
 pub use agent::{
-    pending_request, AgentAction, CostBudget, CostTracker, DoomLoopDetector, EmbeddedHarness,
-    HarnessCtx, HarnessPolicy, HarnessRegistry, Health, HitlKind, HitlRequest, HitlResponse,
-    MiniOrchestrator, NextAction, OutcomeKind, Plan, PlanStep, PlanStore, PreparedAttempt,
-    ReActEngine, Role, RuntimeHarness, RuntimePlan, SelectionReason, SessionState, SessionStatus,
-    StepOutcome, StepRunner, StepStatus, SupervisorPort, SupervisorVerdict, TranscriptEntry,
-    TriggerReason, TurnOutcome,
+    derive_event_id, pending_request, AgentAction, AgentEventType, CostBudget, CostTracker,
+    DoomLoopDetector, EmbeddedHarness, EventCategory, EventEnvelope, HarnessCtx, HarnessPolicy,
+    HarnessRegistry, Health, HitlKind, HitlRequest, HitlResponse, MiniOrchestrator, NextAction,
+    OutcomeKind, Plan, PlanStep, PlanStore, PreparedAttempt, ReActEngine, Role, RuntimeHarness,
+    RuntimePlan, SelectionReason, SessionState, SessionStatus, StepOutcome, StepRunner, StepStatus,
+    SupervisorPort, SupervisorVerdict, TranscriptEntry, TriggerReason, TurnOutcome,
+};
+pub use community::{
+    detect_communities, modularity, Community, CommunityEdge, DEFAULT_MIN_COMMUNITY_SIZE,
 };
 pub use graph::{
     hybrid_rank, jaccard, mmr_rerank, rrf_fuse, time_decay, tokenize, Candidate, RankedId,
     HALF_LIFE_DAYS, KEYWORD_WEIGHT, MMR_LAMBDA, MS_PER_DAY, RRF_K, VECTOR_WEIGHT,
 };
-pub use model::{Entity, Episode, GraphEntity, Memory, Project, Relationship, SourceType, Subgraph};
+pub use model::{
+    Entity, Episode, GraphEntity, Memory, Project, Relationship, SourceType, Subgraph,
+};
 pub use ports::{
     ChangeEvent, ChangeLog, CheckpointStore, Clock, ContainerRuntime, ContainerSpec,
     ContainerState, ContainerStatus, CoreError, CoreResult, EmailMessage, EmailSender,

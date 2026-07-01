@@ -13,6 +13,7 @@
 //! assert round-trips. This proves shared-DB compatibility without standing up
 //! the full 110-table Python schema.
 
+use agistack_adapters_postgres::PgPool;
 use agistack_adapters_postgres::{
     connect, ensure_aux_schema, PgApiKeyStore, PgCheckpointStore, PgMemoryRepository,
     PgProjectStore, PgTenantRepository, PgUserStore, PgVectorIndex, TenantLookup,
@@ -20,7 +21,6 @@ use agistack_adapters_postgres::{
 use agistack_core::agent::types::{SessionState, SessionStatus};
 use agistack_core::model::{Entity, Memory};
 use agistack_core::ports::{CheckpointStore, MemoryRepository, VectorIndexPort};
-use agistack_adapters_postgres::PgPool;
 
 /// Return a connected pool if `DATABASE_URL` is set, else `None` (skip).
 async fn pool_or_skip(test: &str) -> Option<PgPool> {
@@ -47,8 +47,9 @@ async fn ensure_python_shaped_tables(pool: &PgPool) {
             id text PRIMARY KEY, tenant_id text NOT NULL, name text NOT NULL, \
             owner_id text NOT NULL, is_public boolean DEFAULT false)",
         "CREATE TABLE IF NOT EXISTS user_projects (\
-            user_id text NOT NULL, project_id text NOT NULL, \
+            user_id text NOT NULL, project_id text NOT NULL, role text DEFAULT 'member', \
             PRIMARY KEY (user_id, project_id))",
+        "ALTER TABLE user_projects ADD COLUMN IF NOT EXISTS role text DEFAULT 'member'",
         "CREATE TABLE IF NOT EXISTS api_keys (\
             id text PRIMARY KEY, key_hash text, name text, user_id text, \
             created_at timestamptz DEFAULT now(), expires_at timestamptz, \
@@ -94,7 +95,8 @@ fn sample_memory(id: &str, project_id: &str) -> Memory {
 
 #[tokio::test]
 async fn memory_repository_roundtrips_against_shared_schema() {
-    let Some(pool) = pool_or_skip("memory_repository_roundtrips_against_shared_schema").await else {
+    let Some(pool) = pool_or_skip("memory_repository_roundtrips_against_shared_schema").await
+    else {
         return;
     };
     ensure_python_shaped_tables(&pool).await;
@@ -140,7 +142,10 @@ async fn memory_repository_roundtrips_against_shared_schema() {
     assert!(listed.iter().any(|m| m.id == id));
 
     // search_by_project (ILIKE) — hit and miss
-    let hit = repo.search_by_project(project_id, "portable", 10).await.unwrap();
+    let hit = repo
+        .search_by_project(project_id, "portable", 10)
+        .await
+        .unwrap();
     assert!(hit.iter().any(|m| m.id == id));
     let miss = repo
         .search_by_project(project_id, "no_such_token_zzz", 10)
@@ -277,7 +282,9 @@ async fn api_key_and_project_stores_verify_and_scope() {
         // Derive via openssl to avoid hardcoding; falls back to a known constant.
         let out = Command::new("sh")
             .arg("-c")
-            .arg(format!("printf '%s' '{raw_key}' | shasum -a 256 | cut -d' ' -f1"))
+            .arg(format!(
+                "printf '%s' '{raw_key}' | shasum -a 256 | cut -d' ' -f1"
+            ))
             .output();
         match out {
             Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
@@ -357,6 +364,169 @@ async fn ensure_identity_tables(pool: &PgPool) {
     }
 }
 
+#[tokio::test]
+async fn project_store_splits_read_write_and_admin_access() {
+    let Some(pool) = pool_or_skip("project_store_splits_read_write_and_admin_access").await else {
+        return;
+    };
+    ensure_python_shaped_tables(&pool).await;
+    ensure_identity_tables(&pool).await;
+
+    for sql in [
+        "DELETE FROM user_tenants WHERE user_id IN \
+         ('u_owner_authz', 'u_viewer_authz', 'u_admin_authz', 'u_public_authz', 'u_tenant_authz')",
+        "DELETE FROM user_projects WHERE user_id IN \
+         ('u_owner_authz', 'u_viewer_authz', 'u_admin_authz', 'u_public_authz', 'u_tenant_authz')",
+        "DELETE FROM projects WHERE id IN \
+         ('p_owned_authz', 'p_viewer_authz', 'p_admin_authz', 'p_public_authz', 'p_tenant_authz')",
+        "DELETE FROM tenants WHERE id = 't_authz'",
+        "DELETE FROM users WHERE id IN \
+         ('u_owner_authz', 'u_viewer_authz', 'u_admin_authz', 'u_public_authz', 'u_tenant_authz')",
+    ] {
+        sqlx::query(sql).execute(&pool).await.unwrap();
+    }
+
+    sqlx::query("INSERT INTO tenants (id, name) VALUES ('t_authz', 'T')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    for user_id in [
+        "u_owner_authz",
+        "u_viewer_authz",
+        "u_admin_authz",
+        "u_public_authz",
+        "u_tenant_authz",
+    ] {
+        sqlx::query("INSERT INTO users (id, email, is_superuser) VALUES ($1, $2, false)")
+            .bind(user_id)
+            .bind(format!("{user_id}@x"))
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    for (project_id, is_public) in [
+        ("p_owned_authz", false),
+        ("p_viewer_authz", false),
+        ("p_admin_authz", false),
+        ("p_public_authz", true),
+        ("p_tenant_authz", false),
+    ] {
+        sqlx::query(
+            "INSERT INTO projects (id, tenant_id, name, owner_id, is_public) \
+             VALUES ($1, 't_authz', $2, 'u_owner_authz', $3)",
+        )
+        .bind(project_id)
+        .bind(project_id)
+        .bind(is_public)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    for (user_id, project_id, role) in [
+        ("u_viewer_authz", "p_viewer_authz", "viewer"),
+        ("u_admin_authz", "p_admin_authz", "admin"),
+    ] {
+        sqlx::query("INSERT INTO user_projects (user_id, project_id, role) VALUES ($1, $2, $3)")
+            .bind(user_id)
+            .bind(project_id)
+            .bind(role)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    sqlx::query(
+        "INSERT INTO user_tenants (id, user_id, tenant_id, role) \
+         VALUES ('ut_authz', 'u_tenant_authz', 't_authz', 'owner')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let projects = PgProjectStore::new(pool.clone());
+
+    let owned = projects
+        .find_by_id("p_owned_authz")
+        .await
+        .unwrap()
+        .expect("owned project");
+    assert!(projects
+        .user_can_access("u_owner_authz", &owned)
+        .await
+        .unwrap());
+    assert!(projects
+        .user_can_write("u_owner_authz", &owned)
+        .await
+        .unwrap());
+    assert!(projects
+        .user_can_admin("u_owner_authz", &owned)
+        .await
+        .unwrap());
+
+    let viewer = projects
+        .find_by_id("p_viewer_authz")
+        .await
+        .unwrap()
+        .expect("viewer project");
+    assert!(projects
+        .user_can_access("u_viewer_authz", &viewer)
+        .await
+        .unwrap());
+    assert!(!projects
+        .user_can_write("u_viewer_authz", &viewer)
+        .await
+        .unwrap());
+    assert!(!projects
+        .user_can_admin("u_viewer_authz", &viewer)
+        .await
+        .unwrap());
+
+    let admin = projects
+        .find_by_id("p_admin_authz")
+        .await
+        .unwrap()
+        .expect("admin project");
+    assert!(projects
+        .user_can_access("u_admin_authz", &admin)
+        .await
+        .unwrap());
+    assert!(projects
+        .user_can_write("u_admin_authz", &admin)
+        .await
+        .unwrap());
+    assert!(projects
+        .user_can_admin("u_admin_authz", &admin)
+        .await
+        .unwrap());
+
+    let public = projects
+        .find_by_id("p_public_authz")
+        .await
+        .unwrap()
+        .expect("public project");
+    assert!(projects
+        .user_can_access("u_public_authz", &public)
+        .await
+        .unwrap());
+    assert!(!projects
+        .user_can_write("u_public_authz", &public)
+        .await
+        .unwrap());
+    assert!(!projects
+        .user_can_admin("u_public_authz", &public)
+        .await
+        .unwrap());
+
+    let tenant = projects
+        .find_by_id("p_tenant_authz")
+        .await
+        .unwrap()
+        .expect("tenant project");
+    assert!(projects
+        .user_can_admin("u_tenant_authz", &tenant)
+        .await
+        .unwrap());
+}
+
 /// P2 login vertical: prove the store-level round-trip against the shared schema.
 /// 1. `find_auth_by_email` returns the Python-shaped auth record.
 /// 2. `insert_api_key` (mint on login) writes a key that `find_by_raw_key` then
@@ -366,8 +536,7 @@ async fn ensure_identity_tables(pool: &PgPool) {
 ///    404-then-403 ordering).
 #[tokio::test]
 async fn login_and_tenant_reads_roundtrip_against_shared_schema() {
-    let Some(pool) =
-        pool_or_skip("login_and_tenant_reads_roundtrip_against_shared_schema").await
+    let Some(pool) = pool_or_skip("login_and_tenant_reads_roundtrip_against_shared_schema").await
     else {
         return;
     };
@@ -407,15 +576,23 @@ async fn login_and_tenant_reads_roundtrip_against_shared_schema() {
     assert_eq!(rec.hashed_password, stored_hash);
     assert!(rec.is_active);
     assert!(!rec.is_superuser);
-    assert!(users.find_auth_by_email("missing@x").await.unwrap().is_none());
+    assert!(users
+        .find_auth_by_email("missing@x")
+        .await
+        .unwrap()
+        .is_none());
 
     // (2) Mint a key exactly as login does, then resolve it via the auth store.
     let raw_key = "ms_sk_p2_login_session_key_0000000000000000000000000000000000000000";
     users
-        .insert_api_key("k_p2", raw_key, "Login Session p2@memstack.ai", "u_p2", None, &[
-            "read".to_string(),
-            "write".to_string(),
-        ])
+        .insert_api_key(
+            "k_p2",
+            raw_key,
+            "Login Session p2@memstack.ai",
+            "u_p2",
+            None,
+            &["read".to_string(), "write".to_string()],
+        )
         .await
         .unwrap();
     let keys = PgApiKeyStore::new(pool.clone());

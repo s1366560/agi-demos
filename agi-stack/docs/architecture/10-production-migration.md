@@ -87,8 +87,8 @@ P1 选记忆域先行:Rust `MemoryService` 已最成熟,且这是价值高、依
 |---|---|---|---|---|---|
 | **P1** | 记忆与情节 | `/memories`·`/episodes`·`/recall`(~14) | **F1 Postgres+pgvector** | 低-中 | ✅ 本波落地 |
 | **P2** | 身份/租户/项目 | auth·tenants·projects·invitations·trust·shares(~43–58) | F2 ✅ · F10 SMTP ✅ | 中 | 🚧 登录垂直已落地(`/auth/token` 绞杀 + tenants 读就绪;邀请邮件出口 F10 就绪;详见 §6.1、[04 #29](04-spike-evidence.md)) |
-| **P3** | Agent 运行时与会话 | `/agent/*`(84 子)+ `/agent/ws`(1 WS,共 85) | F5 · F7 · **F11**(替 Ray)· Wave L/M/N ✅ | 极高 | 🎯 future(详见 §6.2;硬化地基 Wave L/M/N 已绿) |
-| **P4** | 知识图谱 | graph(10)·enhanced_search(7)(~17) | F8 Neo4j / 端 SQLite+petgraph | 高 | 🚧 端上图 + 生产 Neo4j 层已落地(`GraphStore` + 排序数学 + **三适配器**内存/SQLite/Neo4j + 跨层 parity;详见 §6.3、[04 #31](04-spike-evidence.md)/[#32](04-spike-evidence.md);抽取/社区/端点 future) |
+| **P3** | Agent 运行时与会话 | `/agent/*`(84 子)+ `/agent/ws`(1 WS,共 85) | F5 · F7 · **F11**(替 Ray)· Wave L/M/N ✅ | 极高 | 🎯 future(详见 §6.2;硬化地基 Wave L/M/N 已绿;事件类型/信封地基 `p3-event-model` ✅ [04 #41](04-spike-evidence.md)) |
+| **P4** | 知识图谱 | graph(10)·enhanced_search(7)(~17) | F8 Neo4j / 端 SQLite+petgraph | 高 | 🚧 端上图 + 生产 Neo4j 层 + 社区数学已落地(`GraphStore` + 排序数学 + **三适配器**内存/SQLite/Neo4j + 跨层 parity + 确定性 Louvain 社区检测;详见 §6.3、[04 #31](04-spike-evidence.md)/[#32](04-spike-evidence.md)/[#42](04-spike-evidence.md);抽取/端点 future) |
 | **P5** | 沙箱与 MCP | project_sandbox·skills·channels·terminal(~89) | F9 Docker/MCP · F6 | 高 | 🎯 future(详见 §6.4;`plugin-host` 已就位) |
 | **P6** | 工作区与多 agent | workspaces·tasks·plans·blackboard·topology(71) | 复用 P3 流/事件 · F5 | 高 | 🎯 future(详见 §6.5) |
 | **P7** | 长尾 | genes·instances·llm_providers·observability·…(~220) | F6 · 各自 SDK | 中 | 🎯 future(详见 §6.6,6 组并行) |
@@ -128,12 +128,13 @@ P1 选记忆域先行:Rust `MemoryService` 已最成熟,且这是价值高、依
 > **决策 1**:不走混合 MVP,**一次性全 Rust 化** —— 含 Ray→tokio/gRPC 分布式执行层重建(F11)、全部 35+ 工具移植、完整 SessionProcessor 等价环。**全计划最高风险、最长工期单波,决定总工期。**
 
 - **前置(§13 Wave L/M/N,✅ 已绿)**:`rt-orchestrator`(MiniOrchestrator 驱动 Plan DAG)· `rt-cli-harness`(第二 harness 家族 + `RuntimePlan` 富契约)· `rt-supervisor`(DoomLoop 触发 + Agent-First 裁决 + CostTracker)——补齐 [06](06-agent-core-design.md) 健壮/可编排/可插拔三轴,P3 运行时硬化地基(见 [04 #26/#27/#28](04-spike-evidence.md))。
+- **已落地子切片 `p3-event-model`(✅)**:P3 事件管线的**类型/信封地基**已入核——把 Python `src/domain/events/{types,envelope}.py` 逐字移植为纯核心模块 [`crates/core/src/agent/events.rs`](../../crates/core/src/agent/events.rs)(`AgentEventType` **165 类型**——较早探针估 156,以代码枚举为准;`EventCategory`;`from_wire`/`category`/`is_delta`/`is_terminal`/`requires_human_response`/`is_internal` 谓词;`EventEnvelope` `wrap`/`child`/`with_*`/`to_json`/`from_json`;`derive_event_id`)。**wasm-clean·零新依赖**,`event_id`/`timestamp` 由调用方注入;与既有前端/`EventConverter` **线格式逐字节兼容**,7 单测覆盖;为 `p3-processor`/`p3-ws-bridge`/`p3-tools` 前置(见 [04 #41](04-spike-evidence.md))。
 - **端点(85)**:agent/ 20 子 router 84 个 + `/agent/ws`(1 WS,10 handler)。
 - **Python 表**:`conversations`·`messages`·`task_logs`·`hitl_requests`·`agent_session_snapshots`·`message_execution_status`·`message_bindings`·`agent_tasks`。
 - **事件管线(156 事件类型)**:Tool → `_pending_events` → SessionProcessor(4610 LOC)→ EventConverter → Redis Stream(F5)→ WS 桥(F7)→ 前端 routeToHandler。
 - **Rust 现状**:✅ `ReActEngine`(+ 轮次 checkpoint / 崩溃恢复 / 单 HITL)+ Wave L/M/N 三轴;**缺** SessionProcessor 全编排、156 事件系统、Redis 流、分布式执行层(F11 替 Ray)、WS 桥、35+ 工具、MCP、HITL 协调器、SubAgent 路由。
 - **5 条龙(决策后处置)**:①Ray→**F11 一次性重建**(tokio+`tonic` gRPC + 可选 kameo,复刻监督 / `max_restarts=5` / 跨节点分发);②WS 事件桥(517 LOC ConnectionManager,1000+ 并发,F7);③全部 35+ 工具(2000+ LOC,含 OS 级依赖)全移植;④SessionProcessor 4610 LOC 核心环;⑤LiteLLM→**决策 2 先 OpenAI/Anthropic 两家**,余下 provider future。
-- **子任务**:`p3-conv-repo` → `p3-event-model` → `p3-ws-bridge`(F7)→ `p3-distributed`(F11)→ `p3-tools-full`(35+ 工具内部分批:先 terminal/web_search/memory/context/plan,再 sandbox/interactive/agent-control/workspace/skill/MCP/HITL)→ `p3-processor`(复用 rt-orchestrator + F11)→ `p3-hitl` → `p3-endpoints` → `p3-gateway-parity` → `p3-docs`。
+- **子任务**:`p3-conv-repo` → **`p3-event-model` ✅** → `p3-ws-bridge`(F7)→ `p3-distributed`(F11)→ `p3-tools-full`(35+ 工具内部分批:先 terminal/web_search/memory/context/plan,再 sandbox/interactive/agent-control/workspace/skill/MCP/HITL)→ `p3-processor`(复用 rt-orchestrator + F11)→ `p3-hitl` → `p3-endpoints` → `p3-gateway-parity` → `p3-docs`。
 - **执行策略**:无 Python 执行器并存;靠内部分层次序缓释(F11 + 事件/WS 骨架 → 逐批工具 → 全环 → 灰度)。**建议单列专项、其余波先行摊平风险。**
 
 ### 6.3 P4 · 知识图谱(依赖 F8 Neo4j + `adapters-http-llm`)
@@ -144,7 +145,7 @@ P1 选记忆域先行:Rust `MemoryService` 已最成熟,且这是价值高、依
 - **混合检索**:查询扩展 → 向量(RRF k=60)+ 关键词(全文)→ RRF 融合(`0.6×vec + 0.4×kw`)→ 时间衰减(半衰期 30d)→ MMR 重排(λ=0.7)。
 - **Rust 现状**:✅ **可移植切片 + 生产 Neo4j 层均已落地**(决策 4)—— `GraphStore` 端口 + `GraphEntity`/`Relationship`/`Subgraph` 模型 + 纯 Rust 排序数学 [`crates/core/src/graph.rs`](../../crates/core/src/graph.rs)(RRF/时间衰减/MMR/Jaccard **逐字复刻 Python** 常量公式)+ **三套适配器** `InMemoryGraphStore`(`petgraph`,`wasm32`)/`SqliteGraphStore`(SQLite + `petgraph`,端上耐久)/**`Neo4jGraphStore`(`neo4rs` Bolt,生产服务器层,对 Python 同一套 Neo4j)**;跨层 parity 测证内存 vs SQLite([04 #31](04-spike-evidence.md))与**内存 vs 活 Neo4j**([04 #32](04-spike-evidence.md))结构一致;**缺** LLM reflexion 抽取、Louvain 社区、Episodic/Community 节点、REST 端点。`adapters-http-llm` 可复用做抽取/embedding。
 - **Parity 风险**:Neo4j DateTime/graph 类型 ISO 序列化、向量 float 数组字节序、UUID/tenant 过滤;RRF 权重/衰减/MMR 须逐位复现(**排序数学已在 core 逐字复刻并测**);**端上图近似(petgraph/SQLite)与 Neo4j 的容差已显式定义**——排序层字节一致,子图/遍历为 local-first 近似(存储基底不同)。
-- **子任务**:`p4-neo4j-adapter`(F8,✅ **已落地** `Neo4jGraphStore` 对活 Neo4j parity)→ `p4-extraction`(reflexion + 去重,🎯 future)→ `p4-hybrid-search`(RRF + 衰减 + MMR,✅ **已落地** core 排序数学)→ `p4-community`(Louvain,🎯 future)→ `p4-device-graph`(**决策 4**:SQLite 关系表 + `petgraph` 遍历,纯 Rust 同编 `wasm32`,✅ **已落地**)→ `p4-endpoints`(🎯 future)→ `p4-parity` → `p4-gateway` → `p4-docs`。
+- **子任务**:`p4-neo4j-adapter`(F8,✅ **已落地** `Neo4jGraphStore` 对活 Neo4j parity)→ `p4-extraction`(reflexion + 去重,🎯 future)→ `p4-hybrid-search`(RRF + 衰减 + MMR,✅ **已落地** core 排序数学)→ `p4-community`(Louvain,✅ **已落地** core 社区数学——确定性 Louvain + `modularity`,见 [04 #42](04-spike-evidence.md))→ `p4-device-graph`(**决策 4**:SQLite 关系表 + `petgraph` 遍历,纯 Rust 同编 `wasm32`,✅ **已落地**)→ `p4-endpoints`(🎯 future)→ `p4-parity` → `p4-gateway` → `p4-docs`。
 - **决策 4(纳入端上图)**:✅ 端上 KG 已以 SQLite + `petgraph` 近似 + core 排序数学落地,**生产 Neo4j 层亦已落地**(`Neo4jGraphStore`,对活库跨层 parity 实测,[04 #32](04-spike-evidence.md));风险 #5 可移植部分退役([05 §2](05-roadmap.md))。**龙/future**:Louvain 浮点精度、Episodic/Community 节点 + 向量/全文索引、LLM reflexion 抽取管线、**端上 LLM 推理(风险 #6,llama.cpp/Candle 数百 MB 模型)仍 future**。
 
 ### 6.4 P5 · 沙箱与 MCP(依赖 F9 Docker/MCP + F6 存储 + `plugin-host` ✅)
