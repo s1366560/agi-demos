@@ -95,6 +95,42 @@ async fn ensure_project_access(
     }
 }
 
+/// Verify the caller may write within `project_id`, or map to `403`/`500`.
+async fn ensure_project_write(
+    app: &AppState,
+    identity: &Identity,
+    project_id: &str,
+) -> ApiResult<()> {
+    let allowed = app
+        .auth
+        .can_write_project(&identity.user_id, project_id)
+        .await
+        .map_err(ApiError::internal)?;
+    if allowed {
+        Ok(())
+    } else {
+        Err(ApiError::forbidden("Access denied"))
+    }
+}
+
+/// Verify the caller may administer `project_id`, or map to `403`/`500`.
+async fn ensure_project_admin(
+    app: &AppState,
+    identity: &Identity,
+    project_id: &str,
+) -> ApiResult<()> {
+    let allowed = app
+        .auth
+        .can_admin_project(&identity.user_id, project_id)
+        .await
+        .map_err(ApiError::internal)?;
+    if allowed {
+        Ok(())
+    } else {
+        Err(ApiError::forbidden("Access denied"))
+    }
+}
+
 // ---- MemoryResponse (mirrors routers/memories.py MemoryResponse) ----------
 
 /// Byte-compatible with the Python `MemoryResponse`. Fields the portable core
@@ -176,6 +212,10 @@ struct EntityCreate {
     type_: Option<String>,
 }
 
+/// Python `MemoryCreate` parity shape. During strangler cutover, relationship,
+/// collaborator, public-visibility, and metadata fields are accepted only at
+/// their Python defaults; non-default values are rejected so the gateway can keep
+/// those requests on Python until the Rust endpoint persists them.
 #[derive(Deserialize)]
 struct MemoryCreate {
     project_id: String,
@@ -187,10 +227,40 @@ struct MemoryCreate {
     tags: Vec<String>,
     #[serde(default)]
     entities: Vec<EntityCreate>,
+    #[serde(default)]
+    relationships: Vec<Value>,
+    #[serde(default)]
+    collaborators: Vec<String>,
+    #[serde(default)]
+    is_public: bool,
+    #[serde(default)]
+    metadata: Value,
 }
 
 fn default_content_type() -> String {
     "text".to_string()
+}
+
+fn unsupported_memory_create_fields(req: &MemoryCreate) -> Vec<&'static str> {
+    let mut fields = Vec::new();
+    if !req.relationships.is_empty() {
+        fields.push("relationships");
+    }
+    if !req.collaborators.is_empty() {
+        fields.push("collaborators");
+    }
+    if req.is_public {
+        fields.push("is_public");
+    }
+    let metadata_is_default = match &req.metadata {
+        Value::Null => true,
+        Value::Object(map) => map.is_empty(),
+        _ => false,
+    };
+    if !metadata_is_default {
+        fields.push("metadata");
+    }
+    fields
 }
 
 async fn create_memory(
@@ -198,7 +268,15 @@ async fn create_memory(
     Extension(identity): Extension<Identity>,
     Json(req): Json<MemoryCreate>,
 ) -> ApiResult<Response> {
-    ensure_project_access(&app, &identity, &req.project_id).await?;
+    let unsupported = unsupported_memory_create_fields(&req);
+    if !unsupported.is_empty() {
+        return Err(ApiError::bad_request(format!(
+            "Fields not yet supported on this endpoint: {}",
+            unsupported.join(", ")
+        )));
+    }
+
+    ensure_project_write(&app, &identity, &req.project_id).await?;
 
     let entities = req
         .entities
@@ -272,7 +350,10 @@ async fn list_memories(
                 .search(&q.project_id, query, offset + page_size)
                 .await
                 .map_err(|e| ApiError::internal(e.to_string()))?;
-            hits.into_iter().skip(offset).take(page_size).collect::<Vec<_>>()
+            hits.into_iter()
+                .skip(offset)
+                .take(page_size)
+                .collect::<Vec<_>>()
         }
         None => app
             .memory
@@ -319,7 +400,7 @@ async fn delete_memory(
         .await
         .map_err(|e| ApiError::internal(e.to_string()))?
         .ok_or_else(|| ApiError::not_found("Memory not found"))?;
-    ensure_project_access(&app, &identity, &memory.project_id).await?;
+    ensure_project_admin(&app, &identity, &memory.project_id).await?;
 
     app.memory
         .delete(&memory.project_id, &memory_id)
@@ -360,7 +441,7 @@ async fn create_episode(
         .project_id
         .clone()
         .ok_or_else(|| ApiError::bad_request("project_id is required"))?;
-    ensure_project_access(&app, &identity, &project_id).await?;
+    ensure_project_write(&app, &identity, &project_id).await?;
 
     let episode = agistack_core::model::Episode {
         content: req.content.clone(),
@@ -434,8 +515,7 @@ async fn short_term_recall(
     };
     ensure_project_access(&app, &identity, &project_id).await?;
 
-    let since_ms =
-        chrono::Utc::now().timestamp_millis() - req.window_minutes.max(0) * 60_000;
+    let since_ms = chrono::Utc::now().timestamp_millis() - req.window_minutes.max(0) * 60_000;
 
     let recent = app
         .memory
@@ -527,6 +607,48 @@ mod unit {
         assert_eq!(v["updated_at"], Value::Null);
         assert_eq!(v["entities"][0]["name"], "Rust");
         assert_eq!(v["created_at"], "2023-11-14T22:13:20Z");
+    }
+
+    #[test]
+    fn memory_create_accepts_unsupported_fields_only_at_defaults() {
+        let req: MemoryCreate = serde_json::from_value(json!({
+            "project_id": "p1",
+            "title": "t",
+            "content": "c",
+            "relationships": [],
+            "collaborators": [],
+            "is_public": false,
+            "metadata": {}
+        }))
+        .unwrap();
+        assert!(unsupported_memory_create_fields(&req).is_empty());
+
+        let req: MemoryCreate = serde_json::from_value(json!({
+            "project_id": "p1",
+            "title": "t",
+            "content": "c",
+            "metadata": null
+        }))
+        .unwrap();
+        assert!(unsupported_memory_create_fields(&req).is_empty());
+    }
+
+    #[test]
+    fn memory_create_rejects_unsupported_non_defaults() {
+        let req: MemoryCreate = serde_json::from_value(json!({
+            "project_id": "p1",
+            "title": "t",
+            "content": "c",
+            "relationships": [{"type": "related"}],
+            "collaborators": ["u2"],
+            "is_public": true,
+            "metadata": {"source": "sdk"}
+        }))
+        .unwrap();
+        assert_eq!(
+            unsupported_memory_create_fields(&req),
+            vec!["relationships", "collaborators", "is_public", "metadata"]
+        );
     }
 
     // ---- F3 parity gate: assert the P1 wire shapes against contract-derived

@@ -63,12 +63,14 @@ impl PgApiKeyStore {
         .await
         .map_err(|e| CoreError::Storage(e.to_string()))?;
 
-        Ok(row.map(|(id, user_id, is_active, expires_at)| ApiKeyRecord {
-            id,
-            user_id,
-            is_active,
-            expires_at,
-        }))
+        Ok(
+            row.map(|(id, user_id, is_active, expires_at)| ApiKeyRecord {
+                id,
+                user_id,
+                is_active,
+                expires_at,
+            }),
+        )
     }
 
     /// Best-effort `last_used_at = now()` touch, mirroring the Python auth path.
@@ -114,18 +116,25 @@ impl PgProjectStore {
         .await
         .map_err(|e| CoreError::Storage(e.to_string()))?;
 
-        Ok(row.map(|(id, tenant_id, owner_id, is_public)| ProjectRecord {
-            id,
-            tenant_id,
-            owner_id,
-            is_public,
-        }))
+        Ok(
+            row.map(|(id, tenant_id, owner_id, is_public)| ProjectRecord {
+                id,
+                tenant_id,
+                owner_id,
+                is_public,
+            }),
+        )
     }
 
-    /// Whether `user_id` may access `project`: owner, public, or an explicit
-    /// `user_projects` membership row. Mirrors the Python access check in
-    /// `list_memories` (owner / public / UserProject membership).
-    pub async fn user_can_access(&self, user_id: &str, project: &ProjectRecord) -> CoreResult<bool> {
+    /// Whether `user_id` may read `project`: owner, public, or an explicit
+    /// `user_projects` membership row. Mirrors the Python read predicates in
+    /// `_verify_memory_read_access` / `list_memories` (owner / public /
+    /// UserProject membership).
+    pub async fn user_can_access(
+        &self,
+        user_id: &str,
+        project: &ProjectRecord,
+    ) -> CoreResult<bool> {
         if project.is_public || project.owner_id == user_id {
             return Ok(true);
         }
@@ -138,6 +147,70 @@ impl PgProjectStore {
         .await
         .map_err(|e| CoreError::Storage(e.to_string()))?;
         Ok(row.0 > 0)
+    }
+
+    /// Whether `user_id` may write memories/episodes in `project`. Mirrors
+    /// Python `_load_project_for_create`: owners and non-viewer project members
+    /// may create; public visibility never grants writes.
+    pub async fn user_can_write(&self, user_id: &str, project: &ProjectRecord) -> CoreResult<bool> {
+        if project.owner_id == user_id {
+            return Ok(true);
+        }
+        let row = sqlx::query_as::<_, (i64,)>(
+            "SELECT count(*) FROM user_projects \
+             WHERE user_id = $1 AND project_id = $2 AND role <> 'viewer'",
+        )
+        .bind(user_id)
+        .bind(&project.id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+        Ok(row.0 > 0)
+    }
+
+    /// Whether `user_id` may administer `project`. Mirrors Python
+    /// `_has_project_admin_access`: project owner, project owner/admin role,
+    /// tenant owner/admin role, or a superuser may delete/administer memories.
+    pub async fn user_can_admin(&self, user_id: &str, project: &ProjectRecord) -> CoreResult<bool> {
+        if project.owner_id == user_id {
+            return Ok(true);
+        }
+
+        let project_role = sqlx::query_as::<_, (i64,)>(
+            "SELECT count(*) FROM user_projects \
+             WHERE user_id = $1 AND project_id = $2 AND role IN ('owner', 'admin')",
+        )
+        .bind(user_id)
+        .bind(&project.id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+        if project_role.0 > 0 {
+            return Ok(true);
+        }
+
+        let tenant_role = sqlx::query_as::<_, (i64,)>(
+            "SELECT count(*) FROM user_tenants \
+             WHERE user_id = $1 AND tenant_id = $2 AND role IN ('owner', 'admin')",
+        )
+        .bind(user_id)
+        .bind(&project.tenant_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+        if tenant_role.0 > 0 {
+            return Ok(true);
+        }
+
+        let superuser =
+            sqlx::query_as::<_, (Option<bool>,)>("SELECT is_superuser FROM users WHERE id = $1")
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| CoreError::Storage(e.to_string()))?;
+        Ok(superuser
+            .and_then(|(is_superuser,)| is_superuser)
+            .unwrap_or(false))
     }
 }
 

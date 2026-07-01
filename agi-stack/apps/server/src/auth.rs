@@ -88,8 +88,14 @@ pub trait Authenticator: Send + Sync {
     /// injected (no ambient clock) so expiry is testable/deterministic.
     async fn authenticate(&self, raw_key: &str, now_ms: i64) -> Result<Identity, AuthRejection>;
 
-    /// Whether `user_id` may act within `project_id` (owner / public / member).
+    /// Whether `user_id` may read within `project_id` (owner / public / member).
     async fn can_access_project(&self, user_id: &str, project_id: &str) -> Result<bool, String>;
+
+    /// Whether `user_id` may create memories/episodes within `project_id`.
+    async fn can_write_project(&self, user_id: &str, project_id: &str) -> Result<bool, String>;
+
+    /// Whether `user_id` may administer/delete memories within `project_id`.
+    async fn can_admin_project(&self, user_id: &str, project_id: &str) -> Result<bool, String>;
 }
 
 /// Production authenticator over the shared Python `api_keys`/`projects` tables.
@@ -118,7 +124,9 @@ impl Authenticator for PgAuthenticator {
             .ok_or_else(|| AuthRejection::unauthorized("Invalid API key"))?;
 
         if !record.is_usable_at(now_ms) {
-            return Err(AuthRejection::unauthorized("API key is inactive or expired"));
+            return Err(AuthRejection::unauthorized(
+                "API key is inactive or expired",
+            ));
         }
 
         // Best-effort audit touch; a failure here must never fail the request.
@@ -131,10 +139,47 @@ impl Authenticator for PgAuthenticator {
     }
 
     async fn can_access_project(&self, user_id: &str, project_id: &str) -> Result<bool, String> {
-        match self.projects.find_by_id(project_id).await.map_err(|e| e.to_string())? {
+        match self
+            .projects
+            .find_by_id(project_id)
+            .await
+            .map_err(|e| e.to_string())?
+        {
             Some(project) => self
                 .projects
                 .user_can_access(user_id, &project)
+                .await
+                .map_err(|e| e.to_string()),
+            None => Ok(false),
+        }
+    }
+
+    async fn can_write_project(&self, user_id: &str, project_id: &str) -> Result<bool, String> {
+        match self
+            .projects
+            .find_by_id(project_id)
+            .await
+            .map_err(|e| e.to_string())?
+        {
+            Some(project) => self
+                .projects
+                .user_can_write(user_id, &project)
+                .await
+                .map_err(|e| e.to_string()),
+            None => Ok(false),
+        }
+    }
+
+    async fn can_admin_project(&self, user_id: &str, project_id: &str) -> Result<bool, String> {
+        match self
+            .projects
+            .find_by_id(project_id)
+            .await
+            .map_err(|e| e.to_string())?
+        {
+            Some(project) => self
+                .projects
+                .user_can_admin(user_id, &project)
                 .await
                 .map_err(|e| e.to_string()),
             None => Ok(false),
@@ -174,6 +219,14 @@ impl Authenticator for DevAuthenticator {
     }
 
     async fn can_access_project(&self, _user_id: &str, _project_id: &str) -> Result<bool, String> {
+        Ok(true)
+    }
+
+    async fn can_write_project(&self, _user_id: &str, _project_id: &str) -> Result<bool, String> {
+        Ok(true)
+    }
+
+    async fn can_admin_project(&self, _user_id: &str, _project_id: &str) -> Result<bool, String> {
         Ok(true)
     }
 }
@@ -239,8 +292,14 @@ mod unit {
 
     #[test]
     fn extract_handles_bearer_token_and_bare() {
-        assert_eq!(extract_raw_key(Some("Bearer ms_sk_abc")).unwrap(), "ms_sk_abc");
-        assert_eq!(extract_raw_key(Some("Token ms_sk_abc")).unwrap(), "ms_sk_abc");
+        assert_eq!(
+            extract_raw_key(Some("Bearer ms_sk_abc")).unwrap(),
+            "ms_sk_abc"
+        );
+        assert_eq!(
+            extract_raw_key(Some("Token ms_sk_abc")).unwrap(),
+            "ms_sk_abc"
+        );
         assert_eq!(extract_raw_key(Some("ms_sk_abc")).unwrap(), "ms_sk_abc");
     }
 
@@ -251,7 +310,9 @@ mod unit {
             StatusCode::UNAUTHORIZED
         );
         assert_eq!(
-            extract_raw_key(Some("Bearer sk-openai")).unwrap_err().status,
+            extract_raw_key(Some("Bearer sk-openai"))
+                .unwrap_err()
+                .status,
             StatusCode::UNAUTHORIZED
         );
     }
@@ -262,6 +323,8 @@ mod unit {
         let id = auth.authenticate("ms_sk_demo", 0).await.unwrap();
         assert_eq!(id.user_id, "dev-user");
         assert!(auth.can_access_project("dev-user", "p1").await.unwrap());
+        assert!(auth.can_write_project("dev-user", "p1").await.unwrap());
+        assert!(auth.can_admin_project("dev-user", "p1").await.unwrap());
         assert!(auth.authenticate("nope", 0).await.is_err());
     }
 }
