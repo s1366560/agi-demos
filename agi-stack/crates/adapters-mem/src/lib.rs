@@ -22,12 +22,15 @@
 //!     (blob store, F6; parity oracle for the S3/MinIO tier)
 //!   - [`container_runtime::InMemoryContainerRuntime`] — [`agistack_core::ports::ContainerRuntime`]
 //!     (sandbox provisioning, F9; state-machine oracle for the Docker/bollard tier)
+//!   - [`email::InMemoryEmailSender`] — [`agistack_core::ports::EmailSender`]
+//!     (transactional email, F10; behavioural oracle for the lettre/SMTP tier)
 //!   - [`clock::FixedClock`] / [`clock::SystemClock`] — [`agistack_core::Clock`]
 
 pub mod changelog;
 pub mod checkpoint;
 pub mod clock;
 pub mod container_runtime;
+pub mod email;
 pub mod embedding;
 pub mod event_stream;
 pub mod graph;
@@ -42,6 +45,7 @@ pub use checkpoint::InMemoryCheckpointStore;
 pub use clock::SystemClock;
 pub use clock::FixedClock;
 pub use container_runtime::InMemoryContainerRuntime;
+pub use email::InMemoryEmailSender;
 pub use embedding::{HashEmbedding, NgramHashEmbedding};
 pub use event_stream::InMemoryEventStream;
 pub use graph::InMemoryGraphStore;

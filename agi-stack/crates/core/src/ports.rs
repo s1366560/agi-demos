@@ -40,6 +40,8 @@ pub enum CoreError {
     Event(String),
     #[error("container runtime error: {0}")]
     Container(String),
+    #[error("email error: {0}")]
+    Email(String),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
@@ -321,6 +323,45 @@ pub trait ContainerRuntime: Send + Sync {
     /// List ids of containers matching an optional `(label_key, label_value)`
     /// selector (`None` = all managed containers), sorted ascending.
     async fn list(&self, label: Option<(&str, &str)>) -> CoreResult<Vec<String>>;
+}
+
+/// A transactional email to send, mirroring the fields the Python invitation /
+/// notification flow fills in (`src/.../notifications`, `smtp_config`). A minimal
+/// runtime-neutral subset: a single `from`, one-or-more `to`, a `subject`, and a
+/// plain-text body with an optional HTML alternative. Addresses are validated by
+/// the adapter (the port stays dependency-free `String`s so it compiles to
+/// `wasm32`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmailMessage {
+    /// RFC 5322 sender address (e.g. `"MemStack <no-reply@memstack.ai>"` or a
+    /// bare `"no-reply@memstack.ai"`).
+    pub from: String,
+    /// One or more recipient addresses.
+    pub to: Vec<String>,
+    /// Subject line.
+    pub subject: String,
+    /// Plain-text body (always present — the lowest-common-denominator part).
+    pub body_text: String,
+    /// Optional HTML alternative; when set the adapter sends a `multipart/alternative`.
+    pub body_html: Option<String>,
+}
+
+/// Outbound transactional email — the Rust re-expression of the Python SMTP path
+/// (invitation emails, notifications). This is **F10** of the strangler
+/// migration (`10-production-migration.md` §3): the mail-sending capability P2
+/// (invitations) and P7-G4 (notifications) depend on.
+///
+/// Like [`ObjectStore`]/[`ContainerRuntime`], the port is runtime-agnostic (plain
+/// `EmailMessage` + `async_trait`, no SMTP/network types leak in) so the core
+/// stays wasm-compilable (ADR-0001); the heavy `lettre` SMTP client lives only in
+/// the server-only adapter. Because email delivery is an I/O side effect (not a
+/// value store), cross-adapter equivalence is **behavioural** (the in-memory fake
+/// records exactly what a real SMTP send would transmit), not byte parity.
+#[async_trait]
+pub trait EmailSender: Send + Sync {
+    /// Send `message`. Returns `Ok(())` once the MTA has accepted it (a real SMTP
+    /// `250`), or [`CoreError::Email`] on a rejected envelope / transport failure.
+    async fn send(&self, message: &EmailMessage) -> CoreResult<()>;
 }
 
 /// Mirrors `MemoryRepository` in

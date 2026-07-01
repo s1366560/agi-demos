@@ -37,9 +37,9 @@ pub use graph::{
 pub use model::{Entity, Episode, GraphEntity, Memory, Project, Relationship, SourceType, Subgraph};
 pub use ports::{
     ChangeEvent, ChangeLog, CheckpointStore, Clock, ContainerRuntime, ContainerSpec,
-    ContainerState, ContainerStatus, CoreError, CoreResult, EmbeddingPort, EventStream, GraphStore,
-    LlmPort, MemoryDraft, MemoryRepository, ObjectMeta, ObjectStore, ScoredId, StreamEntry,
-    ToolHost, VectorIndexPort,
+    ContainerState, ContainerStatus, CoreError, CoreResult, EmailMessage, EmailSender,
+    EmbeddingPort, EventStream, GraphStore, LlmPort, MemoryDraft, MemoryRepository, ObjectMeta,
+    ObjectStore, ScoredId, StreamEntry, ToolHost, VectorIndexPort,
 };
 pub use service::MemoryService;
 pub use sync::{reconcile, Replica, SyncRecord, VersionVector};
