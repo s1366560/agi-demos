@@ -16,12 +16,15 @@
 //!   - [`vector::InMemoryVectorIndex`]     — [`agistack_core::VectorIndexPort`]
 //!   - [`checkpoint::InMemoryCheckpointStore`] — [`agistack_core::CheckpointStore`]
 //!   - [`changelog::InMemoryChangeLog`]    — [`agistack_core::ChangeLog`]
+//!   - [`event_stream::InMemoryEventStream`] — [`agistack_core::ports::EventStream`]
+//!     (agent-event bus, F5; parity oracle for the Redis Streams tier)
 //!   - [`clock::FixedClock`] / [`clock::SystemClock`] — [`agistack_core::Clock`]
 
 pub mod changelog;
 pub mod checkpoint;
 pub mod clock;
 pub mod embedding;
+pub mod event_stream;
 pub mod graph;
 pub mod llm;
 pub mod repo;
@@ -33,6 +36,7 @@ pub use checkpoint::InMemoryCheckpointStore;
 pub use clock::SystemClock;
 pub use clock::FixedClock;
 pub use embedding::{HashEmbedding, NgramHashEmbedding};
+pub use event_stream::InMemoryEventStream;
 pub use graph::InMemoryGraphStore;
 pub use llm::{ScriptedLlm, StubLlm};
 pub use repo::InMemoryMemoryRepository;

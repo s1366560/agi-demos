@@ -1,0 +1,27 @@
+[package]
+name = "agistack-adapters-redis"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Native/server-ONLY adapter: the **production agent-event bus** behind the
+# `EventStream` port (plan.md Section 15.1 / F5). It talks to the SAME Redis the
+# Python backend uses for `agent:events:{conversation_id}` streams (XADD MAXLEN /
+# XRANGE), so the strangler can flip event production from Python to Rust while
+# the WebSocket bridge keeps reading the same streams.
+#
+# Why a dedicated crate: the `redis` client drags in tokio + a network stack.
+# Exactly like `adapters-postgres` / `adapters-neo4j`, this is kept OUT of the
+# core/wasm path so the core stays runtime-agnostic and wasm-compilable
+# (ADR-0001). Nothing here ever appears in a port signature — the core only sees
+# `dyn EventStream`. The in-memory tier (`agistack-adapters-mem`) is the
+# browser/test sibling and the parity oracle for this adapter.
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+redis = { version = "0.27", features = ["tokio-comp", "streams"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+agistack-adapters-mem = { path = "../adapters-mem" }
+futures.workspace = true

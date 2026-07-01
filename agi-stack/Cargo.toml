@@ -9,6 +9,7 @@ members = [
     "crates/adapters-cli-harness",
     "crates/adapters-postgres",
     "crates/adapters-neo4j",
+    "crates/adapters-redis",
     "crates/adapters-secrets",
     "crates/adapters-wasmtime",
     "crates/parity",

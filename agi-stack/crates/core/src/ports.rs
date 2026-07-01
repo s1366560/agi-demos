@@ -36,6 +36,8 @@ pub enum CoreError {
     Plan(String),
     #[error("harness error: {0}")]
     Harness(String),
+    #[error("event stream error: {0}")]
+    Event(String),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
@@ -150,6 +152,50 @@ pub struct ChangeEvent {
 #[async_trait]
 pub trait ChangeLog: Send + Sync {
     async fn record(&self, event: ChangeEvent) -> CoreResult<()>;
+}
+
+/// One entry in an event stream: the adapter-assigned monotonic `id` used for
+/// incremental reads, plus the already-serialized event `payload`. Mirrors a
+/// Redis Streams entry (a stream id + a field map). Keeping the payload opaque
+/// (serialized JSON) is deliberate — the core stays decoupled from any concrete
+/// event enum, and every adapter (Redis / in-memory) stores the identical bytes,
+/// so payload sequences match across tiers even though the `id` formats differ.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StreamEntry {
+    pub id: String,
+    pub payload: String,
+}
+
+/// Append-and-read event bus keyed by an opaque `topic` (e.g.
+/// `agent:events:{conversation_id}`). The Rust re-expression of the Python
+/// **Redis Streams agent-event bus** (F5, `10-production-migration.md` §3): the
+/// SessionProcessor appends domain events, the WebSocket bridge reads them
+/// incrementally and forwards to the frontend. This is the data-plane seam that
+/// decouples event production from delivery.
+///
+/// The server adapter is Redis Streams (`redis`, `XADD`/`XRANGE`, server-only);
+/// an in-memory adapter backs tests and the browser. Both sit behind this one
+/// port, so the portable core never learns which is underneath. `max_len` bounds
+/// retained history (Redis `XADD MAXLEN`), giving the same trim/backpressure
+/// behaviour as the Python `maxlen=1000` stream.
+///
+/// Because entry ids are adapter-specific opaque strings, callers must echo back
+/// the last id they saw for incremental reads (exactly like a Redis Streams
+/// consumer); they must not parse or compare ids across adapters.
+#[async_trait]
+pub trait EventStream: Send + Sync {
+    /// Append `payload` to `topic`, trimming the stream to at most `max_len`
+    /// most-recent entries (`0` = unbounded). Returns the new entry's id.
+    async fn append(&self, topic: &str, payload: &str, max_len: usize) -> CoreResult<String>;
+
+    /// Read up to `limit` entries from `topic` strictly after `after_id`
+    /// (empty string or `"0"` = from the beginning), in append order.
+    async fn read_after(
+        &self,
+        topic: &str,
+        after_id: &str,
+        limit: usize,
+    ) -> CoreResult<Vec<StreamEntry>>;
 }
 
 /// Mirrors `MemoryRepository` in
