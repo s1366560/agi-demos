@@ -93,4 +93,4 @@
 2. **可扩展性**(信任 × 平台)—— 工具/技能/MCP 插件生态:[02-extensibility](02-extensibility.md)。
 3. **核心引擎质量**(健壮 · 可扩展 · 热插拔 · 可编排)—— 学习网关/Flink/Argo 内部设计后的综合:[06-agent-core-design](06-agent-core-design.md);多层插件运行时(能力注册 · 插件形态 · 可插拔 Harness · 热插拔生命周期)学习 OpenClaw 后的综合:[07-plugin-runtime-architecture](07-plugin-runtime-architecture.md);控制流/数据流分离(控制面=SSOT · 声明式 reconcile · xDS 风格分发 · local-first 断连自治)学习 Kubernetes/Istio 后的综合:[08-control-data-plane-separation](08-control-data-plane-separation.md)。证据基见 [`../research/`](../research/README.md)。
 
-落地路径与 go/no-go 见 [05-roadmap](05-roadmap.md);已验证证据见 [04-spike-evidence](04-spike-evidence.md);逐平台出厂矩阵(`Makefile` 一键五端)见 [09-shipping-matrix](09-shipping-matrix.md);关键决策见 [`../adr/`](../adr/)。
+落地路径与 go/no-go 见 [05-roadmap](05-roadmap.md);已验证证据见 [04-spike-evidence](04-spike-evidence.md);逐平台出厂矩阵(`Makefile` 一键五端)见 [09-shipping-matrix](09-shipping-matrix.md);生产迁移(Python 后端绞杀替换为 Rust,共享 Postgres strangler + 网关按能力分流,P1 已落地)见 [10-production-migration](10-production-migration.md);关键决策见 [`../adr/`](../adr/)。
