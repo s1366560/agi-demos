@@ -56,7 +56,7 @@ graph LR
 | **F6 · 对象存储(S3 兼容)** | [`crates/adapters-s3`](../../crates/adapters-s3)(`aws-sdk-s3`,server-only):`S3ObjectStore` 实 `ObjectStore` 端口(`put`/`get`/`stat`/`delete`/`list`,值为不透明字节 + 可选 `content_type`),对 **Python 同一套 S3/MinIO 桶**(artifacts/attachments/instance_files)说 `PutObject`/`GetObject`/`HeadObject`/`ListObjectsV2`;`force_path_style(true)`(MinIO 必需)+ 缺桶自建;缺 key → `None`(镜像 Python 404 空对象),无类型归一到 S3 默认 `application/octet-stream`。绞杀可把 blob 读写从 Python 翻到 Rust、Python 侧继续读写同一桶 **零数据迁移** | ✅ **已落地**(`ObjectStore` 端口 + 内存/S3 双适配器,对活 Docker MinIO 跨层 parity 实测;[04 #34](04-spike-evidence.md))。分片/流式上传、`refresh-url` 预签名留 P5·P7 波次 |
 | **F7 · 流式 LLM + WS 事件桥** | `adapters-http-llm` 扩流式 token(**决策 2:先 OpenAI/Anthropic 两家**,余下 future);WS ConnectionManager(1000+ 并发、广播、背压、重连、事件回放)。`axum::ws` + `tokio-tungstenite` | 🎯 future(P3·P4·P6) |
 | **F8 · Neo4j 图适配器** | 节点 Entity/Episodic/Community、边 MENTIONS;向量 + 全文索引;`project_id`/`tenant_id` 收敛。`neo4rs`(社区异步驱动) | ✅ **已落地**(`Neo4jGraphStore` 实 `GraphStore`,对活 Docker Neo4j 跨层 parity 实测;[04 #32](04-spike-evidence.md))。Episodic/Community/向量+全文索引留 future |
-| **F9 · Docker/MCP 沙箱** | 容器生命周期(create/start/health/stop);MCP WebSocket JSON-RPC 2.0(:8765);desktop(KasmVNC)/terminal(ttyd)代理。`bollard` + `tokio-tungstenite` | 🎯 future(P5) |
+| **F9 · Docker/MCP 沙箱** | 容器生命周期(create/start/health/stop);MCP WebSocket JSON-RPC 2.0(:8765);desktop(KasmVNC)/terminal(ttyd)代理。`bollard` + `tokio-tungstenite` | 🚧 **部分落地**:**MCP WS 客户端已通**——[`crates/adapters-mcp`](../../crates/adapters-mcp)(`tokio-tungstenite`,server-only)`WsMcpToolHost` 实**既有 `ToolHost` 端口**(`initialize`→`tools/list` 缓存→`tools/call`),对**运行中的 Docker `sandbox-mcp-server` 实测**握手 + write→read 工具往返(52 工具)通过([04 #35](04-spike-evidence.md))。容器生命周期(`bollard`)+ desktop/terminal/noVNC 代理留 P5 |
 | **F10 · SMTP/邮件(决策 3)** | 邀请邮件 + 模板渲染;因 P2 决定迁邮件邀请,从 P7 上提为多波共享基础。`lettre`,server-only | 🎯 future(P2·P7) |
 | **F11 · 分布式执行层(决策 1,替 Ray)** | tokio + gRPC(`tonic`)actor/执行层替 Ray Actors(会话级 actor + 监督重启 `max_restarts=5` 语义 + 跨节点分发 + 背压)。`tokio` + `tonic` + 可选 `kameo`。**全计划最高风险单点** | 🎯 future(P3·P6) |
 
@@ -152,9 +152,9 @@ P1 选记忆域先行:Rust `MemoryService` 已最成熟,且这是价值高、依
 - **端点(~89)**:project_sandbox(~30:create/health/stats/execute/restart/desktop/terminal/http-services/proxy)· skills(~20:CRUD/versions/publish/import/clone)· channels(~27)· tenant_skill_configs(~8)· terminal(4 + WS);含多 WS 代理(mcp/desktop/terminal/http-service)。
 - **Python 表**:`project_sandbox`(status/container_id)·`skill`(scope SYSTEM/WORKSPACE/PROJECT·spec·version)·`skill_version`·`tenant_skill_config`·`instance_channel_config`。
 - **沙箱运行时**:MCPSandboxAdapter(Docker 容器 + WS MCP :8765,30+ 工具:file/code-intel/edit/test/git/desktop/terminal)vs LocalSandboxAdapter(主机 FS);MCP = JSON-RPC 2.0 over WS,OAuth-like token。
-- **Rust 现状**:✅ `plugin-host`(Skill/Tool 抽象 + ArcSwap 热插拔)· `adapters-wasmtime`(WASM 沙箱);**缺** Docker 编排、MCP WS 传输、desktop/terminal 代理、S3 文件。
+- **Rust 现状**:✅ `plugin-host`(Skill/Tool 抽象 + ArcSwap 热插拔)· `adapters-wasmtime`(WASM 沙箱)· **`adapters-mcp`(MCP WS `ToolHost` 客户端,对活 `sandbox-mcp-server` 实测,✅ 已落地)**;**缺** Docker 编排、desktop/terminal 代理、S3 文件(F6 ✅)。
 - **Parity 风险**:`ProjectSandboxResponse.urls{mcp/desktop/terminal}` 须匹配容器端口路由;ExecuteToolResponse 形状;skill spec/scope 枚举。
-- **子任务**:`p5-docker-adapter`(F9 容器生命周期)→ `p5-mcp-ws`(JSON-RPC 客户端 + 代理)→ `p5-skill-store`(skill 表 + 版本,经 plugin-host 触发)→ `p5-sandbox-endpoints` → `p5-proxy`(desktop/terminal/http WS)→ `p5-parity` → `p5-gateway` → `p5-docs`。
+- **子任务**:`p5-docker-adapter`(F9 容器生命周期)→ `p5-mcp-ws`(JSON-RPC 客户端 + 代理,✅ **客户端已落地** `WsMcpToolHost` 对活库 parity;代理留)→ `p5-skill-store`(skill 表 + 版本,经 plugin-host 触发)→ `p5-sandbox-endpoints` → `p5-proxy`(desktop/terminal/http WS)→ `p5-parity` → `p5-gateway` → `p5-docs`。
 - **龙**:desktop(KasmVNC)/terminal(ttyd)代理状态机、多服务预览路由 + 会话 token、容器 IP/隧道分配。
 
 ### 6.5 P6 · 工作区与多 agent 协作(依赖 P3 事件/流 + F5)
