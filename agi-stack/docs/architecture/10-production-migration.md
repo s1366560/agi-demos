@@ -86,7 +86,7 @@ P1 选记忆域先行:Rust `MemoryService` 已最成熟,且这是价值高、依
 | 波次 | 能力 | 主要端点(实测校准) | 新增/依赖适配器 | 难度 | 状态 |
 |---|---|---|---|---|---|
 | **P1** | 记忆与情节 | `/memories`·`/episodes`·`/recall`(~14) | **F1 Postgres+pgvector** | 低-中 | ✅ 本波落地 |
-| **P2** | 身份/租户/项目 | auth·tenants·projects·invitations·trust·shares(~43–58) | F2 ✅ · F10 SMTP | 中 | 🎯 future(详见 §6.1) |
+| **P2** | 身份/租户/项目 | auth·tenants·projects·invitations·trust·shares(~43–58) | F2 ✅ · F10 SMTP | 中 | 🚧 登录垂直已落地(`/auth/token` 绞杀 + tenants 读就绪;详见 §6.1、[04 #29](04-spike-evidence.md)) |
 | **P3** | Agent 运行时与会话 | `/agent/*`(84 子)+ `/agent/ws`(1 WS,共 85) | F5 · F7 · **F11**(替 Ray)· Wave L/M/N ✅ | 极高 | 🎯 future(详见 §6.2;硬化地基 Wave L/M/N 已绿) |
 | **P4** | 知识图谱 | graph(10)·enhanced_search(7)(~17) | F8 Neo4j / 端 SQLite+petgraph | 高 | 🎯 future(详见 §6.3) |
 | **P5** | 沙箱与 MCP | project_sandbox·skills·channels·terminal(~89) | F9 Docker/MCP · F6 | 高 | 🎯 future(详见 §6.4;`plugin-host` 已就位) |
@@ -107,10 +107,21 @@ P1 选记忆域先行:Rust `MemoryService` 已最成熟,且这是价值高、依
 - **端点(~43–58)**:auth(12,含 device-code RFC 8628 ×3)· tenants(20)· projects(12,含级联删)· invitations(4)· trust(~6)· shares(4)。
 - **Python 表**:`users`·`api_keys`·`tenants`·`projects`·`user_tenants`·`user_projects`·`invitations`·`memory_shares`·`trust_policies`·`decision_records`。
 - **新增适配器**:扩 `adapters-postgres` 覆盖上述表;`adapters-auth-secrets`(bcrypt / `getrandom` token / `jsonwebtoken` JWT);device-code 经 F5 Redis(600s TTL);邮件邀请经 **F10 SMTP(`lettre`)**。
-- **Rust 现状**:✅ F2 `ms_sk_` SHA256 中间件 + project 访问检查;**缺** bcrypt 密码校验、`/auth/token` JWT 签发、租户/项目 CRUD、RBAC、级联删、invitation/share token、device-code 全流程、OAuth 端点、SMTP。
+- **Rust 现状**:✅ F2 `ms_sk_` SHA256 中间件 + project 访问检查;✅ **本会话落地登录垂直**(见下)——bcrypt 密码校验、`/auth/token` 登录、`/auth/oauth/{provider}/callback`(501 parity)、tenants 只读(list/get,含 404-then-403);**缺** 租户/项目写 CRUD、RBAC、级联删、invitation/share token、device-code 全流程、真实 OAuth、SMTP。
 - **Parity 风险**:①**级联删**——删项目连带 15+ 表,须事务 + FK 顺序与 Python 一致;②Pydantic→serde 字段别名(`user_id`←`id`,`populate_by_name`);③bcrypt 须与 passlib 输出逐字一致(固定测试向量);④OAuth 端点 Python 现为 501 stub → Rust 拥有端点但字节对齐仍返 501。
-- **子任务**:`p2-auth-secrets` → `p2-tenant-repo` → `p2-project-repo`(级联删)→ `p2-endpoints`(6 router,含 device-code + OAuth-stub + SMTP 邀请)→ `p2-rbac` → `p2-gateway-parity` → `p2-docs`。
+- **子任务**:`p2-auth-secrets` ✅ → `p2-tenant-repo` ✅ → `p2-project-repo`(级联删)→ `p2-endpoints`(登录垂直 ✅;余下 device-code + 写 CRUD + SMTP 邀请 future)→ `p2-rbac` → `p2-gateway-parity`(`/auth/token`·`/auth/oauth` 已翻 ✅;tenants 翻转 deferred)→ `p2-docs` ✅。
 - **决策 3(全范围迁移)**:device-code + OAuth 端点(501 parity)+ SMTP 邮件邀请全随 P2 迁 Rust。**龙**:真实 OAuth 授权码/PKCE 流。
+
+#### 6.1.1 本会话落地:P2 登录垂直(login vertical,已端到端验证)
+
+按 P1 同一绞杀模式落地 P2 的**可验证证明切片**(登录 + 租户只读),而非 ~43–58 端点的字面 parity:
+
+- **翻网关(flip)**:`POST /api/v1/auth/token`(登录)+ `POST /api/v1/auth/oauth/{provider}/callback`(501 stub)。二者在 Rust 完整覆盖,加入 `STRANGLED_PREFIXES`;`/auth/*` 其余兄弟端点(force-change-password、me…)与 `/tenants/*` 仍走 Python(粗前缀匹配,只列**整体已覆盖**的路径)。
+- **实现 + parity 测试但不翻转**:`GET /tenants/` + `GET /tenants/{id}`。原因:(a) 网关粗段前缀会连带捕获仍在 Python 的 `/tenants/{id}/members|stats|analytics` 兄弟;(b) `TenantResponse` 时间戳依赖 pydantic 精确 ISO-8601 渲染,属 F3 golden 捕获范畴(同 P1 `rfc3339` 假设)。故标注「就绪+已测,翻转待 golden 捕获」。
+- **登录流(逐字复刻 Python `auth.py:136-210`)**:`Form(username,password)` → `find_auth_by_email` → 缺用户或错密码统一 401「Incorrect username or password」(+`WWW-Authenticate: Bearer`,短路不 verify None)→ `!is_active` 则 401「User account is inactive」(无该头)→ `is_superuser` 加 `["admin"]` 权限 → 铸 `ms_sk_` **登录会话 API key**(非 JWT——与 Python `create_api_key` 一致)、id `uuid4`、name `Login Session {username}`、`expires_at = now + 24h` → 返回**扁平 `Token{access_token, token_type:"bearer", must_change_password}`**(无时间戳 → 精确可复现)。登录**未认证**(在 `router_public()`,无中间件)。
+- **摘要 parity 铁证**:`insert_api_key` 内部以 `sha256_hex(plaintext)` 落 `key_hash`,与认证器 `find_by_raw_key` 同一摘要函数 → 铸出的 key 立即可认证(经**真 pgvector 容器**集成测试端到端验证)。
+- **server-only 隔离**:bcrypt(`adapters-secrets`)、sqlx 读写(`adapters-postgres` 的 `user_store`/`tenant_repo`)严格隔离在适配器 crate,**绝不入 core 或端口签名**;core `wasm32` 仍绿。
+- **证据**:[04 #29](04-spike-evidence.md);`cargo test --workspace` 由 112 升至 **128 绿**。
 
 ### 6.2 P3 · Agent 运行时与会话(依赖 Wave L/M/N ✅ + F5/F7/F11)—— 最难波,决策 1 全 Rust 化
 

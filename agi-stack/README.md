@@ -2,7 +2,7 @@
 
 > **新一代可移植智能体核心** —— 一份核心代码,编译/打包后同时跑在**云端服务器**与**端侧(浏览器 WASM / PC / 移动端)**,本地优先(local-first)、可离线;并以**信任 × 平台**两轴承载可扩展的工具/技能/子智能体/MCP 插件生态。
 
-本目录是 **新架构的根**。架构文档在 [`docs/`](docs/);**Phase 1 生产级 Cargo workspace 已落地于此根下**([`crates/`](crates/) + [`apps/`](apps/),`cargo test` 112 测试绿、`agistack-server` 全端点 curl 验证 —— 见下方[「现状」](#现状)与[「构建与运行」](#构建与运行phase-1-工作区))。
+本目录是 **新架构的根**。架构文档在 [`docs/`](docs/);**Phase 1 生产级 Cargo workspace 已落地于此根下**([`crates/`](crates/) + [`apps/`](apps/),`cargo test` 128 测试绿、`agistack-server` 全端点 curl 验证 —— 见下方[「现状」](#现状)与[「构建与运行」](#构建与运行phase-1-工作区))。
 
 ---
 
@@ -75,7 +75,7 @@ graph TD
   - [`crates/adapters-device`](crates/adapters-device) —— 本地优先 SQLite 适配器(`rusqlite` bundled,跨编移动端):持久化 memory repo + checkpoint + 暴力余弦向量索引,证**端上耐久崩溃恢复**。
   - [`crates/bindings-uniffi`](crates/bindings-uniffi) —— UniFFI 移动端绑定:把同一核心(+SQLite 设备适配器)封为 `MobileCore`(`ingest`/`search`/`semantic_search`),`cdylib`→Android `.so`、`staticlib`→iOS `.a`,UniFFI 生成 Swift/Kotlin 原生包。
   - [`apps/server`](apps/server) —— 真实 axum 服务器,把上述端口装配为 DI 图,暴露 episodes/memory(关键词+语义)/agent run/plugins/control-plane 全端点。
-- 验证:`cargo test --workspace` **112 测试绿**(覆盖 core / plugin-host / adapters-mem / adapters-device / adapters-wasmtime / adapters-http-llm / adapters-postgres / adapters-cli-harness / gateway 全 crate,含 Wave A–K 各风险点切片 + Wave L/M/N agent runtime 三轴(可编排 MiniOrchestrator / 可插拔 CLI-backend harness / 健壮 doom-loop+supervisor)+ P1 生产绞杀垂直;明细见 [04 证据表](docs/architecture/04-spike-evidence.md));`agistack-server` 启动后 curl 验证健康、记忆摄取与检索、ReAct 智能体回合、CP/DP 声明式 reconcile(含重复名 NACK 保留 last-good)、插件 enable/disable 全部通过;同一核心 `cargo build --target wasm32-unknown-unknown` 通过;`bindings-uniffi` 经 Android NDK 交叉编译产出**真实 `aarch64-linux-android` `.so`(release 1.5 MB,stripped,`file` 验为 ELF ARM aarch64)** 并由 UniFFI 生成 Kotlin 原生包;经 full Xcode 交叉编译 `aarch64-apple-ios`(+ `-sim`)产出静态库、组装 **XCFramework** 并生成 Swift 包,且在 **iPhone 17 模拟器上实跑冒烟**(摄取 + 关键词检索 + 语义检索全绿)。逐平台一键构建见 [`Makefile`](Makefile) / [09-shipping-matrix](docs/architecture/09-shipping-matrix.md)。生产绞杀迁移(Python→Rust 逐能力替换)见 [10-production-migration](docs/architecture/10-production-migration.md)。
+- 验证:`cargo test --workspace` **128 测试绿**(覆盖 core / plugin-host / adapters-mem / adapters-device / adapters-wasmtime / adapters-http-llm / adapters-postgres / adapters-cli-harness / gateway 全 crate,含 Wave A–K 各风险点切片 + Wave L/M/N agent runtime 三轴(可编排 MiniOrchestrator / 可插拔 CLI-backend harness / 健壮 doom-loop+supervisor)+ P1 记忆/情节 + P2 登录(身份/租户读)生产绞杀垂直;明细见 [04 证据表](docs/architecture/04-spike-evidence.md));`agistack-server` 启动后 curl 验证健康、记忆摄取与检索、ReAct 智能体回合、CP/DP 声明式 reconcile(含重复名 NACK 保留 last-good)、插件 enable/disable 全部通过;同一核心 `cargo build --target wasm32-unknown-unknown` 通过;`bindings-uniffi` 经 Android NDK 交叉编译产出**真实 `aarch64-linux-android` `.so`(release 1.5 MB,stripped,`file` 验为 ELF ARM aarch64)** 并由 UniFFI 生成 Kotlin 原生包;经 full Xcode 交叉编译 `aarch64-apple-ios`(+ `-sim`)产出静态库、组装 **XCFramework** 并生成 Swift 包,且在 **iPhone 17 模拟器上实跑冒烟**(摄取 + 关键词检索 + 语义检索全绿)。逐平台一键构建见 [`Makefile`](Makefile) / [09-shipping-matrix](docs/architecture/09-shipping-matrix.md)。生产绞杀迁移(Python→Rust 逐能力替换)见 [10-production-migration](docs/architecture/10-production-migration.md)。
 - 后续 Phase 2+ 实现仍以 [`docs/`](docs/) 架构文档为权威依据。
 
 ## 构建与运行(Phase 1 工作区)
@@ -84,14 +84,14 @@ graph TD
 cd agi-stack
 
 # —— 推荐:一键构建矩阵(`make help` 列出全部 target;详见 09-shipping-matrix)——
-make ci          # 最小门禁:整工作区测试(112 绿)+ 核心 wasm32
+make ci          # 最小门禁:整工作区测试(128 绿)+ 核心 wasm32
 make all         # 全部免额外 SDK 的产物:server + wasm-web + desktop + 评分卡
 make android     # 移动:NDK 交叉编 .so + Kotlin(需 NDK,路径可 NDK= 覆盖)
 make ios         # 移动:XCFramework + Swift + 模拟器实跑(需 full Xcode)
 
 # —— 等价手动命令(逐条) ——
 
-# 整工作区构建 + 测试(112 测试绿)
+# 整工作区构建 + 测试(128 测试绿)
 cargo test --workspace
 
 # 同一核心编为浏览器 WASM(证运行时无关)
