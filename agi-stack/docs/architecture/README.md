@@ -36,6 +36,7 @@
 | [0008](../adr/0008-agent-runtime-as-pluggable-harness.md) | Agent Runtime 即可插拔 Harness(embedded vs CLI-backend) |
 | [0009](../adr/0009-control-data-plane-separation.md) | 控制流/数据流分离为一等轴(CP=SSOT + 声明式 level-triggered reconcile) |
 | [0010](../adr/0010-xds-style-config-distribution.md) | xDS 风格版本化 typed 配置分发(version/nonce + ACK/NACK + last-good) |
+| [0011](../adr/0011-agent-supervised-verdict.md) | Agent 监督裁决(结构性触发器确定 + 主观 verdict 归 agent 工具调用) |
 
 ## 文档约定
 

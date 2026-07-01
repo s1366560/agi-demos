@@ -2,7 +2,7 @@
 
 > **新一代可移植智能体核心** —— 一份核心代码,编译/打包后同时跑在**云端服务器**与**端侧(浏览器 WASM / PC / 移动端)**,本地优先(local-first)、可离线;并以**信任 × 平台**两轴承载可扩展的工具/技能/子智能体/MCP 插件生态。
 
-本目录是 **新架构的根**。架构文档在 [`docs/`](docs/);**Phase 1 生产级 Cargo workspace 已落地于此根下**([`crates/`](crates/) + [`apps/`](apps/),`cargo test` 71 测试绿、`agistack-server` 全端点 curl 验证 —— 见下方[「现状」](#现状)与[「构建与运行」](#构建与运行phase-1-工作区))。
+本目录是 **新架构的根**。架构文档在 [`docs/`](docs/);**Phase 1 生产级 Cargo workspace 已落地于此根下**([`crates/`](crates/) + [`apps/`](apps/),`cargo test` 112 测试绿、`agistack-server` 全端点 curl 验证 —— 见下方[「现状」](#现状)与[「构建与运行」](#构建与运行phase-1-工作区))。
 
 ---
 
@@ -63,7 +63,7 @@ graph TD
 | [`docs/architecture/09-shipping-matrix.md`](docs/architecture/09-shipping-matrix.md) | 逐平台出厂矩阵:一份核心 → server/web/桌面/Android/iOS 五端产物,`Makefile` 一键 target |
 | [`docs/architecture/10-production-migration.md`](docs/architecture/10-production-migration.md) | 生产迁移:Python 后端绞杀替换为 Rust —— 共享 Postgres strangler、网关按能力分流、P1..P8 波次(P1 已落地) |
 | [`docs/research/`](docs/research/README.md) | 证据基:网关 / Flink / Argo / OpenClaw / Istio·K8s 内部设计源码级调研 |
-| [`docs/adr/`](docs/adr/) | 架构决策记录(ADR):语言选型、WASM-only、插件宿主端口化、Plan DAG、轮次 checkpoint、热插拔机制、能力注册、可插拔 Harness、控制面/数据面分离、xDS 风格分发 |
+| [`docs/adr/`](docs/adr/) | 架构决策记录(ADR):语言选型、WASM-only、插件宿主端口化、Plan DAG、轮次 checkpoint、热插拔机制、能力注册、可插拔 Harness、控制面/数据面分离、xDS 风格分发、agent 监督裁决 |
 
 ## 现状
 
@@ -84,14 +84,14 @@ graph TD
 cd agi-stack
 
 # —— 推荐:一键构建矩阵(`make help` 列出全部 target;详见 09-shipping-matrix)——
-make ci          # 最小门禁:整工作区测试(71 绿)+ 核心 wasm32
+make ci          # 最小门禁:整工作区测试(112 绿)+ 核心 wasm32
 make all         # 全部免额外 SDK 的产物:server + wasm-web + desktop + 评分卡
 make android     # 移动:NDK 交叉编 .so + Kotlin(需 NDK,路径可 NDK= 覆盖)
 make ios         # 移动:XCFramework + Swift + 模拟器实跑(需 full Xcode)
 
 # —— 等价手动命令(逐条) ——
 
-# 整工作区构建 + 测试(71 测试绿)
+# 整工作区构建 + 测试(112 测试绿)
 cargo test --workspace
 
 # 同一核心编为浏览器 WASM(证运行时无关)

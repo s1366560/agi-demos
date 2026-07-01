@@ -126,6 +126,8 @@ graph LR
 
 > **与既有"重/轻分叉"的关系**:[06 §6](06-agent-core-design.md) 的"服务器重型 / 端上轻量"是**同一 runtime 的两种部署**;本节的 harness 是**不同 runtime 的可插拔实现**。二者正交:`SessionProcessor` 是端上+服务器都能跑的 embedded harness;`claude-cli` 这类 CLI backend 只能在服务器作为另一个可选 harness。端上**永远**用 embedded(无子进程、无 JIT 依赖)。
 
+> **✅ 已落地(证据 [04 #27](04-spike-evidence.md))**:上表整节从"仅 `EmbeddedHarness` 一家"升为**两个真实 runtime 家族**。`HarnessRegistry::select` 在 embedded 进程内(`EmbeddedHarness` 包 `ReActEngine`)与 CLI 子进程([`crates/adapters-cli-harness`](../../crates/adapters-cli-harness) 的 `CliBackendHarness`,经 `std::process::Command` spawn、JSON stdin/stdout、置 `owns_native_compaction`,**server-only**)之间按 policy/auto 选择。`runtimePlan` 策略包(`Arc<RuntimePlan>{ normalize_tools, classify_outcome, is_silent }`)已落实为 **core 纯数据 + trait**(host prepares / harness executes),证明其不依赖任何具体 runtime。**不变量守恒**:子进程 spawn 严格隔离在 adapter crate,core 仍零子进程、同编 `wasm32`,端上永远 embedded。core 9 单测 + `adapters-mem` 2 + cli-harness 5 集成测试绿,决策见 [ADR-0008](../adr/0008-agent-runtime-as-pluggable-harness.md)。
+
 ---
 
 ## 5. 热插拔生命周期状态机(来源:OpenClaw registry lifecycle → ADR-0006 ArcSwap)
