@@ -10,10 +10,46 @@ use async_trait::async_trait;
 use futures::executor::block_on;
 
 use agistack_adapters_mem::{FixedClock, InMemoryCheckpointStore, ScriptedLlm};
-use agistack_core::ports::{CheckpointStore, CoreResult, ToolHost};
-use agistack_core::{
-    AgentAction, HitlKind, HitlRequest, ReActEngine, Role, SessionStatus,
+use agistack_core::model::Episode;
+use agistack_core::ports::{
+    CheckpointStore, CoreError, CoreResult, LlmPort, MemoryDraft, ToolHost,
 };
+use agistack_core::{
+    AgentAction, HitlKind, HitlRequest, ReActEngine, Role, SessionStatus, TranscriptEntry,
+};
+
+/// A non-deterministic resume stub: it asks for HITL once by call count, then
+/// finishes on every later decision instead of re-emitting the same request.
+struct NonReemittingHitlLlm {
+    calls: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl LlmPort for NonReemittingHitlLlm {
+    async fn extract_memory(&self, _episode: &Episode) -> CoreResult<MemoryDraft> {
+        Err(CoreError::Llm(
+            "NonReemittingHitlLlm does not extract memory".into(),
+        ))
+    }
+
+    async fn decide(
+        &self,
+        _goal: &str,
+        _round: u64,
+        _transcript: &[TranscriptEntry],
+        _available_tools: &[String],
+    ) -> CoreResult<AgentAction> {
+        if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            Ok(AgentAction::RequestHuman {
+                request: HitlRequest::new("approve-nonrepeat", HitlKind::Decision, "approve?"),
+            })
+        } else {
+            Ok(AgentAction::Finish {
+                answer: "finished after resume".into(),
+            })
+        }
+    }
+}
 
 /// Counts tool invocations so we can prove a resumed loop does NOT re-run a tool
 /// whose output was already persisted before the suspension.
@@ -64,11 +100,18 @@ fn suspends_on_hitl_then_resumes_reusing_completed_work() {
     let suspended = block_on(engine1.run("s-hitl", "deploy the app", Some("p1"))).unwrap();
 
     assert_eq!(suspended.status, SessionStatus::AwaitingInput);
-    assert_eq!(suspended.round, 1, "suspends at the request round, not past it");
+    assert_eq!(
+        suspended.round, 1,
+        "suspends at the request round, not past it"
+    );
     let pending = suspended.pending_hitl.as_ref().expect("a pending request");
     assert_eq!(pending.id, "approve-1");
     assert_eq!(pending.kind, HitlKind::Permission);
-    assert_eq!(tools.calls.load(Ordering::SeqCst), 1, "round-0 tool ran once");
+    assert_eq!(
+        tools.calls.load(Ordering::SeqCst),
+        1,
+        "round-0 tool ran once"
+    );
     assert!(suspended.answer.is_none());
 
     // A plain re-run while suspended is a no-op (status != Running).
@@ -140,4 +183,46 @@ fn resume_is_idempotent_and_validates_request_id() {
     assert_eq!(again.answer.as_deref(), Some("deployed"));
     // The original answer was not overwritten by the second resume.
     assert_eq!(again.hitl_answer("approve-1"), Some("ok"));
+}
+
+#[test]
+fn resume_replays_answer_without_redeciding_suspended_round() {
+    let checkpoints = Arc::new(InMemoryCheckpointStore::new());
+    let tools = Arc::new(CountingToolHost {
+        calls: AtomicUsize::new(0),
+    });
+    let decide_calls = Arc::new(AtomicUsize::new(0));
+    let engine = ReActEngine::new(
+        Arc::new(NonReemittingHitlLlm {
+            calls: decide_calls.clone(),
+        }),
+        tools,
+        checkpoints.clone(),
+        Arc::new(FixedClock(0)),
+    );
+
+    let suspended = block_on(engine.run("s-hitl-nonrepeat", "decide", Some("p1"))).unwrap();
+
+    assert_eq!(suspended.status, SessionStatus::AwaitingInput);
+    let pending = agistack_core::pending_request(&suspended).expect("a pending request");
+    assert_eq!(pending.id, "approve-nonrepeat");
+    assert_eq!(decide_calls.load(Ordering::SeqCst), 1);
+
+    let done =
+        block_on(engine.resume("s-hitl-nonrepeat", "approve-nonrepeat", "approved")).unwrap();
+
+    assert_eq!(done.status, SessionStatus::Finished);
+    assert_eq!(done.answer.as_deref(), Some("finished after resume"));
+    assert_eq!(
+        decide_calls.load(Ordering::SeqCst),
+        2,
+        "resume must replay the HITL answer, advance, then decide the next round once"
+    );
+    assert!(
+        done.transcript
+            .iter()
+            .any(|e| e.role == Role::Human && e.content == "approved"),
+        "human answer must be observed even though decide did not re-emit HITL"
+    );
+    assert!(done.pending_hitl.is_none());
 }

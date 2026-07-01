@@ -122,6 +122,30 @@ impl ReActEngine {
         });
 
         while state.status == SessionStatus::Running {
+            // Crash-safe HITL replay: if this round suspended on a human request that
+            // has since been answered (resume, or recovery after a crash), feed the
+            // recorded answer as this round's observation and advance without
+            // re-querying the planner. This is the HITL analog of reusing a
+            // completed tool call (ADR-0005).
+            if let Some(req) = state.pending_hitl.clone() {
+                match state.hitl_answer(&req.id).map(|a| a.to_string()) {
+                    Some(answer) => {
+                        // The Action line was already persisted when the round suspended.
+                        state.push_unique(TranscriptEntry::new(state.round, Role::Human, answer));
+                        state.pending_hitl = None;
+                        state.round += 1;
+                        self.checkpoints.save(&state).await?;
+                        continue;
+                    }
+                    None => {
+                        // Pending but still unanswered while Running (defensive): re-suspend.
+                        state.status = SessionStatus::AwaitingInput;
+                        self.checkpoints.save(&state).await?;
+                        break;
+                    }
+                }
+            }
+
             // Circuit-breaker: structural round budget.
             if state.round >= self.max_rounds {
                 state.push_unique(TranscriptEntry::new(
@@ -192,11 +216,7 @@ impl ReActEngine {
                         }
                     };
 
-                    state.push_unique(TranscriptEntry::new(
-                        state.round,
-                        Role::Observation,
-                        output,
-                    ));
+                    state.push_unique(TranscriptEntry::new(state.round, Role::Observation, output));
                 }
                 AgentAction::RequestHuman { request } => {
                     // The "ask" is recorded once (dedup-safe on replay).
@@ -330,10 +350,12 @@ impl ReActEngine {
     /// Resume a session that is [`AwaitingInput`] by supplying the human answer
     /// to its pending HITL request, then drive the loop to completion.
     ///
-    /// The answer is persisted before the loop restarts, so this is **idempotent
-    /// and crash-safe**: a fresh engine (new process) replays the suspended round,
-    /// sees the recorded answer instead of re-asking, and continues — reusing any
-    /// already-completed tool calls exactly as ordinary recovery does (ADR-0005).
+    /// The answer is persisted before the loop restarts while the pending request
+    /// remains durable, so this is **idempotent and crash-safe**: a fresh engine
+    /// (new process) replays the persisted pending request plus recorded answer
+    /// directly, without relying on the planner to re-emit the same request, then
+    /// continues — reusing any already-completed tool calls exactly as ordinary
+    /// recovery does (ADR-0005).
     ///
     /// Errors if the session is not awaiting input or if `request_id` does not
     /// match the pending request (a structural guard, not a semantic judgment).
@@ -371,10 +393,9 @@ impl ReActEngine {
             }
         }
 
-        // Record the answer, clear the suspension, flip back to Running, persist —
-        // then let the (round-indexed) loop replay the suspended round and proceed.
+        // Record the answer, flip back to Running, persist — then let the loop
+        // replay the pending request directly without re-deciding the round.
         state.record_hitl_answer(request_id, answer);
-        state.pending_hitl = None;
         state.status = SessionStatus::Running;
         self.checkpoints.save(&state).await?;
 
