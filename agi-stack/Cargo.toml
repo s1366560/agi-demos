@@ -10,6 +10,7 @@ members = [
     "crates/adapters-postgres",
     "crates/adapters-secrets",
     "crates/adapters-wasmtime",
+    "crates/parity",
     "crates/bindings-uniffi",
     "crates/bindings-wasm",
     "apps/server",

@@ -1,0 +1,18 @@
+[package]
+name = "agistack-parity"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# F3 — the strangler parity hard-gate (plan.md §14.2/§15.1). A dependency-light,
+# runtime-agnostic library that asserts a Rust-served JSON response is
+# shape- and format-compatible with the Python contract it replaces. It is the
+# reusable gate every capability wave (P2+) must pass before a gateway flip.
+#
+# Deliberately depends on `serde_json` only: no chrono, no tokio, no heavy tree.
+# It therefore compiles to `wasm32-unknown-unknown` like the core, and never
+# pulls a server-only crate into the fast test loop (ADR-0001).
+
+[dependencies]
+serde_json.workspace = true

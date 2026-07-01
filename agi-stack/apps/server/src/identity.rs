@@ -511,4 +511,63 @@ mod unit {
         assert_eq!(v["token_type"], "bearer");
         assert_eq!(v["must_change_password"], true);
     }
+
+    // ---- F3 parity gate: assert the wire shapes against contract-derived
+    // goldens (plan.md §14.2 F3). The goldens live in `apps/server/tests/golden/`
+    // and encode the Python schema contract; `agistack_parity::compare` checks
+    // key-set + type + scalar-format parity so a strangler flip is safe.
+
+    fn sample_tenant_record() -> TenantRecord {
+        TenantRecord {
+            id: "44444444-4444-4444-8444-444444444444".into(),
+            name: "Acme".into(),
+            slug: "acme".into(),
+            description: None,
+            owner_id: "33333333-3333-4333-8333-333333333333".into(),
+            plan: "free".into(),
+            max_projects: 10,
+            max_users: 25,
+            max_storage: 10_737_418_240,
+            // 2023-11-14T22:13:20Z — deterministic so `created_at` is byte-stable.
+            created_at: chrono::DateTime::from_timestamp(1_700_000_000, 0).unwrap(),
+            updated_at: None,
+        }
+    }
+
+    #[test]
+    fn tenant_view_matches_golden() {
+        let golden: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/golden/tenant_view.json")).unwrap();
+        let actual = serde_json::to_value(TenantView::from(sample_tenant_record())).unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
+
+    #[test]
+    fn tenant_page_matches_golden() {
+        let golden: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/golden/tenant_page.json")).unwrap();
+        let page = TenantPage {
+            tenants: vec![TenantView::from(sample_tenant_record())],
+            total: 1,
+            page: 1,
+            page_size: 20,
+        };
+        let actual = serde_json::to_value(&page).unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
+
+    #[test]
+    fn login_token_matches_golden_with_real_minted_key() {
+        // A freshly minted `ms_sk_` key must satisfy the golden's `<ms_sk>`
+        // matcher — proving the format the strangled login emits is contract-valid.
+        let golden: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/golden/login_token.json")).unwrap();
+        let out = LoginOutcome {
+            access_token: agistack_adapters_secrets::generate_api_key(),
+            token_type: "bearer".into(),
+            must_change_password: false,
+        };
+        let actual = serde_json::to_value(&out).unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
 }

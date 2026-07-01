@@ -1,0 +1,20 @@
+{
+  "tenants": [
+    {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "name": "Acme",
+      "slug": "acme",
+      "description": null,
+      "owner_id": "33333333-3333-4333-8333-333333333333",
+      "plan": "free",
+      "max_projects": 10,
+      "max_users": 25,
+      "max_storage": 10737418240,
+      "created_at": "2023-11-14T22:13:20Z",
+      "updated_at": null
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "page_size": 20
+}

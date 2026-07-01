@@ -145,6 +145,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "agistack-parity"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "agistack-plugin-host"
 version = "0.1.0"
 dependencies = [
@@ -169,6 +176,7 @@ dependencies = [
  "agistack-adapters-secrets",
  "agistack-adapters-wasmtime",
  "agistack-core",
+ "agistack-parity",
  "agistack-plugin-host",
  "async-trait",
  "axum",

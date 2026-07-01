@@ -528,4 +528,77 @@ mod unit {
         assert_eq!(v["entities"][0]["name"], "Rust");
         assert_eq!(v["created_at"], "2023-11-14T22:13:20Z");
     }
+
+    // ---- F3 parity gate: assert the P1 wire shapes against contract-derived
+    // goldens in `apps/server/tests/golden/` (plan.md §14.2 F3).
+
+    fn sample_memory() -> Memory {
+        Memory {
+            id: "11111111-1111-4111-8111-111111111111".into(),
+            project_id: "22222222-2222-4222-8222-222222222222".into(),
+            title: "Portable core".into(),
+            content: "Rust compiles to every target.".into(),
+            author_id: "33333333-3333-4333-8333-333333333333".into(),
+            content_type: "text".into(),
+            tags: vec!["rust".into(), "wasm".into()],
+            entities: vec![Entity {
+                name: "Rust".into(),
+                kind: "lang".into(),
+            }],
+            version: 1,
+            status: "ENABLED".into(),
+            created_at_ms: 1_700_000_000_000, // 2023-11-14T22:13:20Z
+            embedding: None,
+        }
+    }
+
+    #[test]
+    fn memory_response_matches_golden() {
+        let golden: Value =
+            serde_json::from_str(include_str!("../tests/golden/memory_response.json")).unwrap();
+        let actual = serde_json::to_value(MemoryResponse::from(sample_memory())).unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
+
+    #[test]
+    fn episode_response_matches_golden() {
+        let golden: Value =
+            serde_json::from_str(include_str!("../tests/golden/episode_response.json")).unwrap();
+        // Built exactly as `create_episode` builds it (deterministic inputs).
+        let resp = EpisodeResponse {
+            id: "11111111-1111-4111-8111-111111111111".into(),
+            name: "First episode".into(),
+            content: "hello world".into(),
+            status: "completed".into(),
+            created_at: Some(rfc3339(1_700_000_000_000)),
+            message: Some("Episode ingested into memory".into()),
+            task_id: None,
+            workflow_id: None,
+        };
+        let actual = serde_json::to_value(&resp).unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
+
+    #[test]
+    fn short_term_recall_matches_golden() {
+        let golden: Value =
+            serde_json::from_str(include_str!("../tests/golden/short_term_recall.json")).unwrap();
+        // Mirror the handler's per-memory projection so the shape under test is
+        // the one the endpoint actually serves.
+        let m = sample_memory();
+        let results: Vec<Value> = vec![json!({
+            "uuid": m.id,
+            "name": m.title,
+            "content": m.content,
+            "created_at": rfc3339(m.created_at_ms),
+            "metadata": {},
+        })];
+        let resp = ShortTermRecallResponse {
+            total: results.len(),
+            results,
+            window_minutes: 1440,
+        };
+        let actual = serde_json::to_value(&resp).unwrap();
+        agistack_parity::assert_parity(&golden, &actual);
+    }
 }
