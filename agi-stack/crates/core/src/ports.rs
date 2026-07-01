@@ -38,6 +38,8 @@ pub enum CoreError {
     Harness(String),
     #[error("event stream error: {0}")]
     Event(String),
+    #[error("container runtime error: {0}")]
+    Container(String),
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
@@ -244,6 +246,81 @@ pub trait ObjectStore: Send + Sync {
     /// List all keys beginning with `prefix` (empty = all), sorted ascending for
     /// deterministic, cross-adapter-comparable results.
     async fn list(&self, prefix: &str) -> CoreResult<Vec<String>>;
+}
+
+/// Desired configuration for a sandbox container, the input to
+/// [`ContainerRuntime::create`]. A minimal, runtime-neutral subset of the Python
+/// `MCPSandboxAdapter` container spec: the `image` to run, an optional `cmd`
+/// override, `env` pairs, and `labels` used to tag ownership (e.g.
+/// `project_id`) so a fleet can be reconciled/listed by selector.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContainerSpec {
+    pub image: String,
+    pub cmd: Option<Vec<String>>,
+    pub env: Vec<(String, String)>,
+    pub labels: Vec<(String, String)>,
+}
+
+/// Normalized lifecycle state of a container, collapsing the various
+/// runtime-specific state strings into the handful the sandbox layer reacts to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContainerState {
+    /// Created but not yet started.
+    Created,
+    /// Currently running.
+    Running,
+    /// Ran and exited (see [`ContainerStatus::exit_code`]).
+    Exited,
+    /// Any other/unknown runtime state.
+    Unknown,
+}
+
+/// Observed status of a container, returned by [`ContainerRuntime::status`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContainerStatus {
+    pub id: String,
+    pub state: ContainerState,
+    pub running: bool,
+    pub exit_code: Option<i64>,
+}
+
+/// Hexagonal port for **provisioning sandbox containers** — the lifecycle layer
+/// *beneath* [`ToolHost`]: it creates/starts/stops the isolated environment that
+/// a remote [`ToolHost`] (e.g. the MCP-over-WebSocket adapter) then talks to.
+/// This is the Rust re-expression of the Python `MCPSandboxAdapter` container
+/// lifecycle (F9, `10-production-migration.md` §3): create → start → health →
+/// stop.
+///
+/// The server adapter drives a real Docker daemon (`bollard`, server-only); an
+/// in-memory adapter models the identical lifecycle state machine for offline
+/// tests and as a device/test double. Both sit behind this one port, so the
+/// portable core never learns whether a real container or a fake is underneath.
+///
+/// Because a container runtime is a *protocol/lifecycle* surface (not opaque
+/// data storage), cross-adapter equivalence is **state-machine conformance**
+/// (create→Created, start→Running, stop→Exited, remove→absent), not byte
+/// parity: the live Docker daemon and the in-memory fake transition through the
+/// same [`ContainerState`] sequence.
+#[async_trait]
+pub trait ContainerRuntime: Send + Sync {
+    /// Create a container from `spec` without starting it, returning its id.
+    async fn create(&self, spec: &ContainerSpec) -> CoreResult<String>;
+
+    /// Start a previously created container.
+    async fn start(&self, id: &str) -> CoreResult<()>;
+
+    /// Inspect `id`, or `None` if no such container exists (e.g. after remove).
+    async fn status(&self, id: &str) -> CoreResult<Option<ContainerStatus>>;
+
+    /// Stop a running container (no-op if already stopped).
+    async fn stop(&self, id: &str) -> CoreResult<()>;
+
+    /// Remove `id`. Removing an absent container is a no-op success.
+    async fn remove(&self, id: &str) -> CoreResult<()>;
+
+    /// List ids of containers matching an optional `(label_key, label_value)`
+    /// selector (`None` = all managed containers), sorted ascending.
+    async fn list(&self, label: Option<(&str, &str)>) -> CoreResult<Vec<String>>;
 }
 
 /// Mirrors `MemoryRepository` in

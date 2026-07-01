@@ -12,6 +12,7 @@ members = [
     "crates/adapters-redis",
     "crates/adapters-s3",
     "crates/adapters-mcp",
+    "crates/adapters-docker",
     "crates/adapters-secrets",
     "crates/adapters-wasmtime",
     "crates/parity",

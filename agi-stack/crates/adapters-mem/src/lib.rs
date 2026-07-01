@@ -20,11 +20,14 @@
 //!     (agent-event bus, F5; parity oracle for the Redis Streams tier)
 //!   - [`object_store::InMemoryObjectStore`] — [`agistack_core::ports::ObjectStore`]
 //!     (blob store, F6; parity oracle for the S3/MinIO tier)
+//!   - [`container_runtime::InMemoryContainerRuntime`] — [`agistack_core::ports::ContainerRuntime`]
+//!     (sandbox provisioning, F9; state-machine oracle for the Docker/bollard tier)
 //!   - [`clock::FixedClock`] / [`clock::SystemClock`] — [`agistack_core::Clock`]
 
 pub mod changelog;
 pub mod checkpoint;
 pub mod clock;
+pub mod container_runtime;
 pub mod embedding;
 pub mod event_stream;
 pub mod graph;
@@ -38,6 +41,7 @@ pub use checkpoint::InMemoryCheckpointStore;
 #[cfg(not(target_arch = "wasm32"))]
 pub use clock::SystemClock;
 pub use clock::FixedClock;
+pub use container_runtime::InMemoryContainerRuntime;
 pub use embedding::{HashEmbedding, NgramHashEmbedding};
 pub use event_stream::InMemoryEventStream;
 pub use graph::InMemoryGraphStore;
