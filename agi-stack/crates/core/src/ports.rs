@@ -22,6 +22,8 @@ pub enum CoreError {
     Llm(String),
     #[error("embedding error: {0}")]
     Embedding(String),
+    #[error("rerank error: {0}")]
+    Rerank(String),
     #[error("storage error: {0}")]
     Storage(String),
     #[error("tool error: {0}")]
@@ -88,6 +90,31 @@ pub trait LlmPort: Send + Sync {
 #[async_trait]
 pub trait EmbeddingPort: Send + Sync {
     async fn embed(&self, text: &str) -> CoreResult<Vec<f32>>;
+}
+
+/// A reranked candidate: its original index paired with a relevance score
+/// (higher = more relevant). Cross-encoder rerankers jointly score each
+/// query↔document pair, so this ordering is sharper than the bi-encoder cosine
+/// that [`EmbeddingPort`] + [`VectorIndexPort`] produce — it is the second stage
+/// of the Python backend's hybrid search.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RerankHit {
+    pub index: usize,
+    pub score: f32,
+}
+
+/// Query + candidate documents → documents reordered by cross-encoder relevance.
+///
+/// Mirrors the Python `hybrid_search` reranking stage (a BGE reranker over
+/// pgvector/graph candidates). On the server this is an HTTP reranker
+/// (BGE/Cohere/Jina-compatible); on device a local cross-encoder or a pass-through.
+/// Scores are provider-raw (e.g. logits) — compare **within** one response,
+/// don't assume a `[0,1]` range.
+#[async_trait]
+pub trait RerankPort: Send + Sync {
+    /// Score each of `documents` against `query`, returning hits sorted by
+    /// descending relevance (most relevant first).
+    async fn rerank(&self, query: &str, documents: &[String]) -> CoreResult<Vec<RerankHit>>;
 }
 
 /// A vector id paired with its similarity score (cosine, higher = closer).
