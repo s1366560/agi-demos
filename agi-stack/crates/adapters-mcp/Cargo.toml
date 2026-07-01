@@ -1,0 +1,32 @@
+[package]
+name = "agistack-adapters-mcp"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Native/server-ONLY adapter: a **remote MCP tool provider** behind the existing
+# `ToolHost` port (plan.md / F9 · P5). It speaks the Model Context Protocol
+# (JSON-RPC 2.0 over WebSocket) to the SAME `sandbox-mcp-server` the Python
+# backend drives, so the strangler can move MCP tool dispatch (file ops, code
+# intel, terminal, git, ...) from Python to Rust with zero protocol change — the
+# agent loop keeps calling one `dyn ToolHost`.
+#
+# The `ToolHost` port (crates/core/src/ports.rs) was authored for exactly this:
+# "executing tools — both trusted built-ins and sandboxed third-party/MCP
+# capabilities". This is the THIRD backend of that one port (native registry via
+# plugin-host / wasm sandbox via wasmtime / **remote MCP via this crate**),
+# proving the trust/transport axis (ADR-0002) was factored correctly.
+#
+# `tokio-tungstenite` drags in tokio + hyper + a TLS stack, so — exactly like
+# adapters-postgres / -redis / -s3 — it is kept OUT of the core/wasm path
+# (ADR-0001). Nothing here ever appears in a port signature.
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+serde_json.workspace = true
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+tokio = { version = "1", features = ["sync"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }

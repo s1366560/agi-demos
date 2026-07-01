@@ -11,6 +11,7 @@ members = [
     "crates/adapters-neo4j",
     "crates/adapters-redis",
     "crates/adapters-s3",
+    "crates/adapters-mcp",
     "crates/adapters-secrets",
     "crates/adapters-wasmtime",
     "crates/parity",
