@@ -1,6 +1,6 @@
 # 10 · 生产迁移:Python 后端绞杀替换为 Rust 新架构
 
-> 用户需求:「完成现有 Python 后端替换为 Rust 新架构」。本篇是**权威的分波次生产迁移设计**——从已证伪的 Spike/Phase 1 基座,到逐能力替换 ~595 个 Python 端点的落地路径。核心策略:**共享数据库之上的绞杀者(strangler-fig on a shared DB)**,新旧后端并行、逐能力灰度切换、任何阶段都可上线、可回滚。**本波(P1 记忆/情节/召回)已端到端落地并验证**(见 [§4](#4-本波已落地p1--记忆情节召回)、[04 证据 #25](04-spike-evidence.md))。
+> 用户需求:「完成现有 Python 后端替换为 Rust 新架构」。本篇是**权威的分波次生产迁移设计**——从已证伪的 Spike/Phase 1 基座,到逐能力替换 ~595 个 Python 端点的落地路径。核心策略:**共享数据库之上的绞杀者(strangler-fig on a shared DB)**,新旧后端并行、逐能力灰度切换、任何阶段都可上线、可回滚。**本波(P1 记忆/情节/召回)已端到端落地并验证**(见 [§4](#4-本波已落地p1--记忆情节召回)、[04 证据 #25](04-spike-evidence.md));**P2–P8 余下波次已展开为代码级可执行计划**(端点/表/适配器/parity 风险/子任务,见 §6),含依赖序(§7)与 4 项已定决策 + 工作量(§8)。
 
 前置阅读:[00 选型](00-overview.md)、[01 可移植核心](01-portable-core.md)、[05 路线图](05-roadmap.md) §1 绞杀迁移、[08 控制流/数据流分离](08-control-data-plane-separation.md)(网关=数据面边缘)。
 
@@ -52,6 +52,15 @@ graph LR
 | **F2 · 认证/多租户中间件** | [`apps/server/src/auth.rs`](../../apps/server/src/auth.rs)(tower 层,镜像 Python `auth_dependencies.py`):`Authorization: Bearer ms_sk_…` → SHA256 → 查 `api_keys.key_hash` → 校 `is_active`/`expires_at` → 注入 scoped `Identity`;401 路径对齐;**每查询按 `project_id` 收敛**。`PgAuthenticator`(生产)/`DevAuthenticator`(离线,任意 `ms_sk_` → dev 用户)双实现 | ✅ P1 落地 |
 | **F3 · 契约 parity 测试** | 断言 Rust 响应与 Python 字节兼容:`MemoryResponse` 默认字段、i18n 错误信封、尾斜杠(避 307 跨源丢 auth 头) | ✅ P1 覆盖(见 §4) |
 | **F4 · 可观测/灰度** | 结构化日志 + trace + 按路由灰度比例 + 回滚 runbook | 🎯 future(逐波次) |
+| **F5 · Redis Streams 事件总线** | `agent:events:{conv}`(maxlen 1000)· `hitl:responses:{sess}`· `agent:control:*`· `workspace:{id}:{evt}`;xadd/xreadgroup/消费组。`redis` crate,server-only | 🎯 future(P3·P6) |
+| **F6 · 对象存储(S3 兼容)** | artifacts/attachments/instance_files 分片上传、流式下载、refresh-url。`aws-sdk-s3` 或 `object_store` | 🎯 future(P5·P7) |
+| **F7 · 流式 LLM + WS 事件桥** | `adapters-http-llm` 扩流式 token(**决策 2:先 OpenAI/Anthropic 两家**,余下 future);WS ConnectionManager(1000+ 并发、广播、背压、重连、事件回放)。`axum::ws` + `tokio-tungstenite` | 🎯 future(P3·P4·P6) |
+| **F8 · Neo4j 图适配器** | 节点 Entity/Episodic/Community、边 MENTIONS;向量 + 全文索引;`project_id`/`tenant_id` 收敛。`neo4rs`(社区异步驱动) | 🎯 future(P4) |
+| **F9 · Docker/MCP 沙箱** | 容器生命周期(create/start/health/stop);MCP WebSocket JSON-RPC 2.0(:8765);desktop(KasmVNC)/terminal(ttyd)代理。`bollard` + `tokio-tungstenite` | 🎯 future(P5) |
+| **F10 · SMTP/邮件(决策 3)** | 邀请邮件 + 模板渲染;因 P2 决定迁邮件邀请,从 P7 上提为多波共享基础。`lettre`,server-only | 🎯 future(P2·P7) |
+| **F11 · 分布式执行层(决策 1,替 Ray)** | tokio + gRPC(`tonic`)actor/执行层替 Ray Actors(会话级 actor + 监督重启 `max_restarts=5` 语义 + 跨节点分发 + 背压)。`tokio` + `tonic` + 可选 `kameo`。**全计划最高风险单点** | 🎯 future(P3·P6) |
+
+> **F1–F4 已在 P1 落地(F4 为最小切片);F5–F11 为多波共享的 server-only 适配器**,随依赖波次落地(逐波用途见 §6、决策记录见 §8)。其中 **F10(SMTP)因决策 3、F11(分布式执行层替 Ray)因决策 1** 而新增。全部 F5–F11 严格 server-only:`core` 仍零 tokio/零 `std::time`、同编 `wasm32`;端上永远走轻量适配器(内存/SQLite/Wasmi/单线程执行器),不依赖 F5–F11。
 
 ## 4. 本波已落地:P1 — 记忆/情节/召回
 
@@ -74,28 +83,152 @@ P1 选记忆域先行:Rust `MemoryService` 已最成熟,且这是价值高、依
 
 > 每波 = 建所需生产适配器 + 移植 domain/application 逻辑 + 实现端点契约 + 翻网关路由 + parity 测试 + 监控。按「价值 × Rust 就绪度 × 依赖」排序。
 
-| 波次 | 能力 | 主要端点 | 新增/依赖适配器 | 难度 | 状态 |
+| 波次 | 能力 | 主要端点(实测校准) | 新增/依赖适配器 | 难度 | 状态 |
 |---|---|---|---|---|---|
-| **P1** | 记忆与情节 | `/memories/*` · `/episodes/*` · `/recall` | **F1 Postgres+pgvector** | 低-中 | ✅ 本波落地 |
-| **P2** | 身份/租户/项目 | `/auth/*` · `/tenants/*` · `/projects/*` | F2(部分已在) | 中 | 🎯 future |
-| **P3** | Agent 运行时与会话 | WS `/agent/ws` · `/agent/*`(84 子)· HITL | Redis 流 · 流式 LLM · 真 ToolHost · Ray→actor | 极高 | 🎯 future(吞并 Wave L/M/N 运行时硬化) |
-| **P4** | 知识图谱 | `/graph/*` · 实体抽取 · 混合检索 | Neo4j(server)/ SQLite+petgraph(端) | 高 | 🎯 future |
-| **P5** | 沙箱与 MCP | `/project_sandbox/*` · `/skills` · `/channels` | Docker 沙箱 · MCP · 终端 WS | 高 | 🎯 future(`plugin-host` 已就位) |
-| **P6** | 工作区与计划 | `/workspaces` · `/workspace_tasks` · blackboard · topology | 复用 P3 流/事件 | 高 | 🎯 future |
-| **P7** | 长尾 | genes · instances · llm_providers · deploy · cron · observability · … | 各自 | 中 | 🎯 future(~250 端点,多为 CRUD) |
-| **P8** | 切换与下线 | 全量 | — | — | 🎯 future(各能力零 Python 流量后下线) |
+| **P1** | 记忆与情节 | `/memories`·`/episodes`·`/recall`(~14) | **F1 Postgres+pgvector** | 低-中 | ✅ 本波落地 |
+| **P2** | 身份/租户/项目 | auth·tenants·projects·invitations·trust·shares(~43–58) | F2 ✅ · F10 SMTP | 中 | 🎯 future(详见 §6.1) |
+| **P3** | Agent 运行时与会话 | `/agent/*`(84 子)+ `/agent/ws`(1 WS,共 85) | F5 · F7 · **F11**(替 Ray)· Wave L/M/N ✅ | 极高 | 🎯 future(详见 §6.2;硬化地基 Wave L/M/N 已绿) |
+| **P4** | 知识图谱 | graph(10)·enhanced_search(7)(~17) | F8 Neo4j / 端 SQLite+petgraph | 高 | 🎯 future(详见 §6.3) |
+| **P5** | 沙箱与 MCP | project_sandbox·skills·channels·terminal(~89) | F9 Docker/MCP · F6 | 高 | 🎯 future(详见 §6.4;`plugin-host` 已就位) |
+| **P6** | 工作区与多 agent | workspaces·tasks·plans·blackboard·topology(71) | 复用 P3 流/事件 · F5 | 高 | 🎯 future(详见 §6.5) |
+| **P7** | 长尾 | genes·instances·llm_providers·observability·…(~220) | F6 · 各自 SDK | 中 | 🎯 future(详见 §6.6,6 组并行) |
+| **P8** | 切换与下线 | 全量 | — | — | 🎯 future(详见 §6.7) |
+
+> 端点总量校准(探针实测):**~540+ REST + 5 WS**,与 §0 的 ~595(含 voice/security WS、subagents、reflection 等)吻合。逐波**代码级详解见 §6、依赖序见 §7、已定决策与工作量见 §8**。
 
 **诚实的「龙」**(A 方案逐波次落地,MVP 期可保留 Python 微服务承接,经网关并存):**Ray Actor 分布式**(无 Rust 直接对应,需 tokio/actor 或 gRPC 重建)、**LiteLLM 100+ provider 广度**、**Neo4j 抽取管线**、**MCP/Docker 沙箱**、**流式 WS 事件桥**。
 
-## 6. 不变量与回滚
+## 6. 波次详解(P2–P8)
+
+> 数据源:4 路并行 Python 代码级探针(实测端点、SQLAlchemy 表、外部依赖、Rust 现状、parity 风险)。每波模板:**端点 → Python 表 → 新增适配器 → Rust 现状(有/缺)→ parity 风险 → 子任务 → 龙/future**。除 Wave L/M/N 硬化地基已绿外,**P2–P8 均为 future 波次**(A 方案,逐波次落地),各带独立证据行。
+
+### 6.1 P2 · 身份/租户/项目(依赖 F2 ✅ / F3 门禁 / F10 SMTP)
+
+- **端点(~43–58)**:auth(12,含 device-code RFC 8628 ×3)· tenants(20)· projects(12,含级联删)· invitations(4)· trust(~6)· shares(4)。
+- **Python 表**:`users`·`api_keys`·`tenants`·`projects`·`user_tenants`·`user_projects`·`invitations`·`memory_shares`·`trust_policies`·`decision_records`。
+- **新增适配器**:扩 `adapters-postgres` 覆盖上述表;`adapters-auth-secrets`(bcrypt / `getrandom` token / `jsonwebtoken` JWT);device-code 经 F5 Redis(600s TTL);邮件邀请经 **F10 SMTP(`lettre`)**。
+- **Rust 现状**:✅ F2 `ms_sk_` SHA256 中间件 + project 访问检查;**缺** bcrypt 密码校验、`/auth/token` JWT 签发、租户/项目 CRUD、RBAC、级联删、invitation/share token、device-code 全流程、OAuth 端点、SMTP。
+- **Parity 风险**:①**级联删**——删项目连带 15+ 表,须事务 + FK 顺序与 Python 一致;②Pydantic→serde 字段别名(`user_id`←`id`,`populate_by_name`);③bcrypt 须与 passlib 输出逐字一致(固定测试向量);④OAuth 端点 Python 现为 501 stub → Rust 拥有端点但字节对齐仍返 501。
+- **子任务**:`p2-auth-secrets` → `p2-tenant-repo` → `p2-project-repo`(级联删)→ `p2-endpoints`(6 router,含 device-code + OAuth-stub + SMTP 邀请)→ `p2-rbac` → `p2-gateway-parity` → `p2-docs`。
+- **决策 3(全范围迁移)**:device-code + OAuth 端点(501 parity)+ SMTP 邮件邀请全随 P2 迁 Rust。**龙**:真实 OAuth 授权码/PKCE 流。
+
+### 6.2 P3 · Agent 运行时与会话(依赖 Wave L/M/N ✅ + F5/F7/F11)—— 最难波,决策 1 全 Rust 化
+
+> **决策 1**:不走混合 MVP,**一次性全 Rust 化** —— 含 Ray→tokio/gRPC 分布式执行层重建(F11)、全部 35+ 工具移植、完整 SessionProcessor 等价环。**全计划最高风险、最长工期单波,决定总工期。**
+
+- **前置(§13 Wave L/M/N,✅ 已绿)**:`rt-orchestrator`(MiniOrchestrator 驱动 Plan DAG)· `rt-cli-harness`(第二 harness 家族 + `RuntimePlan` 富契约)· `rt-supervisor`(DoomLoop 触发 + Agent-First 裁决 + CostTracker)——补齐 [06](06-agent-core-design.md) 健壮/可编排/可插拔三轴,P3 运行时硬化地基(见 [04 #26/#27/#28](04-spike-evidence.md))。
+- **端点(85)**:agent/ 20 子 router 84 个 + `/agent/ws`(1 WS,10 handler)。
+- **Python 表**:`conversations`·`messages`·`task_logs`·`hitl_requests`·`agent_session_snapshots`·`message_execution_status`·`message_bindings`·`agent_tasks`。
+- **事件管线(156 事件类型)**:Tool → `_pending_events` → SessionProcessor(4610 LOC)→ EventConverter → Redis Stream(F5)→ WS 桥(F7)→ 前端 routeToHandler。
+- **Rust 现状**:✅ `ReActEngine`(+ 轮次 checkpoint / 崩溃恢复 / 单 HITL)+ Wave L/M/N 三轴;**缺** SessionProcessor 全编排、156 事件系统、Redis 流、分布式执行层(F11 替 Ray)、WS 桥、35+ 工具、MCP、HITL 协调器、SubAgent 路由。
+- **5 条龙(决策后处置)**:①Ray→**F11 一次性重建**(tokio+`tonic` gRPC + 可选 kameo,复刻监督 / `max_restarts=5` / 跨节点分发);②WS 事件桥(517 LOC ConnectionManager,1000+ 并发,F7);③全部 35+ 工具(2000+ LOC,含 OS 级依赖)全移植;④SessionProcessor 4610 LOC 核心环;⑤LiteLLM→**决策 2 先 OpenAI/Anthropic 两家**,余下 provider future。
+- **子任务**:`p3-conv-repo` → `p3-event-model` → `p3-ws-bridge`(F7)→ `p3-distributed`(F11)→ `p3-tools-full`(35+ 工具内部分批:先 terminal/web_search/memory/context/plan,再 sandbox/interactive/agent-control/workspace/skill/MCP/HITL)→ `p3-processor`(复用 rt-orchestrator + F11)→ `p3-hitl` → `p3-endpoints` → `p3-gateway-parity` → `p3-docs`。
+- **执行策略**:无 Python 执行器并存;靠内部分层次序缓释(F11 + 事件/WS 骨架 → 逐批工具 → 全环 → 灰度)。**建议单列专项、其余波先行摊平风险。**
+
+### 6.3 P4 · 知识图谱(依赖 F8 Neo4j + `adapters-http-llm`)
+
+- **端点(~17)**:graph(10:communities/entities/relationships/subgraph/memory-graph/rebuild)· enhanced_search(7:advanced/graph-traversal/community/temporal/faceted/capabilities/memory-search)。
+- **图存储**:Neo4j 节点 `Entity`(name/type/summary/uuid/project_id/tenant_id/name_embedding)·`Episodic`·`Community`;边 `MENTIONS`(fact/score);向量索引 + 全文索引。
+- **抽取管线(LLM reflexion)**:LiteLLM(temp 0.0)抽 JSON → 去重(Phase1 SHA256 name+type;Phase2 向量 ≥0.92)→ EntityNode+embedding;reflexion 默认 2 轮补漏。
+- **混合检索**:查询扩展 → 向量(RRF k=60)+ 关键词(全文)→ RRF 融合(`0.6×vec + 0.4×kw`)→ 时间衰减(半衰期 30d)→ MMR 重排(λ=0.7)。
+- **Rust 现状**:❌ 无图适配器;`adapters-http-llm` 可复用做抽取/embedding。
+- **Parity 风险**:Neo4j DateTime/graph 类型 ISO 序列化、向量 float 数组字节序、UUID/tenant 过滤;RRF 权重/衰减/MMR 须逐位复现;**端上图近似(petgraph/SQLite)与 Neo4j 的容差须显式定义**(端上 local-first 近似,非字节对齐)。
+- **子任务**:`p4-neo4j-adapter`(F8)→ `p4-extraction`(reflexion + 去重)→ `p4-hybrid-search`(RRF + 衰减 + MMR)→ `p4-community`(Louvain,`graphrs` 或自实现)→ `p4-device-graph`(**决策 4**:SQLite 关系表 + `petgraph` 遍历,纯 Rust 同编 `wasm32`)→ `p4-endpoints` → `p4-parity` → `p4-gateway` → `p4-docs`。
+- **决策 4(纳入端上图)**:端上 KG 以 SQLite + `petgraph` 近似落地(风险 #5,可移植)。**龙**:Louvain 浮点精度、`neo4rs` 特性差距、**端上 LLM 推理(风险 #6,llama.cpp/Candle 数百 MB 模型)仍 future**。
+
+### 6.4 P5 · 沙箱与 MCP(依赖 F9 Docker/MCP + F6 存储 + `plugin-host` ✅)
+
+- **端点(~89)**:project_sandbox(~30:create/health/stats/execute/restart/desktop/terminal/http-services/proxy)· skills(~20:CRUD/versions/publish/import/clone)· channels(~27)· tenant_skill_configs(~8)· terminal(4 + WS);含多 WS 代理(mcp/desktop/terminal/http-service)。
+- **Python 表**:`project_sandbox`(status/container_id)·`skill`(scope SYSTEM/WORKSPACE/PROJECT·spec·version)·`skill_version`·`tenant_skill_config`·`instance_channel_config`。
+- **沙箱运行时**:MCPSandboxAdapter(Docker 容器 + WS MCP :8765,30+ 工具:file/code-intel/edit/test/git/desktop/terminal)vs LocalSandboxAdapter(主机 FS);MCP = JSON-RPC 2.0 over WS,OAuth-like token。
+- **Rust 现状**:✅ `plugin-host`(Skill/Tool 抽象 + ArcSwap 热插拔)· `adapters-wasmtime`(WASM 沙箱);**缺** Docker 编排、MCP WS 传输、desktop/terminal 代理、S3 文件。
+- **Parity 风险**:`ProjectSandboxResponse.urls{mcp/desktop/terminal}` 须匹配容器端口路由;ExecuteToolResponse 形状;skill spec/scope 枚举。
+- **子任务**:`p5-docker-adapter`(F9 容器生命周期)→ `p5-mcp-ws`(JSON-RPC 客户端 + 代理)→ `p5-skill-store`(skill 表 + 版本,经 plugin-host 触发)→ `p5-sandbox-endpoints` → `p5-proxy`(desktop/terminal/http WS)→ `p5-parity` → `p5-gateway` → `p5-docs`。
+- **龙**:desktop(KasmVNC)/terminal(ttyd)代理状态机、多服务预览路由 + 会话 token、容器 IP/隧道分配。
+
+### 6.5 P6 · 工作区与多 agent 协作(依赖 P3 事件/流 + F5)
+
+- **端点(71)**:workspaces(13)· workspace_tasks(14)· workspace_plans(11)· blackboard(19:posts/files/replies + pin)· topology(10)· workspace_chat(3)· autonomy(1)。
+- **Python 表**:`workspace`·`workspace_member`·`workspace_agent`·`workspace_task`·`workspace_task_session_attempt`·`workspace_plan_event`·`workspace_plan_outbox`·`blackboard_post`/`_reply`/`_file`·`topology_node`/`_edge` 等。
+- **协作模型**:黑板模式(posts/files/replies)+ topology 图 + leader 选举(Redis 冷却 60s)+ Redis 统一事件总线(`workspace:{id}:{evt}`)+ **outbox 模式**(plan 状态转换可靠投递);mention 路由 = fire-and-forget 后台任务。
+- **Rust 现状**:❌ 无;复用 P3 事件/流(F5)+ core `Plan` DAG + rt-orchestrator。
+- **Parity 风险**:①**plan 状态机**(`transition_execution`/`transition_intent`,500+ LOC 计数器/元数据树/错误恢复)须精确移植;②**outbox worker**(事务 + 独立投递线程)连端点带 worker 一起移植;③mention 异步派发。
+- **子任务**:`p6-workspace-repo` → `p6-plan-state`(状态机 + snapshot/恢复)→ `p6-outbox`(outbox 表 + worker)→ `p6-blackboard`(+ F6 文件)→ `p6-topology` → `p6-chat-mention`(经 P3 桥)→ `p6-endpoints` → `p6-parity` → `p6-gateway` → `p6-docs`。
+- **龙**:与 P3 深度耦合,须 P3 事件桥/流稳定后再上;autonomy 迭代循环。
+
+### 6.6 P7 · 长尾(~220,依赖 F6 + 少量外部 SDK,6 组并行)
+
+| 组 | router(端点) | 主题 | 难度 | 外部依赖 |
+|---|---|---|---|---|
+| G1 | genes(29)·cyber_objectives(6)·cyber_genes(5)·instances(18)·instance_channels(5)·instance_files(6)·instance_templates(11) | 基因/实例(73) | 中 | F6 存储 |
+| G2 | llm_providers(21)·deploy(8)·cron(8)·maintenance(11)·engines(1)·background_tasks(3) | LLM/部署/运维(52) | 高 | LLM API·cron·图级 SQL |
+| G3 | observability(16)·audit(5)·events(2)·admin_dlq(9) | 观测/审计(32) | 中 | Redis·DLQ 重放 |
+| G4 | notifications(5)·smtp_config(4)·webhooks(1)·tenant_webhooks(4) | 通知/webhook(14) | 中 | F10 SMTP·Feishu·HMAC |
+| G5 | billing(3)·support(5)·data_export(3)·system(2) | 计费/支持/导出(13) | 低-中 | 计费 provider |
+| G6 | schema(11)·artifacts(7)·attachments_upload(9)·ai_tools(2) | 系统/杂项(29) | 低-中 | F6·分片上传 |
+
+- **新增能力**:cron 调度器(`tokio-schedule` + 后台 worker)· SMTP(F10 `lettre`)· webhook 签名(`hmac`+`sha2`)· 计费 provider(Stripe SDK 或轻 HTTP)· 分片上传状态机(F6)。
+- **策略**:**高度并行**——G1/G6 简单 CRUD 先行(易得分),G2/G4 外部集成按 SDK 可用度排后;llm_providers 模型目录 + maintenance 图级去重为本组难点。
+- **子任务**:6 个子 epic(`p7-g1-genes-instances`…`p7-g6-system`),各内含 repo→endpoints→parity→gateway;`p7-docs` 收口。
+
+### 6.7 P8 · 切换与下线(依赖 P2–P7 全达零 Python 流量)
+
+- 各能力灰度至 100% Rust、观测无回退后:撤对应 Python router、缩容 uvicorn、逐条移除网关分流(最终网关可退化为纯反代或移除)。
+- 终验:全端点 parity 回归、性能对照、数据一致性审计(共享库无双写冲突);Python 代码库归档。
+- **子任务**:`p8-traffic-audit`(逐能力零流量确认)→ `p8-decommission`(下线 Python + 撤分流)→ `p8-final-parity`(全量回归)→ `p8-docs`(迁移终章 + 复盘)。
+
+## 7. 依赖图与波序
+
+```mermaid
+graph TD
+    F2["F2 认证 ✅"] --> P2["P2 身份"]
+    F3["F3+ parity 门禁"] --> P2
+    LMN["Wave L/M/N ✅<br/>orchestrator / cli-harness / supervisor"] --> P3["P3 Agent 运行时"]
+    F5["F5 Redis 事件总线"] --> P3
+    F7["F7 流式 LLM + WS 桥"] --> P3
+    F11["F11 分布式执行层<br/>替 Ray"] --> P3
+    F8["F8 Neo4j"] --> P4["P4 图谱"]
+    F9["F9 Docker/MCP"] --> P5["P5 沙箱/MCP"]
+    F6["F6 对象存储"] --> P5
+    F6 --> P7["P7 长尾"]
+    P3 --> P6["P6 工作区"]
+    F5 --> P6
+    P2 --> P8["P8 切换下线"]
+    P3 --> P8
+    P4 --> P8
+    P5 --> P8
+    P6 --> P8
+    P7 --> P8
+```
+
+- **可即刻并行(无跨波依赖)**:P2(F2/F3)、P4(F8)、P5(F9/F6)、P7-G1/G6(F6)。
+- **串行关键路径**:Wave L/M/N ✅ → P3 → P6 → P8。**P3 最长最难,决定总工期。**
+- **建议波序**:先 F3+/F4+ 门禁 → **P2 + P7-易组并行**(快速扩大 Rust 覆盖、建信心)→ P4 + P5 并行(适配器独立)→ P3(最难,单列专项)→ P6 → P7-难组补齐 → P8。
+
+## 8. 已定决策与工作量
+
+**4 项已定决策(用户确认,已回填各波)**:
+
+| # | 决策 | 影响波次 | future 边界 |
+|---|---|---|---|
+| 1 | **P3 一次性全 Rust 化** —— Ray→tokio/gRPC 分布式执行层(F11)+ 全 35+ 工具 + 完整 SessionProcessor,**无 Python 执行器并存** | P3(·P6) | 靠内部分层次序缓释,非跨语言分流 |
+| 2 | **LLM 先行 OpenAI/Anthropic** —— `adapters-http-llm` 只覆盖两家 | F7·P3·P4 | 其余 100+ provider 标 future |
+| 3 | **P2 全范围迁移** —— device-code(RFC 8628,F5)+ OAuth 端点(501 parity)+ SMTP 邮件邀请(F10)全迁 Rust | P2 | 真实 OAuth 授权码/PKCE 流 future |
+| 4 | **纳入端上图** —— P4 加 `p4-device-graph`(SQLite/`petgraph` 近似,可移植) | P4 | 端上 LLM 推理(数百 MB 模型)仍 future |
+
+**量级(A 方案 spike→生产,非最终承诺,决策后修订)**:P2 ~8–13 周 · **P3 ~24–52 周(↑↑,最不确定、决定总工期)** · P4 ~6–10 周 · P5 ~8–12 周 · P6 ~4–6 周 · P7 ~6–10 周;总计**多人·数季度**,与 §0 / [05 路线图](05-roadmap.md) §6 一致。
+
+**每波完成判据(统一)**:端点经网关由 Rust 服务、与 Python 字节兼容(F3 golden 绿)、灰度 100% 无回退;`cargo test --workspace` 全绿、core `wasm32` 绿;新增 [04 证据](04-spike-evidence.md) 行 + 路线图更新;拆 `feat`/`docs` 提交(含 `Co-authored-by: Copilot` trailer);`gitnexus detect_changes`。各波实现另起会话/todo。
+
+## 9. 不变量与回滚
 
 - **核心运行时无关**:`core` 零 tokio / 零 `std::time`,`cargo build -p agistack-core --target wasm32-unknown-unknown` 恒绿;Postgres(sqlx/tokio)+ 网关(reqwest/tokio)**严格 server-only**,绝不泄漏回端口签名([ADR-0001](../adr/0001-rust-as-portable-core-language.md))。
 - **多租户**:每查询按 `project_id`/`tenant_id` 收敛;F2 中间件解析作用域并在每端点显式 `can_access_project` 后再落库。
 - **绞杀安全**:每次切换 = 网关开关 + 回滚;共享库零数据迁移;切换前过 parity 门禁(响应字节兼容)+ 灰度。附加表只增不改 Python 表。
 - **Agent First**:网关路由/认证是结构性协议事实(前缀集合、hash 查表、算术过期),保持确定性;真正的语义判断(如 P3 的工具选择/路由)才归 agent 工具调用。
 
-## 7. 证据指针
+## 10. 证据指针
 
 - [04 证据 #25](04-spike-evidence.md) —— P1 端到端(网关 + Rust 服务器 + mock Python)、F1 真 pgvector、F2 认证 parity。
 - [05 路线图](05-roadmap.md) §1 Phase 5 —— 由 future 翻「🚧 进行中(P1 生产切片落地)」。
-- 复现:`cargo test --workspace`(87 绿,含 gateway e2e + prod_api parity;pg 集成测试离线跳过);`DATABASE_URL=… cargo test -p agistack-adapters-postgres --test pg_integration`(真库 4 绿);手动 `cargo run -p agistack-server` + `cargo run -p agistack-gateway` 后 curl `/api/v1/memories/`。
+- 复现:`cargo test --workspace`(**112 绿**,含 gateway e2e + prod_api parity + agent runtime 三轴 Wave L/M/N;pg 集成测试离线跳过);`DATABASE_URL=… cargo test -p agistack-adapters-postgres --test pg_integration`(真库 4 绿);手动 `cargo run -p agistack-server` + `cargo run -p agistack-gateway` 后 curl `/api/v1/memories/`。
