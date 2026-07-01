@@ -34,13 +34,20 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+mod auth;
+mod prod_api;
+
 use agistack_adapters_mem::{
     HashEmbedding, InMemoryCheckpointStore, InMemoryMemoryRepository, InMemoryVectorIndex, StubLlm,
     SystemClock,
 };
+use agistack_adapters_postgres::{
+    connect, ensure_aux_schema, PgApiKeyStore, PgCheckpointStore, PgMemoryRepository,
+    PgProjectStore, PgVectorIndex,
+};
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
 use agistack_adapters_http_llm::{HttpEmbedding, HttpLlm};
-use agistack_core::ports::{EmbeddingPort, LlmPort, ToolHost};
+use agistack_core::ports::{CheckpointStore, EmbeddingPort, LlmPort, ToolHost};
 use agistack_core::{
     Episode, Memory, MemoryService, ReActEngine, SessionState, SessionStatus, SourceType,
 };
@@ -49,17 +56,22 @@ use agistack_plugin_host::{
     PluginHost, PluginManifest, ToolDecl, UpperTool,
 };
 
+use crate::auth::{DevAuthenticator, PgAuthenticator, SharedAuthenticator};
+
 /// Shared, cheaply-cloneable application state. Every `Arc`/`HotPlugRegistry`
 /// field is a shared handle, so all routes operate on the same registry, memory
 /// store, and control/data planes.
 #[derive(Clone)]
-struct AppState {
-    memory: Arc<MemoryService>,
+pub(crate) struct AppState {
+    pub(crate) memory: Arc<MemoryService>,
     engine: Arc<ReActEngine>,
     registry: HotPlugRegistry,
     plugins: Arc<PluginHost>,
     control: Arc<Mutex<ControlPlane>>,
     reconciler: Arc<Mutex<DataPlaneReconciler>>,
+    /// Production authenticator backing the `/api/v1` strangled surface
+    /// (Postgres in production, dev stub offline). See [`crate::auth`].
+    pub(crate) auth: SharedAuthenticator,
 }
 
 fn internal<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
@@ -284,14 +296,7 @@ fn select_llm_and_embedding() -> (Arc<dyn LlmPort>, Arc<dyn EmbeddingPort>) {
     }
 }
 
-fn build_state() -> AppState {
-    // Cloud↔local DI switch at the composition root (Phase 3, 03 §2): when
-    // `AGISTACK_LLM_BASE_URL` is set, route the LLM/embedding ports to a real
-    // OpenAI-/LiteLLM-compatible endpoint (`adapters-http-llm`); otherwise use
-    // the deterministic offline stubs. The core never sees which — it only holds
-    // `Arc<dyn LlmPort>` / `Arc<dyn EmbeddingPort>` (ADR-0001).
-    let (llm, embedding) = select_llm_and_embedding();
-
+fn build_registry() -> HotPlugRegistry {
     // Shared hot-pluggable registry — the single data-plane tool set used by the
     // agent, the plugin lifecycle, and the CP/DP reconciler alike.
     let registry = HotPlugRegistry::new();
@@ -305,22 +310,85 @@ fn build_state() -> AppState {
         WasmtimeTool::from_wat("score", "1.0.0", SCORE_V1_WAT, DEFAULT_FUEL)
             .expect("built-in scorer WAT is valid"),
     ));
+    registry
+}
 
-    let memory = Arc::new(
-        MemoryService::new(
-            Arc::new(InMemoryMemoryRepository::new()),
-            llm.clone(),
-            embedding,
-            Arc::new(SystemClock),
-        )
-        .with_vectors(Arc::new(InMemoryVectorIndex::new())),
-    );
+/// Persistence + auth selection at the composition root — the strangler switch
+/// (plan.md Section 14). When `DATABASE_URL` is set, bind the production Postgres
+/// tier (**the same schema Python owns**, ADR-0001) and the SHA256 `api_keys`
+/// authenticator; otherwise use the zero-dependency in-memory adapters and a dev
+/// authenticator so `cargo run`/tests need no database. The heavy `sqlx`/`tokio`
+/// deps stay inside `adapters-postgres`; the core only ever sees `Arc<dyn _>`.
+async fn build_memory_and_auth(
+    llm: Arc<dyn LlmPort>,
+    embedding: Arc<dyn EmbeddingPort>,
+) -> (Arc<MemoryService>, Arc<dyn CheckpointStore>, SharedAuthenticator) {
+    match std::env::var("DATABASE_URL") {
+        Ok(url) if !url.is_empty() => {
+            let pool = connect(&url)
+                .await
+                .expect("connect DATABASE_URL (production Postgres)");
+            // Additive-only: create the Rust-owned aux tables; never alters a
+            // Python-owned table (shared-DB invariant).
+            ensure_aux_schema(&pool)
+                .await
+                .expect("ensure agistack_* auxiliary schema");
+
+            let memory = Arc::new(
+                MemoryService::new(
+                    Arc::new(PgMemoryRepository::new(pool.clone())),
+                    llm,
+                    embedding,
+                    Arc::new(SystemClock),
+                )
+                .with_vectors(Arc::new(PgVectorIndex::new(pool.clone()))),
+            );
+            let checkpoint: Arc<dyn CheckpointStore> =
+                Arc::new(PgCheckpointStore::new(pool.clone()));
+            let authenticator: SharedAuthenticator = Arc::new(PgAuthenticator::new(
+                PgApiKeyStore::new(pool.clone()),
+                PgProjectStore::new(pool),
+            ));
+            eprintln!("[agistack] persistence: PostgreSQL (production, shared Python schema)");
+            (memory, checkpoint, authenticator)
+        }
+        _ => {
+            let memory = Arc::new(
+                MemoryService::new(
+                    Arc::new(InMemoryMemoryRepository::new()),
+                    llm,
+                    embedding,
+                    Arc::new(SystemClock),
+                )
+                .with_vectors(Arc::new(InMemoryVectorIndex::new())),
+            );
+            let checkpoint: Arc<dyn CheckpointStore> = Arc::new(InMemoryCheckpointStore::new());
+            let authenticator: SharedAuthenticator = Arc::new(DevAuthenticator::new("dev-user"));
+            eprintln!("[agistack] persistence: in-memory (dev); auth: dev stub (any ms_sk_ key)");
+            (memory, checkpoint, authenticator)
+        }
+    }
+}
+
+async fn build_state() -> AppState {
+    // Cloud↔local DI switch at the composition root (Phase 3, 03 §2): when
+    // `AGISTACK_LLM_BASE_URL` is set, route the LLM/embedding ports to a real
+    // OpenAI-/LiteLLM-compatible endpoint (`adapters-http-llm`); otherwise use
+    // the deterministic offline stubs. The core never sees which — it only holds
+    // `Arc<dyn LlmPort>` / `Arc<dyn EmbeddingPort>` (ADR-0001).
+    let (llm, embedding) = select_llm_and_embedding();
+
+    let registry = build_registry();
+
+    // Persistence + auth: Postgres (production) or in-memory (dev), selected by
+    // `DATABASE_URL`. This is the strangler cutover switch.
+    let (memory, checkpoint, auth) = build_memory_and_auth(llm.clone(), embedding).await;
 
     let tool_host: Arc<dyn ToolHost> = Arc::new(registry.clone());
     let engine = Arc::new(ReActEngine::new(
         llm,
         tool_host,
-        Arc::new(InMemoryCheckpointStore::new()),
+        checkpoint,
         Arc::new(SystemClock),
     ));
 
@@ -335,6 +403,7 @@ fn build_state() -> AppState {
         plugins,
         control,
         reconciler,
+        auth,
     }
 }
 
@@ -364,6 +433,15 @@ async fn tools_call(
 }
 
 fn router(state: AppState) -> Router {
+    // The production `/api/v1` surface (strangled memory/episodes/recall) sits
+    // behind the F2 auth middleware, which verifies the `ms_sk_` bearer against
+    // `api_keys` and injects a scoped `Identity`. The legacy `/v1/*` demo routes
+    // stay open for local exercising.
+    let prod = prod_api::router().layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        auth::require_api_key,
+    ));
+
     Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/v1/episodes", post(ingest))
@@ -376,13 +454,14 @@ fn router(state: AppState) -> Router {
         .route("/v1/plugins/disable", post(plugins_disable))
         .route("/v1/tools/call", post(tools_call))
         .route("/v1/control-plane/publish", post(cp_publish))
+        .merge(prod)
         .with_state(state)
 }
 
 #[tokio::main]
 async fn main() {
     let addr = std::env::var("AGISTACK_ADDR").unwrap_or_else(|_| "127.0.0.1:8088".to_string());
-    let app = router(build_state());
+    let app = router(build_state().await);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     println!("agistack-server listening on http://{addr}");
     axum::serve(listener, app).await.unwrap();

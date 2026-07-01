@@ -6,10 +6,12 @@ members = [
     "crates/adapters-mem",
     "crates/adapters-device",
     "crates/adapters-http-llm",
+    "crates/adapters-postgres",
     "crates/adapters-wasmtime",
     "crates/bindings-uniffi",
     "crates/bindings-wasm",
     "apps/server",
+    "apps/gateway",
     "apps/bench",
 ]
 

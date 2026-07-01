@@ -182,5 +182,19 @@ pub trait MemoryRepository: Send + Sync {
             .collect())
     }
 
+    /// Count memories in a project, optionally filtered by the same
+    /// case-insensitive title/content search as [`search_by_project`]. Default
+    /// impl counts via the search/list fallback; storage-backed adapters override
+    /// it with a `SELECT count(*)`.
+    ///
+    /// [`search_by_project`]: MemoryRepository::search_by_project
+    async fn count_by_project(&self, project_id: &str, search: Option<&str>) -> CoreResult<usize> {
+        let rows = match search {
+            Some(q) => self.search_by_project(project_id, q, usize::MAX).await?,
+            None => self.list_by_project(project_id, usize::MAX, 0).await?,
+        };
+        Ok(rows.len())
+    }
+
     async fn delete(&self, id: &str) -> CoreResult<bool>;
 }

@@ -1,0 +1,43 @@
+[package]
+name = "agistack-adapters-postgres"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+# Native/server-ONLY adapter: the **production persistence tier** for the
+# Python -> Rust strangler migration (plan.md Section 14 / Phase 5). It implements
+# the core storage ports against the SAME PostgreSQL schema the Python backend
+# uses (shared-DB strangler -> zero data migration) plus a few **additive,
+# Rust-owned auxiliary tables** (vectors, checkpoints) that never touch Python's
+# tables.
+#
+# Why a dedicated crate: `sqlx` drags in tokio + a TLS stack. Exactly like
+# `adapters-http-llm`, this is kept OUT of the core/wasm path so the core stays
+# runtime-agnostic and wasm-compilable (ADR-0001). Nothing here ever appears in a
+# port signature — the core only sees `dyn MemoryRepository` / `dyn VectorIndexPort`
+# / `dyn CheckpointStore`.
+[dependencies]
+agistack-core = { path = "../core" }
+async-trait.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "macros",
+    "postgres",
+    "chrono",
+    "json",
+] }
+sha2 = "0.10"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "macros",
+    "postgres",
+    "chrono",
+    "json",
+] }

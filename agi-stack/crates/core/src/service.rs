@@ -85,6 +85,64 @@ impl MemoryService {
         Ok(saved)
     }
 
+    /// Direct create (no LLM extraction): persist a caller-supplied memory,
+    /// embedding its content and indexing the vector when a vector index is wired.
+    /// Mirrors the Python `POST /api/v1/memories/` `create_memory` path, which
+    /// stores the memory as given rather than distilling it from an episode.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_memory(
+        &self,
+        project_id: &str,
+        author_id: &str,
+        title: &str,
+        content: &str,
+        content_type: &str,
+        tags: Vec<String>,
+        entities: Vec<crate::model::Entity>,
+    ) -> CoreResult<Memory> {
+        let embedding = self.embedding.embed(content).await?;
+        let created_at_ms = self.clock.now_ms();
+        let id = new_memory_id(&format!("{project_id}:{title}:{created_at_ms}"));
+
+        let memory = Memory {
+            id: id.clone(),
+            project_id: project_id.to_string(),
+            title: title.to_string(),
+            content: content.to_string(),
+            author_id: author_id.to_string(),
+            content_type: content_type.to_string(),
+            tags,
+            entities,
+            version: 1,
+            status: "ENABLED".to_string(),
+            created_at_ms,
+            embedding: Some(embedding.clone()),
+        };
+
+        let saved = self.repo.save(memory).await?;
+        if let Some(vectors) = &self.vectors {
+            vectors.upsert(project_id, &id, &embedding).await?;
+        }
+        Ok(saved)
+    }
+
+    /// Total memories in a project, optionally constrained by the same
+    /// case-insensitive title/content search as [`search`](Self::search). Backs
+    /// the `total` field of the paginated list contract.
+    pub async fn count(&self, project_id: &str, search: Option<&str>) -> CoreResult<usize> {
+        self.repo.count_by_project(project_id, search).await
+    }
+
+    /// Page through a project's memories, newest first (list contract).
+    pub async fn list(
+        &self,
+        project_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> CoreResult<Vec<Memory>> {
+        self.repo.list_by_project(project_id, limit, offset).await
+    }
+
     /// Keyword search (repository-backed; substring or SQL `LIKE`).
     pub async fn search(
         &self,
