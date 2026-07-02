@@ -48,7 +48,37 @@ const DEFAULT_WORKER_LAUNCH_DEFER_SECONDS: i64 = 20;
 const DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS: i64 = 300;
 const DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES: i64 = 3;
 const WORKER_LAUNCHABLE_ATTEMPT_STATUSES: [&str; 2] = ["pending", "running"];
+const ACCEPTED_ATTEMPT_STATUS: &str = "accepted";
 const TERMINAL_RETRY_ATTEMPT_STATUSES: [&str; 3] = ["rejected", "blocked", "cancelled"];
+const NO_COMMIT_ACCEPTED_ATTEMPT_STALE_METADATA_KEYS: [&str; 27] = [
+    "candidate_artifacts",
+    "candidate_verifications",
+    "execution_verifications",
+    "last_worker_report_artifacts",
+    "last_worker_report_verifications",
+    "pipeline_evidence_refs",
+    "pipeline_gate_status",
+    "pipeline_last_summary",
+    "pipeline_run_id",
+    "pipeline_status",
+    "source_publish_branch",
+    "source_publish_commit_ref",
+    "source_publish_provider",
+    "source_publish_reason",
+    "source_publish_source_commit_ref",
+    "source_publish_status",
+    "verification_evidence_refs",
+    "verified_commit_ref",
+    "verified_git_diff_summary",
+    "verified_test_commands",
+    "worktree_integration_attempt_id",
+    "worktree_integration_commit_ref",
+    "worktree_integration_dirty_signature",
+    "worktree_integration_ran_at",
+    "worktree_integration_status",
+    "worktree_integration_summary",
+    "worktree_integration_worktree_path",
+];
 
 pub(crate) fn workspace_plan_outbox_handlers(
     dispatch_store: Arc<dyn WorkspacePlanDispatchStore>,
@@ -1117,13 +1147,16 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_missing = self
                 .recover_missing_attempt_nodes(&item, &payload, &workspace_id, &plan_id)
                 .await?;
+            let changed_accepted = self
+                .reconcile_accepted_terminal_attempt_nodes(&workspace_id, &plan_id)
+                .await?;
             let changed_terminal = self
                 .reconcile_terminal_attempt_nodes(&item, &payload, &workspace_id, &plan_id)
                 .await?;
             let changed_reported = self
                 .reconcile_reported_attempt_nodes(&workspace_id, &plan_id)
                 .await?;
-            if changed_missing + changed_terminal + changed_reported > 0 {
+            if changed_missing + changed_accepted + changed_terminal + changed_reported > 0 {
                 return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
             }
             return Ok(WorkspacePlanOutboxHandlerOutcome::Release {
@@ -1326,6 +1359,173 @@ impl SupervisorTickAdmissionHandler {
                 .await?;
         }
         Ok(changed)
+    }
+
+    async fn reconcile_accepted_terminal_attempt_nodes(
+        &self,
+        workspace_id: &str,
+        plan_id: &str,
+    ) -> CoreResult<usize> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let now = Utc::now();
+        let mut changed = 0;
+        for mut node in self.store.list_plan_nodes(plan_id).await? {
+            let Some(attempt_id) = recoverable_node_attempt_id(&node) else {
+                continue;
+            };
+            let Some(attempt) = self.store.get_task_session_attempt(&attempt_id).await? else {
+                continue;
+            };
+            if attempt.status.trim().to_ascii_lowercase() != ACCEPTED_ATTEMPT_STATUS {
+                continue;
+            }
+            if accepted_projection_already_complete(&node, &attempt) {
+                continue;
+            }
+            if !accepted_attempt_matches_node_expected_commit(&node, &attempt) {
+                continue;
+            }
+
+            let evidence_refs = accepted_attempt_evidence_refs(&attempt);
+            let commit_ref = first_valid_commit_ref(&evidence_refs);
+            let git_diff_summary = first_prefixed_ref(&evidence_refs, "git_diff_summary:");
+            let test_commands = prefixed_refs(&evidence_refs, "test_run:");
+            let summary = accepted_attempt_summary(&attempt);
+            self.project_accepted_attempt_to_task(
+                workspace_id,
+                &node,
+                &attempt,
+                &summary,
+                &evidence_refs,
+                commit_ref.as_deref(),
+                git_diff_summary.as_deref(),
+                &test_commands,
+                now,
+            )
+            .await?;
+
+            let mut metadata = accepted_attempt_projection_base_metadata(&node, &attempt);
+            metadata.insert(
+                "terminal_attempt_status".to_string(),
+                json!(ACCEPTED_ATTEMPT_STATUS),
+            );
+            metadata.insert(
+                "terminal_attempt_reconciled_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            metadata.insert("last_verification_summary".to_string(), json!(summary));
+            metadata.insert("last_verification_passed".to_string(), json!(true));
+            metadata.insert("last_verification_hard_fail".to_string(), json!(false));
+            metadata.insert(
+                "last_verification_attempt_id".to_string(),
+                json!(attempt.id.clone()),
+            );
+            metadata.insert(
+                "last_verification_ran_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            if !attempt.candidate_artifacts_json.is_empty() {
+                metadata.insert(
+                    "candidate_artifacts".to_string(),
+                    json!(attempt.candidate_artifacts_json.clone()),
+                );
+            }
+            if !attempt.candidate_verifications_json.is_empty() {
+                metadata.insert(
+                    "candidate_verifications".to_string(),
+                    json!(attempt.candidate_verifications_json.clone()),
+                );
+            }
+            node.intent = "done".to_string();
+            node.execution = "idle".to_string();
+            node.current_attempt_id = Some(attempt.id.clone());
+            node.feature_checkpoint_json =
+                accepted_attempt_projection_feature_checkpoint(&node, &attempt);
+            node.metadata_json = Value::Object(metadata);
+            node.updated_at = Some(now);
+            self.store.save_plan_node(node).await?;
+            changed += 1;
+        }
+        Ok(changed)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn project_accepted_attempt_to_task(
+        &self,
+        workspace_id: &str,
+        node: &WorkspacePlanNodeRecord,
+        attempt: &WorkspaceTaskSessionAttemptRecord,
+        summary: &str,
+        evidence_refs: &[String],
+        commit_ref: Option<&str>,
+        git_diff_summary: Option<&str>,
+        test_commands: &[String],
+        now: DateTime<Utc>,
+    ) -> CoreResult<()> {
+        let task_id = node
+            .workspace_task_id
+            .as_ref()
+            .unwrap_or(&attempt.workspace_task_id);
+        let Some(mut task) = self.store.get_task(workspace_id, task_id).await? else {
+            return Ok(());
+        };
+        if task.workspace_id != workspace_id {
+            return Ok(());
+        }
+
+        let mut metadata = object_or_empty(task.metadata_json.clone());
+        metadata.insert("pending_leader_adjudication".to_string(), json!(false));
+        metadata.remove("retry_verification_only");
+        metadata.insert("durable_plan_verdict".to_string(), json!("accepted"));
+        metadata.insert(
+            "durable_plan_verification_summary".to_string(),
+            json!(summary),
+        );
+        metadata.insert(
+            "durable_plan_verified_at".to_string(),
+            json!(now.to_rfc3339()),
+        );
+        metadata.insert(
+            "last_attempt_status".to_string(),
+            json!(ACCEPTED_ATTEMPT_STATUS),
+        );
+        metadata.insert("last_attempt_id".to_string(), json!(attempt.id.clone()));
+        metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt.id.clone()));
+        metadata.insert("last_worker_report_type".to_string(), json!("completed"));
+        metadata.insert("last_worker_report_summary".to_string(), json!(summary));
+        metadata.insert(
+            "last_leader_adjudication_status".to_string(),
+            json!(ACCEPTED_ATTEMPT_STATUS),
+        );
+        if !evidence_refs.is_empty() {
+            metadata.insert("evidence_refs".to_string(), json!(evidence_refs));
+        }
+        apply_verification_checkpoint_metadata(
+            &mut metadata,
+            summary,
+            commit_ref,
+            git_diff_summary,
+            test_commands,
+            now,
+        );
+
+        task.metadata_json = Value::Object(metadata);
+        task.status = "done".to_string();
+        task.blocker_reason = None;
+        task.completed_at = Some(now);
+        task.updated_at = Some(now);
+        self.store.save_task(task).await?;
+        Ok(())
     }
 
     async fn reconcile_terminal_attempt_nodes(
@@ -1800,6 +2000,369 @@ fn attempt_has_candidate_output(attempt: &WorkspaceTaskSessionAttemptRecord) -> 
         .is_some_and(|summary| !summary.trim().is_empty())
         || !attempt.candidate_artifacts_json.is_empty()
         || !attempt.candidate_verifications_json.is_empty()
+}
+
+fn accepted_projection_already_complete(
+    node: &WorkspacePlanNodeRecord,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+) -> bool {
+    let metadata = object_or_empty(node.metadata_json.clone());
+    node.intent == "done"
+        && node.execution == "idle"
+        && metadata
+            .get("terminal_attempt_status")
+            .and_then(Value::as_str)
+            == Some(ACCEPTED_ATTEMPT_STATUS)
+        && metadata
+            .get("last_verification_attempt_id")
+            .and_then(Value::as_str)
+            == Some(attempt.id.as_str())
+}
+
+fn accepted_attempt_summary(attempt: &WorkspaceTaskSessionAttemptRecord) -> String {
+    attempt
+        .leader_feedback
+        .as_deref()
+        .or(attempt.candidate_summary.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("accepted terminal attempt")
+        .to_string()
+}
+
+fn accepted_attempt_projection_base_metadata(
+    node: &WorkspacePlanNodeRecord,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+) -> Map<String, Value> {
+    let mut metadata = object_or_empty(node.metadata_json.clone());
+    metadata.remove("terminal_attempt_retry_count");
+    metadata.remove("terminal_attempt_retry_reason");
+    metadata.remove("retry_not_before");
+    if !attempt_commit_refs(attempt).is_empty() {
+        return metadata;
+    }
+    for key in NO_COMMIT_ACCEPTED_ATTEMPT_STALE_METADATA_KEYS {
+        metadata.remove(key);
+    }
+    metadata
+}
+
+fn accepted_attempt_projection_feature_checkpoint(
+    node: &WorkspacePlanNodeRecord,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+) -> Option<Value> {
+    if !attempt_commit_refs(attempt).is_empty() || node.feature_checkpoint_json.is_none() {
+        return node.feature_checkpoint_json.clone();
+    }
+    reset_feature_checkpoint(node.feature_checkpoint_json.clone())
+}
+
+fn apply_verification_checkpoint_metadata(
+    metadata: &mut Map<String, Value>,
+    summary: &str,
+    commit_ref: Option<&str>,
+    git_diff_summary: Option<&str>,
+    test_commands: &[String],
+    created_at: DateTime<Utc>,
+) {
+    if commit_ref.is_none() && git_diff_summary.is_none() && test_commands.is_empty() {
+        return;
+    }
+    if let Some(commit_ref) = commit_ref {
+        if let Some(Value::Object(feature_checkpoint)) = metadata.get_mut("feature_checkpoint") {
+            feature_checkpoint.insert("commit_ref".to_string(), json!(commit_ref));
+        }
+    }
+    let handoff = metadata
+        .entry("handoff_package".to_string())
+        .or_insert_with(|| {
+            json!({
+                "reason": "planned",
+                "summary": "Accepted by durable plan verifier.",
+                "next_steps": [],
+                "completed_steps": [],
+                "changed_files": [],
+                "git_head": Value::Null,
+                "git_diff_summary": "",
+                "test_commands": [],
+                "verification_notes": "",
+                "created_at": created_at.to_rfc3339()
+            })
+        });
+    if !handoff.is_object() {
+        *handoff = json!({
+            "reason": "planned",
+            "summary": "Accepted by durable plan verifier.",
+            "next_steps": [],
+            "completed_steps": [],
+            "changed_files": [],
+            "git_head": Value::Null,
+            "git_diff_summary": "",
+            "test_commands": [],
+            "verification_notes": "",
+            "created_at": created_at.to_rfc3339()
+        });
+    }
+    if let Value::Object(handoff) = handoff {
+        if let Some(commit_ref) = commit_ref {
+            handoff.insert("git_head".to_string(), json!(commit_ref));
+        }
+        if let Some(git_diff_summary) = git_diff_summary {
+            handoff.insert("git_diff_summary".to_string(), json!(git_diff_summary));
+        }
+        if !test_commands.is_empty() {
+            handoff.insert("test_commands".to_string(), json!(test_commands));
+        }
+        handoff.insert("verification_notes".to_string(), json!(summary));
+    }
+}
+
+fn accepted_attempt_matches_node_expected_commit(
+    node: &WorkspacePlanNodeRecord,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+) -> bool {
+    let Some(expected) = node_expected_commit_ref(node) else {
+        return true;
+    };
+    let actual_refs = attempt_commit_refs(attempt);
+    if actual_refs.is_empty() {
+        return last_verified_attempt_matches_expected_commit(node, attempt, &expected);
+    }
+    if actual_refs
+        .iter()
+        .any(|actual| git_commit_refs_match(&expected, actual))
+    {
+        return true;
+    }
+    last_verified_attempt_contains_attempt_commit(node, attempt, &actual_refs)
+}
+
+fn accepted_attempt_evidence_refs(attempt: &WorkspaceTaskSessionAttemptRecord) -> Vec<String> {
+    let mut refs = Vec::new();
+    for artifact in &attempt.candidate_artifacts_json {
+        let artifact = artifact.trim();
+        if artifact.is_empty() {
+            continue;
+        }
+        if artifact.starts_with("artifact:") {
+            refs.push(artifact.to_string());
+        } else {
+            refs.push(format!("artifact:{artifact}"));
+        }
+    }
+    for verification in &attempt.candidate_verifications_json {
+        let verification = verification.trim();
+        if !verification.is_empty() {
+            refs.push(verification.to_string());
+        }
+    }
+    dedup_strings(&mut refs);
+    refs
+}
+
+fn first_valid_commit_ref(refs: &[String]) -> Option<String> {
+    refs.iter()
+        .filter_map(|reference| prefixed_ref(reference, "commit_ref:"))
+        .filter_map(|value| commit_ref_token(&value))
+        .next()
+}
+
+fn first_prefixed_ref(refs: &[String], prefix: &str) -> Option<String> {
+    refs.iter()
+        .filter_map(|reference| prefixed_ref(reference, prefix))
+        .next()
+}
+
+fn prefixed_refs(refs: &[String], prefix: &str) -> Vec<String> {
+    refs.iter()
+        .filter_map(|reference| prefixed_ref(reference, prefix))
+        .collect()
+}
+
+fn attempt_commit_refs(attempt: &WorkspaceTaskSessionAttemptRecord) -> Vec<String> {
+    let mut refs: Vec<String> = accepted_attempt_evidence_refs(attempt)
+        .iter()
+        .filter_map(|reference| prefixed_ref(reference, "commit_ref:"))
+        .filter_map(|value| commit_ref_token(&value))
+        .collect();
+    dedup_strings(&mut refs);
+    refs
+}
+
+fn node_expected_commit_ref(node: &WorkspacePlanNodeRecord) -> Option<String> {
+    if let Some(Value::Object(checkpoint)) = &node.feature_checkpoint_json {
+        if let Some(token) = commit_ref_token(checkpoint.get("commit_ref")?.as_str()?) {
+            return Some(token);
+        }
+    }
+    let metadata = object_or_empty(node.metadata_json.clone());
+    for key in [
+        "source_publish_source_commit_ref",
+        "verified_commit_ref",
+        "worktree_integration_commit_ref",
+    ] {
+        if let Some(token) = metadata
+            .get(key)
+            .and_then(Value::as_str)
+            .and_then(commit_ref_token)
+        {
+            return Some(token);
+        }
+    }
+    None
+}
+
+fn last_verified_attempt_matches_expected_commit(
+    node: &WorkspacePlanNodeRecord,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+    expected: &str,
+) -> bool {
+    let metadata = object_or_empty(node.metadata_json.clone());
+    if metadata
+        .get("last_verification_passed")
+        .and_then(Value::as_bool)
+        != Some(true)
+        || metadata
+            .get("last_verification_attempt_id")
+            .and_then(Value::as_str)
+            != Some(attempt.id.as_str())
+    {
+        return false;
+    }
+    let mut refs = node_metadata_commit_refs(&metadata);
+    for key in [
+        "source_publish_source_commit_ref",
+        "source_publish_commit_ref",
+        "verified_commit_ref",
+        "worktree_integration_commit_ref",
+    ] {
+        if let Some(token) = metadata
+            .get(key)
+            .and_then(Value::as_str)
+            .and_then(commit_ref_token)
+        {
+            refs.push(token);
+        }
+    }
+    dedup_strings(&mut refs);
+    refs.iter()
+        .any(|metadata_ref| git_commit_refs_match(expected, metadata_ref))
+}
+
+fn last_verified_attempt_contains_attempt_commit(
+    node: &WorkspacePlanNodeRecord,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+    actual_refs: &[String],
+) -> bool {
+    let metadata = object_or_empty(node.metadata_json.clone());
+    if metadata
+        .get("last_verification_passed")
+        .and_then(Value::as_bool)
+        != Some(true)
+        || metadata
+            .get("last_verification_attempt_id")
+            .and_then(Value::as_str)
+            != Some(attempt.id.as_str())
+    {
+        return false;
+    }
+    let metadata_refs = node_metadata_commit_refs(&metadata);
+    metadata_refs.iter().any(|metadata_ref| {
+        actual_refs
+            .iter()
+            .any(|actual_ref| git_commit_refs_match(metadata_ref, actual_ref))
+    })
+}
+
+fn node_metadata_commit_refs(metadata: &Map<String, Value>) -> Vec<String> {
+    let mut refs = Vec::new();
+    for key in [
+        "verification_evidence_refs",
+        "candidate_artifacts",
+        "candidate_verifications",
+        "last_worker_report_artifacts",
+        "last_worker_report_verifications",
+        "execution_verifications",
+    ] {
+        for value in metadata_string_values(metadata.get(key)) {
+            if let Some(token) = prefixed_ref(&value, "commit_ref:")
+                .and_then(|candidate| commit_ref_token(&candidate))
+            {
+                refs.push(token);
+            }
+        }
+    }
+    dedup_strings(&mut refs);
+    refs
+}
+
+fn prefixed_ref(reference: &str, prefix: &str) -> Option<String> {
+    let trimmed = reference.trim();
+    if trimmed.starts_with(prefix) {
+        return Some(trimmed[prefix.len()..].trim().to_string());
+    }
+    let artifact_prefix = format!("artifact:{prefix}");
+    if trimmed.starts_with(&artifact_prefix) {
+        return Some(trimmed[artifact_prefix.len()..].trim().to_string());
+    }
+    None
+}
+
+fn commit_ref_token(value: &str) -> Option<String> {
+    let token = value.split_whitespace().next()?.trim();
+    if (6..=40).contains(&token.len()) && token.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        Some(token.to_string())
+    } else {
+        None
+    }
+}
+
+fn git_commit_refs_match(left: &str, right: &str) -> bool {
+    let left = left.trim();
+    let right = right.trim();
+    if left.is_empty() || right.is_empty() {
+        return false;
+    }
+    left == right
+        || (left.len() >= 7 && right.starts_with(left))
+        || (right.len() >= 7 && left.starts_with(right))
+}
+
+fn metadata_string_values(value: Option<&Value>) -> Vec<String> {
+    match value {
+        Some(Value::Array(values)) => values
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .collect(),
+        Some(Value::String(value)) if !value.trim().is_empty() => vec![value.trim().to_string()],
+        _ => Vec::new(),
+    }
+}
+
+fn reset_feature_checkpoint(value: Option<Value>) -> Option<Value> {
+    match value {
+        Some(Value::Object(mut checkpoint)) => {
+            checkpoint.insert("worktree_path".to_string(), Value::Null);
+            checkpoint.insert("branch_name".to_string(), Value::Null);
+            checkpoint.insert("base_ref".to_string(), json!("HEAD"));
+            checkpoint.insert("commit_ref".to_string(), Value::Null);
+            Some(Value::Object(checkpoint))
+        }
+        other => other,
+    }
+}
+
+fn dedup_strings(values: &mut Vec<String>) {
+    let mut deduped = Vec::with_capacity(values.len());
+    for value in values.drain(..) {
+        if !deduped.contains(&value) {
+            deduped.push(value);
+        }
+    }
+    *values = deduped;
 }
 
 fn terminal_attempt_pending_pipeline_verification(
@@ -3105,6 +3668,138 @@ mod tests {
         assert_eq!(node.intent, "in_progress");
         assert_eq!(node.execution, "reported");
         assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-rejected"));
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_projects_accepted_attempt_to_node_and_task() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-accepted".to_string());
+        node.feature_checkpoint_json = Some(json!({
+            "worktree_path": "/workspace/.worktrees/attempt-accepted",
+            "branch_name": "attempt-accepted",
+            "base_ref": "main",
+            "commit_ref": "abcdef1"
+        }));
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-accepted",
+            ACCEPTED_ATTEMPT_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.leader_feedback = Some("accepted after verification".to_string());
+        attempt.candidate_artifacts_json = vec!["commit_ref:abcdef1234567890".to_string()];
+        attempt.candidate_verifications_json = vec![
+            "test_run:cargo test -p agistack-server workspace_outbox_worker".to_string(),
+            "git_diff_summary:updated supervisor projection".to_string(),
+        ];
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "done");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-accepted"));
+        assert_eq!(
+            node.metadata_json["terminal_attempt_status"],
+            ACCEPTED_ATTEMPT_STATUS
+        );
+        assert_eq!(
+            node.metadata_json["last_verification_summary"],
+            "accepted after verification"
+        );
+        assert_eq!(node.metadata_json["last_verification_passed"], true);
+        assert_eq!(
+            node.metadata_json["last_verification_attempt_id"],
+            "attempt-accepted"
+        );
+        assert_eq!(
+            node.metadata_json["candidate_artifacts"],
+            json!(["commit_ref:abcdef1234567890"])
+        );
+
+        let task = store.task("task-test");
+        assert_eq!(task.status, "done");
+        assert!(task.completed_at.is_some());
+        assert_eq!(task.metadata_json["durable_plan_verdict"], "accepted");
+        assert_eq!(
+            task.metadata_json["last_attempt_status"],
+            ACCEPTED_ATTEMPT_STATUS
+        );
+        assert_eq!(task.metadata_json[CURRENT_ATTEMPT_ID], "attempt-accepted");
+        assert_eq!(
+            task.metadata_json["last_worker_report_summary"],
+            "accepted after verification"
+        );
+        assert_eq!(
+            task.metadata_json["handoff_package"]["git_head"],
+            "abcdef1234567890"
+        );
+        assert_eq!(
+            task.metadata_json["handoff_package"]["git_diff_summary"],
+            "updated supervisor projection"
+        );
+        assert_eq!(
+            task.metadata_json["handoff_package"]["test_commands"],
+            json!(["cargo test -p agistack-server workspace_outbox_worker"])
+        );
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_skips_accepted_attempt_with_commit_mismatch() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-accepted".to_string());
+        node.feature_checkpoint_json = Some(json!({"commit_ref": "abcdef1"}));
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-accepted",
+            ACCEPTED_ATTEMPT_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.candidate_artifacts_json = vec!["commit_ref:1234567890abcdef".to_string()];
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(
+            outcome,
+            WorkspacePlanOutboxHandlerOutcome::Release {
+                reason: Some("supervisor_tick_requires_full_runtime".to_string())
+            }
+        );
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "in_progress");
+        assert_eq!(node.execution, "running");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-accepted"));
+        let task = store.task("task-test");
+        assert_eq!(task.status, "todo");
         assert!(store.outbox().is_empty());
     }
 
