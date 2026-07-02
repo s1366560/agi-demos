@@ -131,6 +131,38 @@ const NO_COMMIT_ACCEPTED_ATTEMPT_STALE_METADATA_KEYS: [&str; 27] = [
     "worktree_integration_summary",
     "worktree_integration_worktree_path",
 ];
+const ATTEMPT_RETRY_STALE_WORKER_STREAM_METADATA_KEYS: &[&str] = &[
+    "current_attempt_conversation_id",
+    "evidence_refs",
+    "execution_verifications",
+    "last_worker_report_artifacts",
+    "last_worker_report_attempt_id",
+    "last_worker_report_fingerprint",
+    "last_worker_report_summary",
+    "last_worker_report_type",
+    "last_worker_report_verifications",
+    "last_worker_reported_at",
+    "pending_leader_adjudication",
+    "worker_launch_admitted_at",
+    "worker_launch_bound_at",
+    "worker_stream_idle_finished_message_id",
+    "worker_stream_idle_progress_published_at",
+    "worker_stream_idle_progress_published_at_us",
+    "worker_stream_idle_progress_summary",
+    "worker_stream_idle_running_exists",
+    "worker_stream_idle_seconds",
+    "worker_stream_last_entry_id",
+    "worker_stream_last_event_time_us",
+    "worker_stream_last_event_type",
+    "worker_stream_last_replayed_at",
+    "worker_stream_message_id",
+    "worker_stream_replay_attempt_id",
+    "worker_stream_replay_status",
+    "worker_stream_terminal_launch_state",
+    "worker_stream_terminal_outcome",
+    "worker_stream_terminal_replayed_at",
+    "worker_stream_terminal_should_report",
+];
 const FAILED_WORKTREE_RETRY_STALE_METADATA_KEYS: &[&str] = &[
     "candidate_artifacts",
     "candidate_verifications",
@@ -1918,6 +1950,10 @@ impl WorkspacePlanOutboxHandler for DurableHandoffResumeHandler {
         task_metadata.insert(CURRENT_ATTEMPT_WORKER_BINDING_ID.to_string(), Value::Null);
         task_metadata.insert("last_attempt_status".to_string(), json!("running"));
         task_metadata.insert("launch_state".to_string(), json!("scheduled"));
+        if should_reset_attempt_retry_worker_state(&item.event_type, &payload) {
+            clear_attempt_retry_worker_stream_state(&mut task_metadata);
+            task.blocker_reason = None;
+        }
         apply_attempt_retry_context(&mut task_metadata, &payload, now);
         task_metadata.insert(
             "execution_state".to_string(),
@@ -2022,6 +2058,9 @@ impl DurableHandoffResumeHandler {
         );
         metadata.insert("last_attempt_status".to_string(), json!("running"));
         metadata.insert("launch_state".to_string(), json!("scheduled"));
+        if should_reset_attempt_retry_worker_state(&item.event_type, payload) {
+            clear_attempt_retry_worker_stream_state(&mut metadata);
+        }
         apply_attempt_retry_context(&mut metadata, payload, now);
         node.metadata_json = Value::Object(metadata);
         node.updated_at = Some(now);
@@ -2754,6 +2793,9 @@ impl WorkerLaunchAdmissionHandler {
             return Ok((worker_stream_watchdog::StreamState::default(), None));
         };
         let metadata = object_or_empty(task.metadata_json);
+        if !worker_stream_replay_metadata_matches_attempt(&metadata, input.attempt_id) {
+            return Ok((worker_stream_watchdog::StreamState::default(), None));
+        }
         let mut state = worker_stream_watchdog::StreamState::default();
         state.stream_message_id = string_from_map(&metadata, "worker_stream_message_id");
         state.last_stream_event_type = string_from_map(&metadata, "worker_stream_last_event_type");
@@ -2903,7 +2945,11 @@ impl WorkerLaunchAdmissionHandler {
             .get_task(input.workspace_id, input.task_id)
             .await?
             .and_then(|task| {
-                task.metadata_json
+                let metadata = object_or_empty(task.metadata_json);
+                if !worker_stream_replay_metadata_matches_attempt(&metadata, input.attempt_id) {
+                    return None;
+                }
+                metadata
                     .get("worker_stream_last_entry_id")
                     .and_then(Value::as_str)
                     .filter(|value| !value.trim().is_empty())
@@ -12607,6 +12653,32 @@ fn copy_retry_context_payload_fields(source: &Map<String, Value>, target: &mut M
     }
 }
 
+fn should_reset_attempt_retry_worker_state(event_type: &str, payload: &Map<String, Value>) -> bool {
+    event_type == ATTEMPT_RETRY_EVENT
+        && (string_from_map(payload, "retry_reason").is_some()
+            || string_from_map(payload, "previous_attempt_id").is_some()
+            || string_from_map(payload, "retry_attempt_id").is_some()
+            || metadata_string(payload.get("retry_origin")).is_some()
+            || metadata_string(payload.get("worker_stream_orphan_retry_reason")).is_some()
+            || metadata_string(payload.get("worker_stream_orphan_summary")).is_some())
+}
+
+fn clear_attempt_retry_worker_stream_state(metadata: &mut Map<String, Value>) {
+    for key in ATTEMPT_RETRY_STALE_WORKER_STREAM_METADATA_KEYS {
+        metadata.remove(*key);
+    }
+}
+
+fn worker_stream_replay_metadata_matches_attempt(
+    metadata: &Map<String, Value>,
+    attempt_id: &str,
+) -> bool {
+    string_from_map(metadata, "worker_stream_replay_attempt_id")
+        .or_else(|| string_from_map(metadata, LAST_WORKER_REPORT_ATTEMPT_ID))
+        .as_deref()
+        .is_none_or(|recorded_attempt_id| recorded_attempt_id == attempt_id)
+}
+
 fn copy_metadata_string_field(
     source: &Map<String, Value>,
     target: &mut Map<String, Value>,
@@ -15010,9 +15082,48 @@ esac
     #[tokio::test]
     async fn handoff_retry_handler_preserves_worker_stream_orphan_retry_context() {
         let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
-        store.insert_task(task_with_plan_metadata());
+        let mut task = task_with_plan_metadata();
+        task.blocker_reason =
+            Some("Worker stream stopped without a terminal complete/error event".to_string());
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert("worker_stream_last_entry_id".to_string(), json!("42-0"));
+        task_metadata.insert(
+            "worker_stream_replay_attempt_id".to_string(),
+            json!("attempt-old"),
+        );
+        task_metadata.insert("worker_stream_message_id".to_string(), json!("old-msg"));
+        task_metadata.insert(
+            "worker_stream_terminal_outcome".to_string(),
+            json!("no_terminal_event"),
+        );
+        task_metadata.insert("last_worker_report_type".to_string(), json!("blocked"));
+        task_metadata.insert(
+            LAST_WORKER_REPORT_SUMMARY.to_string(),
+            json!("old orphan report"),
+        );
+        task_metadata.insert(
+            LAST_WORKER_REPORT_ATTEMPT_ID.to_string(),
+            json!("attempt-old"),
+        );
+        task_metadata.insert(PENDING_LEADER_ADJUDICATION.to_string(), json!(true));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
         store.insert_plan(plan());
-        store.insert_node(plan_node());
+        let mut node = plan_node();
+        let mut node_metadata = object_or_empty(node.metadata_json.clone());
+        node_metadata.insert("worker_stream_last_entry_id".to_string(), json!("42-0"));
+        node_metadata.insert(
+            "worker_stream_replay_attempt_id".to_string(),
+            json!("attempt-old"),
+        );
+        node_metadata.insert("worker_stream_message_id".to_string(), json!("old-msg"));
+        node_metadata.insert("last_worker_report_type".to_string(), json!("blocked"));
+        node_metadata.insert(
+            LAST_WORKER_REPORT_ATTEMPT_ID.to_string(),
+            json!("attempt-old"),
+        );
+        node.metadata_json = Value::Object(node_metadata);
+        store.insert_node(node);
         let handler = DurableHandoffResumeHandler::new(
             Arc::clone(&store) as Arc<dyn WorkspacePlanDispatchStore>
         );
@@ -15034,6 +15145,7 @@ esac
 
         assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
         let task = store.task("task-test");
+        assert!(task.blocker_reason.is_none());
         assert_eq!(
             task.metadata_json["last_retry_reason"],
             "worker_stream_agent_not_running_stream_idle"
@@ -15055,6 +15167,21 @@ esac
             .get("last_retry_context_at")
             .and_then(Value::as_str)
             .is_some());
+        for key in [
+            "worker_stream_last_entry_id",
+            "worker_stream_replay_attempt_id",
+            "worker_stream_message_id",
+            "worker_stream_terminal_outcome",
+            "last_worker_report_type",
+            LAST_WORKER_REPORT_SUMMARY,
+            LAST_WORKER_REPORT_ATTEMPT_ID,
+            PENDING_LEADER_ADJUDICATION,
+        ] {
+            assert!(
+                task.metadata_json.get(key).is_none(),
+                "task metadata key {key} should be cleared for retry"
+            );
+        }
 
         let node = store.node("node-test");
         let handoff = node.handoff_package_json.as_ref().unwrap();
@@ -15070,6 +15197,18 @@ esac
             node.metadata_json["worker_stream_orphan_retry_reason"],
             "worker_stream_agent_not_running_stream_idle"
         );
+        for key in [
+            "worker_stream_last_entry_id",
+            "worker_stream_replay_attempt_id",
+            "worker_stream_message_id",
+            "last_worker_report_type",
+            LAST_WORKER_REPORT_ATTEMPT_ID,
+        ] {
+            assert!(
+                node.metadata_json.get(key).is_none(),
+                "node metadata key {key} should be cleared for retry"
+            );
+        }
 
         let queued = store.outbox();
         assert_eq!(queued.len(), 1);
@@ -16049,6 +16188,90 @@ esac
         let events = store.plan_events();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].event_type, "worker_report_terminal");
+        let outbox = store.outbox();
+        assert_eq!(outbox.len(), 1);
+        assert_eq!(outbox[0].event_type, SUPERVISOR_TICK_EVENT);
+    }
+
+    #[tokio::test]
+    async fn worker_launch_handler_ignores_previous_attempt_stream_cursor() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        store.insert_task(root_goal_task());
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task_metadata.insert("worker_stream_last_entry_id".to_string(), json!("99-0"));
+        task_metadata.insert(
+            "worker_stream_replay_attempt_id".to_string(),
+            json!("attempt-old"),
+        );
+        task_metadata.insert("worker_stream_message_id".to_string(), json!("old-msg"));
+        task_metadata.insert(
+            "worker_stream_last_event_type".to_string(),
+            json!("text_delta"),
+        );
+        task_metadata.insert(
+            LAST_WORKER_REPORT_ATTEMPT_ID.to_string(),
+            json!("attempt-old"),
+        );
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "dispatched".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let conversation_id = "d267a78e-eefc-5d33-bfb3-ac4fa7ece855";
+        let stream_events = Arc::new(FakeWorkerLaunchEventStream::default());
+        stream_events.push(
+            conversation_id,
+            "1-0",
+            json!({"type": "message", "data": {"id": "msg-new"}}),
+        );
+        stream_events.push(
+            conversation_id,
+            "2-0",
+            json!({
+                "type": "complete",
+                "data": {
+                    "content": "{\"summary\":\"done after retry\",\"test_commands\":[\"cargo test -p retry\"]}"
+                }
+            }),
+        );
+        let handler = worker_launch_handler_with_event_stream(Arc::clone(&store), stream_events, 4);
+
+        let outcome = handler.handle(worker_launch_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let task = store.task("task-test");
+        assert_eq!(task.metadata_json["launch_state"], "completed_via_stream");
+        assert_eq!(task.metadata_json["worker_stream_last_entry_id"], "2-0");
+        assert_eq!(
+            task.metadata_json["worker_stream_replay_attempt_id"],
+            "attempt-test"
+        );
+        assert_eq!(task.metadata_json["worker_stream_message_id"], "msg-new");
+        assert_eq!(task.metadata_json["last_worker_report_type"], "completed");
+        assert_eq!(
+            task.metadata_json[LAST_WORKER_REPORT_SUMMARY],
+            "done after retry"
+        );
+        assert_eq!(
+            task.metadata_json[LAST_WORKER_REPORT_ATTEMPT_ID],
+            "attempt-test"
+        );
+        let attempt = store
+            .attempts()
+            .into_iter()
+            .find(|attempt| attempt.id == "attempt-test")
+            .unwrap();
+        assert_eq!(attempt.status, AWAITING_LEADER_ADJUDICATION_STATUS);
+        assert_eq!(
+            attempt.candidate_summary.as_deref(),
+            Some("done after retry")
+        );
         let outbox = store.outbox();
         assert_eq!(outbox.len(), 1);
         assert_eq!(outbox[0].event_type, SUPERVISOR_TICK_EVENT);
