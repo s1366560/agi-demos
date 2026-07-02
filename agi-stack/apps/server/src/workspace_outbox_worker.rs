@@ -29,6 +29,10 @@ const WORKER_LAUNCH_EVENT: &str = "worker_launch";
 const HANDOFF_RESUME_EVENT: &str = "handoff_resume";
 const ATTEMPT_RETRY_EVENT: &str = "attempt_retry";
 const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
+const SANDBOX_NATIVE_PROVIDER: &str = "sandbox_native";
+const PLANNING_CONTRACT_SOURCE: &str = "planner_agent_code_analysis";
+const DEFAULT_PIPELINE_TIMEOUT_SECONDS: i32 = 600;
+const DEFAULT_PREVIEW_PORT: i32 = 3000;
 const WORKSPACE_PLAN_SYSTEM_ACTOR_ID: &str = "workspace-plan:system";
 const ROOT_GOAL_TASK_ID: &str = "root_goal_task_id";
 const WORKSPACE_PLAN_ID: &str = "workspace_plan_id";
@@ -379,6 +383,30 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         attempt_id: Option<&str>,
     ) -> CoreResult<Option<WorkspacePipelineRunRecord>>;
 
+    #[allow(clippy::too_many_arguments)]
+    async fn ensure_pipeline_contract(
+        &self,
+        contract_id: &str,
+        workspace_id: &str,
+        plan_id: &str,
+        provider: &str,
+        code_root: Option<&str>,
+        commands_json: &Value,
+        env_json: &Value,
+        trigger_policy_json: &Value,
+        timeout_seconds: i32,
+        auto_deploy: bool,
+        preview_port: Option<i32>,
+        health_url: Option<&str>,
+        metadata_json: &Value,
+        now: DateTime<Utc>,
+    ) -> CoreResult<String>;
+
+    async fn create_pipeline_run(
+        &self,
+        run: WorkspacePipelineRunRecord,
+    ) -> CoreResult<WorkspacePipelineRunRecord>;
+
     async fn finish_pipeline_run(
         &self,
         run_id: &str,
@@ -579,6 +607,50 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
     ) -> CoreResult<Option<WorkspacePipelineRunRecord>> {
         PgWorkspaceRepository::latest_pipeline_run_for_node(self, plan_id, node_id, attempt_id)
             .await
+    }
+
+    async fn ensure_pipeline_contract(
+        &self,
+        contract_id: &str,
+        workspace_id: &str,
+        plan_id: &str,
+        provider: &str,
+        code_root: Option<&str>,
+        commands_json: &Value,
+        env_json: &Value,
+        trigger_policy_json: &Value,
+        timeout_seconds: i32,
+        auto_deploy: bool,
+        preview_port: Option<i32>,
+        health_url: Option<&str>,
+        metadata_json: &Value,
+        now: DateTime<Utc>,
+    ) -> CoreResult<String> {
+        PgWorkspaceRepository::ensure_pipeline_contract(
+            self,
+            contract_id,
+            workspace_id,
+            plan_id,
+            provider,
+            code_root,
+            commands_json,
+            env_json,
+            trigger_policy_json,
+            timeout_seconds,
+            auto_deploy,
+            preview_port,
+            health_url,
+            metadata_json,
+            now,
+        )
+        .await
+    }
+
+    async fn create_pipeline_run(
+        &self,
+        run: WorkspacePipelineRunRecord,
+    ) -> CoreResult<WorkspacePipelineRunRecord> {
+        PgWorkspaceRepository::create_pipeline_run(self, run).await
     }
 
     async fn finish_pipeline_run(
@@ -1304,29 +1376,376 @@ impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
             }
         }
 
-        let mut metadata = object_or_empty(node.metadata_json);
-        metadata.insert("pipeline_status".to_string(), json!("requested"));
-        metadata.insert("pipeline_gate_status".to_string(), json!("requested"));
-        metadata.insert("pipeline_requested_at".to_string(), json!(now.to_rfc3339()));
-        metadata.insert("pipeline_request_outbox_id".to_string(), json!(item.id));
-        metadata.insert("pipeline_request_reason".to_string(), json!(reason));
-        metadata.insert(
-            "pipeline_runtime_state".to_string(),
-            json!("runtime_admitted"),
-        );
-        if let Some(attempt_id) = attempt_id {
-            metadata.insert(
-                "pipeline_requested_attempt_id".to_string(),
-                json!(attempt_id),
+        let workspace = self
+            .store
+            .get_workspace(&workspace_id)
+            .await?
+            .ok_or_else(|| CoreError::Storage(format!("workspace {workspace_id} not found")))?;
+        let contract = pipeline_contract_foundation(&workspace);
+        if !contract.can_create_sandbox_native_run() {
+            mark_pipeline_requested(
+                &mut node,
+                &item,
+                &reason,
+                attempt_id.as_deref(),
+                now,
+                "runtime_admitted",
             );
+            self.store.save_plan_node(node).await?;
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
         }
-        node.execution = "idle".to_string();
-        node.metadata_json = Value::Object(metadata);
-        node.updated_at = Some(now);
+
+        let trigger_policy_json = json!({
+            "trigger": "verification_gate",
+            "node_id": node_id,
+            "attempt_id": attempt_id
+        });
+        let contract_id = self
+            .store
+            .ensure_pipeline_contract(
+                &generate_uuid_v4(),
+                &workspace_id,
+                &plan_id,
+                &contract.provider,
+                contract.code_root.as_deref(),
+                &contract.commands_json,
+                &contract.env_json,
+                &trigger_policy_json,
+                contract.timeout_seconds,
+                contract.auto_deploy,
+                contract.preview_port,
+                contract.health_url.as_deref(),
+                &contract.metadata_json,
+                now,
+            )
+            .await?;
+        let run = WorkspacePipelineRunRecord {
+            id: generate_uuid_v4(),
+            contract_id,
+            workspace_id: workspace_id.clone(),
+            plan_id: Some(plan_id.clone()),
+            node_id: Some(node_id.clone()),
+            attempt_id: attempt_id.clone(),
+            commit_ref: node_expected_commit_ref(&node),
+            provider: contract.provider,
+            status: "running".to_string(),
+            reason: None,
+            started_at: Some(now),
+            completed_at: None,
+            metadata_json: json!({
+                "reason": reason
+            }),
+            created_at: now,
+            updated_at: None,
+        };
+        let run = self.store.create_pipeline_run(run).await?;
+        mark_existing_pipeline_run_running(&mut node, &run, now);
         self.store.save_plan_node(node).await?;
 
         Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
     }
+}
+
+struct PipelineContractFoundation {
+    provider: String,
+    code_root: Option<String>,
+    commands_json: Value,
+    env_json: Value,
+    timeout_seconds: i32,
+    auto_deploy: bool,
+    preview_port: Option<i32>,
+    health_url: Option<String>,
+    services_json: Value,
+    deploy_command: Option<String>,
+    agent_managed: bool,
+    contract_source: String,
+    metadata_json: Value,
+}
+
+impl PipelineContractFoundation {
+    fn can_create_sandbox_native_run(&self) -> bool {
+        if self.provider != SANDBOX_NATIVE_PROVIDER {
+            return false;
+        }
+        if !self.auto_deploy {
+            return true;
+        }
+        let service_count = self.services_json.as_array().map_or(0, Vec::len);
+        if self.agent_managed {
+            if self.contract_source != PLANNING_CONTRACT_SOURCE {
+                return false;
+            }
+            if service_count == 0 && self.deploy_command.is_none() && self.health_url.is_none() {
+                return false;
+            }
+        }
+        service_count > 0
+    }
+}
+
+fn pipeline_contract_foundation(workspace: &WorkspaceRecord) -> PipelineContractFoundation {
+    let workspace_metadata = object_or_empty(workspace.metadata_json.clone());
+    let delivery = workspace_metadata
+        .get("delivery_cicd")
+        .cloned()
+        .map(object_or_empty)
+        .unwrap_or_default();
+    let provider = normalize_pipeline_provider(
+        string_from_map(&delivery, "provider")
+            .unwrap_or_else(|| SANDBOX_NATIVE_PROVIDER.to_string())
+            .as_str(),
+    );
+    let timeout_seconds = positive_i32_from_map(
+        &delivery,
+        "timeout_seconds",
+        DEFAULT_PIPELINE_TIMEOUT_SECONDS,
+    );
+    let auto_deploy = bool_from_map_default(&delivery, "auto_deploy", true);
+    let preview_port = Some(positive_i32_from_map(
+        &delivery,
+        "preview_port",
+        DEFAULT_PREVIEW_PORT,
+    ));
+    let health_url = string_from_map(&delivery, "health_url");
+    let deploy_command = string_from_map(&delivery, "deploy_command");
+    let agent_managed = bool_from_map_default(&delivery, "agent_managed", true);
+    let contract_source = string_from_map(&delivery, "contract_source").unwrap_or_else(|| {
+        if delivery.get("agent_proposal").is_some_and(Value::is_object) {
+            "agent_proposal".to_string()
+        } else {
+            "metadata".to_string()
+        }
+    });
+    let contract_confidence = delivery
+        .get("contract_confidence")
+        .and_then(Value::as_f64)
+        .filter(|value| (0.0..=1.0).contains(value))
+        .unwrap_or(1.0);
+    let code_root = string_from_map(&delivery, "code_root")
+        .or_else(|| string_from_map(&workspace_metadata, "sandbox_code_root"))
+        .or_else(|| {
+            workspace_metadata
+                .get("code_context")
+                .and_then(Value::as_object)
+                .and_then(|code_context| string_from_map(code_context, "sandbox_code_root"))
+        });
+    let commands_json = pipeline_stage_specs_json(&delivery, timeout_seconds);
+    let env_json = string_map_json(delivery.get("env"));
+    let services_json = delivery
+        .get("services")
+        .filter(|value| value.is_array())
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let provider_config = pipeline_provider_config_json(&delivery, &provider);
+    let metadata_json = json!({
+        "source": "workspace_plan.pipeline_run_requested",
+        "agent_managed": agent_managed,
+        "contract_source": contract_source,
+        "contract_confidence": contract_confidence,
+        "services": services_json.clone(),
+        "provider_config": provider_config.clone()
+    });
+    PipelineContractFoundation {
+        provider,
+        code_root,
+        commands_json,
+        env_json,
+        timeout_seconds,
+        auto_deploy,
+        preview_port,
+        health_url,
+        services_json,
+        deploy_command,
+        agent_managed,
+        contract_source,
+        metadata_json,
+    }
+}
+
+fn normalize_pipeline_provider(value: &str) -> String {
+    match value.trim() {
+        "memstack-sandbox" | "sandbox_native" | "" => SANDBOX_NATIVE_PROVIDER.to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn pipeline_provider_config_json(delivery: &Map<String, Value>, provider: &str) -> Value {
+    let Some(raw) = delivery.get("provider_config").and_then(Value::as_object) else {
+        return json!({});
+    };
+    raw.get(provider)
+        .filter(|value| value.is_object())
+        .cloned()
+        .or_else(|| Some(Value::Object(raw.clone())))
+        .unwrap_or_else(|| json!({}))
+}
+
+fn pipeline_stage_specs_json(delivery: &Map<String, Value>, timeout_seconds: i32) -> Value {
+    if let Some(stages) = delivery.get("stages").and_then(Value::as_array) {
+        let normalized = stages
+            .iter()
+            .filter_map(|stage| pipeline_stage_from_value(stage, timeout_seconds))
+            .collect::<Vec<_>>();
+        return Value::Array(normalized);
+    }
+    let command_keys = [
+        ("install", "install_command"),
+        ("lint", "lint_command"),
+        ("test", "test_command"),
+        ("build", "build_command"),
+    ];
+    let configured = command_keys
+        .iter()
+        .filter_map(|(stage, key)| {
+            string_from_map(delivery, key).map(|command| {
+                json!({
+                    "stage": stage,
+                    "command": command,
+                    "required": true,
+                    "timeout_seconds": timeout_seconds
+                })
+            })
+        })
+        .collect::<Vec<_>>();
+    if !configured.is_empty() {
+        return Value::Array(configured);
+    }
+    Value::Array(default_pipeline_stage_specs(timeout_seconds))
+}
+
+fn pipeline_stage_from_value(stage: &Value, default_timeout: i32) -> Option<Value> {
+    let map = stage.as_object()?;
+    let stage_name = string_from_map(map, "stage").or_else(|| string_from_map(map, "id"))?;
+    let command = string_from_map(map, "command")?;
+    let mut payload = Map::new();
+    payload.insert("stage".to_string(), json!(stage_name));
+    payload.insert("command".to_string(), json!(command));
+    payload.insert(
+        "required".to_string(),
+        json!(bool_from_map_default(map, "required", true)),
+    );
+    payload.insert(
+        "timeout_seconds".to_string(),
+        json!(positive_i32_from_map(
+            map,
+            "timeout_seconds",
+            default_timeout
+        )),
+    );
+    if let Some(service_id) = string_from_map(map, "service_id") {
+        payload.insert("service_id".to_string(), json!(service_id));
+    }
+    Some(Value::Object(payload))
+}
+
+fn default_pipeline_stage_specs(timeout_seconds: i32) -> Vec<Value> {
+    vec![
+        json!({
+            "stage": "install",
+            "command": default_install_command(),
+            "required": true,
+            "timeout_seconds": timeout_seconds
+        }),
+        json!({
+            "stage": "lint",
+            "command": default_lint_command(),
+            "required": false,
+            "timeout_seconds": timeout_seconds
+        }),
+        json!({
+            "stage": "test",
+            "command": default_test_command(),
+            "required": true,
+            "timeout_seconds": timeout_seconds
+        }),
+        json!({
+            "stage": "build",
+            "command": default_build_command(),
+            "required": true,
+            "timeout_seconds": timeout_seconds
+        }),
+    ]
+}
+
+fn default_install_command() -> &'static str {
+    "if [ -f package.json ]; then if [ -f pnpm-lock.yaml ] && command -v pnpm >/dev/null 2>&1; then pnpm install --frozen-lockfile || pnpm install; elif [ -f package-lock.json ]; then npm ci || npm install; else npm install; fi; elif [ -f pyproject.toml ] && command -v uv >/dev/null 2>&1; then uv sync; else echo 'no install step'; fi"
+}
+
+fn default_lint_command() -> &'static str {
+    "if [ -f Makefile ] && grep -qE '^lint:' Makefile; then make lint; elif [ -f package.json ]; then npm run lint --if-present; else echo 'no lint step'; fi"
+}
+
+fn default_test_command() -> &'static str {
+    "if [ -f Makefile ] && grep -qE '^test:' Makefile; then make test; elif [ -f package.json ]; then if node -e \"const p=require('./package.json');process.exit(p.scripts&&p.scripts.test?0:1)\"; then npm test -- --runInBand=false 2>/dev/null || npm test; else echo 'no npm test script'; fi; elif [ -d tests ]; then pytest; else echo 'no test step'; fi"
+}
+
+fn default_build_command() -> &'static str {
+    "if [ -f Makefile ] && grep -qE '^build:' Makefile; then make build; elif [ -f package.json ]; then npm run build --if-present; else echo 'no build step'; fi"
+}
+
+fn string_map_json(value: Option<&Value>) -> Value {
+    let Some(map) = value.and_then(Value::as_object) else {
+        return json!({});
+    };
+    let normalized = map
+        .iter()
+        .filter_map(|(key, value)| {
+            if value.is_null() {
+                None
+            } else {
+                Some((
+                    key.clone(),
+                    json!(value
+                        .as_str()
+                        .map_or_else(|| value.to_string(), ToOwned::to_owned)),
+                ))
+            }
+        })
+        .collect::<Map<_, _>>();
+    Value::Object(normalized)
+}
+
+fn bool_from_map_default(map: &Map<String, Value>, key: &str, default: bool) -> bool {
+    map.get(key).and_then(Value::as_bool).unwrap_or(default)
+}
+
+fn positive_i32_from_map(map: &Map<String, Value>, key: &str, default: i32) -> i32 {
+    let parsed = map
+        .get(key)
+        .and_then(Value::as_i64)
+        .and_then(|value| i32::try_from(value).ok())
+        .unwrap_or(default);
+    if parsed > 0 {
+        parsed
+    } else {
+        default
+    }
+}
+
+fn mark_pipeline_requested(
+    node: &mut WorkspacePlanNodeRecord,
+    item: &WorkspacePlanOutboxRecord,
+    reason: &str,
+    attempt_id: Option<&str>,
+    now: DateTime<Utc>,
+    runtime_state: &str,
+) {
+    let mut metadata = object_or_empty(node.metadata_json.clone());
+    metadata.insert("pipeline_status".to_string(), json!("requested"));
+    metadata.insert("pipeline_gate_status".to_string(), json!("requested"));
+    metadata.insert("pipeline_requested_at".to_string(), json!(now.to_rfc3339()));
+    metadata.insert("pipeline_request_outbox_id".to_string(), json!(item.id));
+    metadata.insert("pipeline_request_reason".to_string(), json!(reason));
+    metadata.insert("pipeline_runtime_state".to_string(), json!(runtime_state));
+    if let Some(attempt_id) = attempt_id {
+        metadata.insert(
+            "pipeline_requested_attempt_id".to_string(),
+            json!(attempt_id),
+        );
+    }
+    node.execution = "idle".to_string();
+    node.metadata_json = Value::Object(metadata);
+    node.updated_at = Some(now);
 }
 
 fn can_reflect_existing_pipeline_run(
@@ -4026,6 +4445,25 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Clone, PartialEq)]
+    struct FakePipelineContractRecord {
+        id: String,
+        workspace_id: String,
+        plan_id: String,
+        provider: String,
+        code_root: Option<String>,
+        commands_json: Value,
+        env_json: Value,
+        trigger_policy_json: Value,
+        timeout_seconds: i32,
+        auto_deploy: bool,
+        preview_port: Option<i32>,
+        health_url: Option<String>,
+        metadata_json: Value,
+        created_at: DateTime<Utc>,
+        updated_at: Option<DateTime<Utc>>,
+    }
+
     #[derive(Default)]
     struct FakeWorkspacePlanDispatchStore {
         workspaces: Mutex<HashMap<String, WorkspaceRecord>>,
@@ -4033,6 +4471,7 @@ mod tests {
         plans: Mutex<HashMap<String, WorkspacePlanRecord>>,
         nodes: Mutex<HashMap<String, WorkspacePlanNodeRecord>>,
         attempts: Mutex<HashMap<String, WorkspaceTaskSessionAttemptRecord>>,
+        pipeline_contracts: Mutex<HashMap<(String, String), FakePipelineContractRecord>>,
         pipeline_runs: Mutex<HashMap<String, WorkspacePipelineRunRecord>>,
         plan_events: Mutex<Vec<WorkspacePlanEventRecord>>,
         outbox: Mutex<Vec<WorkspacePlanOutboxRecord>>,
@@ -4088,6 +4527,28 @@ mod tests {
 
         fn pipeline_run(&self, id: &str) -> WorkspacePipelineRunRecord {
             self.pipeline_runs.lock().unwrap().get(id).unwrap().clone()
+        }
+
+        fn pipeline_runs(&self) -> Vec<WorkspacePipelineRunRecord> {
+            self.pipeline_runs
+                .lock()
+                .unwrap()
+                .values()
+                .cloned()
+                .collect()
+        }
+
+        fn pipeline_contract(
+            &self,
+            workspace_id: &str,
+            plan_id: &str,
+        ) -> FakePipelineContractRecord {
+            self.pipeline_contracts
+                .lock()
+                .unwrap()
+                .get(&(workspace_id.to_string(), plan_id.to_string()))
+                .unwrap()
+                .clone()
         }
 
         fn attempts(&self) -> Vec<WorkspaceTaskSessionAttemptRecord> {
@@ -4317,6 +4778,72 @@ mod tests {
             Ok(runs.into_iter().next())
         }
 
+        async fn ensure_pipeline_contract(
+            &self,
+            contract_id: &str,
+            workspace_id: &str,
+            plan_id: &str,
+            provider: &str,
+            code_root: Option<&str>,
+            commands_json: &Value,
+            env_json: &Value,
+            trigger_policy_json: &Value,
+            timeout_seconds: i32,
+            auto_deploy: bool,
+            preview_port: Option<i32>,
+            health_url: Option<&str>,
+            metadata_json: &Value,
+            now: DateTime<Utc>,
+        ) -> CoreResult<String> {
+            let mut contracts = self.pipeline_contracts.lock().unwrap();
+            let key = (workspace_id.to_string(), plan_id.to_string());
+            if let Some(existing) = contracts.get_mut(&key) {
+                existing.provider = provider.to_string();
+                existing.code_root = code_root.map(ToOwned::to_owned);
+                existing.commands_json = commands_json.clone();
+                existing.env_json = env_json.clone();
+                existing.trigger_policy_json = trigger_policy_json.clone();
+                existing.timeout_seconds = timeout_seconds.max(1);
+                existing.auto_deploy = auto_deploy;
+                existing.preview_port = preview_port;
+                existing.health_url = health_url.map(ToOwned::to_owned);
+                existing.metadata_json = metadata_json.clone();
+                existing.updated_at = Some(now);
+                return Ok(existing.id.clone());
+            }
+            let record = FakePipelineContractRecord {
+                id: contract_id.to_string(),
+                workspace_id: workspace_id.to_string(),
+                plan_id: plan_id.to_string(),
+                provider: provider.to_string(),
+                code_root: code_root.map(ToOwned::to_owned),
+                commands_json: commands_json.clone(),
+                env_json: env_json.clone(),
+                trigger_policy_json: trigger_policy_json.clone(),
+                timeout_seconds: timeout_seconds.max(1),
+                auto_deploy,
+                preview_port,
+                health_url: health_url.map(ToOwned::to_owned),
+                metadata_json: metadata_json.clone(),
+                created_at: now,
+                updated_at: None,
+            };
+            let id = record.id.clone();
+            contracts.insert(key, record);
+            Ok(id)
+        }
+
+        async fn create_pipeline_run(
+            &self,
+            run: WorkspacePipelineRunRecord,
+        ) -> CoreResult<WorkspacePipelineRunRecord> {
+            self.pipeline_runs
+                .lock()
+                .unwrap()
+                .insert(run.id.clone(), run.clone());
+            Ok(run)
+        }
+
         async fn finish_pipeline_run(
             &self,
             run_id: &str,
@@ -4533,6 +5060,28 @@ mod tests {
         workspace_with_metadata(json!({
             "code_context": {
                 "sandbox_code_root": root
+            }
+        }))
+    }
+
+    fn workspace_with_pipeline_contract() -> WorkspaceRecord {
+        workspace_with_metadata(json!({
+            "delivery_cicd": {
+                "provider": "sandbox_native",
+                "code_root": "/workspace/project",
+                "auto_deploy": false,
+                "timeout_seconds": 120,
+                "contract_source": PLANNING_CONTRACT_SOURCE,
+                "contract_confidence": 0.82,
+                "env": {"CI": "true"},
+                "stages": [
+                    {
+                        "stage": "test",
+                        "command": "cargo test --workspace",
+                        "required": true,
+                        "timeout_seconds": 120
+                    }
+                ]
             }
         }))
     }
@@ -4890,6 +5439,7 @@ mod tests {
     #[tokio::test]
     async fn pipeline_run_handler_marks_node_requested_without_running_provider() {
         let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
         store.insert_plan(plan());
         let mut node = plan_node();
         node.execution = "reported".to_string();
@@ -4921,6 +5471,78 @@ mod tests {
             "attempt-test"
         );
         assert!(node.metadata_json["pipeline_requested_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_creates_durable_running_run_for_planning_contract() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_pipeline_contract());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        node.feature_checkpoint_json = Some(json!({"commit_ref": "abcdef1234567890"}));
+        store.insert_node(node);
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler.handle(pipeline_run_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.metadata_json["pipeline_status"], "running");
+        assert_eq!(node.metadata_json["pipeline_gate_status"], "running");
+        assert!(node.metadata_json["pipeline_run_id"].is_string());
+        assert!(node.metadata_json["pipeline_started_at"].is_string());
+        assert!(node.metadata_json.get("pipeline_requested_at").is_none());
+
+        let runs = store.pipeline_runs();
+        assert_eq!(runs.len(), 1);
+        let run = &runs[0];
+        assert_eq!(run.workspace_id, "workspace-test");
+        assert_eq!(run.plan_id.as_deref(), Some("plan-test"));
+        assert_eq!(run.node_id.as_deref(), Some("node-test"));
+        assert_eq!(run.attempt_id.as_deref(), Some("attempt-test"));
+        assert_eq!(run.commit_ref.as_deref(), Some("abcdef1234567890"));
+        assert_eq!(run.provider, SANDBOX_NATIVE_PROVIDER);
+        assert_eq!(run.status, "running");
+        assert_eq!(
+            run.metadata_json["reason"],
+            "operator requested harness-native pipeline"
+        );
+        assert_eq!(
+            node.metadata_json["pipeline_run_id"].as_str(),
+            Some(run.id.as_str())
+        );
+
+        let contract = store.pipeline_contract("workspace-test", "plan-test");
+        assert_eq!(contract.id, run.contract_id);
+        assert_eq!(contract.provider, SANDBOX_NATIVE_PROVIDER);
+        assert_eq!(contract.code_root.as_deref(), Some("/workspace/project"));
+        assert_eq!(contract.timeout_seconds, 120);
+        assert!(!contract.auto_deploy);
+        assert_eq!(contract.env_json["CI"], "true");
+        assert_eq!(
+            contract.trigger_policy_json,
+            json!({
+                "trigger": "verification_gate",
+                "node_id": "node-test",
+                "attempt_id": "attempt-test"
+            })
+        );
+        assert_eq!(contract.commands_json[0]["stage"], "test");
+        assert_eq!(
+            contract.commands_json[0]["command"],
+            "cargo test --workspace"
+        );
+        assert_eq!(
+            contract.metadata_json["source"],
+            "workspace_plan.pipeline_run_requested"
+        );
+        assert_eq!(
+            contract.metadata_json["contract_source"],
+            PLANNING_CONTRACT_SOURCE
+        );
     }
 
     #[tokio::test]
@@ -5033,6 +5655,7 @@ mod tests {
     #[tokio::test]
     async fn pipeline_run_handler_ignores_running_run_with_commit_mismatch() {
         let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_pipeline_contract());
         store.insert_plan(plan());
         let mut node = plan_node();
         node.execution = "reported".to_string();
@@ -5053,14 +5676,11 @@ mod tests {
         assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
         let node = store.node("node-test");
         assert_eq!(node.execution, "idle");
-        assert_eq!(node.metadata_json["pipeline_status"], "requested");
-        assert_eq!(node.metadata_json["pipeline_gate_status"], "requested");
-        assert_eq!(
-            node.metadata_json["pipeline_requested_attempt_id"],
-            "attempt-test"
-        );
-        assert!(node.metadata_json.get("pipeline_run_id").is_none());
-        assert!(node.metadata_json.get("pipeline_started_at").is_none());
+        assert_eq!(node.metadata_json["pipeline_status"], "running");
+        assert_eq!(node.metadata_json["pipeline_gate_status"], "running");
+        let new_run_id = node.metadata_json["pipeline_run_id"].as_str().unwrap();
+        assert_ne!(new_run_id, "pipeline-run-running-stale");
+        assert!(node.metadata_json["pipeline_started_at"].is_string());
         let run = store.pipeline_run("pipeline-run-running-stale");
         assert_eq!(run.status, "failed");
         assert_eq!(
@@ -5080,11 +5700,19 @@ mod tests {
         );
         assert!(run.completed_at.is_some());
         assert!(run.updated_at.is_some());
+        let new_run = store.pipeline_run(new_run_id);
+        assert_eq!(new_run.status, "running");
+        assert_eq!(new_run.commit_ref.as_deref(), Some("abcdef1234567890"));
+        assert_eq!(
+            new_run.metadata_json["reason"],
+            "operator requested harness-native pipeline"
+        );
     }
 
     #[tokio::test]
     async fn pipeline_run_handler_marks_running_run_without_source_ref_stale() {
         let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_pipeline_contract());
         store.insert_plan(plan());
         let mut node = plan_node();
         node.execution = "reported".to_string();
@@ -5104,8 +5732,9 @@ mod tests {
 
         assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
         let node = store.node("node-test");
-        assert_eq!(node.metadata_json["pipeline_status"], "requested");
-        assert!(node.metadata_json.get("pipeline_run_id").is_none());
+        assert_eq!(node.metadata_json["pipeline_status"], "running");
+        let new_run_id = node.metadata_json["pipeline_run_id"].as_str().unwrap();
+        assert_ne!(new_run_id, "pipeline-run-running-unknown");
         let run = store.pipeline_run("pipeline-run-running-unknown");
         assert_eq!(run.status, "failed");
         assert_eq!(
@@ -5122,11 +5751,15 @@ mod tests {
             run.metadata_json["superseded_by_source_commit_ref"],
             "abcdef1234567890"
         );
+        let new_run = store.pipeline_run(new_run_id);
+        assert_eq!(new_run.status, "running");
+        assert_eq!(new_run.commit_ref.as_deref(), Some("abcdef1234567890"));
     }
 
     #[tokio::test]
     async fn pipeline_run_handler_keeps_requested_on_success_commit_mismatch() {
         let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_pipeline_contract());
         store.insert_plan(plan());
         let mut node = plan_node();
         node.execution = "reported".to_string();
@@ -5150,17 +5783,13 @@ mod tests {
         assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
         let node = store.node("node-test");
         assert_eq!(node.execution, "idle");
-        assert_eq!(node.metadata_json["pipeline_status"], "requested");
-        assert_eq!(node.metadata_json["pipeline_gate_status"], "requested");
-        assert_eq!(
-            node.metadata_json["pipeline_request_outbox_id"],
-            "job-pipeline-run"
-        );
-        assert_eq!(
-            node.metadata_json["pipeline_requested_attempt_id"],
-            "attempt-test"
-        );
-        assert!(node.metadata_json.get("pipeline_run_id").is_none());
+        assert_eq!(node.metadata_json["pipeline_status"], "running");
+        assert_eq!(node.metadata_json["pipeline_gate_status"], "running");
+        let new_run_id = node.metadata_json["pipeline_run_id"].as_str().unwrap();
+        assert_ne!(new_run_id, "pipeline-run-stale");
+        let new_run = store.pipeline_run(new_run_id);
+        assert_eq!(new_run.status, "running");
+        assert_eq!(new_run.commit_ref.as_deref(), Some("abcdef1234567890"));
         assert!(node.metadata_json.get("last_verification_passed").is_none());
         assert!(node.metadata_json.get("pipeline_evidence_refs").is_none());
     }

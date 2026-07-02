@@ -794,6 +794,91 @@ impl PgWorkspaceRepository {
             .transpose()
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn ensure_pipeline_contract(
+        &self,
+        contract_id: &str,
+        workspace_id: &str,
+        plan_id: &str,
+        provider: &str,
+        code_root: Option<&str>,
+        commands_json: &Value,
+        env_json: &Value,
+        trigger_policy_json: &Value,
+        timeout_seconds: i32,
+        auto_deploy: bool,
+        preview_port: Option<i32>,
+        health_url: Option<&str>,
+        metadata_json: &Value,
+        now: DateTime<Utc>,
+    ) -> CoreResult<String> {
+        sqlx::query_as::<_, (String,)>(
+            "INSERT INTO workspace_pipeline_contracts \
+             (id, workspace_id, plan_id, provider, code_root, commands_json, env_json, \
+              trigger_policy_json, timeout_seconds, auto_deploy, preview_port, health_url, \
+              status, metadata_json, created_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'active', $13, $14) \
+             ON CONFLICT ON CONSTRAINT uq_workspace_pipeline_contract_workspace_plan \
+             DO UPDATE SET provider = EXCLUDED.provider, code_root = EXCLUDED.code_root, \
+                 commands_json = EXCLUDED.commands_json, env_json = EXCLUDED.env_json, \
+                 trigger_policy_json = EXCLUDED.trigger_policy_json, \
+                 timeout_seconds = EXCLUDED.timeout_seconds, auto_deploy = EXCLUDED.auto_deploy, \
+                 preview_port = EXCLUDED.preview_port, health_url = EXCLUDED.health_url, \
+                 metadata_json = EXCLUDED.metadata_json, status = 'active', updated_at = $14 \
+             RETURNING id",
+        )
+        .bind(contract_id)
+        .bind(workspace_id)
+        .bind(plan_id)
+        .bind(provider)
+        .bind(code_root)
+        .bind(Json(commands_json))
+        .bind(Json(env_json))
+        .bind(Json(trigger_policy_json))
+        .bind(timeout_seconds.max(1))
+        .bind(auto_deploy)
+        .bind(preview_port)
+        .bind(health_url)
+        .bind(Json(metadata_json))
+        .bind(now)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(storage)
+        .map(|row| row.0)
+    }
+
+    pub async fn create_pipeline_run(
+        &self,
+        run: WorkspacePipelineRunRecord,
+    ) -> CoreResult<WorkspacePipelineRunRecord> {
+        sqlx::query(&format!(
+            "INSERT INTO workspace_pipeline_runs \
+             (id, contract_id, workspace_id, plan_id, node_id, attempt_id, commit_ref, provider, \
+              status, reason, started_at, completed_at, metadata_json, created_at, updated_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) \
+             RETURNING {PIPELINE_RUN_COLS}"
+        ))
+        .bind(&run.id)
+        .bind(&run.contract_id)
+        .bind(&run.workspace_id)
+        .bind(&run.plan_id)
+        .bind(&run.node_id)
+        .bind(&run.attempt_id)
+        .bind(&run.commit_ref)
+        .bind(&run.provider)
+        .bind(&run.status)
+        .bind(&run.reason)
+        .bind(run.started_at)
+        .bind(run.completed_at)
+        .bind(Json(&run.metadata_json))
+        .bind(run.created_at)
+        .bind(run.updated_at)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(storage)
+        .and_then(row_to_pipeline_run)
+    }
+
     pub async fn finish_pipeline_run(
         &self,
         run_id: &str,

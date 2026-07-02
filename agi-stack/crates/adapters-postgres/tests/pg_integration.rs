@@ -24,9 +24,10 @@ use agistack_adapters_postgres::{
     ProjectSandboxRecord, ProjectStatsLookup, ProjectUpdatePatch, SkillProjectAccess, SkillRecord,
     SkillUpdateRecord, SkillVersionRecord, TenantAccessStatus, TenantAdminStatus, TenantLookup,
     TenantUpdatePatch, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
-    WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
-    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
-    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
+    WorkspacePipelineRunRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
+    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
+    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+    WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_core::agent::types::{SessionState, SessionStatus};
 use agistack_core::model::{Entity, Memory};
@@ -62,6 +63,8 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
     ensure_python_shaped_tables(&pool).await;
 
     for sql in [
+        "DELETE FROM workspace_pipeline_runs WHERE plan_id = 'plan_p6_repo' OR workspace_id = 'ws_p6_repo'",
+        "DELETE FROM workspace_pipeline_contracts WHERE plan_id = 'plan_p6_repo' OR workspace_id = 'ws_p6_repo'",
         "DELETE FROM workspace_plan_outbox WHERE plan_id = 'plan_p6_repo' OR workspace_id = 'ws_p6_repo'",
         "DELETE FROM workspace_plan_events WHERE plan_id = 'plan_p6_repo' OR workspace_id = 'ws_p6_repo'",
         "DELETE FROM workspace_plan_blackboard_entries WHERE plan_id = 'plan_p6_repo'",
@@ -558,6 +561,90 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
         updated_node.metadata_json["operator_action"]["action"],
         "test"
     );
+
+    let contract_id = repo
+        .ensure_pipeline_contract(
+            "pipeline_contract_p6_repo",
+            "ws_p6_repo",
+            "plan_p6_repo",
+            "sandbox_native",
+            Some("/workspace/project"),
+            &json!([{
+                "stage": "test",
+                "command": "cargo test --workspace",
+                "required": true,
+                "timeout_seconds": 120
+            }]),
+            &json!({"CI": "true"}),
+            &json!({
+                "trigger": "verification_gate",
+                "node_id": "plan_node_p6",
+                "attempt_id": "attempt_p6_repo_1"
+            }),
+            120,
+            false,
+            Some(3000),
+            None,
+            &json!({"source": "workspace_plan.pipeline_run_requested"}),
+            created_at,
+        )
+        .await
+        .unwrap();
+    assert_eq!(contract_id, "pipeline_contract_p6_repo");
+    let updated_contract_id = repo
+        .ensure_pipeline_contract(
+            "pipeline_contract_p6_repo_new",
+            "ws_p6_repo",
+            "plan_p6_repo",
+            "sandbox_native",
+            Some("/workspace/project"),
+            &json!([{
+                "stage": "build",
+                "command": "cargo build",
+                "required": true,
+                "timeout_seconds": 90
+            }]),
+            &json!({}),
+            &json!({"trigger": "verification_gate"}),
+            90,
+            false,
+            Some(3000),
+            None,
+            &json!({"source": "workspace_plan.pipeline_run_requested", "updated": true}),
+            created_at,
+        )
+        .await
+        .unwrap();
+    assert_eq!(updated_contract_id, "pipeline_contract_p6_repo");
+    let pipeline_run = repo
+        .create_pipeline_run(WorkspacePipelineRunRecord {
+            id: "pipeline_run_p6_repo".to_string(),
+            contract_id: contract_id.clone(),
+            workspace_id: "ws_p6_repo".to_string(),
+            plan_id: Some("plan_p6_repo".to_string()),
+            node_id: Some("plan_node_p6".to_string()),
+            attempt_id: Some("attempt_p6_repo_1".to_string()),
+            commit_ref: Some("abcdef1234567890".to_string()),
+            provider: "sandbox_native".to_string(),
+            status: "running".to_string(),
+            reason: None,
+            started_at: Some(created_at),
+            completed_at: None,
+            metadata_json: json!({"reason": "pipeline_gate_required"}),
+            created_at,
+            updated_at: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(pipeline_run.status, "running");
+    let latest_run = repo
+        .latest_pipeline_run_for_node("plan_p6_repo", "plan_node_p6", Some("attempt_p6_repo_1"))
+        .await
+        .unwrap()
+        .expect("latest pipeline run");
+    assert_eq!(latest_run.id, "pipeline_run_p6_repo");
+    assert_eq!(latest_run.commit_ref.as_deref(), Some("abcdef1234567890"));
+    assert_eq!(latest_run.metadata_json["reason"], "pipeline_gate_required");
 
     repo.create_plan_blackboard_entry(WorkspacePlanBlackboardEntryRecord {
         id: "plan_bb_p6_v1".to_string(),
@@ -1063,6 +1150,38 @@ async fn ensure_python_shaped_tables(pool: &PgPool) {
             ON workspace_plan_outbox (status, next_attempt_at)",
         "CREATE INDEX IF NOT EXISTS ix_workspace_plan_outbox_lease \
             ON workspace_plan_outbox (lease_owner, lease_expires_at)",
+        "CREATE TABLE IF NOT EXISTS workspace_pipeline_contracts (\
+            id text PRIMARY KEY, workspace_id text NOT NULL, plan_id text, \
+            provider varchar(40) DEFAULT 'sandbox_native' NOT NULL, code_root text, \
+            commands_json json DEFAULT '[]'::json NOT NULL, \
+            env_json json DEFAULT '{}'::json NOT NULL, \
+            trigger_policy_json json DEFAULT '{}'::json NOT NULL, \
+            timeout_seconds integer DEFAULT 600 NOT NULL, \
+            auto_deploy boolean DEFAULT true NOT NULL, preview_port integer, health_url text, \
+            status varchar(20) DEFAULT 'active' NOT NULL, \
+            metadata_json json DEFAULT '{}'::json NOT NULL, \
+            created_at timestamptz DEFAULT now() NOT NULL, updated_at timestamptz, \
+            CONSTRAINT uq_workspace_pipeline_contract_workspace_plan UNIQUE (workspace_id, plan_id))",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_pipeline_contracts_workspace \
+            ON workspace_pipeline_contracts (workspace_id)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_pipeline_contracts_plan \
+            ON workspace_pipeline_contracts (plan_id)",
+        "CREATE TABLE IF NOT EXISTS workspace_pipeline_runs (\
+            id text PRIMARY KEY, contract_id text NOT NULL, workspace_id text NOT NULL, \
+            plan_id text, node_id text, attempt_id text, commit_ref text, \
+            provider varchar(40) DEFAULT 'sandbox_native' NOT NULL, \
+            status varchar(20) DEFAULT 'pending' NOT NULL, reason text, \
+            started_at timestamptz, completed_at timestamptz, \
+            metadata_json json DEFAULT '{}'::json NOT NULL, \
+            created_at timestamptz DEFAULT now() NOT NULL, updated_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_pipeline_runs_workspace_created \
+            ON workspace_pipeline_runs (workspace_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_pipeline_runs_plan_node \
+            ON workspace_pipeline_runs (plan_id, node_id)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_pipeline_runs_attempt \
+            ON workspace_pipeline_runs (attempt_id)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_pipeline_runs_status \
+            ON workspace_pipeline_runs (status)",
         "CREATE TABLE IF NOT EXISTS topology_nodes (\
             id text PRIMARY KEY, workspace_id text NOT NULL, node_type varchar(20) NOT NULL, \
             ref_id text, title varchar(255) DEFAULT '' NOT NULL, \
