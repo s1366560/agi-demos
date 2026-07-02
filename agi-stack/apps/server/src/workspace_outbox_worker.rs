@@ -1257,6 +1257,11 @@ impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
             .latest_pipeline_run_for_node(&plan_id, &node_id, attempt_id.as_deref())
             .await?
         {
+            if run.status == "running" && pipeline_run_matches_node_expected_commit(&run, &node) {
+                mark_existing_pipeline_run_running(&mut node, &run, now);
+                self.store.save_plan_node(node).await?;
+                return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+            }
             if can_reflect_existing_pipeline_run(&run, &node) {
                 reflect_existing_pipeline_run_to_node(&mut node, &run, now);
                 self.store.save_plan_node(node).await?;
@@ -1296,6 +1301,13 @@ fn can_reflect_existing_pipeline_run(
     if run.status != "success" {
         return false;
     }
+    pipeline_run_matches_node_expected_commit(run, node)
+}
+
+fn pipeline_run_matches_node_expected_commit(
+    run: &WorkspacePipelineRunRecord,
+    node: &WorkspacePlanNodeRecord,
+) -> bool {
     let Some(expected) = node_expected_commit_ref(node) else {
         return true;
     };
@@ -1310,6 +1322,21 @@ fn pipeline_run_source_commit_ref(run: &WorkspacePipelineRunRecord) -> Option<St
         .and_then(Value::as_str)
         .and_then(commit_ref_token)
         .or_else(|| run.commit_ref.as_deref().and_then(commit_ref_token))
+}
+
+fn mark_existing_pipeline_run_running(
+    node: &mut WorkspacePlanNodeRecord,
+    run: &WorkspacePipelineRunRecord,
+    now: DateTime<Utc>,
+) {
+    let mut metadata = object_or_empty(node.metadata_json.clone());
+    metadata.insert("pipeline_run_id".to_string(), json!(run.id));
+    metadata.insert("pipeline_status".to_string(), json!("running"));
+    metadata.insert("pipeline_gate_status".to_string(), json!("running"));
+    metadata.insert("pipeline_started_at".to_string(), json!(now.to_rfc3339()));
+    node.execution = "idle".to_string();
+    node.metadata_json = Value::Object(metadata);
+    node.updated_at = Some(now);
 }
 
 fn reflect_existing_pipeline_run_to_node(
@@ -4552,6 +4579,7 @@ mod tests {
         commit_ref: Option<&str>,
         metadata_json: Value,
     ) -> WorkspacePipelineRunRecord {
+        let timestamp = Utc.with_ymd_and_hms(2026, 1, 2, 3, 5, 5).unwrap();
         WorkspacePipelineRunRecord {
             id: id.to_string(),
             contract_id: "pipeline-contract-test".to_string(),
@@ -4564,7 +4592,11 @@ mod tests {
             status: status.to_string(),
             reason: None,
             started_at: Some(Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap()),
-            completed_at: Some(Utc.with_ymd_and_hms(2026, 1, 2, 3, 5, 5).unwrap()),
+            completed_at: if status == "running" {
+                None
+            } else {
+                Some(timestamp)
+            },
             metadata_json,
             created_at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 6, 5).unwrap(),
             updated_at: None,
@@ -4879,6 +4911,75 @@ mod tests {
             ])
         );
         assert!(node.metadata_json.get("pipeline_requested_at").is_none());
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_marks_existing_running_run_on_node() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        node.feature_checkpoint_json = Some(json!({"commit_ref": "abcdef1234567890"}));
+        store.insert_node(node);
+        store.insert_pipeline_run(pipeline_run_record(
+            "pipeline-run-running",
+            "running",
+            Some("attempt-test"),
+            Some("abcdef1234567890"),
+            json!({"source_publish_source_commit_ref": "abcdef1234567890"}),
+        ));
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler.handle(pipeline_run_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "in_progress");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(
+            node.metadata_json["pipeline_run_id"],
+            "pipeline-run-running"
+        );
+        assert_eq!(node.metadata_json["pipeline_status"], "running");
+        assert_eq!(node.metadata_json["pipeline_gate_status"], "running");
+        assert!(node.metadata_json["pipeline_started_at"].is_string());
+        assert!(node.metadata_json.get("pipeline_requested_at").is_none());
+        assert!(node.metadata_json.get("last_verification_passed").is_none());
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_ignores_running_run_with_commit_mismatch() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        node.feature_checkpoint_json = Some(json!({"commit_ref": "abcdef1234567890"}));
+        store.insert_node(node);
+        store.insert_pipeline_run(pipeline_run_record(
+            "pipeline-run-running-stale",
+            "running",
+            Some("attempt-test"),
+            Some("bbbbbb1234567890"),
+            json!({"source_publish_source_commit_ref": "bbbbbb1234567890"}),
+        ));
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler.handle(pipeline_run_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.metadata_json["pipeline_status"], "requested");
+        assert_eq!(node.metadata_json["pipeline_gate_status"], "requested");
+        assert_eq!(
+            node.metadata_json["pipeline_requested_attempt_id"],
+            "attempt-test"
+        );
+        assert!(node.metadata_json.get("pipeline_run_id").is_none());
+        assert!(node.metadata_json.get("pipeline_started_at").is_none());
     }
 
     #[tokio::test]
