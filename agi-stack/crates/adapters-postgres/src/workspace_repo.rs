@@ -1,8 +1,9 @@
 //! Shared-DB repository for the P6 workspace foundation.
 //!
 //! The Python backend owns these tables (`workspaces`, `workspace_tasks`,
-//! `topology_*`, `blackboard_*`). Rust writes the same rows during strangler
-//! cutover and keeps SQLx strictly in this server-only adapter crate.
+//! `topology_*`, `blackboard_*`, `workspace_plan_*`). Rust writes the same rows
+//! during strangler cutover and keeps SQLx strictly in this server-only adapter
+//! crate.
 
 use serde_json::Value;
 use sqlx::postgres::PgRow;
@@ -32,6 +33,19 @@ const REPLY_COLS: &str = "id, post_id, workspace_id, author_id, content, metadat
 const FILE_COLS: &str = "id, workspace_id, parent_path, name, is_directory, file_size, \
     content_type, storage_key, uploader_type, uploader_id, uploader_name, checksum_sha256, \
     mime_type_detected, created_at";
+const PLAN_COLS: &str = "id, workspace_id, goal_id, status, created_at, updated_at";
+const PLAN_NODE_COLS: &str = "id, plan_id, parent_id, kind, title, description, depends_on, \
+    inputs_schema, outputs_schema, acceptance_criteria, feature_checkpoint, handoff_package, \
+    recommended_capabilities, preferred_agent_id, estimated_effort, priority, intent, execution, \
+    progress, assignee_agent_id, current_attempt_id, workspace_task_id, metadata_json, created_at, \
+    updated_at, completed_at";
+const PLAN_BLACKBOARD_COLS: &str = "id, plan_id, key, value_json, published_by, version, \
+    schema_ref, metadata_json, created_at";
+const PLAN_EVENT_COLS: &str = "id, plan_id, workspace_id, node_id, attempt_id, event_type, \
+    source, actor_id, payload_json, created_at";
+const PLAN_OUTBOX_COLS: &str = "id, plan_id, workspace_id, event_type, payload_json, status, \
+    attempt_count, max_attempts, lease_owner, lease_expires_at, last_error, next_attempt_at, \
+    processed_at, metadata_json, created_at, updated_at";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkspaceRecord {
@@ -171,6 +185,93 @@ pub struct BlackboardOutboxRecord {
     pub payload_json: Value,
     pub metadata_json: Value,
     pub correlation_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspacePlanRecord {
+    pub id: String,
+    pub workspace_id: String,
+    pub goal_id: String,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspacePlanNodeRecord {
+    pub id: String,
+    pub plan_id: String,
+    pub parent_id: Option<String>,
+    pub kind: String,
+    pub title: String,
+    pub description: String,
+    pub depends_on_json: Vec<String>,
+    pub inputs_schema_json: Value,
+    pub outputs_schema_json: Value,
+    pub acceptance_criteria_json: Vec<Value>,
+    pub feature_checkpoint_json: Option<Value>,
+    pub handoff_package_json: Option<Value>,
+    pub recommended_capabilities_json: Vec<Value>,
+    pub preferred_agent_id: Option<String>,
+    pub estimated_effort_json: Value,
+    pub priority: i32,
+    pub intent: String,
+    pub execution: String,
+    pub progress_json: Value,
+    pub assignee_agent_id: Option<String>,
+    pub current_attempt_id: Option<String>,
+    pub workspace_task_id: Option<String>,
+    pub metadata_json: Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspacePlanBlackboardEntryRecord {
+    pub id: String,
+    pub plan_id: String,
+    pub key: String,
+    pub value_json: Option<Value>,
+    pub published_by: String,
+    pub version: i32,
+    pub schema_ref: Option<String>,
+    pub metadata_json: Value,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspacePlanEventRecord {
+    pub id: String,
+    pub plan_id: String,
+    pub workspace_id: String,
+    pub node_id: Option<String>,
+    pub attempt_id: Option<String>,
+    pub event_type: String,
+    pub source: String,
+    pub actor_id: Option<String>,
+    pub payload_json: Value,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspacePlanOutboxRecord {
+    pub id: String,
+    pub plan_id: Option<String>,
+    pub workspace_id: String,
+    pub event_type: String,
+    pub payload_json: Value,
+    pub status: String,
+    pub attempt_count: i32,
+    pub max_attempts: i32,
+    pub lease_owner: Option<String>,
+    pub lease_expires_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+    pub next_attempt_at: Option<DateTime<Utc>>,
+    pub processed_at: Option<DateTime<Utc>>,
+    pub metadata_json: Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1127,6 +1228,267 @@ impl PgWorkspaceRepository {
         Ok(result.rows_affected() > 0)
     }
 
+    pub async fn create_plan(&self, plan: WorkspacePlanRecord) -> CoreResult<WorkspacePlanRecord> {
+        sqlx::query(&format!(
+            "INSERT INTO workspace_plans \
+                (id, workspace_id, goal_id, status, created_at, updated_at) \
+             VALUES ($1,$2,$3,$4,$5,$6) RETURNING {PLAN_COLS}"
+        ))
+        .bind(&plan.id)
+        .bind(&plan.workspace_id)
+        .bind(&plan.goal_id)
+        .bind(&plan.status)
+        .bind(plan.created_at)
+        .bind(plan.updated_at)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_plan)
+        .transpose()?
+        .ok_or_else(|| CoreError::Storage("workspace plan insert returned no row".into()))
+    }
+
+    pub async fn list_plans(
+        &self,
+        workspace_id: &str,
+        limit: i64,
+    ) -> CoreResult<Vec<WorkspacePlanRecord>> {
+        let rows = sqlx::query(&format!(
+            "SELECT {PLAN_COLS} FROM workspace_plans \
+             WHERE workspace_id = $1 \
+             ORDER BY created_at DESC, id DESC LIMIT $2"
+        ))
+        .bind(workspace_id)
+        .bind(limit.max(1))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(row_to_plan).collect()
+    }
+
+    pub async fn get_plan(&self, plan_id: &str) -> CoreResult<Option<WorkspacePlanRecord>> {
+        sqlx::query(&format!(
+            "SELECT {PLAN_COLS} FROM workspace_plans WHERE id = $1"
+        ))
+        .bind(plan_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_plan)
+        .transpose()
+    }
+
+    pub async fn create_plan_node(
+        &self,
+        node: WorkspacePlanNodeRecord,
+    ) -> CoreResult<WorkspacePlanNodeRecord> {
+        sqlx::query(&format!(
+            "INSERT INTO workspace_plan_nodes \
+                (id, plan_id, parent_id, kind, title, description, depends_on, inputs_schema, \
+                 outputs_schema, acceptance_criteria, feature_checkpoint, handoff_package, \
+                 recommended_capabilities, preferred_agent_id, estimated_effort, priority, \
+                 intent, execution, progress, assignee_agent_id, current_attempt_id, \
+                 workspace_task_id, metadata_json, created_at, updated_at, completed_at) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,\
+                     $21,$22,$23,$24,$25,$26) \
+             RETURNING {PLAN_NODE_COLS}"
+        ))
+        .bind(&node.id)
+        .bind(&node.plan_id)
+        .bind(&node.parent_id)
+        .bind(&node.kind)
+        .bind(&node.title)
+        .bind(&node.description)
+        .bind(Json(&node.depends_on_json))
+        .bind(Json(&node.inputs_schema_json))
+        .bind(Json(&node.outputs_schema_json))
+        .bind(Json(&node.acceptance_criteria_json))
+        .bind(node.feature_checkpoint_json.as_ref().map(Json))
+        .bind(node.handoff_package_json.as_ref().map(Json))
+        .bind(Json(&node.recommended_capabilities_json))
+        .bind(&node.preferred_agent_id)
+        .bind(Json(&node.estimated_effort_json))
+        .bind(node.priority)
+        .bind(&node.intent)
+        .bind(&node.execution)
+        .bind(Json(&node.progress_json))
+        .bind(&node.assignee_agent_id)
+        .bind(&node.current_attempt_id)
+        .bind(&node.workspace_task_id)
+        .bind(Json(&node.metadata_json))
+        .bind(node.created_at)
+        .bind(node.updated_at)
+        .bind(node.completed_at)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_plan_node)
+        .transpose()?
+        .ok_or_else(|| CoreError::Storage("workspace plan node insert returned no row".into()))
+    }
+
+    pub async fn list_plan_nodes(&self, plan_id: &str) -> CoreResult<Vec<WorkspacePlanNodeRecord>> {
+        let rows = sqlx::query(&format!(
+            "SELECT {PLAN_NODE_COLS} FROM workspace_plan_nodes \
+             WHERE plan_id = $1 ORDER BY kind ASC, priority ASC, id ASC"
+        ))
+        .bind(plan_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(row_to_plan_node).collect()
+    }
+
+    pub async fn create_plan_blackboard_entry(
+        &self,
+        entry: WorkspacePlanBlackboardEntryRecord,
+    ) -> CoreResult<WorkspacePlanBlackboardEntryRecord> {
+        sqlx::query(&format!(
+            "INSERT INTO workspace_plan_blackboard_entries \
+                (id, plan_id, key, value_json, published_by, version, schema_ref, metadata_json, \
+                 created_at) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING {PLAN_BLACKBOARD_COLS}"
+        ))
+        .bind(&entry.id)
+        .bind(&entry.plan_id)
+        .bind(&entry.key)
+        .bind(entry.value_json.as_ref().map(Json))
+        .bind(&entry.published_by)
+        .bind(entry.version)
+        .bind(&entry.schema_ref)
+        .bind(Json(&entry.metadata_json))
+        .bind(entry.created_at)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_plan_blackboard_entry)
+        .transpose()?
+        .ok_or_else(|| {
+            CoreError::Storage("workspace plan blackboard insert returned no row".into())
+        })
+    }
+
+    pub async fn list_plan_blackboard_latest(
+        &self,
+        plan_id: &str,
+    ) -> CoreResult<Vec<WorkspacePlanBlackboardEntryRecord>> {
+        let rows = sqlx::query(&format!(
+            "SELECT DISTINCT ON (key) {PLAN_BLACKBOARD_COLS} \
+             FROM workspace_plan_blackboard_entries \
+             WHERE plan_id = $1 \
+             ORDER BY key ASC, version DESC, created_at DESC"
+        ))
+        .bind(plan_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(row_to_plan_blackboard_entry).collect()
+    }
+
+    pub async fn create_plan_event(
+        &self,
+        event: WorkspacePlanEventRecord,
+    ) -> CoreResult<WorkspacePlanEventRecord> {
+        sqlx::query(&format!(
+            "INSERT INTO workspace_plan_events \
+                (id, plan_id, workspace_id, node_id, attempt_id, event_type, source, actor_id, \
+                 payload_json, created_at) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING {PLAN_EVENT_COLS}"
+        ))
+        .bind(&event.id)
+        .bind(&event.plan_id)
+        .bind(&event.workspace_id)
+        .bind(&event.node_id)
+        .bind(&event.attempt_id)
+        .bind(&event.event_type)
+        .bind(&event.source)
+        .bind(&event.actor_id)
+        .bind(Json(&event.payload_json))
+        .bind(event.created_at)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_plan_event)
+        .transpose()?
+        .ok_or_else(|| CoreError::Storage("workspace plan event insert returned no row".into()))
+    }
+
+    pub async fn list_plan_events(
+        &self,
+        plan_id: &str,
+        limit: i64,
+    ) -> CoreResult<Vec<WorkspacePlanEventRecord>> {
+        if limit <= 0 {
+            return Ok(Vec::new());
+        }
+        let rows = sqlx::query(&format!(
+            "SELECT {PLAN_EVENT_COLS} FROM workspace_plan_events \
+             WHERE plan_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2"
+        ))
+        .bind(plan_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(row_to_plan_event).collect()
+    }
+
+    pub async fn enqueue_plan_outbox(
+        &self,
+        item: WorkspacePlanOutboxRecord,
+    ) -> CoreResult<WorkspacePlanOutboxRecord> {
+        sqlx::query(&format!(
+            "INSERT INTO workspace_plan_outbox \
+                (id, plan_id, workspace_id, event_type, payload_json, status, attempt_count, \
+                 max_attempts, lease_owner, lease_expires_at, last_error, next_attempt_at, \
+                 processed_at, metadata_json, created_at, updated_at) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) \
+             RETURNING {PLAN_OUTBOX_COLS}"
+        ))
+        .bind(&item.id)
+        .bind(&item.plan_id)
+        .bind(&item.workspace_id)
+        .bind(&item.event_type)
+        .bind(Json(&item.payload_json))
+        .bind(&item.status)
+        .bind(item.attempt_count)
+        .bind(item.max_attempts)
+        .bind(&item.lease_owner)
+        .bind(item.lease_expires_at)
+        .bind(&item.last_error)
+        .bind(item.next_attempt_at)
+        .bind(item.processed_at)
+        .bind(Json(&item.metadata_json))
+        .bind(item.created_at)
+        .bind(item.updated_at)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_plan_outbox)
+        .transpose()?
+        .ok_or_else(|| CoreError::Storage("workspace plan outbox insert returned no row".into()))
+    }
+
+    pub async fn list_plan_outbox(
+        &self,
+        plan_id: &str,
+        limit: i64,
+    ) -> CoreResult<Vec<WorkspacePlanOutboxRecord>> {
+        if limit <= 0 {
+            return Ok(Vec::new());
+        }
+        let rows = sqlx::query(&format!(
+            "SELECT {PLAN_OUTBOX_COLS} FROM workspace_plan_outbox \
+             WHERE plan_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2"
+        ))
+        .bind(plan_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(row_to_plan_outbox).collect()
+    }
+
     pub async fn enqueue_blackboard_outbox(
         &self,
         outbox: BlackboardOutboxRecord,
@@ -1279,8 +1641,110 @@ fn row_to_file(row: PgRow) -> CoreResult<BlackboardFileRecord> {
     })
 }
 
+fn row_to_plan(row: PgRow) -> CoreResult<WorkspacePlanRecord> {
+    Ok(WorkspacePlanRecord {
+        id: row.try_get("id").map_err(storage)?,
+        workspace_id: row.try_get("workspace_id").map_err(storage)?,
+        goal_id: row.try_get("goal_id").map_err(storage)?,
+        status: row.try_get("status").map_err(storage)?,
+        created_at: row.try_get("created_at").map_err(storage)?,
+        updated_at: row.try_get("updated_at").map_err(storage)?,
+    })
+}
+
+fn row_to_plan_node(row: PgRow) -> CoreResult<WorkspacePlanNodeRecord> {
+    Ok(WorkspacePlanNodeRecord {
+        id: row.try_get("id").map_err(storage)?,
+        plan_id: row.try_get("plan_id").map_err(storage)?,
+        parent_id: row.try_get("parent_id").map_err(storage)?,
+        kind: row.try_get("kind").map_err(storage)?,
+        title: row.try_get("title").map_err(storage)?,
+        description: row.try_get("description").map_err(storage)?,
+        depends_on_json: json_vec_string(&row, "depends_on")?,
+        inputs_schema_json: json_value(&row, "inputs_schema")?,
+        outputs_schema_json: json_value(&row, "outputs_schema")?,
+        acceptance_criteria_json: json_vec_value(&row, "acceptance_criteria")?,
+        feature_checkpoint_json: json_optional_value(&row, "feature_checkpoint")?,
+        handoff_package_json: json_optional_value(&row, "handoff_package")?,
+        recommended_capabilities_json: json_vec_value(&row, "recommended_capabilities")?,
+        preferred_agent_id: row.try_get("preferred_agent_id").map_err(storage)?,
+        estimated_effort_json: json_value(&row, "estimated_effort")?,
+        priority: row.try_get("priority").map_err(storage)?,
+        intent: row.try_get("intent").map_err(storage)?,
+        execution: row.try_get("execution").map_err(storage)?,
+        progress_json: json_value(&row, "progress")?,
+        assignee_agent_id: row.try_get("assignee_agent_id").map_err(storage)?,
+        current_attempt_id: row.try_get("current_attempt_id").map_err(storage)?,
+        workspace_task_id: row.try_get("workspace_task_id").map_err(storage)?,
+        metadata_json: json_value(&row, "metadata_json")?,
+        created_at: row.try_get("created_at").map_err(storage)?,
+        updated_at: row.try_get("updated_at").map_err(storage)?,
+        completed_at: row.try_get("completed_at").map_err(storage)?,
+    })
+}
+
+fn row_to_plan_blackboard_entry(row: PgRow) -> CoreResult<WorkspacePlanBlackboardEntryRecord> {
+    Ok(WorkspacePlanBlackboardEntryRecord {
+        id: row.try_get("id").map_err(storage)?,
+        plan_id: row.try_get("plan_id").map_err(storage)?,
+        key: row.try_get("key").map_err(storage)?,
+        value_json: json_optional_value(&row, "value_json")?,
+        published_by: row.try_get("published_by").map_err(storage)?,
+        version: row.try_get("version").map_err(storage)?,
+        schema_ref: row.try_get("schema_ref").map_err(storage)?,
+        metadata_json: json_value(&row, "metadata_json")?,
+        created_at: row.try_get("created_at").map_err(storage)?,
+    })
+}
+
+fn row_to_plan_event(row: PgRow) -> CoreResult<WorkspacePlanEventRecord> {
+    Ok(WorkspacePlanEventRecord {
+        id: row.try_get("id").map_err(storage)?,
+        plan_id: row.try_get("plan_id").map_err(storage)?,
+        workspace_id: row.try_get("workspace_id").map_err(storage)?,
+        node_id: row.try_get("node_id").map_err(storage)?,
+        attempt_id: row.try_get("attempt_id").map_err(storage)?,
+        event_type: row.try_get("event_type").map_err(storage)?,
+        source: row.try_get("source").map_err(storage)?,
+        actor_id: row.try_get("actor_id").map_err(storage)?,
+        payload_json: json_value(&row, "payload_json")?,
+        created_at: row.try_get("created_at").map_err(storage)?,
+    })
+}
+
+fn row_to_plan_outbox(row: PgRow) -> CoreResult<WorkspacePlanOutboxRecord> {
+    Ok(WorkspacePlanOutboxRecord {
+        id: row.try_get("id").map_err(storage)?,
+        plan_id: row.try_get("plan_id").map_err(storage)?,
+        workspace_id: row.try_get("workspace_id").map_err(storage)?,
+        event_type: row.try_get("event_type").map_err(storage)?,
+        payload_json: json_value(&row, "payload_json")?,
+        status: row.try_get("status").map_err(storage)?,
+        attempt_count: row.try_get("attempt_count").map_err(storage)?,
+        max_attempts: row.try_get("max_attempts").map_err(storage)?,
+        lease_owner: row.try_get("lease_owner").map_err(storage)?,
+        lease_expires_at: row.try_get("lease_expires_at").map_err(storage)?,
+        last_error: row.try_get("last_error").map_err(storage)?,
+        next_attempt_at: row.try_get("next_attempt_at").map_err(storage)?,
+        processed_at: row.try_get("processed_at").map_err(storage)?,
+        metadata_json: json_value(&row, "metadata_json")?,
+        created_at: row.try_get("created_at").map_err(storage)?,
+        updated_at: row.try_get("updated_at").map_err(storage)?,
+    })
+}
+
 fn json_value(row: &PgRow, name: &str) -> CoreResult<Value> {
     let Json(value): Json<Value> = row.try_get(name).map_err(storage)?;
+    Ok(value)
+}
+
+fn json_optional_value(row: &PgRow, name: &str) -> CoreResult<Option<Value>> {
+    let value: Option<Json<Value>> = row.try_get(name).map_err(storage)?;
+    Ok(value.map(|Json(value)| value))
+}
+
+fn json_vec_value(row: &PgRow, name: &str) -> CoreResult<Vec<Value>> {
+    let Json(value): Json<Vec<Value>> = row.try_get(name).map_err(storage)?;
     Ok(value)
 }
 

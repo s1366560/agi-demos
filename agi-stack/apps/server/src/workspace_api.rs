@@ -33,7 +33,9 @@ use agistack_adapters_mem::InMemoryObjectStore;
 use agistack_adapters_postgres::{
     BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
     PgWorkspaceRepository, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
-    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+    WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
+    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
+    WorkspaceTaskRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
 use agistack_core::ports::ObjectStore;
@@ -68,6 +70,13 @@ pub(crate) trait WorkspaceService: Send + Sync {
         project_id: &str,
         workspace_id: &str,
     ) -> Result<WorkspaceView, WorkspaceApiError>;
+
+    async fn get_plan_snapshot(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        query: WorkspacePlanSnapshotQuery,
+    ) -> Result<WorkspacePlanSnapshotView, WorkspaceApiError>;
 
     async fn update_workspace(
         &self,
@@ -398,6 +407,10 @@ impl WorkspaceApiError {
         Self::new(StatusCode::NOT_FOUND, "Blackboard item not found")
     }
 
+    fn plan_not_found() -> Self {
+        Self::new(StatusCode::NOT_FOUND, "Workspace plan not found")
+    }
+
     fn conflict(detail: impl Into<String>) -> Self {
         Self::new(StatusCode::CONFLICT, detail)
     }
@@ -650,6 +663,20 @@ pub(crate) struct DeleteFileQuery {
     recursive: bool,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct WorkspacePlanSnapshotQuery {
+    #[serde(default)]
+    outbox_limit: Option<i64>,
+    #[serde(default)]
+    event_limit: Option<i64>,
+    #[serde(default)]
+    include_details: Option<bool>,
+    #[serde(default)]
+    recover_stale_attempts: Option<bool>,
+    #[serde(default)]
+    plan_id: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct BlackboardUpload {
     parent_path: String,
@@ -827,6 +854,244 @@ pub(crate) struct BlackboardFileListView {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) struct DeletedView {
     deleted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanActionCapabilityView {
+    enabled: bool,
+    label: String,
+    reason: Option<String>,
+    requires_confirmation: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanPhaseContractView {
+    phase: String,
+    title: String,
+    entry_gate: String,
+    exit_gate: String,
+    required_evidence: Vec<String>,
+    allowed_routing: Vec<String>,
+    blocked_semantics: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanGateStatusView {
+    status: String,
+    summary: String,
+    missing: Vec<String>,
+    evidence_refs: Vec<String>,
+    routing: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanEvidenceBundleView {
+    artifacts: Vec<String>,
+    evidence_refs: Vec<String>,
+    changed_files: Vec<String>,
+    pipeline_refs: Vec<String>,
+    verification_summary: String,
+    review_summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanBlockerAnalysisView {
+    blocker_type: String,
+    root_cause: String,
+    resolution: String,
+    routing_decision: String,
+    human_intervention_required: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanNodeView {
+    id: String,
+    parent_id: Option<String>,
+    kind: String,
+    title: String,
+    description: String,
+    depends_on: Vec<String>,
+    acceptance_criteria: Vec<Value>,
+    feature_checkpoint: Option<Value>,
+    handoff_package: Option<Value>,
+    recommended_capabilities: Vec<Value>,
+    intent: String,
+    execution: String,
+    progress: Value,
+    assignee_agent_id: Option<String>,
+    current_attempt_id: Option<String>,
+    workspace_task_id: Option<String>,
+    priority: i32,
+    metadata: Value,
+    created_at: String,
+    updated_at: Option<String>,
+    completed_at: Option<String>,
+    phase_contract: Option<WorkspacePlanPhaseContractView>,
+    evidence_bundle: WorkspacePlanEvidenceBundleView,
+    gate_status: WorkspacePlanGateStatusView,
+    blocker_analysis: Option<WorkspacePlanBlockerAnalysisView>,
+    actions: HashMap<String, WorkspacePlanActionCapabilityView>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanView {
+    id: String,
+    workspace_id: String,
+    goal_id: String,
+    status: String,
+    created_at: String,
+    updated_at: Option<String>,
+    nodes: Vec<WorkspacePlanNodeView>,
+    counts: HashMap<String, i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanIterationPhaseView {
+    id: String,
+    label: String,
+    total: i32,
+    done: i32,
+    running: i32,
+    blocked: i32,
+    progress: i32,
+    gate_status: WorkspacePlanGateStatusView,
+    required_artifacts: Vec<String>,
+    missing_artifacts: Vec<String>,
+    summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanIterationSummaryView {
+    current_iteration: i32,
+    loop_label: String,
+    cadence: String,
+    loop_status: String,
+    max_iterations: i32,
+    completed_iterations: Vec<i32>,
+    current_sprint_goal: String,
+    review_summary: String,
+    stop_reason: String,
+    active_phase: String,
+    active_phase_label: String,
+    next_action: String,
+    task_count: i32,
+    task_budget: i32,
+    phases: Vec<WorkspacePlanIterationPhaseView>,
+    deliverables: Vec<String>,
+    feedback_items: Vec<String>,
+    history: Vec<Value>,
+    actions: HashMap<String, WorkspacePlanActionCapabilityView>,
+    findings: Vec<Value>,
+    rejected_finding_count: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanRunAssessmentView {
+    status: String,
+    summary: String,
+    evidence_refs: Vec<String>,
+    warnings: Vec<String>,
+    required_services_total: i32,
+    required_services_healthy: i32,
+    failed_required_services: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspaceDeliverySummaryView {
+    provider: String,
+    status: String,
+    contract_source: String,
+    contract_confidence: f64,
+    agent_managed: bool,
+    code_root: Option<String>,
+    latest_run: Option<Value>,
+    recent_runs: Vec<Value>,
+    services: Vec<Value>,
+    deployment: Option<Value>,
+    deployments: Vec<Value>,
+    run_assessment: WorkspacePlanRunAssessmentView,
+    warnings: Vec<String>,
+    actions: HashMap<String, WorkspacePlanActionCapabilityView>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanBlackboardEntryView {
+    plan_id: String,
+    key: String,
+    value: Value,
+    published_by: String,
+    version: i32,
+    schema_ref: Option<String>,
+    metadata: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanOutboxItemView {
+    id: String,
+    plan_id: Option<String>,
+    workspace_id: String,
+    event_type: String,
+    payload: Value,
+    status: String,
+    attempt_count: i32,
+    max_attempts: i32,
+    lease_owner: Option<String>,
+    lease_expires_at: Option<String>,
+    last_error: Option<String>,
+    next_attempt_at: Option<String>,
+    processed_at: Option<String>,
+    metadata: Value,
+    created_at: String,
+    updated_at: Option<String>,
+    actions: HashMap<String, WorkspacePlanActionCapabilityView>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanEventView {
+    id: String,
+    plan_id: String,
+    workspace_id: String,
+    node_id: Option<String>,
+    attempt_id: Option<String>,
+    event_type: String,
+    source: String,
+    actor_id: Option<String>,
+    payload: Value,
+    created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanHistoryItemView {
+    plan_id: String,
+    title: String,
+    status: String,
+    loop_status: String,
+    root_goal_id: Option<String>,
+    root_goal_status: Option<String>,
+    current_iteration: i32,
+    max_iterations: i32,
+    completed_iterations: Vec<i32>,
+    task_count: i32,
+    created_at: String,
+    updated_at: Option<String>,
+    is_latest: bool,
+    is_selected: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct WorkspacePlanSnapshotView {
+    workspace_id: String,
+    plan: Option<WorkspacePlanView>,
+    root_goal: Option<Value>,
+    iteration: Option<WorkspacePlanIterationSummaryView>,
+    delivery: Option<WorkspaceDeliverySummaryView>,
+    blackboard: Vec<WorkspacePlanBlackboardEntryView>,
+    outbox: Vec<WorkspacePlanOutboxItemView>,
+    events: Vec<WorkspacePlanEventView>,
+    plan_history: Vec<WorkspacePlanHistoryItemView>,
+    iteration_runs: Vec<Value>,
+    run_health: Option<Value>,
+    artifact_index: Option<Value>,
 }
 
 pub(crate) struct PgWorkspaceService {
@@ -1020,6 +1285,83 @@ impl WorkspaceService for PgWorkspaceService {
             .map_err(WorkspaceApiError::internal)?
             .map(WorkspaceView::from)
             .ok_or_else(WorkspaceApiError::workspace_not_found)
+    }
+
+    async fn get_plan_snapshot(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        query: WorkspacePlanSnapshotQuery,
+    ) -> Result<WorkspacePlanSnapshotView, WorkspaceApiError> {
+        self.ensure_workspace_access(user_id, workspace_id, WorkspaceAccess::Read)
+            .await?;
+        let _recover_stale_attempts = query.recover_stale_attempts.unwrap_or(false);
+        let mut plans = self
+            .repo
+            .list_plans(workspace_id, 50)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        if plans.is_empty() {
+            return Ok(empty_plan_snapshot(workspace_id));
+        }
+        let selected_plan_id = if let Some(plan_id) = query.plan_id.as_deref() {
+            if !plans.iter().any(|plan| plan.id == plan_id) {
+                let plan = self
+                    .repo
+                    .get_plan(plan_id)
+                    .await
+                    .map_err(WorkspaceApiError::internal)?
+                    .filter(|plan| plan.workspace_id == workspace_id)
+                    .ok_or_else(WorkspaceApiError::plan_not_found)?;
+                plans.push(plan);
+            }
+            plan_id.to_string()
+        } else {
+            plans[0].id.clone()
+        };
+        let mut plans_with_nodes = Vec::with_capacity(plans.len());
+        for plan in plans {
+            let nodes = self
+                .repo
+                .list_plan_nodes(&plan.id)
+                .await
+                .map_err(WorkspaceApiError::internal)?;
+            plans_with_nodes.push((plan, nodes));
+        }
+        let include_details = query.include_details.unwrap_or(true);
+        let (blackboard, outbox, events) = if include_details {
+            (
+                self.repo
+                    .list_plan_blackboard_latest(&selected_plan_id)
+                    .await
+                    .map_err(WorkspaceApiError::internal)?,
+                self.repo
+                    .list_plan_outbox(
+                        &selected_plan_id,
+                        query.outbox_limit.unwrap_or(20).clamp(0, 100),
+                    )
+                    .await
+                    .map_err(WorkspaceApiError::internal)?,
+                self.repo
+                    .list_plan_events(
+                        &selected_plan_id,
+                        query.event_limit.unwrap_or(50).clamp(0, 200),
+                    )
+                    .await
+                    .map_err(WorkspaceApiError::internal)?,
+            )
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
+        };
+        Ok(build_plan_snapshot(
+            workspace_id,
+            plans_with_nodes,
+            &selected_plan_id,
+            include_details,
+            blackboard,
+            outbox,
+            events,
+        ))
     }
 
     async fn update_workspace(
@@ -2386,6 +2728,11 @@ struct DevWorkspaceState {
     replies: HashMap<String, BlackboardReplyRecord>,
     files: HashMap<String, BlackboardFileRecord>,
     outbox: Vec<BlackboardOutboxRecord>,
+    plans: HashMap<String, WorkspacePlanRecord>,
+    plan_nodes: HashMap<String, WorkspacePlanNodeRecord>,
+    plan_blackboard: Vec<WorkspacePlanBlackboardEntryRecord>,
+    plan_events: Vec<WorkspacePlanEventRecord>,
+    plan_outbox: Vec<WorkspacePlanOutboxRecord>,
 }
 
 pub(crate) struct DevWorkspaceService {
@@ -2513,6 +2860,109 @@ impl WorkspaceService for DevWorkspaceService {
             .cloned()
             .ok_or_else(WorkspaceApiError::workspace_not_found)?;
         Ok(workspace.into())
+    }
+
+    async fn get_plan_snapshot(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        query: WorkspacePlanSnapshotQuery,
+    ) -> Result<WorkspacePlanSnapshotView, WorkspaceApiError> {
+        self.require_dev_user(user_id)?;
+        let _recover_stale_attempts = query.recover_stale_attempts.unwrap_or(false);
+        let state = self.state.lock().expect("workspace dev state");
+        if !state.workspaces.contains_key(workspace_id) {
+            return Err(WorkspaceApiError::workspace_not_found());
+        }
+        let mut plans: Vec<_> = state
+            .plans
+            .values()
+            .filter(|plan| plan.workspace_id == workspace_id)
+            .cloned()
+            .collect();
+        plans.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(a.id.cmp(&b.id)));
+        if plans.is_empty() {
+            return Ok(empty_plan_snapshot(workspace_id));
+        }
+        let selected_plan_id = if let Some(plan_id) = query.plan_id.as_deref() {
+            if !plans.iter().any(|plan| plan.id == plan_id) {
+                return Err(WorkspaceApiError::plan_not_found());
+            }
+            plan_id.to_string()
+        } else {
+            plans[0].id.clone()
+        };
+        let plans_with_nodes: Vec<_> = plans
+            .into_iter()
+            .map(|plan| {
+                let mut nodes: Vec<_> = state
+                    .plan_nodes
+                    .values()
+                    .filter(|node| node.plan_id == plan.id)
+                    .cloned()
+                    .collect();
+                nodes.sort_by(|a, b| {
+                    a.kind
+                        .cmp(&b.kind)
+                        .then(a.priority.cmp(&b.priority))
+                        .then(a.id.cmp(&b.id))
+                });
+                (plan, nodes)
+            })
+            .collect();
+        let include_details = query.include_details.unwrap_or(true);
+        let (blackboard, outbox, events) = if include_details {
+            let mut latest = HashMap::<String, WorkspacePlanBlackboardEntryRecord>::new();
+            for entry in state
+                .plan_blackboard
+                .iter()
+                .filter(|entry| entry.plan_id == selected_plan_id.as_str())
+            {
+                let replace = latest
+                    .get(&entry.key)
+                    .map(|current| {
+                        entry.version > current.version
+                            || (entry.version == current.version
+                                && entry.created_at > current.created_at)
+                    })
+                    .unwrap_or(true);
+                if replace {
+                    latest.insert(entry.key.clone(), entry.clone());
+                }
+            }
+            let mut blackboard: Vec<_> = latest.into_values().collect();
+            blackboard.sort_by(|a, b| a.key.cmp(&b.key));
+            let outbox_limit = query.outbox_limit.unwrap_or(20).clamp(0, 100) as usize;
+            let mut outbox: Vec<_> = state
+                .plan_outbox
+                .iter()
+                .filter(|item| item.plan_id.as_deref() == Some(selected_plan_id.as_str()))
+                .cloned()
+                .collect();
+            outbox.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(b.id.cmp(&a.id)));
+            outbox.truncate(outbox_limit);
+            let event_limit = query.event_limit.unwrap_or(50).clamp(0, 200) as usize;
+            let mut events: Vec<_> = state
+                .plan_events
+                .iter()
+                .filter(|event| event.plan_id == selected_plan_id.as_str())
+                .cloned()
+                .collect();
+            events.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(b.id.cmp(&a.id)));
+            events.truncate(event_limit);
+            (blackboard, outbox, events)
+        } else {
+            (Vec::new(), Vec::new(), Vec::new())
+        };
+        Ok(build_plan_snapshot(
+            workspace_id,
+            plans_with_nodes,
+            &selected_plan_id,
+            include_details,
+            blackboard,
+            outbox,
+            events,
+        ))
     }
 
     async fn update_workspace(
@@ -3918,6 +4368,862 @@ impl From<BlackboardFileRecord> for BlackboardFileView {
     }
 }
 
+fn empty_plan_snapshot(workspace_id: &str) -> WorkspacePlanSnapshotView {
+    WorkspacePlanSnapshotView {
+        workspace_id: workspace_id.to_string(),
+        plan: None,
+        root_goal: None,
+        iteration: None,
+        delivery: None,
+        blackboard: Vec::new(),
+        outbox: Vec::new(),
+        events: Vec::new(),
+        plan_history: Vec::new(),
+        iteration_runs: Vec::new(),
+        run_health: None,
+        artifact_index: None,
+    }
+}
+
+fn build_plan_snapshot(
+    workspace_id: &str,
+    plans_with_nodes: Vec<(WorkspacePlanRecord, Vec<WorkspacePlanNodeRecord>)>,
+    selected_plan_id: &str,
+    include_details: bool,
+    blackboard: Vec<WorkspacePlanBlackboardEntryRecord>,
+    outbox: Vec<WorkspacePlanOutboxRecord>,
+    events: Vec<WorkspacePlanEventRecord>,
+) -> WorkspacePlanSnapshotView {
+    if plans_with_nodes.is_empty() {
+        return empty_plan_snapshot(workspace_id);
+    }
+    let selected = plans_with_nodes
+        .iter()
+        .find(|(plan, _)| plan.id == selected_plan_id)
+        .unwrap_or(&plans_with_nodes[0]);
+    let plan_view = plan_view(&selected.0, &selected.1);
+    if !include_details {
+        return WorkspacePlanSnapshotView {
+            plan: Some(plan_view),
+            root_goal: None,
+            ..empty_plan_snapshot(workspace_id)
+        };
+    }
+    let latest_plan_id = plans_with_nodes[0].0.id.clone();
+    WorkspacePlanSnapshotView {
+        workspace_id: workspace_id.to_string(),
+        plan: Some(plan_view),
+        root_goal: None,
+        iteration: Some(iteration_summary_view(&selected.0, &selected.1)),
+        delivery: Some(delivery_summary_view(&selected.0)),
+        blackboard: blackboard
+            .into_iter()
+            .map(WorkspacePlanBlackboardEntryView::from)
+            .collect(),
+        outbox: outbox
+            .into_iter()
+            .map(WorkspacePlanOutboxItemView::from)
+            .collect(),
+        events: events
+            .into_iter()
+            .map(WorkspacePlanEventView::from)
+            .collect(),
+        plan_history: plans_with_nodes
+            .iter()
+            .map(|(plan, nodes)| plan_history_view(plan, nodes, &latest_plan_id, selected_plan_id))
+            .collect(),
+        iteration_runs: Vec::new(),
+        run_health: None,
+        artifact_index: None,
+    }
+}
+
+fn plan_view(plan: &WorkspacePlanRecord, nodes: &[WorkspacePlanNodeRecord]) -> WorkspacePlanView {
+    let mut counts = HashMap::new();
+    for node in nodes {
+        let intent = node_response_intent(plan, node);
+        *counts.entry(format!("intent:{intent}")).or_insert(0) += 1;
+        *counts
+            .entry(format!("execution:{}", node.execution))
+            .or_insert(0) += 1;
+    }
+    let mut node_views: Vec<_> = nodes.iter().map(node_view).collect();
+    node_views.sort_by(|a, b| {
+        a.kind
+            .cmp(&b.kind)
+            .then(a.priority.cmp(&b.priority))
+            .then(a.id.cmp(&b.id))
+    });
+    WorkspacePlanView {
+        id: plan.id.clone(),
+        workspace_id: plan.workspace_id.clone(),
+        goal_id: plan.goal_id.clone(),
+        status: plan.status.clone(),
+        created_at: iso(plan.created_at),
+        updated_at: plan.updated_at.map(iso),
+        nodes: node_views,
+        counts,
+    }
+}
+
+fn node_view(node: &WorkspacePlanNodeRecord) -> WorkspacePlanNodeView {
+    let mut metadata = object_or_empty(node.metadata_json.clone());
+    fill_pipeline_status_from_evidence(&mut metadata);
+    let phase = node_iteration_phase(node);
+    let evidence_bundle = evidence_bundle_view(node, &metadata);
+    let gate_status = gate_status_view();
+    WorkspacePlanNodeView {
+        id: node.id.clone(),
+        parent_id: node.parent_id.clone(),
+        kind: node.kind.clone(),
+        title: node.title.clone(),
+        description: node.description.clone(),
+        depends_on: node.depends_on_json.clone(),
+        acceptance_criteria: node.acceptance_criteria_json.clone(),
+        feature_checkpoint: node.feature_checkpoint_json.clone(),
+        handoff_package: node.handoff_package_json.clone(),
+        recommended_capabilities: node.recommended_capabilities_json.clone(),
+        intent: node.intent.clone(),
+        execution: node.execution.clone(),
+        progress: progress_view(&node.intent, &node.progress_json),
+        assignee_agent_id: node.assignee_agent_id.clone(),
+        current_attempt_id: node.current_attempt_id.clone(),
+        workspace_task_id: node.workspace_task_id.clone(),
+        priority: node.priority,
+        metadata,
+        created_at: iso(node.created_at),
+        updated_at: node.updated_at.map(iso),
+        completed_at: node.completed_at.map(iso),
+        phase_contract: Some(phase_contract_view(&phase)),
+        evidence_bundle,
+        gate_status,
+        blocker_analysis: None,
+        actions: node_actions(node),
+    }
+}
+
+fn node_response_intent(plan: &WorkspacePlanRecord, node: &WorkspacePlanNodeRecord) -> String {
+    if plan.status == "completed" && node.kind == "goal" {
+        "done".to_string()
+    } else {
+        node.intent.clone()
+    }
+}
+
+fn progress_view(intent: &str, raw: &Value) -> Value {
+    let progress = object_or_empty(raw.clone());
+    json!({
+        "percent": if intent == "done" {
+            100.0
+        } else {
+            progress.get("percent").and_then(Value::as_f64).unwrap_or(0.0)
+        },
+        "confidence": progress.get("confidence").and_then(Value::as_f64).unwrap_or(1.0),
+        "note": progress.get("note").and_then(Value::as_str).unwrap_or("")
+    })
+}
+
+fn action(
+    enabled: bool,
+    label: &str,
+    reason: Option<&str>,
+    requires_confirmation: bool,
+) -> WorkspacePlanActionCapabilityView {
+    WorkspacePlanActionCapabilityView {
+        enabled,
+        label: label.to_string(),
+        reason: reason.map(ToOwned::to_owned),
+        requires_confirmation,
+    }
+}
+
+fn node_actions(
+    node: &WorkspacePlanNodeRecord,
+) -> HashMap<String, WorkspacePlanActionCapabilityView> {
+    let executable = matches!(node.kind.as_str(), "task" | "verify");
+    let done = node.intent == "done";
+    let blocked = node.intent == "blocked";
+    let metadata = object_or_empty(node.metadata_json.clone());
+    let reviewable = blocked
+        || (executable
+            && !done
+            && metadata
+                .get("last_verification_passed")
+                .and_then(Value::as_bool)
+                == Some(false));
+    let has_attempt = node.current_attempt_id.is_some() || node.workspace_task_id.is_some();
+    HashMap::from([
+        (
+            "open_attempt".to_string(),
+            action(
+                has_attempt,
+                "Open attempt",
+                if has_attempt {
+                    None
+                } else {
+                    Some("No worker attempt has been linked yet.")
+                },
+                false,
+            ),
+        ),
+        (
+            "request_replan".to_string(),
+            action(
+                executable && !done,
+                "Request replan",
+                if executable && !done {
+                    None
+                } else {
+                    Some("Only active task or verification nodes can be replanned.")
+                },
+                true,
+            ),
+        ),
+        (
+            "reopen_blocked".to_string(),
+            action(
+                blocked,
+                "Reopen blocked node",
+                if blocked {
+                    None
+                } else {
+                    Some("Only blocked nodes can be reopened.")
+                },
+                false,
+            ),
+        ),
+        (
+            "accept_with_human_review".to_string(),
+            action(
+                reviewable,
+                "Accept after review",
+                if reviewable {
+                    None
+                } else {
+                    Some("Only blocked or verification-rework nodes can be accepted after review.")
+                },
+                true,
+            ),
+        ),
+    ])
+}
+
+const ITERATION_PHASE_ORDER: [&str; 6] =
+    ["research", "plan", "implement", "test", "deploy", "review"];
+
+fn node_iteration_phase(node: &WorkspacePlanNodeRecord) -> String {
+    let metadata = object_or_empty(node.metadata_json.clone());
+    if let Some(phase) = metadata.get("iteration_phase").and_then(Value::as_str) {
+        if ITERATION_PHASE_ORDER.contains(&phase) {
+            return phase.to_string();
+        }
+    }
+    if let Some(sequence) = node
+        .feature_checkpoint_json
+        .as_ref()
+        .and_then(|value| value.get("sequence"))
+        .and_then(Value::as_i64)
+        .filter(|value| *value > 0)
+    {
+        return ITERATION_PHASE_ORDER[((sequence - 1) as usize) % ITERATION_PHASE_ORDER.len()]
+            .to_string();
+    }
+    "plan".to_string()
+}
+
+fn phase_contract_view(phase: &str) -> WorkspacePlanPhaseContractView {
+    let (title, entry_gate, exit_gate, evidence, routing) = match phase {
+        "research" => (
+            "Research",
+            "Root goal and code context are visible to the worker.",
+            "Problem facts, constraints, and unknowns are captured as evidence.",
+            vec!["research notes", "scope facts"],
+            vec!["continue", "replan", "recover"],
+        ),
+        "implement" => (
+            "Implement",
+            "Story card and write scope are bounded.",
+            "Changed files and a local recovery boundary are recorded.",
+            vec![
+                "changed files",
+                "commit or recovery ref",
+                "scope discipline",
+            ],
+            vec!["continue", "recover", "replan"],
+        ),
+        "test" => (
+            "Test",
+            "Implementation evidence exists.",
+            "Required checks produce machine-verifiable evidence.",
+            vec!["ci pipeline", "test stage", "failure recovery"],
+            vec!["continue", "recover", "replan"],
+        ),
+        "deploy" => (
+            "Deploy",
+            "Pipeline is green or recovery is in progress.",
+            "Required preview services are registered and healthy.",
+            vec!["deployment health", "preview URL", "service logs"],
+            vec!["continue", "recover", "needs_human_review"],
+        ),
+        "review" => (
+            "Review",
+            "Pipeline and deployment evidence are available.",
+            "AC-by-AC verdict and next-iteration routing verdict are recorded.",
+            vec!["review verdict", "evidence index", "next routing"],
+            vec![
+                "complete_goal",
+                "continue_next_iteration",
+                "needs_human_review",
+            ],
+        ),
+        _ => (
+            "Plan",
+            "Research context is available or explicitly not required.",
+            "Story card includes AC, dependencies, impact, out-of-scope, and task budget.",
+            vec!["story card", "acceptance criteria", "task budget"],
+            vec!["continue", "replan", "needs_human_review"],
+        ),
+    };
+    WorkspacePlanPhaseContractView {
+        phase: phase.to_string(),
+        title: title.to_string(),
+        entry_gate: entry_gate.to_string(),
+        exit_gate: exit_gate.to_string(),
+        required_evidence: evidence.into_iter().map(ToOwned::to_owned).collect(),
+        allowed_routing: routing.into_iter().map(ToOwned::to_owned).collect(),
+        blocked_semantics: "Blocked is reserved for missing human permission, credentials, policy decisions, or irreversible operator choices. Test, pipeline, or evidence failures should route to recovery or replan.".to_string(),
+    }
+}
+
+fn evidence_bundle_view(
+    node: &WorkspacePlanNodeRecord,
+    metadata: &Value,
+) -> WorkspacePlanEvidenceBundleView {
+    let evidence_refs = metadata_string_values(
+        metadata,
+        &[
+            "pipeline_evidence_refs",
+            "evidence_refs",
+            "execution_verifications",
+            "verification_evidence_refs",
+        ],
+    );
+    let mut artifacts = Vec::new();
+    if let Some(checkpoint) = &node.feature_checkpoint_json {
+        artifacts.extend(string_values(checkpoint.get("expected_artifacts")));
+    }
+    artifacts.extend(metadata_string_values(
+        metadata,
+        &[
+            "artifacts",
+            "artifact_refs",
+            "deliverables",
+            "expected_artifacts",
+        ],
+    ));
+    dedup_truncate(&mut artifacts, 12);
+    let mut changed_files = metadata_string_values(
+        metadata,
+        &["write_set", "changed_files", "git_changed_files"],
+    );
+    dedup_truncate(&mut changed_files, 20);
+    let pipeline_refs = evidence_refs
+        .iter()
+        .filter(|item| {
+            item.starts_with("ci_pipeline:")
+                || item.starts_with("pipeline_")
+                || item.starts_with("deployment_")
+                || item.starts_with("preview_")
+        })
+        .cloned()
+        .collect();
+    WorkspacePlanEvidenceBundleView {
+        artifacts,
+        evidence_refs,
+        changed_files,
+        pipeline_refs,
+        verification_summary: first_metadata_string(
+            metadata,
+            &[
+                "last_verification_summary",
+                "verification_summary",
+                "worker_report_summary",
+                "terminal_report_summary",
+            ],
+        ),
+        review_summary: first_metadata_string(
+            metadata,
+            &[
+                "review_summary",
+                "last_review_summary",
+                "phase_review_summary",
+            ],
+        ),
+    }
+}
+
+fn gate_status_view() -> WorkspacePlanGateStatusView {
+    WorkspacePlanGateStatusView {
+        status: "pending".to_string(),
+        summary: String::new(),
+        missing: Vec::new(),
+        evidence_refs: Vec::new(),
+        routing: "continue".to_string(),
+    }
+}
+
+fn fill_pipeline_status_from_evidence(metadata: &mut Value) {
+    let mut refs = metadata_string_values(metadata, &["pipeline_evidence_refs"]);
+    if refs.is_empty() {
+        refs = metadata_string_values(
+            metadata,
+            &[
+                "evidence_refs",
+                "execution_verifications",
+                "verification_evidence_refs",
+            ],
+        );
+    }
+    let (status, run_id) = pipeline_status_from_evidence_refs(&refs);
+    if let Some(obj) = metadata.as_object_mut() {
+        if let Some(status) = status {
+            obj.insert("pipeline_status".to_string(), json!(status));
+            obj.insert("pipeline_gate_status".to_string(), json!(status));
+        }
+        if let Some(run_id) = run_id {
+            obj.insert("pipeline_run_id".to_string(), json!(run_id));
+        }
+    }
+}
+
+fn pipeline_status_from_evidence_refs(refs: &[String]) -> (Option<&'static str>, Option<String>) {
+    let mut status = None;
+    let mut run_id = None;
+    for value in refs {
+        if value == "ci_pipeline:passed" {
+            status = Some("success");
+        } else if value == "ci_pipeline:failed" {
+            status = Some("failed");
+        } else if let Some(id) = value.strip_prefix("pipeline_run:success:") {
+            status = Some("success");
+            run_id = Some(id.to_string());
+        } else if let Some(id) = value.strip_prefix("pipeline_run:failed:") {
+            status = Some("failed");
+            run_id = Some(id.to_string());
+        }
+    }
+    (status, run_id)
+}
+
+fn iteration_summary_view(
+    plan: &WorkspacePlanRecord,
+    nodes: &[WorkspacePlanNodeRecord],
+) -> WorkspacePlanIterationSummaryView {
+    let runnable: Vec<_> = nodes
+        .iter()
+        .filter(|node| matches!(node.kind.as_str(), "task" | "verify"))
+        .collect();
+    let goal_metadata = nodes
+        .iter()
+        .find(|node| node.id == plan.goal_id)
+        .or_else(|| nodes.iter().find(|node| node.kind == "goal"))
+        .map(|node| object_or_empty(node.metadata_json.clone()))
+        .unwrap_or_else(|| json!({}));
+    let loop_metadata = goal_metadata
+        .get("iteration_loop")
+        .filter(|value| value.is_object())
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let loop_status = string_from_value(loop_metadata.get("loop_status")).unwrap_or_else(|| {
+        if plan.status == "completed" {
+            "completed".to_string()
+        } else if plan.status == "suspended" {
+            "suspended".to_string()
+        } else {
+            "active".to_string()
+        }
+    });
+    let current_iteration = int_from_value(loop_metadata.get("current_iteration"), 1);
+    let max_iterations = int_from_value(loop_metadata.get("max_iterations"), 8);
+    let active_phase = runnable
+        .iter()
+        .find(|node| node.intent != "done")
+        .map(|node| node_iteration_phase(node))
+        .unwrap_or_else(|| "research".to_string());
+    let phases = ITERATION_PHASE_ORDER
+        .iter()
+        .map(|phase| iteration_phase_view(phase, &runnable))
+        .collect();
+    WorkspacePlanIterationSummaryView {
+        current_iteration,
+        loop_label: "Scrum feedback loop".to_string(),
+        cadence: "research -> plan -> implement -> test -> deploy -> review".to_string(),
+        loop_status,
+        max_iterations,
+        completed_iterations: int_list_from_value(loop_metadata.get("completed_iterations")),
+        current_sprint_goal: string_from_value(loop_metadata.get("current_sprint_goal"))
+            .unwrap_or_default(),
+        review_summary: string_from_value(loop_metadata.get("last_review_summary"))
+            .unwrap_or_default(),
+        stop_reason: string_from_value(loop_metadata.get("stop_reason")).unwrap_or_default(),
+        active_phase_label: phase_label(&active_phase),
+        active_phase,
+        next_action: String::new(),
+        task_count: runnable.len() as i32,
+        task_budget: int_from_value(goal_metadata.get("task_budget"), 6),
+        phases,
+        deliverables: metadata_string_values(&loop_metadata, &["deliverables"]),
+        feedback_items: metadata_string_values(&loop_metadata, &["feedback_items"]),
+        history: Vec::new(),
+        actions: HashMap::from([
+            (
+                "pause_iteration".to_string(),
+                action(plan.status != "completed", "Pause loop", None, false),
+            ),
+            (
+                "resume_iteration".to_string(),
+                action(plan.status != "completed", "Resume loop", None, false),
+            ),
+            (
+                "trigger_next_iteration".to_string(),
+                action(
+                    plan.status != "completed",
+                    "Trigger next iteration",
+                    None,
+                    true,
+                ),
+            ),
+        ]),
+        findings: Vec::new(),
+        rejected_finding_count: int_from_value(
+            loop_metadata.get("last_review_rejected_finding_count"),
+            0,
+        ),
+    }
+}
+
+fn iteration_phase_view(
+    phase: &str,
+    nodes: &[&WorkspacePlanNodeRecord],
+) -> WorkspacePlanIterationPhaseView {
+    let phase_nodes: Vec<_> = nodes
+        .iter()
+        .copied()
+        .filter(|node| node_iteration_phase(node) == phase)
+        .collect();
+    let total = phase_nodes.len() as i32;
+    let done = phase_nodes
+        .iter()
+        .filter(|node| node.intent == "done")
+        .count() as i32;
+    let blocked = phase_nodes
+        .iter()
+        .filter(|node| node.intent == "blocked")
+        .count() as i32;
+    let running = phase_nodes
+        .iter()
+        .filter(|node| {
+            matches!(
+                node.execution.as_str(),
+                "running" | "dispatching" | "executing"
+            )
+        })
+        .count() as i32;
+    WorkspacePlanIterationPhaseView {
+        id: phase.to_string(),
+        label: phase_label(phase),
+        total,
+        done,
+        running,
+        blocked,
+        progress: if total > 0 { (done * 100) / total } else { 0 },
+        gate_status: gate_status_view(),
+        required_artifacts: Vec::new(),
+        missing_artifacts: Vec::new(),
+        summary: String::new(),
+    }
+}
+
+fn delivery_summary_view(plan: &WorkspacePlanRecord) -> WorkspaceDeliverySummaryView {
+    WorkspaceDeliverySummaryView {
+        provider: "sandbox_native".to_string(),
+        status: "not_configured".to_string(),
+        contract_source: "metadata".to_string(),
+        contract_confidence: 0.0,
+        agent_managed: true,
+        code_root: None,
+        latest_run: None,
+        recent_runs: Vec::new(),
+        services: Vec::new(),
+        deployment: None,
+        deployments: Vec::new(),
+        run_assessment: WorkspacePlanRunAssessmentView {
+            status: "not_run".to_string(),
+            summary: "No pipeline run has been recorded.".to_string(),
+            evidence_refs: Vec::new(),
+            warnings: Vec::new(),
+            required_services_total: 0,
+            required_services_healthy: 0,
+            failed_required_services: Vec::new(),
+        },
+        warnings: Vec::new(),
+        actions: HashMap::from([
+            (
+                "request_pipeline".to_string(),
+                action(
+                    plan.status != "completed",
+                    "Run pipeline",
+                    if plan.status == "completed" {
+                        Some("The plan is already complete.")
+                    } else {
+                        None
+                    },
+                    false,
+                ),
+            ),
+            (
+                "regenerate_contract".to_string(),
+                action(
+                    plan.status != "completed",
+                    "Regenerate contract",
+                    if plan.status == "completed" {
+                        Some("The plan is already complete.")
+                    } else {
+                        None
+                    },
+                    false,
+                ),
+            ),
+            (
+                "restart_preview".to_string(),
+                action(
+                    false,
+                    "Restart preview",
+                    Some("No preview deployment exists."),
+                    false,
+                ),
+            ),
+            (
+                "rollback_preview".to_string(),
+                action(
+                    false,
+                    "Rollback preview",
+                    Some("No rollback reference is available."),
+                    true,
+                ),
+            ),
+        ]),
+    }
+}
+
+fn plan_history_view(
+    plan: &WorkspacePlanRecord,
+    nodes: &[WorkspacePlanNodeRecord],
+    latest_plan_id: &str,
+    selected_plan_id: &str,
+) -> WorkspacePlanHistoryItemView {
+    let runnable: Vec<_> = nodes
+        .iter()
+        .filter(|node| matches!(node.kind.as_str(), "task" | "verify"))
+        .collect();
+    let goal_node = nodes
+        .iter()
+        .find(|node| node.id == plan.goal_id)
+        .or_else(|| nodes.iter().find(|node| node.kind == "goal"));
+    let loop_metadata = goal_node
+        .and_then(|node| node.metadata_json.get("iteration_loop"))
+        .filter(|value| value.is_object())
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    WorkspacePlanHistoryItemView {
+        plan_id: plan.id.clone(),
+        title: goal_node
+            .map(|node| node.title.clone())
+            .unwrap_or_else(|| plan.goal_id.clone()),
+        status: plan.status.clone(),
+        loop_status: string_from_value(loop_metadata.get("loop_status")).unwrap_or_else(|| {
+            if plan.status == "completed" {
+                "completed".to_string()
+            } else if plan.status == "suspended" {
+                "suspended".to_string()
+            } else {
+                "active".to_string()
+            }
+        }),
+        root_goal_id: None,
+        root_goal_status: None,
+        current_iteration: int_from_value(loop_metadata.get("current_iteration"), 1),
+        max_iterations: int_from_value(loop_metadata.get("max_iterations"), 8),
+        completed_iterations: int_list_from_value(loop_metadata.get("completed_iterations")),
+        task_count: runnable.len() as i32,
+        created_at: iso(plan.created_at),
+        updated_at: plan.updated_at.map(iso),
+        is_latest: plan.id == latest_plan_id,
+        is_selected: plan.id == selected_plan_id,
+    }
+}
+
+impl From<WorkspacePlanBlackboardEntryRecord> for WorkspacePlanBlackboardEntryView {
+    fn from(record: WorkspacePlanBlackboardEntryRecord) -> Self {
+        Self {
+            plan_id: record.plan_id,
+            key: record.key,
+            value: record.value_json.unwrap_or(Value::Null),
+            published_by: record.published_by,
+            version: record.version,
+            schema_ref: record.schema_ref,
+            metadata: record.metadata_json,
+        }
+    }
+}
+
+impl From<WorkspacePlanOutboxRecord> for WorkspacePlanOutboxItemView {
+    fn from(record: WorkspacePlanOutboxRecord) -> Self {
+        let actions = outbox_actions(&record);
+        Self {
+            id: record.id,
+            plan_id: record.plan_id,
+            workspace_id: record.workspace_id,
+            event_type: record.event_type,
+            payload: record.payload_json,
+            status: record.status.clone(),
+            attempt_count: record.attempt_count,
+            max_attempts: record.max_attempts,
+            lease_owner: record.lease_owner,
+            lease_expires_at: record.lease_expires_at.map(iso),
+            last_error: record.last_error,
+            next_attempt_at: record.next_attempt_at.map(iso),
+            processed_at: record.processed_at.map(iso),
+            metadata: record.metadata_json.clone(),
+            created_at: iso(record.created_at),
+            updated_at: record.updated_at.map(iso),
+            actions,
+        }
+    }
+}
+
+impl From<WorkspacePlanEventRecord> for WorkspacePlanEventView {
+    fn from(record: WorkspacePlanEventRecord) -> Self {
+        Self {
+            id: record.id,
+            plan_id: record.plan_id,
+            workspace_id: record.workspace_id,
+            node_id: record.node_id,
+            attempt_id: record.attempt_id,
+            event_type: record.event_type,
+            source: record.source,
+            actor_id: record.actor_id,
+            payload: record.payload_json,
+            created_at: iso(record.created_at),
+        }
+    }
+}
+
+fn outbox_actions(
+    record: &WorkspacePlanOutboxRecord,
+) -> HashMap<String, WorkspacePlanActionCapabilityView> {
+    let delayed = record
+        .metadata_json
+        .get("operator_retry")
+        .and_then(Value::as_object)
+        .and_then(|value| value.get("previous_next_attempt_at"))
+        .is_some();
+    let retryable = matches!(record.status.as_str(), "failed" | "dead_letter") || delayed;
+    HashMap::from([(
+        "retry_outbox".to_string(),
+        action(
+            retryable,
+            "Retry now",
+            if retryable {
+                None
+            } else {
+                Some("Only failed, dead-letter, or delayed pending jobs can be retried.")
+            },
+            false,
+        ),
+    )])
+}
+
+fn phase_label(phase: &str) -> String {
+    match phase {
+        "research" => "Research",
+        "plan" => "Plan",
+        "implement" => "Implement",
+        "test" => "Test",
+        "deploy" => "Deploy",
+        "review" => "Review",
+        _ => phase,
+    }
+    .to_string()
+}
+
+fn string_from_value(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn int_from_value(value: Option<&Value>, fallback: i32) -> i32 {
+    value
+        .and_then(|value| {
+            value
+                .as_i64()
+                .or_else(|| value.as_str().and_then(|text| text.parse::<i64>().ok()))
+        })
+        .filter(|value| *value >= 0)
+        .map(|value| value as i32)
+        .unwrap_or(fallback)
+}
+
+fn int_list_from_value(value: Option<&Value>) -> Vec<i32> {
+    value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_i64().map(|value| value as i32))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn metadata_string_values(value: &Value, keys: &[&str]) -> Vec<String> {
+    let mut items = Vec::new();
+    for key in keys {
+        items.extend(string_values(value.get(*key)));
+    }
+    dedup_truncate(&mut items, usize::MAX);
+    items
+}
+
+fn string_values(value: Option<&Value>) -> Vec<String> {
+    match value {
+        Some(Value::String(text)) if !text.is_empty() => vec![text.clone()],
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(|item| item.as_str().filter(|text| !text.is_empty()))
+            .map(ToOwned::to_owned)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn first_metadata_string(value: &Value, keys: &[&str]) -> String {
+    keys.iter()
+        .find_map(|key| string_from_value(value.get(*key)))
+        .unwrap_or_default()
+}
+
+fn dedup_truncate(items: &mut Vec<String>, limit: usize) {
+    let mut seen = std::collections::HashSet::new();
+    items.retain(|item| seen.insert(item.clone()));
+    if items.len() > limit {
+        items.truncate(limit);
+    }
+}
+
 fn compose_workspace_metadata(body: WorkspaceCreatePayload) -> Value {
     let mut metadata = object_or_empty(body.metadata);
     let use_case = body.use_case.unwrap_or_else(|| {
@@ -4717,6 +6023,18 @@ async fn get_workspace(
         .map(Json)
 }
 
+async fn get_plan_snapshot(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path(workspace_id): Path<String>,
+    Query(query): Query<WorkspacePlanSnapshotQuery>,
+) -> Result<Json<WorkspacePlanSnapshotView>, WorkspaceApiError> {
+    app.workspaces
+        .get_plan_snapshot(&identity.user_id, &workspace_id, query)
+        .await
+        .map(Json)
+}
+
 async fn update_workspace(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
@@ -5412,6 +6730,10 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id",
             get(get_workspace).patch(update_workspace).delete(delete_workspace),
         )
+        .route(
+            "/api/v1/workspaces/:workspace_id/plan",
+            get(get_plan_snapshot),
+        )
         .route("/api/v1/workspaces/:workspace_id/tasks", post(create_task).get(list_tasks))
         .route(
             "/api/v1/workspaces/:workspace_id/tasks/:task_id",
@@ -5678,6 +7000,104 @@ mod tests {
         );
     }
 
+    #[test]
+    fn workspace_plan_snapshot_matches_golden() {
+        let created_at = "2026-01-02T03:04:05Z".parse().unwrap();
+        let plan = WorkspacePlanRecord {
+            id: "plan-1".to_string(),
+            workspace_id: "ws-1".to_string(),
+            goal_id: "node-1".to_string(),
+            status: "active".to_string(),
+            created_at,
+            updated_at: None,
+        };
+        let node = WorkspacePlanNodeRecord {
+            id: "node-1".to_string(),
+            plan_id: "plan-1".to_string(),
+            parent_id: None,
+            kind: "task".to_string(),
+            title: "Implement P6 plans".to_string(),
+            description: "Port snapshot ledger".to_string(),
+            depends_on_json: Vec::new(),
+            inputs_schema_json: json!({}),
+            outputs_schema_json: json!({}),
+            acceptance_criteria_json: Vec::new(),
+            feature_checkpoint_json: None,
+            handoff_package_json: None,
+            recommended_capabilities_json: Vec::new(),
+            preferred_agent_id: None,
+            estimated_effort_json: json!({"minutes": 30, "confidence": 0.7}),
+            priority: 1,
+            intent: "todo".to_string(),
+            execution: "idle".to_string(),
+            progress_json: json!({"percent": 0.0, "confidence": 0.8, "note": "queued"}),
+            assignee_agent_id: None,
+            current_attempt_id: None,
+            workspace_task_id: None,
+            metadata_json: json!({
+                "iteration_phase": "plan",
+                "evidence_refs": ["ci_pipeline:passed"],
+                "changed_files": ["agi-stack/apps/server/src/workspace_api.rs"],
+                "last_verification_summary": "golden locked"
+            }),
+            created_at,
+            updated_at: None,
+            completed_at: None,
+        };
+        let snapshot = build_plan_snapshot(
+            "ws-1",
+            vec![(plan, vec![node])],
+            "plan-1",
+            true,
+            vec![WorkspacePlanBlackboardEntryRecord {
+                id: "bb-1".to_string(),
+                plan_id: "plan-1".to_string(),
+                key: "research.summary".to_string(),
+                value_json: Some(json!({"summary": "ready"})),
+                published_by: "agent-1".to_string(),
+                version: 2,
+                schema_ref: Some("workspace.plan.summary.v1".to_string()),
+                metadata_json: json!({"source": "planner"}),
+                created_at,
+            }],
+            vec![WorkspacePlanOutboxRecord {
+                id: "outbox-1".to_string(),
+                plan_id: Some("plan-1".to_string()),
+                workspace_id: "ws-1".to_string(),
+                event_type: "supervisor_tick".to_string(),
+                payload_json: json!({"node_id": "node-1"}),
+                status: "failed".to_string(),
+                attempt_count: 1,
+                max_attempts: 5,
+                lease_owner: None,
+                lease_expires_at: None,
+                last_error: Some("provider unavailable".to_string()),
+                next_attempt_at: None,
+                processed_at: None,
+                metadata_json: json!({"source": "workspace_plan_api"}),
+                created_at,
+                updated_at: None,
+            }],
+            vec![WorkspacePlanEventRecord {
+                id: "event-1".to_string(),
+                plan_id: "plan-1".to_string(),
+                workspace_id: "ws-1".to_string(),
+                node_id: Some("node-1".to_string()),
+                attempt_id: None,
+                event_type: "workspace_plan_updated".to_string(),
+                source: "system".to_string(),
+                actor_id: Some("agent-1".to_string()),
+                payload_json: json!({"status": "active"}),
+                created_at,
+            }],
+        );
+        assert_golden(
+            &snapshot,
+            serde_json::from_str(include_str!("../tests/golden/workspace_plan_snapshot.json"))
+                .unwrap(),
+        );
+    }
+
     #[tokio::test]
     async fn dev_service_roundtrips_workspace_task_topology_blackboard() {
         let service = DevWorkspaceService::new("user-1");
@@ -5890,6 +7310,78 @@ mod tests {
             .await
             .unwrap();
         assert!(deleted.deleted);
+        {
+            let mut state = service.state.lock().expect("workspace dev state");
+            let now = "2026-01-02T03:04:05Z".parse().unwrap();
+            state.plans.insert(
+                "plan-dev".to_string(),
+                WorkspacePlanRecord {
+                    id: "plan-dev".to_string(),
+                    workspace_id: workspace.id.clone(),
+                    goal_id: "plan-node-dev".to_string(),
+                    status: "active".to_string(),
+                    created_at: now,
+                    updated_at: None,
+                },
+            );
+            state.plan_nodes.insert(
+                "plan-node-dev".to_string(),
+                WorkspacePlanNodeRecord {
+                    id: "plan-node-dev".to_string(),
+                    plan_id: "plan-dev".to_string(),
+                    parent_id: None,
+                    kind: "task".to_string(),
+                    title: "Plan state".to_string(),
+                    description: "Durable P6 snapshot".to_string(),
+                    depends_on_json: Vec::new(),
+                    inputs_schema_json: json!({}),
+                    outputs_schema_json: json!({}),
+                    acceptance_criteria_json: Vec::new(),
+                    feature_checkpoint_json: None,
+                    handoff_package_json: None,
+                    recommended_capabilities_json: Vec::new(),
+                    preferred_agent_id: None,
+                    estimated_effort_json: json!({}),
+                    priority: 1,
+                    intent: "todo".to_string(),
+                    execution: "idle".to_string(),
+                    progress_json: json!({}),
+                    assignee_agent_id: None,
+                    current_attempt_id: None,
+                    workspace_task_id: Some(task.id.clone()),
+                    metadata_json: json!({"iteration_phase": "plan"}),
+                    created_at: now,
+                    updated_at: None,
+                    completed_at: None,
+                },
+            );
+            state
+                .plan_blackboard
+                .push(WorkspacePlanBlackboardEntryRecord {
+                    id: "plan-bb-dev".to_string(),
+                    plan_id: "plan-dev".to_string(),
+                    key: "plan.summary".to_string(),
+                    value_json: Some(json!({"ok": true})),
+                    published_by: "user-1".to_string(),
+                    version: 1,
+                    schema_ref: None,
+                    metadata_json: json!({}),
+                    created_at: now,
+                });
+        }
+        let snapshot = service
+            .get_plan_snapshot(
+                "user-1",
+                &workspace.id,
+                WorkspacePlanSnapshotQuery::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            snapshot.plan.as_ref().map(|plan| plan.id.as_str()),
+            Some("plan-dev")
+        );
+        assert_eq!(snapshot.blackboard.len(), 1);
         let done = service
             .transition_task(
                 "user-1",

@@ -24,7 +24,9 @@ use agistack_adapters_postgres::{
     ProjectSandboxRecord, ProjectStatsLookup, ProjectUpdatePatch, SkillProjectAccess, SkillRecord,
     SkillUpdateRecord, SkillVersionRecord, TenantAccessStatus, TenantAdminStatus, TenantLookup,
     TenantUpdatePatch, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
-    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+    WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
+    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
+    WorkspaceTaskRecord,
 };
 use agistack_core::agent::types::{SessionState, SessionStatus};
 use agistack_core::model::{Entity, Memory};
@@ -53,6 +55,16 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
         return;
     };
     ensure_python_shaped_tables(&pool).await;
+
+    for sql in [
+        "DELETE FROM workspace_plan_outbox WHERE plan_id = 'plan_p6_repo' OR workspace_id = 'ws_p6_repo'",
+        "DELETE FROM workspace_plan_events WHERE plan_id = 'plan_p6_repo' OR workspace_id = 'ws_p6_repo'",
+        "DELETE FROM workspace_plan_blackboard_entries WHERE plan_id = 'plan_p6_repo'",
+        "DELETE FROM workspace_plan_nodes WHERE plan_id = 'plan_p6_repo'",
+        "DELETE FROM workspace_plans WHERE id = 'plan_p6_repo' OR workspace_id = 'ws_p6_repo'",
+    ] {
+        let _ = sqlx::query(sql).execute(&pool).await;
+    }
 
     for table in [
         "workspace_blackboard_outbox",
@@ -377,6 +389,137 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
     .unwrap()
     .0;
     assert_eq!(outbox_count, 1);
+
+    let plan = repo
+        .create_plan(WorkspacePlanRecord {
+            id: "plan_p6_repo".to_string(),
+            workspace_id: "ws_p6_repo".to_string(),
+            goal_id: "plan_node_p6".to_string(),
+            status: "active".to_string(),
+            created_at,
+            updated_at: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(plan.workspace_id, "ws_p6_repo");
+    let node = repo
+        .create_plan_node(WorkspacePlanNodeRecord {
+            id: "plan_node_p6".to_string(),
+            plan_id: "plan_p6_repo".to_string(),
+            parent_id: None,
+            kind: "task".to_string(),
+            title: "Plan snapshot".to_string(),
+            description: "Rust reads Python-shaped plan state".to_string(),
+            depends_on_json: vec![],
+            inputs_schema_json: json!({}),
+            outputs_schema_json: json!({}),
+            acceptance_criteria_json: vec![json!({
+                "kind": "test",
+                "spec": {"command": "cargo test"},
+                "required": true,
+                "description": "workspace tests pass"
+            })],
+            feature_checkpoint_json: None,
+            handoff_package_json: None,
+            recommended_capabilities_json: vec![json!({"name": "executor", "weight": 1.0})],
+            preferred_agent_id: None,
+            estimated_effort_json: json!({"minutes": 30, "confidence": 0.7}),
+            priority: 1,
+            intent: "todo".to_string(),
+            execution: "idle".to_string(),
+            progress_json: json!({"percent": 0.0, "confidence": 1.0, "note": ""}),
+            assignee_agent_id: None,
+            current_attempt_id: None,
+            workspace_task_id: Some("task_p6_repo".to_string()),
+            metadata_json: json!({"iteration_phase": "plan"}),
+            created_at,
+            updated_at: None,
+            completed_at: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(node.workspace_task_id.as_deref(), Some("task_p6_repo"));
+    let latest_plans = repo.list_plans("ws_p6_repo", 10).await.unwrap();
+    assert_eq!(latest_plans[0].id, "plan_p6_repo");
+    let nodes = repo.list_plan_nodes("plan_p6_repo").await.unwrap();
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].acceptance_criteria_json[0]["kind"], "test");
+
+    repo.create_plan_blackboard_entry(WorkspacePlanBlackboardEntryRecord {
+        id: "plan_bb_p6_v1".to_string(),
+        plan_id: "plan_p6_repo".to_string(),
+        key: "research.summary".to_string(),
+        value_json: Some(json!({"summary": "old"})),
+        published_by: "u_p6_owner".to_string(),
+        version: 1,
+        schema_ref: None,
+        metadata_json: json!({}),
+        created_at,
+    })
+    .await
+    .unwrap();
+    repo.create_plan_blackboard_entry(WorkspacePlanBlackboardEntryRecord {
+        id: "plan_bb_p6_v2".to_string(),
+        plan_id: "plan_p6_repo".to_string(),
+        key: "research.summary".to_string(),
+        value_json: Some(json!({"summary": "new"})),
+        published_by: "u_p6_owner".to_string(),
+        version: 2,
+        schema_ref: Some("summary.v1".to_string()),
+        metadata_json: json!({"source": "test"}),
+        created_at,
+    })
+    .await
+    .unwrap();
+    let latest_blackboard = repo
+        .list_plan_blackboard_latest("plan_p6_repo")
+        .await
+        .unwrap();
+    assert_eq!(latest_blackboard.len(), 1);
+    assert_eq!(
+        latest_blackboard[0].value_json.as_ref().unwrap()["summary"],
+        "new"
+    );
+
+    repo.create_plan_event(WorkspacePlanEventRecord {
+        id: "plan_event_p6".to_string(),
+        plan_id: "plan_p6_repo".to_string(),
+        workspace_id: "ws_p6_repo".to_string(),
+        node_id: Some("plan_node_p6".to_string()),
+        attempt_id: None,
+        event_type: "workspace_plan_updated".to_string(),
+        source: "system".to_string(),
+        actor_id: Some("u_p6_owner".to_string()),
+        payload_json: json!({"status": "active"}),
+        created_at,
+    })
+    .await
+    .unwrap();
+    let events = repo.list_plan_events("plan_p6_repo", 5).await.unwrap();
+    assert_eq!(events[0].event_type, "workspace_plan_updated");
+
+    repo.enqueue_plan_outbox(WorkspacePlanOutboxRecord {
+        id: "plan_outbox_p6".to_string(),
+        plan_id: Some("plan_p6_repo".to_string()),
+        workspace_id: "ws_p6_repo".to_string(),
+        event_type: "supervisor_tick".to_string(),
+        payload_json: json!({"node_id": "plan_node_p6"}),
+        status: "pending".to_string(),
+        attempt_count: 0,
+        max_attempts: 5,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json: json!({"source": "test"}),
+        created_at,
+        updated_at: None,
+    })
+    .await
+    .unwrap();
+    let plan_outbox = repo.list_plan_outbox("plan_p6_repo", 5).await.unwrap();
+    assert_eq!(plan_outbox[0].event_type, "supervisor_tick");
 }
 
 /// Create the minimal Python-shaped tables the adapter reads/writes, plus the
@@ -460,6 +603,75 @@ async fn ensure_python_shaped_tables(pool: &PgPool) {
             blocker_reason text, metadata_json json DEFAULT '{}'::json, \
             created_at timestamptz DEFAULT now(), updated_at timestamptz, \
             completed_at timestamptz, archived_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS workspace_plans (\
+            id text PRIMARY KEY, workspace_id text NOT NULL, goal_id text NOT NULL, \
+            status varchar(20) DEFAULT 'draft' NOT NULL, \
+            created_at timestamptz DEFAULT now() NOT NULL, updated_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plans_workspace \
+            ON workspace_plans (workspace_id)",
+        "CREATE TABLE IF NOT EXISTS workspace_plan_nodes (\
+            id text PRIMARY KEY, plan_id text NOT NULL, parent_id text, \
+            kind varchar(20) DEFAULT 'task' NOT NULL, title varchar(500) NOT NULL, \
+            description text DEFAULT '' NOT NULL, depends_on json DEFAULT '[]'::json NOT NULL, \
+            inputs_schema json DEFAULT '{}'::json NOT NULL, \
+            outputs_schema json DEFAULT '{}'::json NOT NULL, \
+            acceptance_criteria json DEFAULT '[]'::json NOT NULL, \
+            feature_checkpoint json, handoff_package json, \
+            recommended_capabilities json DEFAULT '[]'::json NOT NULL, \
+            preferred_agent_id text, estimated_effort json DEFAULT '{}'::json NOT NULL, \
+            priority integer DEFAULT 0 NOT NULL, intent varchar(20) DEFAULT 'todo' NOT NULL, \
+            execution varchar(20) DEFAULT 'idle' NOT NULL, progress json DEFAULT '{}'::json NOT NULL, \
+            assignee_agent_id text, current_attempt_id text, workspace_task_id text, \
+            metadata_json json DEFAULT '{}'::json NOT NULL, \
+            created_at timestamptz DEFAULT now() NOT NULL, updated_at timestamptz, \
+            completed_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_nodes_plan \
+            ON workspace_plan_nodes (plan_id)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_nodes_parent \
+            ON workspace_plan_nodes (parent_id)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_nodes_workspace_task \
+            ON workspace_plan_nodes (workspace_task_id)",
+        "CREATE TABLE IF NOT EXISTS workspace_plan_blackboard_entries (\
+            id text PRIMARY KEY, plan_id text NOT NULL, key varchar(500) NOT NULL, \
+            value_json json, published_by text NOT NULL, version integer NOT NULL, \
+            schema_ref text, metadata_json json DEFAULT '{}'::json NOT NULL, \
+            created_at timestamptz DEFAULT now() NOT NULL)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_plan_blackboard_plan_key_version \
+            ON workspace_plan_blackboard_entries (plan_id, key, version)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_blackboard_plan \
+            ON workspace_plan_blackboard_entries (plan_id)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_blackboard_plan_key \
+            ON workspace_plan_blackboard_entries (plan_id, key)",
+        "CREATE TABLE IF NOT EXISTS workspace_plan_events (\
+            id text PRIMARY KEY, plan_id text NOT NULL, workspace_id text NOT NULL, \
+            node_id text, attempt_id text, event_type varchar(80) NOT NULL, \
+            source varchar(80) DEFAULT 'system' NOT NULL, actor_id text, \
+            payload_json json DEFAULT '{}'::json NOT NULL, \
+            created_at timestamptz DEFAULT now() NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_events_plan_created \
+            ON workspace_plan_events (plan_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_events_workspace_created \
+            ON workspace_plan_events (workspace_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_events_node \
+            ON workspace_plan_events (plan_id, node_id, created_at)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_events_attempt \
+            ON workspace_plan_events (attempt_id)",
+        "CREATE TABLE IF NOT EXISTS workspace_plan_outbox (\
+            id text PRIMARY KEY, plan_id text, workspace_id text NOT NULL, \
+            event_type varchar(80) NOT NULL, payload_json json DEFAULT '{}'::json NOT NULL, \
+            status varchar(20) DEFAULT 'pending' NOT NULL, attempt_count integer DEFAULT 0 NOT NULL, \
+            max_attempts integer DEFAULT 5 NOT NULL, lease_owner varchar(255), \
+            lease_expires_at timestamptz, last_error text, next_attempt_at timestamptz, \
+            processed_at timestamptz, metadata_json json DEFAULT '{}'::json NOT NULL, \
+            created_at timestamptz DEFAULT now() NOT NULL, updated_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_outbox_plan \
+            ON workspace_plan_outbox (plan_id)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_outbox_workspace_status \
+            ON workspace_plan_outbox (workspace_id, status)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_outbox_status_next_attempt \
+            ON workspace_plan_outbox (status, next_attempt_at)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_plan_outbox_lease \
+            ON workspace_plan_outbox (lease_owner, lease_expires_at)",
         "CREATE TABLE IF NOT EXISTS topology_nodes (\
             id text PRIMARY KEY, workspace_id text NOT NULL, node_type varchar(20) NOT NULL, \
             ref_id text, title varchar(255) DEFAULT '' NOT NULL, \

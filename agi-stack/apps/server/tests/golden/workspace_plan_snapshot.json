@@ -1,0 +1,393 @@
+{
+  "workspace_id": "ws-1",
+  "plan": {
+    "id": "plan-1",
+    "workspace_id": "ws-1",
+    "goal_id": "node-1",
+    "status": "active",
+    "created_at": "2026-01-02T03:04:05.000Z",
+    "updated_at": null,
+    "nodes": [
+      {
+        "id": "node-1",
+        "parent_id": null,
+        "kind": "task",
+        "title": "Implement P6 plans",
+        "description": "Port snapshot ledger",
+        "depends_on": [],
+        "acceptance_criteria": [],
+        "feature_checkpoint": null,
+        "handoff_package": null,
+        "recommended_capabilities": [],
+        "intent": "todo",
+        "execution": "idle",
+        "progress": {
+          "percent": 0.0,
+          "confidence": 0.8,
+          "note": "queued"
+        },
+        "assignee_agent_id": null,
+        "current_attempt_id": null,
+        "workspace_task_id": null,
+        "priority": 1,
+        "metadata": {
+          "iteration_phase": "plan",
+          "evidence_refs": ["ci_pipeline:passed"],
+          "changed_files": ["agi-stack/apps/server/src/workspace_api.rs"],
+          "last_verification_summary": "golden locked",
+          "pipeline_status": "success",
+          "pipeline_gate_status": "success"
+        },
+        "created_at": "2026-01-02T03:04:05.000Z",
+        "updated_at": null,
+        "completed_at": null,
+        "phase_contract": {
+          "phase": "plan",
+          "title": "Plan",
+          "entry_gate": "Research context is available or explicitly not required.",
+          "exit_gate": "Story card includes AC, dependencies, impact, out-of-scope, and task budget.",
+          "required_evidence": ["story card", "acceptance criteria", "task budget"],
+          "allowed_routing": ["continue", "replan", "needs_human_review"],
+          "blocked_semantics": "Blocked is reserved for missing human permission, credentials, policy decisions, or irreversible operator choices. Test, pipeline, or evidence failures should route to recovery or replan."
+        },
+        "evidence_bundle": {
+          "artifacts": [],
+          "evidence_refs": ["ci_pipeline:passed"],
+          "changed_files": ["agi-stack/apps/server/src/workspace_api.rs"],
+          "pipeline_refs": ["ci_pipeline:passed"],
+          "verification_summary": "golden locked",
+          "review_summary": ""
+        },
+        "gate_status": {
+          "status": "pending",
+          "summary": "",
+          "missing": [],
+          "evidence_refs": [],
+          "routing": "continue"
+        },
+        "blocker_analysis": null,
+        "actions": {
+          "open_attempt": {
+            "enabled": false,
+            "label": "Open attempt",
+            "reason": "No worker attempt has been linked yet.",
+            "requires_confirmation": false
+          },
+          "request_replan": {
+            "enabled": true,
+            "label": "Request replan",
+            "reason": null,
+            "requires_confirmation": true
+          },
+          "reopen_blocked": {
+            "enabled": false,
+            "label": "Reopen blocked node",
+            "reason": "Only blocked nodes can be reopened.",
+            "requires_confirmation": false
+          },
+          "accept_with_human_review": {
+            "enabled": false,
+            "label": "Accept after review",
+            "reason": "Only blocked or verification-rework nodes can be accepted after review.",
+            "requires_confirmation": true
+          }
+        }
+      }
+    ],
+    "counts": {
+      "intent:todo": 1,
+      "execution:idle": 1
+    }
+  },
+  "root_goal": null,
+  "iteration": {
+    "current_iteration": 1,
+    "loop_label": "Scrum feedback loop",
+    "cadence": "research -> plan -> implement -> test -> deploy -> review",
+    "loop_status": "active",
+    "max_iterations": 8,
+    "completed_iterations": [],
+    "current_sprint_goal": "",
+    "review_summary": "",
+    "stop_reason": "",
+    "active_phase": "plan",
+    "active_phase_label": "Plan",
+    "next_action": "",
+    "task_count": 1,
+    "task_budget": 6,
+    "phases": [
+      {
+        "id": "research",
+        "label": "Research",
+        "total": 0,
+        "done": 0,
+        "running": 0,
+        "blocked": 0,
+        "progress": 0,
+        "gate_status": {
+          "status": "pending",
+          "summary": "",
+          "missing": [],
+          "evidence_refs": [],
+          "routing": "continue"
+        },
+        "required_artifacts": [],
+        "missing_artifacts": [],
+        "summary": ""
+      },
+      {
+        "id": "plan",
+        "label": "Plan",
+        "total": 1,
+        "done": 0,
+        "running": 0,
+        "blocked": 0,
+        "progress": 0,
+        "gate_status": {
+          "status": "pending",
+          "summary": "",
+          "missing": [],
+          "evidence_refs": [],
+          "routing": "continue"
+        },
+        "required_artifacts": [],
+        "missing_artifacts": [],
+        "summary": ""
+      },
+      {
+        "id": "implement",
+        "label": "Implement",
+        "total": 0,
+        "done": 0,
+        "running": 0,
+        "blocked": 0,
+        "progress": 0,
+        "gate_status": {
+          "status": "pending",
+          "summary": "",
+          "missing": [],
+          "evidence_refs": [],
+          "routing": "continue"
+        },
+        "required_artifacts": [],
+        "missing_artifacts": [],
+        "summary": ""
+      },
+      {
+        "id": "test",
+        "label": "Test",
+        "total": 0,
+        "done": 0,
+        "running": 0,
+        "blocked": 0,
+        "progress": 0,
+        "gate_status": {
+          "status": "pending",
+          "summary": "",
+          "missing": [],
+          "evidence_refs": [],
+          "routing": "continue"
+        },
+        "required_artifacts": [],
+        "missing_artifacts": [],
+        "summary": ""
+      },
+      {
+        "id": "deploy",
+        "label": "Deploy",
+        "total": 0,
+        "done": 0,
+        "running": 0,
+        "blocked": 0,
+        "progress": 0,
+        "gate_status": {
+          "status": "pending",
+          "summary": "",
+          "missing": [],
+          "evidence_refs": [],
+          "routing": "continue"
+        },
+        "required_artifacts": [],
+        "missing_artifacts": [],
+        "summary": ""
+      },
+      {
+        "id": "review",
+        "label": "Review",
+        "total": 0,
+        "done": 0,
+        "running": 0,
+        "blocked": 0,
+        "progress": 0,
+        "gate_status": {
+          "status": "pending",
+          "summary": "",
+          "missing": [],
+          "evidence_refs": [],
+          "routing": "continue"
+        },
+        "required_artifacts": [],
+        "missing_artifacts": [],
+        "summary": ""
+      }
+    ],
+    "deliverables": [],
+    "feedback_items": [],
+    "history": [],
+    "actions": {
+      "pause_iteration": {
+        "enabled": true,
+        "label": "Pause loop",
+        "reason": null,
+        "requires_confirmation": false
+      },
+      "resume_iteration": {
+        "enabled": true,
+        "label": "Resume loop",
+        "reason": null,
+        "requires_confirmation": false
+      },
+      "trigger_next_iteration": {
+        "enabled": true,
+        "label": "Trigger next iteration",
+        "reason": null,
+        "requires_confirmation": true
+      }
+    },
+    "findings": [],
+    "rejected_finding_count": 0
+  },
+  "delivery": {
+    "provider": "sandbox_native",
+    "status": "not_configured",
+    "contract_source": "metadata",
+    "contract_confidence": 0.0,
+    "agent_managed": true,
+    "code_root": null,
+    "latest_run": null,
+    "recent_runs": [],
+    "services": [],
+    "deployment": null,
+    "deployments": [],
+    "run_assessment": {
+      "status": "not_run",
+      "summary": "No pipeline run has been recorded.",
+      "evidence_refs": [],
+      "warnings": [],
+      "required_services_total": 0,
+      "required_services_healthy": 0,
+      "failed_required_services": []
+    },
+    "warnings": [],
+    "actions": {
+      "request_pipeline": {
+        "enabled": true,
+        "label": "Run pipeline",
+        "reason": null,
+        "requires_confirmation": false
+      },
+      "regenerate_contract": {
+        "enabled": true,
+        "label": "Regenerate contract",
+        "reason": null,
+        "requires_confirmation": false
+      },
+      "restart_preview": {
+        "enabled": false,
+        "label": "Restart preview",
+        "reason": "No preview deployment exists.",
+        "requires_confirmation": false
+      },
+      "rollback_preview": {
+        "enabled": false,
+        "label": "Rollback preview",
+        "reason": "No rollback reference is available.",
+        "requires_confirmation": true
+      }
+    }
+  },
+  "blackboard": [
+    {
+      "plan_id": "plan-1",
+      "key": "research.summary",
+      "value": {
+        "summary": "ready"
+      },
+      "published_by": "agent-1",
+      "version": 2,
+      "schema_ref": "workspace.plan.summary.v1",
+      "metadata": {
+        "source": "planner"
+      }
+    }
+  ],
+  "outbox": [
+    {
+      "id": "outbox-1",
+      "plan_id": "plan-1",
+      "workspace_id": "ws-1",
+      "event_type": "supervisor_tick",
+      "payload": {
+        "node_id": "node-1"
+      },
+      "status": "failed",
+      "attempt_count": 1,
+      "max_attempts": 5,
+      "lease_owner": null,
+      "lease_expires_at": null,
+      "last_error": "provider unavailable",
+      "next_attempt_at": null,
+      "processed_at": null,
+      "metadata": {
+        "source": "workspace_plan_api"
+      },
+      "created_at": "2026-01-02T03:04:05.000Z",
+      "updated_at": null,
+      "actions": {
+        "retry_outbox": {
+          "enabled": true,
+          "label": "Retry now",
+          "reason": null,
+          "requires_confirmation": false
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "event-1",
+      "plan_id": "plan-1",
+      "workspace_id": "ws-1",
+      "node_id": "node-1",
+      "attempt_id": null,
+      "event_type": "workspace_plan_updated",
+      "source": "system",
+      "actor_id": "agent-1",
+      "payload": {
+        "status": "active"
+      },
+      "created_at": "2026-01-02T03:04:05.000Z"
+    }
+  ],
+  "plan_history": [
+    {
+      "plan_id": "plan-1",
+      "title": "Implement P6 plans",
+      "status": "active",
+      "loop_status": "active",
+      "root_goal_id": null,
+      "root_goal_status": null,
+      "current_iteration": 1,
+      "max_iterations": 8,
+      "completed_iterations": [],
+      "task_count": 1,
+      "created_at": "2026-01-02T03:04:05.000Z",
+      "updated_at": null,
+      "is_latest": true,
+      "is_selected": true
+    }
+  ],
+  "iteration_runs": [],
+  "run_health": null,
+  "artifact_index": null
+}
