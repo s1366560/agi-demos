@@ -76,6 +76,8 @@ const DEFAULT_WORKER_LAUNCH_MAX_ACTIVE: i64 = 4;
 const DEFAULT_WORKER_LAUNCH_DEFER_SECONDS: i64 = 20;
 const DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS: i64 = 300;
 const WORKER_LAUNCH_COOLDOWN_SECONDS: u64 = 300;
+#[allow(dead_code)]
+const DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS: i64 = 900;
 const DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES: i64 = 3;
 const WORKER_LAUNCHABLE_ATTEMPT_STATUSES: [&str; 2] = ["pending", "running"];
 const ACCEPTED_ATTEMPT_STATUS: &str = "accepted";
@@ -189,6 +191,64 @@ const FAILED_WORKTREE_RETRY_STALE_METADATA_KEYS: &[&str] = &[
     "worktree_integration_summary",
     "worktree_integration_worktree_path",
 ];
+
+#[allow(dead_code)]
+mod worker_stream_orphan {
+    use super::DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(super) enum StopReason {
+        AgentFinishedWithoutTerminalEvent,
+        AgentNotRunningStreamIdle,
+    }
+
+    impl StopReason {
+        pub(super) fn as_str(self) -> &'static str {
+            match self {
+                Self::AgentFinishedWithoutTerminalEvent => "agent_finished_without_terminal_event",
+                Self::AgentNotRunningStreamIdle => "agent_not_running_stream_idle",
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(super) struct Decision {
+        pub(super) should_stop: bool,
+        pub(super) reason: Option<StopReason>,
+    }
+
+    pub(super) fn should_stop(
+        finished_message_id: Option<&str>,
+        stream_message_id: Option<&str>,
+        running_exists: bool,
+        idle_seconds: f64,
+        orphan_grace_seconds: Option<i64>,
+    ) -> Decision {
+        if let Some(finished_message_id) = finished_message_id.filter(|value| !value.is_empty()) {
+            if stream_message_id.is_none() || stream_message_id == Some(finished_message_id) {
+                return Decision {
+                    should_stop: true,
+                    reason: Some(StopReason::AgentFinishedWithoutTerminalEvent),
+                };
+            }
+        }
+
+        let grace_seconds = orphan_grace_seconds
+            .unwrap_or(DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS)
+            .max(1) as f64;
+        if !running_exists && idle_seconds >= grace_seconds {
+            return Decision {
+                should_stop: true,
+                reason: Some(StopReason::AgentNotRunningStreamIdle),
+            };
+        }
+
+        Decision {
+            should_stop: false,
+            reason: None,
+        }
+    }
+}
 
 #[async_trait]
 pub(crate) trait WorkerLaunchRuntimeStateStore: Send + Sync {
@@ -12697,6 +12757,68 @@ esac
             ),
             "d267a78e-eefc-5d33-bfb3-ac4fa7ece855"
         );
+    }
+
+    #[test]
+    fn should_stop_orphaned_worker_stream_matches_python_contract() {
+        let finished_without_stream =
+            worker_stream_orphan::should_stop(Some("msg-1"), None, true, 0.0, Some(900));
+        assert!(finished_without_stream.should_stop);
+        assert_eq!(
+            finished_without_stream
+                .reason
+                .map(worker_stream_orphan::StopReason::as_str),
+            Some("agent_finished_without_terminal_event")
+        );
+
+        let finished_matching_stream =
+            worker_stream_orphan::should_stop(Some("msg-1"), Some("msg-1"), true, 0.0, Some(900));
+        assert!(finished_matching_stream.should_stop);
+        assert_eq!(
+            finished_matching_stream
+                .reason
+                .map(worker_stream_orphan::StopReason::as_str),
+            Some("agent_finished_without_terminal_event")
+        );
+
+        let finished_for_other_message =
+            worker_stream_orphan::should_stop(Some("msg-2"), Some("msg-1"), true, 999.0, Some(900));
+        assert!(!finished_for_other_message.should_stop);
+        assert_eq!(finished_for_other_message.reason, None);
+
+        let not_running_below_grace =
+            worker_stream_orphan::should_stop(None, Some("msg-1"), false, 899.0, Some(900));
+        assert!(!not_running_below_grace.should_stop);
+        assert_eq!(not_running_below_grace.reason, None);
+
+        let not_running_at_grace =
+            worker_stream_orphan::should_stop(None, Some("msg-1"), false, 900.0, Some(900));
+        assert!(not_running_at_grace.should_stop);
+        assert_eq!(
+            not_running_at_grace
+                .reason
+                .map(worker_stream_orphan::StopReason::as_str),
+            Some("agent_not_running_stream_idle")
+        );
+
+        let running_over_grace =
+            worker_stream_orphan::should_stop(None, Some("msg-1"), true, 1200.0, Some(900));
+        assert!(!running_over_grace.should_stop);
+        assert_eq!(running_over_grace.reason, None);
+
+        let clamped_grace = worker_stream_orphan::should_stop(None, None, false, 1.0, Some(0));
+        assert!(clamped_grace.should_stop);
+        assert_eq!(
+            clamped_grace
+                .reason
+                .map(worker_stream_orphan::StopReason::as_str),
+            Some("agent_not_running_stream_idle")
+        );
+
+        let empty_finished_marker =
+            worker_stream_orphan::should_stop(Some(""), None, false, 0.5, Some(1));
+        assert!(!empty_finished_marker.should_stop);
+        assert_eq!(empty_finished_marker.reason, None);
     }
 
     #[tokio::test]
