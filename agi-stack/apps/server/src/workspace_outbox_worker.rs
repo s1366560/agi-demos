@@ -1887,6 +1887,12 @@ struct GitPublishResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct GitRemoteMergeResult {
+    status: String,
+    reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct GitCommandOutput {
     exit_code: i32,
     stdout: String,
@@ -4776,6 +4782,21 @@ async fn publish_git_ref_from_temporary_worktree(
             });
         }
         added = true;
+        let remote = remote_url.unwrap_or("origin");
+        let remote_merge =
+            merge_remote_branch_for_publish(&worktree_path, publish_ref, remote, branch, env)
+                .await?;
+        if remote_merge.status == "failed" {
+            return Ok(GitPublishResult {
+                status: "failed".to_string(),
+                reason: Some(
+                    remote_merge
+                        .reason
+                        .unwrap_or_else(|| "remote branch merge failed".to_string()),
+                ),
+                published_commit: None,
+            });
+        }
         let head = run_git_command(&worktree_path, &["rev-parse", "HEAD"], env, 60).await?;
         if head.exit_code != 0 {
             return Ok(GitPublishResult {
@@ -4785,10 +4806,23 @@ async fn publish_git_ref_from_temporary_worktree(
             });
         }
         let published_commit = head.stdout.trim().to_string();
-        let remote = remote_url.unwrap_or("origin");
         let refspec = format!("HEAD:refs/heads/{branch}");
         let push = run_git_command(&worktree_path, &["push", remote, &refspec], env, 180).await?;
         if push.exit_code != 0 {
+            if is_non_fast_forward_push_rejection(&push) {
+                if let Some(retried) = retry_temporary_worktree_push_after_non_fast_forward(
+                    &worktree_path,
+                    &published_commit,
+                    remote,
+                    branch,
+                    env,
+                    default_reason,
+                )
+                .await?
+                {
+                    return Ok(retried);
+                }
+            }
             return Ok(GitPublishResult {
                 status: "failed".to_string(),
                 reason: Some(compact_git_error(&push)),
@@ -4797,7 +4831,11 @@ async fn publish_git_ref_from_temporary_worktree(
         }
         Ok(GitPublishResult {
             status: "published".to_string(),
-            reason: Some(default_reason.to_string()),
+            reason: Some(
+                remote_merge
+                    .reason
+                    .unwrap_or_else(|| default_reason.to_string()),
+            ),
             published_commit: Some(published_commit),
         })
     }
@@ -4815,6 +4853,429 @@ async fn publish_git_ref_from_temporary_worktree(
     }
     let _ = std::fs::remove_dir_all(&temp_parent);
     result
+}
+
+async fn retry_temporary_worktree_push_after_non_fast_forward(
+    worktree_path: &Path,
+    candidate_ref: &str,
+    remote: &str,
+    branch: &str,
+    env: &[(String, String)],
+    default_reason: &str,
+) -> CoreResult<Option<GitPublishResult>> {
+    let retry_merge =
+        merge_remote_branch_for_publish(worktree_path, candidate_ref, remote, branch, env).await?;
+    if retry_merge.status == "failed" {
+        return Ok(Some(GitPublishResult {
+            status: "failed".to_string(),
+            reason: Some(
+                retry_merge.reason.unwrap_or_else(|| {
+                    "remote branch merge failed after push rejection".to_string()
+                }),
+            ),
+            published_commit: Some(candidate_ref.to_string()),
+        }));
+    }
+    let retry_head = run_git_command(worktree_path, &["rev-parse", "HEAD"], env, 60).await?;
+    if retry_head.exit_code != 0 {
+        return Ok(Some(GitPublishResult {
+            status: "failed".to_string(),
+            reason: Some(compact_git_error(&retry_head)),
+            published_commit: Some(candidate_ref.to_string()),
+        }));
+    }
+    let retried_commit = retry_head.stdout.trim().to_string();
+    let refspec = format!("HEAD:refs/heads/{branch}");
+    let retry_push = run_git_command(worktree_path, &["push", remote, &refspec], env, 180).await?;
+    if retry_push.exit_code == 0 {
+        let retry_reason = retry_merge
+            .reason
+            .unwrap_or_else(|| default_reason.to_string());
+        return Ok(Some(GitPublishResult {
+            status: "published".to_string(),
+            reason: Some(format!(
+                "{retry_reason}; retried after non-fast-forward push"
+            )),
+            published_commit: Some(retried_commit),
+        }));
+    }
+    Ok(None)
+}
+
+async fn merge_remote_branch_for_publish(
+    worktree_path: &Path,
+    candidate_ref: &str,
+    remote: &str,
+    branch: &str,
+    env: &[(String, String)],
+) -> CoreResult<GitRemoteMergeResult> {
+    let remote_ref = format!("refs/remotes/memstack-source-publish/{branch}");
+    let fetch_refspec = format!("+refs/heads/{branch}:{remote_ref}");
+    let fetch = run_git_command(
+        worktree_path,
+        &["fetch", "--no-tags", remote, &fetch_refspec],
+        env,
+        180,
+    )
+    .await?;
+    if fetch.exit_code != 0 {
+        let reason = compact_git_error(&fetch);
+        let normalized = reason.to_ascii_lowercase();
+        if normalized.contains("couldn't find remote ref")
+            || normalized.contains("could not find remote ref")
+        {
+            return Ok(GitRemoteMergeResult {
+                status: "skipped".to_string(),
+                reason: None,
+            });
+        }
+        return Ok(GitRemoteMergeResult {
+            status: "failed".to_string(),
+            reason: Some(reason),
+        });
+    }
+
+    let remote_ancestor = run_git_command(
+        worktree_path,
+        &["merge-base", "--is-ancestor", &remote_ref, "HEAD"],
+        env,
+        60,
+    )
+    .await?;
+    if remote_ancestor.exit_code == 0 {
+        return Ok(GitRemoteMergeResult {
+            status: "skipped".to_string(),
+            reason: None,
+        });
+    }
+
+    let local_ancestor = run_git_command(
+        worktree_path,
+        &["merge-base", "--is-ancestor", "HEAD", &remote_ref],
+        env,
+        60,
+    )
+    .await?;
+    if local_ancestor.exit_code == 0 {
+        return merge_remote_branch_preserving_local_tree(worktree_path, &remote_ref, env).await;
+    }
+
+    let merge = run_git_command(
+        worktree_path,
+        &["merge", "--no-edit", &remote_ref],
+        env,
+        120,
+    )
+    .await?;
+    if merge.exit_code == 0 {
+        return restore_candidate_publish_paths_after_merge(
+            worktree_path,
+            candidate_ref,
+            &remote_ref,
+            env,
+            "merged remote branch before publish",
+        )
+        .await;
+    }
+
+    let _ = run_git_command(worktree_path, &["merge", "--abort"], env, 60).await;
+    let merged = merge_remote_branch_with_local_preference(worktree_path, &remote_ref, env).await?;
+    if merged.status == "failed" {
+        return Ok(merged);
+    }
+    let reason = merged
+        .reason
+        .clone()
+        .unwrap_or_else(|| "merged remote branch before publish".to_string());
+    restore_candidate_publish_paths_after_merge(
+        worktree_path,
+        candidate_ref,
+        &remote_ref,
+        env,
+        &reason,
+    )
+    .await
+}
+
+async fn merge_remote_branch_preserving_local_tree(
+    worktree_path: &Path,
+    remote_ref: &str,
+    env: &[(String, String)],
+) -> CoreResult<GitRemoteMergeResult> {
+    let merge_ours_strategy = run_git_command(
+        worktree_path,
+        &["merge", "--no-edit", "-s", "ours", remote_ref],
+        env,
+        120,
+    )
+    .await?;
+    if merge_ours_strategy.exit_code == 0 {
+        return Ok(GitRemoteMergeResult {
+            status: "merged".to_string(),
+            reason: Some(
+                "merged remote branch history before publish preserving candidate tree".to_string(),
+            ),
+        });
+    }
+    Ok(GitRemoteMergeResult {
+        status: "failed".to_string(),
+        reason: Some(compact_git_error(&merge_ours_strategy)),
+    })
+}
+
+async fn restore_candidate_publish_paths_after_merge(
+    worktree_path: &Path,
+    candidate_ref: &str,
+    remote_ref: &str,
+    env: &[(String, String)],
+    reason: &str,
+) -> CoreResult<GitRemoteMergeResult> {
+    let paths =
+        candidate_publish_restore_path_states(worktree_path, candidate_ref, remote_ref, env)
+            .await?;
+    if paths.is_empty() {
+        return Ok(GitRemoteMergeResult {
+            status: "merged".to_string(),
+            reason: Some(reason.to_string()),
+        });
+    }
+
+    let present_paths: Vec<String> = paths
+        .iter()
+        .filter_map(|(path, present)| present.then_some(path.clone()))
+        .collect();
+    let removed_paths: Vec<String> = paths
+        .iter()
+        .filter_map(|(path, present)| (!present).then_some(path.clone()))
+        .collect();
+    if !present_paths.is_empty() {
+        let mut args = vec![
+            "checkout".to_string(),
+            candidate_ref.to_string(),
+            "--".to_string(),
+        ];
+        args.extend(present_paths);
+        let checkout = run_git_command_owned(worktree_path, args, env, 120).await?;
+        if checkout.exit_code != 0 {
+            return Ok(GitRemoteMergeResult {
+                status: "failed".to_string(),
+                reason: Some(compact_git_error(&checkout)),
+            });
+        }
+    }
+    if !removed_paths.is_empty() {
+        let mut args = vec![
+            "rm".to_string(),
+            "-f".to_string(),
+            "--ignore-unmatch".to_string(),
+            "--".to_string(),
+        ];
+        args.extend(removed_paths);
+        let remove = run_git_command_owned(worktree_path, args, env, 120).await?;
+        if remove.exit_code != 0 {
+            return Ok(GitRemoteMergeResult {
+                status: "failed".to_string(),
+                reason: Some(compact_git_error(&remove)),
+            });
+        }
+    }
+
+    let mut diff_args = vec![
+        "diff".to_string(),
+        "--cached".to_string(),
+        "--quiet".to_string(),
+        "--".to_string(),
+    ];
+    diff_args.extend(paths.iter().map(|(path, _)| path.clone()));
+    let changed = run_git_command_owned(worktree_path, diff_args, env, 60).await?;
+    if changed.exit_code == 0 {
+        return Ok(GitRemoteMergeResult {
+            status: "merged".to_string(),
+            reason: Some(reason.to_string()),
+        });
+    }
+    if changed.exit_code != 1 {
+        return Ok(GitRemoteMergeResult {
+            status: "failed".to_string(),
+            reason: Some(compact_git_error(&changed)),
+        });
+    }
+
+    let commit = run_git_command(
+        worktree_path,
+        &["commit", "-m", "Preserve candidate source publish paths"],
+        env,
+        120,
+    )
+    .await?;
+    if commit.exit_code != 0 {
+        return Ok(GitRemoteMergeResult {
+            status: "failed".to_string(),
+            reason: Some(compact_git_error(&commit)),
+        });
+    }
+    Ok(GitRemoteMergeResult {
+        status: "merged".to_string(),
+        reason: Some(format!(
+            "{reason}; restored candidate tree paths after merge"
+        )),
+    })
+}
+
+async fn candidate_publish_restore_path_states(
+    worktree_path: &Path,
+    candidate_ref: &str,
+    remote_ref: &str,
+    env: &[(String, String)],
+) -> CoreResult<Vec<(String, bool)>> {
+    candidate_publish_path_states(worktree_path, candidate_ref, remote_ref, env).await
+}
+
+async fn candidate_publish_path_states(
+    worktree_path: &Path,
+    candidate_ref: &str,
+    remote_ref: &str,
+    env: &[(String, String)],
+) -> CoreResult<Vec<(String, bool)>> {
+    let base = run_git_command(
+        worktree_path,
+        &["merge-base", candidate_ref, remote_ref],
+        env,
+        60,
+    )
+    .await?;
+    if base.exit_code != 0 {
+        return Ok(Vec::new());
+    }
+    let base_ref = base.stdout.trim().to_string();
+    if base_ref.is_empty() {
+        return Ok(Vec::new());
+    }
+    let diff = run_git_command(
+        worktree_path,
+        &["diff", "--name-status", "-z", &base_ref, candidate_ref],
+        env,
+        60,
+    )
+    .await?;
+    if diff.exit_code != 0 {
+        return Ok(Vec::new());
+    }
+    Ok(parse_git_name_status_path_states(&diff.stdout))
+}
+
+fn parse_git_name_status_path_states(raw: &str) -> Vec<(String, bool)> {
+    let parts: Vec<&str> = raw.split('\0').filter(|part| !part.is_empty()).collect();
+    let mut paths = Vec::new();
+    let mut index = 0usize;
+    while index < parts.len() {
+        let status = parts[index];
+        index += 1;
+        let Some(code) = status.chars().next() else {
+            continue;
+        };
+        if matches!(code, 'R' | 'C') {
+            if index + 1 >= parts.len() {
+                break;
+            }
+            let old_path = parts[index];
+            let new_path = parts[index + 1];
+            index += 2;
+            if code == 'R' && !old_path.is_empty() {
+                set_path_state(&mut paths, old_path.to_string(), false);
+            }
+            if !new_path.is_empty() {
+                set_path_state(&mut paths, new_path.to_string(), true);
+            }
+            continue;
+        }
+        if index >= parts.len() {
+            break;
+        }
+        let path = parts[index];
+        index += 1;
+        if !path.is_empty() {
+            set_path_state(&mut paths, path.to_string(), code != 'D');
+        }
+    }
+    paths
+}
+
+fn set_path_state(paths: &mut Vec<(String, bool)>, path: String, present: bool) {
+    if let Some((_, existing_present)) = paths
+        .iter_mut()
+        .find(|(existing_path, _)| existing_path == &path)
+    {
+        *existing_present = present;
+    } else {
+        paths.push((path, present));
+    }
+}
+
+async fn merge_remote_branch_with_local_preference(
+    worktree_path: &Path,
+    remote_ref: &str,
+    env: &[(String, String)],
+) -> CoreResult<GitRemoteMergeResult> {
+    let merge_ours = run_git_command(
+        worktree_path,
+        &["merge", "--no-edit", "-X", "ours", remote_ref],
+        env,
+        120,
+    )
+    .await?;
+    if merge_ours.exit_code == 0 {
+        return Ok(GitRemoteMergeResult {
+            status: "merged".to_string(),
+            reason: Some(
+                "merged remote branch before publish using local conflict preference".to_string(),
+            ),
+        });
+    }
+    if is_unrelated_history_merge_rejection(&merge_ours) {
+        let _ = run_git_command(worktree_path, &["merge", "--abort"], env, 60).await;
+        let merge_unrelated_ours = run_git_command(
+            worktree_path,
+            &[
+                "merge",
+                "--no-edit",
+                "--allow-unrelated-histories",
+                "-X",
+                "ours",
+                remote_ref,
+            ],
+            env,
+            120,
+        )
+        .await?;
+        if merge_unrelated_ours.exit_code == 0 {
+            return Ok(GitRemoteMergeResult {
+                status: "merged".to_string(),
+                reason: Some(
+                    "merged unrelated remote branch before publish using local conflict preference"
+                        .to_string(),
+                ),
+            });
+        }
+        return Ok(GitRemoteMergeResult {
+            status: "failed".to_string(),
+            reason: Some(compact_git_error(&merge_unrelated_ours)),
+        });
+    }
+    Ok(GitRemoteMergeResult {
+        status: "failed".to_string(),
+        reason: Some(compact_git_error(&merge_ours)),
+    })
+}
+
+async fn run_git_command_owned(
+    cwd: &Path,
+    args: Vec<String>,
+    env: &[(String, String)],
+    timeout_seconds: u64,
+) -> CoreResult<GitCommandOutput> {
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    run_git_command(cwd, &arg_refs, env, timeout_seconds).await
 }
 
 async fn run_git_command(
@@ -10642,6 +11103,160 @@ steps:
         assert_eq!(
             store.outbox()[0].metadata_json["source"],
             "workspace_plan.drone_pipeline_run_completed"
+        );
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_merges_advanced_remote_branch_before_drone_source_publish() {
+        let Some(fixture) = git_publish_fixture() else {
+            return;
+        };
+        run_git_ok(
+            &fixture.repo,
+            &[
+                "push",
+                fixture.remote.to_str().unwrap(),
+                "HEAD:refs/heads/main",
+            ],
+        );
+
+        let remote_checkout = fixture.root.join("remote-checkout");
+        run_git_ok(
+            &fixture.root,
+            &[
+                "clone",
+                fixture.remote.to_str().unwrap(),
+                remote_checkout.to_str().unwrap(),
+            ],
+        );
+        run_git_ok(&remote_checkout, &["checkout", "-B", "main", "origin/main"]);
+        run_git_ok(
+            &remote_checkout,
+            &["config", "user.email", "remote@example.test"],
+        );
+        run_git_ok(&remote_checkout, &["config", "user.name", "Remote Test"]);
+        std::fs::write(remote_checkout.join("remote.txt"), "remote-only\n").unwrap();
+        run_git_ok(&remote_checkout, &["add", "remote.txt"]);
+        run_git_ok(&remote_checkout, &["commit", "-m", "remote advance"]);
+        let remote_commit = run_git_ok(&remote_checkout, &["rev-parse", "HEAD"])
+            .trim()
+            .to_string();
+        run_git_ok(
+            &remote_checkout,
+            &["push", "origin", "HEAD:refs/heads/main"],
+        );
+
+        std::fs::write(fixture.repo.join("candidate.txt"), "candidate-only\n").unwrap();
+        run_git_ok(&fixture.repo, &["add", "candidate.txt"]);
+        run_git_ok(&fixture.repo, &["commit", "-m", "candidate change"]);
+        let candidate_commit = run_git_ok(&fixture.repo, &["rev-parse", "HEAD"])
+            .trim()
+            .to_string();
+
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_drone_pipeline_contract_git_publish(
+            &fixture.repo,
+            &fixture.remote,
+        ));
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        node.feature_checkpoint_json = Some(json!({"commit_ref": candidate_commit.clone()}));
+        store.insert_node(node);
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler.handle(pipeline_run_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let pushed = run_git_ok(
+            &fixture.root,
+            &[
+                "--git-dir",
+                fixture.remote.to_str().unwrap(),
+                "rev-parse",
+                "refs/heads/main",
+            ],
+        )
+        .trim()
+        .to_string();
+        assert_ne!(pushed, candidate_commit);
+        run_git_ok(
+            &fixture.root,
+            &[
+                "--git-dir",
+                fixture.remote.to_str().unwrap(),
+                "merge-base",
+                "--is-ancestor",
+                &candidate_commit,
+                "refs/heads/main",
+            ],
+        );
+        run_git_ok(
+            &fixture.root,
+            &[
+                "--git-dir",
+                fixture.remote.to_str().unwrap(),
+                "merge-base",
+                "--is-ancestor",
+                &remote_commit,
+                "refs/heads/main",
+            ],
+        );
+        assert_eq!(
+            run_git_ok(
+                &fixture.root,
+                &[
+                    "--git-dir",
+                    fixture.remote.to_str().unwrap(),
+                    "show",
+                    "refs/heads/main:candidate.txt",
+                ],
+            ),
+            "candidate-only\n"
+        );
+        assert_eq!(
+            run_git_ok(
+                &fixture.root,
+                &[
+                    "--git-dir",
+                    fixture.remote.to_str().unwrap(),
+                    "show",
+                    "refs/heads/main:remote.txt",
+                ],
+            ),
+            "remote-only\n"
+        );
+
+        let run = store.pipeline_runs().into_iter().next().unwrap();
+        assert_eq!(run.provider, DRONE_PROVIDER);
+        assert_eq!(run.status, "failed");
+        assert_eq!(run.commit_ref.as_deref(), Some(candidate_commit.as_str()));
+        assert_eq!(run.metadata_json["source_publish_status"], "published");
+        assert_eq!(run.metadata_json["source_publish_commit_ref"], pushed);
+        assert_eq!(
+            run.metadata_json["source_publish_source_commit_ref"],
+            candidate_commit
+        );
+        assert!(run.metadata_json["source_publish_reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("merged remote branch before publish")));
+
+        let contract = store.pipeline_contract("workspace-test", "plan-test");
+        assert_eq!(
+            contract.metadata_json["provider_config"]["source_publish"]["commit"],
+            pushed
+        );
+        assert_eq!(
+            contract.metadata_json["provider_config"]["source_publish"]["source_commit_ref"],
+            candidate_commit
+        );
+        let node = store.node("node-test");
+        assert_eq!(node.metadata_json["source_publish_status"], "published");
+        assert_eq!(node.metadata_json["source_publish_commit_ref"], pushed);
+        assert_eq!(
+            node.metadata_json["source_publish_source_commit_ref"],
+            candidate_commit
         );
     }
 
