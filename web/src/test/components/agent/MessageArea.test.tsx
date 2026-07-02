@@ -19,6 +19,13 @@ const virtualizerMock = vi.hoisted(() => ({
     count: number;
     getItemKey?: ((index: number) => string | number) | undefined;
   }>,
+  instances: [] as Array<{
+    shouldAdjustScrollPositionOnItemSizeChange?: (
+      item: { start: number },
+      delta: number,
+      instance: { scrollOffset: number | null }
+    ) => boolean;
+  }>,
 }));
 
 // Mock virtualizer to render all rows in tests
@@ -28,7 +35,7 @@ vi.mock('@tanstack/react-virtual', () => ({
     getItemKey?: ((index: number) => string | number) | undefined;
   }) => {
     virtualizerMock.options.push(options);
-    return {
+    const instance = {
       getTotalSize: () => options.count * 80,
       getVirtualItems: () =>
         Array.from({ length: options.count }, (_, index) => ({
@@ -41,6 +48,8 @@ vi.mock('@tanstack/react-virtual', () => ({
       scrollToIndex: virtualizerMock.scrollToIndex,
       measure: virtualizerMock.measure,
     };
+    virtualizerMock.instances.push(instance);
+    return instance;
   },
 }));
 
@@ -99,6 +108,7 @@ describe('MessageArea Compound Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     virtualizerMock.options.length = 0;
+    virtualizerMock.instances.length = 0;
     useStreamingStore.setState({
       agentStreamingAssistantContent: '',
       agentStreamingThought: '',
@@ -313,6 +323,42 @@ describe('MessageArea Compound Component', () => {
       } finally {
         requestAnimationFrameSpy.mockRestore();
       }
+    });
+
+    it('should disable virtualizer size-change scroll correction while reading history', () => {
+      render(<MessageArea {...defaultProps} />);
+      const container = screen.getByTestId('message-container');
+      defineScrollMetrics(container, { scrollHeight: 1000, clientHeight: 300 });
+
+      container.scrollTop = 100;
+      fireEvent.scroll(container);
+
+      const virtualizer = virtualizerMock.instances.at(-1);
+      expect(
+        virtualizer?.shouldAdjustScrollPositionOnItemSizeChange?.(
+          { start: 0 },
+          500,
+          { scrollOffset: 100 }
+        )
+      ).toBe(false);
+    });
+
+    it('should keep virtualizer size-change correction while following the bottom', () => {
+      render(<MessageArea {...defaultProps} />);
+      const container = screen.getByTestId('message-container');
+      defineScrollMetrics(container, { scrollHeight: 1000, clientHeight: 300 });
+
+      container.scrollTop = 700;
+      fireEvent.scroll(container);
+
+      const virtualizer = virtualizerMock.instances.at(-1);
+      expect(
+        virtualizer?.shouldAdjustScrollPositionOnItemSizeChange?.(
+          { start: 100 },
+          120,
+          { scrollOffset: 700 }
+        )
+      ).toBe(true);
     });
 
     it('should not force-scroll to bottom when a live event arrives after the user scrolls up', () => {

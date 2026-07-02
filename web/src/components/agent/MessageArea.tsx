@@ -36,6 +36,7 @@ import {
   memo,
   Children,
   useMemo,
+  useLayoutEffect,
   isValidElement,
   useId,
 } from 'react';
@@ -43,7 +44,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useVirtualizer, type VirtualItem, type Virtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronUp, Loader2, Pin, PinOff } from 'lucide-react';
 
 import { usePinnedEventIds, useAgentHITLStore } from '../../stores/agent/hitlStore';
@@ -569,6 +570,37 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     const rowMeasurementFrameRef = useRef<number | null>(null);
 
     virtualizerRef.current = virtualizer;
+
+    const shouldAdjustVirtualizerScroll = useCallback(
+      (
+        item: VirtualItem,
+        _delta: number,
+        instance: Virtualizer<HTMLDivElement, Element>
+      ) => {
+        const container = containerRef.current;
+        if (!container) return true;
+
+        const distanceFromBottom =
+          container.scrollHeight - container.scrollTop - container.clientHeight;
+        if (userScrolledUpRef.current || distanceFromBottom > 100) return false;
+
+        const scrollOffset = instance.scrollOffset ?? container.scrollTop;
+        return item.start < scrollOffset;
+      },
+      [containerRef, userScrolledUpRef]
+    );
+
+    useLayoutEffect(() => {
+      virtualizer.shouldAdjustScrollPositionOnItemSizeChange = shouldAdjustVirtualizerScroll;
+
+      return () => {
+        if (
+          virtualizer.shouldAdjustScrollPositionOnItemSizeChange === shouldAdjustVirtualizerScroll
+        ) {
+          virtualizer.shouldAdjustScrollPositionOnItemSizeChange = undefined;
+        }
+      };
+    }, [shouldAdjustVirtualizerScroll, virtualizer]);
 
     const flushMeasuredRows = useCallback(() => {
       rowMeasurementFrameRef.current = null;
