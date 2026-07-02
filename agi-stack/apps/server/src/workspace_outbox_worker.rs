@@ -33,6 +33,7 @@ const HANDOFF_RESUME_EVENT: &str = "handoff_resume";
 const ATTEMPT_RETRY_EVENT: &str = "attempt_retry";
 const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
 const SANDBOX_NATIVE_PROVIDER: &str = "sandbox_native";
+const DRONE_PROVIDER: &str = "drone";
 const PLANNING_CONTRACT_SOURCE: &str = "planner_agent_code_analysis";
 const DEFAULT_PIPELINE_TIMEOUT_SECONDS: i32 = 600;
 const DEFAULT_PREVIEW_PORT: i32 = 3000;
@@ -1524,7 +1525,9 @@ impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
             .await?
             .ok_or_else(|| CoreError::Storage(format!("workspace {workspace_id} not found")))?;
         let contract = pipeline_contract_foundation(&workspace);
-        if !contract.can_create_sandbox_native_run() {
+        let source_publish_failure =
+            drone_source_publish_failure(&contract, &workspace, &node, attempt_id.as_deref());
+        if !contract.can_create_sandbox_native_run() && source_publish_failure.is_none() {
             mark_pipeline_requested(
                 &mut node,
                 &item,
@@ -1557,10 +1560,11 @@ impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
                 contract.auto_deploy,
                 contract.preview_port,
                 contract.health_url.as_deref(),
-                &contract.metadata_json,
+                &pipeline_contract_metadata(&contract, source_publish_failure.as_ref()),
                 now,
             )
             .await?;
+        let run_metadata = pipeline_run_metadata(&reason, source_publish_failure.as_ref());
         let run = WorkspacePipelineRunRecord {
             id: generate_uuid_v4(),
             contract_id,
@@ -1574,15 +1578,49 @@ impl WorkspacePlanOutboxHandler for PipelineRunAdmissionHandler {
             reason: None,
             started_at: Some(now),
             completed_at: None,
-            metadata_json: json!({
-                "reason": reason
-            }),
+            metadata_json: run_metadata,
             created_at: now,
             updated_at: None,
         };
         let run = self.store.create_pipeline_run(run).await?;
         mark_existing_pipeline_run_running(&mut node, &run, now);
         self.store.save_plan_node(node.clone()).await?;
+
+        if let Some(source_publish_failure) = source_publish_failure {
+            let completed_at = Utc::now();
+            let run = finish_drone_source_publish_failure(
+                self.store.as_ref(),
+                &workspace,
+                &contract,
+                &run,
+                &source_publish_failure,
+                completed_at,
+            )
+            .await?;
+            finish_pipeline_on_node(
+                &mut node,
+                &run,
+                "failed",
+                Some(&source_publish_failure.reason),
+                &source_publish_failure.evidence_refs(&run.id),
+                None,
+                contract.health_url.as_deref(),
+                completed_at,
+            );
+            self.store.save_plan_node(node).await?;
+            self.store
+                .enqueue_plan_outbox(pipeline_completed_supervisor_tick_with_source(
+                    &workspace_id,
+                    &plan_id,
+                    &node_id,
+                    &run.id,
+                    "failed",
+                    "workspace_plan.drone_pipeline_run_completed",
+                    completed_at,
+                ))
+                .await?;
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        }
 
         if contract.can_execute_inline_stages() {
             if let Some(stage_runner) = &self.stage_runner {
@@ -1658,6 +1696,7 @@ pub(crate) struct PipelineContractFoundation {
     deploy_command: Option<String>,
     agent_managed: bool,
     contract_source: String,
+    provider_config_json: Value,
     metadata_json: Value,
 }
 
@@ -1697,6 +1736,22 @@ struct PipelineStageExecutionOutcome {
     reason: Option<String>,
     stage_results: Vec<PipelineStageResult>,
     evidence_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DroneSourcePublishFailure {
+    reason: String,
+    metadata: Map<String, Value>,
+}
+
+impl DroneSourcePublishFailure {
+    fn evidence_refs(&self, run_id: &str) -> Vec<String> {
+        vec![
+            "ci_pipeline:failed".to_string(),
+            "source_publish:failed".to_string(),
+            format!("pipeline_run:failed:{run_id}"),
+        ]
+    }
 }
 
 impl PipelineContractFoundation {
@@ -1835,6 +1890,290 @@ async fn execute_sandbox_native_pipeline_stages(
         stage_results,
         evidence_refs,
     })
+}
+
+async fn finish_drone_source_publish_failure(
+    store: &dyn WorkspacePlanDispatchStore,
+    workspace: &WorkspaceRecord,
+    contract: &PipelineContractFoundation,
+    run: &WorkspacePipelineRunRecord,
+    failure: &DroneSourcePublishFailure,
+    completed_at: DateTime<Utc>,
+) -> CoreResult<WorkspacePipelineRunRecord> {
+    let stage_row = store
+        .create_pipeline_stage_run(WorkspacePipelineStageRunRecord {
+            id: generate_uuid_v4(),
+            run_id: run.id.clone(),
+            workspace_id: workspace.id.clone(),
+            stage: "source_publish".to_string(),
+            status: "running".to_string(),
+            command: Some("git:publish".to_string()),
+            exit_code: None,
+            stdout_preview: None,
+            stderr_preview: None,
+            log_ref: None,
+            artifact_refs_json: Vec::new(),
+            started_at: Some(completed_at),
+            completed_at: None,
+            duration_ms: None,
+            metadata_json: Value::Object(source_publish_stage_metadata(failure)),
+            created_at: completed_at,
+            updated_at: None,
+        })
+        .await?;
+    let _ = store
+        .finish_pipeline_stage_run(
+            &stage_row.id,
+            "failed",
+            Some(1),
+            Some(""),
+            Some(&failure.reason),
+            None,
+            &[],
+            &Value::Object(source_publish_stage_metadata(failure)),
+            completed_at,
+        )
+        .await?;
+
+    let run_metadata = Value::Object(drone_source_publish_run_metadata(
+        contract,
+        failure,
+        completed_at,
+    ));
+    let finished = store
+        .finish_pipeline_run(
+            &run.id,
+            "failed",
+            Some(&failure.reason),
+            &run_metadata,
+            completed_at,
+        )
+        .await?;
+    Ok(finished.unwrap_or_else(|| {
+        let mut fallback = run.clone();
+        fallback.status = "failed".to_string();
+        fallback.reason = Some(failure.reason.clone());
+        fallback.metadata_json = merge_object_values(&fallback.metadata_json, &run_metadata);
+        fallback.completed_at = Some(completed_at);
+        fallback.updated_at = Some(completed_at);
+        fallback
+    }))
+}
+
+fn source_publish_stage_metadata(failure: &DroneSourcePublishFailure) -> Map<String, Value> {
+    let mut metadata = Map::new();
+    metadata.insert("external_provider".to_string(), json!(DRONE_PROVIDER));
+    metadata.extend(failure.metadata.clone());
+    metadata
+}
+
+fn drone_source_publish_run_metadata(
+    contract: &PipelineContractFoundation,
+    failure: &DroneSourcePublishFailure,
+    completed_at: DateTime<Utc>,
+) -> Map<String, Value> {
+    let mut metadata = Map::new();
+    metadata.insert("stage_count".to_string(), json!(1));
+    metadata.insert(
+        "service_count".to_string(),
+        json!(contract.services_json.as_array().map_or(0, Vec::len)),
+    );
+    metadata.insert("external_provider".to_string(), json!(DRONE_PROVIDER));
+    metadata.insert("pipeline_failed_stage".to_string(), json!("source_publish"));
+    metadata.insert(
+        "pipeline_failure_summary".to_string(),
+        json!(failure.reason),
+    );
+    metadata.insert("pipeline_last_summary".to_string(), json!(failure.reason));
+    metadata.insert(
+        "pipeline_finished_at".to_string(),
+        json!(completed_at.to_rfc3339()),
+    );
+    metadata.extend(failure.metadata.clone());
+    metadata
+}
+
+fn pipeline_contract_metadata(
+    contract: &PipelineContractFoundation,
+    source_publish_failure: Option<&DroneSourcePublishFailure>,
+) -> Value {
+    source_publish_failure.map_or_else(
+        || contract.metadata_json.clone(),
+        |failure| {
+            let mut metadata = object_or_empty(contract.metadata_json.clone());
+            metadata.extend(failure.metadata.clone());
+            Value::Object(metadata)
+        },
+    )
+}
+
+fn pipeline_run_metadata(
+    reason: &str,
+    source_publish_failure: Option<&DroneSourcePublishFailure>,
+) -> Value {
+    let mut metadata = Map::new();
+    metadata.insert("reason".to_string(), json!(reason));
+    if let Some(failure) = source_publish_failure {
+        metadata.extend(failure.metadata.clone());
+    }
+    Value::Object(metadata)
+}
+
+fn merge_object_values(left: &Value, right: &Value) -> Value {
+    let mut merged = object_or_empty(left.clone());
+    merged.extend(object_or_empty(right.clone()));
+    Value::Object(merged)
+}
+
+fn drone_source_publish_failure(
+    contract: &PipelineContractFoundation,
+    workspace: &WorkspaceRecord,
+    node: &WorkspacePlanNodeRecord,
+    attempt_id: Option<&str>,
+) -> Option<DroneSourcePublishFailure> {
+    if contract.provider != DRONE_PROVIDER || attempt_id.is_none() {
+        return None;
+    }
+    let commit_ref = node_expected_commit_ref(node)?;
+    let provider_config = object_or_empty(contract.provider_config_json.clone());
+    let workspace_metadata = object_or_empty(workspace.metadata_json.clone());
+    let source_control = drone_source_control_config(&workspace_metadata, &provider_config);
+    let branch = drone_source_branch(&source_control, &provider_config);
+
+    if host_code_root_from_workspace(&workspace.metadata_json).is_none() {
+        let reason = "host_code_root is not available for Drone source publish".to_string();
+        return Some(DroneSourcePublishFailure {
+            metadata: source_publish_metadata(
+                "failed",
+                Some(&reason),
+                Some(&commit_ref),
+                None,
+                Some(&commit_ref),
+                None,
+            ),
+            reason,
+        });
+    }
+
+    if branch.is_none() {
+        let reason =
+            "source_control.default_branch or delivery_cicd.drone.branch is required".to_string();
+        return Some(DroneSourcePublishFailure {
+            metadata: source_publish_metadata(
+                "failed",
+                Some(&reason),
+                Some(&commit_ref),
+                None,
+                Some(&commit_ref),
+                None,
+            ),
+            reason,
+        });
+    }
+
+    None
+}
+
+fn source_publish_metadata(
+    status: &str,
+    reason: Option<&str>,
+    commit_ref: Option<&str>,
+    branch: Option<&str>,
+    source_commit_ref: Option<&str>,
+    token_env: Option<&str>,
+) -> Map<String, Value> {
+    let mut metadata = Map::new();
+    metadata.insert("source_publish_status".to_string(), json!(status));
+    metadata.insert("source_publish_provider".to_string(), json!("git"));
+    if let Some(reason) = reason {
+        metadata.insert("source_publish_reason".to_string(), json!(reason));
+    }
+    if let Some(commit_ref) = commit_ref {
+        metadata.insert("source_publish_commit_ref".to_string(), json!(commit_ref));
+    }
+    if let Some(branch) = branch {
+        metadata.insert("source_publish_branch".to_string(), json!(branch));
+    }
+    if let Some(source_commit_ref) = source_commit_ref {
+        metadata.insert(
+            "source_publish_source_commit_ref".to_string(),
+            json!(source_commit_ref),
+        );
+    }
+    if let Some(token_env) = token_env {
+        metadata.insert("source_publish_token_env".to_string(), json!(token_env));
+    }
+    metadata
+}
+
+fn drone_source_control_config(
+    workspace_metadata: &Map<String, Value>,
+    provider_config: &Map<String, Value>,
+) -> Map<String, Value> {
+    let mut source_control = Map::new();
+    if let Some(config) = provider_config
+        .get("source_control")
+        .and_then(Value::as_object)
+    {
+        source_control.extend(config.clone());
+    }
+    if let Some(config) = workspace_metadata
+        .get("source_control")
+        .and_then(Value::as_object)
+    {
+        source_control.extend(config.clone());
+    }
+    if !source_control.contains_key("repo") {
+        if let Some(value) = provider_config
+            .get("repo")
+            .or_else(|| provider_config.get("repository"))
+            .filter(|value| value.is_string())
+        {
+            source_control.insert("repo".to_string(), value.clone());
+        }
+    }
+    if !source_control.contains_key("default_branch") {
+        if let Some(value) = provider_config
+            .get("branch")
+            .filter(|value| value.is_string())
+        {
+            source_control.insert("default_branch".to_string(), value.clone());
+        }
+    }
+    source_control
+}
+
+fn drone_source_branch(
+    source_control: &Map<String, Value>,
+    provider_config: &Map<String, Value>,
+) -> Option<String> {
+    string_from_map(provider_config, "branch")
+        .or_else(|| string_from_map(source_control, "default_branch"))
+        .filter(|branch| is_safe_git_branch(branch))
+}
+
+fn host_code_root_from_workspace(workspace_metadata: &Value) -> Option<String> {
+    metadata_string_from_path(workspace_metadata, &["host_code_root"]).or_else(|| {
+        metadata_string_from_path(workspace_metadata, &["code_context", "host_code_root"])
+    })
+}
+
+fn is_safe_git_branch(value: &str) -> bool {
+    let value = value.trim();
+    if value.is_empty()
+        || value.starts_with('-')
+        || value.starts_with('/')
+        || value.ends_with('/')
+        || value.contains("..")
+        || value.contains("//")
+        || value.contains("@{")
+        || value.contains('\\')
+    {
+        return false;
+    }
+    value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '/' | '-'))
 }
 
 fn pipeline_stage_specs_from_json(
@@ -2094,6 +2433,7 @@ fn pipeline_contract_foundation(workspace: &WorkspaceRecord) -> PipelineContract
         deploy_command,
         agent_managed,
         contract_source,
+        provider_config_json: provider_config,
         metadata_json,
     }
 }
@@ -2106,14 +2446,38 @@ fn normalize_pipeline_provider(value: &str) -> String {
 }
 
 fn pipeline_provider_config_json(delivery: &Map<String, Value>, provider: &str) -> Value {
-    let Some(raw) = delivery.get("provider_config").and_then(Value::as_object) else {
-        return json!({});
-    };
-    raw.get(provider)
-        .filter(|value| value.is_object())
-        .cloned()
-        .or_else(|| Some(Value::Object(raw.clone())))
-        .unwrap_or_else(|| json!({}))
+    let mut provider_config = Map::new();
+    if let Some(raw) = delivery.get("provider_config").and_then(Value::as_object) {
+        if let Some(scoped) = raw.get(provider).and_then(Value::as_object) {
+            provider_config.extend(scoped.clone());
+        } else {
+            provider_config.extend(raw.clone());
+        }
+    }
+    if let Some(scoped) = delivery.get(provider).and_then(Value::as_object) {
+        provider_config.extend(scoped.clone());
+    }
+    for key in [
+        "repo",
+        "repository",
+        "branch",
+        "commit",
+        "target",
+        "params",
+        "build_params",
+        "server_url",
+        "server_url_env",
+        "token_env",
+        "poll_interval_seconds",
+        "deploy",
+    ] {
+        if !provider_config.contains_key(key) {
+            if let Some(value) = delivery.get(key) {
+                provider_config.insert(key.to_string(), value.clone());
+            }
+        }
+    }
+    Value::Object(provider_config)
 }
 
 fn pipeline_stage_specs_json(delivery: &Map<String, Value>, timeout_seconds: i32) -> Value {
@@ -2454,6 +2818,26 @@ fn pipeline_completed_supervisor_tick(
     pipeline_status: &str,
     now: DateTime<Utc>,
 ) -> WorkspacePlanOutboxRecord {
+    pipeline_completed_supervisor_tick_with_source(
+        workspace_id,
+        plan_id,
+        node_id,
+        pipeline_run_id,
+        pipeline_status,
+        "workspace_plan.pipeline_run_completed",
+        now,
+    )
+}
+
+fn pipeline_completed_supervisor_tick_with_source(
+    workspace_id: &str,
+    plan_id: &str,
+    node_id: &str,
+    pipeline_run_id: &str,
+    pipeline_status: &str,
+    source: &str,
+    now: DateTime<Utc>,
+) -> WorkspacePlanOutboxRecord {
     WorkspacePlanOutboxRecord {
         id: generate_uuid_v4(),
         plan_id: Some(plan_id.to_string()),
@@ -2474,7 +2858,7 @@ fn pipeline_completed_supervisor_tick(
         last_error: None,
         next_attempt_at: None,
         processed_at: None,
-        metadata_json: json!({"source": "workspace_plan.pipeline_run_completed"}),
+        metadata_json: json!({"source": source}),
         created_at: now,
         updated_at: None,
     }
@@ -5838,6 +6222,42 @@ mod tests {
         }))
     }
 
+    fn workspace_with_drone_pipeline_contract_missing_host_root() -> WorkspaceRecord {
+        workspace_with_metadata(json!({
+            "source_control": {
+                "default_branch": "main"
+            },
+            "delivery_cicd": {
+                "provider": "drone",
+                "auto_deploy": true,
+                "contract_source": PLANNING_CONTRACT_SOURCE,
+                "drone": {
+                    "repo": "owner/repo",
+                    "branch": "main"
+                }
+            }
+        }))
+    }
+
+    fn workspace_with_drone_pipeline_contract_missing_branch() -> WorkspaceRecord {
+        workspace_with_metadata(json!({
+            "code_context": {
+                "host_code_root": "/tmp/worktree",
+                "sandbox_code_root": "/workspace/project"
+            },
+            "delivery_cicd": {
+                "provider": "drone",
+                "auto_deploy": true,
+                "contract_source": PLANNING_CONTRACT_SOURCE,
+                "provider_config": {
+                    "drone": {
+                        "repo": "owner/repo"
+                    }
+                }
+            }
+        }))
+    }
+
     fn plan() -> WorkspacePlanRecord {
         WorkspacePlanRecord {
             id: "plan-test".to_string(),
@@ -6460,6 +6880,163 @@ mod tests {
             ]
         );
         assert_eq!(store.outbox().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_fails_drone_source_publish_without_host_code_root() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_drone_pipeline_contract_missing_host_root());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        node.feature_checkpoint_json = Some(json!({"commit_ref": "abcdef1234567890"}));
+        store.insert_node(node);
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler.handle(pipeline_run_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let runs = store.pipeline_runs();
+        assert_eq!(runs.len(), 1);
+        let run = &runs[0];
+        assert_eq!(run.provider, DRONE_PROVIDER);
+        assert_eq!(run.status, "failed");
+        assert_eq!(
+            run.reason.as_deref(),
+            Some("host_code_root is not available for Drone source publish")
+        );
+        assert_eq!(run.metadata_json["external_provider"], DRONE_PROVIDER);
+        assert_eq!(run.metadata_json["pipeline_failed_stage"], "source_publish");
+        assert_eq!(run.metadata_json["source_publish_status"], "failed");
+        assert_eq!(run.metadata_json["source_publish_provider"], "git");
+        assert_eq!(
+            run.metadata_json["source_publish_commit_ref"],
+            "abcdef1234567890"
+        );
+        assert_eq!(
+            run.metadata_json["source_publish_source_commit_ref"],
+            "abcdef1234567890"
+        );
+        assert_eq!(
+            run.metadata_json["source_publish_reason"],
+            "host_code_root is not available for Drone source publish"
+        );
+
+        let stages = store.pipeline_stage_runs();
+        assert_eq!(stages.len(), 1);
+        let stage = &stages[0];
+        assert_eq!(stage.run_id, run.id);
+        assert_eq!(stage.stage, "source_publish");
+        assert_eq!(stage.status, "failed");
+        assert_eq!(stage.command.as_deref(), Some("git:publish"));
+        assert_eq!(stage.exit_code, Some(1));
+        assert_eq!(
+            stage.stderr_preview.as_deref(),
+            Some("host_code_root is not available for Drone source publish")
+        );
+        assert_eq!(stage.metadata_json["external_provider"], DRONE_PROVIDER);
+        assert_eq!(stage.metadata_json["source_publish_status"], "failed");
+
+        let contract = store.pipeline_contract("workspace-test", "plan-test");
+        assert_eq!(contract.provider, DRONE_PROVIDER);
+        assert_eq!(contract.metadata_json["source_publish_status"], "failed");
+        assert_eq!(
+            contract.metadata_json["provider_config"],
+            json!({"branch": "main", "repo": "owner/repo"})
+        );
+
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "in_progress");
+        assert_eq!(node.execution, "reported");
+        assert_eq!(node.metadata_json["pipeline_status"], "failed");
+        assert_eq!(node.metadata_json["pipeline_gate_status"], "failed");
+        assert_eq!(
+            node.metadata_json["pipeline_failed_stage"],
+            "source_publish"
+        );
+        assert_eq!(node.metadata_json["source_publish_status"], "failed");
+        assert_eq!(
+            metadata_string_values(node.metadata_json.get("pipeline_evidence_refs")),
+            vec![
+                "ci_pipeline:failed".to_string(),
+                "source_publish:failed".to_string(),
+                format!("pipeline_run:failed:{}", run.id)
+            ]
+        );
+
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, SUPERVISOR_TICK_EVENT);
+        assert_eq!(
+            queued[0].metadata_json["source"],
+            "workspace_plan.drone_pipeline_run_completed"
+        );
+        assert_eq!(queued[0].payload_json["pipeline_status"], "failed");
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_fails_drone_source_publish_without_branch() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_drone_pipeline_contract_missing_branch());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        node.feature_checkpoint_json = Some(json!({"commit_ref": "abcdef1234567890"}));
+        store.insert_node(node);
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler.handle(pipeline_run_item()).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let run = store.pipeline_runs().into_iter().next().unwrap();
+        assert_eq!(run.provider, DRONE_PROVIDER);
+        assert_eq!(run.status, "failed");
+        assert_eq!(
+            run.reason.as_deref(),
+            Some("source_control.default_branch or delivery_cicd.drone.branch is required")
+        );
+        assert_eq!(run.metadata_json["pipeline_failed_stage"], "source_publish");
+        assert_eq!(run.metadata_json["source_publish_status"], "failed");
+        assert!(run.metadata_json.get("source_publish_branch").is_none());
+
+        let stage = store.pipeline_stage_runs().into_iter().next().unwrap();
+        assert_eq!(stage.stage, "source_publish");
+        assert_eq!(stage.status, "failed");
+        assert_eq!(stage.exit_code, Some(1));
+        assert_eq!(
+            stage.stderr_preview.as_deref(),
+            Some("source_control.default_branch or delivery_cicd.drone.branch is required")
+        );
+
+        let contract = store.pipeline_contract("workspace-test", "plan-test");
+        assert_eq!(contract.provider, DRONE_PROVIDER);
+        assert_eq!(
+            contract.metadata_json["provider_config"],
+            json!({"repo": "owner/repo"})
+        );
+        assert_eq!(contract.metadata_json["source_publish_status"], "failed");
+
+        let node = store.node("node-test");
+        assert_eq!(node.metadata_json["pipeline_status"], "failed");
+        assert_eq!(node.metadata_json["source_publish_provider"], "git");
+        assert_eq!(
+            node.metadata_json["pipeline_failure_summary"],
+            "source_control.default_branch or delivery_cicd.drone.branch is required"
+        );
+        assert_eq!(
+            metadata_string_values(node.metadata_json.get("pipeline_evidence_refs")),
+            vec![
+                "ci_pipeline:failed".to_string(),
+                "source_publish:failed".to_string(),
+                format!("pipeline_run:failed:{}", run.id)
+            ]
+        );
+        assert_eq!(
+            store.outbox()[0].metadata_json["source"],
+            "workspace_plan.drone_pipeline_run_completed"
+        );
     }
 
     #[tokio::test]
