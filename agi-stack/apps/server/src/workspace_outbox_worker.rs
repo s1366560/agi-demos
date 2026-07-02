@@ -40,6 +40,7 @@ const DRONE_PROVIDER: &str = "drone";
 const DRONE_SERVER_ENV: &str = "DRONE_SERVER";
 const DRONE_SERVER_URL_ENV: &str = "DRONE_SERVER_URL";
 const DRONE_TOKEN_ENV: &str = "DRONE_TOKEN";
+const DRONE_CLI_JSON_TEMPLATE: &str = "{{ json . }}";
 const DRONE_DOCKER_DEPLOY_VALIDATION: &str = "explicit_deploy_step_v1";
 const DRONE_YAML_PREFLIGHT_VALIDATION: &str = "drone_yml_preflight_v1";
 const DEFAULT_DRONE_DEPLOY_MODE: &str = "cli";
@@ -1905,6 +1906,8 @@ struct DronePipelineConfig {
     repo: String,
     server_url: String,
     token: String,
+    client: String,
+    cli_command: String,
     host_code_root: Option<PathBuf>,
     branch: Option<String>,
     commit: Option<String>,
@@ -2354,6 +2357,8 @@ fn drone_pipeline_config(
         repo: repo.to_string(),
         server_url: server_url.trim_end_matches('/').to_string(),
         token,
+        client: drone_client_from_config(&provider_config),
+        cli_command: drone_cli_command_from_config(&provider_config),
         host_code_root: contract.host_code_root.as_deref().map(PathBuf::from),
         branch: string_from_map(&provider_config, "branch"),
         commit: string_from_map(&provider_config, "commit"),
@@ -2366,6 +2371,30 @@ fn drone_pipeline_config(
         ),
         poll_interval_seconds: positive_u64_from_map(&provider_config, "poll_interval_seconds", 5),
     }))
+}
+
+fn drone_client_from_config(provider_config: &Map<String, Value>) -> String {
+    if bool_from_map_default(provider_config, "use_cli", false) {
+        return "cli".to_string();
+    }
+    let raw = string_from_map(provider_config, "drone_client")
+        .or_else(|| string_from_map(provider_config, "client"))
+        .or_else(|| string_from_map(provider_config, "transport"))
+        .unwrap_or_else(|| "http".to_string());
+    let normalized = raw.trim().to_ascii_lowercase().replace('-', "_");
+    if matches!(normalized.as_str(), "cli" | "drone_cli") {
+        "cli".to_string()
+    } else {
+        "http".to_string()
+    }
+}
+
+fn drone_cli_command_from_config(provider_config: &Map<String, Value>) -> String {
+    string_from_map(provider_config, "drone_command")
+        .or_else(|| string_from_map(provider_config, "cli_command"))
+        .or_else(|| string_from_map(provider_config, "command"))
+        .or_else(|| drone_config_value_env("DRONE_CLI"))
+        .unwrap_or_else(|| "drone".to_string())
 }
 
 fn drone_deploy_config(value: Option<&Value>) -> Option<DroneDeployConfig> {
@@ -2498,6 +2527,8 @@ fn drone_config_failure_config(message: &str) -> DronePipelineConfig {
         repo: String::new(),
         server_url: String::new(),
         token: String::new(),
+        client: "http".to_string(),
+        cli_command: "drone".to_string(),
         host_code_root: None,
         branch: None,
         commit: None,
@@ -2781,6 +2812,29 @@ async fn run_drone_pipeline(config: &DronePipelineConfig) -> CoreResult<DronePip
         return Ok(result);
     }
 
+    if config.client == "cli" {
+        match run_drone_pipeline_cli(config).await {
+            Ok(mut result) => {
+                result
+                    .metadata
+                    .insert("drone_client".to_string(), json!("cli"));
+                return Ok(result);
+            }
+            Err(err) if is_drone_cli_unavailable_error(&err) => {
+                let mut result = run_drone_pipeline_http(config).await?;
+                result
+                    .metadata
+                    .insert("drone_client".to_string(), json!("http_fallback"));
+                return Ok(result);
+            }
+            Err(err) => return Err(err),
+        }
+    }
+
+    run_drone_pipeline_http(config).await
+}
+
+async fn run_drone_pipeline_http(config: &DronePipelineConfig) -> CoreResult<DronePipelineResult> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
@@ -2796,6 +2850,369 @@ async fn run_drone_pipeline(config: &DronePipelineConfig) -> CoreResult<DronePip
     };
     let build = poll_drone_build(&client, config, build_number).await?;
     drone_result_from_build(&client, config, &build).await
+}
+
+async fn run_drone_pipeline_cli(config: &DronePipelineConfig) -> CoreResult<DronePipelineResult> {
+    ensure_drone_repo_enabled_cli(config).await?;
+    ensure_drone_docker_deploy_repo_trusted_cli(config).await?;
+    let running = running_drone_build_for_commit_cli(config).await?;
+    let build_number = if let Some(build) = running {
+        required_i64(build.get("number"), "Drone build number")?
+    } else {
+        let created = create_drone_build_cli(config).await?;
+        required_i64(created.get("number"), "Drone build number")?
+    };
+    let build = poll_drone_build_cli(config, build_number).await?;
+    drone_result_from_build_cli(config, &build).await
+}
+
+async fn ensure_drone_repo_enabled_cli(config: &DronePipelineConfig) -> CoreResult<()> {
+    match drone_cli_json_object(config, &["repo", "info", &config.repo_slug()]).await {
+        Ok(repo) => {
+            if repo.get("active").and_then(Value::as_bool) == Some(false) {
+                let _ = drone_cli_text(config, &["repo", "enable", &config.repo_slug()]).await?;
+            }
+            Ok(())
+        }
+        Err(err) if looks_like_drone_not_found(&err.to_string()) => {
+            let _ = drone_cli_text(config, &["repo", "enable", &config.repo_slug()]).await?;
+            Ok(())
+        }
+        Err(err) => Err(err),
+    }
+}
+
+async fn ensure_drone_docker_deploy_repo_trusted_cli(
+    config: &DronePipelineConfig,
+) -> CoreResult<()> {
+    if !drone_docker_deploy_requires_trusted_repo(config.deploy.as_ref()) {
+        return Ok(());
+    }
+    let repo = drone_cli_json_object(config, &["repo", "info", &config.repo_slug()]).await?;
+    if repo.get("trusted").and_then(Value::as_bool) == Some(true) {
+        return Ok(());
+    }
+    let _ = drone_cli_text(
+        config,
+        &["repo", "update", &config.repo_slug(), "--trusted"],
+    )
+    .await?;
+    let updated = drone_cli_json_object(config, &["repo", "info", &config.repo_slug()])
+        .await
+        .unwrap_or_else(|_| {
+            let mut updated = Map::new();
+            updated.insert("trusted".to_string(), json!(true));
+            updated
+        });
+    if updated.get("trusted").and_then(Value::as_bool) != Some(true) {
+        return Err(CoreError::Storage(format!(
+            "Drone repo {} must be trusted for docker deploy host volumes",
+            config.repo_slug()
+        )));
+    }
+    Ok(())
+}
+
+async fn running_drone_build_for_commit_cli(
+    config: &DronePipelineConfig,
+) -> CoreResult<Option<Value>> {
+    let Some(commit) = config.commit.as_deref() else {
+        return Ok(None);
+    };
+    let builds = drone_cli_build_list(config, 25).await;
+    let Ok(builds) = builds else {
+        return Ok(None);
+    };
+    Ok(builds.into_iter().find(|build| {
+        let status = drone_status(build.get("status"));
+        is_drone_running_status(&status) && drone_build_matches_commit(build, commit)
+    }))
+}
+
+async fn create_drone_build_cli(config: &DronePipelineConfig) -> CoreResult<Value> {
+    let mut args = vec![
+        "build".to_string(),
+        "create".to_string(),
+        config.repo_slug(),
+    ];
+    if let Some(branch) = &config.branch {
+        args.push(format!("--branch={branch}"));
+    }
+    if let Some(commit) = &config.commit {
+        args.push(format!("--commit={commit}"));
+    }
+    for (key, value) in &config.params {
+        args.push(format!("--param={key}={value}"));
+    }
+    drone_cli_json_value_owned(config, args).await
+}
+
+async fn poll_drone_build_cli(
+    config: &DronePipelineConfig,
+    build_number: i64,
+) -> CoreResult<Value> {
+    let started = Instant::now();
+    let mut latest: Option<Value> = None;
+    loop {
+        let build = drone_cli_json_value_owned(
+            config,
+            vec![
+                "build".to_string(),
+                "info".to_string(),
+                config.repo_slug(),
+                build_number.to_string(),
+            ],
+        )
+        .await?;
+        let status = drone_status(build.get("status"));
+        if is_drone_terminal_status(&status) {
+            return Ok(build);
+        }
+        if started.elapsed() >= Duration::from_secs(config.timeout_seconds.max(1)) {
+            let _ = drone_cli_text_owned(
+                config,
+                vec![
+                    "build".to_string(),
+                    "stop".to_string(),
+                    config.repo_slug(),
+                    build_number.to_string(),
+                ],
+            )
+            .await;
+            let mut timeout_build = object_or_empty(latest.unwrap_or(build));
+            timeout_build.insert("number".to_string(), json!(build_number));
+            timeout_build.insert("status".to_string(), json!("timeout"));
+            return Ok(Value::Object(timeout_build));
+        }
+        latest = Some(build);
+        sleep(Duration::from_secs(config.poll_interval_seconds.max(1))).await;
+    }
+}
+
+async fn drone_result_from_build_cli(
+    config: &DronePipelineConfig,
+    build: &Value,
+) -> CoreResult<DronePipelineResult> {
+    let build_number = required_i64(build.get("number"), "Drone build number")?;
+    let external_url = config.build_url(build_number);
+    let stage_results = drone_stage_results_cli(config, build_number, build, &external_url).await;
+    drone_result_from_build_and_stages(config, build, stage_results)
+}
+
+async fn drone_stage_results_cli(
+    config: &DronePipelineConfig,
+    build_number: i64,
+    build: &Value,
+    external_url: &str,
+) -> Vec<DronePipelineStageResult> {
+    let Some(stages) = build.get("stages").and_then(Value::as_array) else {
+        return vec![drone_pipeline_stage_result(
+            config,
+            build_number,
+            "drone",
+            "build",
+            drone_status(build.get("status")),
+            optional_i32(build.get("exit_code")),
+            String::new(),
+            build.get("error").and_then(Value::as_str).unwrap_or(""),
+            external_url,
+            config.deploy.as_ref(),
+        )];
+    };
+    let mut output = Vec::new();
+    for stage in stages {
+        let stage_name = stage
+            .get("name")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or("stage");
+        let stage_log_ref = log_part(stage.get("number")).unwrap_or_else(|| stage_name.to_string());
+        if let Some(steps) = stage.get("steps").and_then(Value::as_array) {
+            for step in steps {
+                let step_name = step
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or("step");
+                let step_log_ref =
+                    log_part(step.get("number")).unwrap_or_else(|| step_name.to_string());
+                let log_text = drone_cli_text_owned(
+                    config,
+                    vec![
+                        "log".to_string(),
+                        "view".to_string(),
+                        config.repo_slug(),
+                        build_number.to_string(),
+                        stage_log_ref.clone(),
+                        step_log_ref,
+                    ],
+                )
+                .await
+                .unwrap_or_default();
+                output.push(drone_pipeline_stage_result(
+                    config,
+                    build_number,
+                    stage_name,
+                    step_name,
+                    drone_status(step.get("status")),
+                    optional_i32(step.get("exit_code")),
+                    log_text,
+                    step.get("error").and_then(Value::as_str).unwrap_or(""),
+                    external_url,
+                    config.deploy.as_ref(),
+                ));
+            }
+        } else {
+            output.push(drone_pipeline_stage_result(
+                config,
+                build_number,
+                stage_name,
+                stage_name,
+                drone_status(stage.get("status")),
+                optional_i32(stage.get("exit_code")),
+                String::new(),
+                stage.get("error").and_then(Value::as_str).unwrap_or(""),
+                external_url,
+                config.deploy.as_ref(),
+            ));
+        }
+    }
+    if output.is_empty() {
+        output.push(drone_pipeline_stage_result(
+            config,
+            build_number,
+            "drone",
+            "build",
+            drone_status(build.get("status")),
+            optional_i32(build.get("exit_code")),
+            String::new(),
+            build.get("error").and_then(Value::as_str).unwrap_or(""),
+            external_url,
+            config.deploy.as_ref(),
+        ));
+    }
+    output
+}
+
+async fn drone_cli_build_list(
+    config: &DronePipelineConfig,
+    per_page: usize,
+) -> CoreResult<Vec<Value>> {
+    let text = drone_cli_text_owned(
+        config,
+        vec![
+            "build".to_string(),
+            "ls".to_string(),
+            config.repo_slug(),
+            format!("--limit={}", per_page.max(1)),
+            "--format".to_string(),
+            DRONE_CLI_JSON_TEMPLATE.to_string(),
+        ],
+    )
+    .await?;
+    Ok(text
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter(|value| value.is_object())
+        .collect())
+}
+
+async fn drone_cli_json_object(
+    config: &DronePipelineConfig,
+    args: &[&str],
+) -> CoreResult<Map<String, Value>> {
+    let value = drone_cli_json_value(config, args).await?;
+    match value {
+        Value::Object(map) => Ok(map),
+        _ => Err(CoreError::Storage(
+            "Drone CLI JSON response was not an object".to_string(),
+        )),
+    }
+}
+
+async fn drone_cli_json_value(config: &DronePipelineConfig, args: &[&str]) -> CoreResult<Value> {
+    drone_cli_json_value_owned(config, args.iter().map(|arg| (*arg).to_string()).collect()).await
+}
+
+async fn drone_cli_json_value_owned(
+    config: &DronePipelineConfig,
+    mut args: Vec<String>,
+) -> CoreResult<Value> {
+    args.push("--format".to_string());
+    args.push(DRONE_CLI_JSON_TEMPLATE.to_string());
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    let text = drone_cli_text(config, &arg_refs).await?;
+    serde_json::from_str(&text)
+        .map_err(|err| CoreError::Storage(format!("Drone CLI returned invalid JSON: {err}")))
+}
+
+async fn drone_cli_text(config: &DronePipelineConfig, args: &[&str]) -> CoreResult<String> {
+    let output = run_drone_cli_command(config, args).await?;
+    if output.exit_code != 0 {
+        let text = if output.stderr.trim().is_empty() {
+            output.stdout.trim()
+        } else {
+            output.stderr.trim()
+        };
+        return Err(CoreError::Storage(format!(
+            "Drone CLI command failed: {}",
+            compact_text(text, 600)
+        )));
+    }
+    Ok(output.stdout)
+}
+
+async fn drone_cli_text_owned(
+    config: &DronePipelineConfig,
+    args: Vec<String>,
+) -> CoreResult<String> {
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    drone_cli_text(config, &arg_refs).await
+}
+
+async fn run_drone_cli_command(
+    config: &DronePipelineConfig,
+    args: &[&str],
+) -> CoreResult<GitCommandOutput> {
+    let mut command = tokio::process::Command::new(&config.cli_command);
+    command
+        .args(args)
+        .env(DRONE_SERVER_ENV, &config.server_url)
+        .env(DRONE_TOKEN_ENV, &config.token)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let output = tokio::time::timeout(Duration::from_secs(30), command.output())
+        .await
+        .map_err(|_| {
+            CoreError::Storage(format!(
+                "Drone CLI {} timed out after 30s",
+                config.cli_command
+            ))
+        })?
+        .map_err(|err| {
+            if err.kind() == std::io::ErrorKind::NotFound {
+                CoreError::Storage(format!(
+                    "Drone CLI executable not found: {}",
+                    config.cli_command
+                ))
+            } else {
+                CoreError::Storage(format!(
+                    "Drone CLI {} failed to start: {err}",
+                    config.cli_command
+                ))
+            }
+        })?;
+    Ok(GitCommandOutput {
+        exit_code: output.status.code().unwrap_or(1),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
+fn is_drone_cli_unavailable_error(err: &CoreError) -> bool {
+    err.to_string()
+        .to_ascii_lowercase()
+        .contains("drone cli executable not found")
 }
 
 async fn ensure_drone_repo_enabled(
@@ -2977,13 +3394,23 @@ async fn drone_result_from_build(
     build: &Value,
 ) -> CoreResult<DronePipelineResult> {
     let build_number = required_i64(build.get("number"), "Drone build number")?;
+    let external_url = config.build_url(build_number);
+    let stage_results =
+        drone_stage_results(client, config, build_number, build, &external_url).await;
+    drone_result_from_build_and_stages(config, build, stage_results)
+}
+
+fn drone_result_from_build_and_stages(
+    config: &DronePipelineConfig,
+    build: &Value,
+    stage_results: Vec<DronePipelineStageResult>,
+) -> CoreResult<DronePipelineResult> {
+    let build_number = required_i64(build.get("number"), "Drone build number")?;
     let external_id = format!("{}#{build_number}", config.repo_slug());
     let external_url = config.build_url(build_number);
     let drone_status = drone_status(build.get("status"));
     let mut status = drone_internal_status(&drone_status);
     let mut reason = drone_failure_reason(&drone_status, &external_id);
-    let stage_results =
-        drone_stage_results(client, config, build_number, build, &external_url).await;
     let deploy_state = drone_deploy_state(&stage_results, config.deploy.as_ref());
     let deploy_validation_issues = if deploy_state.as_deref() == Some("invalid") {
         drone_deploy_validation_issues(&stage_results, config.deploy.as_ref())
@@ -9533,6 +9960,37 @@ mod tests {
         workspace_with_metadata(metadata)
     }
 
+    fn workspace_with_drone_cli_pipeline_contract(
+        server_url: &str,
+        token_env: &str,
+        command: &Path,
+    ) -> WorkspaceRecord {
+        workspace_with_metadata(json!({
+            "source_control": {
+                "default_branch": "main"
+            },
+            "delivery_cicd": {
+                "provider": "drone",
+                "auto_deploy": true,
+                "contract_source": PLANNING_CONTRACT_SOURCE,
+                "drone": {
+                    "repo": "owner/repo",
+                    "branch": "main",
+                    "commit": "abc123",
+                    "server_url": server_url,
+                    "token_env": token_env,
+                    "client": "cli",
+                    "command": command.to_string_lossy().to_string(),
+                    "poll_interval_seconds": 1,
+                    "timeout_seconds": 1,
+                    "params": {
+                        "target": "workspace-ci"
+                    }
+                }
+            }
+        }))
+    }
+
     fn workspace_with_drone_docker_deploy_pipeline_contract(
         server_url: &str,
         token_env: &str,
@@ -9684,12 +10142,85 @@ mod tests {
         }
     }
 
+    struct DroneCliFixture {
+        root: PathBuf,
+        command: PathBuf,
+        capture: PathBuf,
+    }
+
+    impl Drop for DroneCliFixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
     fn drone_yaml_fixture(content: &str) -> DroneYamlFixture {
         let root =
             std::env::temp_dir().join(format!("agistack-drone-yaml-test-{}", generate_uuid_v4()));
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join(".drone.yml"), content).unwrap();
         DroneYamlFixture { root }
+    }
+
+    fn drone_cli_fixture() -> DroneCliFixture {
+        let root =
+            std::env::temp_dir().join(format!("agistack-drone-cli-test-{}", generate_uuid_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let command = root.join("drone");
+        let capture = root.join("commands.log");
+        let capture_text = capture.to_string_lossy();
+        std::fs::write(
+            &command,
+            format!(
+                r#"#!/bin/sh
+CAPTURE="{capture_text}"
+printf 'server=%s token=%s args=%s\n' "$DRONE_SERVER" "$DRONE_TOKEN" "$*" >> "$CAPTURE"
+case "$1 $2" in
+  "repo info")
+    printf '%s\n' '{{"active":true,"trusted":true}}'
+    ;;
+  "repo enable")
+    printf '%s\n' enabled
+    ;;
+  "repo update")
+    printf '%s\n' updated
+    ;;
+  "build ls")
+    exit 0
+    ;;
+  "build create")
+    printf '%s\n' '{{"number":51,"status":"running"}}'
+    ;;
+  "build info")
+    printf '%s\n' '{{"number":51,"status":"success","link":"http://drone.local/owner/repo/51","stages":[{{"name":"ci","number":1,"steps":[{{"name":"test","number":1,"status":"success","exit_code":0}}]}}]}}'
+    ;;
+  "log view")
+    printf '%s\n' 'cargo test ok'
+    ;;
+  "build stop")
+    printf '%s\n' stopped
+    ;;
+  *)
+    printf 'unexpected drone args: %s\n' "$*" >&2
+    exit 64
+    ;;
+esac
+"#
+            ),
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&command).unwrap().permissions();
+            permissions.set_mode(0o700);
+            std::fs::set_permissions(&command, permissions).unwrap();
+        }
+        DroneCliFixture {
+            root,
+            command,
+            capture,
+        }
     }
 
     fn git_publish_fixture() -> Option<GitPublishFixture> {
@@ -10625,6 +11156,125 @@ mod tests {
             "POST /api/repos/owner/repo/builds?target=workspace-ci&branch=main&commit=abc123"
         ));
         assert!(requests[4].contains("GET /api/repos/owner/repo/builds/41/logs/1/1"));
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_triggers_and_polls_drone_via_cli() {
+        let fixture = drone_cli_fixture();
+        std::env::set_var("AGISTACK_TEST_DRONE_TOKEN_CLI", "token-cli");
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_drone_cli_pipeline_contract(
+            "http://drone-cli.local",
+            "AGISTACK_TEST_DRONE_TOKEN_CLI",
+            &fixture.command,
+        ));
+        store.insert_plan(plan());
+        store.insert_node(plan_node());
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler
+            .handle(pipeline_run_item_without_attempt())
+            .await
+            .unwrap();
+        std::env::remove_var("AGISTACK_TEST_DRONE_TOKEN_CLI");
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let run = store.pipeline_runs().into_iter().next().unwrap();
+        assert_eq!(run.provider, DRONE_PROVIDER);
+        assert_eq!(run.status, "success");
+        assert_eq!(run.reason, None);
+        assert_eq!(run.metadata_json["external_provider"], DRONE_PROVIDER);
+        assert_eq!(run.metadata_json["external_id"], "owner/repo#51");
+        assert_eq!(
+            run.metadata_json["external_url"],
+            "http://drone-cli.local/owner/repo/51"
+        );
+        assert_eq!(run.metadata_json["drone_client"], "cli");
+        assert_eq!(run.metadata_json["drone_build_number"], 51);
+        assert_eq!(run.metadata_json["drone_status"], "success");
+
+        let stage = store.pipeline_stage_runs().into_iter().next().unwrap();
+        assert_eq!(stage.stage, "ci/test");
+        assert_eq!(stage.status, "success");
+        assert_eq!(stage.command.as_deref(), Some("drone:ci/test"));
+        assert_eq!(stage.exit_code, Some(0));
+        assert_eq!(stage.stdout_preview.as_deref(), Some("cargo test ok"));
+
+        let node = store.node("node-test");
+        assert_eq!(node.metadata_json["pipeline_status"], "success");
+        assert_eq!(
+            metadata_string_values(node.metadata_json.get("pipeline_evidence_refs")),
+            vec![
+                "ci_pipeline:passed".to_string(),
+                "drone_build:success:owner/repo#51".to_string(),
+                "pipeline_external:drone:owner/repo#51".to_string(),
+                "pipeline_stage:ci/test:success".to_string(),
+                format!("pipeline_run:success:{}", run.id),
+                "pipeline_run_external:drone:owner/repo#51".to_string(),
+            ]
+        );
+
+        let captured = std::fs::read_to_string(&fixture.capture).unwrap();
+        assert!(captured.contains("server=http://drone-cli.local token=token-cli args=repo info owner/repo --format {{ json . }}"));
+        assert!(captured.contains("args=build ls owner/repo --limit=25 --format {{ json . }}"));
+        assert!(captured.contains("args=build create owner/repo --branch=main --commit=abc123 --param=target=workspace-ci --format {{ json . }}"));
+        assert!(captured.contains("args=build info owner/repo 51 --format {{ json . }}"));
+        assert!(captured.contains("args=log view owner/repo 51 1 1"));
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_falls_back_to_drone_http_when_cli_is_missing() {
+        let (server_url, captured) = drone_api_mock(vec![
+            (200, r#"{"active":true,"trusted":true}"#),
+            (200, r#"[]"#),
+            (200, r#"{"number":52,"status":"running"}"#),
+            (
+                200,
+                r#"{"number":52,"status":"success","link":"http://drone.local/owner/repo/52","stages":[{"name":"ci","number":1,"steps":[{"name":"test","number":1,"status":"success","exit_code":0}]}]}"#,
+            ),
+            (200, r#"[{"out":"cargo test via fallback\n"}]"#),
+        ])
+        .await;
+        let missing_command =
+            std::env::temp_dir().join(format!("agistack-missing-drone-{}", generate_uuid_v4()));
+        std::env::set_var(
+            "AGISTACK_TEST_DRONE_TOKEN_CLI_FALLBACK",
+            "token-cli-fallback",
+        );
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_drone_cli_pipeline_contract(
+            &server_url,
+            "AGISTACK_TEST_DRONE_TOKEN_CLI_FALLBACK",
+            &missing_command,
+        ));
+        store.insert_plan(plan());
+        store.insert_node(plan_node());
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler
+            .handle(pipeline_run_item_without_attempt())
+            .await
+            .unwrap();
+        std::env::remove_var("AGISTACK_TEST_DRONE_TOKEN_CLI_FALLBACK");
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let run = store.pipeline_runs().into_iter().next().unwrap();
+        assert_eq!(run.status, "success");
+        assert_eq!(run.metadata_json["external_id"], "owner/repo#52");
+        assert_eq!(run.metadata_json["drone_client"], "http_fallback");
+        let stage = store.pipeline_stage_runs().into_iter().next().unwrap();
+        assert_eq!(
+            stage.stdout_preview.as_deref(),
+            Some("cargo test via fallback")
+        );
+
+        let requests = captured.lock().await;
+        assert_eq!(requests.len(), 5);
+        assert!(requests[0].contains("GET /api/repos/owner/repo"));
+        assert!(requests[0].contains("authorization: Bearer token-cli-fallback"));
+        assert!(requests[2].contains(
+            "POST /api/repos/owner/repo/builds?target=workspace-ci&branch=main&commit=abc123"
+        ));
     }
 
     #[tokio::test]
