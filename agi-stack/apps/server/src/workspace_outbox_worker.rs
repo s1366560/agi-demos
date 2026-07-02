@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use agistack_adapters_postgres::{
     PgWorkspaceRepository, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
-    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceTaskRecord,
+    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceRecord, WorkspaceTaskRecord,
     WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
@@ -50,6 +50,13 @@ const DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES: i64 = 3;
 const WORKER_LAUNCHABLE_ATTEMPT_STATUSES: [&str; 2] = ["pending", "running"];
 const ACCEPTED_ATTEMPT_STATUS: &str = "accepted";
 const TERMINAL_RETRY_ATTEMPT_STATUSES: [&str; 3] = ["rejected", "blocked", "cancelled"];
+const WORKTREE_INTEGRATION_DONE_STATUSES: [&str; 5] = [
+    "merged",
+    "already_merged",
+    "skipped",
+    "blocked_dirty_main",
+    "failed",
+];
 const NO_COMMIT_ACCEPTED_ATTEMPT_STALE_METADATA_KEYS: [&str; 27] = [
     "candidate_artifacts",
     "candidate_verifications",
@@ -241,6 +248,8 @@ pub(crate) trait WorkspacePlanOutboxStore: Send + Sync {
 
 #[async_trait]
 pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
+    async fn get_workspace(&self, workspace_id: &str) -> CoreResult<Option<WorkspaceRecord>>;
+
     async fn get_task(
         &self,
         workspace_id: &str,
@@ -367,6 +376,10 @@ impl WorkspacePlanOutboxStore for PgWorkspacePlanOutboxStore {
 
 #[async_trait]
 impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
+    async fn get_workspace(&self, workspace_id: &str) -> CoreResult<Option<WorkspaceRecord>> {
+        PgWorkspaceRepository::get_workspace(self, workspace_id).await
+    }
+
     async fn get_task(
         &self,
         workspace_id: &str,
@@ -1401,18 +1414,22 @@ impl SupervisorTickAdmissionHandler {
             let git_diff_summary = first_prefixed_ref(&evidence_refs, "git_diff_summary:");
             let test_commands = prefixed_refs(&evidence_refs, "test_run:");
             let summary = accepted_attempt_summary(&attempt);
-            self.project_accepted_attempt_to_task(
-                workspace_id,
-                &node,
-                &attempt,
-                &summary,
-                &evidence_refs,
-                commit_ref.as_deref(),
-                git_diff_summary.as_deref(),
-                &test_commands,
-                now,
-            )
-            .await?;
+            let Some(integration_metadata) = self
+                .project_accepted_attempt_to_task(
+                    workspace_id,
+                    &node,
+                    &attempt,
+                    &summary,
+                    &evidence_refs,
+                    commit_ref.as_deref(),
+                    git_diff_summary.as_deref(),
+                    &test_commands,
+                    now,
+                )
+                .await?
+            else {
+                continue;
+            };
 
             let mut metadata = accepted_attempt_projection_base_metadata(&node, &attempt);
             metadata.insert(
@@ -1446,6 +1463,7 @@ impl SupervisorTickAdmissionHandler {
                     json!(attempt.candidate_verifications_json.clone()),
                 );
             }
+            metadata.extend(integration_metadata);
             node.intent = "done".to_string();
             node.execution = "idle".to_string();
             node.current_attempt_id = Some(attempt.id.clone());
@@ -1471,17 +1489,31 @@ impl SupervisorTickAdmissionHandler {
         git_diff_summary: Option<&str>,
         test_commands: &[String],
         now: DateTime<Utc>,
-    ) -> CoreResult<()> {
+    ) -> CoreResult<Option<Map<String, Value>>> {
         let task_id = node
             .workspace_task_id
             .as_ref()
             .unwrap_or(&attempt.workspace_task_id);
         let Some(mut task) = self.store.get_task(workspace_id, task_id).await? else {
-            return Ok(());
+            return Ok(Some(Map::new()));
         };
         if task.workspace_id != workspace_id {
-            return Ok(());
+            return Ok(Some(Map::new()));
         }
+
+        let integration_metadata = self
+            .integrate_accepted_attempt_worktree(
+                workspace_id,
+                node,
+                &attempt.id,
+                &task,
+                commit_ref,
+                now,
+            )
+            .await?;
+        let Some(integration_metadata) = integration_metadata else {
+            return Ok(None);
+        };
 
         let mut metadata = object_or_empty(task.metadata_json.clone());
         metadata.insert("pending_leader_adjudication".to_string(), json!(false));
@@ -1518,6 +1550,7 @@ impl SupervisorTickAdmissionHandler {
             test_commands,
             now,
         );
+        metadata.extend(integration_metadata.clone());
 
         task.metadata_json = Value::Object(metadata);
         task.status = "done".to_string();
@@ -1525,6 +1558,120 @@ impl SupervisorTickAdmissionHandler {
         task.completed_at = Some(now);
         task.updated_at = Some(now);
         self.store.save_task(task).await?;
+        Ok(Some(integration_metadata))
+    }
+
+    async fn integrate_accepted_attempt_worktree(
+        &self,
+        workspace_id: &str,
+        node: &WorkspacePlanNodeRecord,
+        attempt_id: &str,
+        task: &WorkspaceTaskRecord,
+        commit_ref: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> CoreResult<Option<Map<String, Value>>> {
+        let Some(commit_ref) = commit_ref
+            .and_then(commit_ref_token)
+            .or_else(|| accepted_attempt_integration_commit_ref(node))
+        else {
+            return Ok(Some(Map::new()));
+        };
+        let Some(workspace) = self.store.get_workspace(workspace_id).await? else {
+            return Ok(Some(worktree_integration_metadata(
+                "skipped",
+                "workspace not found",
+                attempt_id,
+                Some(commit_ref.as_str()),
+                None,
+                now,
+                None,
+            )));
+        };
+        let Some(sandbox_code_root) =
+            sandbox_code_root_for_integration(&task.metadata_json, &workspace.metadata_json)
+        else {
+            return Ok(Some(worktree_integration_metadata(
+                "skipped",
+                "sandbox_code_root is not available for accepted worktree integration",
+                attempt_id,
+                Some(commit_ref.as_str()),
+                None,
+                now,
+                None,
+            )));
+        };
+        let Some(worktree_path) = accepted_attempt_worktree_path(
+            node,
+            &task.metadata_json,
+            &sandbox_code_root,
+            attempt_id,
+        ) else {
+            return Ok(Some(worktree_integration_metadata(
+                "skipped",
+                "accepted attempt has no worktree_path",
+                attempt_id,
+                Some(commit_ref.as_str()),
+                None,
+                now,
+                None,
+            )));
+        };
+        if normalize_posix_path(&worktree_path) == normalize_posix_path(&sandbox_code_root) {
+            let metadata = worktree_integration_metadata(
+                "already_merged",
+                "accepted attempt already ran in sandbox_code_root",
+                attempt_id,
+                Some(commit_ref.as_str()),
+                Some(worktree_path.as_str()),
+                now,
+                None,
+            );
+            self.record_worktree_integration_event(
+                workspace_id,
+                node,
+                attempt_id,
+                task,
+                &metadata,
+                "accepted_worktree_integration_skipped",
+                now,
+            )
+            .await?;
+            return Ok(Some(metadata));
+        }
+        Ok(None)
+    }
+
+    async fn record_worktree_integration_event(
+        &self,
+        workspace_id: &str,
+        node: &WorkspacePlanNodeRecord,
+        attempt_id: &str,
+        task: &WorkspaceTaskRecord,
+        metadata: &Map<String, Value>,
+        event_type: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<()> {
+        self.store
+            .create_plan_event(WorkspacePlanEventRecord {
+                id: generate_uuid_v4(),
+                plan_id: node.plan_id.clone(),
+                workspace_id: workspace_id.to_string(),
+                node_id: Some(node.id.clone()),
+                attempt_id: Some(attempt_id.to_string()),
+                event_type: event_type.to_string(),
+                source: "workspace_plan.accepted_worktree_integration".to_string(),
+                actor_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string()),
+                payload_json: json!({
+                    "status": metadata.get("worktree_integration_status").cloned().unwrap_or(Value::Null),
+                    "summary": metadata.get("worktree_integration_summary").cloned().unwrap_or(Value::Null),
+                    "commit_ref": metadata.get("worktree_integration_commit_ref").cloned().unwrap_or(Value::Null),
+                    "worktree_path": metadata.get("worktree_integration_worktree_path").cloned().unwrap_or(Value::Null),
+                    "workspace_task_id": task.id.clone(),
+                    "dirty_signature": metadata.get("worktree_integration_dirty_signature").cloned().unwrap_or(Value::Null),
+                }),
+                created_at: now,
+            })
+            .await?;
         Ok(())
     }
 
@@ -2017,6 +2164,7 @@ fn accepted_projection_already_complete(
             .get("last_verification_attempt_id")
             .and_then(Value::as_str)
             == Some(attempt.id.as_str())
+        && accepted_worktree_projection_complete_for_node(node, attempt, &metadata)
 }
 
 fn accepted_attempt_summary(attempt: &WorkspaceTaskSessionAttemptRecord) -> String {
@@ -2055,6 +2203,22 @@ fn accepted_attempt_projection_feature_checkpoint(
         return node.feature_checkpoint_json.clone();
     }
     reset_feature_checkpoint(node.feature_checkpoint_json.clone())
+}
+
+fn accepted_worktree_projection_complete_for_node(
+    node: &WorkspacePlanNodeRecord,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+    metadata: &Map<String, Value>,
+) -> bool {
+    let has_commit_for_integration = !attempt_commit_refs(attempt).is_empty()
+        || accepted_attempt_integration_commit_ref(node).is_some();
+    if !has_commit_for_integration {
+        return true;
+    }
+    let status = metadata_string(metadata.get("worktree_integration_status"))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    WORKTREE_INTEGRATION_DONE_STATUSES.contains(&status.as_str())
 }
 
 fn apply_verification_checkpoint_metadata(
@@ -2115,6 +2279,141 @@ fn apply_verification_checkpoint_metadata(
         }
         handoff.insert("verification_notes".to_string(), json!(summary));
     }
+}
+
+fn accepted_attempt_integration_commit_ref(node: &WorkspacePlanNodeRecord) -> Option<String> {
+    feature_checkpoint_commit_ref(node).or_else(|| node_expected_commit_ref(node))
+}
+
+fn feature_checkpoint_commit_ref(node: &WorkspacePlanNodeRecord) -> Option<String> {
+    if let Some(Value::Object(checkpoint)) = &node.feature_checkpoint_json {
+        return checkpoint
+            .get("commit_ref")
+            .and_then(Value::as_str)
+            .and_then(commit_ref_token);
+    }
+    None
+}
+
+fn worktree_integration_metadata(
+    status: &str,
+    summary: &str,
+    attempt_id: &str,
+    commit_ref: Option<&str>,
+    worktree_path: Option<&str>,
+    now: DateTime<Utc>,
+    dirty_signature: Option<&str>,
+) -> Map<String, Value> {
+    let mut metadata = Map::new();
+    metadata.insert("worktree_integration_status".to_string(), json!(status));
+    metadata.insert("worktree_integration_summary".to_string(), json!(summary));
+    metadata.insert(
+        "worktree_integration_attempt_id".to_string(),
+        json!(attempt_id),
+    );
+    metadata.insert(
+        "worktree_integration_ran_at".to_string(),
+        json!(now.to_rfc3339()),
+    );
+    if let Some(commit_ref) = commit_ref {
+        metadata.insert(
+            "worktree_integration_commit_ref".to_string(),
+            json!(commit_ref),
+        );
+    }
+    if let Some(worktree_path) = worktree_path {
+        metadata.insert(
+            "worktree_integration_worktree_path".to_string(),
+            json!(worktree_path),
+        );
+    }
+    metadata.insert(
+        "worktree_integration_dirty_signature".to_string(),
+        dirty_signature.map_or(Value::Null, |value| json!(value)),
+    );
+    metadata
+}
+
+fn sandbox_code_root_for_integration(
+    task_metadata: &Value,
+    workspace_metadata: &Value,
+) -> Option<String> {
+    metadata_string_from_path(task_metadata, &["sandbox_code_root"])
+        .or_else(|| {
+            metadata_string_from_path(task_metadata, &["code_context", "sandbox_code_root"])
+        })
+        .or_else(|| metadata_string_from_path(workspace_metadata, &["sandbox_code_root"]))
+        .or_else(|| {
+            metadata_string_from_path(workspace_metadata, &["code_context", "sandbox_code_root"])
+        })
+}
+
+fn accepted_attempt_worktree_path(
+    node: &WorkspacePlanNodeRecord,
+    task_metadata: &Value,
+    sandbox_code_root: &str,
+    attempt_id: &str,
+) -> Option<String> {
+    let raw_path = metadata_string_from_path(
+        node.feature_checkpoint_json
+            .as_ref()
+            .unwrap_or(&Value::Null),
+        &["worktree_path"],
+    )
+    .or_else(|| metadata_string_from_path(task_metadata, &["feature_checkpoint", "worktree_path"]))
+    .unwrap_or_else(|| default_attempt_worktree_path(sandbox_code_root, attempt_id));
+    let path = raw_path.replace("${sandbox_code_root}", sandbox_code_root);
+    if path.contains("${sandbox_code_root}") {
+        return None;
+    }
+    Some(normalize_posix_path(&path))
+}
+
+fn default_attempt_worktree_path(sandbox_code_root: &str, attempt_id: &str) -> String {
+    normalize_posix_path(&format!(
+        "{}/../.memstack/worktrees/{}",
+        sandbox_code_root.trim_end_matches('/'),
+        attempt_id
+    ))
+}
+
+fn normalize_posix_path(value: &str) -> String {
+    let absolute = value.starts_with('/');
+    let mut parts = Vec::new();
+    for part in value.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                if !parts.is_empty() {
+                    parts.pop();
+                } else if !absolute {
+                    parts.push("..");
+                }
+            }
+            other => parts.push(other),
+        }
+    }
+    let mut normalized = parts.join("/");
+    if absolute {
+        normalized.insert(0, '/');
+    }
+    if normalized.is_empty() {
+        if absolute {
+            "/".to_string()
+        } else {
+            ".".to_string()
+        }
+    } else {
+        normalized
+    }
+}
+
+fn metadata_string_from_path(value: &Value, path: &[&str]) -> Option<String> {
+    let mut cursor = value;
+    for key in path {
+        cursor = cursor.get(*key)?;
+    }
+    metadata_string(Some(cursor))
 }
 
 fn accepted_attempt_matches_node_expected_commit(
@@ -2816,6 +3115,7 @@ mod tests {
 
     #[derive(Default)]
     struct FakeWorkspacePlanDispatchStore {
+        workspaces: Mutex<HashMap<String, WorkspaceRecord>>,
         tasks: Mutex<HashMap<String, WorkspaceTaskRecord>>,
         plans: Mutex<HashMap<String, WorkspacePlanRecord>>,
         nodes: Mutex<HashMap<String, WorkspacePlanNodeRecord>>,
@@ -2827,6 +3127,13 @@ mod tests {
     }
 
     impl FakeWorkspacePlanDispatchStore {
+        fn insert_workspace(&self, workspace: WorkspaceRecord) {
+            self.workspaces
+                .lock()
+                .unwrap()
+                .insert(workspace.id.clone(), workspace);
+        }
+
         fn insert_task(&self, task: WorkspaceTaskRecord) {
             self.tasks.lock().unwrap().insert(task.id.clone(), task);
         }
@@ -2873,6 +3180,10 @@ mod tests {
 
     #[async_trait]
     impl WorkspacePlanDispatchStore for FakeWorkspacePlanDispatchStore {
+        async fn get_workspace(&self, workspace_id: &str) -> CoreResult<Option<WorkspaceRecord>> {
+            Ok(self.workspaces.lock().unwrap().get(workspace_id).cloned())
+        }
+
         async fn get_task(
             &self,
             workspace_id: &str,
@@ -3099,6 +3410,32 @@ mod tests {
             completed_at: None,
             archived_at: None,
         }
+    }
+
+    fn workspace_with_metadata(metadata_json: Value) -> WorkspaceRecord {
+        WorkspaceRecord {
+            id: "workspace-test".to_string(),
+            tenant_id: "tenant-test".to_string(),
+            project_id: "project-test".to_string(),
+            name: "Workspace".to_string(),
+            description: None,
+            created_by: "actor-test".to_string(),
+            is_archived: false,
+            metadata_json,
+            office_status: "active".to_string(),
+            hex_layout_config_json: json!({}),
+            default_blocking_categories_json: Vec::new(),
+            created_at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
+            updated_at: None,
+        }
+    }
+
+    fn workspace_with_code_root(root: &str) -> WorkspaceRecord {
+        workspace_with_metadata(json!({
+            "code_context": {
+                "sandbox_code_root": root
+            }
+        }))
     }
 
     fn plan() -> WorkspacePlanRecord {
@@ -3674,6 +4011,7 @@ mod tests {
     #[tokio::test]
     async fn supervisor_tick_handler_projects_accepted_attempt_to_node_and_task() {
         let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
         store.insert_task(task_with_plan_metadata());
         store.insert_plan(plan());
         let mut node = plan_node();
@@ -3757,6 +4095,137 @@ mod tests {
             task.metadata_json["handoff_package"]["test_commands"],
             json!(["cargo test -p agistack-server workspace_outbox_worker"])
         );
+        assert_eq!(task.metadata_json["worktree_integration_status"], "skipped");
+        assert_eq!(
+            task.metadata_json["worktree_integration_summary"],
+            "sandbox_code_root is not available for accepted worktree integration"
+        );
+        assert_eq!(
+            node.metadata_json["worktree_integration_commit_ref"],
+            "abcdef1234567890"
+        );
+        assert_eq!(node.metadata_json["worktree_integration_status"], "skipped");
+        assert!(store.plan_events().is_empty());
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_records_already_merged_accepted_worktree() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_code_root("/workspace/app"));
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-accepted".to_string());
+        node.feature_checkpoint_json = Some(json!({
+            "worktree_path": "/workspace/app",
+            "branch_name": "attempt-accepted",
+            "base_ref": "main",
+            "commit_ref": "abcdef1"
+        }));
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-accepted",
+            ACCEPTED_ATTEMPT_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.leader_feedback = Some("accepted in main checkout".to_string());
+        attempt.candidate_artifacts_json = vec!["commit_ref:abcdef1234567890".to_string()];
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        let task = store.task("task-test");
+        assert_eq!(node.intent, "done");
+        assert_eq!(task.status, "done");
+        assert_eq!(
+            node.metadata_json["worktree_integration_status"],
+            "already_merged"
+        );
+        assert_eq!(
+            task.metadata_json["worktree_integration_worktree_path"],
+            "/workspace/app"
+        );
+        assert_eq!(
+            task.metadata_json["worktree_integration_summary"],
+            "accepted attempt already ran in sandbox_code_root"
+        );
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].event_type,
+            "accepted_worktree_integration_skipped"
+        );
+        assert_eq!(
+            events[0].source,
+            "workspace_plan.accepted_worktree_integration"
+        );
+        assert_eq!(events[0].payload_json["status"], "already_merged");
+        assert_eq!(events[0].payload_json["commit_ref"], "abcdef1234567890");
+        assert_eq!(events[0].payload_json["worktree_path"], "/workspace/app");
+        assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_releases_accepted_attempt_that_requires_real_worktree_merge() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_code_root("/workspace/app"));
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-accepted".to_string());
+        node.feature_checkpoint_json = Some(json!({
+            "worktree_path": "/workspace/.memstack/worktrees/attempt-accepted",
+            "branch_name": "attempt-accepted",
+            "base_ref": "main",
+            "commit_ref": "abcdef1"
+        }));
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-accepted",
+            ACCEPTED_ATTEMPT_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.leader_feedback = Some("accepted in isolated worktree".to_string());
+        attempt.candidate_artifacts_json = vec!["commit_ref:abcdef1234567890".to_string()];
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(
+            outcome,
+            WorkspacePlanOutboxHandlerOutcome::Release {
+                reason: Some("supervisor_tick_requires_full_runtime".to_string())
+            }
+        );
+        let node = store.node("node-test");
+        let task = store.task("task-test");
+        assert_eq!(node.intent, "in_progress");
+        assert_eq!(node.execution, "running");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-accepted"));
+        assert_eq!(task.status, "todo");
+        assert!(task.metadata_json.get("durable_plan_verdict").is_none());
+        assert!(store.plan_events().is_empty());
         assert!(store.outbox().is_empty());
     }
 
