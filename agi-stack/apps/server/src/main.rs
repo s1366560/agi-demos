@@ -887,7 +887,12 @@ fn router(state: AppState) -> Router {
 #[tokio::main]
 async fn main() {
     let addr = std::env::var("AGISTACK_ADDR").unwrap_or_else(|_| "127.0.0.1:8088".to_string());
-    let app = router(build_state().await);
+    let state = build_state().await;
+    let _workspace_plan_outbox_runtime = state
+        .workspace_plan_outbox_worker
+        .as_ref()
+        .and_then(|worker| Arc::clone(worker).spawn_if_enabled());
+    let app = router(state);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     println!("agistack-server listening on http://{addr}");
     axum::serve(listener, app).await.unwrap();

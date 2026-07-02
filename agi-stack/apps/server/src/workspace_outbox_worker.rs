@@ -5,8 +5,6 @@
 //! Python-shaped `workspace_plan_outbox` rows and dispatch them to event
 //! handlers once each P6 runtime slice is migrated.
 
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -14,6 +12,8 @@ use agistack_adapters_postgres::{PgWorkspaceRepository, WorkspacePlanOutboxRecor
 use agistack_core::ports::CoreResult;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use tokio::task::JoinHandle;
+use tokio::time::{sleep, Duration};
 
 pub(crate) type SharedWorkspacePlanOutboxWorker = Arc<WorkspacePlanOutboxWorker>;
 pub(crate) type WorkspacePlanOutboxHandlers = HashMap<String, Arc<dyn WorkspacePlanOutboxHandler>>;
@@ -23,10 +23,14 @@ pub(crate) struct WorkspacePlanOutboxWorkerConfig {
     pub worker_id: String,
     pub batch_size: i64,
     pub lease_seconds: i64,
+    pub poll_interval_millis: u64,
+    pub autostart: bool,
 }
 
 impl WorkspacePlanOutboxWorkerConfig {
     pub(crate) fn from_env() -> Self {
+        let rust_autostart = bool_env("AGISTACK_WORKSPACE_PLAN_OUTBOX_AUTOSTART", false);
+        let python_worker_enabled = bool_env("WORKSPACE_PLAN_OUTBOX_ENABLED", true);
         Self {
             worker_id: std::env::var("WORKSPACE_PLAN_OUTBOX_WORKER_ID")
                 .ok()
@@ -34,6 +38,8 @@ impl WorkspacePlanOutboxWorkerConfig {
                 .unwrap_or_else(|| "agistack-rust-workspace-plan-outbox".to_string()),
             batch_size: positive_i64_env("WORKSPACE_PLAN_OUTBOX_BATCH_SIZE", 10),
             lease_seconds: positive_i64_env("WORKSPACE_PLAN_OUTBOX_LEASE_SECONDS", 60),
+            poll_interval_millis: positive_millis_env("WORKSPACE_PLAN_OUTBOX_POLL_SECONDS", 2000),
+            autostart: rust_autostart && python_worker_enabled,
         }
     }
 }
@@ -44,6 +50,8 @@ impl Default for WorkspacePlanOutboxWorkerConfig {
             worker_id: "agistack-rust-workspace-plan-outbox".to_string(),
             batch_size: 10,
             lease_seconds: 60,
+            poll_interval_millis: 2000,
+            autostart: false,
         }
     }
 }
@@ -58,7 +66,30 @@ pub(crate) struct WorkspacePlanOutboxRunReport {
     pub skipped: usize,
 }
 
+pub(crate) struct WorkspacePlanOutboxWorkerRuntime {
+    join: Option<JoinHandle<()>>,
+}
+
+impl WorkspacePlanOutboxWorkerRuntime {
+    #[cfg(test)]
+    async fn shutdown(mut self) {
+        if let Some(join) = self.join.take() {
+            join.abort();
+            let _ = join.await;
+        }
+    }
+}
+
+impl Drop for WorkspacePlanOutboxWorkerRuntime {
+    fn drop(&mut self) {
+        if let Some(join) = &self.join {
+            join.abort();
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
 pub(crate) enum WorkspacePlanOutboxHandlerOutcome {
     Complete,
     Release { reason: Option<String> },
@@ -189,6 +220,23 @@ impl WorkspacePlanOutboxWorker {
         self.handlers.len()
     }
 
+    pub(crate) fn spawn_if_enabled(self: Arc<Self>) -> Option<WorkspacePlanOutboxWorkerRuntime> {
+        if !self.config.autostart {
+            return None;
+        }
+        if self.handlers.is_empty() {
+            eprintln!(
+                "[agistack] workspace plan outbox worker: autostart requested but no handlers are registered; not consuming queue"
+            );
+            return None;
+        }
+        let worker = Arc::clone(&self);
+        let join = tokio::spawn(async move {
+            worker.run_loop().await;
+        });
+        Some(WorkspacePlanOutboxWorkerRuntime { join: Some(join) })
+    }
+
     pub(crate) async fn run_once(&self) -> CoreResult<WorkspacePlanOutboxRunReport> {
         let now = Utc::now();
         let claimed = self
@@ -208,6 +256,18 @@ impl WorkspacePlanOutboxWorker {
             self.process_item(item, &mut report).await?;
         }
         Ok(report)
+    }
+
+    async fn run_loop(self: Arc<Self>) {
+        loop {
+            if let Err(err) = self.run_once().await {
+                eprintln!("[agistack] workspace plan outbox worker poll failed: {err}");
+            }
+            sleep(Duration::from_millis(
+                self.config.poll_interval_millis.max(1),
+            ))
+            .await;
+        }
     }
 
     async fn process_item(
@@ -288,6 +348,27 @@ fn positive_i64_env(name: &str, default: i64) -> i64 {
         .ok()
         .and_then(|raw| raw.trim().parse::<i64>().ok())
         .filter(|value| *value > 0)
+        .unwrap_or(default)
+}
+
+fn positive_millis_env(name: &str, default_millis: u64) -> u64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|raw| raw.trim().parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|seconds| (seconds * 1000.0).ceil().max(1.0) as u64)
+        .unwrap_or(default_millis)
+}
+
+fn bool_env(name: &str, default: bool) -> bool {
+    std::env::var(name)
+        .ok()
+        .map(|raw| {
+            matches!(
+                raw.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
         .unwrap_or(default)
 }
 
@@ -470,6 +551,8 @@ mod tests {
                 worker_id: "worker-test".to_string(),
                 batch_size: 10,
                 lease_seconds: 60,
+                poll_interval_millis: 5,
+                autostart: false,
             },
             handlers,
         )
@@ -602,5 +685,57 @@ mod tests {
             Some("storage error: handler boom")
         );
         assert_eq!(item.attempt_count, 1);
+    }
+
+    #[tokio::test]
+    async fn workspace_outbox_loop_refuses_autostart_without_handlers() {
+        let store = Arc::new(FakeWorkspacePlanOutboxStore::default());
+        store.insert(outbox("job-safe", "unknown"));
+        let worker = Arc::new(WorkspacePlanOutboxWorker::new(
+            Arc::clone(&store) as Arc<dyn WorkspacePlanOutboxStore>,
+            WorkspacePlanOutboxWorkerConfig {
+                autostart: true,
+                ..WorkspacePlanOutboxWorkerConfig::default()
+            },
+            HashMap::new(),
+        ));
+
+        let runtime = worker.spawn_if_enabled();
+
+        assert!(runtime.is_none());
+        let item = store.get("job-safe");
+        assert_eq!(item.status, "pending");
+        assert_eq!(item.attempt_count, 0);
+    }
+
+    #[tokio::test]
+    async fn workspace_outbox_loop_polls_until_stopped_when_handlers_exist() {
+        let store = Arc::new(FakeWorkspacePlanOutboxStore::default());
+        store.insert(outbox("job-loop", "known"));
+        let worker = Arc::new(WorkspacePlanOutboxWorker::new(
+            Arc::clone(&store) as Arc<dyn WorkspacePlanOutboxStore>,
+            WorkspacePlanOutboxWorkerConfig {
+                worker_id: "worker-test".to_string(),
+                batch_size: 10,
+                lease_seconds: 60,
+                poll_interval_millis: 5,
+                autostart: true,
+            },
+            HashMap::from([("known".to_string(), handler(HandlerBehavior::Complete))]),
+        ));
+        let runtime = worker.spawn_if_enabled().expect("runtime should start");
+
+        for _ in 0..20 {
+            if store.get("job-loop").status == "completed" {
+                runtime.shutdown().await;
+                let item = store.get("job-loop");
+                assert_eq!(item.status, "completed");
+                assert_eq!(item.attempt_count, 1);
+                return;
+            }
+            sleep(tokio::time::Duration::from_millis(5)).await;
+        }
+        runtime.shutdown().await;
+        panic!("worker loop did not complete the job");
     }
 }
