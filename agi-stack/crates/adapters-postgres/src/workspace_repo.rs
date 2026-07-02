@@ -29,6 +29,9 @@ const POST_COLS: &str = "id, workspace_id, author_id, title, content, status, is
     metadata_json, created_at, updated_at";
 const REPLY_COLS: &str = "id, post_id, workspace_id, author_id, content, metadata_json, \
     created_at, updated_at";
+const FILE_COLS: &str = "id, workspace_id, parent_path, name, is_directory, file_size, \
+    content_type, storage_key, uploader_type, uploader_id, uploader_name, checksum_sha256, \
+    mime_type_detected, created_at";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkspaceRecord {
@@ -138,6 +141,24 @@ pub struct BlackboardReplyRecord {
     pub metadata_json: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlackboardFileRecord {
+    pub id: String,
+    pub workspace_id: String,
+    pub parent_path: String,
+    pub name: String,
+    pub is_directory: bool,
+    pub file_size: i32,
+    pub content_type: String,
+    pub storage_key: String,
+    pub uploader_type: String,
+    pub uploader_id: String,
+    pub uploader_name: String,
+    pub checksum_sha256: Option<String>,
+    pub mime_type_detected: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -936,6 +957,176 @@ impl PgWorkspaceRepository {
         Ok(result.rows_affected() > 0)
     }
 
+    pub async fn create_file(
+        &self,
+        file: BlackboardFileRecord,
+    ) -> CoreResult<BlackboardFileRecord> {
+        sqlx::query(&format!(
+            "INSERT INTO blackboard_files \
+                (id, workspace_id, parent_path, name, is_directory, file_size, content_type, \
+                 storage_key, uploader_type, uploader_id, uploader_name, checksum_sha256, \
+                 mime_type_detected, created_at) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) \
+             RETURNING {FILE_COLS}"
+        ))
+        .bind(&file.id)
+        .bind(&file.workspace_id)
+        .bind(&file.parent_path)
+        .bind(&file.name)
+        .bind(file.is_directory)
+        .bind(file.file_size)
+        .bind(&file.content_type)
+        .bind(&file.storage_key)
+        .bind(&file.uploader_type)
+        .bind(&file.uploader_id)
+        .bind(&file.uploader_name)
+        .bind(&file.checksum_sha256)
+        .bind(&file.mime_type_detected)
+        .bind(file.created_at)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(storage)
+        .and_then(row_to_file)
+    }
+
+    pub async fn list_files(
+        &self,
+        workspace_id: &str,
+        parent_path: &str,
+    ) -> CoreResult<Vec<BlackboardFileRecord>> {
+        let rows = sqlx::query(&format!(
+            "SELECT {FILE_COLS} FROM blackboard_files \
+             WHERE workspace_id = $1 AND parent_path = $2 \
+             ORDER BY is_directory DESC, name ASC"
+        ))
+        .bind(workspace_id)
+        .bind(parent_path)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(row_to_file).collect()
+    }
+
+    pub async fn find_file_by_path(
+        &self,
+        workspace_id: &str,
+        parent_path: &str,
+        name: &str,
+    ) -> CoreResult<Option<BlackboardFileRecord>> {
+        sqlx::query(&format!(
+            "SELECT {FILE_COLS} FROM blackboard_files \
+             WHERE workspace_id = $1 AND parent_path = $2 AND name = $3"
+        ))
+        .bind(workspace_id)
+        .bind(parent_path)
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_file)
+        .transpose()
+    }
+
+    pub async fn get_file(
+        &self,
+        workspace_id: &str,
+        file_id: &str,
+    ) -> CoreResult<Option<BlackboardFileRecord>> {
+        sqlx::query(&format!(
+            "SELECT {FILE_COLS} FROM blackboard_files WHERE id = $1 AND workspace_id = $2"
+        ))
+        .bind(file_id)
+        .bind(workspace_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_file)
+        .transpose()
+    }
+
+    pub async fn find_file_descendants(
+        &self,
+        workspace_id: &str,
+        path_prefix: &str,
+    ) -> CoreResult<Vec<BlackboardFileRecord>> {
+        let rows = sqlx::query(&format!(
+            "SELECT {FILE_COLS} FROM blackboard_files \
+             WHERE workspace_id = $1 AND parent_path LIKE $2 \
+             ORDER BY parent_path ASC, is_directory DESC, name ASC"
+        ))
+        .bind(workspace_id)
+        .bind(format!("{path_prefix}%"))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(row_to_file).collect()
+    }
+
+    pub async fn save_file(&self, file: BlackboardFileRecord) -> CoreResult<BlackboardFileRecord> {
+        sqlx::query(&format!(
+            "UPDATE blackboard_files SET parent_path=$3, name=$4, is_directory=$5, \
+                 file_size=$6, content_type=$7, storage_key=$8, uploader_type=$9, \
+                 uploader_id=$10, uploader_name=$11, checksum_sha256=$12, \
+                 mime_type_detected=$13 \
+             WHERE id=$1 AND workspace_id=$2 RETURNING {FILE_COLS}"
+        ))
+        .bind(&file.id)
+        .bind(&file.workspace_id)
+        .bind(&file.parent_path)
+        .bind(&file.name)
+        .bind(file.is_directory)
+        .bind(file.file_size)
+        .bind(&file.content_type)
+        .bind(&file.storage_key)
+        .bind(&file.uploader_type)
+        .bind(&file.uploader_id)
+        .bind(&file.uploader_name)
+        .bind(&file.checksum_sha256)
+        .bind(&file.mime_type_detected)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_file)
+        .transpose()?
+        .ok_or_else(|| CoreError::Storage("blackboard file update returned no row".into()))
+    }
+
+    pub async fn bulk_update_file_parent_path(
+        &self,
+        workspace_id: &str,
+        old_prefix: &str,
+        new_prefix: &str,
+    ) -> CoreResult<u64> {
+        let result = sqlx::query(
+            "UPDATE blackboard_files \
+             SET parent_path = CASE \
+                 WHEN parent_path = $2 THEN $3 \
+                 ELSE concat($3, substr(parent_path, $4)) \
+             END \
+             WHERE workspace_id = $1 AND (parent_path = $2 OR parent_path LIKE $5)",
+        )
+        .bind(workspace_id)
+        .bind(old_prefix)
+        .bind(new_prefix)
+        .bind((old_prefix.len() + 1) as i32)
+        .bind(format!("{old_prefix}%"))
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(result.rows_affected())
+    }
+
+    pub async fn delete_file(&self, workspace_id: &str, file_id: &str) -> CoreResult<bool> {
+        let result =
+            sqlx::query("DELETE FROM blackboard_files WHERE id = $1 AND workspace_id = $2")
+                .bind(file_id)
+                .bind(workspace_id)
+                .execute(&self.pool)
+                .await
+                .map_err(storage)?;
+        Ok(result.rows_affected() > 0)
+    }
+
     pub async fn enqueue_blackboard_outbox(
         &self,
         outbox: BlackboardOutboxRecord,
@@ -1066,6 +1257,25 @@ fn row_to_reply(row: PgRow) -> CoreResult<BlackboardReplyRecord> {
         metadata_json: json_value(&row, "metadata_json")?,
         created_at: row.try_get("created_at").map_err(storage)?,
         updated_at: row.try_get("updated_at").map_err(storage)?,
+    })
+}
+
+fn row_to_file(row: PgRow) -> CoreResult<BlackboardFileRecord> {
+    Ok(BlackboardFileRecord {
+        id: row.try_get("id").map_err(storage)?,
+        workspace_id: row.try_get("workspace_id").map_err(storage)?,
+        parent_path: row.try_get("parent_path").map_err(storage)?,
+        name: row.try_get("name").map_err(storage)?,
+        is_directory: row.try_get("is_directory").map_err(storage)?,
+        file_size: row.try_get("file_size").map_err(storage)?,
+        content_type: row.try_get("content_type").map_err(storage)?,
+        storage_key: row.try_get("storage_key").map_err(storage)?,
+        uploader_type: row.try_get("uploader_type").map_err(storage)?,
+        uploader_id: row.try_get("uploader_id").map_err(storage)?,
+        uploader_name: row.try_get("uploader_name").map_err(storage)?,
+        checksum_sha256: row.try_get("checksum_sha256").map_err(storage)?,
+        mime_type_detected: row.try_get("mime_type_detected").map_err(storage)?,
+        created_at: row.try_get("created_at").map_err(storage)?,
     })
 }
 

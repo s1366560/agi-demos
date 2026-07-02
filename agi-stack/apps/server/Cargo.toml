@@ -16,9 +16,10 @@ agistack-adapters-redis = { path = "../../crates/adapters-redis" }
 agistack-adapters-mcp = { path = "../../crates/adapters-mcp" }
 agistack-adapters-docker = { path = "../../crates/adapters-docker" }
 agistack-adapters-secrets = { path = "../../crates/adapters-secrets" }
+agistack-adapters-s3 = { path = "../../crates/adapters-s3" }
 agistack-adapters-smtp = { path = "../../crates/adapters-smtp" }
 agistack-adapters-wasmtime = { path = "../../crates/adapters-wasmtime" }
-axum = { version = "0.7", features = ["ws"] }
+axum = { version = "0.7", features = ["multipart", "ws"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time"] }
 serde.workspace = true
 serde_json.workspace = true

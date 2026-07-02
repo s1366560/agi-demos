@@ -66,9 +66,9 @@ pub use trust_repo::{
 pub use user_store::{PgUserStore, UserAuthRecord};
 pub use vector_index::PgVectorIndex;
 pub use workspace_repo::{
-    BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord, PgWorkspaceRepository,
-    TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess, WorkspaceMemberRecord,
-    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+    BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
+    PgWorkspaceRepository, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
+    WorkspaceMemberRecord, WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
 };
 
 use agistack_core::ports::{CoreError, CoreResult};

@@ -15,7 +15,7 @@
 
 use agistack_adapters_postgres::PgPool;
 use agistack_adapters_postgres::{
-    connect, ensure_aux_schema, BlackboardOutboxRecord, BlackboardPostRecord,
+    connect, ensure_aux_schema, BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord,
     BlackboardReplyRecord, InvitationRecord, NewDecisionRecordRecord, NewShareRecord,
     NewTrustPolicyRecord, PgApiKeyStore, PgCheckpointStore, PgInvitationRepository,
     PgMemoryRepository, PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore,
@@ -56,6 +56,7 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
 
     for table in [
         "workspace_blackboard_outbox",
+        "blackboard_files",
         "blackboard_replies",
         "blackboard_posts",
         "topology_edges",
@@ -301,6 +302,60 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
         .await
         .unwrap();
     assert_eq!(reply.post_id, post.id);
+    let dir = repo
+        .create_file(BlackboardFileRecord {
+            id: "file_p6_dir".to_string(),
+            workspace_id: "ws_p6_repo".to_string(),
+            parent_path: "/".to_string(),
+            name: "docs".to_string(),
+            is_directory: true,
+            file_size: 0,
+            content_type: String::new(),
+            storage_key: String::new(),
+            uploader_type: "user".to_string(),
+            uploader_id: "u_p6_owner".to_string(),
+            uploader_name: "Owner".to_string(),
+            checksum_sha256: None,
+            mime_type_detected: None,
+            created_at,
+        })
+        .await
+        .unwrap();
+    assert!(dir.is_directory);
+    let file = repo
+        .create_file(BlackboardFileRecord {
+            id: "file_p6_doc".to_string(),
+            workspace_id: "ws_p6_repo".to_string(),
+            parent_path: "/docs/".to_string(),
+            name: "status.txt".to_string(),
+            is_directory: false,
+            file_size: 11,
+            content_type: "text/plain".to_string(),
+            storage_key: "file_p6_doc/status.txt".to_string(),
+            uploader_type: "user".to_string(),
+            uploader_id: "u_p6_owner".to_string(),
+            uploader_name: "Owner".to_string(),
+            checksum_sha256: None,
+            mime_type_detected: None,
+            created_at,
+        })
+        .await
+        .unwrap();
+    assert_eq!(file.parent_path, "/docs/");
+    let files = repo.list_files("ws_p6_repo", "/docs/").await.unwrap();
+    assert_eq!(
+        files.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(),
+        vec!["status.txt"]
+    );
+    repo.bulk_update_file_parent_path("ws_p6_repo", "/docs/", "/notes/")
+        .await
+        .unwrap();
+    let moved = repo
+        .get_file("ws_p6_repo", "file_p6_doc")
+        .await
+        .unwrap()
+        .expect("file");
+    assert_eq!(moved.parent_path, "/notes/");
     repo.enqueue_blackboard_outbox(BlackboardOutboxRecord {
         id: "outbox_p6_repo".to_string(),
         workspace_id: "ws_p6_repo".to_string(),
@@ -430,6 +485,15 @@ async fn ensure_python_shaped_tables(pool: &PgPool) {
             id text PRIMARY KEY, post_id text NOT NULL, workspace_id text NOT NULL, \
             author_id text NOT NULL, content text NOT NULL, metadata_json json DEFAULT '{}'::json, \
             created_at timestamptz DEFAULT now(), updated_at timestamptz)",
+        "CREATE TABLE IF NOT EXISTS blackboard_files (\
+            id text PRIMARY KEY, workspace_id text NOT NULL, parent_path varchar(1024) DEFAULT '/' NOT NULL, \
+            name varchar(255) NOT NULL, is_directory boolean DEFAULT false NOT NULL, \
+            file_size integer DEFAULT 0 NOT NULL, content_type varchar(128) DEFAULT '' NOT NULL, \
+            storage_key varchar(512) DEFAULT '' NOT NULL, uploader_type varchar(10) NOT NULL, \
+            uploader_id text NOT NULL, uploader_name varchar(128) NOT NULL, checksum_sha256 varchar(64), \
+            mime_type_detected varchar(255), created_at timestamptz DEFAULT now())",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_blackboard_files_ws_path_name \
+            ON blackboard_files (workspace_id, parent_path, name)",
         "CREATE TABLE IF NOT EXISTS workspace_blackboard_outbox (\
             id text PRIMARY KEY, workspace_id text NOT NULL, tenant_id text NOT NULL, \
             project_id text NOT NULL, event_type varchar(80) NOT NULL, \

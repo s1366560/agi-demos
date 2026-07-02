@@ -2,17 +2,24 @@
 //!
 //! This deliberately covers only precise, database-backed resources:
 //! workspaces, workspace tasks, topology nodes/edges, and blackboard
-//! posts/replies plus transactional outbox rows. Runtime-heavy siblings
-//! (plan actions, execution diagnostics, files, leader adjudication) remain
-//! Python-owned until their full semantics are migrated.
+//! posts/replies/files plus transactional outbox rows. Runtime-heavy siblings
+//! (plan actions, execution diagnostics, leader adjudication) remain Python-owned
+//! until their full semantics are migrated.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
+    body::Body,
+    extract::{Multipart, Path, Query, State},
+    http::{
+        header::{
+            ACCEPT_RANGES, CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE, ETAG,
+            IF_NONE_MATCH,
+        },
+        HeaderMap, HeaderValue, StatusCode,
+    },
     response::{IntoResponse, Response},
     routing::{get, patch, post},
     Extension, Json, Router,
@@ -21,12 +28,15 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+#[cfg(test)]
+use agistack_adapters_mem::InMemoryObjectStore;
 use agistack_adapters_postgres::{
-    BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord, PgWorkspaceRepository,
-    TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess, WorkspaceProjectAccess,
-    WorkspaceRecord, WorkspaceTaskRecord,
+    BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
+    PgWorkspaceRepository, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
+    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
+use agistack_core::ports::ObjectStore;
 
 use crate::auth::Identity;
 use crate::AppState;
@@ -277,6 +287,72 @@ pub(crate) trait WorkspaceService: Send + Sync {
         workspace_id: &str,
         post_id: &str,
         reply_id: &str,
+    ) -> Result<DeletedView, WorkspaceApiError>;
+
+    async fn list_files(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        query: BlackboardFileListQuery,
+    ) -> Result<BlackboardFileListView, WorkspaceApiError>;
+
+    async fn create_directory(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        body: MkdirPayload,
+    ) -> Result<BlackboardFileView, WorkspaceApiError>;
+
+    async fn upload_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        upload: BlackboardUpload,
+    ) -> Result<BlackboardFileView, WorkspaceApiError>;
+
+    async fn download_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        file_id: &str,
+    ) -> Result<BlackboardFileDownload, WorkspaceApiError>;
+
+    async fn patch_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        file_id: &str,
+        body: RenameOrMoveFilePayload,
+    ) -> Result<BlackboardFileView, WorkspaceApiError>;
+
+    async fn copy_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        file_id: &str,
+        body: CopyFilePayload,
+    ) -> Result<BlackboardFileView, WorkspaceApiError>;
+
+    async fn delete_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        file_id: &str,
+        query: DeleteFileQuery,
     ) -> Result<DeletedView, WorkspaceApiError>;
 }
 
@@ -540,6 +616,57 @@ pub(crate) struct BlackboardReplyUpdatePayload {
     metadata: Option<Value>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct BlackboardFileListQuery {
+    #[serde(default)]
+    parent_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct MkdirPayload {
+    #[serde(default = "root_path")]
+    parent_path: String,
+    name: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RenameOrMoveFilePayload {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    parent_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct CopyFilePayload {
+    target_parent_path: String,
+    #[serde(default)]
+    name: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct DeleteFileQuery {
+    #[serde(default)]
+    recursive: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BlackboardUpload {
+    parent_path: String,
+    filename: String,
+    content_type: Option<String>,
+    bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BlackboardFileDownload {
+    filename: String,
+    content_type: String,
+    file_size: i32,
+    etag: String,
+    bytes: Vec<u8>,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum TaskTransitionAction {
     Claim,
@@ -678,17 +805,38 @@ pub(crate) struct BlackboardReplyListView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct BlackboardFileView {
+    id: String,
+    workspace_id: String,
+    parent_path: String,
+    name: String,
+    is_directory: bool,
+    file_size: i32,
+    content_type: String,
+    uploader_type: String,
+    uploader_id: String,
+    uploader_name: String,
+    created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct BlackboardFileListView {
+    items: Vec<BlackboardFileView>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) struct DeletedView {
     deleted: bool,
 }
 
 pub(crate) struct PgWorkspaceService {
     repo: PgWorkspaceRepository,
+    object_store: Arc<dyn ObjectStore>,
 }
 
 impl PgWorkspaceService {
-    pub(crate) fn new(repo: PgWorkspaceRepository) -> Self {
-        Self { repo }
+    pub(crate) fn new(repo: PgWorkspaceRepository, object_store: Arc<dyn ObjectStore>) -> Self {
+        Self { repo, object_store }
     }
 
     async fn ensure_project_access(
@@ -774,6 +922,10 @@ impl PgWorkspaceService {
             })
             .await
             .map_err(WorkspaceApiError::internal)
+    }
+
+    fn object_key(&self, workspace_id: &str, storage_key: &str) -> String {
+        object_key(workspace_id, storage_key)
     }
 }
 
@@ -1757,6 +1909,471 @@ impl WorkspaceService for PgWorkspaceService {
         .await?;
         Ok(DeletedView { deleted })
     }
+
+    async fn list_files(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        query: BlackboardFileListQuery,
+    ) -> Result<BlackboardFileListView, WorkspaceApiError> {
+        self.ensure_workspace_scope_and_access(
+            user_id,
+            tenant_id,
+            project_id,
+            workspace_id,
+            WorkspaceAccess::Read,
+        )
+        .await?;
+        let parent_path = validate_file_path(query.parent_path.as_deref().unwrap_or("/"))?;
+        let files = self
+            .repo
+            .list_files(workspace_id, &parent_path)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        Ok(BlackboardFileListView {
+            items: files.into_iter().map(BlackboardFileView::from).collect(),
+        })
+    }
+
+    async fn create_directory(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        body: MkdirPayload,
+    ) -> Result<BlackboardFileView, WorkspaceApiError> {
+        self.ensure_workspace_scope_and_access(
+            user_id,
+            tenant_id,
+            project_id,
+            workspace_id,
+            WorkspaceAccess::Write,
+        )
+        .await?;
+        let parent_path = validate_file_path(&body.parent_path)?;
+        let name = validate_filename(&body.name)?;
+        if parent_path != "/" {
+            require_directory_exists_pg(&self.repo, workspace_id, &parent_path).await?;
+        }
+        ensure_file_name_available_pg(&self.repo, workspace_id, &parent_path, &name).await?;
+        let file = self
+            .repo
+            .create_file(BlackboardFileRecord {
+                id: new_id(),
+                workspace_id: workspace_id.to_string(),
+                parent_path,
+                name,
+                is_directory: true,
+                file_size: 0,
+                content_type: String::new(),
+                storage_key: String::new(),
+                uploader_type: "user".to_string(),
+                uploader_id: user_id.to_string(),
+                uploader_name: user_id.to_string(),
+                checksum_sha256: None,
+                mime_type_detected: None,
+                created_at: Utc::now(),
+            })
+            .await
+            .map_err(map_file_storage_error)?;
+        let view = BlackboardFileView::from(file);
+        self.enqueue_blackboard_event(
+            tenant_id,
+            project_id,
+            workspace_id,
+            "blackboard_file_created",
+            file_event_payload(workspace_id, &view),
+        )
+        .await?;
+        Ok(view)
+    }
+
+    async fn upload_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        upload: BlackboardUpload,
+    ) -> Result<BlackboardFileView, WorkspaceApiError> {
+        self.ensure_workspace_scope_and_access(
+            user_id,
+            tenant_id,
+            project_id,
+            workspace_id,
+            WorkspaceAccess::Write,
+        )
+        .await?;
+        if upload.bytes.len() > MAX_FILE_SIZE {
+            return Err(WorkspaceApiError::bad_request(format!(
+                "File exceeds maximum size of {MAX_FILE_SIZE} bytes"
+            )));
+        }
+        let parent_path = validate_file_path(&upload.parent_path)?;
+        if parent_path != "/" {
+            require_directory_exists_pg(&self.repo, workspace_id, &parent_path).await?;
+        }
+        let filename = validate_filename(&upload.filename)?;
+        ensure_file_name_available_pg(&self.repo, workspace_id, &parent_path, &filename).await?;
+        let file_id = new_id();
+        let content_type = upload
+            .content_type
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| guess_content_type(&filename));
+        let file_size = upload.bytes.len().min(i32::MAX as usize) as i32;
+        let storage_key = format!("{file_id}/{filename}");
+        self.object_store
+            .put(
+                &self.object_key(workspace_id, &storage_key),
+                upload.bytes,
+                Some(&content_type),
+            )
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        let file = self
+            .repo
+            .create_file(BlackboardFileRecord {
+                id: file_id,
+                workspace_id: workspace_id.to_string(),
+                parent_path,
+                name: filename,
+                is_directory: false,
+                file_size,
+                content_type,
+                storage_key,
+                uploader_type: "user".to_string(),
+                uploader_id: user_id.to_string(),
+                uploader_name: user_id.to_string(),
+                checksum_sha256: None,
+                mime_type_detected: None,
+                created_at: Utc::now(),
+            })
+            .await
+            .map_err(map_file_storage_error)?;
+        let mut file = file;
+        if let Some(meta) = self
+            .object_store
+            .stat(&self.object_key(workspace_id, &file.storage_key))
+            .await
+            .map_err(WorkspaceApiError::internal)?
+        {
+            file.file_size = meta.size.min(i32::MAX as u64) as i32;
+            if let Some(content_type) = meta.content_type {
+                file.content_type = content_type;
+            }
+            file = self
+                .repo
+                .save_file(file)
+                .await
+                .map_err(WorkspaceApiError::internal)?;
+        }
+        let view = BlackboardFileView::from(file);
+        self.enqueue_blackboard_event(
+            tenant_id,
+            project_id,
+            workspace_id,
+            "blackboard_file_created",
+            file_event_payload(workspace_id, &view),
+        )
+        .await?;
+        Ok(view)
+    }
+
+    async fn download_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        file_id: &str,
+    ) -> Result<BlackboardFileDownload, WorkspaceApiError> {
+        self.ensure_workspace_scope_and_access(
+            user_id,
+            tenant_id,
+            project_id,
+            workspace_id,
+            WorkspaceAccess::Read,
+        )
+        .await?;
+        let file = self
+            .repo
+            .get_file(workspace_id, file_id)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .ok_or_else(WorkspaceApiError::blackboard_not_found)?;
+        if file.is_directory {
+            return Err(WorkspaceApiError::bad_request(
+                "Cannot read directory content",
+            ));
+        }
+        let bytes = self
+            .object_store
+            .get(&self.object_key(workspace_id, &file.storage_key))
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .ok_or_else(|| {
+                WorkspaceApiError::new(StatusCode::NOT_FOUND, "File content not found")
+            })?;
+        Ok(BlackboardFileDownload {
+            filename: file.name,
+            content_type: if file.content_type.is_empty() {
+                "application/octet-stream".to_string()
+            } else {
+                file.content_type
+            },
+            file_size: file.file_size,
+            etag: file
+                .checksum_sha256
+                .map(|checksum| format!("\"{checksum}\""))
+                .unwrap_or_else(|| format!("W/\"sz-{}-id-{}\"", file.file_size, file.id)),
+            bytes,
+        })
+    }
+
+    async fn patch_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        file_id: &str,
+        body: RenameOrMoveFilePayload,
+    ) -> Result<BlackboardFileView, WorkspaceApiError> {
+        self.ensure_workspace_scope_and_access(
+            user_id,
+            tenant_id,
+            project_id,
+            workspace_id,
+            WorkspaceAccess::Write,
+        )
+        .await?;
+        if body.name.is_none() && body.parent_path.is_none() {
+            return Err(WorkspaceApiError::bad_request(
+                "Provide at least one of 'name' or 'parent_path'",
+            ));
+        }
+        let mut file = self
+            .repo
+            .get_file(workspace_id, file_id)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .ok_or_else(WorkspaceApiError::blackboard_not_found)?;
+        if let Some(parent_path) = body.parent_path {
+            let target_parent = validate_file_path(&parent_path)?;
+            if target_parent != file.parent_path {
+                if target_parent != "/" {
+                    require_directory_exists_pg(&self.repo, workspace_id, &target_parent).await?;
+                }
+                if file.is_directory {
+                    let own_prefix = join_child_path(&file.parent_path, &file.name)?;
+                    if target_parent == own_prefix || target_parent.starts_with(&own_prefix) {
+                        return Err(WorkspaceApiError::bad_request(
+                            "Cannot move a directory into itself",
+                        ));
+                    }
+                    let new_prefix = join_child_path(&target_parent, &file.name)?;
+                    self.repo
+                        .bulk_update_file_parent_path(workspace_id, &own_prefix, &new_prefix)
+                        .await
+                        .map_err(WorkspaceApiError::internal)?;
+                }
+                ensure_file_name_available_pg(&self.repo, workspace_id, &target_parent, &file.name)
+                    .await?;
+                file.parent_path = target_parent;
+            }
+        }
+        if let Some(name) = body.name {
+            let safe_name = validate_filename(&name)?;
+            if safe_name != file.name {
+                ensure_file_name_available_pg(
+                    &self.repo,
+                    workspace_id,
+                    &file.parent_path,
+                    &safe_name,
+                )
+                .await?;
+                if file.is_directory {
+                    let old_prefix = join_child_path(&file.parent_path, &file.name)?;
+                    let new_prefix = join_child_path(&file.parent_path, &safe_name)?;
+                    self.repo
+                        .bulk_update_file_parent_path(workspace_id, &old_prefix, &new_prefix)
+                        .await
+                        .map_err(WorkspaceApiError::internal)?;
+                }
+                file.name = safe_name;
+            }
+        }
+        let view = self
+            .repo
+            .save_file(file)
+            .await
+            .map(BlackboardFileView::from)
+            .map_err(WorkspaceApiError::internal)?;
+        self.enqueue_blackboard_event(
+            tenant_id,
+            project_id,
+            workspace_id,
+            "blackboard_file_updated",
+            json!({ "file": view, "file_id": view.id }),
+        )
+        .await?;
+        Ok(view)
+    }
+
+    async fn copy_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        file_id: &str,
+        body: CopyFilePayload,
+    ) -> Result<BlackboardFileView, WorkspaceApiError> {
+        self.ensure_workspace_scope_and_access(
+            user_id,
+            tenant_id,
+            project_id,
+            workspace_id,
+            WorkspaceAccess::Write,
+        )
+        .await?;
+        let source = self
+            .repo
+            .get_file(workspace_id, file_id)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .ok_or_else(WorkspaceApiError::blackboard_not_found)?;
+        let target_parent = validate_file_path(&body.target_parent_path)?;
+        if target_parent != "/" {
+            require_directory_exists_pg(&self.repo, workspace_id, &target_parent).await?;
+        }
+        let copy_name = validate_filename(body.name.as_deref().unwrap_or(&source.name))?;
+        ensure_file_name_available_pg(&self.repo, workspace_id, &target_parent, &copy_name).await?;
+        let copied = if source.is_directory {
+            copy_directory_pg(
+                &self.repo,
+                Arc::clone(&self.object_store),
+                workspace_id,
+                user_id,
+                &source,
+                &target_parent,
+                &copy_name,
+            )
+            .await?
+        } else {
+            copy_single_file_pg(
+                &self.repo,
+                Arc::clone(&self.object_store),
+                workspace_id,
+                user_id,
+                &source,
+                &target_parent,
+                &copy_name,
+            )
+            .await?
+        };
+        let view = BlackboardFileView::from(copied);
+        self.enqueue_blackboard_event(
+            tenant_id,
+            project_id,
+            workspace_id,
+            "blackboard_file_created",
+            file_event_payload(workspace_id, &view),
+        )
+        .await?;
+        Ok(view)
+    }
+
+    async fn delete_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        file_id: &str,
+        query: DeleteFileQuery,
+    ) -> Result<DeletedView, WorkspaceApiError> {
+        self.ensure_workspace_scope_and_access(
+            user_id,
+            tenant_id,
+            project_id,
+            workspace_id,
+            WorkspaceAccess::Write,
+        )
+        .await?;
+        let file = self
+            .repo
+            .get_file(workspace_id, file_id)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .ok_or_else(WorkspaceApiError::blackboard_not_found)?;
+        let was_directory = file.is_directory;
+        if file.is_directory {
+            let child_path = join_child_path(&file.parent_path, &file.name)?;
+            let children = self
+                .repo
+                .list_files(workspace_id, &child_path)
+                .await
+                .map_err(WorkspaceApiError::internal)?;
+            if !children.is_empty() && !query.recursive {
+                return Err(WorkspaceApiError::bad_request("Directory is not empty"));
+            }
+            if query.recursive {
+                let descendants = self
+                    .repo
+                    .find_file_descendants(workspace_id, &child_path)
+                    .await
+                    .map_err(WorkspaceApiError::internal)?;
+                for descendant in descendants.iter().rev() {
+                    if !descendant.is_directory && !descendant.storage_key.is_empty() {
+                        self.object_store
+                            .delete(&self.object_key(workspace_id, &descendant.storage_key))
+                            .await
+                            .map_err(WorkspaceApiError::internal)?;
+                    }
+                    self.repo
+                        .delete_file(workspace_id, &descendant.id)
+                        .await
+                        .map_err(WorkspaceApiError::internal)?;
+                }
+            }
+        } else if !file.storage_key.is_empty() {
+            self.object_store
+                .delete(&self.object_key(workspace_id, &file.storage_key))
+                .await
+                .map_err(WorkspaceApiError::internal)?;
+        }
+        let deleted = self
+            .repo
+            .delete_file(workspace_id, file_id)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        if !deleted {
+            return Err(WorkspaceApiError::blackboard_not_found());
+        }
+        self.enqueue_blackboard_event(
+            tenant_id,
+            project_id,
+            workspace_id,
+            if was_directory {
+                "blackboard_directory_deleted"
+            } else {
+                "blackboard_file_deleted"
+            },
+            json!({
+                "workspace_id": workspace_id,
+                "file_id": file_id,
+                "deleted": deleted,
+                "recursive": query.recursive,
+                "is_directory": was_directory
+            }),
+        )
+        .await?;
+        Ok(DeletedView { deleted })
+    }
 }
 
 #[derive(Default)]
@@ -1767,19 +2384,30 @@ struct DevWorkspaceState {
     edges: HashMap<String, TopologyEdgeRecord>,
     posts: HashMap<String, BlackboardPostRecord>,
     replies: HashMap<String, BlackboardReplyRecord>,
+    files: HashMap<String, BlackboardFileRecord>,
     outbox: Vec<BlackboardOutboxRecord>,
 }
 
 pub(crate) struct DevWorkspaceService {
     dev_user_id: String,
     state: Mutex<DevWorkspaceState>,
+    object_store: Arc<dyn ObjectStore>,
 }
 
 impl DevWorkspaceService {
+    #[cfg(test)]
     pub(crate) fn new(dev_user_id: impl Into<String>) -> Self {
+        Self::with_object_store(dev_user_id, Arc::new(InMemoryObjectStore::new()))
+    }
+
+    pub(crate) fn with_object_store(
+        dev_user_id: impl Into<String>,
+        object_store: Arc<dyn ObjectStore>,
+    ) -> Self {
         Self {
             dev_user_id: dev_user_id.into(),
             state: Mutex::new(DevWorkspaceState::default()),
+            object_store,
         }
     }
 
@@ -1798,6 +2426,10 @@ impl DevWorkspaceService {
         project_id: &str,
     ) -> bool {
         workspace.tenant_id == tenant_id && workspace.project_id == project_id
+    }
+
+    fn object_key(&self, workspace_id: &str, storage_key: &str) -> String {
+        object_key(workspace_id, storage_key)
     }
 }
 
@@ -1947,6 +2579,9 @@ impl WorkspaceService for DevWorkspaceService {
         state
             .replies
             .retain(|_, reply| reply.workspace_id != workspace_id);
+        state
+            .files
+            .retain(|_, file| file.workspace_id != workspace_id);
         Ok(())
     }
 
@@ -2694,6 +3329,425 @@ impl WorkspaceService for DevWorkspaceService {
         }
         Ok(DeletedView { deleted: true })
     }
+
+    async fn list_files(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        query: BlackboardFileListQuery,
+    ) -> Result<BlackboardFileListView, WorkspaceApiError> {
+        self.require_dev_user(user_id)?;
+        let parent_path = validate_file_path(query.parent_path.as_deref().unwrap_or("/"))?;
+        let state = self.state.lock().expect("workspace dev state");
+        if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
+            return Err(WorkspaceApiError::workspace_not_found());
+        }
+        let mut files: Vec<_> = state
+            .files
+            .values()
+            .filter(|file| file.workspace_id == workspace_id && file.parent_path == parent_path)
+            .cloned()
+            .collect();
+        sort_files(&mut files);
+        Ok(BlackboardFileListView {
+            items: files.into_iter().map(BlackboardFileView::from).collect(),
+        })
+    }
+
+    async fn create_directory(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        body: MkdirPayload,
+    ) -> Result<BlackboardFileView, WorkspaceApiError> {
+        self.require_dev_user(user_id)?;
+        let parent_path = validate_file_path(&body.parent_path)?;
+        let name = validate_filename(&body.name)?;
+        let mut state = self.state.lock().expect("workspace dev state");
+        if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
+            return Err(WorkspaceApiError::workspace_not_found());
+        }
+        if parent_path != "/" {
+            require_directory_exists_dev(&state, workspace_id, &parent_path)?;
+        }
+        ensure_file_name_available_dev(&state, workspace_id, &parent_path, &name)?;
+        let file = BlackboardFileRecord {
+            id: new_id(),
+            workspace_id: workspace_id.to_string(),
+            parent_path,
+            name,
+            is_directory: true,
+            file_size: 0,
+            content_type: String::new(),
+            storage_key: String::new(),
+            uploader_type: "user".to_string(),
+            uploader_id: user_id.to_string(),
+            uploader_name: user_id.to_string(),
+            checksum_sha256: None,
+            mime_type_detected: None,
+            created_at: Utc::now(),
+        };
+        state.files.insert(file.id.clone(), file.clone());
+        let view = BlackboardFileView::from(file);
+        state.outbox.push(BlackboardOutboxRecord {
+            id: new_id(),
+            workspace_id: workspace_id.to_string(),
+            tenant_id: tenant_id.to_string(),
+            project_id: project_id.to_string(),
+            event_type: "blackboard_file_created".to_string(),
+            payload_json: file_event_payload(workspace_id, &view),
+            metadata_json: json!({ "tenant_id": tenant_id, "project_id": project_id }),
+            correlation_id: None,
+        });
+        Ok(view)
+    }
+
+    async fn upload_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        upload: BlackboardUpload,
+    ) -> Result<BlackboardFileView, WorkspaceApiError> {
+        self.require_dev_user(user_id)?;
+        if upload.bytes.len() > MAX_FILE_SIZE {
+            return Err(WorkspaceApiError::bad_request(format!(
+                "File exceeds maximum size of {MAX_FILE_SIZE} bytes"
+            )));
+        }
+        let parent_path = validate_file_path(&upload.parent_path)?;
+        let filename = validate_filename(&upload.filename)?;
+        {
+            let state = self.state.lock().expect("workspace dev state");
+            if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
+                return Err(WorkspaceApiError::workspace_not_found());
+            }
+            if parent_path != "/" {
+                require_directory_exists_dev(&state, workspace_id, &parent_path)?;
+            }
+            ensure_file_name_available_dev(&state, workspace_id, &parent_path, &filename)?;
+        }
+        let file_id = new_id();
+        let content_type = upload
+            .content_type
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| guess_content_type(&filename));
+        let file_size = upload.bytes.len().min(i32::MAX as usize) as i32;
+        let storage_key = format!("{file_id}/{filename}");
+        self.object_store
+            .put(
+                &self.object_key(workspace_id, &storage_key),
+                upload.bytes,
+                Some(&content_type),
+            )
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        let file = BlackboardFileRecord {
+            id: file_id,
+            workspace_id: workspace_id.to_string(),
+            parent_path,
+            name: filename,
+            is_directory: false,
+            file_size,
+            content_type,
+            storage_key,
+            uploader_type: "user".to_string(),
+            uploader_id: user_id.to_string(),
+            uploader_name: user_id.to_string(),
+            checksum_sha256: None,
+            mime_type_detected: None,
+            created_at: Utc::now(),
+        };
+        let mut state = self.state.lock().expect("workspace dev state");
+        state.files.insert(file.id.clone(), file.clone());
+        let view = BlackboardFileView::from(file);
+        state.outbox.push(BlackboardOutboxRecord {
+            id: new_id(),
+            workspace_id: workspace_id.to_string(),
+            tenant_id: tenant_id.to_string(),
+            project_id: project_id.to_string(),
+            event_type: "blackboard_file_created".to_string(),
+            payload_json: file_event_payload(workspace_id, &view),
+            metadata_json: json!({ "tenant_id": tenant_id, "project_id": project_id }),
+            correlation_id: None,
+        });
+        Ok(view)
+    }
+
+    async fn download_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        file_id: &str,
+    ) -> Result<BlackboardFileDownload, WorkspaceApiError> {
+        self.require_dev_user(user_id)?;
+        let file = {
+            let state = self.state.lock().expect("workspace dev state");
+            if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
+                return Err(WorkspaceApiError::workspace_not_found());
+            }
+            state
+                .files
+                .get(file_id)
+                .filter(|file| file.workspace_id == workspace_id)
+                .cloned()
+                .ok_or_else(WorkspaceApiError::blackboard_not_found)?
+        };
+        if file.is_directory {
+            return Err(WorkspaceApiError::bad_request(
+                "Cannot read directory content",
+            ));
+        }
+        let bytes = self
+            .object_store
+            .get(&self.object_key(workspace_id, &file.storage_key))
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .ok_or_else(|| {
+                WorkspaceApiError::new(StatusCode::NOT_FOUND, "File content not found")
+            })?;
+        Ok(BlackboardFileDownload {
+            filename: file.name,
+            content_type: if file.content_type.is_empty() {
+                "application/octet-stream".to_string()
+            } else {
+                file.content_type
+            },
+            file_size: file.file_size,
+            etag: file
+                .checksum_sha256
+                .map(|checksum| format!("\"{checksum}\""))
+                .unwrap_or_else(|| format!("W/\"sz-{}-id-{}\"", file.file_size, file.id)),
+            bytes,
+        })
+    }
+
+    async fn patch_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        file_id: &str,
+        body: RenameOrMoveFilePayload,
+    ) -> Result<BlackboardFileView, WorkspaceApiError> {
+        self.require_dev_user(user_id)?;
+        if body.name.is_none() && body.parent_path.is_none() {
+            return Err(WorkspaceApiError::bad_request(
+                "Provide at least one of 'name' or 'parent_path'",
+            ));
+        }
+        let mut state = self.state.lock().expect("workspace dev state");
+        if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
+            return Err(WorkspaceApiError::workspace_not_found());
+        }
+        let mut file = state
+            .files
+            .get(file_id)
+            .filter(|file| file.workspace_id == workspace_id)
+            .cloned()
+            .ok_or_else(WorkspaceApiError::blackboard_not_found)?;
+        if let Some(parent_path) = body.parent_path {
+            let target_parent = validate_file_path(&parent_path)?;
+            if target_parent != file.parent_path {
+                if target_parent != "/" {
+                    require_directory_exists_dev(&state, workspace_id, &target_parent)?;
+                }
+                if file.is_directory {
+                    let own_prefix = join_child_path(&file.parent_path, &file.name)?;
+                    if target_parent == own_prefix || target_parent.starts_with(&own_prefix) {
+                        return Err(WorkspaceApiError::bad_request(
+                            "Cannot move a directory into itself",
+                        ));
+                    }
+                    let new_prefix = join_child_path(&target_parent, &file.name)?;
+                    bulk_update_parent_path_dev(&mut state, workspace_id, &own_prefix, &new_prefix);
+                }
+                ensure_file_name_available_dev(&state, workspace_id, &target_parent, &file.name)?;
+                file.parent_path = target_parent;
+            }
+        }
+        if let Some(name) = body.name {
+            let safe_name = validate_filename(&name)?;
+            if safe_name != file.name {
+                ensure_file_name_available_dev(
+                    &state,
+                    workspace_id,
+                    &file.parent_path,
+                    &safe_name,
+                )?;
+                if file.is_directory {
+                    let old_prefix = join_child_path(&file.parent_path, &file.name)?;
+                    let new_prefix = join_child_path(&file.parent_path, &safe_name)?;
+                    bulk_update_parent_path_dev(&mut state, workspace_id, &old_prefix, &new_prefix);
+                }
+                file.name = safe_name;
+            }
+        }
+        state.files.insert(file.id.clone(), file.clone());
+        let view = BlackboardFileView::from(file);
+        state.outbox.push(BlackboardOutboxRecord {
+            id: new_id(),
+            workspace_id: workspace_id.to_string(),
+            tenant_id: tenant_id.to_string(),
+            project_id: project_id.to_string(),
+            event_type: "blackboard_file_updated".to_string(),
+            payload_json: json!({ "file": view, "file_id": view.id }),
+            metadata_json: json!({ "tenant_id": tenant_id, "project_id": project_id }),
+            correlation_id: None,
+        });
+        Ok(view)
+    }
+
+    async fn copy_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        file_id: &str,
+        body: CopyFilePayload,
+    ) -> Result<BlackboardFileView, WorkspaceApiError> {
+        self.require_dev_user(user_id)?;
+        let source;
+        let target_parent = validate_file_path(&body.target_parent_path)?;
+        let copy_name;
+        {
+            let state = self.state.lock().expect("workspace dev state");
+            if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
+                return Err(WorkspaceApiError::workspace_not_found());
+            }
+            source = state
+                .files
+                .get(file_id)
+                .filter(|file| file.workspace_id == workspace_id)
+                .cloned()
+                .ok_or_else(WorkspaceApiError::blackboard_not_found)?;
+            if target_parent != "/" {
+                require_directory_exists_dev(&state, workspace_id, &target_parent)?;
+            }
+            copy_name = validate_filename(body.name.as_deref().unwrap_or(&source.name))?;
+            ensure_file_name_available_dev(&state, workspace_id, &target_parent, &copy_name)?;
+        }
+        let copied = if source.is_directory {
+            copy_directory_dev(
+                self,
+                workspace_id,
+                user_id,
+                &source,
+                &target_parent,
+                &copy_name,
+            )
+            .await?
+        } else {
+            copy_single_file_dev(
+                self,
+                workspace_id,
+                user_id,
+                &source,
+                &target_parent,
+                &copy_name,
+            )
+            .await?
+        };
+        let mut state = self.state.lock().expect("workspace dev state");
+        let view = BlackboardFileView::from(copied);
+        state.outbox.push(BlackboardOutboxRecord {
+            id: new_id(),
+            workspace_id: workspace_id.to_string(),
+            tenant_id: tenant_id.to_string(),
+            project_id: project_id.to_string(),
+            event_type: "blackboard_file_created".to_string(),
+            payload_json: file_event_payload(workspace_id, &view),
+            metadata_json: json!({ "tenant_id": tenant_id, "project_id": project_id }),
+            correlation_id: None,
+        });
+        Ok(view)
+    }
+
+    async fn delete_file(
+        &self,
+        user_id: &str,
+        tenant_id: &str,
+        project_id: &str,
+        workspace_id: &str,
+        file_id: &str,
+        query: DeleteFileQuery,
+    ) -> Result<DeletedView, WorkspaceApiError> {
+        self.require_dev_user(user_id)?;
+        let (file, descendants) = {
+            let state = self.state.lock().expect("workspace dev state");
+            if !workspace_in_scope_dev(&state, self, workspace_id, tenant_id, project_id) {
+                return Err(WorkspaceApiError::workspace_not_found());
+            }
+            let file = state
+                .files
+                .get(file_id)
+                .filter(|file| file.workspace_id == workspace_id)
+                .cloned()
+                .ok_or_else(WorkspaceApiError::blackboard_not_found)?;
+            let descendants = if file.is_directory {
+                let child_path = join_child_path(&file.parent_path, &file.name)?;
+                let children = list_files_dev(&state, workspace_id, &child_path);
+                if !children.is_empty() && !query.recursive {
+                    return Err(WorkspaceApiError::bad_request("Directory is not empty"));
+                }
+                find_descendants_dev(&state, workspace_id, &child_path)
+            } else {
+                Vec::new()
+            };
+            (file, descendants)
+        };
+        for descendant in &descendants {
+            if !descendant.is_directory && !descendant.storage_key.is_empty() {
+                self.object_store
+                    .delete(&self.object_key(workspace_id, &descendant.storage_key))
+                    .await
+                    .map_err(WorkspaceApiError::internal)?;
+            }
+        }
+        if !file.is_directory && !file.storage_key.is_empty() {
+            self.object_store
+                .delete(&self.object_key(workspace_id, &file.storage_key))
+                .await
+                .map_err(WorkspaceApiError::internal)?;
+        }
+        let mut state = self.state.lock().expect("workspace dev state");
+        for descendant in descendants {
+            state.files.remove(&descendant.id);
+        }
+        if state.files.remove(file_id).is_none() {
+            return Err(WorkspaceApiError::blackboard_not_found());
+        }
+        state.outbox.push(BlackboardOutboxRecord {
+            id: new_id(),
+            workspace_id: workspace_id.to_string(),
+            tenant_id: tenant_id.to_string(),
+            project_id: project_id.to_string(),
+            event_type: if file.is_directory {
+                "blackboard_directory_deleted".to_string()
+            } else {
+                "blackboard_file_deleted".to_string()
+            },
+            payload_json: json!({
+                "workspace_id": workspace_id,
+                "file_id": file_id,
+                "deleted": true,
+                "recursive": query.recursive,
+                "is_directory": file.is_directory
+            }),
+            metadata_json: json!({ "tenant_id": tenant_id, "project_id": project_id }),
+            correlation_id: None,
+        });
+        Ok(DeletedView { deleted: true })
+    }
 }
 
 impl From<WorkspaceRecord> for WorkspaceView {
@@ -2842,6 +3896,24 @@ impl From<BlackboardReplyRecord> for BlackboardReplyView {
             metadata: record.metadata_json,
             created_at: iso(record.created_at),
             updated_at: record.updated_at.map(iso),
+        }
+    }
+}
+
+impl From<BlackboardFileRecord> for BlackboardFileView {
+    fn from(record: BlackboardFileRecord) -> Self {
+        Self {
+            id: record.id,
+            workspace_id: record.workspace_id,
+            parent_path: record.parent_path,
+            name: record.name,
+            is_directory: record.is_directory,
+            file_size: record.file_size,
+            content_type: record.content_type,
+            uploader_type: record.uploader_type,
+            uploader_id: record.uploader_id,
+            uploader_name: record.uploader_name,
+            created_at: iso(record.created_at),
         }
     }
 }
@@ -3003,6 +4075,22 @@ fn default_post_status() -> String {
     "open".to_string()
 }
 
+fn root_path() -> String {
+    "/".to_string()
+}
+
+const BLOCKED_FILE_SEGMENTS: &[&str] = &[
+    "credentials",
+    "node_modules",
+    ".env",
+    "__pycache__",
+    ".git",
+    ".svn",
+    ".hg",
+];
+const MAX_FILE_SIZE: usize = 100 * 1024 * 1024;
+const MAX_COPY_ENTRIES: usize = 500;
+
 fn clamp_limit(limit: Option<i64>, default: i64, max: i64) -> i64 {
     limit.unwrap_or(default).clamp(1, max)
 }
@@ -3042,6 +4130,556 @@ fn iso(value: DateTime<Utc>) -> String {
 
 fn new_id() -> String {
     generate_uuid_v4()
+}
+
+fn validate_file_path(path: &str) -> Result<String, WorkspaceApiError> {
+    let raw = if path.trim().is_empty() {
+        "/".to_string()
+    } else {
+        path.replace('\\', "/").trim().to_string()
+    };
+    let mut parts = Vec::new();
+    for part in raw.split('/') {
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if part == ".." {
+            return Err(WorkspaceApiError::bad_request("Path traversal detected"));
+        }
+        if BLOCKED_FILE_SEGMENTS
+            .iter()
+            .any(|blocked| part.eq_ignore_ascii_case(blocked))
+        {
+            return Err(WorkspaceApiError::bad_request(format!(
+                "Blocked path segment: {part}"
+            )));
+        }
+        parts.push(part);
+    }
+    if parts.is_empty() {
+        Ok("/".to_string())
+    } else {
+        Ok(format!("/{}/", parts.join("/")))
+    }
+}
+
+fn validate_filename(filename: &str) -> Result<String, WorkspaceApiError> {
+    let normalized = filename.replace('\\', "/");
+    if normalized.is_empty()
+        || normalized.contains('/')
+        || normalized == "."
+        || normalized == ".."
+        || normalized.contains('\0')
+    {
+        return Err(WorkspaceApiError::bad_request("Invalid filename"));
+    }
+    if BLOCKED_FILE_SEGMENTS
+        .iter()
+        .any(|blocked| normalized.eq_ignore_ascii_case(blocked))
+    {
+        return Err(WorkspaceApiError::bad_request(format!(
+            "Blocked path segment: {normalized}"
+        )));
+    }
+    Ok(normalized)
+}
+
+fn join_child_path(parent_path: &str, name: &str) -> Result<String, WorkspaceApiError> {
+    validate_file_path(&format!("{}/{}", parent_path.trim_end_matches('/'), name))
+}
+
+fn split_directory_path(path: &str) -> Result<(String, String), WorkspaceApiError> {
+    let normalized = validate_file_path(path)?;
+    if normalized == "/" {
+        return Err(WorkspaceApiError::bad_request(
+            "Root directory has no file record",
+        ));
+    }
+    let mut parts: Vec<&str> = normalized.trim_matches('/').split('/').collect();
+    let name = parts
+        .pop()
+        .ok_or_else(|| WorkspaceApiError::bad_request("Invalid directory path"))?;
+    let parent = if parts.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}/", parts.join("/"))
+    };
+    Ok((parent, name.to_string()))
+}
+
+async fn require_directory_exists_pg(
+    repo: &PgWorkspaceRepository,
+    workspace_id: &str,
+    path: &str,
+) -> Result<(), WorkspaceApiError> {
+    let (parent_path, name) = split_directory_path(path)?;
+    let found = repo
+        .find_file_by_path(workspace_id, &parent_path, &name)
+        .await
+        .map_err(WorkspaceApiError::internal)?;
+    match found {
+        Some(file) if file.is_directory => Ok(()),
+        _ => Err(WorkspaceApiError::bad_request(
+            "Destination directory not found",
+        )),
+    }
+}
+
+async fn ensure_file_name_available_pg(
+    repo: &PgWorkspaceRepository,
+    workspace_id: &str,
+    parent_path: &str,
+    name: &str,
+) -> Result<(), WorkspaceApiError> {
+    if repo
+        .find_file_by_path(workspace_id, parent_path, name)
+        .await
+        .map_err(WorkspaceApiError::internal)?
+        .is_some()
+    {
+        Err(WorkspaceApiError::conflict("File already exists"))
+    } else {
+        Ok(())
+    }
+}
+
+fn map_file_storage_error(err: agistack_core::ports::CoreError) -> WorkspaceApiError {
+    if err.to_string().contains("uq_blackboard_files_ws_path_name") {
+        WorkspaceApiError::conflict("File already exists")
+    } else {
+        WorkspaceApiError::internal(err)
+    }
+}
+
+fn workspace_in_scope_dev(
+    state: &DevWorkspaceState,
+    service: &DevWorkspaceService,
+    workspace_id: &str,
+    tenant_id: &str,
+    project_id: &str,
+) -> bool {
+    state
+        .workspaces
+        .get(workspace_id)
+        .map(|workspace| service.workspace_matches(workspace, tenant_id, project_id))
+        .unwrap_or(false)
+}
+
+fn find_file_by_path_dev(
+    state: &DevWorkspaceState,
+    workspace_id: &str,
+    parent_path: &str,
+    name: &str,
+) -> Option<BlackboardFileRecord> {
+    state
+        .files
+        .values()
+        .find(|file| {
+            file.workspace_id == workspace_id
+                && file.parent_path == parent_path
+                && file.name == name
+        })
+        .cloned()
+}
+
+fn require_directory_exists_dev(
+    state: &DevWorkspaceState,
+    workspace_id: &str,
+    path: &str,
+) -> Result<(), WorkspaceApiError> {
+    let (parent_path, name) = split_directory_path(path)?;
+    match find_file_by_path_dev(state, workspace_id, &parent_path, &name) {
+        Some(file) if file.is_directory => Ok(()),
+        _ => Err(WorkspaceApiError::bad_request(
+            "Destination directory not found",
+        )),
+    }
+}
+
+fn ensure_file_name_available_dev(
+    state: &DevWorkspaceState,
+    workspace_id: &str,
+    parent_path: &str,
+    name: &str,
+) -> Result<(), WorkspaceApiError> {
+    if find_file_by_path_dev(state, workspace_id, parent_path, name).is_some() {
+        Err(WorkspaceApiError::conflict("File already exists"))
+    } else {
+        Ok(())
+    }
+}
+
+fn list_files_dev(
+    state: &DevWorkspaceState,
+    workspace_id: &str,
+    parent_path: &str,
+) -> Vec<BlackboardFileRecord> {
+    let mut files: Vec<_> = state
+        .files
+        .values()
+        .filter(|file| file.workspace_id == workspace_id && file.parent_path == parent_path)
+        .cloned()
+        .collect();
+    sort_files(&mut files);
+    files
+}
+
+fn find_descendants_dev(
+    state: &DevWorkspaceState,
+    workspace_id: &str,
+    path_prefix: &str,
+) -> Vec<BlackboardFileRecord> {
+    let mut files: Vec<_> = state
+        .files
+        .values()
+        .filter(|file| {
+            file.workspace_id == workspace_id && file.parent_path.starts_with(path_prefix)
+        })
+        .cloned()
+        .collect();
+    files.sort_by(|a, b| {
+        a.parent_path
+            .cmp(&b.parent_path)
+            .then(b.is_directory.cmp(&a.is_directory))
+            .then(a.name.cmp(&b.name))
+    });
+    files
+}
+
+fn sort_files(files: &mut [BlackboardFileRecord]) {
+    files.sort_by(|a, b| {
+        b.is_directory
+            .cmp(&a.is_directory)
+            .then(a.name.cmp(&b.name))
+    });
+}
+
+fn bulk_update_parent_path_dev(
+    state: &mut DevWorkspaceState,
+    workspace_id: &str,
+    old_prefix: &str,
+    new_prefix: &str,
+) {
+    for file in state.files.values_mut() {
+        if file.workspace_id == workspace_id {
+            if file.parent_path == old_prefix {
+                file.parent_path = new_prefix.to_string();
+            } else if let Some(suffix) = file.parent_path.strip_prefix(old_prefix) {
+                file.parent_path = format!("{new_prefix}{suffix}");
+            }
+        }
+    }
+}
+
+fn object_key(workspace_id: &str, storage_key: &str) -> String {
+    format!(
+        "workspace-files/{}/{}",
+        workspace_id.trim_matches('/'),
+        storage_key.trim_start_matches('/')
+    )
+}
+
+fn file_event_payload(workspace_id: &str, view: &BlackboardFileView) -> Value {
+    json!({
+        "file": view,
+        "workspace_id": workspace_id,
+        "file_id": view.id,
+        "parent_path": view.parent_path,
+        "name": view.name,
+        "is_directory": view.is_directory,
+    })
+}
+
+fn guess_content_type(filename: &str) -> String {
+    match filename
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "txt" | "md" | "log" => "text/plain",
+        "json" => "application/json",
+        "csv" => "text/csv",
+        "html" | "htm" => "text/html",
+        "css" => "text/css",
+        "js" | "mjs" => "text/javascript",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "svg" => "image/svg+xml",
+        "pdf" => "application/pdf",
+        _ => "application/octet-stream",
+    }
+    .to_string()
+}
+
+fn content_disposition(filename: &str) -> String {
+    let escaped = filename.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("attachment; filename=\"{escaped}\"")
+}
+
+async fn copy_single_file_pg(
+    repo: &PgWorkspaceRepository,
+    object_store: Arc<dyn ObjectStore>,
+    workspace_id: &str,
+    user_id: &str,
+    source: &BlackboardFileRecord,
+    target_parent: &str,
+    copy_name: &str,
+) -> Result<BlackboardFileRecord, WorkspaceApiError> {
+    let bytes = object_store
+        .get(&object_key(workspace_id, &source.storage_key))
+        .await
+        .map_err(WorkspaceApiError::internal)?
+        .ok_or_else(|| WorkspaceApiError::new(StatusCode::NOT_FOUND, "File content not found"))?;
+    let new_id = new_id();
+    let storage_key = format!("{new_id}/{copy_name}");
+    object_store
+        .put(
+            &object_key(workspace_id, &storage_key),
+            bytes,
+            Some(&source.content_type),
+        )
+        .await
+        .map_err(WorkspaceApiError::internal)?;
+    repo.create_file(BlackboardFileRecord {
+        id: new_id,
+        workspace_id: workspace_id.to_string(),
+        parent_path: target_parent.to_string(),
+        name: copy_name.to_string(),
+        is_directory: false,
+        file_size: source.file_size,
+        content_type: source.content_type.clone(),
+        storage_key,
+        uploader_type: "user".to_string(),
+        uploader_id: user_id.to_string(),
+        uploader_name: user_id.to_string(),
+        checksum_sha256: source.checksum_sha256.clone(),
+        mime_type_detected: source.mime_type_detected.clone(),
+        created_at: Utc::now(),
+    })
+    .await
+    .map_err(map_file_storage_error)
+}
+
+async fn copy_directory_pg(
+    repo: &PgWorkspaceRepository,
+    object_store: Arc<dyn ObjectStore>,
+    workspace_id: &str,
+    user_id: &str,
+    source: &BlackboardFileRecord,
+    target_parent: &str,
+    copy_name: &str,
+) -> Result<BlackboardFileRecord, WorkspaceApiError> {
+    let old_prefix = join_child_path(&source.parent_path, &source.name)?;
+    let descendants = repo
+        .find_file_descendants(workspace_id, &old_prefix)
+        .await
+        .map_err(WorkspaceApiError::internal)?;
+    if descendants.len() + 1 > MAX_COPY_ENTRIES {
+        return Err(WorkspaceApiError::bad_request(
+            "Directory copy is too large",
+        ));
+    }
+    let root = repo
+        .create_file(BlackboardFileRecord {
+            id: new_id(),
+            workspace_id: workspace_id.to_string(),
+            parent_path: target_parent.to_string(),
+            name: copy_name.to_string(),
+            is_directory: true,
+            file_size: 0,
+            content_type: String::new(),
+            storage_key: String::new(),
+            uploader_type: "user".to_string(),
+            uploader_id: user_id.to_string(),
+            uploader_name: user_id.to_string(),
+            checksum_sha256: None,
+            mime_type_detected: None,
+            created_at: Utc::now(),
+        })
+        .await
+        .map_err(map_file_storage_error)?;
+    let new_prefix = join_child_path(target_parent, copy_name)?;
+    for descendant in descendants {
+        let target_desc_parent =
+            replace_parent_prefix(&descendant.parent_path, &old_prefix, &new_prefix);
+        if descendant.is_directory {
+            repo.create_file(BlackboardFileRecord {
+                id: new_id(),
+                workspace_id: workspace_id.to_string(),
+                parent_path: target_desc_parent,
+                name: descendant.name,
+                is_directory: true,
+                file_size: 0,
+                content_type: String::new(),
+                storage_key: String::new(),
+                uploader_type: "user".to_string(),
+                uploader_id: user_id.to_string(),
+                uploader_name: user_id.to_string(),
+                checksum_sha256: None,
+                mime_type_detected: None,
+                created_at: Utc::now(),
+            })
+            .await
+            .map_err(map_file_storage_error)?;
+        } else {
+            copy_single_file_pg(
+                repo,
+                Arc::clone(&object_store),
+                workspace_id,
+                user_id,
+                &descendant,
+                &target_desc_parent,
+                &descendant.name,
+            )
+            .await?;
+        }
+    }
+    Ok(root)
+}
+
+async fn copy_single_file_dev(
+    service: &DevWorkspaceService,
+    workspace_id: &str,
+    user_id: &str,
+    source: &BlackboardFileRecord,
+    target_parent: &str,
+    copy_name: &str,
+) -> Result<BlackboardFileRecord, WorkspaceApiError> {
+    let bytes = service
+        .object_store
+        .get(&service.object_key(workspace_id, &source.storage_key))
+        .await
+        .map_err(WorkspaceApiError::internal)?
+        .ok_or_else(|| WorkspaceApiError::new(StatusCode::NOT_FOUND, "File content not found"))?;
+    let new_id = new_id();
+    let storage_key = format!("{new_id}/{copy_name}");
+    service
+        .object_store
+        .put(
+            &service.object_key(workspace_id, &storage_key),
+            bytes,
+            Some(&source.content_type),
+        )
+        .await
+        .map_err(WorkspaceApiError::internal)?;
+    let clone = BlackboardFileRecord {
+        id: new_id,
+        workspace_id: workspace_id.to_string(),
+        parent_path: target_parent.to_string(),
+        name: copy_name.to_string(),
+        is_directory: false,
+        file_size: source.file_size,
+        content_type: source.content_type.clone(),
+        storage_key,
+        uploader_type: "user".to_string(),
+        uploader_id: user_id.to_string(),
+        uploader_name: user_id.to_string(),
+        checksum_sha256: source.checksum_sha256.clone(),
+        mime_type_detected: source.mime_type_detected.clone(),
+        created_at: Utc::now(),
+    };
+    service
+        .state
+        .lock()
+        .expect("workspace dev state")
+        .files
+        .insert(clone.id.clone(), clone.clone());
+    Ok(clone)
+}
+
+async fn copy_directory_dev(
+    service: &DevWorkspaceService,
+    workspace_id: &str,
+    user_id: &str,
+    source: &BlackboardFileRecord,
+    target_parent: &str,
+    copy_name: &str,
+) -> Result<BlackboardFileRecord, WorkspaceApiError> {
+    let old_prefix = join_child_path(&source.parent_path, &source.name)?;
+    let descendants = {
+        let state = service.state.lock().expect("workspace dev state");
+        find_descendants_dev(&state, workspace_id, &old_prefix)
+    };
+    if descendants.len() + 1 > MAX_COPY_ENTRIES {
+        return Err(WorkspaceApiError::bad_request(
+            "Directory copy is too large",
+        ));
+    }
+    let root = BlackboardFileRecord {
+        id: new_id(),
+        workspace_id: workspace_id.to_string(),
+        parent_path: target_parent.to_string(),
+        name: copy_name.to_string(),
+        is_directory: true,
+        file_size: 0,
+        content_type: String::new(),
+        storage_key: String::new(),
+        uploader_type: "user".to_string(),
+        uploader_id: user_id.to_string(),
+        uploader_name: user_id.to_string(),
+        checksum_sha256: None,
+        mime_type_detected: None,
+        created_at: Utc::now(),
+    };
+    service
+        .state
+        .lock()
+        .expect("workspace dev state")
+        .files
+        .insert(root.id.clone(), root.clone());
+    let new_prefix = join_child_path(target_parent, copy_name)?;
+    for descendant in descendants {
+        let target_desc_parent =
+            replace_parent_prefix(&descendant.parent_path, &old_prefix, &new_prefix);
+        if descendant.is_directory {
+            let clone = BlackboardFileRecord {
+                id: new_id(),
+                workspace_id: workspace_id.to_string(),
+                parent_path: target_desc_parent,
+                name: descendant.name,
+                is_directory: true,
+                file_size: 0,
+                content_type: String::new(),
+                storage_key: String::new(),
+                uploader_type: "user".to_string(),
+                uploader_id: user_id.to_string(),
+                uploader_name: user_id.to_string(),
+                checksum_sha256: None,
+                mime_type_detected: None,
+                created_at: Utc::now(),
+            };
+            service
+                .state
+                .lock()
+                .expect("workspace dev state")
+                .files
+                .insert(clone.id.clone(), clone);
+        } else {
+            copy_single_file_dev(
+                service,
+                workspace_id,
+                user_id,
+                &descendant,
+                &target_desc_parent,
+                &descendant.name,
+            )
+            .await?;
+        }
+    }
+    Ok(root)
+}
+
+fn replace_parent_prefix(parent_path: &str, old_prefix: &str, new_prefix: &str) -> String {
+    if parent_path == old_prefix {
+        new_prefix.to_string()
+    } else if let Some(suffix) = parent_path.strip_prefix(old_prefix) {
+        format!("{new_prefix}{suffix}")
+    } else {
+        parent_path.to_string()
+    }
 }
 
 async fn create_workspace(
@@ -3471,6 +5109,229 @@ async fn delete_reply(
         .map(Json)
 }
 
+async fn list_files(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
+    Query(query): Query<BlackboardFileListQuery>,
+) -> Result<Json<BlackboardFileListView>, WorkspaceApiError> {
+    app.workspaces
+        .list_files(
+            &identity.user_id,
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            query,
+        )
+        .await
+        .map(Json)
+}
+
+async fn create_directory(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
+    Json(body): Json<MkdirPayload>,
+) -> Result<(StatusCode, Json<BlackboardFileView>), WorkspaceApiError> {
+    app.workspaces
+        .create_directory(
+            &identity.user_id,
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            body,
+        )
+        .await
+        .map(|view| (StatusCode::CREATED, Json(view)))
+}
+
+async fn upload_file(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((tenant_id, project_id, workspace_id)): Path<(String, String, String)>,
+    multipart: Multipart,
+) -> Result<(StatusCode, Json<BlackboardFileView>), WorkspaceApiError> {
+    let upload = parse_upload(multipart).await?;
+    app.workspaces
+        .upload_file(
+            &identity.user_id,
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            upload,
+        )
+        .await
+        .map(|view| (StatusCode::CREATED, Json(view)))
+}
+
+async fn download_file(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    headers: HeaderMap,
+    Path((tenant_id, project_id, workspace_id, file_id)): Path<(String, String, String, String)>,
+) -> Result<Response, WorkspaceApiError> {
+    let download = app
+        .workspaces
+        .download_file(
+            &identity.user_id,
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            &file_id,
+        )
+        .await?;
+    if let Some(if_none_match) = headers
+        .get(IF_NONE_MATCH)
+        .and_then(|value| value.to_str().ok())
+    {
+        let candidates = if_none_match.split(',').map(str::trim);
+        if candidates
+            .into_iter()
+            .any(|candidate| candidate == download.etag)
+        {
+            return response_with_headers(StatusCode::NOT_MODIFIED, &download, Vec::new());
+        }
+    }
+    let bytes = download.bytes.clone();
+    response_with_headers(StatusCode::OK, &download, bytes)
+}
+
+async fn patch_file(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((tenant_id, project_id, workspace_id, file_id)): Path<(String, String, String, String)>,
+    Json(body): Json<RenameOrMoveFilePayload>,
+) -> Result<Json<BlackboardFileView>, WorkspaceApiError> {
+    app.workspaces
+        .patch_file(
+            &identity.user_id,
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            &file_id,
+            body,
+        )
+        .await
+        .map(Json)
+}
+
+async fn copy_file(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((tenant_id, project_id, workspace_id, file_id)): Path<(String, String, String, String)>,
+    Json(body): Json<CopyFilePayload>,
+) -> Result<(StatusCode, Json<BlackboardFileView>), WorkspaceApiError> {
+    app.workspaces
+        .copy_file(
+            &identity.user_id,
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            &file_id,
+            body,
+        )
+        .await
+        .map(|view| (StatusCode::CREATED, Json(view)))
+}
+
+async fn delete_file(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((tenant_id, project_id, workspace_id, file_id)): Path<(String, String, String, String)>,
+    Query(query): Query<DeleteFileQuery>,
+) -> Result<Json<DeletedView>, WorkspaceApiError> {
+    app.workspaces
+        .delete_file(
+            &identity.user_id,
+            &tenant_id,
+            &project_id,
+            &workspace_id,
+            &file_id,
+            query,
+        )
+        .await
+        .map(Json)
+}
+
+async fn parse_upload(mut multipart: Multipart) -> Result<BlackboardUpload, WorkspaceApiError> {
+    let mut parent_path = "/".to_string();
+    let mut filename = None;
+    let mut content_type = None;
+    let mut bytes = None;
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|err| WorkspaceApiError::bad_request(format!("Invalid multipart upload: {err}")))?
+    {
+        let name = field.name().map(str::to_string);
+        match name.as_deref() {
+            Some("parent_path") => {
+                parent_path = field.text().await.map_err(|err| {
+                    WorkspaceApiError::bad_request(format!("Invalid multipart upload: {err}"))
+                })?;
+            }
+            Some("file") => {
+                filename = Some(field.file_name().unwrap_or("unnamed").to_string());
+                content_type = field.content_type().map(str::to_string);
+                bytes = Some(
+                    field
+                        .bytes()
+                        .await
+                        .map_err(|err| {
+                            WorkspaceApiError::bad_request(format!(
+                                "Invalid multipart upload: {err}"
+                            ))
+                        })?
+                        .to_vec(),
+                );
+            }
+            _ => {}
+        }
+    }
+    Ok(BlackboardUpload {
+        parent_path,
+        filename: filename.unwrap_or_else(|| "unnamed".to_string()),
+        content_type,
+        bytes: bytes.ok_or_else(|| WorkspaceApiError::bad_request("Missing upload file"))?,
+    })
+}
+
+fn response_with_headers(
+    status: StatusCode,
+    download: &BlackboardFileDownload,
+    bytes: Vec<u8>,
+) -> Result<Response, WorkspaceApiError> {
+    let mut response = Response::builder().status(status);
+    let headers = response
+        .headers_mut()
+        .ok_or_else(|| WorkspaceApiError::internal("response headers unavailable"))?;
+    headers.insert(
+        CONTENT_TYPE,
+        HeaderValue::from_str(&download.content_type)
+            .map_err(|err| WorkspaceApiError::internal(format!("content-type: {err}")))?,
+    );
+    headers.insert(
+        CONTENT_DISPOSITION,
+        HeaderValue::from_str(&content_disposition(&download.filename))
+            .map_err(|err| WorkspaceApiError::internal(format!("content-disposition: {err}")))?,
+    );
+    headers.insert(
+        CONTENT_LENGTH,
+        HeaderValue::from_str(&download.file_size.max(0).to_string())
+            .map_err(|err| WorkspaceApiError::internal(format!("content-length: {err}")))?,
+    );
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("private, no-cache"));
+    headers.insert(ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    headers.insert(
+        ETAG,
+        HeaderValue::from_str(&download.etag)
+            .map_err(|err| WorkspaceApiError::internal(format!("etag: {err}")))?,
+    );
+    response
+        .body(Body::from(bytes))
+        .map_err(|err| WorkspaceApiError::internal(format!("response body: {err}")))
+}
+
 async fn claim_task(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
@@ -3607,6 +5468,30 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/blackboard/posts/:post_id/replies/:reply_id",
             patch(update_reply).delete(delete_reply),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/blackboard/files",
+            get(list_files),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/blackboard/files/mkdir",
+            post(create_directory),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/blackboard/files/upload",
+            post(upload_file),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/blackboard/files/:file_id/download",
+            get(download_file),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/blackboard/files/:file_id",
+            patch(patch_file).delete(delete_file),
+        )
+        .route(
+            "/api/v1/tenants/:tenant_id/projects/:project_id/workspaces/:workspace_id/blackboard/files/:file_id/copy",
+            post(copy_file),
         )
 }
 
@@ -3754,6 +5639,22 @@ mod tests {
             created_at: "2026-01-02T03:04:05Z".parse().unwrap(),
             updated_at: None,
         };
+        let file = BlackboardFileRecord {
+            id: "file-1".to_string(),
+            workspace_id: "ws-1".to_string(),
+            parent_path: "/docs/".to_string(),
+            name: "status.txt".to_string(),
+            is_directory: false,
+            file_size: 11,
+            content_type: "text/plain".to_string(),
+            storage_key: "file-1/status.txt".to_string(),
+            uploader_type: "user".to_string(),
+            uploader_id: "user-1".to_string(),
+            uploader_name: "Owner".to_string(),
+            checksum_sha256: None,
+            mime_type_detected: None,
+            created_at: "2026-01-02T03:04:05Z".parse().unwrap(),
+        };
         assert_golden(
             &BlackboardPostListView {
                 items: vec![BlackboardPostView::from(post)],
@@ -3766,6 +5667,13 @@ mod tests {
                 items: vec![BlackboardReplyView::from(reply)],
             },
             serde_json::from_str(include_str!("../tests/golden/blackboard_reply_list.json"))
+                .unwrap(),
+        );
+        assert_golden(
+            &BlackboardFileListView {
+                items: vec![BlackboardFileView::from(file)],
+            },
+            serde_json::from_str(include_str!("../tests/golden/blackboard_file_list.json"))
                 .unwrap(),
         );
     }
@@ -3892,6 +5800,96 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(reply.post_id, post.id);
+        let dir = service
+            .create_directory(
+                "user-1",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                MkdirPayload {
+                    parent_path: "/".to_string(),
+                    name: "docs".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(dir.is_directory);
+        let file = service
+            .upload_file(
+                "user-1",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                BlackboardUpload {
+                    parent_path: "/docs/".to_string(),
+                    filename: "status.txt".to_string(),
+                    content_type: Some("text/plain".to_string()),
+                    bytes: b"P6 file ok".to_vec(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(file.file_size, 10);
+        let listed = service
+            .list_files(
+                "user-1",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                BlackboardFileListQuery {
+                    parent_path: Some("/docs/".to_string()),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(listed.items.len(), 1);
+        let download = service
+            .download_file("user-1", "tenant-1", "project-1", &workspace.id, &file.id)
+            .await
+            .unwrap();
+        assert_eq!(download.bytes, b"P6 file ok");
+        let renamed = service
+            .patch_file(
+                "user-1",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                &file.id,
+                RenameOrMoveFilePayload {
+                    name: Some("renamed.txt".to_string()),
+                    parent_path: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(renamed.name, "renamed.txt");
+        let copied = service
+            .copy_file(
+                "user-1",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                &renamed.id,
+                CopyFilePayload {
+                    target_parent_path: "/".to_string(),
+                    name: Some("copy.txt".to_string()),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(copied.parent_path, "/");
+        let deleted = service
+            .delete_file(
+                "user-1",
+                "tenant-1",
+                "project-1",
+                &workspace.id,
+                &renamed.id,
+                DeleteFileQuery { recursive: false },
+            )
+            .await
+            .unwrap();
+        assert!(deleted.deleted);
         let done = service
             .transition_task(
                 "user-1",

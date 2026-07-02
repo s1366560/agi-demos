@@ -51,8 +51,8 @@ use agistack_adapters_docker::{DockerContainerRuntime, ImagePullPolicy};
 use agistack_adapters_http_llm::{HttpEmbedding, HttpLlm};
 use agistack_adapters_mem::{
     HashEmbedding, InMemoryCheckpointStore, InMemoryContainerRuntime, InMemoryEmailSender,
-    InMemoryEventStream, InMemoryGraphStore, InMemoryMemoryRepository, InMemoryVectorIndex,
-    StubLlm, SystemClock,
+    InMemoryEventStream, InMemoryGraphStore, InMemoryMemoryRepository, InMemoryObjectStore,
+    InMemoryVectorIndex, StubLlm, SystemClock,
 };
 use agistack_adapters_neo4j::{connect as connect_neo4j, Neo4jGraphStore};
 use agistack_adapters_postgres::{
@@ -65,7 +65,7 @@ use agistack_adapters_smtp::SmtpEmailSender;
 use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
 use agistack_core::ports::{
     CheckpointStore, ContainerRuntime, EmailSender, EmbeddingPort, EventStream, GraphStore,
-    LlmPort, ToolHost,
+    LlmPort, ObjectStore, ToolHost,
 };
 use agistack_core::{
     Episode, Memory, MemoryService, ReActEngine, SessionState, SessionStatus, SourceType,
@@ -425,6 +425,52 @@ async fn build_device_grant_store() -> SharedDeviceGrantStore {
     }
 }
 
+async fn build_object_store() -> Arc<dyn ObjectStore> {
+    let requested = std::env::var("AGISTACK_OBJECT_STORE")
+        .map(|value| value.eq_ignore_ascii_case("s3"))
+        .unwrap_or(false)
+        || std::env::var("AGISTACK_S3_BUCKET")
+            .map(|value| !value.is_empty())
+            .unwrap_or(false);
+    if requested {
+        let endpoint = std::env::var("AGISTACK_S3_ENDPOINT")
+            .ok()
+            .or_else(|| std::env::var("S3_TEST_ENDPOINT").ok());
+        let region = std::env::var("AGISTACK_S3_REGION").unwrap_or_else(|_| "us-east-1".into());
+        let access_key = std::env::var("AGISTACK_S3_ACCESS_KEY")
+            .ok()
+            .or_else(|| std::env::var("S3_TEST_ACCESS_KEY").ok())
+            .unwrap_or_else(|| "minioadmin".into());
+        let secret_key = std::env::var("AGISTACK_S3_SECRET_KEY")
+            .ok()
+            .or_else(|| std::env::var("S3_TEST_SECRET_KEY").ok())
+            .unwrap_or_else(|| "minioadmin".into());
+        let bucket =
+            std::env::var("AGISTACK_S3_BUCKET").unwrap_or_else(|_| "agistack-objects".into());
+        match agistack_adapters_s3::connect(
+            endpoint.as_deref(),
+            &region,
+            &access_key,
+            &secret_key,
+            &bucket,
+        )
+        .await
+        {
+            Ok(store) => {
+                eprintln!("[agistack] object store: S3/MinIO bucket {bucket}");
+                return Arc::new(store);
+            }
+            Err(err) => {
+                eprintln!(
+                    "[agistack] object store: S3/MinIO unavailable ({err}); falling back to in-memory"
+                );
+            }
+        }
+    }
+    eprintln!("[agistack] object store: in-memory (dev)");
+    Arc::new(InMemoryObjectStore::new())
+}
+
 /// Persistence + auth selection at the composition root — the strangler switch
 /// (plan.md Section 14). When `DATABASE_URL` is set, bind the production Postgres
 /// tier (**the same schema Python owns**, ADR-0001) and the SHA256 `api_keys`
@@ -434,6 +480,7 @@ async fn build_device_grant_store() -> SharedDeviceGrantStore {
 async fn build_memory_and_auth(
     llm: Arc<dyn LlmPort>,
     embedding: Arc<dyn EmbeddingPort>,
+    object_store: Arc<dyn ObjectStore>,
 ) -> (
     Arc<MemoryService>,
     Arc<dyn CheckpointStore>,
@@ -494,6 +541,7 @@ async fn build_memory_and_auth(
                 Arc::new(PgSkillService::new(PgSkillRepository::new(pool.clone())));
             let workspaces: SharedWorkspaces = Arc::new(PgWorkspaceService::new(
                 PgWorkspaceRepository::new(pool.clone()),
+                object_store,
             ));
             let sandbox_repo = Some(PgProjectSandboxRepository::new(pool.clone()));
             let project_sandbox_config_repo = Some(PgProjectReadRepository::new(pool.clone()));
@@ -530,7 +578,10 @@ async fn build_memory_and_auth(
             let shares: SharedShares = Arc::new(DevShareService::new("dev-user"));
             let trust: SharedTrust = Arc::new(DevTrustService::new("dev-user"));
             let skills: SharedSkills = Arc::new(DevSkillService::new("dev-tenant"));
-            let workspaces: SharedWorkspaces = Arc::new(DevWorkspaceService::new("dev-user"));
+            let workspaces: SharedWorkspaces = Arc::new(DevWorkspaceService::with_object_store(
+                "dev-user",
+                object_store,
+            ));
             eprintln!("[agistack] persistence: in-memory (dev); auth: dev stub (any ms_sk_ key)");
             (
                 memory,
@@ -670,6 +721,7 @@ async fn build_state() -> AppState {
     let (llm, embedding) = select_llm_and_embedding();
 
     let registry = build_registry();
+    let object_store = build_object_store().await;
 
     // Persistence + auth: Postgres (production) or in-memory (dev), selected by
     // `DATABASE_URL`. This is the strangler cutover switch.
@@ -684,7 +736,7 @@ async fn build_state() -> AppState {
         workspaces,
         sandbox_repo,
         project_config_repo,
-    ) = build_memory_and_auth(llm.clone(), embedding).await;
+    ) = build_memory_and_auth(llm.clone(), embedding, object_store).await;
     let events = build_event_stream().await;
     let graph = build_graph_store().await;
     let sandbox_runtime = build_container_runtime().await;
