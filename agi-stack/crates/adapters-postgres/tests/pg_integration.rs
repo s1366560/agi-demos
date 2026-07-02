@@ -32,7 +32,7 @@ use agistack_core::agent::types::{SessionState, SessionStatus};
 use agistack_core::model::{Entity, Memory};
 use agistack_core::ports::{CheckpointStore, MemoryRepository, VectorIndexPort};
 use serde_json::json;
-use sqlx::types::chrono::{TimeZone, Utc};
+use sqlx::types::chrono::{DateTime, TimeZone, Utc};
 
 /// Return a connected pool if `DATABASE_URL` is set, else `None` (skip).
 async fn pool_or_skip(test: &str) -> Option<PgPool> {
@@ -46,6 +46,11 @@ async fn pool_or_skip(test: &str) -> Option<PgPool> {
             None
         }
     }
+}
+
+fn ts(year: i32, month: u32, day: u32, hour: u32, min: u32, sec: u32) -> DateTime<Utc> {
+    Utc.with_ymd_and_hms(year, month, day, hour, min, sec)
+        .unwrap()
 }
 
 #[tokio::test]
@@ -520,6 +525,245 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
     .unwrap();
     let plan_outbox = repo.list_plan_outbox("plan_p6_repo", 5).await.unwrap();
     assert_eq!(plan_outbox[0].event_type, "supervisor_tick");
+
+    let outbox_now = Utc.with_ymd_and_hms(2026, 1, 2, 4, 0, 0).unwrap();
+    repo.enqueue_plan_outbox(WorkspacePlanOutboxRecord {
+        id: "plan_outbox_p6_delayed".to_string(),
+        plan_id: Some("plan_p6_repo".to_string()),
+        workspace_id: "ws_p6_repo".to_string(),
+        event_type: "attempt_retry".to_string(),
+        payload_json: json!({"node_id": "plan_node_p6"}),
+        status: "pending".to_string(),
+        attempt_count: 2,
+        max_attempts: 5,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: Some("retry later".to_string()),
+        next_attempt_at: Some(ts(2026, 1, 2, 4, 1, 0)),
+        processed_at: None,
+        metadata_json: json!({"source": "delayed"}),
+        created_at,
+        updated_at: None,
+    })
+    .await
+    .unwrap();
+    repo.enqueue_plan_outbox(WorkspacePlanOutboxRecord {
+        id: "plan_outbox_p6_expired".to_string(),
+        plan_id: Some("plan_p6_repo".to_string()),
+        workspace_id: "ws_p6_repo".to_string(),
+        event_type: "worker_launch".to_string(),
+        payload_json: json!({"node_id": "plan_node_p6"}),
+        status: "processing".to_string(),
+        attempt_count: 1,
+        max_attempts: 5,
+        lease_owner: Some("old-worker".to_string()),
+        lease_expires_at: Some(ts(2026, 1, 2, 3, 59, 59)),
+        last_error: Some("stale lease".to_string()),
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json: json!({"source": "expired"}),
+        created_at,
+        updated_at: None,
+    })
+    .await
+    .unwrap();
+    repo.enqueue_plan_outbox(WorkspacePlanOutboxRecord {
+        id: "plan_outbox_p6_release".to_string(),
+        plan_id: Some("plan_p6_repo".to_string()),
+        workspace_id: "ws_p6_repo".to_string(),
+        event_type: "worker_launch".to_string(),
+        payload_json: json!({"node_id": "plan_node_p6"}),
+        status: "pending".to_string(),
+        attempt_count: 0,
+        max_attempts: 5,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json: json!({"source": "release"}),
+        created_at,
+        updated_at: None,
+    })
+    .await
+    .unwrap();
+    repo.enqueue_plan_outbox(WorkspacePlanOutboxRecord {
+        id: "plan_outbox_p6_dead".to_string(),
+        plan_id: Some("plan_p6_repo".to_string()),
+        workspace_id: "ws_p6_repo".to_string(),
+        event_type: "worker_launch".to_string(),
+        payload_json: json!({"node_id": "plan_node_p6"}),
+        status: "processing".to_string(),
+        attempt_count: 5,
+        max_attempts: 5,
+        lease_owner: Some("worker-a".to_string()),
+        lease_expires_at: Some(ts(2026, 1, 2, 4, 1, 0)),
+        last_error: None,
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json: json!({"source": "dead-letter"}),
+        created_at,
+        updated_at: None,
+    })
+    .await
+    .unwrap();
+
+    let claimed = repo
+        .claim_due_plan_outbox(10, "worker-a", 30, outbox_now)
+        .await
+        .unwrap();
+    let claimed_ids = claimed
+        .iter()
+        .map(|item| item.id.as_str())
+        .collect::<Vec<_>>();
+    assert!(claimed_ids.contains(&"plan_outbox_p6"));
+    assert!(claimed_ids.contains(&"plan_outbox_p6_expired"));
+    assert!(claimed_ids.contains(&"plan_outbox_p6_release"));
+    assert!(!claimed_ids.contains(&"plan_outbox_p6_delayed"));
+    assert!(!claimed_ids.contains(&"plan_outbox_p6_dead"));
+
+    let claimed_due = repo
+        .get_plan_outbox("plan_outbox_p6")
+        .await
+        .unwrap()
+        .expect("claimed due outbox");
+    assert_eq!(claimed_due.status, "processing");
+    assert_eq!(claimed_due.attempt_count, 1);
+    assert_eq!(claimed_due.lease_owner.as_deref(), Some("worker-a"));
+    assert_eq!(claimed_due.lease_expires_at, Some(ts(2026, 1, 2, 4, 0, 30)));
+
+    assert!(repo
+        .renew_plan_outbox_lease("plan_outbox_p6", "worker-a", 45, outbox_now)
+        .await
+        .unwrap());
+    assert!(!repo
+        .renew_plan_outbox_lease("plan_outbox_p6", "wrong-worker", 45, outbox_now)
+        .await
+        .unwrap());
+    let renewed = repo
+        .get_plan_outbox("plan_outbox_p6")
+        .await
+        .unwrap()
+        .expect("renewed outbox");
+    assert_eq!(renewed.lease_expires_at, Some(ts(2026, 1, 2, 4, 0, 45)));
+
+    assert!(repo
+        .mark_plan_outbox_failed("plan_outbox_p6", "boom", Some("worker-a"), outbox_now)
+        .await
+        .unwrap());
+    let failed = repo
+        .get_plan_outbox("plan_outbox_p6")
+        .await
+        .unwrap()
+        .expect("failed outbox");
+    assert_eq!(failed.status, "failed");
+    assert_eq!(failed.last_error.as_deref(), Some("boom"));
+    assert_eq!(failed.next_attempt_at, Some(ts(2026, 1, 2, 4, 0, 2)));
+
+    let retried = repo
+        .retry_plan_outbox_now(
+            "plan_outbox_p6",
+            "ws_p6_repo",
+            Some("u_p6_owner"),
+            Some("operator retry"),
+            outbox_now,
+        )
+        .await
+        .unwrap()
+        .expect("retried outbox");
+    assert_eq!(retried.status, "pending");
+    assert_eq!(retried.attempt_count, 1);
+    assert!(retried.next_attempt_at.is_none());
+    assert_eq!(
+        retried.metadata_json["operator_retry"]["previous_status"],
+        "failed"
+    );
+
+    let delayed_retry = repo
+        .retry_plan_outbox_now(
+            "plan_outbox_p6_delayed",
+            "ws_p6_repo",
+            Some("u_p6_owner"),
+            Some("run now"),
+            outbox_now,
+        )
+        .await
+        .unwrap()
+        .expect("delayed retry");
+    assert_eq!(delayed_retry.status, "pending");
+    assert!(delayed_retry.next_attempt_at.is_none());
+    assert!(delayed_retry.metadata_json["operator_retry"]["previous_next_attempt_at"].is_string());
+    assert!(repo
+        .retry_plan_outbox_now(
+            "plan_outbox_p6_delayed",
+            "wrong_workspace",
+            Some("u_p6_owner"),
+            None,
+            outbox_now,
+        )
+        .await
+        .unwrap()
+        .is_none());
+
+    assert!(repo
+        .release_plan_outbox_processing(
+            "plan_outbox_p6_release",
+            Some("shutdown"),
+            Some("worker-a"),
+            outbox_now,
+        )
+        .await
+        .unwrap());
+    let released = repo
+        .get_plan_outbox("plan_outbox_p6_release")
+        .await
+        .unwrap()
+        .expect("released outbox");
+    assert_eq!(released.status, "pending");
+    assert_eq!(released.attempt_count, 0);
+    assert_eq!(released.last_error.as_deref(), Some("shutdown"));
+
+    assert!(repo
+        .mark_plan_outbox_completed("plan_outbox_p6_expired", Some("worker-a"), outbox_now)
+        .await
+        .unwrap());
+    let completed = repo
+        .get_plan_outbox("plan_outbox_p6_expired")
+        .await
+        .unwrap()
+        .expect("completed outbox");
+    assert_eq!(completed.status, "completed");
+    assert_eq!(completed.processed_at, Some(outbox_now));
+
+    assert!(repo
+        .mark_plan_outbox_failed(
+            "plan_outbox_p6_dead",
+            "too many retries",
+            Some("worker-a"),
+            outbox_now,
+        )
+        .await
+        .unwrap());
+    let dead_letter = repo
+        .get_plan_outbox("plan_outbox_p6_dead")
+        .await
+        .unwrap()
+        .expect("dead letter outbox");
+    assert_eq!(dead_letter.status, "dead_letter");
+    assert!(dead_letter.next_attempt_at.is_none());
+    let revived = repo
+        .retry_plan_outbox_now(
+            "plan_outbox_p6_dead",
+            "ws_p6_repo",
+            Some("u_p6_owner"),
+            Some("revive"),
+            outbox_now,
+        )
+        .await
+        .unwrap()
+        .expect("revived dead letter");
+    assert_eq!(revived.status, "pending");
+    assert_eq!(revived.attempt_count, 0);
 }
 
 /// Create the minimal Python-shaped tables the adapter reads/writes, plus the

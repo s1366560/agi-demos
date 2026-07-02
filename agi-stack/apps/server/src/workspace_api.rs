@@ -5122,12 +5122,11 @@ impl From<WorkspacePlanEventRecord> for WorkspacePlanEventView {
 fn outbox_actions(
     record: &WorkspacePlanOutboxRecord,
 ) -> HashMap<String, WorkspacePlanActionCapabilityView> {
-    let delayed = record
-        .metadata_json
-        .get("operator_retry")
-        .and_then(Value::as_object)
-        .and_then(|value| value.get("previous_next_attempt_at"))
-        .is_some();
+    let delayed = record.status == "pending"
+        && record
+            .next_attempt_at
+            .map(|next_attempt_at| next_attempt_at > Utc::now())
+            .unwrap_or(false);
     let retryable = matches!(record.status.as_str(), "failed" | "dead_letter") || delayed;
     HashMap::from([(
         "retry_outbox".to_string(),
