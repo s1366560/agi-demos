@@ -77,6 +77,10 @@ const DEFAULT_WORKER_LAUNCH_DEFER_SECONDS: i64 = 20;
 const DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS: i64 = 300;
 const WORKER_LAUNCH_COOLDOWN_SECONDS: u64 = 300;
 #[allow(dead_code)]
+const WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS: usize = 700;
+#[allow(dead_code)]
+const WORKER_STREAM_COMPLETION_SUMMARY_CHARS: usize = 2000;
+#[allow(dead_code)]
 const DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS: i64 = 900;
 const DEFAULT_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES: i64 = 3;
 const WORKER_LAUNCHABLE_ATTEMPT_STATUSES: [&str; 2] = ["pending", "running"];
@@ -194,7 +198,10 @@ const FAILED_WORKTREE_RETRY_STALE_METADATA_KEYS: &[&str] = &[
 
 #[allow(dead_code)]
 mod worker_stream_watchdog {
-    use super::DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS;
+    use super::{
+        DEFAULT_WORKER_STREAM_ORPHAN_GRACE_SECONDS, WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS,
+        WORKER_STREAM_COMPLETION_SUMMARY_CHARS,
+    };
     use serde_json::Value;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -299,6 +306,218 @@ mod worker_stream_watchdog {
             parts.push(format!("agent:finished={finished_message_id}"));
         }
         parts.join("; ")
+    }
+
+    pub(super) fn worker_launch_started_summary(
+        attempt_number: Option<&str>,
+        repair_brief_prompt: Option<&str>,
+    ) -> String {
+        let attempt_label = attempt_number
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("attempt #{value}"))
+            .unwrap_or_else(|| "attempt".to_string());
+        let repair_summary = compact_progress_text(repair_brief_prompt);
+        if repair_summary.is_empty() {
+            return format!("Worker {attempt_label} started; session is bound and streaming.");
+        }
+        format!("Worker {attempt_label} started from verifier feedback: {repair_summary}")
+    }
+
+    pub(super) fn compact_progress_text(value: Option<&str>) -> String {
+        let Some(value) = value else {
+            return String::new();
+        };
+        let collapsed = value.split_whitespace().collect::<Vec<_>>().join(" ");
+        if collapsed.is_empty() {
+            return collapsed;
+        }
+        if collapsed.chars().count() <= WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS {
+            return collapsed;
+        }
+        let end = char_prefix_boundary(&collapsed, WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS - 1);
+        format!("{}...", collapsed[..end].trim_end())
+    }
+
+    pub(super) fn stream_completion_summary(final_content: &str, accumulated_text: &str) -> String {
+        let mut summary = if final_content.is_empty() {
+            accumulated_text.trim().to_string()
+        } else {
+            final_content.trim().to_string()
+        };
+        if summary.is_empty() {
+            summary = "Worker stream completed without an explicit workspace terminal report."
+                .to_string();
+        }
+        if summary.chars().count() > WORKER_STREAM_COMPLETION_SUMMARY_CHARS {
+            let end = char_prefix_boundary(&summary, WORKER_STREAM_COMPLETION_SUMMARY_CHARS - 3);
+            summary = format!("{}...", &summary[..end]);
+        }
+        summary
+    }
+
+    pub(super) fn should_synthesize_stream_completion_report(
+        terminal_report_tool_observed: bool,
+    ) -> bool {
+        !terminal_report_tool_observed
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(super) enum TerminalReportToolStatus {
+        Denied,
+        Applied,
+        Attempted,
+    }
+
+    impl TerminalReportToolStatus {
+        pub(super) fn as_str(self) -> &'static str {
+            match self {
+                Self::Denied => "denied",
+                Self::Applied => "applied",
+                Self::Attempted => "attempted",
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(super) enum TerminalReportType {
+        Completed,
+        Blocked,
+    }
+
+    impl TerminalReportType {
+        pub(super) fn as_str(self) -> &'static str {
+            match self {
+                Self::Completed => "completed",
+                Self::Blocked => "blocked",
+            }
+        }
+    }
+
+    pub(super) fn terminal_report_tool_observation_status(
+        event: &Value,
+    ) -> Option<TerminalReportToolStatus> {
+        if event.get("type").and_then(Value::as_str) != Some("observe") {
+            return None;
+        }
+        let data = event.get("data")?.as_object()?;
+        let _report_type = terminal_report_type_for_tool(data.get("tool_name")?)?;
+        if data.get("error").is_some_and(json_truthy) {
+            return Some(TerminalReportToolStatus::Denied);
+        }
+        Some(terminal_report_tool_result_status(data.get("result")))
+    }
+
+    pub(super) fn terminal_report_tool_report_type(event: &Value) -> Option<TerminalReportType> {
+        if event.get("type").and_then(Value::as_str) != Some("observe") {
+            return None;
+        }
+        let data = event.get("data")?.as_object()?;
+        terminal_report_type_for_tool(data.get("tool_name")?)
+    }
+
+    pub(super) fn terminal_report_metadata_matches_attempt(
+        metadata: Option<&Value>,
+        attempt_id: Option<&str>,
+        report_type: Option<&str>,
+    ) -> bool {
+        let Some(attempt_id) = attempt_id.filter(|value| !value.is_empty()) else {
+            return false;
+        };
+        let Some(metadata) = metadata.and_then(Value::as_object) else {
+            return false;
+        };
+        if metadata
+            .get("last_worker_report_attempt_id")
+            .and_then(Value::as_str)
+            != Some(attempt_id)
+        {
+            return false;
+        }
+        match report_type.filter(|value| !value.is_empty()) {
+            Some(report_type) => {
+                metadata
+                    .get("last_worker_report_type")
+                    .and_then(Value::as_str)
+                    == Some(report_type)
+            }
+            None => true,
+        }
+    }
+
+    pub(super) fn should_reconcile_terminal_report_tool(
+        terminal_report_tool_applied: bool,
+        report_recorded_for_attempt: bool,
+    ) -> bool {
+        terminal_report_tool_applied && !report_recorded_for_attempt
+    }
+
+    fn terminal_report_type_for_tool(value: &Value) -> Option<TerminalReportType> {
+        match value.as_str()?.trim() {
+            "workspace_report_complete" => Some(TerminalReportType::Completed),
+            "workspace_report_blocked" => Some(TerminalReportType::Blocked),
+            _ => None,
+        }
+    }
+
+    fn terminal_report_tool_result_status(result: Option<&Value>) -> TerminalReportToolStatus {
+        let result_text = result.and_then(Value::as_str).unwrap_or("");
+        if let Ok(Value::Object(parsed)) = serde_json::from_str::<Value>(result_text) {
+            if let Some(status) = parsed_terminal_report_tool_status(&parsed) {
+                return status;
+            }
+        }
+        let lowered = result_text.to_lowercase();
+        if lowered.contains("completion denied:")
+            || lowered.contains("terminal_report_apply_failed")
+            || lowered.contains("\"error\"")
+        {
+            TerminalReportToolStatus::Denied
+        } else {
+            TerminalReportToolStatus::Attempted
+        }
+    }
+
+    fn parsed_terminal_report_tool_status(
+        parsed: &serde_json::Map<String, Value>,
+    ) -> Option<TerminalReportToolStatus> {
+        if let Some(applied_report) = parsed.get("applied_report").and_then(Value::as_object) {
+            if applied_report
+                .get("skipped_supervisor_only")
+                .and_then(Value::as_bool)
+                == Some(true)
+            {
+                return Some(TerminalReportToolStatus::Attempted);
+            }
+            if applied_report.get("applied").and_then(Value::as_bool) == Some(true) {
+                return Some(TerminalReportToolStatus::Applied);
+            }
+        }
+        if parsed.get("ok").and_then(Value::as_bool) == Some(true) {
+            return Some(TerminalReportToolStatus::Applied);
+        }
+        if parsed.get("error").is_some_and(json_truthy) {
+            return Some(TerminalReportToolStatus::Denied);
+        }
+        None
+    }
+
+    fn json_truthy(value: &Value) -> bool {
+        match value {
+            Value::Null => false,
+            Value::Bool(value) => *value,
+            Value::Number(value) => value.as_f64().is_some_and(|number| number != 0.0),
+            Value::String(value) => !value.is_empty(),
+            Value::Array(value) => !value.is_empty(),
+            Value::Object(value) => !value.is_empty(),
+        }
+    }
+
+    fn char_prefix_boundary(value: &str, max_chars: usize) -> usize {
+        value
+            .char_indices()
+            .nth(max_chars)
+            .map(|(index, _)| index)
+            .unwrap_or(value.len())
     }
 }
 
@@ -12963,6 +13182,154 @@ esac
             ),
             "Worker stream still active; no new visible stream event for 900s; agent:running missing; agent:finished=msg-1"
         );
+    }
+
+    #[test]
+    fn worker_stream_watchdog_launch_started_summary_matches_python_contract() {
+        assert_eq!(
+            worker_stream_watchdog::worker_launch_started_summary(
+                Some("9"),
+                Some(
+                    "verification failed:\n  - clean_worktree_after_commit: ?? .playwright-cache/; ?? logs/"
+                ),
+            ),
+            "Worker attempt #9 started from verifier feedback: verification failed: - clean_worktree_after_commit: ?? .playwright-cache/; ?? logs/"
+        );
+        assert_eq!(
+            worker_stream_watchdog::worker_launch_started_summary(None, None),
+            "Worker attempt started; session is bound and streaming."
+        );
+        let long_feedback = "x".repeat(WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS + 50);
+        let summary =
+            worker_stream_watchdog::worker_launch_started_summary(Some("10"), Some(&long_feedback));
+        assert!(summary.starts_with("Worker attempt #10 started from verifier feedback: "));
+        assert!(summary.ends_with("..."));
+        assert!(summary.len() < WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS + 80);
+
+        let unicode_feedback = "验".repeat(WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS + 1);
+        let unicode_summary = worker_stream_watchdog::worker_launch_started_summary(
+            Some("11"),
+            Some(&unicode_feedback),
+        );
+        assert!(unicode_summary.ends_with("..."));
+    }
+
+    #[test]
+    fn worker_stream_watchdog_completion_summary_matches_python_contract() {
+        assert_eq!(
+            worker_stream_watchdog::stream_completion_summary("Finished the implementation.", ""),
+            "Finished the implementation."
+        );
+        assert_eq!(
+            worker_stream_watchdog::stream_completion_summary("", ""),
+            "Worker stream completed without an explicit workspace terminal report."
+        );
+        let accumulated = "x".repeat(2500);
+        let summary = worker_stream_watchdog::stream_completion_summary("", &accumulated);
+        assert_eq!(summary.len(), WORKER_STREAM_COMPLETION_SUMMARY_CHARS);
+        assert!(summary.ends_with("..."));
+
+        let unicode_accumulated = "完".repeat(WORKER_STREAM_COMPLETION_SUMMARY_CHARS + 1);
+        let unicode_summary =
+            worker_stream_watchdog::stream_completion_summary("", &unicode_accumulated);
+        assert_eq!(
+            unicode_summary.chars().count(),
+            WORKER_STREAM_COMPLETION_SUMMARY_CHARS
+        );
+        assert!(unicode_summary.ends_with("..."));
+    }
+
+    #[test]
+    fn worker_stream_watchdog_terminal_report_observations_match_python_contract() {
+        let denied = json!({
+            "type": "observe",
+            "data": {
+                "tool_name": "workspace_report_complete",
+                "result": "{\"error\": \"completion denied: protected test/review node includes failed evidence\"}",
+                "error": null
+            }
+        });
+        assert_eq!(
+            worker_stream_watchdog::terminal_report_tool_observation_status(&denied)
+                .map(worker_stream_watchdog::TerminalReportToolStatus::as_str),
+            Some("denied")
+        );
+        assert!(!worker_stream_watchdog::should_synthesize_stream_completion_report(true));
+
+        let applied = json!({
+            "type": "observe",
+            "data": {
+                "tool_name": "workspace_report_blocked",
+                "result": "{\"applied_report\": {\"applied\": true}}",
+                "error": null
+            }
+        });
+        assert_eq!(
+            worker_stream_watchdog::terminal_report_tool_observation_status(&applied)
+                .map(worker_stream_watchdog::TerminalReportToolStatus::as_str),
+            Some("applied")
+        );
+        assert_eq!(
+            worker_stream_watchdog::terminal_report_tool_report_type(&applied)
+                .map(worker_stream_watchdog::TerminalReportType::as_str),
+            Some("blocked")
+        );
+
+        let supervisor_only = json!({
+            "type": "observe",
+            "data": {
+                "tool_name": "workspace_report_complete",
+                "result": "{\"ok\": true, \"applied_report\": {\"skipped_supervisor_only\": true, \"reason\": \"WORKSPACE_WTP_V1_ONLY\"}}",
+                "error": null
+            }
+        });
+        assert_eq!(
+            worker_stream_watchdog::terminal_report_tool_observation_status(&supervisor_only)
+                .map(worker_stream_watchdog::TerminalReportToolStatus::as_str),
+            Some("attempted")
+        );
+
+        let non_terminal_tool = json!({
+            "type": "observe",
+            "data": {"tool_name": "bash", "result": "done", "error": null}
+        });
+        assert_eq!(
+            worker_stream_watchdog::terminal_report_tool_observation_status(&non_terminal_tool),
+            None
+        );
+        assert!(worker_stream_watchdog::should_synthesize_stream_completion_report(false));
+    }
+
+    #[test]
+    fn worker_stream_watchdog_terminal_report_metadata_matches_python_contract() {
+        let metadata = json!({
+            "last_worker_report_attempt_id": "attempt-1",
+            "last_worker_report_type": "completed"
+        });
+        assert!(
+            worker_stream_watchdog::terminal_report_metadata_matches_attempt(
+                Some(&metadata),
+                Some("attempt-1"),
+                Some("completed")
+            )
+        );
+        assert!(
+            !worker_stream_watchdog::terminal_report_metadata_matches_attempt(
+                Some(&metadata),
+                Some("attempt-2"),
+                Some("completed")
+            )
+        );
+        assert!(
+            !worker_stream_watchdog::terminal_report_metadata_matches_attempt(
+                Some(&metadata),
+                Some("attempt-1"),
+                Some("blocked")
+            )
+        );
+        assert!(worker_stream_watchdog::should_reconcile_terminal_report_tool(true, false));
+        assert!(!worker_stream_watchdog::should_reconcile_terminal_report_tool(true, true));
+        assert!(!worker_stream_watchdog::should_reconcile_terminal_report_tool(false, false));
     }
 
     #[tokio::test]
