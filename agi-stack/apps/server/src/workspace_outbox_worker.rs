@@ -70,6 +70,8 @@ const WORKER_LAUNCH_MAX_ACTIVE_ENV: &str = "WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE";
 const WORKER_LAUNCH_DEFER_SECONDS_ENV: &str = "WORKSPACE_WORKER_LAUNCH_DEFER_SECONDS";
 const WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV: &str =
     "WORKSPACE_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS";
+const WORKER_STREAM_POLL_INTERVAL_SECONDS_ENV: &str =
+    "WORKSPACE_WORKER_STREAM_POLL_INTERVAL_SECONDS";
 const WORKER_LAUNCH_CONVERSATION_SOURCE: &str = "workspace_worker_launch";
 const WORKER_LAUNCH_CONVERSATION_STAGE: &str = "worker_launch";
 const WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY_ENV: &str =
@@ -79,6 +81,7 @@ const AWAITING_LEADER_ADJUDICATION_STATUS: &str = "awaiting_leader_adjudication"
 const DEFAULT_WORKER_LAUNCH_MAX_ACTIVE: i64 = 4;
 const DEFAULT_WORKER_LAUNCH_DEFER_SECONDS: i64 = 20;
 const DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS: i64 = 300;
+const DEFAULT_WORKER_STREAM_POLL_INTERVAL_SECONDS: i64 = 5;
 const WORKER_LAUNCH_COOLDOWN_SECONDS: u64 = 300;
 #[allow(dead_code)]
 const WORKER_LAUNCH_PROGRESS_SUMMARY_CHARS: usize = 700;
@@ -2026,6 +2029,7 @@ pub(crate) struct WorkerLaunchAdmissionConfig {
     pub max_active_worker_conversations: i64,
     pub defer_seconds: i64,
     pub active_event_grace_seconds: i64,
+    pub stream_poll_interval_seconds: i64,
 }
 
 impl WorkerLaunchAdmissionConfig {
@@ -2042,6 +2046,10 @@ impl WorkerLaunchAdmissionConfig {
             active_event_grace_seconds: positive_i64_env(
                 WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV,
                 DEFAULT_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS,
+            ),
+            stream_poll_interval_seconds: positive_i64_env(
+                WORKER_STREAM_POLL_INTERVAL_SECONDS_ENV,
+                DEFAULT_WORKER_STREAM_POLL_INTERVAL_SECONDS,
             ),
         }
     }
@@ -2260,6 +2268,7 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
         let node_id = string_from_map(&payload, "node_id")
             .or_else(|| string_from_map(&task_metadata, WORKSPACE_PLAN_NODE_ID));
         let attempt_id = string_from_map(&payload, "attempt_id");
+        let is_stream_poll = bool_from_map(&payload, "worker_stream_poll");
 
         if self
             .stale_worker_launch_reason(
@@ -2274,21 +2283,23 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
             return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
         }
 
-        if let Some(active_count) = self
-            .defer_active_capacity_count(&workspace_id, attempt_id.as_deref())
-            .await?
-        {
-            self.store
-                .enqueue_plan_outbox(deferred_worker_launch_outbox(
-                    &item,
-                    &payload,
-                    active_count,
-                    self.config.max_active_worker_conversations,
-                    self.config.defer_seconds,
-                    Utc::now(),
-                ))
-                .await?;
-            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        if !is_stream_poll {
+            if let Some(active_count) = self
+                .defer_active_capacity_count(&workspace_id, attempt_id.as_deref())
+                .await?
+            {
+                self.store
+                    .enqueue_plan_outbox(deferred_worker_launch_outbox(
+                        &item,
+                        &payload,
+                        active_count,
+                        self.config.max_active_worker_conversations,
+                        self.config.defer_seconds,
+                        Utc::now(),
+                    ))
+                    .await?;
+                return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+            }
         }
 
         let workspace = self
@@ -2303,13 +2314,17 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
         let launch_node = self
             .load_launch_node(plan_id.as_deref(), node_id.as_deref())
             .await?;
-        let worktree_context = worker_launch_worktree_context(
-            Some(&workspace),
-            &task,
-            launch_node.as_ref(),
-            attempt_id.as_deref(),
-        )
-        .await?;
+        let worktree_context = if is_stream_poll {
+            None
+        } else {
+            worker_launch_worktree_context(
+                Some(&workspace),
+                &task,
+                launch_node.as_ref(),
+                attempt_id.as_deref(),
+            )
+            .await?
+        };
         let now = Utc::now();
         if let Some(context) = worktree_context.as_ref() {
             merge_metadata_patch(&mut task_metadata, &context.metadata_patch);
@@ -2360,7 +2375,7 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
                 self.runtime_clear_reused_session_markers(&conversation_id)
                     .await;
             }
-            if !self.runtime_claim_launch_cooldown(&conversation_id).await {
+            if !is_stream_poll && !self.runtime_claim_launch_cooldown(&conversation_id).await {
                 return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
             }
             let agent_config = json!({
@@ -2401,7 +2416,9 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
             bound_attempt = Some(attempt);
         }
 
-        let launch_state = if current_attempt_conversation_id.is_some() {
+        let launch_state = if is_stream_poll && current_attempt_conversation_id.is_some() {
+            "stream_polling"
+        } else if current_attempt_conversation_id.is_some() {
             "bound"
         } else {
             "runtime_admitted"
@@ -2485,20 +2502,29 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
             let stream_after_id = string_from_map(&payload, "stream_after_id")
                 .or_else(|| string_from_map(&payload, "worker_stream_after_id"));
             let root_goal_task_id = string_from_map(&payload, ROOT_GOAL_TASK_ID);
-            self.replay_bound_worker_stream_once(WorkerStreamReplayInput {
-                workspace_id: &workspace_id,
-                task_id: &task_id,
-                root_goal_task_id: root_goal_task_id.as_deref(),
-                attempt_id,
+            let replay = self
+                .replay_bound_worker_stream_once(WorkerStreamReplayInput {
+                    workspace_id: &workspace_id,
+                    task_id: &task_id,
+                    root_goal_task_id: root_goal_task_id.as_deref(),
+                    attempt_id,
+                    conversation_id,
+                    actor_user_id: &actor_user_id,
+                    worker_agent_id: &worker_agent_id,
+                    leader_agent_id: Some(&leader_agent_id),
+                    plan_id: plan_id.as_deref(),
+                    node_id: node_id.as_deref(),
+                    stream_after_id: stream_after_id.as_deref(),
+                    now,
+                })
+                .await?;
+            self.enqueue_worker_stream_poll_if_needed(
+                &item,
+                &payload,
+                &replay,
                 conversation_id,
-                actor_user_id: &actor_user_id,
-                worker_agent_id: &worker_agent_id,
-                leader_agent_id: Some(&leader_agent_id),
-                plan_id: plan_id.as_deref(),
-                node_id: node_id.as_deref(),
-                stream_after_id: stream_after_id.as_deref(),
                 now,
-            })
+            )
             .await?;
         }
 
@@ -2537,6 +2563,35 @@ struct WorkerStreamReplayInput<'a> {
     now: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorkerStreamReplayResult {
+    replay_after_id: String,
+    last_entry_id: Option<String>,
+    entries_read: usize,
+    terminal_seen: bool,
+}
+
+impl WorkerStreamReplayResult {
+    fn empty(replay_after_id: String) -> Self {
+        Self {
+            replay_after_id,
+            last_entry_id: None,
+            entries_read: 0,
+            terminal_seen: false,
+        }
+    }
+
+    fn next_after_id(&self) -> &str {
+        self.last_entry_id
+            .as_deref()
+            .unwrap_or(&self.replay_after_id)
+    }
+
+    fn is_nonterminal(&self) -> bool {
+        !self.terminal_seen
+    }
+}
+
 struct WorkerStreamIdleProgress {
     summary: String,
     idle_seconds: i64,
@@ -2559,7 +2614,7 @@ impl WorkerLaunchAdmissionHandler {
     async fn replay_bound_worker_stream_once(
         &self,
         input: WorkerStreamReplayInput<'_>,
-    ) -> CoreResult<bool> {
+    ) -> CoreResult<WorkerStreamReplayResult> {
         let stream_after_id = self.worker_stream_replay_after_id(&input).await?;
         let entries = self
             .stream_events
@@ -2570,14 +2625,16 @@ impl WorkerLaunchAdmissionHandler {
             )
             .await?;
         if entries.is_empty() {
-            return Ok(false);
+            return Ok(WorkerStreamReplayResult::empty(stream_after_id));
         }
 
         let mut state = worker_stream_watchdog::StreamState::default();
         let mut last_entry_id = None;
         let mut last_event_time_us = None;
         let mut terminal_seen = false;
+        let mut entries_read = 0;
         for entry in entries {
+            entries_read += 1;
             last_entry_id = Some(entry.id.clone());
             let event = match serde_json::from_str::<Value>(&entry.payload) {
                 Ok(event) => event,
@@ -2610,7 +2667,12 @@ impl WorkerLaunchAdmissionHandler {
                 None,
             )
             .await?;
-            return Ok(false);
+            return Ok(WorkerStreamReplayResult {
+                replay_after_id: stream_after_id,
+                last_entry_id: last_entry_id.map(ToOwned::to_owned),
+                entries_read,
+                terminal_seen: false,
+            });
         }
 
         let report_recorded_for_attempt = self
@@ -2626,22 +2688,21 @@ impl WorkerLaunchAdmissionHandler {
             })
             .unwrap_or(false);
         let outcome = state.terminal_outcome(report_recorded_for_attempt);
-        let reported = self
-            .persist_worker_stream_terminal_outcome(WorkerStreamTerminalPersistence {
-                workspace_id: input.workspace_id,
-                task_id: input.task_id,
-                root_goal_task_id: input.root_goal_task_id,
-                attempt_id: Some(input.attempt_id),
-                conversation_id: Some(input.conversation_id),
-                actor_user_id: input.actor_user_id,
-                worker_agent_id: input.worker_agent_id,
-                leader_agent_id: input.leader_agent_id,
-                plan_id: input.plan_id,
-                node_id: input.node_id,
-                outcome: &outcome,
-                now: input.now,
-            })
-            .await?;
+        self.persist_worker_stream_terminal_outcome(WorkerStreamTerminalPersistence {
+            workspace_id: input.workspace_id,
+            task_id: input.task_id,
+            root_goal_task_id: input.root_goal_task_id,
+            attempt_id: Some(input.attempt_id),
+            conversation_id: Some(input.conversation_id),
+            actor_user_id: input.actor_user_id,
+            worker_agent_id: input.worker_agent_id,
+            leader_agent_id: input.leader_agent_id,
+            plan_id: input.plan_id,
+            node_id: input.node_id,
+            outcome: &outcome,
+            now: input.now,
+        })
+        .await?;
         self.patch_worker_stream_replay_metadata(
             &input,
             last_entry_id,
@@ -2650,7 +2711,47 @@ impl WorkerLaunchAdmissionHandler {
             Some(&outcome),
         )
         .await?;
-        Ok(reported)
+        Ok(WorkerStreamReplayResult {
+            replay_after_id: stream_after_id,
+            last_entry_id: last_entry_id.map(ToOwned::to_owned),
+            entries_read,
+            terminal_seen: true,
+        })
+    }
+
+    async fn enqueue_worker_stream_poll_if_needed(
+        &self,
+        item: &WorkspacePlanOutboxRecord,
+        payload: &Map<String, Value>,
+        replay: &WorkerStreamReplayResult,
+        conversation_id: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<()> {
+        if !replay.is_nonterminal() {
+            return Ok(());
+        }
+        if self
+            .runtime_agent_finished_message_id(conversation_id)
+            .await
+            .is_some()
+        {
+            return Ok(());
+        }
+        let running_exists = self.runtime_agent_running_exists(conversation_id).await;
+        if !running_exists && replay.entries_read == 0 {
+            return Ok(());
+        }
+        self.store
+            .enqueue_plan_outbox(worker_stream_poll_outbox(
+                item,
+                payload,
+                conversation_id,
+                replay,
+                self.config.stream_poll_interval_seconds,
+                now,
+            ))
+            .await?;
+        Ok(())
     }
 
     async fn worker_stream_replay_after_id(
@@ -12307,6 +12408,71 @@ fn deferred_worker_launch_outbox(
     }
 }
 
+fn worker_stream_poll_outbox(
+    item: &WorkspacePlanOutboxRecord,
+    payload: &Map<String, Value>,
+    conversation_id: &str,
+    replay: &WorkerStreamReplayResult,
+    delay_seconds: i64,
+    now: DateTime<Utc>,
+) -> WorkspacePlanOutboxRecord {
+    let mut poll_payload = payload.clone();
+    poll_payload.insert("worker_stream_poll".to_string(), json!(true));
+    poll_payload.insert("stream_after_id".to_string(), json!(replay.next_after_id()));
+    poll_payload.insert(
+        "worker_stream_poll_conversation_id".to_string(),
+        json!(conversation_id),
+    );
+    poll_payload.remove("reuse_conversation_id");
+
+    let mut metadata = object_or_empty(item.metadata_json.clone());
+    let poll_count = metadata
+        .get("stream_poll_count")
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+        + 1;
+    metadata.insert(
+        "source".to_string(),
+        json!("workspace_plan.worker_launch.stream_poll"),
+    );
+    metadata.insert(
+        "stream_poll_from_outbox_id".to_string(),
+        json!(item.id.clone()),
+    );
+    metadata.insert("stream_poll_count".to_string(), json!(poll_count));
+    metadata.insert(
+        "stream_poll_after_id".to_string(),
+        json!(replay.next_after_id()),
+    );
+    metadata.insert(
+        "stream_poll_conversation_id".to_string(),
+        json!(conversation_id),
+    );
+    metadata.insert(
+        "stream_poll_entries_read".to_string(),
+        json!(replay.entries_read),
+    );
+
+    WorkspacePlanOutboxRecord {
+        id: generate_uuid_v4(),
+        plan_id: item.plan_id.clone(),
+        workspace_id: item.workspace_id.clone(),
+        event_type: WORKER_LAUNCH_EVENT.to_string(),
+        payload_json: Value::Object(poll_payload),
+        status: "pending".to_string(),
+        attempt_count: 0,
+        max_attempts: item.max_attempts,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: Some(now + ChronoDuration::seconds(delay_seconds.max(1))),
+        processed_at: None,
+        metadata_json: Value::Object(metadata),
+        created_at: now,
+        updated_at: None,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn worker_report_supervisor_tick(
     workspace_id: &str,
@@ -14179,6 +14345,7 @@ esac
                 max_active_worker_conversations: max_active,
                 defer_seconds: 30,
                 active_event_grace_seconds: 60,
+                stream_poll_interval_seconds: 5,
             },
         )
     }
@@ -14195,6 +14362,7 @@ esac
                 max_active_worker_conversations: max_active,
                 defer_seconds: 30,
                 active_event_grace_seconds: 60,
+                stream_poll_interval_seconds: 5,
             },
         )
     }
@@ -14211,6 +14379,7 @@ esac
                 max_active_worker_conversations: max_active,
                 defer_seconds: 30,
                 active_event_grace_seconds: 60,
+                stream_poll_interval_seconds: 5,
             },
         )
     }
@@ -14229,6 +14398,7 @@ esac
                 max_active_worker_conversations: max_active,
                 defer_seconds: 30,
                 active_event_grace_seconds: 60,
+                stream_poll_interval_seconds: 5,
             },
         )
     }
@@ -15412,7 +15582,21 @@ esac
         let node = store.node("node-test");
         assert_eq!(node.execution, "running");
         assert!(store.plan_events().is_empty());
-        assert!(store.outbox().is_empty());
+        let outbox = store.outbox();
+        assert_eq!(outbox.len(), 1);
+        assert_eq!(outbox[0].event_type, WORKER_LAUNCH_EVENT);
+        assert_eq!(outbox[0].payload_json["worker_stream_poll"], true);
+        assert_eq!(outbox[0].payload_json["stream_after_id"], "2-0");
+        assert!(outbox[0]
+            .payload_json
+            .get("reuse_conversation_id")
+            .is_none());
+        assert!(outbox[0].next_attempt_at.is_some());
+        assert_eq!(
+            outbox[0].metadata_json["source"],
+            "workspace_plan.worker_launch.stream_poll"
+        );
+        assert_eq!(outbox[0].metadata_json["stream_poll_after_id"], "2-0");
     }
 
     #[tokio::test]
@@ -15515,7 +15699,93 @@ esac
             .unwrap()
             .contains("Worker stream still active"));
         assert!(store.plan_events().is_empty());
-        assert!(store.outbox().is_empty());
+        let outbox = store.outbox();
+        assert_eq!(outbox.len(), 1);
+        assert_eq!(outbox[0].event_type, WORKER_LAUNCH_EVENT);
+        assert_eq!(outbox[0].payload_json["worker_stream_poll"], true);
+        assert_eq!(outbox[0].payload_json["stream_after_id"], "2-0");
+        assert_eq!(
+            outbox[0].metadata_json["source"],
+            "workspace_plan.worker_launch.stream_poll"
+        );
+    }
+
+    #[tokio::test]
+    async fn worker_launch_stream_poll_bypasses_launch_gates_and_continues_from_cursor() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        store.set_active_worker_conversations(99);
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task_metadata.insert("worker_stream_last_entry_id".to_string(), json!("2-0"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        let conversation_id = "d267a78e-eefc-5d33-bfb3-ac4fa7ece855";
+        store.insert_attempt(task_session_attempt(
+            "attempt-test",
+            "running",
+            Some(conversation_id),
+        ));
+        let runtime_state = Arc::new(FakeWorkerLaunchRuntimeStateStore::default());
+        runtime_state.insert_cooldown(conversation_id);
+        runtime_state.insert_running(conversation_id);
+        let stream_events = Arc::new(FakeWorkerLaunchEventStream::default());
+        stream_events.push(
+            conversation_id,
+            "2-0",
+            json!({"type": "text_delta", "data": {"text": "already seen"}}),
+        );
+        stream_events.push(
+            conversation_id,
+            "3-0",
+            json!({"type": "text_delta", "data": {"text": "next chunk"}}),
+        );
+        let handler = worker_launch_handler_with_state_and_event_stream(
+            Arc::clone(&store),
+            Arc::clone(&runtime_state),
+            stream_events,
+            1,
+        );
+        let mut item = worker_launch_item();
+        let payload = item.payload_json.as_object_mut().unwrap();
+        payload.insert("worker_stream_poll".to_string(), json!(true));
+        payload.insert("stream_after_id".to_string(), json!("2-0"));
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        assert!(runtime_state.claims().is_empty());
+        let task = store.task("task-test");
+        assert_eq!(task.metadata_json["launch_state"], "stream_polling");
+        assert_eq!(task.metadata_json["worker_stream_last_entry_id"], "3-0");
+        assert_eq!(
+            task.metadata_json["worker_stream_replay_status"],
+            "observed"
+        );
+        assert_eq!(
+            task.metadata_json["worker_stream_last_event_type"],
+            "text_delta"
+        );
+        let node = store.node("node-test");
+        assert_eq!(node.execution, "running");
+        assert_eq!(node.metadata_json["launch_state"], "stream_polling");
+        let outbox = store.outbox();
+        assert_eq!(outbox.len(), 1);
+        assert_eq!(outbox[0].event_type, WORKER_LAUNCH_EVENT);
+        assert_eq!(outbox[0].payload_json["worker_stream_poll"], true);
+        assert_eq!(outbox[0].payload_json["stream_after_id"], "3-0");
+        assert_eq!(
+            outbox[0].metadata_json["source"],
+            "workspace_plan.worker_launch.stream_poll"
+        );
+        assert_eq!(outbox[0].metadata_json["stream_poll_entries_read"], 1);
+        assert!(outbox[0].next_attempt_at.is_some());
     }
 
     #[tokio::test]
