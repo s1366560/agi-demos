@@ -6867,11 +6867,15 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
             let changed_reported = self
                 .reconcile_reported_attempt_nodes(&workspace_id, &plan_id)
                 .await?;
+            let changed_dirty_main_dependency_dispatch = self
+                .dispatch_ready_dirty_main_dependency_node(&item, &payload, &workspace_id, &plan_id)
+                .await?;
             if changed_worktree_failed
                 + changed_missing
                 + changed_accepted
                 + changed_terminal
                 + changed_reported
+                + changed_dirty_main_dependency_dispatch
                 > 0
             {
                 return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
@@ -7204,6 +7208,116 @@ impl SupervisorTickAdmissionHandler {
                 .await?;
         }
         Ok(changed)
+    }
+
+    async fn dispatch_ready_dirty_main_dependency_node(
+        &self,
+        item: &WorkspacePlanOutboxRecord,
+        payload: &Map<String, Value>,
+        workspace_id: &str,
+        plan_id: &str,
+    ) -> CoreResult<usize> {
+        let plan = self.store.get_plan(plan_id).await?.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            ))
+        })?;
+        if plan.workspace_id != workspace_id {
+            return Err(CoreError::Storage(format!(
+                "workspace plan {plan_id} not found for workspace {workspace_id}"
+            )));
+        }
+
+        let mut nodes = self.store.list_plan_nodes(plan_id).await?;
+        nodes.sort_by(|left, right| {
+            left.priority
+                .cmp(&right.priority)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+        let nodes_by_id = nodes
+            .iter()
+            .map(|node| (node.id.clone(), node.clone()))
+            .collect::<HashMap<_, _>>();
+
+        for mut node in nodes {
+            if !dirty_main_dependency_dispatch_candidate(&node) {
+                continue;
+            }
+            let Some(context) = self
+                .retry_context_for_node(payload, workspace_id, &node)
+                .await?
+            else {
+                continue;
+            };
+            if self
+                .store
+                .find_active_task_session_attempt(&context.task_id)
+                .await?
+                .is_some()
+            {
+                continue;
+            }
+            let (blocking_dependencies, dirty_main_seed_dependencies) =
+                dependency_dispatch_blockers(&node, &nodes_by_id);
+            if !blocking_dependencies.is_empty() || dirty_main_seed_dependencies.is_empty() {
+                continue;
+            }
+
+            let dependency_base_ref = dependency_base_ref_for_dispatch(&node, &nodes_by_id);
+            if let Some(base_ref) = dependency_base_ref.as_deref() {
+                node.feature_checkpoint_json = feature_checkpoint_with_base_ref(
+                    node.feature_checkpoint_json.clone(),
+                    base_ref,
+                );
+            }
+            let now = Utc::now();
+            let mut metadata = object_or_empty(node.metadata_json.clone());
+            metadata.insert(
+                "dirty_main_dependency_dispatch_status".to_string(),
+                json!("queued"),
+            );
+            metadata.insert(
+                "dirty_main_dependency_dispatch_outbox_id".to_string(),
+                json!(item.id.clone()),
+            );
+            metadata.insert(
+                "dirty_main_dependency_dispatch_queued_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+            metadata.insert(
+                "dirty_main_dependency_seed_node_ids".to_string(),
+                json!(dirty_main_seed_dependencies),
+            );
+            if let Some(base_ref) = dependency_base_ref.as_deref() {
+                metadata.insert(
+                    "dirty_main_dependency_base_ref".to_string(),
+                    json!(base_ref),
+                );
+            }
+            node.metadata_json = Value::Object(metadata);
+            node.updated_at = Some(now);
+            self.store.save_plan_node(node.clone()).await?;
+            self.store
+                .enqueue_plan_outbox(supervisor_retry_attempt_outbox(
+                    item,
+                    payload,
+                    workspace_id,
+                    plan_id,
+                    &node.id,
+                    &context.task_id,
+                    &context.worker_agent_id,
+                    &context.actor_user_id,
+                    &context.leader_agent_id,
+                    context.root_goal_task_id.as_deref(),
+                    None,
+                    "dirty_main_dependency_ready",
+                    now,
+                ))
+                .await?;
+            return Ok(1);
+        }
+
+        Ok(0)
     }
 
     async fn reconcile_accepted_terminal_attempt_nodes(
@@ -8478,6 +8592,173 @@ fn dependency_commit_needs_integration(
         return false;
     }
     !matches!(status.as_str(), "merged" | "already_merged" | "skipped")
+}
+
+fn dirty_main_dependency_dispatch_candidate(node: &WorkspacePlanNodeRecord) -> bool {
+    if node.intent != "todo" || node.execution != "idle" || node.depends_on_json.is_empty() {
+        return false;
+    }
+    if node
+        .current_attempt_id
+        .as_deref()
+        .is_some_and(|attempt_id| !attempt_id.trim().is_empty())
+    {
+        return false;
+    }
+    if node.workspace_task_id.as_deref().is_none_or(str::is_empty) {
+        return false;
+    }
+    metadata_string(
+        object_or_empty(node.metadata_json.clone()).get("dirty_main_dependency_dispatch_outbox_id"),
+    )
+    .is_none()
+}
+
+fn dependency_dispatch_blockers(
+    node: &WorkspacePlanNodeRecord,
+    nodes_by_id: &HashMap<String, WorkspacePlanNodeRecord>,
+) -> (Vec<String>, Vec<String>) {
+    let metadata = object_or_empty(node.metadata_json.clone());
+    let repair_dependency = metadata_string(metadata.get("blocked_by_repair_node_id"));
+    let mut dependency_ids = node.depends_on_json.clone();
+    if let Some(repair_dependency) = repair_dependency.as_deref() {
+        if !dependency_ids.iter().any(|id| id == repair_dependency) {
+            dependency_ids.push(repair_dependency.to_string());
+        }
+    }
+    dependency_ids.sort();
+    dependency_ids.dedup();
+
+    let mut blocking = Vec::new();
+    let mut dirty_main_seed_dependencies = Vec::new();
+    for dependency_id in dependency_ids {
+        let Some(dependency) = nodes_by_id.get(&dependency_id) else {
+            blocking.push(dependency_id);
+            continue;
+        };
+        if dependency.intent != "done" {
+            blocking.push(dependency_id);
+            continue;
+        }
+        let dependency_metadata = object_or_empty(dependency.metadata_json.clone());
+        if dependency_commit_needs_integration(dependency, &dependency_metadata) {
+            if repair_dependency_can_seed_downstream_worktree(
+                node,
+                &dependency_id,
+                repair_dependency.as_deref(),
+                dependency,
+                &dependency_metadata,
+            ) {
+                dirty_main_seed_dependencies.push(dependency_id);
+                continue;
+            }
+            blocking.push(dependency_id);
+        }
+    }
+    (blocking, dirty_main_seed_dependencies)
+}
+
+fn repair_dependency_can_seed_downstream_worktree(
+    node: &WorkspacePlanNodeRecord,
+    dependency_id: &str,
+    repair_dependency: Option<&str>,
+    dependency: &WorkspacePlanNodeRecord,
+    dependency_metadata: &Map<String, Value>,
+) -> bool {
+    if metadata_string(dependency_metadata.get("worktree_integration_status")).as_deref()
+        != Some("blocked_dirty_main")
+    {
+        return false;
+    }
+    if dependency_dispatch_commit_ref(dependency).is_none() {
+        return false;
+    }
+    repair_dependency.is_some_and(|repair_dependency| repair_dependency == dependency_id)
+        || metadata_string(object_or_empty(node.metadata_json.clone()).get("repair_for_node_id"))
+            .is_some()
+        || node_is_iteration_artifact(node, "plan", "sprint_backlog")
+        || node_is_iteration_artifact(node, "implement", "increment")
+        || node_is_iteration_artifact(node, "test", "verification")
+        || node_is_iteration_artifact(node, "review", "feedback")
+        || node_is_iteration_artifact(node, "deploy", "release_candidate")
+        || nodes_repair_same_original(node, dependency)
+}
+
+fn node_is_iteration_artifact(node: &WorkspacePlanNodeRecord, phase: &str, artifact: &str) -> bool {
+    let metadata = object_or_empty(node.metadata_json.clone());
+    metadata_string(metadata.get("iteration_phase")).as_deref() == Some(phase)
+        && metadata_string(metadata.get("scrum_artifact")).as_deref() == Some(artifact)
+}
+
+fn nodes_repair_same_original(
+    node: &WorkspacePlanNodeRecord,
+    dependency: &WorkspacePlanNodeRecord,
+) -> bool {
+    let node_metadata = object_or_empty(node.metadata_json.clone());
+    let dependency_metadata = object_or_empty(dependency.metadata_json.clone());
+    let Some(node_repair_for) = metadata_string(node_metadata.get("repair_for_node_id")) else {
+        return false;
+    };
+    metadata_string(dependency_metadata.get("repair_for_node_id")).as_deref()
+        == Some(node_repair_for.as_str())
+}
+
+fn dependency_base_ref_for_dispatch(
+    node: &WorkspacePlanNodeRecord,
+    nodes_by_id: &HashMap<String, WorkspacePlanNodeRecord>,
+) -> Option<String> {
+    let mut candidates = Vec::new();
+    for dependency_id in &node.depends_on_json {
+        let Some(dependency) = nodes_by_id.get(dependency_id) else {
+            continue;
+        };
+        if dependency.intent != "done" {
+            continue;
+        }
+        let Some(commit_ref) = dependency_dispatch_commit_ref(dependency) else {
+            continue;
+        };
+        let timestamp = dependency
+            .completed_at
+            .or(dependency.updated_at)
+            .unwrap_or(dependency.created_at);
+        candidates.push((timestamp, dependency_id.clone(), commit_ref));
+    }
+    candidates
+        .into_iter()
+        .max_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)))
+        .map(|(_, _, commit_ref)| commit_ref)
+}
+
+fn dependency_dispatch_commit_ref(node: &WorkspacePlanNodeRecord) -> Option<String> {
+    let metadata = object_or_empty(node.metadata_json.clone());
+    if metadata_string(metadata.get("worktree_integration_status")).as_deref()
+        == Some("blocked_dirty_main")
+    {
+        if let Some(commit_ref) = metadata_string(metadata.get("verified_commit_ref")) {
+            return Some(commit_ref);
+        }
+    }
+    for key in [
+        "source_publish_commit_ref",
+        "worktree_integration_commit_ref",
+        "verified_commit_ref",
+    ] {
+        if let Some(commit_ref) = metadata_string(metadata.get(key)) {
+            return Some(commit_ref);
+        }
+    }
+    feature_checkpoint_commit_ref(node)
+}
+
+fn feature_checkpoint_with_base_ref(value: Option<Value>, base_ref: &str) -> Option<Value> {
+    match value {
+        Some(Value::Object(mut checkpoint)) => {
+            checkpoint.insert("base_ref".to_string(), json!(base_ref));
+            Some(Value::Object(checkpoint))
+        }
+        other => other,
+    }
 }
 
 fn node_disposition_satisfies_dependency_without_integration(
@@ -12712,6 +12993,240 @@ steps:
             "attempt-stale"
         );
         assert!(node.metadata_json["supervisor_tick_admitted_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_dispatches_repair_from_blocked_dirty_main_dependency() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "todo".to_string();
+        node.execution = "idle".to_string();
+        node.depends_on_json = vec!["repair-node".to_string()];
+        node.feature_checkpoint_json = Some(json!({
+            "feature_id": "feature-node-test",
+            "base_ref": "HEAD"
+        }));
+        node.metadata_json = json!({
+            "blocked_by_repair_node_id": "repair-node"
+        });
+        store.insert_node(node);
+        let mut repair = plan_node();
+        repair.id = "repair-node".to_string();
+        repair.workspace_task_id = None;
+        repair.assignee_agent_id = None;
+        repair.intent = "done".to_string();
+        repair.execution = "idle".to_string();
+        repair.depends_on_json = Vec::new();
+        repair.feature_checkpoint_json = Some(json!({
+            "feature_id": "feature-repair-node",
+            "worktree_path": "/workspace/.memstack/worktrees/attempt-repair-node",
+            "commit_ref": "abc1234"
+        }));
+        repair.metadata_json = json!({
+            "repair_for_node_id": "node-test",
+            "terminal_attempt_status": "accepted",
+            "verified_commit_ref": "abc1234",
+            "worktree_integration_commit_ref": "abc1234",
+            "worktree_integration_status": "blocked_dirty_main",
+            "verification_evidence_refs": ["commit_ref:abc1234"]
+        });
+        store.insert_node(repair);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-dirty-dispatch", SUPERVISOR_TICK_EVENT);
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test",
+            "leader_agent_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "todo");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(
+            node.feature_checkpoint_json
+                .as_ref()
+                .and_then(|value| value["base_ref"].as_str()),
+            Some("abc1234")
+        );
+        assert_eq!(
+            node.metadata_json["dirty_main_dependency_base_ref"],
+            "abc1234"
+        );
+        assert_eq!(
+            node.metadata_json["dirty_main_dependency_seed_node_ids"],
+            json!(["repair-node"])
+        );
+        assert_eq!(
+            node.metadata_json["dirty_main_dependency_dispatch_status"],
+            "queued"
+        );
+        assert!(node.metadata_json["dirty_main_dependency_dispatch_queued_at"].is_string());
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, ATTEMPT_RETRY_EVENT);
+        assert_eq!(queued[0].payload_json["node_id"], "node-test");
+        assert_eq!(queued[0].payload_json["task_id"], "task-test");
+        assert_eq!(queued[0].payload_json["worker_agent_id"], "agent-worker");
+        assert_eq!(
+            queued[0].payload_json["retry_reason"],
+            "dirty_main_dependency_ready"
+        );
+        assert_eq!(
+            queued[0].metadata_json["source"],
+            "workspace_plan.supervisor_tick.retry_admission"
+        );
+        assert_eq!(
+            queued[0].metadata_json["retry_reason"],
+            "dirty_main_dependency_ready"
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_dispatches_release_candidate_from_dirty_main_dependencies() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "todo".to_string();
+        node.execution = "idle".to_string();
+        node.depends_on_json = vec!["dep-a".to_string(), "dep-b".to_string()];
+        node.feature_checkpoint_json = Some(json!({
+            "feature_id": "feature-release",
+            "base_ref": "HEAD"
+        }));
+        node.metadata_json = json!({
+            "iteration_phase": "deploy",
+            "scrum_artifact": "release_candidate"
+        });
+        store.insert_node(node);
+        for (dependency_id, commit_ref) in [("dep-a", "aaa1111"), ("dep-b", "bbb2222")] {
+            let mut dependency = plan_node();
+            dependency.id = dependency_id.to_string();
+            dependency.workspace_task_id = None;
+            dependency.assignee_agent_id = None;
+            dependency.intent = "done".to_string();
+            dependency.execution = "idle".to_string();
+            dependency.depends_on_json = Vec::new();
+            dependency.feature_checkpoint_json = Some(json!({
+                "feature_id": format!("feature-{dependency_id}"),
+                "worktree_path": format!("/workspace/.memstack/worktrees/attempt-{dependency_id}"),
+                "commit_ref": commit_ref
+            }));
+            dependency.metadata_json = json!({
+                "terminal_attempt_status": "accepted",
+                "verified_commit_ref": commit_ref,
+                "worktree_integration_commit_ref": commit_ref,
+                "worktree_integration_status": "blocked_dirty_main",
+                "verification_evidence_refs": [format!("commit_ref:{commit_ref}")]
+            });
+            store.insert_node(dependency);
+        }
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox(
+            "job-supervisor-release-dirty-dispatch",
+            SUPERVISOR_TICK_EVENT,
+        );
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test",
+            "leader_agent_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(
+            node.feature_checkpoint_json
+                .as_ref()
+                .and_then(|value| value["base_ref"].as_str()),
+            Some("bbb2222")
+        );
+        assert_eq!(
+            node.metadata_json["dirty_main_dependency_base_ref"],
+            "bbb2222"
+        );
+        assert_eq!(
+            node.metadata_json["dirty_main_dependency_seed_node_ids"],
+            json!(["dep-a", "dep-b"])
+        );
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, ATTEMPT_RETRY_EVENT);
+        assert_eq!(queued[0].payload_json["node_id"], "node-test");
+        assert_eq!(
+            queued[0].payload_json["retry_reason"],
+            "dirty_main_dependency_ready"
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_keeps_regular_node_blocked_by_dirty_main_dependency() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "todo".to_string();
+        node.execution = "idle".to_string();
+        node.depends_on_json = vec!["dirty-dependency".to_string()];
+        node.feature_checkpoint_json = Some(json!({
+            "feature_id": "feature-node-test",
+            "base_ref": "HEAD"
+        }));
+        store.insert_node(node);
+        let mut dependency = plan_node();
+        dependency.id = "dirty-dependency".to_string();
+        dependency.workspace_task_id = None;
+        dependency.assignee_agent_id = None;
+        dependency.intent = "done".to_string();
+        dependency.execution = "idle".to_string();
+        dependency.depends_on_json = Vec::new();
+        dependency.feature_checkpoint_json = Some(json!({
+            "feature_id": "feature-dirty-dependency",
+            "worktree_path": "/workspace/.memstack/worktrees/attempt-dirty-dependency",
+            "commit_ref": "def5678"
+        }));
+        dependency.metadata_json = json!({
+            "terminal_attempt_status": "accepted",
+            "verified_commit_ref": "def5678",
+            "worktree_integration_commit_ref": "def5678",
+            "worktree_integration_status": "blocked_dirty_main",
+            "verification_evidence_refs": ["commit_ref:def5678"]
+        });
+        store.insert_node(dependency);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-dirty-blocked", SUPERVISOR_TICK_EVENT);
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test",
+            "leader_agent_id": WORKSPACE_PLAN_SYSTEM_ACTOR_ID
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(
+            outcome,
+            WorkspacePlanOutboxHandlerOutcome::Release {
+                reason: Some("supervisor_tick_requires_full_runtime".to_string())
+            }
+        );
+        let node = store.node("node-test");
+        assert_eq!(
+            node.feature_checkpoint_json
+                .as_ref()
+                .and_then(|value| value["base_ref"].as_str()),
+            Some("HEAD")
+        );
+        assert!(node
+            .metadata_json
+            .get("dirty_main_dependency_dispatch_status")
+            .is_none());
+        assert!(store.outbox().is_empty());
     }
 
     #[tokio::test]
