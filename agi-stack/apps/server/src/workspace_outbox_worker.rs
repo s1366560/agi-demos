@@ -22,6 +22,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{json, Map, Value};
 use serde_yaml_ng::Value as YamlValue;
+use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
@@ -58,6 +59,9 @@ const WORKSPACE_PLAN_NODE_ID: &str = "workspace_plan_node_id";
 const CURRENT_ATTEMPT_ID: &str = "current_attempt_id";
 const CURRENT_ATTEMPT_WORKER_BINDING_ID: &str = "current_attempt_worker_binding_id";
 const CURRENT_ATTEMPT_CONVERSATION_ID: &str = "current_attempt_conversation_id";
+const PENDING_LEADER_ADJUDICATION: &str = "pending_leader_adjudication";
+const LAST_WORKER_REPORT_ATTEMPT_ID: &str = "last_worker_report_attempt_id";
+const LAST_WORKER_REPORT_SUMMARY: &str = "last_worker_report_summary";
 const TASK_ROLE: &str = "task_role";
 const GOAL_ROOT_TASK_ROLE: &str = "goal_root";
 const REMEDIATION_STATUS: &str = "remediation_status";
@@ -1253,6 +1257,16 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         completed_at: DateTime<Utc>,
     ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>>;
 
+    async fn record_task_session_attempt_candidate_output(
+        &self,
+        attempt_id: &str,
+        summary: Option<&str>,
+        artifacts_json: &[String],
+        verifications_json: &[String],
+        conversation_id: Option<&str>,
+        updated_at: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>>;
+
     async fn count_recent_running_task_session_attempts_with_conversation(
         &self,
         workspace_id: &str,
@@ -1612,6 +1626,27 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
             leader_feedback,
             adjudication_reason,
             completed_at,
+        )
+        .await
+    }
+
+    async fn record_task_session_attempt_candidate_output(
+        &self,
+        attempt_id: &str,
+        summary: Option<&str>,
+        artifacts_json: &[String],
+        verifications_json: &[String],
+        conversation_id: Option<&str>,
+        updated_at: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        PgWorkspaceRepository::record_task_session_attempt_candidate_output(
+            self,
+            attempt_id,
+            summary,
+            artifacts_json,
+            verifications_json,
+            conversation_id,
+            updated_at,
         )
         .await
     }
@@ -2293,7 +2328,345 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
     }
 }
 
+#[allow(dead_code)]
+struct WorkerStreamTerminalPersistence<'a> {
+    workspace_id: &'a str,
+    task_id: &'a str,
+    root_goal_task_id: Option<&'a str>,
+    attempt_id: Option<&'a str>,
+    conversation_id: Option<&'a str>,
+    actor_user_id: &'a str,
+    worker_agent_id: &'a str,
+    leader_agent_id: Option<&'a str>,
+    plan_id: Option<&'a str>,
+    node_id: Option<&'a str>,
+    outcome: &'a worker_stream_watchdog::TerminalOutcome,
+    now: DateTime<Utc>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+struct WorkerReportPayload {
+    normalized_summary: String,
+    report_artifacts: Vec<String>,
+    merged_artifacts: Vec<String>,
+    report_verifications: Vec<String>,
+    merged_verifications: Vec<String>,
+    fingerprint: String,
+}
+
 impl WorkerLaunchAdmissionHandler {
+    #[allow(dead_code)]
+    async fn persist_worker_stream_terminal_outcome(
+        &self,
+        input: WorkerStreamTerminalPersistence<'_>,
+    ) -> CoreResult<bool> {
+        let Some(mut task) = self
+            .store
+            .get_task(input.workspace_id, input.task_id)
+            .await?
+        else {
+            return Ok(false);
+        };
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        let root_goal_task_id = input
+            .root_goal_task_id
+            .map(ToOwned::to_owned)
+            .or_else(|| string_from_map(&task_metadata, ROOT_GOAL_TASK_ID));
+        if let (Some(expected), Some(actual)) = (
+            input.root_goal_task_id,
+            string_from_map(&task_metadata, ROOT_GOAL_TASK_ID),
+        ) {
+            if actual != expected {
+                return Err(CoreError::Storage(
+                    "worker stream terminal report task does not belong to root goal".into(),
+                ));
+            }
+        }
+        let plan_id = input
+            .plan_id
+            .map(ToOwned::to_owned)
+            .or_else(|| string_from_map(&task_metadata, WORKSPACE_PLAN_ID));
+        let node_id = input
+            .node_id
+            .map(ToOwned::to_owned)
+            .or_else(|| string_from_map(&task_metadata, WORKSPACE_PLAN_NODE_ID));
+        let v2_plan_linked = plan_id
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+            && node_id
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty());
+
+        task_metadata.insert(
+            "launch_state".to_string(),
+            json!(input.outcome.launch_state),
+        );
+
+        let mut reported = false;
+        if input.outcome.should_report {
+            if let (Some(attempt_id), Some(report_type)) =
+                (input.attempt_id, input.outcome.report_type.as_ref())
+            {
+                if !is_stale_terminal_worker_report(&task_metadata, attempt_id) {
+                    let report_type = report_type.as_str();
+                    let report = build_worker_report_payload(
+                        &task_metadata,
+                        report_type,
+                        &input.outcome.summary,
+                        &[],
+                        None,
+                    );
+                    let pending_leader = !v2_plan_linked;
+                    let last_attempt_status = if v2_plan_linked {
+                        "awaiting_plan_verification"
+                    } else {
+                        AWAITING_LEADER_ADJUDICATION_STATUS
+                    };
+                    task_metadata
+                        .insert("evidence_refs".to_string(), json!(report.merged_artifacts));
+                    task_metadata.insert(
+                        "execution_verifications".to_string(),
+                        json!(report.merged_verifications),
+                    );
+                    task_metadata.insert("last_worker_report_type".to_string(), json!(report_type));
+                    task_metadata.insert(
+                        LAST_WORKER_REPORT_SUMMARY.to_string(),
+                        json!(report.normalized_summary.clone()),
+                    );
+                    task_metadata.insert(
+                        "last_worker_report_artifacts".to_string(),
+                        json!(report.merged_artifacts.clone()),
+                    );
+                    task_metadata.insert(
+                        "last_worker_report_verifications".to_string(),
+                        json!(report.report_verifications.clone()),
+                    );
+                    task_metadata.insert(
+                        "last_worker_reported_at".to_string(),
+                        json!(input.now.to_rfc3339()),
+                    );
+                    task_metadata.insert(
+                        "last_worker_report_fingerprint".to_string(),
+                        json!(report.fingerprint.clone()),
+                    );
+                    task_metadata
+                        .insert(LAST_WORKER_REPORT_ATTEMPT_ID.to_string(), json!(attempt_id));
+                    task_metadata.insert(
+                        PENDING_LEADER_ADJUDICATION.to_string(),
+                        json!(pending_leader),
+                    );
+                    task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt_id));
+                    task_metadata.insert("last_attempt_id".to_string(), json!(attempt_id));
+                    if let Some(conversation_id) = input.conversation_id {
+                        task_metadata.insert(
+                            CURRENT_ATTEMPT_CONVERSATION_ID.to_string(),
+                            json!(conversation_id),
+                        );
+                    }
+                    task_metadata.insert(
+                        "current_attempt_worker_agent_id".to_string(),
+                        json!(input.worker_agent_id),
+                    );
+                    if let Some(attempt) = self.store.get_task_session_attempt(attempt_id).await? {
+                        task_metadata.insert(
+                            "current_attempt_number".to_string(),
+                            json!(attempt.attempt_number),
+                        );
+                    }
+                    task_metadata.insert(
+                        "last_attempt_status".to_string(),
+                        json!(last_attempt_status),
+                    );
+                    task_metadata.insert(
+                        "execution_state".to_string(),
+                        worker_execution_state(
+                            "in_progress",
+                            &format!(
+                                "workspace_goal_runtime.worker_report.{report_type}:{}",
+                                report.normalized_summary
+                            ),
+                            if v2_plan_linked {
+                                "await_plan_verification"
+                            } else {
+                                "await_leader_adjudication"
+                            },
+                            input.worker_agent_id,
+                            input.now,
+                        ),
+                    );
+
+                    let recorded = self
+                        .store
+                        .record_task_session_attempt_candidate_output(
+                            attempt_id,
+                            Some(&report.normalized_summary),
+                            &report.report_artifacts,
+                            &report.report_verifications,
+                            input.conversation_id,
+                            input.now,
+                        )
+                        .await?
+                        .is_some();
+                    if recorded {
+                        reported = true;
+                        if let (Some(plan_id), Some(node_id), Some(root_goal_task_id)) = (
+                            plan_id.as_deref(),
+                            node_id.as_deref(),
+                            root_goal_task_id.as_deref(),
+                        ) {
+                            self.mark_workspace_plan_node_reported(
+                                &input,
+                                plan_id,
+                                node_id,
+                                root_goal_task_id,
+                                report_type,
+                                &report,
+                            )
+                            .await?;
+                        }
+                    }
+                }
+            }
+        } else {
+            task_metadata.insert(
+                "execution_state".to_string(),
+                worker_execution_state(
+                    "in_progress",
+                    &format!("workspace_worker_launch.{}", input.outcome.launch_state),
+                    "observe",
+                    input.leader_agent_id.unwrap_or(input.actor_user_id),
+                    input.now,
+                ),
+            );
+        }
+
+        task.metadata_json = Value::Object(task_metadata);
+        if task.status == "todo" {
+            task.status = "in_progress".to_string();
+            task.completed_at = None;
+        }
+        if input
+            .outcome
+            .report_type
+            .as_ref()
+            .is_some_and(|report_type| {
+                report_type.as_str() == "blocked" && input.outcome.should_report
+            })
+        {
+            task.blocker_reason = Some(input.outcome.summary.clone());
+        }
+        task.updated_at = Some(input.now);
+        self.store.save_task(task).await?;
+        Ok(reported)
+    }
+
+    async fn mark_workspace_plan_node_reported(
+        &self,
+        input: &WorkerStreamTerminalPersistence<'_>,
+        plan_id: &str,
+        node_id: &str,
+        root_goal_task_id: &str,
+        report_type: &str,
+        report: &WorkerReportPayload,
+    ) -> CoreResult<()> {
+        let mut nodes = self.store.list_plan_nodes(plan_id).await?;
+        let Some(mut node) = nodes.drain(..).find(|candidate| candidate.id == node_id) else {
+            return Ok(());
+        };
+        if input
+            .attempt_id
+            .is_some_and(|attempt_id| node.current_attempt_id.as_deref() != Some(attempt_id))
+        {
+            return Ok(());
+        }
+        let Some(attempt_id) = input.attempt_id else {
+            return Ok(());
+        };
+        let mut progress = object_or_empty(node.progress_json.clone());
+        progress
+            .entry("percent".to_string())
+            .or_insert_with(|| json!(0.0));
+        progress
+            .entry("confidence".to_string())
+            .or_insert_with(|| json!(1.0));
+        progress.insert("note".to_string(), json!(report.normalized_summary.clone()));
+
+        let mut metadata = object_or_empty(node.metadata_json.clone());
+        let reported_at = input.now.to_rfc3339();
+        let report_event = json!({
+            "event_type": "worker_report_terminal",
+            "source_event_type": "worker_report_terminal",
+            "summary": report.normalized_summary,
+            "attempt_id": attempt_id,
+            "worker_agent_id": input.worker_agent_id,
+            "reported_at": reported_at
+        });
+        let mut progress_events = metadata
+            .get("progress_events")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        progress_events.push(report_event.clone());
+        if progress_events.len() > 25 {
+            progress_events = progress_events.split_off(progress_events.len() - 25);
+        }
+        metadata.insert("progress_events".to_string(), Value::Array(progress_events));
+        metadata.insert("latest_worker_progress".to_string(), report_event);
+        metadata.insert(
+            "launch_state".to_string(),
+            json!(input.outcome.launch_state),
+        );
+        metadata.insert("last_worker_report_type".to_string(), json!(report_type));
+        metadata.insert(
+            LAST_WORKER_REPORT_SUMMARY.to_string(),
+            json!(report.normalized_summary.clone()),
+        );
+        metadata.insert(LAST_WORKER_REPORT_ATTEMPT_ID.to_string(), json!(attempt_id));
+        metadata.insert("last_worker_reported_at".to_string(), json!(reported_at));
+
+        node.intent = "in_progress".to_string();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some(attempt_id.to_string());
+        node.progress_json = Value::Object(progress);
+        node.metadata_json = Value::Object(metadata);
+        node.updated_at = Some(input.now);
+        self.store.save_plan_node(node).await?;
+        self.store
+            .create_plan_event(WorkspacePlanEventRecord {
+                id: generate_uuid_v4(),
+                plan_id: plan_id.to_string(),
+                workspace_id: input.workspace_id.to_string(),
+                node_id: Some(node_id.to_string()),
+                attempt_id: Some(attempt_id.to_string()),
+                event_type: "worker_report_terminal".to_string(),
+                source: "worker_report".to_string(),
+                actor_id: Some(input.worker_agent_id.to_string()),
+                payload_json: json!({
+                    "report_type": report_type,
+                    "summary": report.normalized_summary,
+                    "artifacts": report.report_artifacts,
+                    "verifications": report.report_verifications,
+                    "reported_at": input.now.to_rfc3339()
+                }),
+                created_at: input.now,
+            })
+            .await?;
+        self.store
+            .enqueue_plan_outbox(worker_report_supervisor_tick(
+                input.workspace_id,
+                plan_id,
+                node_id,
+                attempt_id,
+                root_goal_task_id,
+                input.actor_user_id,
+                input.leader_agent_id,
+                input.now,
+            ))
+            .await?;
+        Ok(())
+    }
+
     async fn runtime_agent_running_exists(&self, conversation_id: &str) -> bool {
         match self
             .runtime_state
@@ -8433,6 +8806,163 @@ fn merge_string_values(existing: Option<&Value>, additions: &[String]) -> Vec<St
     values
 }
 
+fn build_worker_report_payload(
+    task_metadata: &Map<String, Value>,
+    report_type: &str,
+    summary: &str,
+    artifacts: &[String],
+    report_id: Option<&str>,
+) -> WorkerReportPayload {
+    let (normalized_summary, mut report_artifacts, mut report_verifications) =
+        parse_worker_report_payload(report_type, summary, artifacts);
+    let mut merged_artifacts = metadata_string_values(task_metadata.get("evidence_refs"));
+    let mut report_artifacts_for_merge = report_artifacts.clone();
+    merged_artifacts.append(&mut report_artifacts_for_merge);
+    dedup_strings(&mut merged_artifacts);
+    let mut merged_verifications =
+        metadata_string_values(task_metadata.get("execution_verifications"));
+    let mut report_verifications_for_merge = report_verifications.clone();
+    merged_verifications.append(&mut report_verifications_for_merge);
+    dedup_strings(&mut merged_verifications);
+    let fingerprint = worker_report_fingerprint(
+        report_type,
+        &normalized_summary,
+        &merged_artifacts,
+        &report_verifications,
+        report_id,
+    );
+    dedup_strings(&mut report_artifacts);
+    dedup_strings(&mut report_verifications);
+    WorkerReportPayload {
+        normalized_summary,
+        report_artifacts,
+        merged_artifacts,
+        report_verifications,
+        merged_verifications,
+        fingerprint,
+    }
+}
+
+fn parse_worker_report_payload(
+    report_type: &str,
+    summary: &str,
+    artifacts: &[String],
+) -> (String, Vec<String>, Vec<String>) {
+    let mut normalized_summary = summary.trim().to_string();
+    if normalized_summary.is_empty() {
+        normalized_summary = format!("worker_report:{report_type}");
+    }
+    let mut merged_artifacts = artifacts
+        .iter()
+        .map(|artifact| artifact.trim())
+        .filter(|artifact| !artifact.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    let mut verifications = Vec::new();
+
+    if let Ok(Value::Object(payload)) = serde_json::from_str::<Value>(summary) {
+        if let Some(payload_summary) = metadata_string(payload.get("summary")) {
+            normalized_summary = payload_summary;
+        }
+        for item in metadata_string_values(payload.get("artifacts")) {
+            merged_artifacts.push(item);
+        }
+        for item in metadata_string_values(payload.get("verifications")) {
+            verifications.push(item);
+        }
+        if let Some(commit_ref) = metadata_string(payload.get("commit_ref")) {
+            merged_artifacts.push(format!("commit_ref:{commit_ref}"));
+        }
+        if let Some(git_diff_summary) = metadata_string(payload.get("git_diff_summary")) {
+            merged_artifacts.push(format!("git_diff_summary:{git_diff_summary}"));
+        }
+        for path in metadata_string_values(payload.get("changed_files")) {
+            merged_artifacts.push(format!("changed_file:{path}"));
+        }
+        for command in metadata_string_values(payload.get("test_commands")) {
+            verifications.push(format!("test_run:{command}"));
+        }
+        if let Some(verdict) = metadata_string(payload.get("verdict"))
+            .or_else(|| metadata_string(payload.get("outcome")))
+        {
+            verifications.push(format!("worker_verdict:{verdict}"));
+        }
+        if let Some(grade) = metadata_string(payload.get("verification_grade")) {
+            verifications.push(format!("verification_grade:{grade}"));
+        }
+    }
+
+    if report_type == "completed" && verifications.is_empty() {
+        verifications.push("worker_report:completed".to_string());
+    }
+    dedup_strings(&mut merged_artifacts);
+    dedup_strings(&mut verifications);
+    (normalized_summary, merged_artifacts, verifications)
+}
+
+fn worker_report_fingerprint(
+    report_type: &str,
+    summary: &str,
+    artifacts: &[String],
+    verifications: &[String],
+    report_id: Option<&str>,
+) -> String {
+    let serialized = format!(
+        "{{\"artifacts\": {}, \"report_id\": {}, \"report_type\": {}, \"summary\": {}, \"verifications\": {}}}",
+        python_json_string_array(artifacts),
+        python_json_string(report_id.unwrap_or("")),
+        python_json_string(report_type),
+        python_json_string(summary),
+        python_json_string_array(verifications)
+    );
+    let mut hasher = Sha256::new();
+    hasher.update(serialized.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+fn python_json_string(value: &str) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
+}
+
+fn python_json_string_array(values: &[String]) -> String {
+    if values.is_empty() {
+        return "[]".to_string();
+    }
+    format!(
+        "[{}]",
+        values
+            .iter()
+            .map(|value| python_json_string(value))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+fn is_stale_terminal_worker_report(task_metadata: &Map<String, Value>, attempt_id: &str) -> bool {
+    string_from_map(task_metadata, CURRENT_ATTEMPT_ID)
+        .as_deref()
+        .is_some_and(|current_attempt_id| {
+            !current_attempt_id.is_empty() && current_attempt_id != attempt_id
+        })
+}
+
+fn worker_execution_state(
+    phase: &str,
+    reason: &str,
+    action: &str,
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> Value {
+    json!({
+        "phase": phase,
+        "last_agent_reason": reason,
+        "last_agent_action": action,
+        "updated_by_actor_type": "agent",
+        "updated_by_actor_id": actor_id,
+        "updated_at": now.to_rfc3339()
+    })
+}
+
 fn pipeline_completion_node_state(
     node: &WorkspacePlanNodeRecord,
     metadata: &Map<String, Value>,
@@ -11205,6 +11735,49 @@ fn deferred_worker_launch_outbox(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn worker_report_supervisor_tick(
+    workspace_id: &str,
+    plan_id: &str,
+    node_id: &str,
+    attempt_id: &str,
+    root_goal_task_id: &str,
+    actor_user_id: &str,
+    leader_agent_id: Option<&str>,
+    now: DateTime<Utc>,
+) -> WorkspacePlanOutboxRecord {
+    WorkspacePlanOutboxRecord {
+        id: generate_uuid_v4(),
+        plan_id: Some(plan_id.to_string()),
+        workspace_id: workspace_id.to_string(),
+        event_type: SUPERVISOR_TICK_EVENT.to_string(),
+        payload_json: json!({
+            "workspace_id": workspace_id,
+            "root_task_id": root_goal_task_id,
+            "actor_user_id": actor_user_id,
+            "leader_agent_id": leader_agent_id,
+            "plan_id": plan_id,
+            "node_id": node_id,
+            "attempt_id": attempt_id
+        }),
+        status: "pending".to_string(),
+        attempt_count: 0,
+        max_attempts: 3,
+        lease_owner: None,
+        lease_expires_at: None,
+        last_error: None,
+        next_attempt_at: None,
+        processed_at: None,
+        metadata_json: json!({
+            "source": "worker_report",
+            "node_id": node_id,
+            "attempt_id": attempt_id
+        }),
+        created_at: now,
+        updated_at: None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn supervisor_retry_attempt_outbox(
     item: &WorkspacePlanOutboxRecord,
     payload: &Map<String, Value>,
@@ -12267,6 +12840,36 @@ mod tests {
             attempt.adjudication_reason = adjudication_reason.map(ToOwned::to_owned);
             attempt.completed_at = Some(completed_at);
             attempt.updated_at = Some(completed_at);
+            Ok(Some(attempt.clone()))
+        }
+
+        async fn record_task_session_attempt_candidate_output(
+            &self,
+            attempt_id: &str,
+            summary: Option<&str>,
+            artifacts_json: &[String],
+            verifications_json: &[String],
+            conversation_id: Option<&str>,
+            updated_at: DateTime<Utc>,
+        ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+            let mut attempts = self.attempts.lock().unwrap();
+            let Some(attempt) = attempts.get_mut(attempt_id) else {
+                return Ok(None);
+            };
+            if matches!(
+                attempt.status.as_str(),
+                "accepted" | "rejected" | "blocked" | "cancelled"
+            ) {
+                return Ok(Some(attempt.clone()));
+            }
+            attempt.status = AWAITING_LEADER_ADJUDICATION_STATUS.to_string();
+            if let Some(conversation_id) = conversation_id {
+                attempt.conversation_id = Some(conversation_id.to_string());
+            }
+            attempt.candidate_summary = summary.map(ToOwned::to_owned);
+            attempt.candidate_artifacts_json = artifacts_json.to_vec();
+            attempt.candidate_verifications_json = verifications_json.to_vec();
+            attempt.updated_at = Some(updated_at);
             Ok(Some(attempt.clone()))
         }
 
@@ -13688,6 +14291,247 @@ esac
             orphan_outcome.summary,
             "Worker stream stopped without a terminal complete/error event (agent_not_running_stream_idle)."
         );
+    }
+
+    #[tokio::test]
+    async fn worker_stream_terminal_outcome_persists_completed_report_like_python() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        store.insert_task(root_goal_task());
+        let mut task = task_with_plan_metadata();
+        task.status = "in_progress".to_string();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt(
+            "attempt-test",
+            "running",
+            Some("conversation-test"),
+        ));
+        let handler = worker_launch_handler(Arc::clone(&store), 4);
+        let mut stream = worker_stream_watchdog::StreamState::default();
+        stream.observe_event(&json!({
+            "type": "complete",
+            "data": {
+                "content": "{\"summary\":\"finished from stream\",\"commit_ref\":\"abcdef1234567890\",\"test_commands\":[\"cargo test -p app\"]}"
+            }
+        }));
+        let outcome = stream.terminal_outcome(false);
+
+        let reported = handler
+            .persist_worker_stream_terminal_outcome(WorkerStreamTerminalPersistence {
+                workspace_id: "workspace-test",
+                task_id: "task-test",
+                root_goal_task_id: Some("root-task"),
+                attempt_id: Some("attempt-test"),
+                conversation_id: Some("conversation-test"),
+                actor_user_id: "actor-test",
+                worker_agent_id: "agent-worker",
+                leader_agent_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID),
+                plan_id: Some("plan-test"),
+                node_id: Some("node-test"),
+                outcome: &outcome,
+                now: Utc.with_ymd_and_hms(2026, 1, 2, 4, 0, 0).unwrap(),
+            })
+            .await
+            .unwrap();
+
+        assert!(reported);
+        let task = store.task("task-test");
+        assert_eq!(task.status, "in_progress");
+        assert_eq!(task.metadata_json["launch_state"], "completed_via_stream");
+        assert_eq!(task.metadata_json["last_worker_report_type"], "completed");
+        assert_eq!(
+            task.metadata_json[LAST_WORKER_REPORT_SUMMARY],
+            "finished from stream"
+        );
+        assert_eq!(
+            task.metadata_json[LAST_WORKER_REPORT_ATTEMPT_ID],
+            "attempt-test"
+        );
+        assert_eq!(task.metadata_json[PENDING_LEADER_ADJUDICATION], false);
+        assert_eq!(
+            task.metadata_json["last_attempt_status"],
+            "awaiting_plan_verification"
+        );
+        assert_eq!(
+            task.metadata_json["last_worker_report_artifacts"],
+            json!(["commit_ref:abcdef1234567890"])
+        );
+        assert_eq!(
+            task.metadata_json["last_worker_report_verifications"],
+            json!(["test_run:cargo test -p app"])
+        );
+        assert_eq!(
+            task.metadata_json["execution_state"]["last_agent_action"],
+            "await_plan_verification"
+        );
+        assert_eq!(
+            task.metadata_json["last_worker_report_fingerprint"]
+                .as_str()
+                .unwrap()
+                .len(),
+            64
+        );
+        let attempt = store.attempts().remove(0);
+        assert_eq!(attempt.status, AWAITING_LEADER_ADJUDICATION_STATUS);
+        assert_eq!(
+            attempt.candidate_summary.as_deref(),
+            Some("finished from stream")
+        );
+        assert_eq!(
+            attempt.candidate_artifacts_json,
+            vec!["commit_ref:abcdef1234567890".to_string()]
+        );
+        assert_eq!(
+            attempt.candidate_verifications_json,
+            vec!["test_run:cargo test -p app".to_string()]
+        );
+        assert_eq!(
+            attempt.conversation_id.as_deref(),
+            Some("conversation-test")
+        );
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "in_progress");
+        assert_eq!(node.execution, "reported");
+        assert_eq!(node.progress_json["note"], "finished from stream");
+        assert_eq!(
+            node.metadata_json["latest_worker_progress"]["attempt_id"],
+            "attempt-test"
+        );
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "worker_report_terminal");
+        assert_eq!(events[0].payload_json["report_type"], "completed");
+        let outbox = store.outbox();
+        assert_eq!(outbox.len(), 1);
+        assert_eq!(outbox[0].event_type, SUPERVISOR_TICK_EVENT);
+        assert_eq!(outbox[0].metadata_json["source"], "worker_report");
+    }
+
+    #[tokio::test]
+    async fn worker_stream_terminal_outcome_persists_no_terminal_blocked_report() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        store.insert_task(root_goal_task());
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let handler = worker_launch_handler(Arc::clone(&store), 4);
+        let mut stream = worker_stream_watchdog::StreamState::default();
+        stream.mark_stream_ended_without_terminal();
+        let outcome = stream.terminal_outcome(false);
+
+        let reported = handler
+            .persist_worker_stream_terminal_outcome(WorkerStreamTerminalPersistence {
+                workspace_id: "workspace-test",
+                task_id: "task-test",
+                root_goal_task_id: Some("root-task"),
+                attempt_id: Some("attempt-test"),
+                conversation_id: Some("conversation-test"),
+                actor_user_id: "actor-test",
+                worker_agent_id: "agent-worker",
+                leader_agent_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID),
+                plan_id: Some("plan-test"),
+                node_id: Some("node-test"),
+                outcome: &outcome,
+                now: Utc.with_ymd_and_hms(2026, 1, 2, 4, 1, 0).unwrap(),
+            })
+            .await
+            .unwrap();
+
+        assert!(reported);
+        let task = store.task("task-test");
+        assert_eq!(task.status, "in_progress");
+        assert_eq!(task.metadata_json["launch_state"], "no_terminal_event");
+        assert_eq!(task.metadata_json["last_worker_report_type"], "blocked");
+        assert_eq!(
+            task.blocker_reason.as_deref(),
+            Some("Worker stream ended without a terminal complete/error event.")
+        );
+        let attempt = store.attempts().remove(0);
+        assert_eq!(attempt.status, AWAITING_LEADER_ADJUDICATION_STATUS);
+        assert_eq!(
+            attempt.candidate_summary.as_deref(),
+            Some("Worker stream ended without a terminal complete/error event.")
+        );
+        assert!(attempt.candidate_verifications_json.is_empty());
+        let node = store.node("node-test");
+        assert_eq!(node.execution, "reported");
+        assert_eq!(
+            store.plan_events()[0].payload_json["report_type"],
+            "blocked"
+        );
+    }
+
+    #[tokio::test]
+    async fn worker_stream_terminal_outcome_does_not_duplicate_applied_terminal_tool_report() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let handler = worker_launch_handler(Arc::clone(&store), 4);
+        let mut stream = worker_stream_watchdog::StreamState::default();
+        stream.observe_event(&json!({
+            "type": "observe",
+            "data": {
+                "tool_name": "workspace_report_complete",
+                "result": "{\"applied_report\":{\"applied\":true}}"
+            }
+        }));
+        stream.observe_event(&json!({"type": "complete", "data": {"content": "done"}}));
+        let outcome = stream.terminal_outcome(true);
+
+        let reported = handler
+            .persist_worker_stream_terminal_outcome(WorkerStreamTerminalPersistence {
+                workspace_id: "workspace-test",
+                task_id: "task-test",
+                root_goal_task_id: Some("root-task"),
+                attempt_id: Some("attempt-test"),
+                conversation_id: None,
+                actor_user_id: "actor-test",
+                worker_agent_id: "agent-worker",
+                leader_agent_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID),
+                plan_id: Some("plan-test"),
+                node_id: Some("node-test"),
+                outcome: &outcome,
+                now: Utc.with_ymd_and_hms(2026, 1, 2, 4, 2, 0).unwrap(),
+            })
+            .await
+            .unwrap();
+
+        assert!(!reported);
+        let task = store.task("task-test");
+        assert_eq!(
+            task.metadata_json["launch_state"],
+            "terminal_report_tool_applied"
+        );
+        assert!(task.metadata_json.get("last_worker_report_type").is_none());
+        let attempt = store.attempts().remove(0);
+        assert_eq!(attempt.status, "running");
+        assert!(attempt.candidate_summary.is_none());
+        assert!(store.plan_events().is_empty());
+        assert!(store.outbox().is_empty());
     }
 
     #[tokio::test]

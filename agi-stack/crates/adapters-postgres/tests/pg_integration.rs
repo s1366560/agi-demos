@@ -277,6 +277,35 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
         .unwrap()
         .expect("loaded attempt by id");
     assert_eq!(loaded_attempt.workspace_task_id, "task_p6_repo");
+    let reported_attempt = repo
+        .record_task_session_attempt_candidate_output(
+            "attempt_p6_repo_1",
+            Some("worker stream completed"),
+            &["commit_ref:abcdef1234567890".to_string()],
+            &["worker_report:completed".to_string()],
+            Some("conv_p6_worker_reported"),
+            created_at,
+        )
+        .await
+        .unwrap()
+        .expect("reported attempt should update");
+    assert_eq!(reported_attempt.status, "awaiting_leader_adjudication");
+    assert_eq!(
+        reported_attempt.conversation_id.as_deref(),
+        Some("conv_p6_worker_reported")
+    );
+    assert_eq!(
+        reported_attempt.candidate_summary.as_deref(),
+        Some("worker stream completed")
+    );
+    assert_eq!(
+        reported_attempt.candidate_artifacts_json,
+        vec!["commit_ref:abcdef1234567890".to_string()]
+    );
+    assert_eq!(
+        reported_attempt.candidate_verifications_json,
+        vec!["worker_report:completed".to_string()]
+    );
     repo.create_task_session_attempt(WorkspaceTaskSessionAttemptRecord {
         id: "attempt_p6_repo_2".to_string(),
         workspace_task_id: "task_p6_repo".to_string(),

@@ -1211,6 +1211,45 @@ impl PgWorkspaceRepository {
         .transpose()
     }
 
+    pub async fn record_task_session_attempt_candidate_output(
+        &self,
+        attempt_id: &str,
+        summary: Option<&str>,
+        artifacts_json: &[String],
+        verifications_json: &[String],
+        conversation_id: Option<&str>,
+        updated_at: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        let Some(existing) = self.get_task_session_attempt(attempt_id).await? else {
+            return Ok(None);
+        };
+        if matches!(
+            existing.status.as_str(),
+            "accepted" | "rejected" | "blocked" | "cancelled"
+        ) {
+            return Ok(Some(existing));
+        }
+        sqlx::query(&format!(
+            "UPDATE workspace_task_session_attempts \
+             SET status = 'awaiting_leader_adjudication', \
+                 conversation_id = COALESCE($2, conversation_id), \
+                 candidate_summary = $3, candidate_artifacts_json = $4, \
+                 candidate_verifications_json = $5, updated_at = $6 \
+             WHERE id = $1 RETURNING {TASK_SESSION_ATTEMPT_COLS}"
+        ))
+        .bind(attempt_id)
+        .bind(conversation_id)
+        .bind(summary)
+        .bind(Json(artifacts_json))
+        .bind(Json(verifications_json))
+        .bind(updated_at)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_task_session_attempt)
+        .transpose()
+    }
+
     pub async fn count_recent_running_task_session_attempts_with_conversation(
         &self,
         workspace_id: &str,
