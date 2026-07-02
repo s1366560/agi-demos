@@ -9890,6 +9890,23 @@ impl WorkspacePlanOutboxHandler for SupervisorTickAdmissionHandler {
         let root_goal_task_id = string_from_map(&payload, ROOT_GOAL_TASK_ID)
             .or_else(|| string_from_map(&payload, "root_task_id"))
             .or_else(|| string_from_map(&task_metadata, ROOT_GOAL_TASK_ID));
+        if is_worker_report_supervisor_tick(&item, &payload) {
+            return self
+                .handle_worker_report_supervisor_tick(
+                    &item,
+                    &payload,
+                    &workspace_id,
+                    &plan_id,
+                    node,
+                    &task_id,
+                    &worker_agent_id,
+                    &actor_user_id,
+                    &leader_agent_id,
+                    root_goal_task_id.as_deref(),
+                    retry_attempt_id.as_deref(),
+                )
+                .await;
+        }
         let retry_reason = string_from_map(&payload, "retry_reason")
             .unwrap_or_else(|| "supervisor_tick_retry".to_string());
 
@@ -9952,6 +9969,142 @@ struct SupervisorRetryContext {
 }
 
 impl SupervisorTickAdmissionHandler {
+    #[allow(clippy::too_many_arguments)]
+    async fn handle_worker_report_supervisor_tick(
+        &self,
+        item: &WorkspacePlanOutboxRecord,
+        payload: &Map<String, Value>,
+        workspace_id: &str,
+        plan_id: &str,
+        mut node: WorkspacePlanNodeRecord,
+        task_id: &str,
+        worker_agent_id: &str,
+        actor_user_id: &str,
+        leader_agent_id: &str,
+        root_goal_task_id: Option<&str>,
+        attempt_id: Option<&str>,
+    ) -> CoreResult<WorkspacePlanOutboxHandlerOutcome> {
+        let Some(attempt_id) = attempt_id else {
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        };
+        let Some(attempt) = self.store.get_task_session_attempt(attempt_id).await? else {
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        };
+        if attempt.status != AWAITING_LEADER_ADJUDICATION_STATUS
+            || !attempt_has_candidate_output(&attempt)
+        {
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        }
+
+        let now = Utc::now();
+        let node_metadata = object_or_empty(node.metadata_json.clone());
+        if let Some(retry_reason) =
+            worker_stream_orphan_report_retry_reason(&node_metadata, &attempt)
+        {
+            self.store
+                .finish_task_session_attempt(
+                    attempt_id,
+                    "blocked",
+                    attempt.candidate_summary.as_deref(),
+                    Some(&retry_reason),
+                    now,
+                )
+                .await?;
+            let retry_exhausted = release_node_for_terminal_retry(
+                &mut node,
+                &retry_reason,
+                now,
+                plan_terminal_attempt_max_retries(),
+            );
+            let mut metadata = object_or_empty(node.metadata_json.clone());
+            metadata.insert(
+                "worker_report_supervisor_tick_status".to_string(),
+                json!("orphan_retry_admitted"),
+            );
+            metadata.insert(
+                "worker_stream_orphan_retry_reason".to_string(),
+                json!(retry_reason.clone()),
+            );
+            node.metadata_json = Value::Object(metadata);
+            self.store.save_plan_node(node.clone()).await?;
+
+            self.store
+                .create_plan_event(WorkspacePlanEventRecord {
+                    id: generate_uuid_v4(),
+                    plan_id: plan_id.to_string(),
+                    workspace_id: workspace_id.to_string(),
+                    node_id: Some(node.id.clone()),
+                    attempt_id: Some(attempt_id.to_string()),
+                    event_type: "worker_stream_orphan_retry_admitted".to_string(),
+                    source: "workspace_plan_supervisor_tick".to_string(),
+                    actor_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string()),
+                    payload_json: json!({
+                        "retry_reason": retry_reason,
+                        "summary": attempt.candidate_summary,
+                    }),
+                    created_at: now,
+                })
+                .await?;
+
+            if !retry_exhausted {
+                self.store
+                    .enqueue_plan_outbox(supervisor_retry_attempt_outbox(
+                        item,
+                        payload,
+                        workspace_id,
+                        plan_id,
+                        &node.id,
+                        task_id,
+                        worker_agent_id,
+                        actor_user_id,
+                        leader_agent_id,
+                        root_goal_task_id,
+                        Some(attempt_id),
+                        &retry_reason,
+                        now,
+                    ))
+                    .await?;
+            }
+            return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
+        }
+
+        let mut metadata = object_or_empty(node.metadata_json);
+        metadata.insert(
+            "reported_attempt_reconciled_at".to_string(),
+            json!(now.to_rfc3339()),
+        );
+        metadata.insert(
+            "reported_attempt_status".to_string(),
+            json!(AWAITING_LEADER_ADJUDICATION_STATUS),
+        );
+        metadata.insert(
+            "worker_report_supervisor_tick_status".to_string(),
+            json!("reported_candidate_observed"),
+        );
+        node.execution = "reported".to_string();
+        node.metadata_json = Value::Object(metadata);
+        node.updated_at = Some(now);
+        self.store.save_plan_node(node.clone()).await?;
+        self.store
+            .create_plan_event(WorkspacePlanEventRecord {
+                id: generate_uuid_v4(),
+                plan_id: plan_id.to_string(),
+                workspace_id: workspace_id.to_string(),
+                node_id: Some(node.id.clone()),
+                attempt_id: Some(attempt_id.to_string()),
+                event_type: "auto_reported_attempt_reconciled".to_string(),
+                source: "workspace_plan_supervisor_tick".to_string(),
+                actor_id: Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID.to_string()),
+                payload_json: json!({
+                    "reason": "worker_report_supervisor_tick",
+                    "node_ids": [node.id]
+                }),
+                created_at: now,
+            })
+            .await?;
+        Ok(WorkspacePlanOutboxHandlerOutcome::Complete)
+    }
+
     async fn reopen_failed_worktree_integration_nodes(
         &self,
         item: &WorkspacePlanOutboxRecord,
@@ -11408,6 +11561,17 @@ fn reported_reconcilable_node(node: &WorkspacePlanNodeRecord) -> bool {
     node.intent == "in_progress" && node.execution == "idle"
 }
 
+fn is_worker_report_supervisor_tick(
+    item: &WorkspacePlanOutboxRecord,
+    payload: &Map<String, Value>,
+) -> bool {
+    string_from_value_object(&item.metadata_json, "source").as_deref() == Some("worker_report")
+        && string_from_map(payload, "node_id").is_some()
+        && string_from_map(payload, "attempt_id").is_some()
+        && string_from_map(payload, "retry_node_id").is_none()
+        && string_from_map(payload, "retry_reason").is_none()
+}
+
 fn attempt_has_candidate_output(attempt: &WorkspaceTaskSessionAttemptRecord) -> bool {
     attempt
         .candidate_summary
@@ -11415,6 +11579,29 @@ fn attempt_has_candidate_output(attempt: &WorkspaceTaskSessionAttemptRecord) -> 
         .is_some_and(|summary| !summary.trim().is_empty())
         || !attempt.candidate_artifacts_json.is_empty()
         || !attempt.candidate_verifications_json.is_empty()
+}
+
+fn worker_stream_orphan_report_retry_reason(
+    node_metadata: &Map<String, Value>,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+) -> Option<String> {
+    if metadata_string(node_metadata.get("last_worker_report_type")).as_deref() != Some("blocked")
+        || metadata_string(node_metadata.get("launch_state")).as_deref()
+            != Some("no_terminal_event")
+    {
+        return None;
+    }
+    let summary = attempt.candidate_summary.as_deref()?.trim();
+    if !summary.contains("Worker stream stopped without a terminal complete/error event") {
+        return None;
+    }
+    if summary.contains("agent_finished_without_terminal_event") {
+        Some("worker_stream_agent_finished_without_terminal_event".to_string())
+    } else if summary.contains("agent_not_running_stream_idle") {
+        Some("worker_stream_agent_not_running_stream_idle".to_string())
+    } else {
+        Some("worker_stream_no_terminal_event".to_string())
+    }
 }
 
 fn accepted_projection_already_complete_base(
@@ -19416,6 +19603,156 @@ steps:
             "active_plan_node_points_to_reported_attempt"
         );
         assert_eq!(events[0].payload_json["node_ids"], json!(["node-test"]));
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_observes_worker_report_without_retrying_completed_candidate() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        node.assignee_agent_id = Some("agent-worker".to_string());
+        node.metadata_json = json!({
+            "launch_state": "completed_via_stream",
+            "last_worker_report_type": "completed",
+            "last_worker_report_summary": "finished from stream"
+        });
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-test",
+            AWAITING_LEADER_ADJUDICATION_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.candidate_summary = Some("finished from stream".to_string());
+        attempt.candidate_verifications_json = vec!["worker_report:completed".to_string()];
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let item = worker_report_supervisor_tick(
+            "workspace-test",
+            "plan-test",
+            "node-test",
+            "attempt-test",
+            "root-task",
+            "actor-test",
+            Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID),
+            Utc.with_ymd_and_hms(2026, 1, 2, 5, 0, 0).unwrap(),
+        );
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "in_progress");
+        assert_eq!(node.execution, "reported");
+        assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-test"));
+        assert_eq!(
+            node.metadata_json["worker_report_supervisor_tick_status"],
+            "reported_candidate_observed"
+        );
+        assert_eq!(
+            node.metadata_json["reported_attempt_status"],
+            AWAITING_LEADER_ADJUDICATION_STATUS
+        );
+        assert!(store.outbox().is_empty());
+        let attempt = store
+            .attempts()
+            .into_iter()
+            .find(|attempt| attempt.id == "attempt-test")
+            .unwrap();
+        assert_eq!(attempt.status, AWAITING_LEADER_ADJUDICATION_STATUS);
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "auto_reported_attempt_reconciled");
+        assert_eq!(
+            events[0].payload_json["reason"],
+            "worker_report_supervisor_tick"
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_retries_worker_stream_orphan_report() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_task(task_with_plan_metadata());
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "reported".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        node.assignee_agent_id = Some("agent-worker".to_string());
+        node.metadata_json = json!({
+            "launch_state": "no_terminal_event",
+            "last_worker_report_type": "blocked",
+            "last_worker_report_summary": "Worker stream stopped without a terminal complete/error event (agent_not_running_stream_idle)."
+        });
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-test",
+            AWAITING_LEADER_ADJUDICATION_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.candidate_summary = Some(
+            "Worker stream stopped without a terminal complete/error event (agent_not_running_stream_idle)."
+                .to_string(),
+        );
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let item = worker_report_supervisor_tick(
+            "workspace-test",
+            "plan-test",
+            "node-test",
+            "attempt-test",
+            "root-task",
+            "actor-test",
+            Some(WORKSPACE_PLAN_SYSTEM_ACTOR_ID),
+            Utc.with_ymd_and_hms(2026, 1, 2, 5, 1, 0).unwrap(),
+        );
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let node = store.node("node-test");
+        assert_eq!(node.intent, "todo");
+        assert_eq!(node.execution, "idle");
+        assert_eq!(node.current_attempt_id, None);
+        assert_eq!(
+            node.metadata_json["terminal_attempt_retry_reason"],
+            "worker_stream_agent_not_running_stream_idle"
+        );
+        assert_eq!(
+            node.metadata_json["worker_report_supervisor_tick_status"],
+            "orphan_retry_admitted"
+        );
+        let attempt = store
+            .attempts()
+            .into_iter()
+            .find(|attempt| attempt.id == "attempt-test")
+            .unwrap();
+        assert_eq!(attempt.status, "blocked");
+        assert_eq!(
+            attempt.adjudication_reason.as_deref(),
+            Some("worker_stream_agent_not_running_stream_idle")
+        );
+        let queued = store.outbox();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].event_type, ATTEMPT_RETRY_EVENT);
+        assert_eq!(
+            queued[0].payload_json["previous_attempt_id"],
+            "attempt-test"
+        );
+        assert_eq!(
+            queued[0].payload_json["retry_reason"],
+            "worker_stream_agent_not_running_stream_idle"
+        );
+        let events = store.plan_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "worker_stream_orphan_retry_admitted");
+        assert_eq!(
+            events[0].payload_json["retry_reason"],
+            "worker_stream_agent_not_running_stream_idle"
+        );
     }
 
     #[tokio::test]
