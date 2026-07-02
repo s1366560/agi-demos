@@ -53,6 +53,9 @@ const PLAN_OUTBOX_COLS: &str = "id, plan_id, workspace_id, event_type, payload_j
 const PIPELINE_RUN_COLS: &str = "id, contract_id, workspace_id, plan_id, node_id, attempt_id, \
     commit_ref, provider, status, reason, started_at, completed_at, metadata_json, created_at, \
     updated_at";
+const PIPELINE_STAGE_RUN_COLS: &str = "id, run_id, workspace_id, stage, status, command, \
+    exit_code, stdout_preview, stderr_preview, log_ref, artifact_refs_json, started_at, \
+    completed_at, duration_ms, metadata_json, created_at, updated_at";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkspaceRecord {
@@ -316,6 +319,27 @@ pub struct WorkspacePipelineRunRecord {
     pub reason: Option<String>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
+    pub metadata_json: Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkspacePipelineStageRunRecord {
+    pub id: String,
+    pub run_id: String,
+    pub workspace_id: String,
+    pub stage: String,
+    pub status: String,
+    pub command: Option<String>,
+    pub exit_code: Option<i32>,
+    pub stdout_preview: Option<String>,
+    pub stderr_preview: Option<String>,
+    pub log_ref: Option<String>,
+    pub artifact_refs_json: Vec<String>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub duration_ms: Option<i32>,
     pub metadata_json: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -903,6 +927,80 @@ impl PgWorkspaceRepository {
         .await
         .map_err(storage)?
         .map(row_to_pipeline_run)
+        .transpose()
+    }
+
+    pub async fn create_pipeline_stage_run(
+        &self,
+        stage_run: WorkspacePipelineStageRunRecord,
+    ) -> CoreResult<WorkspacePipelineStageRunRecord> {
+        sqlx::query(&format!(
+            "INSERT INTO workspace_pipeline_stage_runs \
+             (id, run_id, workspace_id, stage, status, command, exit_code, stdout_preview, \
+              stderr_preview, log_ref, artifact_refs_json, started_at, completed_at, \
+              duration_ms, metadata_json, created_at, updated_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) \
+             RETURNING {PIPELINE_STAGE_RUN_COLS}"
+        ))
+        .bind(&stage_run.id)
+        .bind(&stage_run.run_id)
+        .bind(&stage_run.workspace_id)
+        .bind(&stage_run.stage)
+        .bind(&stage_run.status)
+        .bind(&stage_run.command)
+        .bind(stage_run.exit_code)
+        .bind(&stage_run.stdout_preview)
+        .bind(&stage_run.stderr_preview)
+        .bind(&stage_run.log_ref)
+        .bind(Json(&stage_run.artifact_refs_json))
+        .bind(stage_run.started_at)
+        .bind(stage_run.completed_at)
+        .bind(stage_run.duration_ms)
+        .bind(Json(&stage_run.metadata_json))
+        .bind(stage_run.created_at)
+        .bind(stage_run.updated_at)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(storage)
+        .and_then(row_to_pipeline_stage_run)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn finish_pipeline_stage_run(
+        &self,
+        stage_run_id: &str,
+        status: &str,
+        exit_code: Option<i32>,
+        stdout_preview: Option<&str>,
+        stderr_preview: Option<&str>,
+        log_ref: Option<&str>,
+        artifact_refs: &[String],
+        metadata_patch: &Value,
+        completed_at: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspacePipelineStageRunRecord>> {
+        sqlx::query(&format!(
+            "UPDATE workspace_pipeline_stage_runs \
+             SET status = $2, exit_code = $3, stdout_preview = $4, stderr_preview = $5, \
+                 log_ref = $6, artifact_refs_json = $7, completed_at = $8, updated_at = $8, \
+                 duration_ms = GREATEST(0, CAST(EXTRACT(EPOCH FROM \
+                     ($8 - COALESCE(started_at, $8))) * 1000 AS integer)), \
+                 metadata_json = metadata_json || $9 \
+             WHERE id = $1 \
+             RETURNING {PIPELINE_STAGE_RUN_COLS}"
+        ))
+        .bind(stage_run_id)
+        .bind(status)
+        .bind(exit_code)
+        .bind(stdout_preview)
+        .bind(stderr_preview)
+        .bind(log_ref)
+        .bind(Json(artifact_refs))
+        .bind(completed_at)
+        .bind(Json(metadata_patch))
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_pipeline_stage_run)
         .transpose()
     }
 
@@ -2322,6 +2420,28 @@ fn row_to_pipeline_run(row: PgRow) -> CoreResult<WorkspacePipelineRunRecord> {
         reason: row.try_get("reason").map_err(storage)?,
         started_at: row.try_get("started_at").map_err(storage)?,
         completed_at: row.try_get("completed_at").map_err(storage)?,
+        metadata_json: json_value(&row, "metadata_json")?,
+        created_at: row.try_get("created_at").map_err(storage)?,
+        updated_at: row.try_get("updated_at").map_err(storage)?,
+    })
+}
+
+fn row_to_pipeline_stage_run(row: PgRow) -> CoreResult<WorkspacePipelineStageRunRecord> {
+    Ok(WorkspacePipelineStageRunRecord {
+        id: row.try_get("id").map_err(storage)?,
+        run_id: row.try_get("run_id").map_err(storage)?,
+        workspace_id: row.try_get("workspace_id").map_err(storage)?,
+        stage: row.try_get("stage").map_err(storage)?,
+        status: row.try_get("status").map_err(storage)?,
+        command: row.try_get("command").map_err(storage)?,
+        exit_code: row.try_get("exit_code").map_err(storage)?,
+        stdout_preview: row.try_get("stdout_preview").map_err(storage)?,
+        stderr_preview: row.try_get("stderr_preview").map_err(storage)?,
+        log_ref: row.try_get("log_ref").map_err(storage)?,
+        artifact_refs_json: json_vec_string(&row, "artifact_refs_json")?,
+        started_at: row.try_get("started_at").map_err(storage)?,
+        completed_at: row.try_get("completed_at").map_err(storage)?,
+        duration_ms: row.try_get("duration_ms").map_err(storage)?,
         metadata_json: json_value(&row, "metadata_json")?,
         created_at: row.try_get("created_at").map_err(storage)?,
         updated_at: row.try_get("updated_at").map_err(storage)?,

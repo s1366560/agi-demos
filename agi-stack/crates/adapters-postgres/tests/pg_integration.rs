@@ -24,10 +24,10 @@ use agistack_adapters_postgres::{
     ProjectSandboxRecord, ProjectStatsLookup, ProjectUpdatePatch, SkillProjectAccess, SkillRecord,
     SkillUpdateRecord, SkillVersionRecord, TenantAccessStatus, TenantAdminStatus, TenantLookup,
     TenantUpdatePatch, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
-    WorkspacePipelineRunRecord, WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord,
-    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord,
-    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
-    WorkspaceTaskSessionAttemptRecord,
+    WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord,
+    WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
+    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
+    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_core::agent::types::{SessionState, SessionStatus};
 use agistack_core::model::{Entity, Memory};
@@ -63,6 +63,7 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
     ensure_python_shaped_tables(&pool).await;
 
     for sql in [
+        "DELETE FROM workspace_pipeline_stage_runs WHERE run_id IN (SELECT id FROM workspace_pipeline_runs WHERE plan_id = 'plan_p6_repo' OR workspace_id = 'ws_p6_repo') OR workspace_id = 'ws_p6_repo'",
         "DELETE FROM workspace_pipeline_runs WHERE plan_id = 'plan_p6_repo' OR workspace_id = 'ws_p6_repo'",
         "DELETE FROM workspace_pipeline_contracts WHERE plan_id = 'plan_p6_repo' OR workspace_id = 'ws_p6_repo'",
         "DELETE FROM workspace_plan_outbox WHERE plan_id = 'plan_p6_repo' OR workspace_id = 'ws_p6_repo'",
@@ -645,6 +646,55 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
     assert_eq!(latest_run.id, "pipeline_run_p6_repo");
     assert_eq!(latest_run.commit_ref.as_deref(), Some("abcdef1234567890"));
     assert_eq!(latest_run.metadata_json["reason"], "pipeline_gate_required");
+    let stage_started_at = created_at;
+    let pipeline_stage_run = repo
+        .create_pipeline_stage_run(WorkspacePipelineStageRunRecord {
+            id: "pipeline_stage_run_p6_repo".to_string(),
+            run_id: pipeline_run.id.clone(),
+            workspace_id: "ws_p6_repo".to_string(),
+            stage: "test".to_string(),
+            status: "running".to_string(),
+            command: Some("cargo test --workspace".to_string()),
+            exit_code: None,
+            stdout_preview: None,
+            stderr_preview: None,
+            log_ref: None,
+            artifact_refs_json: Vec::new(),
+            started_at: Some(stage_started_at),
+            completed_at: None,
+            duration_ms: None,
+            metadata_json: json!({"required": true}),
+            created_at: stage_started_at,
+            updated_at: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(pipeline_stage_run.status, "running");
+    let stage_completed_at = ts(2026, 1, 2, 3, 4, 7);
+    let artifact_refs = vec!["pipeline_log:test:sandbox://pipeline/test.log".to_string()];
+    let finished_stage = repo
+        .finish_pipeline_stage_run(
+            &pipeline_stage_run.id,
+            "success",
+            Some(0),
+            Some("ok"),
+            Some(""),
+            Some("sandbox://pipeline/test.log"),
+            &artifact_refs,
+            &json!({"duration_ms_observed": 1900}),
+            stage_completed_at,
+        )
+        .await
+        .unwrap()
+        .expect("finished pipeline stage run");
+    assert_eq!(finished_stage.status, "success");
+    assert_eq!(finished_stage.exit_code, Some(0));
+    assert_eq!(finished_stage.stdout_preview.as_deref(), Some("ok"));
+    assert_eq!(finished_stage.stderr_preview.as_deref(), Some(""));
+    assert_eq!(finished_stage.artifact_refs_json, artifact_refs);
+    assert_eq!(finished_stage.duration_ms, Some(2_000));
+    assert_eq!(finished_stage.metadata_json["required"], true);
+    assert_eq!(finished_stage.metadata_json["duration_ms_observed"], 1900);
 
     repo.create_plan_blackboard_entry(WorkspacePlanBlackboardEntryRecord {
         id: "plan_bb_p6_v1".to_string(),
@@ -1182,6 +1232,18 @@ async fn ensure_python_shaped_tables(pool: &PgPool) {
             ON workspace_pipeline_runs (attempt_id)",
         "CREATE INDEX IF NOT EXISTS ix_workspace_pipeline_runs_status \
             ON workspace_pipeline_runs (status)",
+        "CREATE TABLE IF NOT EXISTS workspace_pipeline_stage_runs (\
+            id text PRIMARY KEY, run_id text NOT NULL, workspace_id text NOT NULL, \
+            stage varchar(40) NOT NULL, status varchar(20) DEFAULT 'pending' NOT NULL, \
+            command text, exit_code integer, stdout_preview text, stderr_preview text, \
+            log_ref text, artifact_refs_json json DEFAULT '[]'::json NOT NULL, \
+            started_at timestamptz, completed_at timestamptz, duration_ms integer, \
+            metadata_json json DEFAULT '{}'::json NOT NULL, \
+            created_at timestamptz DEFAULT now() NOT NULL, updated_at timestamptz)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_pipeline_stage_runs_run \
+            ON workspace_pipeline_stage_runs (run_id)",
+        "CREATE INDEX IF NOT EXISTS ix_workspace_pipeline_stage_runs_workspace_status \
+            ON workspace_pipeline_stage_runs (workspace_id, status)",
         "CREATE TABLE IF NOT EXISTS topology_nodes (\
             id text PRIMARY KEY, workspace_id text NOT NULL, node_type varchar(20) NOT NULL, \
             ref_id text, title varchar(255) DEFAULT '' NOT NULL, \

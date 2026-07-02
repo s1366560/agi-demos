@@ -9,9 +9,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use agistack_adapters_postgres::{
-    PgWorkspaceRepository, WorkspacePipelineRunRecord, WorkspacePlanEventRecord,
-    WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceRecord,
-    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
+    PgWorkspaceRepository, WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord,
+    WorkspacePlanEventRecord, WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord,
+    WorkspacePlanRecord, WorkspaceRecord, WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
 };
 use agistack_adapters_secrets::generate_uuid_v4;
 use agistack_core::ports::{CoreError, CoreResult};
@@ -416,6 +416,26 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         completed_at: DateTime<Utc>,
     ) -> CoreResult<Option<WorkspacePipelineRunRecord>>;
 
+    #[allow(dead_code)]
+    async fn create_pipeline_stage_run(
+        &self,
+        stage_run: WorkspacePipelineStageRunRecord,
+    ) -> CoreResult<WorkspacePipelineStageRunRecord>;
+
+    #[allow(clippy::too_many_arguments, dead_code)]
+    async fn finish_pipeline_stage_run(
+        &self,
+        stage_run_id: &str,
+        status: &str,
+        exit_code: Option<i32>,
+        stdout_preview: Option<&str>,
+        stderr_preview: Option<&str>,
+        log_ref: Option<&str>,
+        artifact_refs: &[String],
+        metadata_patch: &Value,
+        completed_at: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspacePipelineStageRunRecord>>;
+
     async fn latest_task_session_attempt_number(&self, workspace_task_id: &str) -> CoreResult<i32>;
 
     async fn create_task_session_attempt(
@@ -666,6 +686,40 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
             run_id,
             status,
             reason,
+            metadata_patch,
+            completed_at,
+        )
+        .await
+    }
+
+    async fn create_pipeline_stage_run(
+        &self,
+        stage_run: WorkspacePipelineStageRunRecord,
+    ) -> CoreResult<WorkspacePipelineStageRunRecord> {
+        PgWorkspaceRepository::create_pipeline_stage_run(self, stage_run).await
+    }
+
+    async fn finish_pipeline_stage_run(
+        &self,
+        stage_run_id: &str,
+        status: &str,
+        exit_code: Option<i32>,
+        stdout_preview: Option<&str>,
+        stderr_preview: Option<&str>,
+        log_ref: Option<&str>,
+        artifact_refs: &[String],
+        metadata_patch: &Value,
+        completed_at: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspacePipelineStageRunRecord>> {
+        PgWorkspaceRepository::finish_pipeline_stage_run(
+            self,
+            stage_run_id,
+            status,
+            exit_code,
+            stdout_preview,
+            stderr_preview,
+            log_ref,
+            artifact_refs,
             metadata_patch,
             completed_at,
         )
@@ -4473,6 +4527,7 @@ mod tests {
         attempts: Mutex<HashMap<String, WorkspaceTaskSessionAttemptRecord>>,
         pipeline_contracts: Mutex<HashMap<(String, String), FakePipelineContractRecord>>,
         pipeline_runs: Mutex<HashMap<String, WorkspacePipelineRunRecord>>,
+        pipeline_stage_runs: Mutex<HashMap<String, WorkspacePipelineStageRunRecord>>,
         plan_events: Mutex<Vec<WorkspacePlanEventRecord>>,
         outbox: Mutex<Vec<WorkspacePlanOutboxRecord>>,
         active_worker_conversations: Mutex<i64>,
@@ -4536,6 +4591,15 @@ mod tests {
                 .values()
                 .cloned()
                 .collect()
+        }
+
+        fn pipeline_stage_run(&self, id: &str) -> WorkspacePipelineStageRunRecord {
+            self.pipeline_stage_runs
+                .lock()
+                .unwrap()
+                .get(id)
+                .unwrap()
+                .clone()
         }
 
         fn pipeline_contract(
@@ -4866,6 +4930,54 @@ mod tests {
             }
             run.metadata_json = Value::Object(metadata);
             Ok(Some(run.clone()))
+        }
+
+        async fn create_pipeline_stage_run(
+            &self,
+            stage_run: WorkspacePipelineStageRunRecord,
+        ) -> CoreResult<WorkspacePipelineStageRunRecord> {
+            self.pipeline_stage_runs
+                .lock()
+                .unwrap()
+                .insert(stage_run.id.clone(), stage_run.clone());
+            Ok(stage_run)
+        }
+
+        async fn finish_pipeline_stage_run(
+            &self,
+            stage_run_id: &str,
+            status: &str,
+            exit_code: Option<i32>,
+            stdout_preview: Option<&str>,
+            stderr_preview: Option<&str>,
+            log_ref: Option<&str>,
+            artifact_refs: &[String],
+            metadata_patch: &Value,
+            completed_at: DateTime<Utc>,
+        ) -> CoreResult<Option<WorkspacePipelineStageRunRecord>> {
+            let mut stage_runs = self.pipeline_stage_runs.lock().unwrap();
+            let Some(stage_run) = stage_runs.get_mut(stage_run_id) else {
+                return Ok(None);
+            };
+            stage_run.status = status.to_string();
+            stage_run.exit_code = exit_code;
+            stage_run.stdout_preview = stdout_preview.map(ToOwned::to_owned);
+            stage_run.stderr_preview = stderr_preview.map(ToOwned::to_owned);
+            stage_run.log_ref = log_ref.map(ToOwned::to_owned);
+            stage_run.artifact_refs_json = artifact_refs.to_vec();
+            stage_run.completed_at = Some(completed_at);
+            let duration_ms = stage_run
+                .started_at
+                .map(|started_at| (completed_at - started_at).num_milliseconds().max(0))
+                .unwrap_or(0);
+            stage_run.duration_ms = Some(i32::try_from(duration_ms).unwrap_or(i32::MAX));
+            stage_run.updated_at = Some(completed_at);
+            let mut metadata = object_or_empty(stage_run.metadata_json.clone());
+            for (key, value) in object_or_empty(metadata_patch.clone()) {
+                metadata.insert(key, value);
+            }
+            stage_run.metadata_json = Value::Object(metadata);
+            Ok(Some(stage_run.clone()))
         }
 
         async fn latest_task_session_attempt_number(
@@ -5233,6 +5345,29 @@ mod tests {
         }
     }
 
+    fn pipeline_stage_run_record(id: &str, run_id: &str) -> WorkspacePipelineStageRunRecord {
+        let timestamp = Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap();
+        WorkspacePipelineStageRunRecord {
+            id: id.to_string(),
+            run_id: run_id.to_string(),
+            workspace_id: "workspace-test".to_string(),
+            stage: "test".to_string(),
+            status: "running".to_string(),
+            command: Some("cargo test --workspace".to_string()),
+            exit_code: None,
+            stdout_preview: None,
+            stderr_preview: None,
+            log_ref: None,
+            artifact_refs_json: Vec::new(),
+            started_at: Some(timestamp),
+            completed_at: None,
+            duration_ms: None,
+            metadata_json: json!({"required": true}),
+            created_at: timestamp,
+            updated_at: None,
+        }
+    }
+
     fn supervisor_tick_handler(
         store: Arc<FakeWorkspacePlanDispatchStore>,
     ) -> SupervisorTickAdmissionHandler {
@@ -5543,6 +5678,60 @@ mod tests {
             contract.metadata_json["contract_source"],
             PLANNING_CONTRACT_SOURCE
         );
+    }
+
+    #[tokio::test]
+    async fn pipeline_stage_run_store_persists_finish_result() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        let started = Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap();
+        let completed = Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 7).unwrap();
+        let stage_run = WorkspacePlanDispatchStore::create_pipeline_stage_run(
+            &*store,
+            pipeline_stage_run_record("pipeline-stage-run-test", "pipeline-run-test"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(stage_run.status, "running");
+        assert_eq!(stage_run.started_at, Some(started));
+
+        let artifact_refs = vec![
+            "pipeline_log:test:sandbox://pipeline/run/test.log".to_string(),
+            "artifact:test:coverage".to_string(),
+        ];
+        let finished = WorkspacePlanDispatchStore::finish_pipeline_stage_run(
+            &*store,
+            "pipeline-stage-run-test",
+            "success",
+            Some(0),
+            Some("ok"),
+            Some(""),
+            Some("sandbox://pipeline/run/test.log"),
+            &artifact_refs,
+            &json!({"duration_ms_observed": 1800, "service_id": null}),
+            completed,
+        )
+        .await
+        .unwrap()
+        .expect("stage run finished");
+
+        assert_eq!(finished.status, "success");
+        assert_eq!(finished.exit_code, Some(0));
+        assert_eq!(finished.stdout_preview.as_deref(), Some("ok"));
+        assert_eq!(finished.stderr_preview.as_deref(), Some(""));
+        assert_eq!(
+            finished.log_ref.as_deref(),
+            Some("sandbox://pipeline/run/test.log")
+        );
+        assert_eq!(finished.artifact_refs_json, artifact_refs);
+        assert_eq!(finished.completed_at, Some(completed));
+        assert_eq!(finished.duration_ms, Some(2_000));
+        assert_eq!(finished.updated_at, Some(completed));
+        assert_eq!(finished.metadata_json["required"], true);
+        assert_eq!(finished.metadata_json["duration_ms_observed"], 1800);
+        assert!(finished.metadata_json["service_id"].is_null());
+
+        let persisted = store.pipeline_stage_run("pipeline-stage-run-test");
+        assert_eq!(persisted, finished);
     }
 
     #[tokio::test]

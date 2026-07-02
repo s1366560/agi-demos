@@ -68,10 +68,10 @@ pub use vector_index::PgVectorIndex;
 pub use workspace_repo::{
     BlackboardFileRecord, BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord,
     PgWorkspaceRepository, TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess,
-    WorkspaceMemberRecord, WorkspacePipelineRunRecord, WorkspacePlanBlackboardEntryRecord,
-    WorkspacePlanEventRecord, WorkspacePlanNodeRecord, WorkspacePlanOutboxRecord,
-    WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
-    WorkspaceTaskSessionAttemptRecord,
+    WorkspaceMemberRecord, WorkspacePipelineRunRecord, WorkspacePipelineStageRunRecord,
+    WorkspacePlanBlackboardEntryRecord, WorkspacePlanEventRecord, WorkspacePlanNodeRecord,
+    WorkspacePlanOutboxRecord, WorkspacePlanRecord, WorkspaceProjectAccess, WorkspaceRecord,
+    WorkspaceTaskRecord, WorkspaceTaskSessionAttemptRecord,
 };
 
 use agistack_core::ports::{CoreError, CoreResult};
