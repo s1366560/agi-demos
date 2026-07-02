@@ -46,6 +46,7 @@ mod shares_api;
 mod skill_api;
 mod trust_api;
 mod workspace_api;
+mod workspace_outbox_worker;
 
 use agistack_adapters_docker::{DockerContainerRuntime, ImagePullPolicy};
 use agistack_adapters_http_llm::{HttpEmbedding, HttpLlm};
@@ -88,6 +89,10 @@ use crate::shares_api::{DevShareService, PgShareService, SharedShares};
 use crate::skill_api::{DevSkillService, PgSkillService, SharedSkills};
 use crate::trust_api::{DevTrustService, PgTrustService, SharedTrust};
 use crate::workspace_api::{DevWorkspaceService, PgWorkspaceService, SharedWorkspaces};
+use crate::workspace_outbox_worker::{
+    PgWorkspacePlanOutboxStore, SharedWorkspacePlanOutboxWorker, WorkspacePlanOutboxHandlers,
+    WorkspacePlanOutboxWorker, WorkspacePlanOutboxWorkerConfig,
+};
 
 /// Shared, cheaply-cloneable application state. Every `Arc`/`HotPlugRegistry`
 /// field is a shared handle, so all routes operate on the same registry, memory
@@ -117,6 +122,9 @@ pub(crate) struct AppState {
     /// P6 workspace/task/topology/blackboard foundation over Python-owned
     /// workspace tables.
     pub(crate) workspaces: SharedWorkspaces,
+    /// P6 server-only outbox worker foundation. It is wired for explicit
+    /// one-shot/loop use once handlers are migrated, but is not auto-started.
+    pub(crate) workspace_plan_outbox_worker: Option<SharedWorkspacePlanOutboxWorker>,
     /// P4 knowledge-graph store. Server composition picks Neo4j when configured,
     /// otherwise an in-memory dev/test backend behind the same portable port.
     pub(crate) graph: Arc<dyn GraphStore>,
@@ -490,6 +498,7 @@ async fn build_memory_and_auth(
     SharedTrust,
     SharedSkills,
     SharedWorkspaces,
+    Option<SharedWorkspacePlanOutboxWorker>,
     Option<PgProjectSandboxRepository>,
     Option<PgProjectReadRepository>,
 ) {
@@ -543,6 +552,13 @@ async fn build_memory_and_auth(
                 PgWorkspaceRepository::new(pool.clone()),
                 object_store,
             ));
+            let workspace_plan_outbox_worker = Some(Arc::new(WorkspacePlanOutboxWorker::new(
+                Arc::new(PgWorkspacePlanOutboxStore::new(PgWorkspaceRepository::new(
+                    pool.clone(),
+                ))),
+                WorkspacePlanOutboxWorkerConfig::from_env(),
+                WorkspacePlanOutboxHandlers::default(),
+            )));
             let sandbox_repo = Some(PgProjectSandboxRepository::new(pool.clone()));
             let project_sandbox_config_repo = Some(PgProjectReadRepository::new(pool.clone()));
             eprintln!("[agistack] persistence: PostgreSQL (production, shared Python schema)");
@@ -555,6 +571,7 @@ async fn build_memory_and_auth(
                 trust,
                 skills,
                 workspaces,
+                workspace_plan_outbox_worker,
                 sandbox_repo,
                 project_sandbox_config_repo,
             )
@@ -592,6 +609,7 @@ async fn build_memory_and_auth(
                 trust,
                 skills,
                 workspaces,
+                None,
                 None,
                 None,
             )
@@ -734,6 +752,7 @@ async fn build_state() -> AppState {
         trust,
         skills,
         workspaces,
+        workspace_plan_outbox_worker,
         sandbox_repo,
         project_config_repo,
     ) = build_memory_and_auth(llm.clone(), embedding, object_store).await;
@@ -784,6 +803,7 @@ async fn build_state() -> AppState {
         trust,
         skills,
         workspaces,
+        workspace_plan_outbox_worker,
         graph,
         sandboxes,
     }
@@ -814,6 +834,14 @@ async fn tools_call(
     Ok(Json(json!({ "tool": req.tool, "output": output })))
 }
 
+async fn health(State(app): State<AppState>) -> &'static str {
+    let _ = app
+        .workspace_plan_outbox_worker
+        .as_ref()
+        .map(|worker| worker.handler_count());
+    "ok"
+}
+
 fn router(state: AppState) -> Router {
     // The production `/api/v1` surface splits by authentication:
     //   * authed — strangled memory/episodes/recall (P1) + tenant reads (P2) —
@@ -838,7 +866,7 @@ fn router(state: AppState) -> Router {
     let public = identity_api::router_public().merge(shares_api::router_public());
 
     Router::new()
-        .route("/health", get(|| async { "ok" }))
+        .route("/health", get(health))
         .route("/v1/episodes", post(ingest))
         .route("/v1/memories/search", get(search))
         .route("/v1/memories/:id", get(get_memory))

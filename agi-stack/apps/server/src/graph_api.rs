@@ -999,6 +999,7 @@ mod tests {
             trust,
             skills,
             workspaces,
+            workspace_plan_outbox_worker: None,
             graph: Arc::new(InMemoryGraphStore::new()),
             sandboxes: Arc::new(ProjectSandboxService::new(
                 Arc::new(InMemoryContainerRuntime::new()),
