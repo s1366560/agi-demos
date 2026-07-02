@@ -1,0 +1,7 @@
+{
+  "valid": true,
+  "email": "invitee@example.test",
+  "tenant_id": "44444444-4444-4444-8444-444444444444",
+  "role": "member",
+  "expires_at": "2023-11-21T22:13:20Z"
+}

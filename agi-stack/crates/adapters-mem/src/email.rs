@@ -41,7 +41,10 @@ impl InMemoryEmailSender {
 #[async_trait]
 impl EmailSender for InMemoryEmailSender {
     async fn send(&self, message: &EmailMessage) -> CoreResult<()> {
-        self.sent.lock().expect("email sink mutex").push(message.clone());
+        self.sent
+            .lock()
+            .expect("email sink mutex")
+            .push(message.clone());
         Ok(())
     }
 }
@@ -85,6 +88,9 @@ mod tests {
         let sent = sender.sent();
         assert_eq!(sent[0].from, "MemStack <no-reply@memstack.ai>");
         assert_eq!(sent[0].body_text, "Join the project");
-        assert_eq!(sent[0].body_html.as_deref(), Some("<p>Join the project</p>"));
+        assert_eq!(
+            sent[0].body_html.as_deref(),
+            Some("<p>Join the project</p>")
+        );
     }
 }

@@ -63,9 +63,7 @@ fn unique_project(tag: &str) -> String {
 
 async fn wipe(graph: &Graph, project: &str) {
     graph
-        .run(
-            query("MATCH (e:Entity {project_id: $pid}) DETACH DELETE e").param("pid", project),
-        )
+        .run(query("MATCH (e:Entity {project_id: $pid}) DETACH DELETE e").param("pid", project))
         .await
         .expect("cleanup wipe");
 }
@@ -108,8 +106,12 @@ async fn seed(
         mem.upsert_entity(e.clone()).await.expect("mem upsert ent");
     }
     for r in rels {
-        neo.upsert_relationship(r.clone()).await.expect("neo upsert rel");
-        mem.upsert_relationship(r.clone()).await.expect("mem upsert rel");
+        neo.upsert_relationship(r.clone())
+            .await
+            .expect("neo upsert rel");
+        mem.upsert_relationship(r.clone())
+            .await
+            .expect("mem upsert rel");
     }
 }
 
@@ -183,7 +185,12 @@ async fn neo4j_matches_in_memory_across_all_reads() {
     }
 
     // search_entities: case-insensitive over name OR summary, plus a limit.
-    for (q, limit) in [("alpha", 10usize), ("branch", 10), ("e", 2), ("zzz-none", 10)] {
+    for (q, limit) in [
+        ("alpha", 10usize),
+        ("branch", 10),
+        ("e", 2),
+        ("zzz-none", 10),
+    ] {
         let s_neo = neo
             .search_entities(&project, q, limit)
             .await
@@ -196,7 +203,11 @@ async fn neo4j_matches_in_memory_across_all_reads() {
     }
 
     // Decoy project sees only its own node (isolation), independent of `project`.
-    let leak = neo.get_entity(&project, "a").await.expect("neo get a").unwrap();
+    let leak = neo
+        .get_entity(&project, "a")
+        .await
+        .expect("neo get a")
+        .unwrap();
     assert_eq!(leak.name, "Alpha", "project scoping: no cross-project leak");
 
     wipe(&graph, &project).await;

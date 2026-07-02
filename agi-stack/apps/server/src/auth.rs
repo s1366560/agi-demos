@@ -48,8 +48,17 @@ use crate::AppState;
 #[derive(Debug, Clone)]
 pub struct Identity {
     pub user_id: String,
-    pub api_key_id: String,
+    /// Authenticated API-key id, retained for audit/event attribution as more
+    /// strangled surfaces move into Rust.
+    pub _api_key_id: String,
 }
+
+/// The raw `ms_sk_...` token accepted by the auth middleware. Most handlers only
+/// need [`Identity`]; proxy bootstrap endpoints also need the legacy token value
+/// because Python seeds it directly into a scoped HttpOnly cookie for iframe and
+/// WebSocket subresources.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawApiKey(pub String);
 
 /// Why a request was rejected. Carries the HTTP status + a Python-parity detail
 /// string so the JSON error envelope matches the legacy backend.
@@ -134,7 +143,7 @@ impl Authenticator for PgAuthenticator {
 
         Ok(Identity {
             user_id: record.user_id,
-            api_key_id: record.id,
+            _api_key_id: record.id,
         })
     }
 
@@ -214,7 +223,7 @@ impl Authenticator for DevAuthenticator {
         }
         Ok(Identity {
             user_id: self.dev_user_id.clone(),
-            api_key_id: format!("dev_{}", &raw_key[..raw_key.len().min(14)]),
+            _api_key_id: format!("dev_{}", &raw_key[..raw_key.len().min(14)]),
         })
     }
 
@@ -254,6 +263,58 @@ fn extract_raw_key(authorization: Option<&str>) -> Result<String, AuthRejection>
     Ok(raw.to_string())
 }
 
+fn is_sandbox_proxy_path(path: &str) -> bool {
+    path.starts_with("/api/v1/projects/") && path.contains("/sandbox/")
+}
+
+fn extract_protocol_key(value: &str) -> Option<&str> {
+    value
+        .split(',')
+        .map(str::trim)
+        .find(|part| part.starts_with("ms_sk_"))
+}
+
+fn extract_query_token(query: Option<&str>) -> Option<&str> {
+    query?.split('&').find_map(|pair| {
+        let (key, value) = pair.split_once('=')?;
+        (key == "token" && value.starts_with("ms_sk_")).then_some(value)
+    })
+}
+
+fn extract_cookie_token(cookie_header: &str) -> Option<&str> {
+    cookie_header.split(';').find_map(|cookie| {
+        let (key, value) = cookie.trim().split_once('=')?;
+        ((key == "sandbox_proxy_token" || key == "desktop_token") && value.starts_with("ms_sk_"))
+            .then_some(value)
+    })
+}
+
+fn extract_sandbox_proxy_raw_key<T>(request: &Request<T>) -> Option<String> {
+    if !is_sandbox_proxy_path(request.uri().path()) {
+        return None;
+    }
+
+    if let Some(raw) = request
+        .headers()
+        .get(axum::http::header::SEC_WEBSOCKET_PROTOCOL)
+        .and_then(|v| v.to_str().ok())
+        .and_then(extract_protocol_key)
+    {
+        return Some(raw.to_string());
+    }
+
+    if let Some(raw) = extract_query_token(request.uri().query()) {
+        return Some(raw.to_string());
+    }
+
+    request
+        .headers()
+        .get(axum::http::header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(extract_cookie_token)
+        .map(str::to_string)
+}
+
 /// Axum middleware guarding the production `/api/v1` surface. On success it
 /// inserts an [`Identity`] into request extensions; on failure it short-circuits
 /// with the Python-parity 401 envelope.
@@ -270,13 +331,17 @@ pub async fn require_api_key(
 
     let raw_key = match extract_raw_key(header.as_deref()) {
         Ok(key) => key,
-        Err(rejection) => return rejection.into_response(),
+        Err(rejection) => match extract_sandbox_proxy_raw_key(&request) {
+            Some(key) => key,
+            None => return rejection.into_response(),
+        },
     };
 
     let now_ms = chrono::Utc::now().timestamp_millis();
     match app.auth.authenticate(&raw_key, now_ms).await {
         Ok(identity) => {
             request.extensions_mut().insert(identity);
+            request.extensions_mut().insert(RawApiKey(raw_key));
             next.run(request).await
         }
         Err(rejection) => rejection.into_response(),
@@ -315,6 +380,48 @@ mod unit {
                 .status,
             StatusCode::UNAUTHORIZED
         );
+    }
+
+    #[test]
+    fn sandbox_proxy_auth_accepts_query_protocol_and_cookies_only_on_sandbox_paths() {
+        let request = Request::builder()
+            .uri("/api/v1/projects/p1/sandbox/mcp/proxy?token=ms_sk_query")
+            .body(())
+            .unwrap();
+        assert_eq!(
+            extract_sandbox_proxy_raw_key(&request).as_deref(),
+            Some("ms_sk_query")
+        );
+
+        let request = Request::builder()
+            .uri("/api/v1/projects/p1/sandbox/mcp/proxy")
+            .header("sec-websocket-protocol", "mcp, ms_sk_protocol")
+            .body(())
+            .unwrap();
+        assert_eq!(
+            extract_sandbox_proxy_raw_key(&request).as_deref(),
+            Some("ms_sk_protocol")
+        );
+
+        let request = Request::builder()
+            .uri("/api/v1/projects/p1/sandbox/desktop/proxy/app.js")
+            .header(
+                "cookie",
+                "theme=dark; sandbox_proxy_token=ms_sk_cookie; other=1",
+            )
+            .body(())
+            .unwrap();
+        assert_eq!(
+            extract_sandbox_proxy_raw_key(&request).as_deref(),
+            Some("ms_sk_cookie")
+        );
+
+        let request = Request::builder()
+            .uri("/api/v1/projects/p1")
+            .header("cookie", "sandbox_proxy_token=ms_sk_cookie")
+            .body(())
+            .unwrap();
+        assert_eq!(extract_sandbox_proxy_raw_key(&request), None);
     }
 
     #[tokio::test]

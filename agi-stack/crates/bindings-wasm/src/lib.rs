@@ -18,7 +18,9 @@ use js_sys::Promise;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
-use agistack_adapters_mem::{HashEmbedding, InMemoryMemoryRepository, InMemoryVectorIndex, StubLlm};
+use agistack_adapters_mem::{
+    HashEmbedding, InMemoryMemoryRepository, InMemoryVectorIndex, StubLlm,
+};
 use agistack_core::ports::Clock;
 use agistack_core::{Episode, MemoryService, SourceType};
 
@@ -78,7 +80,9 @@ impl AgistackCore {
                 .ingest_episode(&project_id, &author_id, &episode)
                 .await
                 .map_err(to_js)?;
-            Ok(JsValue::from_str(&serde_json::to_string(&memory).map_err(to_js)?))
+            Ok(JsValue::from_str(
+                &serde_json::to_string(&memory).map_err(to_js)?,
+            ))
         })
     }
 
@@ -87,8 +91,13 @@ impl AgistackCore {
     pub fn search(&self, project_id: String, q: String, limit: usize) -> Promise {
         let service = self.service.clone();
         future_to_promise(async move {
-            let hits = service.search(&project_id, &q, limit).await.map_err(to_js)?;
-            Ok(JsValue::from_str(&serde_json::to_string(&hits).map_err(to_js)?))
+            let hits = service
+                .search(&project_id, &q, limit)
+                .await
+                .map_err(to_js)?;
+            Ok(JsValue::from_str(
+                &serde_json::to_string(&hits).map_err(to_js)?,
+            ))
         })
     }
 
@@ -101,7 +110,9 @@ impl AgistackCore {
                 .semantic_search(&project_id, &q, limit)
                 .await
                 .map_err(to_js)?;
-            Ok(JsValue::from_str(&serde_json::to_string(&hits).map_err(to_js)?))
+            Ok(JsValue::from_str(
+                &serde_json::to_string(&hits).map_err(to_js)?,
+            ))
         })
     }
 }

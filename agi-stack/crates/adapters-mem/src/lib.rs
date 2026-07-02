@@ -41,15 +41,15 @@ pub mod vector;
 
 pub use changelog::InMemoryChangeLog;
 pub use checkpoint::InMemoryCheckpointStore;
+pub use clock::FixedClock;
 #[cfg(not(target_arch = "wasm32"))]
 pub use clock::SystemClock;
-pub use clock::FixedClock;
 pub use container_runtime::InMemoryContainerRuntime;
 pub use email::InMemoryEmailSender;
 pub use embedding::{HashEmbedding, NgramHashEmbedding};
 pub use event_stream::InMemoryEventStream;
 pub use graph::InMemoryGraphStore;
-pub use object_store::InMemoryObjectStore;
 pub use llm::{ScriptedLlm, StubLlm};
+pub use object_store::InMemoryObjectStore;
 pub use repo::InMemoryMemoryRepository;
 pub use vector::InMemoryVectorIndex;

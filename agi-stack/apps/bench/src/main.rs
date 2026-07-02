@@ -16,7 +16,9 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use agistack_adapters_mem::{FixedClock, HashEmbedding, InMemoryMemoryRepository, InMemoryVectorIndex, StubLlm};
+use agistack_adapters_mem::{
+    FixedClock, HashEmbedding, InMemoryMemoryRepository, InMemoryVectorIndex, StubLlm,
+};
 use agistack_core::model::{Episode, SourceType};
 use agistack_core::ports::VectorIndexPort;
 use agistack_core::MemoryService;
@@ -100,7 +102,11 @@ fn main() {
     rows.push((
         "单步 ingest 延迟(剔 LLM 网络)",
         "≤ 50 ms",
-        format!("P50 {:.3} ms · P99 {:.3} ms", ms(ingest_p50), ms(ingest_p99)),
+        format!(
+            "P50 {:.3} ms · P99 {:.3} ms",
+            ms(ingest_p50),
+            ms(ingest_p99)
+        ),
         if ms(ingest_p50) <= 50.0 { "✅" } else { "❌" },
     ));
     rows.push((
@@ -130,7 +136,8 @@ fn main() {
         "对比 Python 数十–数百 MB",
         match server_bin {
             Some(b) => format!("{}(实测)", human_size(b)),
-            None => "640 KB(评估值,见 04 §2;未构建则跑 `cargo build -p agistack-server --release`)".into(),
+            None => "640 KB(评估值,见 04 §2;未构建则跑 `cargo build -p agistack-server --release`)"
+                .into(),
         }
         .into(),
         "✅",
@@ -210,7 +217,9 @@ fn main() {
 
     println!("\n== 结论 ==");
     if fail == 0 {
-        println!("建议:**GO** — make-or-break 风险(运行时无关核心 → 一份代码跨 server/web/桌面/移动)");
+        println!(
+            "建议:**GO** — make-or-break 风险(运行时无关核心 → 一份代码跨 server/web/桌面/移动)"
+        );
         println!("已用可运行、可测试产物确认;扩展性/热插拔/CP-DP/同步/AI 抽象五轴均有实证。");
         println!("未尽项(生产 Postgres+pgvector、端上大模型、iOS 真机签名、Component Model CI、");
         println!("Python 逐能力绞杀替换)为已设计·标注 future,不构成 no-go 因素。");

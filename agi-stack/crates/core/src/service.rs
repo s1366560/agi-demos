@@ -7,9 +7,7 @@
 use std::sync::Arc;
 
 use crate::model::{Episode, Memory};
-use crate::ports::{
-    Clock, CoreResult, EmbeddingPort, LlmPort, MemoryRepository, VectorIndexPort,
-};
+use crate::ports::{Clock, CoreResult, EmbeddingPort, LlmPort, MemoryRepository, VectorIndexPort};
 use crate::util::new_memory_id;
 
 /// Episode → Memory ingestion + retrieval.

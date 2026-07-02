@@ -11,14 +11,25 @@ agistack-adapters-mem = { path = "../../crates/adapters-mem" }
 agistack-adapters-device = { path = "../../crates/adapters-device" }
 agistack-adapters-http-llm = { path = "../../crates/adapters-http-llm" }
 agistack-adapters-postgres = { path = "../../crates/adapters-postgres" }
+agistack-adapters-neo4j = { path = "../../crates/adapters-neo4j" }
+agistack-adapters-redis = { path = "../../crates/adapters-redis" }
+agistack-adapters-mcp = { path = "../../crates/adapters-mcp" }
+agistack-adapters-docker = { path = "../../crates/adapters-docker" }
 agistack-adapters-secrets = { path = "../../crates/adapters-secrets" }
+agistack-adapters-smtp = { path = "../../crates/adapters-smtp" }
 agistack-adapters-wasmtime = { path = "../../crates/adapters-wasmtime" }
-axum = "0.7"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+axum = { version = "0.7", features = ["ws"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time"] }
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+futures-util = "0.3"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+rustls = "0.23"
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
+url = "2"
 
 [dev-dependencies]
 serde_urlencoded = "0.7"

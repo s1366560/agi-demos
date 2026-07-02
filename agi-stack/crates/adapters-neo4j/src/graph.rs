@@ -315,8 +315,7 @@ fn bfs_subgraph(
         }
     }
 
-    let by_uuid: HashMap<&str, &GraphEntity> =
-        ents.iter().map(|e| (e.uuid.as_str(), e)).collect();
+    let by_uuid: HashMap<&str, &GraphEntity> = ents.iter().map(|e| (e.uuid.as_str(), e)).collect();
     let mut entities: Vec<GraphEntity> = reached
         .iter()
         .filter_map(|u| by_uuid.get(u.as_str()).map(|e| (*e).clone()))

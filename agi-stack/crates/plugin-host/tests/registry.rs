@@ -3,10 +3,10 @@
 
 use std::sync::Arc;
 
-use futures::executor::block_on;
 use agistack_plugin_host::native::{EchoTool, LenTool};
 use agistack_plugin_host::registry::HotPlugRegistry;
 use agistack_plugin_host::tool::Trust;
+use futures::executor::block_on;
 
 #[test]
 fn register_lookup_and_invoke() {

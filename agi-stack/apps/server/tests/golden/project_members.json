@@ -1,0 +1,18 @@
+{
+  "members": [
+    {
+      "user_id": "33333333-3333-4333-8333-333333333333",
+      "email": "ada@example.test",
+      "name": "Ada Lovelace",
+      "role": "owner",
+      "permissions": {
+        "admin": true,
+        "read": true,
+        "write": true,
+        "delete": true
+      },
+      "created_at": "2023-11-14T22:13:20Z"
+    }
+  ],
+  "total": 1
+}

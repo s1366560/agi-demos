@@ -16,7 +16,7 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 
 use agistack_core::ports::{
-    ContainerRuntime, ContainerSpec, ContainerState, ContainerStatus, CoreResult,
+    ContainerRuntime, ContainerSpec, ContainerState, ContainerStatus, CoreResult, PortBinding,
 };
 
 /// Process-local container runtime: `id -> record`. Ids are `mem-{n}` so tests
@@ -32,6 +32,7 @@ struct Record {
     state: ContainerState,
     exit_code: Option<i64>,
     labels: Vec<(String, String)>,
+    ports: Vec<PortBinding>,
 }
 
 impl InMemoryContainerRuntime {
@@ -52,6 +53,7 @@ impl ContainerRuntime for InMemoryContainerRuntime {
                 state: ContainerState::Created,
                 exit_code: None,
                 labels: spec.labels.clone(),
+                ports: spec.ports.clone(),
             },
         );
         Ok(id)
@@ -73,6 +75,7 @@ impl ContainerRuntime for InMemoryContainerRuntime {
             state: r.state,
             running: matches!(r.state, ContainerState::Running),
             exit_code: r.exit_code,
+            ports: r.ports.clone(),
         }))
     }
 
@@ -122,6 +125,7 @@ mod tests {
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
+            ports: vec![],
         }
     }
 
@@ -133,6 +137,7 @@ mod tests {
         let st = block_on(rt.status(&id)).unwrap().unwrap();
         assert_eq!(st.state, ContainerState::Created);
         assert!(!st.running);
+        assert!(st.ports.is_empty());
 
         block_on(rt.start(&id)).unwrap();
         let st = block_on(rt.status(&id)).unwrap().unwrap();
@@ -171,7 +176,23 @@ mod tests {
         assert_eq!(p1, vec![a, c]);
         let p2 = block_on(rt.list(Some(("project", "p2")))).unwrap();
         assert_eq!(p2, vec![b]);
-        assert!(block_on(rt.list(Some(("project", "none")))).unwrap().is_empty());
+        assert!(block_on(rt.list(Some(("project", "none"))))
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn create_records_port_bindings_for_state_machine_oracles() {
+        let rt = InMemoryContainerRuntime::new();
+        let mut spec = spec(&[]);
+        spec.ports = vec![PortBinding {
+            container_port: 8765,
+            host_port: 18765,
+            host_ip: Some("127.0.0.1".to_string()),
+        }];
+        let id = block_on(rt.create(&spec)).unwrap();
+        let status = block_on(rt.status(&id)).unwrap().unwrap();
+        assert_eq!(status.ports, spec.ports);
     }
 
     #[test]

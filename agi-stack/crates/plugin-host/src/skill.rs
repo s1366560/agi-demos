@@ -252,9 +252,9 @@ impl SkillEngine {
         let snapshot = registry.snapshot();
         let mut outputs: Vec<serde_json::Value> = Vec::with_capacity(compiled.skill.steps.len());
         for step in &compiled.skill.steps {
-            let tool: Arc<dyn crate::tool::Tool> = snapshot
-                .get(step)
-                .ok_or_else(|| CoreError::Tool(format!("skill `{name}`: unknown step tool: {step}")))?;
+            let tool: Arc<dyn crate::tool::Tool> = snapshot.get(step).ok_or_else(|| {
+                CoreError::Tool(format!("skill `{name}`: unknown step tool: {step}"))
+            })?;
             let out = tool.invoke(input_json).await?;
             let parsed: serde_json::Value =
                 serde_json::from_str(&out).unwrap_or(serde_json::Value::String(out));

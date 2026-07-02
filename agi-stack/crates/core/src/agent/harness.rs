@@ -563,12 +563,8 @@ mod tests {
         let mut reg = HarnessRegistry::new(fallback());
         reg.register(FakeHarness::for_provider("codex", "openai", 10));
 
-        let attempt = PreparedAttempt::new(
-            "s1",
-            "do it",
-            Some("p1"),
-            HarnessCtx::new("openai", "gpt"),
-        );
+        let attempt =
+            PreparedAttempt::new("s1", "do it", Some("p1"), HarnessCtx::new("openai", "gpt"));
         let outcome = block_on(reg.run(attempt)).unwrap();
         assert_eq!(outcome.runtime_id, "codex");
         assert_eq!(outcome.session.answer.as_deref(), Some("codex"));
@@ -602,8 +598,8 @@ mod tests {
     #[test]
     fn prepared_attempt_carries_runtime_plan() {
         let plan = Arc::new(RuntimePlan::new().with_alias("x", "y"));
-        let attempt = PreparedAttempt::new("s", "g", None, HarnessCtx::new("p", "m"))
-            .with_runtime_plan(plan);
+        let attempt =
+            PreparedAttempt::new("s", "g", None, HarnessCtx::new("p", "m")).with_runtime_plan(plan);
         assert_eq!(attempt.runtime_plan.normalize_tool("x"), "y");
     }
 }

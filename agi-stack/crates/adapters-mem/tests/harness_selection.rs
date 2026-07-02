@@ -102,7 +102,10 @@ fn auto_routes_to_specialized_else_runs_embedded() {
     .unwrap();
     assert_eq!(outcome.runtime_id, "openclaw");
     assert_eq!(outcome.session.status, SessionStatus::Finished);
-    let answer = outcome.session.answer.expect("embedded loop produced an answer");
+    let answer = outcome
+        .session
+        .answer
+        .expect("embedded loop produced an answer");
     assert!(
         answer.contains("\"tool\":\"len\""),
         "embedded ReAct loop should have invoked the tool: {answer}"

@@ -63,7 +63,51 @@ impl PgUserStore {
         .map_err(|e| CoreError::Storage(e.to_string()))?;
 
         Ok(row.map(
-            |(id, email, full_name, hashed_password, is_active, is_superuser, must_change_password)| {
+            |(
+                id,
+                email,
+                full_name,
+                hashed_password,
+                is_active,
+                is_superuser,
+                must_change_password,
+            )| {
+                UserAuthRecord {
+                    id,
+                    email,
+                    full_name,
+                    hashed_password,
+                    is_active,
+                    is_superuser,
+                    must_change_password,
+                }
+            },
+        ))
+    }
+
+    /// Look up the same auth row by user id. Device-code approval is already
+    /// authenticated by an API key and only needs the user's active/superuser
+    /// flags to mint the CLI key with Python-compatible permissions.
+    pub async fn find_auth_by_id(&self, user_id: &str) -> CoreResult<Option<UserAuthRecord>> {
+        let row = sqlx::query_as::<_, (String, String, Option<String>, String, bool, bool, bool)>(
+            "SELECT id, email, full_name, hashed_password, is_active, is_superuser, \
+             must_change_password FROM users WHERE id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+
+        Ok(row.map(
+            |(
+                id,
+                email,
+                full_name,
+                hashed_password,
+                is_active,
+                is_superuser,
+                must_change_password,
+            )| {
                 UserAuthRecord {
                     id,
                     email,

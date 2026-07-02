@@ -13,10 +13,12 @@ license.workspace = true
 # Native-only (tokio + reqwest + a TLS stack); it is an edge process, never part
 # of the portable core.
 [dependencies]
-axum = "0.7"
+axum = { version = "0.7", features = ["ws"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
 bytes = "1"
+futures-util = "0.3"
+tokio-tungstenite = "0.24"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "sync"] }

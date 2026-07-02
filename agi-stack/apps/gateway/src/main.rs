@@ -5,7 +5,7 @@
 //!   `AGISTACK_RUST_UPSTREAM`  Rust server base URL   (default `http://127.0.0.1:8088`)
 //!   `AGISTACK_PYTHON_UPSTREAM` Python backend base URL (default `http://127.0.0.1:8000`)
 
-use agistack_gateway::{app, GatewayState, Upstreams, STRANGLED_PREFIXES};
+use agistack_gateway::{app, strangled_rule_summary, GatewayState, Upstreams};
 
 #[tokio::main]
 async fn main() {
@@ -23,7 +23,10 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     println!("agistack-gateway listening on http://{addr}");
-    println!("  strangled -> Rust   {rust}   ({})", STRANGLED_PREFIXES.join(", "));
+    println!(
+        "  strangled -> Rust   {rust}   ({})",
+        strangled_rule_summary()
+    );
     println!("  fallback  -> Python {python}");
     axum::serve(listener, app(state)).await.unwrap();
 }

@@ -212,29 +212,30 @@ impl ToolHost for WsMcpToolHost {
 
 #[cfg(test)]
 mod tests {
-use super::extract_text;
-use serde_json::json;
+    use super::extract_text;
+    use serde_json::json;
 
-#[test]
-fn extract_text_joins_content_items() {
-    let result = json!({
-        "content": [{ "type": "text", "text": "line-a" }, { "type": "text", "text": "line-b" }],
-        "isError": false
-    });
-    assert_eq!(extract_text(&result), "line-a\nline-b");
-}
+    #[test]
+    fn extract_text_joins_content_items() {
+        let result = json!({
+            "content": [{ "type": "text", "text": "line-a" }, { "type": "text", "text": "line-b" }],
+            "isError": false
+        });
+        assert_eq!(extract_text(&result), "line-a\nline-b");
+    }
 
-#[test]
-fn extract_text_skips_non_text_and_handles_empty() {
-    let result = json!({ "content": [{ "type": "image", "data": "..." }] });
-    assert_eq!(extract_text(&result), "");
-    assert_eq!(extract_text(&json!({})), "");
-}
+    #[test]
+    fn extract_text_skips_non_text_and_handles_empty() {
+        let result = json!({ "content": [{ "type": "image", "data": "..." }] });
+        assert_eq!(extract_text(&result), "");
+        assert_eq!(extract_text(&json!({})), "");
+    }
 
-#[test]
-fn extract_text_reads_error_payload() {
-    // The `isError: true` text is what `call` surfaces as CoreError::Tool.
-    let result = json!({ "content": [{ "type": "text", "text": "Unknown tool: x" }], "isError": true });
-    assert_eq!(extract_text(&result), "Unknown tool: x");
-}
+    #[test]
+    fn extract_text_reads_error_payload() {
+        // The `isError: true` text is what `call` surfaces as CoreError::Tool.
+        let result =
+            json!({ "content": [{ "type": "text", "text": "Unknown tool: x" }], "isError": true });
+        assert_eq!(extract_text(&result), "Unknown tool: x");
+    }
 }

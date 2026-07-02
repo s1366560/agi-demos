@@ -158,7 +158,10 @@ mod tests {
     #[async_trait]
     impl PlanStore for MemPlanStore {
         async fn save(&self, plan_id: &str, plan: &Plan) -> CoreResult<()> {
-            self.0.lock().unwrap().insert(plan_id.to_string(), plan.clone());
+            self.0
+                .lock()
+                .unwrap()
+                .insert(plan_id.to_string(), plan.clone());
             Ok(())
         }
         async fn load(&self, plan_id: &str) -> CoreResult<Option<Plan>> {
@@ -177,13 +180,25 @@ mod tests {
 
     impl RecordingRunner {
         fn new(log: Arc<Mutex<Vec<String>>>) -> Self {
-            Self { log, crash_on: None, fail_on: None }
+            Self {
+                log,
+                crash_on: None,
+                fail_on: None,
+            }
         }
         fn crashing(log: Arc<Mutex<Vec<String>>>, crash_on: &str) -> Self {
-            Self { log, crash_on: Some(crash_on.into()), fail_on: None }
+            Self {
+                log,
+                crash_on: Some(crash_on.into()),
+                fail_on: None,
+            }
         }
         fn failing(log: Arc<Mutex<Vec<String>>>, fail_on: &str) -> Self {
-            Self { log, crash_on: None, fail_on: Some(fail_on.into()) }
+            Self {
+                log,
+                crash_on: None,
+                fail_on: Some(fail_on.into()),
+            }
         }
     }
 
@@ -203,7 +218,11 @@ mod tests {
     }
 
     fn step(id: &str, deps: &[&str]) -> PlanStep {
-        PlanStep::new(id, format!("do {id}"), deps.iter().map(|d| d.to_string()).collect())
+        PlanStep::new(
+            id,
+            format!("do {id}"),
+            deps.iter().map(|d| d.to_string()).collect(),
+        )
     }
 
     /// a → {b, c} → d : a diamond DAG converges to all-Done, and each step runs
@@ -250,10 +269,8 @@ mod tests {
 
         // Resume with a healthy runner + the SAME store. "a" is already Done, so
         // it is not re-dispatched; "b" (left Pending) and "c" run to completion.
-        let orch2 = MiniOrchestrator::new(
-            Arc::new(RecordingRunner::new(log.clone())),
-            store.clone(),
-        );
+        let orch2 =
+            MiniOrchestrator::new(Arc::new(RecordingRunner::new(log.clone())), store.clone());
         let done = block_on(orch2.run("p-crash", &plan)).unwrap();
         assert!(done.is_complete());
         // "a" appears exactly once across both runs (reused, never repeated).
@@ -299,20 +316,16 @@ mod tests {
         let store = Arc::new(MemPlanStore::default());
         let log = Arc::new(Mutex::new(Vec::new()));
 
-        let orch1 = MiniOrchestrator::new(
-            Arc::new(RecordingRunner::new(log.clone())),
-            store.clone(),
-        );
+        let orch1 =
+            MiniOrchestrator::new(Arc::new(RecordingRunner::new(log.clone())), store.clone());
         block_on(orch1.run("p-idem", &plan)).unwrap();
         assert_eq!(*log.lock().unwrap(), vec!["a", "b"]);
 
         // Second orchestrator, fresh log, same store: the plan is already
         // complete, so reconcile dispatches nothing.
         let log2 = Arc::new(Mutex::new(Vec::new()));
-        let orch2 = MiniOrchestrator::new(
-            Arc::new(RecordingRunner::new(log2.clone())),
-            store.clone(),
-        );
+        let orch2 =
+            MiniOrchestrator::new(Arc::new(RecordingRunner::new(log2.clone())), store.clone());
         let done = block_on(orch2.run("p-idem", &plan)).unwrap();
         assert!(done.is_complete());
         assert!(log2.lock().unwrap().is_empty());

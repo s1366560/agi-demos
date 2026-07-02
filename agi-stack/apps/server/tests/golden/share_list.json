@@ -1,0 +1,15 @@
+{
+  "shares": [
+    {
+      "id": "<uuid>",
+      "share_token": "<urlsafe_token>",
+      "permissions": {
+        "view": true,
+        "edit": false
+      },
+      "expires_at": null,
+      "created_at": "<iso8601>",
+      "access_count": 0
+    }
+  ]
+}

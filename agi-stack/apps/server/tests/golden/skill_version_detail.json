@@ -1,0 +1,13 @@
+{
+  "id": "<uuid>",
+  "skill_id": "<uuid>",
+  "version_number": 2,
+  "version_label": "1.2.0",
+  "skill_md_content": "# Code Review\n",
+  "resource_files": {
+    "rules.md": "Focus on regressions."
+  },
+  "change_summary": "Manual content update",
+  "created_by": "agent",
+  "created_at": "<iso8601>"
+}

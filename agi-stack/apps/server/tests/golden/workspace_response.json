@@ -1,0 +1,22 @@
+{
+  "id": "ws-00000000-0000-4000-8000-000000000001",
+  "tenant_id": "tenant-1",
+  "project_id": "project-1",
+  "name": "Core Workspace",
+  "created_by": "user-1",
+  "description": "Shared P6 surface",
+  "is_archived": false,
+  "metadata": {
+    "workspace_use_case": "programming",
+    "workspace_type": "software_development",
+    "collaboration_mode": "multi_agent_shared",
+    "agent_conversation_mode": "multi_agent_shared",
+    "autonomy_profile": {
+      "workspace_type": "software_development"
+    }
+  },
+  "office_status": "inactive",
+  "hex_layout_config": {},
+  "created_at": "<iso8601>",
+  "updated_at": null
+}

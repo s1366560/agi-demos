@@ -22,7 +22,10 @@ use agistack_core::ports::{EmailMessage, EmailSender};
 const SMTP_HOST: &str = "localhost";
 
 fn smtp_port() -> u16 {
-    std::env::var("AGISTACK_SMTP_PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(1025)
+    std::env::var("AGISTACK_SMTP_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1025)
 }
 
 fn api_base() -> String {
@@ -48,7 +51,10 @@ async fn sends_through_real_smtp_and_arrives_in_mailpit() {
     let _ = client.delete(&list_url).send().await;
 
     // Unique subject so we can find exactly our message in the inbox.
-    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let subject = format!("agistack F10 invite {nanos}");
 
     let msg = EmailMessage {
@@ -67,15 +73,27 @@ async fn sends_through_real_smtp_and_arrives_in_mailpit() {
 
     // Real delivery over SMTP.
     let sender = SmtpEmailSender::plaintext(SMTP_HOST, smtp_port());
-    sender.send(&msg).await.expect("SMTP send should be accepted (250)");
+    sender
+        .send(&msg)
+        .await
+        .expect("SMTP send should be accepted (250)");
 
     // Poll the inbox until our uniquely-subjected message shows up.
     let mut found: Option<serde_json::Value> = None;
     for _ in 0..20 {
-        let list: serde_json::Value =
-            client.get(&list_url).send().await.unwrap().json().await.unwrap();
+        let list: serde_json::Value = client
+            .get(&list_url)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         if let Some(arr) = list["messages"].as_array() {
-            if let Some(m) = arr.iter().find(|m| m["Subject"] == serde_json::json!(subject)) {
+            if let Some(m) = arr
+                .iter()
+                .find(|m| m["Subject"] == serde_json::json!(subject))
+            {
                 found = Some(m.clone());
                 break;
             }
@@ -102,8 +120,14 @@ async fn sends_through_real_smtp_and_arrives_in_mailpit() {
         .json()
         .await
         .unwrap();
-    assert!(full["Text"].as_str().unwrap_or_default().contains("Join the project"));
-    assert!(full["HTML"].as_str().unwrap_or_default().contains("Join the project"));
+    assert!(full["Text"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("Join the project"));
+    assert!(full["HTML"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("Join the project"));
 
     // Cross-tier behavioural parity: what mailpit actually received matches what
     // the in-memory oracle recorded.

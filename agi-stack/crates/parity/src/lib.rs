@@ -92,19 +92,51 @@ pub enum Mismatch {
 impl fmt::Display for Mismatch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Mismatch::MissingKey { path } => write!(f, "{path}: missing key (in golden, absent in response)"),
-            Mismatch::ExtraKey { path } => write!(f, "{path}: unexpected key (in response, absent in golden)"),
-            Mismatch::TypeMismatch { path, expected, actual } => {
-                write!(f, "{path}: type mismatch — golden {expected}, response {actual}")
+            Mismatch::MissingKey { path } => {
+                write!(f, "{path}: missing key (in golden, absent in response)")
             }
-            Mismatch::ValueMismatch { path, expected, actual } => {
-                write!(f, "{path}: value mismatch — golden {expected}, response {actual}")
+            Mismatch::ExtraKey { path } => {
+                write!(f, "{path}: unexpected key (in response, absent in golden)")
             }
-            Mismatch::ArrayLen { path, expected, actual } => {
-                write!(f, "{path}: array length — golden {expected}, response {actual}")
+            Mismatch::TypeMismatch {
+                path,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "{path}: type mismatch — golden {expected}, response {actual}"
+                )
             }
-            Mismatch::Matcher { path, token, actual } => {
-                write!(f, "{path}: value {actual} does not satisfy matcher <{token}>")
+            Mismatch::ValueMismatch {
+                path,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "{path}: value mismatch — golden {expected}, response {actual}"
+                )
+            }
+            Mismatch::ArrayLen {
+                path,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "{path}: array length — golden {expected}, response {actual}"
+                )
+            }
+            Mismatch::Matcher {
+                path,
+                token,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "{path}: value {actual} does not satisfy matcher <{token}>"
+                )
             }
             Mismatch::UnknownMatcher { path, token } => {
                 write!(f, "{path}: unknown matcher token <{token}>")
@@ -185,7 +217,9 @@ fn walk(path: &str, golden: &Value, actual: &Value, out: &mut Vec<Mismatch>) {
             }
             for k in a.keys() {
                 if !g.contains_key(k) {
-                    out.push(Mismatch::ExtraKey { path: format!("{path}.{k}") });
+                    out.push(Mismatch::ExtraKey {
+                        path: format!("{path}.{k}"),
+                    });
                 }
             }
         }
@@ -265,6 +299,8 @@ fn check_matcher(path: &str, token: &str, actual: &Value, out: &mut Vec<Mismatch
         "uuid" => actual.as_str().map(is_canonical_uuid).unwrap_or(false),
         "iso8601" => actual.as_str().map(is_iso8601_utc_z).unwrap_or(false),
         "ms_sk" => actual.as_str().map(is_ms_sk_key).unwrap_or(false),
+        "urlsafe_token" => actual.as_str().map(is_urlsafe_token_32).unwrap_or(false),
+        "device_user_code" => actual.as_str().map(is_device_user_code).unwrap_or(false),
         _ => {
             out.push(Mismatch::UnknownMatcher {
                 path: path.to_string(),
@@ -351,14 +387,32 @@ pub fn is_ms_sk_key(s: &str) -> bool {
     let Some(rest) = s.strip_prefix("ms_sk_") else {
         return false;
     };
-    rest.len() == 64 && rest.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+    rest.len() == 64
+        && rest
+            .bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+}
+
+/// Python `secrets.token_urlsafe(32)` shape: 43 URL-safe base64 chars, no `=`.
+pub fn is_urlsafe_token_32(s: &str) -> bool {
+    s.len() == 43
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// Python `_USER_CODE_ALPHABET` + `_USER_CODE_LEN` for device-code login.
+pub fn is_device_user_code(s: &str) -> bool {
+    const ALPHABET: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    s.len() == 8 && s.chars().all(|c| ALPHABET.contains(c))
 }
 
 /// The FastAPI `HTTPException` error envelope: a JSON object carrying a `detail`
 /// field. Rust handlers must render errors this way so the frontend's existing
 /// error handling keeps working across a strangler flip.
 pub fn is_error_envelope(v: &Value) -> bool {
-    v.as_object().map(|o| o.contains_key("detail")).unwrap_or(false)
+    v.as_object()
+        .map(|o| o.contains_key("detail"))
+        .unwrap_or(false)
 }
 
 /// True when `v` is `{"detail": <expected>}` (exact detail string).
@@ -388,8 +442,14 @@ mod tests {
         let actual = json!({ "a": 1, "c": 3 });
         let r = compare(&golden, &actual);
         assert!(!r.is_match());
-        assert!(r.mismatches.iter().any(|m| matches!(m, Mismatch::MissingKey { path } if path == "$.b")));
-        assert!(r.mismatches.iter().any(|m| matches!(m, Mismatch::ExtraKey { path } if path == "$.c")));
+        assert!(r
+            .mismatches
+            .iter()
+            .any(|m| matches!(m, Mismatch::MissingKey { path } if path == "$.b")));
+        assert!(r
+            .mismatches
+            .iter()
+            .any(|m| matches!(m, Mismatch::ExtraKey { path } if path == "$.c")));
     }
 
     #[test]
@@ -397,8 +457,14 @@ mod tests {
         let golden = json!({ "n": 1, "s": "A" });
         let actual = json!({ "n": "1", "s": "a" });
         let r = compare(&golden, &actual);
-        assert!(r.mismatches.iter().any(|m| matches!(m, Mismatch::TypeMismatch { path, .. } if path == "$.n")));
-        assert!(r.mismatches.iter().any(|m| matches!(m, Mismatch::ValueMismatch { path, .. } if path == "$.s")));
+        assert!(r
+            .mismatches
+            .iter()
+            .any(|m| matches!(m, Mismatch::TypeMismatch { path, .. } if path == "$.n")));
+        assert!(r
+            .mismatches
+            .iter()
+            .any(|m| matches!(m, Mismatch::ValueMismatch { path, .. } if path == "$.s")));
     }
 
     #[test]
@@ -414,7 +480,14 @@ mod tests {
         assert!(compare(&json!([1, 2, 3]), &json!([1, 2, 3])).is_match());
         assert!(!compare(&json!([1, 2, 3]), &json!([3, 2, 1])).is_match());
         let short = compare(&json!([1, 2, 3]), &json!([1, 2]));
-        assert!(short.mismatches.iter().any(|m| matches!(m, Mismatch::ArrayLen { expected: 3, actual: 2, .. })));
+        assert!(short.mismatches.iter().any(|m| matches!(
+            m,
+            Mismatch::ArrayLen {
+                expected: 3,
+                actual: 2,
+                ..
+            }
+        )));
     }
 
     #[test]
@@ -422,7 +495,9 @@ mod tests {
         let golden = json!({ "tenants": [{ "slug": "acme" }] });
         let actual = json!({ "tenants": [{ "slug": "other" }] });
         let r = compare(&golden, &actual);
-        assert!(r.mismatches.iter().any(|m| matches!(m, Mismatch::ValueMismatch { path, .. } if path == "$.tenants[0].slug")));
+        assert!(r.mismatches.iter().any(
+            |m| matches!(m, Mismatch::ValueMismatch { path, .. } if path == "$.tenants[0].slug")
+        ));
     }
 
     #[test]
@@ -437,13 +512,36 @@ mod tests {
     }
 
     #[test]
+    fn matcher_device_code_formats() {
+        let golden = json!({
+            "device_code": "<urlsafe_token>",
+            "user_code": "<device_user_code>"
+        });
+        let actual = json!({
+            "device_code": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "user_code": "ABCDEFGH"
+        });
+        assert_parity(&golden, &actual);
+
+        assert!(!compare(
+            &golden,
+            &json!({"device_code": "short", "user_code": "ABCDI001"})
+        )
+        .is_match());
+    }
+
+    #[test]
     fn matcher_rejects_wrong_format() {
         // +00:00 offset must fail the ISO-8601-Z matcher.
         let g = json!({ "at": "<iso8601>" });
         assert!(!compare(&g, &json!({ "at": "2023-11-14T22:13:20+00:00" })).is_match());
         // upper-case UUID fails the canonical-lowercase matcher.
         let g2 = json!({ "id": "<uuid>" });
-        assert!(!compare(&g2, &json!({ "id": "1B4E28BA-2FA1-11D2-883F-0016D3CCA427" })).is_match());
+        assert!(!compare(
+            &g2,
+            &json!({ "id": "1B4E28BA-2FA1-11D2-883F-0016D3CCA427" })
+        )
+        .is_match());
     }
 
     #[test]
@@ -465,7 +563,10 @@ mod tests {
     fn unknown_matcher_token_fails_loudly() {
         let g = json!({ "x": "<wat>" });
         let r = compare(&g, &json!({ "x": "anything" }));
-        assert!(r.mismatches.iter().any(|m| matches!(m, Mismatch::UnknownMatcher { .. })));
+        assert!(r
+            .mismatches
+            .iter()
+            .any(|m| matches!(m, Mismatch::UnknownMatcher { .. })));
     }
 
     #[test]
@@ -482,14 +583,18 @@ mod tests {
         assert!(is_canonical_uuid("1b4e28ba-2fa1-11d2-883f-0016d3cca427"));
         assert!(!is_canonical_uuid("1b4e28ba2fa111d2883f0016d3cca427"));
         assert!(!is_canonical_uuid("ZZZZ28ba-2fa1-11d2-883f-0016d3cca427"));
-        assert!(is_ms_sk_key("ms_sk_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"));
+        assert!(is_ms_sk_key(
+            "ms_sk_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        ));
         assert!(!is_ms_sk_key("ms_sk_short"));
         assert!(!is_ms_sk_key("jwt.header.payload"));
     }
 
     #[test]
     fn error_envelope_helpers() {
-        assert!(is_error_envelope(&json!({ "detail": "Incorrect username or password" })));
+        assert!(is_error_envelope(
+            &json!({ "detail": "Incorrect username or password" })
+        ));
         assert!(!is_error_envelope(&json!({ "error": "nope" })));
         assert!(error_envelope_is(&json!({ "detail": "x" }), "x"));
         assert!(!error_envelope_is(&json!({ "detail": "x" }), "y"));

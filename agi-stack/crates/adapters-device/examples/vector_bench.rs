@@ -138,6 +138,9 @@ fn main() {
     let ann_p50 = percentile(&ann_us, 0.50) as f64 / 1e3;
     let brute_p50 = percentile(&brute_us, 0.50) as f64 / 1e3;
     if brute_p50 > 0.0 {
-        println!("HNSW speedup at P50:     {:.1}x", brute_p50 / ann_p50.max(1e-6));
+        println!(
+            "HNSW speedup at P50:     {:.1}x",
+            brute_p50 / ann_p50.max(1e-6)
+        );
     }
 }

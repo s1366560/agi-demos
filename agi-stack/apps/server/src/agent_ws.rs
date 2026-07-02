@@ -1,0 +1,641 @@
+//! Rust WebSocket bridge for the strangled agent surface (F7/P3 foundation).
+//!
+//! This is intentionally a foundation slice, not the full Python
+//! `SessionProcessor` port. It proves the stable transport contract first:
+//! browser-compatible auth subprotocols, heartbeat/ack/error messages,
+//! conversation subscription with stream replay, and Rust-produced agent events
+//! written to the shared `EventStream` (`agent:events:{conversation_id}`).
+
+use std::collections::HashMap;
+
+use axum::{
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Query, State,
+    },
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+};
+use serde::Deserialize;
+use serde_json::{json, Value};
+use tokio::time::{self, Duration};
+
+use crate::auth::{AuthRejection, Identity};
+use crate::AppState;
+use agistack_core::agent::events::{derive_event_id, AgentEventType, EventEnvelope};
+
+const WEBSOCKET_AUTH_SUBPROTOCOL: &str = "memstack.auth";
+const EVENT_STREAM_MAX_LEN: usize = 1000;
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct AgentWsQuery {
+    token: Option<String>,
+    session_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ClientMessage {
+    Heartbeat,
+    Subscribe {
+        conversation_id: String,
+        #[serde(default)]
+        last_event_id: Option<String>,
+        #[serde(default)]
+        message_id: Option<String>,
+        #[serde(default)]
+        from_time_us: Option<i64>,
+        #[serde(default)]
+        from_counter: Option<u64>,
+    },
+    Unsubscribe {
+        conversation_id: String,
+    },
+    SendMessage {
+        conversation_id: String,
+        message: String,
+        project_id: String,
+        #[serde(default)]
+        message_id: Option<String>,
+    },
+    StopSession {
+        conversation_id: String,
+    },
+    SubscribeStatus {
+        project_id: String,
+    },
+    UnsubscribeStatus {
+        project_id: String,
+    },
+    SubscribeLifecycleState {
+        project_id: String,
+        #[serde(default)]
+        tenant_id: Option<String>,
+    },
+    UnsubscribeLifecycleState {
+        project_id: String,
+        #[serde(default)]
+        tenant_id: Option<String>,
+    },
+    SubscribeSandbox {
+        project_id: String,
+        #[serde(default)]
+        tenant_id: Option<String>,
+    },
+    UnsubscribeSandbox {
+        project_id: String,
+        #[serde(default)]
+        tenant_id: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Default)]
+struct Subscription {
+    last_id: String,
+    message_id: Option<String>,
+    from_time_us: Option<i64>,
+    from_counter: Option<u64>,
+}
+
+/// `GET /api/v1/agent/ws` — WebSocket bridge compatible with the existing
+/// browser client. Authentication happens before the upgrade; accepted sockets
+/// echo the `memstack.auth` subprotocol when offered.
+pub(crate) async fn agent_ws(
+    State(app): State<AppState>,
+    Query(query): Query<AgentWsQuery>,
+    headers: HeaderMap,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let raw_key = match extract_ws_api_key(&headers, query.token.as_deref()) {
+        Some(key) => key,
+        None => {
+            return AuthRejection {
+                status: StatusCode::UNAUTHORIZED,
+                detail: "Missing API key. Please provide an API key in the WebSocket protocol or token query parameter.".to_string(),
+            }
+            .into_response();
+        }
+    };
+
+    let identity = match app
+        .auth
+        .authenticate(&raw_key, chrono::Utc::now().timestamp_millis())
+        .await
+    {
+        Ok(identity) => identity,
+        Err(rejection) => return rejection.into_response(),
+    };
+
+    let session_id = query.session_id.unwrap_or_else(|| "ws-session".to_string());
+    ws.protocols([WEBSOCKET_AUTH_SUBPROTOCOL])
+        .on_upgrade(move |socket| handle_socket(app, identity, session_id, socket))
+}
+
+fn extract_ws_api_key(headers: &HeaderMap, token: Option<&str>) -> Option<String> {
+    if let Some(raw) = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(extract_authorization_key)
+    {
+        return Some(raw.to_string());
+    }
+
+    if let Some(raw) = headers
+        .get(axum::http::header::SEC_WEBSOCKET_PROTOCOL)
+        .and_then(|v| v.to_str().ok())
+        .and_then(extract_protocol_key)
+    {
+        return Some(raw.to_string());
+    }
+
+    token
+        .filter(|value| value.starts_with("ms_sk_"))
+        .map(ToString::to_string)
+}
+
+fn extract_authorization_key(value: &str) -> Option<&str> {
+    value
+        .strip_prefix("Bearer ")
+        .or_else(|| value.strip_prefix("Token "))
+        .or(Some(value))
+        .filter(|raw| raw.starts_with("ms_sk_"))
+}
+
+fn extract_protocol_key(value: &str) -> Option<&str> {
+    value
+        .split(',')
+        .map(str::trim)
+        .find(|part| *part != WEBSOCKET_AUTH_SUBPROTOCOL && part.starts_with("ms_sk_"))
+}
+
+async fn handle_socket(
+    app: AppState,
+    identity: Identity,
+    session_id: String,
+    mut socket: WebSocket,
+) {
+    let mut subscriptions: HashMap<String, Subscription> = HashMap::new();
+    let mut interval = time::interval(Duration::from_millis(250));
+    let _ = send_json(
+        &mut socket,
+        json!({
+            "type": "ack",
+            "action": "connect",
+            "session_id": session_id,
+            "timestamp": now_iso(),
+        }),
+    )
+    .await;
+
+    loop {
+        tokio::select! {
+            incoming = socket.recv() => {
+                let Some(Ok(message)) = incoming else {
+                    break;
+                };
+                if !handle_client_message(&app, &identity, &mut socket, &mut subscriptions, message).await {
+                    break;
+                }
+            }
+            _ = interval.tick() => {
+                if flush_subscriptions(&app, &mut socket, &mut subscriptions).await.is_err() {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+async fn handle_client_message(
+    app: &AppState,
+    identity: &Identity,
+    socket: &mut WebSocket,
+    subscriptions: &mut HashMap<String, Subscription>,
+    message: Message,
+) -> bool {
+    let Message::Text(text) = message else {
+        return true;
+    };
+    let parsed: Result<ClientMessage, _> = serde_json::from_str(&text);
+    let Ok(parsed) = parsed else {
+        let _ = send_error(socket, "Invalid WebSocket message").await;
+        return true;
+    };
+
+    match parsed {
+        ClientMessage::Heartbeat => {
+            let _ = send_json(socket, json!({"type": "heartbeat", "timestamp": now_iso()})).await;
+        }
+        ClientMessage::Subscribe {
+            conversation_id,
+            last_event_id,
+            message_id,
+            from_time_us,
+            from_counter,
+        } => {
+            subscriptions.insert(
+                conversation_id.clone(),
+                Subscription {
+                    last_id: last_event_id.unwrap_or_default(),
+                    message_id,
+                    from_time_us,
+                    from_counter,
+                },
+            );
+            let _ = send_ack(
+                socket,
+                "subscribe",
+                json!({"conversation_id": conversation_id}),
+            )
+            .await;
+        }
+        ClientMessage::Unsubscribe { conversation_id } => {
+            subscriptions.remove(&conversation_id);
+            let _ = send_ack(
+                socket,
+                "unsubscribe",
+                json!({"conversation_id": conversation_id}),
+            )
+            .await;
+        }
+        ClientMessage::SubscribeStatus { project_id } => {
+            let _ = send_ack(
+                socket,
+                "subscribe_status",
+                json!({"project_id": project_id}),
+            )
+            .await;
+        }
+        ClientMessage::UnsubscribeStatus { project_id } => {
+            let _ = send_ack(
+                socket,
+                "unsubscribe_status",
+                json!({"project_id": project_id}),
+            )
+            .await;
+        }
+        ClientMessage::SubscribeLifecycleState {
+            project_id,
+            tenant_id,
+        } => {
+            let _ = send_ack(
+                socket,
+                "subscribe_lifecycle_state",
+                json!({"project_id": project_id, "tenant_id": tenant_id}),
+            )
+            .await;
+        }
+        ClientMessage::UnsubscribeLifecycleState {
+            project_id,
+            tenant_id,
+        } => {
+            let _ = send_ack(
+                socket,
+                "unsubscribe_lifecycle_state",
+                json!({"project_id": project_id, "tenant_id": tenant_id}),
+            )
+            .await;
+        }
+        ClientMessage::SubscribeSandbox {
+            project_id,
+            tenant_id,
+        } => {
+            let _ = send_ack(
+                socket,
+                "subscribe_sandbox",
+                json!({"project_id": project_id, "tenant_id": tenant_id}),
+            )
+            .await;
+        }
+        ClientMessage::UnsubscribeSandbox {
+            project_id,
+            tenant_id,
+        } => {
+            let _ = send_ack(
+                socket,
+                "unsubscribe_sandbox",
+                json!({"project_id": project_id, "tenant_id": tenant_id}),
+            )
+            .await;
+        }
+        ClientMessage::SendMessage {
+            conversation_id,
+            message,
+            project_id,
+            message_id,
+        } => {
+            subscriptions
+                .entry(conversation_id.clone())
+                .or_insert_with(|| Subscription {
+                    message_id: message_id.clone(),
+                    ..Subscription::default()
+                });
+            let _ = send_ack(
+                socket,
+                "send_message",
+                json!({"conversation_id": conversation_id}),
+            )
+            .await;
+            if let Err(err) = run_agent_message(
+                app,
+                identity,
+                &conversation_id,
+                &project_id,
+                message_id.as_deref(),
+                &message,
+            )
+            .await
+            {
+                let data = json!({"message": err, "conversation_id": conversation_id});
+                let _ =
+                    append_event(app, &conversation_id, AgentEventType::Error, data.clone()).await;
+                let _ = send_json(
+                    socket,
+                    json!({"type": "error", "conversation_id": conversation_id, "data": data}),
+                )
+                .await;
+            }
+        }
+        ClientMessage::StopSession { conversation_id } => {
+            let data = json!({"conversation_id": conversation_id, "cancelled": true});
+            let _ = append_event(app, &conversation_id, AgentEventType::Cancelled, data).await;
+            let _ = send_ack(
+                socket,
+                "stop_session",
+                json!({"conversation_id": conversation_id}),
+            )
+            .await;
+        }
+    }
+    true
+}
+
+async fn run_agent_message(
+    app: &AppState,
+    identity: &Identity,
+    conversation_id: &str,
+    project_id: &str,
+    message_id: Option<&str>,
+    message: &str,
+) -> Result<(), String> {
+    let allowed = app
+        .auth
+        .can_access_project(&identity.user_id, project_id)
+        .await?;
+    if !allowed {
+        return Err("Access denied".to_string());
+    }
+
+    append_event(
+        app,
+        conversation_id,
+        AgentEventType::Start,
+        json!({
+            "conversation_id": conversation_id,
+            "message_id": message_id,
+            "project_id": project_id,
+        }),
+    )
+    .await?;
+
+    let state = app
+        .engine
+        .run(conversation_id, message, Some(project_id))
+        .await
+        .map_err(|e| e.to_string())?;
+    append_event(
+        app,
+        conversation_id,
+        AgentEventType::Complete,
+        json!({
+            "conversation_id": conversation_id,
+            "message_id": message_id,
+            "project_id": project_id,
+            "answer": state.answer,
+            "session": state,
+        }),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn flush_subscriptions(
+    app: &AppState,
+    socket: &mut WebSocket,
+    subscriptions: &mut HashMap<String, Subscription>,
+) -> Result<(), ()> {
+    for (conversation_id, subscription) in subscriptions.iter_mut() {
+        let topic = stream_topic(conversation_id);
+        let entries = app
+            .events
+            .read_after(&topic, &subscription.last_id, 100)
+            .await
+            .map_err(|_| ())?;
+        for entry in entries {
+            let message = stream_entry_to_ws_message(conversation_id, &entry.payload);
+            if subscription_allows(&message, subscription) {
+                send_json(socket, message).await.map_err(|_| ())?;
+            }
+            subscription.last_id = entry.id;
+        }
+    }
+    Ok(())
+}
+
+fn subscription_allows(message: &Value, subscription: &Subscription) -> bool {
+    if let Some(expected) = subscription.message_id.as_deref() {
+        let actual = message
+            .pointer("/data/message_id")
+            .and_then(Value::as_str)
+            .or_else(|| message.get("message_id").and_then(Value::as_str));
+        if let Some(actual) = actual {
+            if actual != expected {
+                return false;
+            }
+        }
+    }
+
+    let Some(from_time_us) = subscription.from_time_us else {
+        return true;
+    };
+    let event_time_us = message
+        .get("event_time_us")
+        .and_then(Value::as_i64)
+        .unwrap_or_default();
+    if event_time_us > from_time_us {
+        return true;
+    }
+    if event_time_us < from_time_us {
+        return false;
+    }
+    let from_counter = subscription.from_counter.unwrap_or_default();
+    let event_counter = message
+        .get("event_counter")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    event_counter >= from_counter
+}
+
+async fn append_event(
+    app: &AppState,
+    conversation_id: &str,
+    event_type: AgentEventType,
+    data: Value,
+) -> Result<(), String> {
+    let counter = app
+        .event_counter
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        + 1;
+    let event_time_us = chrono::Utc::now().timestamp_micros();
+    let envelope = EventEnvelope::wrap(
+        event_type,
+        data.clone(),
+        derive_event_id(&format!(
+            "{conversation_id}:{}:{counter}",
+            event_type.as_str()
+        )),
+        now_iso(),
+    )
+    .with_correlation(conversation_id.to_string(), None);
+    let payload = json!({
+        "type": event_type.as_str(),
+        "data": data,
+        "event_time_us": event_time_us,
+        "event_counter": counter,
+        "envelope": envelope.to_value(),
+    });
+    app.events
+        .append(
+            &stream_topic(conversation_id),
+            &payload.to_string(),
+            EVENT_STREAM_MAX_LEN,
+        )
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+fn stream_entry_to_ws_message(conversation_id: &str, payload: &str) -> Value {
+    let parsed: Value = serde_json::from_str(payload).unwrap_or_else(|_| json!({}));
+    if parsed.get("type").is_some() {
+        let mut message = parsed;
+        if let Some(obj) = message.as_object_mut() {
+            obj.insert("conversation_id".to_string(), json!(conversation_id));
+        }
+        return message;
+    }
+    if parsed.get("event_type").is_some() {
+        return json!({
+            "type": parsed.get("event_type").and_then(Value::as_str).unwrap_or("message"),
+            "conversation_id": conversation_id,
+            "data": parsed.get("payload").cloned().unwrap_or_else(|| json!({})),
+            "envelope": parsed,
+        });
+    }
+    json!({
+        "type": "error",
+        "conversation_id": conversation_id,
+        "data": {"message": "Malformed event payload"}
+    })
+}
+
+async fn send_ack(socket: &mut WebSocket, action: &str, extra: Value) -> Result<(), axum::Error> {
+    let mut message = json!({
+        "type": "ack",
+        "action": action,
+        "timestamp": now_iso(),
+    });
+    if let (Some(base), Some(extra)) = (message.as_object_mut(), extra.as_object()) {
+        base.extend(extra.clone());
+    }
+    send_json(socket, message).await
+}
+
+async fn send_error(socket: &mut WebSocket, message: &str) -> Result<(), axum::Error> {
+    send_json(
+        socket,
+        json!({"type": "error", "data": {"message": message}}),
+    )
+    .await
+}
+
+async fn send_json(socket: &mut WebSocket, value: Value) -> Result<(), axum::Error> {
+    socket.send(Message::Text(value.to_string())).await
+}
+
+fn stream_topic(conversation_id: &str) -> String {
+    format!("agent:events:{conversation_id}")
+}
+
+fn now_iso() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::http::{HeaderMap, HeaderValue};
+
+    use super::*;
+
+    #[test]
+    fn extracts_protocol_api_key() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::SEC_WEBSOCKET_PROTOCOL,
+            HeaderValue::from_static("memstack.auth, ms_sk_abc123"),
+        );
+        assert_eq!(
+            extract_ws_api_key(&headers, None).as_deref(),
+            Some("ms_sk_abc123")
+        );
+    }
+
+    #[test]
+    fn authorization_beats_query_token() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer ms_sk_header"),
+        );
+        assert_eq!(
+            extract_ws_api_key(&headers, Some("ms_sk_query")).as_deref(),
+            Some("ms_sk_header")
+        );
+    }
+
+    #[test]
+    fn stream_payload_is_frontend_message_shape() {
+        let payload = json!({
+            "type": "complete",
+            "data": {"answer": "ok"},
+            "event_time_us": 7,
+            "event_counter": 2,
+        });
+        let out = stream_entry_to_ws_message("c1", &payload.to_string());
+        assert_eq!(out["type"], "complete");
+        assert_eq!(out["conversation_id"], "c1");
+        assert_eq!(out["data"]["answer"], "ok");
+        assert_eq!(out["event_time_us"], 7);
+    }
+
+    #[test]
+    fn subscription_filters_replay_cursor() {
+        let sub = Subscription {
+            from_time_us: Some(10),
+            from_counter: Some(3),
+            ..Subscription::default()
+        };
+        assert!(!subscription_allows(
+            &json!({"type": "thought", "event_time_us": 9, "event_counter": 99}),
+            &sub
+        ));
+        assert!(!subscription_allows(
+            &json!({"type": "thought", "event_time_us": 10, "event_counter": 2}),
+            &sub
+        ));
+        assert!(subscription_allows(
+            &json!({"type": "thought", "event_time_us": 10, "event_counter": 3}),
+            &sub
+        ));
+    }
+}

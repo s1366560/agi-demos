@@ -20,6 +20,8 @@ license.workspace = true
 agistack-core = { path = "../core" }
 async-trait.workspace = true
 redis = { version = "0.27", features = ["tokio-comp", "streams"] }
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

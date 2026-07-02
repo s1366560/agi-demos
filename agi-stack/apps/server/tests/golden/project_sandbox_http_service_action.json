@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "message": "HTTP service web stopped",
+  "service": {
+    "service_id": "web",
+    "name": "Docs",
+    "source_type": "sandbox_internal",
+    "status": "stopped",
+    "service_url": "http://127.0.0.1:3000/docs",
+    "preview_url": "http://web.p1.preview.localhost:8000/",
+    "ws_preview_url": "ws://web.p1.preview.localhost:8000/",
+    "sandbox_id": "s1",
+    "auto_open": true,
+    "restart_token": "1700000000000",
+    "updated_at": "1970-01-01T00:00:00.000+00:00"
+  }
+}

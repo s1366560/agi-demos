@@ -44,7 +44,9 @@ impl ObjectStore for InMemoryObjectStore {
                 // so this oracle faithfully models the production tier (which
                 // always reports `application/octet-stream` for untyped objects).
                 content_type: Some(
-                    content_type.unwrap_or("application/octet-stream").to_string(),
+                    content_type
+                        .unwrap_or("application/octet-stream")
+                        .to_string(),
                 ),
             },
         );
@@ -111,7 +113,10 @@ mod tests {
         let s = InMemoryObjectStore::new();
         block_on(s.put("k", b"x".to_vec(), None)).unwrap();
         let meta = block_on(s.stat("k")).unwrap().unwrap();
-        assert_eq!(meta.content_type.as_deref(), Some("application/octet-stream"));
+        assert_eq!(
+            meta.content_type.as_deref(),
+            Some("application/octet-stream")
+        );
     }
 
     #[test]

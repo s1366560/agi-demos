@@ -1,0 +1,25 @@
+{
+  "memory_count": 2,
+  "conversation_count": 3,
+  "storage_used": 42,
+  "storage_limit": 1073741824,
+  "node_count": 0,
+  "member_count": 4,
+  "collaborators": 4,
+  "active_nodes": 0,
+  "last_active": "2023-11-14T22:23:20Z",
+  "system_status": {
+    "status": "operational",
+    "indexing_active": true,
+    "indexing_progress": 100
+  },
+  "recent_activity": [
+    {
+      "id": "mem-1",
+      "user": "Ada Lovelace",
+      "action": "created a memory",
+      "target": "Portable core",
+      "time": "10m ago"
+    }
+  ]
+}

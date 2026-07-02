@@ -7,8 +7,8 @@
 
 use std::sync::Mutex;
 
-use async_trait::async_trait;
 use agistack_core::ports::{ChangeEvent, ChangeLog, CoreError, CoreResult};
+use async_trait::async_trait;
 
 /// Append-only log of [`ChangeEvent`]s, in order of arrival.
 #[derive(Default)]

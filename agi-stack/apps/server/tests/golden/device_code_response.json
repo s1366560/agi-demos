@@ -1,0 +1,8 @@
+{
+  "device_code": "<urlsafe_token>",
+  "user_code": "<device_user_code>",
+  "verification_uri": "/device",
+  "verification_uri_complete": "/device?user_code=ABCDEFGH",
+  "expires_in": 600,
+  "interval": 5
+}

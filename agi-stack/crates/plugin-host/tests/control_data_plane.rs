@@ -25,7 +25,10 @@ impl ToolFactory for TestFactory {
         if decl.trust == "bad" {
             return Err(CoreError::Tool(format!("refusing to build {}", decl.name)));
         }
-        Ok(Arc::new(EchoTool::new(decl.name.clone(), decl.version.clone())))
+        Ok(Arc::new(EchoTool::new(
+            decl.name.clone(),
+            decl.version.clone(),
+        )))
     }
 }
 
@@ -136,7 +139,10 @@ fn reapplying_same_snapshot_is_idempotent_noop() {
 
     let (ack2, out2) = dp.reconcile(&snap, &f);
     assert!(ack2.is_ack());
-    assert!(out2.is_noop(), "re-applying the same desired state must be a no-op");
+    assert!(
+        out2.is_noop(),
+        "re-applying the same desired state must be a no-op"
+    );
 
     // Same Arc instance -> the tool was not rebuilt/replaced (no churn of
     // in-flight handles).

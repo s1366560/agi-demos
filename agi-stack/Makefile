@@ -14,19 +14,21 @@ export PATH := $(HOME)/.cargo/bin:$(PATH)
 
 # ---- 可覆盖变量 ----
 CARGO        ?= cargo
+RUSTUP       ?= rustup
 PROFILE      ?= release
 ADDR         ?= 127.0.0.1:8088
 # Android NDK(本机默认;生产建议 cargo-ndk)。覆盖:make android NDK=/path/to/ndk
 NDK          ?= $(HOME)/Library/Android/sdk/ndk/30.0.14904198
 ANDROID_TARGET ?= aarch64-linux-android
 ANDROID_API    ?= 21
+WASM_TARGET    ?= wasm32-unknown-unknown
 WASM_OUT     ?= pkg
 
 # NDK 工具链(darwin host;Linux 改 linux-x86_64)
 NDK_TC := $(NDK)/toolchains/llvm/prebuilt/darwin-x86_64/bin
 
 .DEFAULT_GOAL := help
-.PHONY: help test ci all wasm-core server wasm-web desktop android ios bench scorecard clean fmt-check
+.PHONY: help test ci all ensure-wasm-target wasm-core server wasm-web desktop android ios bench scorecard clean fmt-check
 
 help: ## 列出全部 target
 	@echo "agi-stack 构建矩阵 — target:"
@@ -36,11 +38,14 @@ help: ## 列出全部 target
 	@echo "矩阵详见 docs/architecture/09-shipping-matrix.md"
 
 # ---- 跨平台门禁 ----
-test: ## 整工作区测试(cargo test --workspace,71 测试绿)
+test: ## 整工作区测试(cargo test --workspace,363 测试绿)
 	$(CARGO) test --workspace
 
-wasm-core: ## 不变量:核心编为 wasm32-unknown-unknown(证运行时无关)
-	$(CARGO) build -p agistack-core --target wasm32-unknown-unknown
+ensure-wasm-target: ## 安装核心 wasm 门禁所需 Rust target(幂等)
+	$(RUSTUP) target add $(WASM_TARGET) >/dev/null
+
+wasm-core: ensure-wasm-target ## 不变量:核心编为 wasm32-unknown-unknown(证运行时无关)
+	$(CARGO) build -p agistack-core --target $(WASM_TARGET)
 
 ci: test wasm-core ## 最小合并门禁:test + 核心 wasm32(无需额外 SDK)
 

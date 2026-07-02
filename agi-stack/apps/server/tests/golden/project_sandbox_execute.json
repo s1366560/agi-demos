@@ -1,0 +1,11 @@
+{
+  "success": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "ok"
+    }
+  ],
+  "is_error": false,
+  "execution_time_ms": "<int>"
+}

@@ -136,7 +136,11 @@ mod tests {
     use super::*;
 
     fn step(id: &str, deps: &[&str]) -> PlanStep {
-        PlanStep::new(id, format!("do {id}"), deps.iter().map(|d| d.to_string()).collect())
+        PlanStep::new(
+            id,
+            format!("do {id}"),
+            deps.iter().map(|d| d.to_string()).collect(),
+        )
     }
 
     #[test]

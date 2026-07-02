@@ -5,8 +5,8 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use agistack_core::ports::{CoreError, CoreResult};
+use async_trait::async_trait;
 
 use crate::host::ToolFactory;
 use crate::manifest::ToolDecl;
@@ -15,7 +15,10 @@ use crate::tool::{Tool, Trust};
 fn input_text(input_json: &str) -> CoreResult<String> {
     let v: serde_json::Value =
         serde_json::from_str(input_json).map_err(|e| CoreError::Tool(e.to_string()))?;
-    Ok(v.get("text").and_then(|t| t.as_str()).unwrap_or("").to_string())
+    Ok(v.get("text")
+        .and_then(|t| t.as_str())
+        .unwrap_or("")
+        .to_string())
 }
 
 /// A trusted built-in: returns the character length of `input.text`.
@@ -98,6 +101,9 @@ pub struct NativeToolFactory;
 
 impl ToolFactory for NativeToolFactory {
     fn build(&self, decl: &ToolDecl) -> CoreResult<Arc<dyn Tool>> {
-        Ok(Arc::new(EchoTool::new(decl.name.clone(), decl.version.clone())))
+        Ok(Arc::new(EchoTool::new(
+            decl.name.clone(),
+            decl.version.clone(),
+        )))
     }
 }

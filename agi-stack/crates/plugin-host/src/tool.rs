@@ -1,7 +1,7 @@
 //! The atomic capability abstraction and its classification metadata.
 
-use async_trait::async_trait;
 use agistack_core::ports::CoreResult;
+use async_trait::async_trait;
 
 /// Trust tier of a capability provider — the **trust axis** (ADR-0002).
 ///

@@ -128,10 +128,7 @@ impl WasmtimeTool {
 }
 
 /// Instantiate a no-import module, mapping failures to [`CoreError`].
-fn instantiate_module(
-    module: &Module,
-    store: &mut Store<()>,
-) -> CoreResult<wasmtime::Instance> {
+fn instantiate_module(module: &Module, store: &mut Store<()>) -> CoreResult<wasmtime::Instance> {
     wasmtime::Instance::new(store, module, &[])
         .map_err(|e| CoreError::Tool(format!("instantiate: {e:#}")))
 }
@@ -206,7 +203,10 @@ impl Default for WasmtimeToolFactory {
 impl ToolFactory for WasmtimeToolFactory {
     fn build(&self, decl: &ToolDecl) -> CoreResult<std::sync::Arc<dyn Tool>> {
         let wat = decl.wat.as_deref().ok_or_else(|| {
-            CoreError::Tool(format!("wasm tool '{}' has no `wat` in manifest", decl.name))
+            CoreError::Tool(format!(
+                "wasm tool '{}' has no `wat` in manifest",
+                decl.name
+            ))
         })?;
         let tool = WasmtimeTool::from_wat(decl.name.clone(), decl.version.clone(), wat, self.fuel)?;
         Ok(std::sync::Arc::new(tool))
@@ -286,7 +286,10 @@ mod tests {
 
         // The pinned pre-swap snapshot still resolves v1.
         let still_v1 = block_on(pinned.get("score").unwrap().invoke(r#"{"len":10}"#)).unwrap();
-        assert!(still_v1.contains("\"score\":37"), "pinned still v1: {still_v1}");
+        assert!(
+            still_v1.contains("\"score\":37"),
+            "pinned still v1: {still_v1}"
+        );
     }
 
     #[test]
@@ -315,7 +318,10 @@ mod tests {
         let err = score.call(&mut store, 3).map_err(map_trap).unwrap_err();
         let msg = format!("{err}");
         // The epoch-deadline trap surfaces as Trap::Interrupt in wasmtime 46.
-        assert!(msg.contains("interrupt"), "expected epoch interrupt trap, got: {msg}");
+        assert!(
+            msg.contains("interrupt"),
+            "expected epoch interrupt trap, got: {msg}"
+        );
     }
 
     #[test]

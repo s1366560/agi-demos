@@ -5,11 +5,11 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use agistack_adapters_mem::{FixedClock, InMemoryCheckpointStore, ScriptedLlm, StubLlm};
 use agistack_core::agent::types::{CompletedCall, Role, TranscriptEntry};
 use agistack_core::ports::{CheckpointStore, CoreResult, ToolHost};
 use agistack_core::{AgentAction, ReActEngine, SessionState, SessionStatus};
+use async_trait::async_trait;
 use futures::executor::block_on;
 
 /// A `ToolHost` that counts how many times a tool was actually invoked — lets us
@@ -62,7 +62,10 @@ fn happy_path_runs_tool_once_then_finishes() {
     assert_eq!(state.status, SessionStatus::Finished);
     assert_eq!(tools.count(), 1, "tool should run exactly once");
     let answer = state.answer.expect("answer set");
-    assert!(answer.contains("\"tool\":\"len\""), "unexpected answer: {answer}");
+    assert!(
+        answer.contains("\"tool\":\"len\""),
+        "unexpected answer: {answer}"
+    );
 
     // A checkpoint was persisted for the finished session.
     let saved = block_on(checkpoints.load("s-happy")).unwrap().unwrap();
@@ -80,7 +83,11 @@ fn resume_reuses_completed_tool_call_without_reinvoking() {
     // Simulate a crash AFTER the round-0 tool executed and was persisted, but
     // BEFORE the round finished: round still 0, Action recorded, output saved.
     let mut seeded = SessionState::new("s-resume", "len of hello", Some("p1"));
-    seeded.push_unique(TranscriptEntry::new(0, Role::Action, format!("len {LEN_INPUT}")));
+    seeded.push_unique(TranscriptEntry::new(
+        0,
+        Role::Action,
+        format!("len {LEN_INPUT}"),
+    ));
     seeded.completed_tool_calls.push(CompletedCall {
         round: 0,
         tool: "len".into(),
@@ -96,9 +103,7 @@ fn resume_reuses_completed_tool_call_without_reinvoking() {
             tool: "len".into(),
             input_json: LEN_INPUT.into(),
         },
-        AgentAction::Finish {
-            answer: "5".into(),
-        },
+        AgentAction::Finish { answer: "5".into() },
     ];
     let engine = ReActEngine::new(
         Arc::new(ScriptedLlm::new(script)),
@@ -109,7 +114,11 @@ fn resume_reuses_completed_tool_call_without_reinvoking() {
 
     let state = block_on(engine.run("s-resume", "len of hello", Some("p1"))).unwrap();
 
-    assert_eq!(tools.count(), 0, "saved tool output must be reused, not re-invoked");
+    assert_eq!(
+        tools.count(),
+        0,
+        "saved tool output must be reused, not re-invoked"
+    );
     assert_eq!(state.status, SessionStatus::Finished);
     assert_eq!(state.answer.as_deref(), Some("5"));
 

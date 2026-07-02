@@ -74,12 +74,9 @@ impl MobileCore {
 
     /// Keyword search within a project; returns a JSON array of Memory.
     pub fn search(&self, project_id: String, query: String, limit: u32) -> String {
-        let hits = futures::executor::block_on(self.service.search(
-            &project_id,
-            &query,
-            limit as usize,
-        ))
-        .expect("search failed");
+        let hits =
+            futures::executor::block_on(self.service.search(&project_id, &query, limit as usize))
+                .expect("search failed");
         serde_json::to_string(&hits).expect("serialize hits")
     }
 

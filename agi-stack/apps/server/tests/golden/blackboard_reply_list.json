@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "id": "reply-1",
+      "post_id": "post-1",
+      "workspace_id": "ws-1",
+      "author_id": "user-2",
+      "content": "ack",
+      "metadata": {},
+      "created_at": "<iso8601>",
+      "updated_at": null
+    }
+  ]
+}

@@ -67,9 +67,7 @@ fn matches_returns_only_fired_skills_sorted() {
     engine
         .register(skill("alpha", r#"query.contains("a")"#, &[]))
         .unwrap();
-    engine
-        .register(skill("never", "false", &[]))
-        .unwrap();
+    engine.register(skill("never", "false", &[])).unwrap();
 
     let ctx = SkillContext::new("banana");
     // Both "a"-matching skills fire; the always-false one does not; sorted.
@@ -88,7 +86,11 @@ fn run_composes_registered_tools_in_declared_order() {
     let mut engine = SkillEngine::new();
     // A skill that fires on "shout" and composes upper -> len over the input.
     engine
-        .register(skill("loud", r#"query.contains("shout")"#, &["upper", "len"]))
+        .register(skill(
+            "loud",
+            r#"query.contains("shout")"#,
+            &["upper", "len"],
+        ))
         .unwrap();
 
     let ctx = SkillContext::new("please shout this");
@@ -112,7 +114,11 @@ fn run_errors_when_trigger_does_not_fire() {
     registry.register_tool(Arc::new(LenTool));
     let mut engine = SkillEngine::new();
     engine
-        .register(skill("guarded", r#"query.contains("magic-word")"#, &["len"]))
+        .register(skill(
+            "guarded",
+            r#"query.contains("magic-word")"#,
+            &["len"],
+        ))
         .unwrap();
 
     let ctx = SkillContext::new("no trigger here");
@@ -151,7 +157,10 @@ fn sandbox_traps_runaway_trigger_without_hanging() {
         .unwrap();
     let ctx = SkillContext::new("go");
     let err = engine.evaluate("runaway", &ctx);
-    assert!(err.is_err(), "runaway trigger must be trapped by the op budget");
+    assert!(
+        err.is_err(),
+        "runaway trigger must be trapped by the op budget"
+    );
 }
 
 #[test]
@@ -172,8 +181,7 @@ fn sample_skill_file_loads_and_runs_end_to_end() {
     // Keyword arm fires and composes the registered tools.
     let ctx = SkillContext::new("what's the weather forecast");
     assert!(engine.evaluate("weather-skill", &ctx).unwrap());
-    let out =
-        block_on(engine.run("weather-skill", &ctx, &registry, r#"{"text":"sun"}"#)).unwrap();
+    let out = block_on(engine.run("weather-skill", &ctx, &registry, r#"{"text":"sun"}"#)).unwrap();
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     assert_eq!(v["steps"][0]["output"]["upper"], "SUN");
     assert_eq!(v["steps"][1]["output"]["len"], 3);

@@ -13,7 +13,13 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use agistack_adapters_mem::InMemoryEventStream;
-use agistack_adapters_redis::{connect, RedisEventStream};
+use agistack_adapters_redis::{
+    connect, device_code_key, device_user_code_key, sandbox_http_services_key,
+    sandbox_mcp_upstream_token_key, sandbox_preview_session_key, sandbox_terminal_session_key,
+    DeviceGrant, RedisDeviceGrantStore, RedisEventStream, RedisSandboxHttpRegistry,
+    SandboxHttpServiceRecord, SandboxMcpUpstreamTokenRecord, SandboxPreviewSessionRecord,
+    SandboxTerminalSessionRecord,
+};
 use agistack_core::ports::EventStream;
 
 fn redis_uri() -> String {
@@ -40,6 +46,30 @@ async fn redis_or_skip() -> Option<RedisEventStream> {
     }
 }
 
+async fn redis_grants_or_skip() -> Option<RedisDeviceGrantStore> {
+    let uri = redis_uri();
+    match RedisDeviceGrantStore::connect(&uri).await {
+        Ok(store) => Some(store),
+        Err(e) => {
+            eprintln!("[skip] Redis unreachable at {uri}: {e} — skipping device grant test");
+            None
+        }
+    }
+}
+
+async fn redis_sandbox_http_registry_or_skip() -> Option<RedisSandboxHttpRegistry> {
+    let uri = redis_uri();
+    match RedisSandboxHttpRegistry::connect(&uri).await {
+        Ok(store) => Some(store),
+        Err(e) => {
+            eprintln!(
+                "[skip] Redis unreachable at {uri}: {e} — skipping sandbox HTTP registry test"
+            );
+            None
+        }
+    }
+}
+
 async fn del(stream: &RedisEventStream, topic: &str) {
     // Best-effort cleanup via a throwaway append+trim is awkward; instead issue a
     // raw DEL through a fresh connection helper. RedisEventStream doesn't expose
@@ -47,17 +77,35 @@ async fn del(stream: &RedisEventStream, topic: &str) {
     let uri = redis_uri();
     if let Ok(client) = redis::Client::open(uri) {
         if let Ok(mut conn) = client.get_multiplexed_async_connection().await {
-            let _: Result<i64, _> = redis::cmd("DEL")
-                .arg(topic)
-                .query_async(&mut conn)
-                .await;
+            let _: Result<i64, _> = redis::cmd("DEL").arg(topic).query_async(&mut conn).await;
         }
     }
     // Keep the reference used so the signature stays honest about needing a live stream.
     let _ = stream;
 }
 
-async fn payloads_after(s: &dyn EventStream, topic: &str, after: &str, limit: usize) -> Vec<String> {
+async fn del_keys(keys: &[String]) {
+    let uri = redis_uri();
+    if let Ok(client) = redis::Client::open(uri) {
+        if let Ok(mut conn) = client.get_multiplexed_async_connection().await {
+            let _: Result<i64, _> = redis::cmd("DEL").arg(keys).query_async(&mut conn).await;
+        }
+    }
+}
+
+async fn ttl(key: &str) -> Option<i64> {
+    let uri = redis_uri();
+    let client = redis::Client::open(uri).ok()?;
+    let mut conn = client.get_multiplexed_async_connection().await.ok()?;
+    redis::cmd("TTL").arg(key).query_async(&mut conn).await.ok()
+}
+
+async fn payloads_after(
+    s: &dyn EventStream,
+    topic: &str,
+    after: &str,
+    limit: usize,
+) -> Vec<String> {
     s.read_after(topic, after, limit)
         .await
         .unwrap()
@@ -100,7 +148,10 @@ async fn redis_matches_in_memory_ordering_and_paging() {
     let r_rest = payloads_after(&redis, &topic, &r_first.last().unwrap().id, 100).await;
     let m_rest = payloads_after(&mem, &topic, &m_first.last().unwrap().id, 100).await;
     assert_eq!(r_rest, vec!["evt-c", "evt-d", "evt-e"], "redis remainder");
-    assert_eq!(r_rest, m_rest, "remainder parity (ids differ, payloads match)");
+    assert_eq!(
+        r_rest, m_rest,
+        "remainder parity (ids differ, payloads match)"
+    );
 
     del(&redis, &topic).await;
 }
@@ -126,4 +177,197 @@ async fn redis_matches_in_memory_maxlen_trim() {
     assert_eq!(r, m, "redis vs in-memory trim parity");
 
     del(&redis, &topic).await;
+}
+
+#[tokio::test]
+async fn redis_device_grants_match_python_keys_and_lifecycle() {
+    let Some(store) = redis_grants_or_skip().await else {
+        return;
+    };
+    let suffix = unique_topic("device-grant").replace(':', "-");
+    let device_code = format!("device-{suffix}");
+    let user_code = "ABCDEFGH";
+    let keys = vec![
+        device_code_key(&device_code),
+        device_user_code_key(user_code),
+    ];
+    del_keys(&keys).await;
+
+    let pending = DeviceGrant::pending(user_code);
+    store
+        .create_pending(&device_code, &pending, 600)
+        .await
+        .unwrap();
+    assert!(store.user_code_exists(user_code).await.unwrap());
+    assert_eq!(
+        store.device_code_for_user_code(user_code).await.unwrap(),
+        Some(device_code.clone())
+    );
+    assert_eq!(store.get(&device_code).await.unwrap(), Some(pending));
+
+    let approved = DeviceGrant::approved(user_code, "user-1", "ms_sk_test");
+    store
+        .save_preserving_ttl(&device_code, &approved, 600)
+        .await
+        .unwrap();
+    assert_eq!(store.get(&device_code).await.unwrap(), Some(approved));
+
+    store.delete_pair(&device_code, user_code).await.unwrap();
+    assert!(!store.user_code_exists(user_code).await.unwrap());
+    assert_eq!(store.get(&device_code).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn redis_sandbox_http_registry_persists_services_and_preview_sessions() {
+    let Some(store) = redis_sandbox_http_registry_or_skip().await else {
+        return;
+    };
+    let suffix = unique_topic("sandbox-http").replace(':', "-");
+    let project_id = format!("project-{suffix}");
+    let service_id = "web";
+    let token = format!("preview-{suffix}");
+    let keys = vec![
+        sandbox_http_services_key(&project_id),
+        sandbox_preview_session_key(&token),
+    ];
+    del_keys(&keys).await;
+
+    let service = SandboxHttpServiceRecord {
+        service_id: service_id.to_string(),
+        name: "Docs".to_string(),
+        source_type: "sandbox_internal".to_string(),
+        status: "running".to_string(),
+        service_url: "http://127.0.0.1:3000/docs".to_string(),
+        preview_url: "http://web.project.preview.localhost:8000/".to_string(),
+        ws_preview_url: Some("ws://web.project.preview.localhost:8000/".to_string()),
+        sandbox_id: Some("sandbox-1".to_string()),
+        auto_open: true,
+        restart_token: Some("1700000000000".to_string()),
+        updated_at: "1970-01-01T00:00:00.000+00:00".to_string(),
+    };
+
+    store
+        .upsert_http_service(&project_id, &service)
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .get_http_service(&project_id, service_id)
+            .await
+            .unwrap(),
+        Some(service.clone())
+    );
+    assert_eq!(
+        store.list_http_services(&project_id).await.unwrap(),
+        vec![service.clone()]
+    );
+
+    let session = SandboxPreviewSessionRecord {
+        project_id: project_id.clone(),
+        service_id: service_id.to_string(),
+        expires_at_ms: 1_700_000_060_000,
+    };
+    store
+        .create_preview_session(&token, &session, 60)
+        .await
+        .unwrap();
+    assert_eq!(
+        store.get_preview_session(&token).await.unwrap(),
+        Some(session)
+    );
+    let session_ttl = ttl(&sandbox_preview_session_key(&token)).await.unwrap();
+    assert!(
+        (1..=60).contains(&session_ttl),
+        "preview session should be Redis TTL-backed, got {session_ttl}"
+    );
+
+    assert!(store
+        .remove_http_service(&project_id, service_id)
+        .await
+        .unwrap());
+    assert!(store
+        .get_http_service(&project_id, service_id)
+        .await
+        .unwrap()
+        .is_none());
+
+    del_keys(&keys).await;
+}
+
+#[tokio::test]
+async fn redis_sandbox_terminal_sessions_are_ttl_persisted() {
+    let Some(store) = redis_sandbox_http_registry_or_skip().await else {
+        return;
+    };
+    let suffix = unique_topic("terminal-session").replace(':', "-");
+    let project_id = format!("project-{suffix}");
+    let session_id = "term-session";
+    let key = sandbox_terminal_session_key(&project_id, session_id);
+    del_keys(std::slice::from_ref(&key)).await;
+
+    let session = SandboxTerminalSessionRecord {
+        project_id: project_id.clone(),
+        session_id: session_id.to_string(),
+        cols: 120,
+        rows: 40,
+        connected: true,
+        last_seen_at_ms: 1_700_000_000_000,
+        expires_at_ms: 1_700_086_400_000,
+    };
+    store.upsert_terminal_session(&session, 60).await.unwrap();
+    assert_eq!(
+        store
+            .get_terminal_session(&project_id, session_id)
+            .await
+            .unwrap(),
+        Some(session)
+    );
+    let session_ttl = ttl(&key).await.unwrap();
+    assert!(
+        (1..=60).contains(&session_ttl),
+        "terminal session should be Redis TTL-backed, got {session_ttl}"
+    );
+
+    assert!(store
+        .remove_terminal_session(&project_id, session_id)
+        .await
+        .unwrap());
+    assert!(store
+        .get_terminal_session(&project_id, session_id)
+        .await
+        .unwrap()
+        .is_none());
+
+    del_keys(&[key]).await;
+}
+
+#[tokio::test]
+async fn redis_sandbox_mcp_upstream_tokens_are_ttl_persisted() {
+    let Some(store) = redis_sandbox_http_registry_or_skip().await else {
+        return;
+    };
+    let suffix = unique_topic("mcp-token").replace(':', "-");
+    let token = format!("mcp-token-{suffix}");
+    let key = sandbox_mcp_upstream_token_key(&token);
+    del_keys(std::slice::from_ref(&key)).await;
+
+    let grant = SandboxMcpUpstreamTokenRecord {
+        token: token.clone(),
+        project_id: format!("project-{suffix}"),
+        sandbox_id: "sandbox-1".to_string(),
+        issued_at_ms: 1_700_000_000_000,
+        expires_at_ms: 1_700_000_600_000,
+    };
+    store.create_mcp_upstream_token(&grant, 60).await.unwrap();
+    assert_eq!(
+        store.get_mcp_upstream_token(&token).await.unwrap(),
+        Some(grant)
+    );
+    let token_ttl = ttl(&key).await.unwrap();
+    assert!(
+        (1..=60).contains(&token_ttl),
+        "mcp upstream token should be Redis TTL-backed, got {token_ttl}"
+    );
+
+    del_keys(&[key]).await;
 }

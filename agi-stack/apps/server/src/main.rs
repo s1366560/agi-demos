@@ -23,33 +23,50 @@
 //!   POST /v1/tools/call               invoke one tool via the ToolHost (sandboxes wasm)
 //!   POST /v1/control-plane/publish     CP publishes desired tools -> DP reconcile -> ACK/NACK
 
-use std::sync::{Arc, Mutex};
+use std::sync::{atomic::AtomicU64, Arc, Mutex};
 
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    routing::{get, post},
+    routing::{any, get, post},
     Json, Router,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+mod agent_ws;
 mod auth;
+mod enhanced_search_api;
+mod graph_api;
 mod identity;
 mod identity_api;
 mod prod_api;
+mod sandbox_api;
+mod shares_api;
+mod skill_api;
+mod trust_api;
+mod workspace_api;
 
-use agistack_adapters_mem::{
-    HashEmbedding, InMemoryCheckpointStore, InMemoryMemoryRepository, InMemoryVectorIndex, StubLlm,
-    SystemClock,
-};
-use agistack_adapters_postgres::{
-    connect, ensure_aux_schema, PgApiKeyStore, PgCheckpointStore, PgMemoryRepository,
-    PgProjectStore, PgTenantRepository, PgUserStore, PgVectorIndex,
-};
-use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
+use agistack_adapters_docker::{DockerContainerRuntime, ImagePullPolicy};
 use agistack_adapters_http_llm::{HttpEmbedding, HttpLlm};
-use agistack_core::ports::{CheckpointStore, EmbeddingPort, LlmPort, ToolHost};
+use agistack_adapters_mem::{
+    HashEmbedding, InMemoryCheckpointStore, InMemoryContainerRuntime, InMemoryEmailSender,
+    InMemoryEventStream, InMemoryGraphStore, InMemoryMemoryRepository, InMemoryVectorIndex,
+    StubLlm, SystemClock,
+};
+use agistack_adapters_neo4j::{connect as connect_neo4j, Neo4jGraphStore};
+use agistack_adapters_postgres::{
+    connect, ensure_aux_schema, PgApiKeyStore, PgCheckpointStore, PgInvitationRepository,
+    PgMemoryRepository, PgProjectReadRepository, PgProjectSandboxRepository, PgProjectStore,
+    PgShareRepository, PgSkillRepository, PgTenantRepository, PgTrustRepository, PgUserStore,
+    PgVectorIndex, PgWorkspaceRepository,
+};
+use agistack_adapters_smtp::SmtpEmailSender;
+use agistack_adapters_wasmtime::{WasmtimeTool, DEFAULT_FUEL, SCORE_V1_WAT};
+use agistack_core::ports::{
+    CheckpointStore, ContainerRuntime, EmailSender, EmbeddingPort, EventStream, GraphStore,
+    LlmPort, ToolHost,
+};
 use agistack_core::{
     Episode, Memory, MemoryService, ReActEngine, SessionState, SessionStatus, SourceType,
 };
@@ -59,7 +76,18 @@ use agistack_plugin_host::{
 };
 
 use crate::auth::{DevAuthenticator, PgAuthenticator, SharedAuthenticator};
-use crate::identity::{DevIdentityService, PgIdentityService, SharedIdentity};
+use crate::identity::{
+    DevIdentityService, InMemoryDeviceGrantStore, PgIdentityService, SharedDeviceGrantStore,
+    SharedIdentity,
+};
+use crate::sandbox_api::{
+    in_memory_http_service_registry, PgProjectSandboxConfigSource, ProjectSandboxService,
+    SharedHttpServiceRegistry, SharedProjectSandboxes,
+};
+use crate::shares_api::{DevShareService, PgShareService, SharedShares};
+use crate::skill_api::{DevSkillService, PgSkillService, SharedSkills};
+use crate::trust_api::{DevTrustService, PgTrustService, SharedTrust};
+use crate::workspace_api::{DevWorkspaceService, PgWorkspaceService, SharedWorkspaces};
 
 /// Shared, cheaply-cloneable application state. Every `Arc`/`HotPlugRegistry`
 /// field is a shared handle, so all routes operate on the same registry, memory
@@ -67,7 +95,9 @@ use crate::identity::{DevIdentityService, PgIdentityService, SharedIdentity};
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) memory: Arc<MemoryService>,
-    engine: Arc<ReActEngine>,
+    pub(crate) engine: Arc<ReActEngine>,
+    pub(crate) events: Arc<dyn EventStream>,
+    pub(crate) event_counter: Arc<AtomicU64>,
     registry: HotPlugRegistry,
     plugins: Arc<PluginHost>,
     control: Arc<Mutex<ControlPlane>>,
@@ -78,6 +108,21 @@ pub(crate) struct AppState {
     /// P2 identity service: login (`/auth/token`) + tenant reads. Postgres in
     /// production, dev stub offline. See [`crate::identity`].
     pub(crate) identity: SharedIdentity,
+    /// P2 share service: authenticated share management plus public token access.
+    pub(crate) shares: SharedShares,
+    /// P2 trust governance service: policies, approval requests, and decisions.
+    pub(crate) trust: SharedTrust,
+    /// P5 skill store/versioning service over Python-owned `skills` tables.
+    pub(crate) skills: SharedSkills,
+    /// P6 workspace/task/topology/blackboard foundation over Python-owned
+    /// workspace tables.
+    pub(crate) workspaces: SharedWorkspaces,
+    /// P4 knowledge-graph store. Server composition picks Neo4j when configured,
+    /// otherwise an in-memory dev/test backend behind the same portable port.
+    pub(crate) graph: Arc<dyn GraphStore>,
+    /// P5 project sandbox lifecycle service over the portable ContainerRuntime
+    /// port. Docker stays server-only; tests/dev can use the in-memory runtime.
+    pub(crate) sandboxes: SharedProjectSandboxes,
 }
 
 fn internal<E: std::fmt::Display>(e: E) -> (StatusCode, String) {
@@ -262,8 +307,14 @@ async fn cp_publish(
         dp.reconcile(&snapshot, &NativeToolFactory)
     };
     let ack_json = match ack {
-        ConfigAck::Ack { version, nonce } => json!({"status":"ack","version":version,"nonce":nonce}),
-        ConfigAck::Nack { version, nonce, error } => {
+        ConfigAck::Ack { version, nonce } => {
+            json!({"status":"ack","version":version,"nonce":nonce})
+        }
+        ConfigAck::Nack {
+            version,
+            nonce,
+            error,
+        } => {
             json!({"status":"nack","version":version,"nonce":nonce,"error":error})
         }
     };
@@ -285,9 +336,10 @@ async fn cp_publish(
 fn select_llm_and_embedding() -> (Arc<dyn LlmPort>, Arc<dyn EmbeddingPort>) {
     match std::env::var("AGISTACK_LLM_BASE_URL") {
         Ok(base) if !base.is_empty() => {
-            let chat_model = std::env::var("AGISTACK_LLM_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
-            let embed_model =
-                std::env::var("AGISTACK_EMBED_MODEL").unwrap_or_else(|_| "text-embedding-3-small".into());
+            let chat_model =
+                std::env::var("AGISTACK_LLM_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
+            let embed_model = std::env::var("AGISTACK_EMBED_MODEL")
+                .unwrap_or_else(|_| "text-embedding-3-small".into());
             let key = std::env::var("AGISTACK_LLM_API_KEY").ok();
             let mut llm = HttpLlm::new(base.clone(), chat_model);
             let mut emb = HttpEmbedding::new(base, embed_model);
@@ -319,6 +371,60 @@ fn build_registry() -> HotPlugRegistry {
     registry
 }
 
+fn select_email_sender() -> Arc<dyn EmailSender> {
+    match std::env::var("AGISTACK_SMTP_HOST") {
+        Ok(host) if !host.is_empty() => {
+            let sender = match (
+                std::env::var("AGISTACK_SMTP_USERNAME").ok(),
+                std::env::var("AGISTACK_SMTP_PASSWORD").ok(),
+            ) {
+                (Some(username), Some(password))
+                    if !username.is_empty() && !password.is_empty() =>
+                {
+                    SmtpEmailSender::relay(&host, username, password)
+                        .expect("configure AGISTACK_SMTP_HOST relay")
+                }
+                _ => {
+                    let port = std::env::var("AGISTACK_SMTP_PORT")
+                        .ok()
+                        .and_then(|p| p.parse::<u16>().ok())
+                        .unwrap_or(1025);
+                    SmtpEmailSender::plaintext(&host, port)
+                }
+            };
+            eprintln!("[agistack] email sender: SMTP via AGISTACK_SMTP_HOST");
+            Arc::new(sender)
+        }
+        _ => {
+            eprintln!("[agistack] email sender: in-memory (dev)");
+            Arc::new(InMemoryEmailSender::new())
+        }
+    }
+}
+
+async fn build_device_grant_store() -> SharedDeviceGrantStore {
+    match std::env::var("REDIS_URL") {
+        Ok(url) if !url.is_empty() => {
+            match agistack_adapters_redis::RedisDeviceGrantStore::connect(&url).await {
+                Ok(store) => {
+                    eprintln!("[agistack] device-code grants: Redis TTL via REDIS_URL");
+                    Arc::new(store)
+                }
+                Err(err) => {
+                    eprintln!(
+                        "[agistack] device-code grants: Redis unavailable ({err}); falling back to in-memory"
+                    );
+                    Arc::new(InMemoryDeviceGrantStore::new())
+                }
+            }
+        }
+        _ => {
+            eprintln!("[agistack] device-code grants: in-memory (dev)");
+            Arc::new(InMemoryDeviceGrantStore::new())
+        }
+    }
+}
+
 /// Persistence + auth selection at the composition root — the strangler switch
 /// (plan.md Section 14). When `DATABASE_URL` is set, bind the production Postgres
 /// tier (**the same schema Python owns**, ADR-0001) and the SHA256 `api_keys`
@@ -333,7 +439,17 @@ async fn build_memory_and_auth(
     Arc<dyn CheckpointStore>,
     SharedAuthenticator,
     SharedIdentity,
+    SharedShares,
+    SharedTrust,
+    SharedSkills,
+    SharedWorkspaces,
+    Option<PgProjectSandboxRepository>,
+    Option<PgProjectReadRepository>,
 ) {
+    let email = select_email_sender();
+    let device_grants = build_device_grant_store().await;
+    let invitation_base_url = std::env::var("AGISTACK_INVITATION_BASE_URL")
+        .unwrap_or_else(|_| "http://localhost:8000".into());
     match std::env::var("DATABASE_URL") {
         Ok(url) if !url.is_empty() => {
             let pool = connect(&url)
@@ -360,13 +476,40 @@ async fn build_memory_and_auth(
             let identity: SharedIdentity = Arc::new(PgIdentityService::new(
                 PgUserStore::new(pool.clone()),
                 PgTenantRepository::new(pool.clone()),
+                PgProjectReadRepository::new(pool.clone()),
+                PgInvitationRepository::new(pool.clone()),
+                email,
+                device_grants,
+                invitation_base_url,
             ));
             let authenticator: SharedAuthenticator = Arc::new(PgAuthenticator::new(
                 PgApiKeyStore::new(pool.clone()),
-                PgProjectStore::new(pool),
+                PgProjectStore::new(pool.clone()),
             ));
+            let shares: SharedShares =
+                Arc::new(PgShareService::new(PgShareRepository::new(pool.clone())));
+            let trust: SharedTrust =
+                Arc::new(PgTrustService::new(PgTrustRepository::new(pool.clone())));
+            let skills: SharedSkills =
+                Arc::new(PgSkillService::new(PgSkillRepository::new(pool.clone())));
+            let workspaces: SharedWorkspaces = Arc::new(PgWorkspaceService::new(
+                PgWorkspaceRepository::new(pool.clone()),
+            ));
+            let sandbox_repo = Some(PgProjectSandboxRepository::new(pool.clone()));
+            let project_sandbox_config_repo = Some(PgProjectReadRepository::new(pool.clone()));
             eprintln!("[agistack] persistence: PostgreSQL (production, shared Python schema)");
-            (memory, checkpoint, authenticator, identity)
+            (
+                memory,
+                checkpoint,
+                authenticator,
+                identity,
+                shares,
+                trust,
+                skills,
+                workspaces,
+                sandbox_repo,
+                project_sandbox_config_repo,
+            )
         }
         _ => {
             let memory = Arc::new(
@@ -380,10 +523,141 @@ async fn build_memory_and_auth(
             );
             let checkpoint: Arc<dyn CheckpointStore> = Arc::new(InMemoryCheckpointStore::new());
             let authenticator: SharedAuthenticator = Arc::new(DevAuthenticator::new("dev-user"));
-            let identity: SharedIdentity = Arc::new(DevIdentityService::new("dev-user"));
+            let identity: SharedIdentity = Arc::new(DevIdentityService::with_device_grants(
+                "dev-user",
+                device_grants,
+            ));
+            let shares: SharedShares = Arc::new(DevShareService::new("dev-user"));
+            let trust: SharedTrust = Arc::new(DevTrustService::new("dev-user"));
+            let skills: SharedSkills = Arc::new(DevSkillService::new("dev-tenant"));
+            let workspaces: SharedWorkspaces = Arc::new(DevWorkspaceService::new("dev-user"));
             eprintln!("[agistack] persistence: in-memory (dev); auth: dev stub (any ms_sk_ key)");
-            (memory, checkpoint, authenticator, identity)
+            (
+                memory,
+                checkpoint,
+                authenticator,
+                identity,
+                shares,
+                trust,
+                skills,
+                workspaces,
+                None,
+                None,
+            )
         }
+    }
+}
+
+async fn build_event_stream() -> Arc<dyn EventStream> {
+    match std::env::var("REDIS_URL") {
+        Ok(url) if !url.is_empty() => match agistack_adapters_redis::connect(&url).await {
+            Ok(stream) => {
+                eprintln!("[agistack] event stream: Redis Streams via REDIS_URL");
+                Arc::new(stream)
+            }
+            Err(err) => {
+                eprintln!(
+                    "[agistack] event stream: Redis unavailable ({err}); falling back to in-memory"
+                );
+                Arc::new(InMemoryEventStream::new())
+            }
+        },
+        _ => {
+            eprintln!("[agistack] event stream: in-memory (dev)");
+            Arc::new(InMemoryEventStream::new())
+        }
+    }
+}
+
+async fn build_sandbox_http_service_registry() -> SharedHttpServiceRegistry {
+    match std::env::var("REDIS_URL") {
+        Ok(url) if !url.is_empty() => {
+            match agistack_adapters_redis::RedisSandboxHttpRegistry::connect(&url).await {
+                Ok(registry) => {
+                    eprintln!("[agistack] sandbox HTTP services: Redis registry via REDIS_URL");
+                    Arc::new(registry)
+                }
+                Err(err) => {
+                    eprintln!(
+                        "[agistack] sandbox HTTP services: Redis unavailable ({err}); falling back to in-memory"
+                    );
+                    in_memory_http_service_registry()
+                }
+            }
+        }
+        _ => {
+            eprintln!("[agistack] sandbox HTTP services: in-memory (dev)");
+            in_memory_http_service_registry()
+        }
+    }
+}
+
+async fn build_graph_store() -> Arc<dyn GraphStore> {
+    match std::env::var("NEO4J_URI") {
+        Ok(uri) if !uri.is_empty() => {
+            let user = std::env::var("NEO4J_USER").unwrap_or_else(|_| "neo4j".into());
+            let password = std::env::var("NEO4J_PASSWORD").unwrap_or_else(|_| "password".into());
+            match connect_neo4j(&uri, &user, &password).await {
+                Ok(graph) => {
+                    eprintln!("[agistack] graph store: Neo4j via NEO4J_URI");
+                    Arc::new(Neo4jGraphStore::new(graph))
+                }
+                Err(err) => {
+                    eprintln!(
+                        "[agistack] graph store: Neo4j unavailable ({err}); falling back to in-memory"
+                    );
+                    Arc::new(InMemoryGraphStore::new())
+                }
+            }
+        }
+        _ => {
+            eprintln!("[agistack] graph store: in-memory (dev)");
+            Arc::new(InMemoryGraphStore::new())
+        }
+    }
+}
+
+async fn build_container_runtime() -> Arc<dyn ContainerRuntime> {
+    let runtime = std::env::var("AGISTACK_CONTAINER_RUNTIME")
+        .ok()
+        .or_else(|| std::env::var("AGISTACK_SANDBOX_RUNTIME").ok())
+        .unwrap_or_else(|| "memory".to_string());
+    let wants_docker = runtime.eq_ignore_ascii_case("docker")
+        || std::env::var("AGISTACK_DOCKER_SANDBOX")
+            .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+
+    if wants_docker {
+        let raw_pull_policy = std::env::var("AGISTACK_SANDBOX_IMAGE_PULL").ok();
+        let image_pull_policy = match raw_pull_policy.as_deref() {
+            Some(raw) if !raw.trim().is_empty() => match ImagePullPolicy::parse(raw) {
+                Some(policy) => policy,
+                None => {
+                    eprintln!(
+                        "[agistack] invalid AGISTACK_SANDBOX_IMAGE_PULL={raw:?}; using if_missing"
+                    );
+                    ImagePullPolicy::IfMissing
+                }
+            },
+            _ => ImagePullPolicy::IfMissing,
+        };
+        match DockerContainerRuntime::connect_with_image_pull_policy(image_pull_policy).await {
+            Ok(runtime) => {
+                eprintln!(
+                    "[agistack] sandbox runtime: Docker via ContainerRuntime (image_pull={image_pull_policy})"
+                );
+                Arc::new(runtime)
+            }
+            Err(err) => {
+                eprintln!(
+                    "[agistack] sandbox runtime: Docker unavailable ({err}); falling back to in-memory"
+                );
+                Arc::new(InMemoryContainerRuntime::new())
+            }
+        }
+    } else {
+        eprintln!("[agistack] sandbox runtime: in-memory (dev)");
+        Arc::new(InMemoryContainerRuntime::new())
     }
 }
 
@@ -399,12 +673,42 @@ async fn build_state() -> AppState {
 
     // Persistence + auth: Postgres (production) or in-memory (dev), selected by
     // `DATABASE_URL`. This is the strangler cutover switch.
-    let (memory, checkpoint, auth, identity) = build_memory_and_auth(llm.clone(), embedding).await;
-
+    let (
+        memory,
+        checkpoint,
+        auth,
+        identity,
+        shares,
+        trust,
+        skills,
+        workspaces,
+        sandbox_repo,
+        project_config_repo,
+    ) = build_memory_and_auth(llm.clone(), embedding).await;
+    let events = build_event_stream().await;
+    let graph = build_graph_store().await;
+    let sandbox_runtime = build_container_runtime().await;
+    let sandbox_http_registry = build_sandbox_http_service_registry().await;
+    let sandbox_image =
+        std::env::var("AGISTACK_SANDBOX_IMAGE").unwrap_or_else(|_| "redis:7-alpine".to_string());
     let tool_host: Arc<dyn ToolHost> = Arc::new(registry.clone());
+    let mut sandbox_service = match sandbox_repo {
+        Some(repo) => ProjectSandboxService::with_postgres(sandbox_runtime, sandbox_image, repo),
+        None => ProjectSandboxService::new(sandbox_runtime, sandbox_image),
+    };
+    if let Some(repo) = project_config_repo {
+        sandbox_service = sandbox_service
+            .with_project_config_source(Arc::new(PgProjectSandboxConfigSource::new(repo)));
+    }
+    let sandboxes = Arc::new(
+        sandbox_service
+            .with_http_service_registry(sandbox_http_registry)
+            .with_tool_host(Arc::clone(&tool_host))
+            .with_ws_mcp_connector(),
+    );
     let engine = Arc::new(ReActEngine::new(
         llm,
-        tool_host,
+        Arc::clone(&tool_host),
         checkpoint,
         Arc::new(SystemClock),
     ));
@@ -416,12 +720,20 @@ async fn build_state() -> AppState {
     AppState {
         memory,
         engine,
+        events,
+        event_counter: Arc::new(AtomicU64::new(0)),
         registry,
         plugins,
         control,
         reconciler,
         auth,
         identity,
+        shares,
+        trust,
+        skills,
+        workspaces,
+        graph,
+        sandboxes,
     }
 }
 
@@ -459,12 +771,19 @@ fn router(state: AppState) -> Router {
     //     middleware (you can't present a key before you have one).
     // The legacy `/v1/*` demo routes stay open for local exercising.
     let authed = prod_api::router()
+        .merge(enhanced_search_api::router())
+        .merge(graph_api::router())
         .merge(identity_api::router_authed())
+        .merge(sandbox_api::router())
+        .merge(shares_api::router_authed())
+        .merge(skill_api::router())
+        .merge(trust_api::router_authed())
+        .merge(workspace_api::router())
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             auth::require_api_key,
         ));
-    let public = identity_api::router_public();
+    let public = identity_api::router_public().merge(shares_api::router_public());
 
     Router::new()
         .route("/health", get(|| async { "ok" }))
@@ -473,6 +792,7 @@ fn router(state: AppState) -> Router {
         .route("/v1/memories/:id", get(get_memory))
         .route("/v1/agent/run", post(agent_run))
         .route("/v1/agent/resume", post(agent_resume))
+        .route("/api/v1/agent/ws", get(agent_ws::agent_ws))
         .route("/v1/plugins", get(plugins_list))
         .route("/v1/plugins/enable", post(plugins_enable))
         .route("/v1/plugins/disable", post(plugins_disable))
@@ -480,6 +800,7 @@ fn router(state: AppState) -> Router {
         .route("/v1/control-plane/publish", post(cp_publish))
         .merge(public)
         .merge(authed)
+        .fallback(any(sandbox_api::preview_host_proxy))
         .with_state(state)
 }
 

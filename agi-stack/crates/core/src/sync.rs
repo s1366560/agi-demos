@@ -51,17 +51,8 @@ fn key(event: &ChangeEvent) -> (String, String) {
 /// then higher `seq`. The last two make the order total (no ties between
 /// distinct records) which is what guarantees deterministic convergence.
 fn wins(a: &SyncRecord, b: &SyncRecord) -> bool {
-    (
-        a.event.version,
-        a.event.at_ms,
-        a.replica_id.as_str(),
-        a.seq,
-    ) > (
-        b.event.version,
-        b.event.at_ms,
-        b.replica_id.as_str(),
-        b.seq,
-    )
+    (a.event.version, a.event.at_ms, a.replica_id.as_str(), a.seq)
+        > (b.event.version, b.event.at_ms, b.replica_id.as_str(), b.seq)
 }
 
 /// One node's local-first state: a deduped record log plus the version vector of
@@ -141,10 +132,7 @@ impl Replica {
                 })
                 .or_insert_with(|| r.clone());
         }
-        winners
-            .into_iter()
-            .map(|(k, r)| (k, r.event))
-            .collect()
+        winners.into_iter().map(|(k, r)| (k, r.event)).collect()
     }
 
     pub fn version_vector(&self) -> &VersionVector {
@@ -202,7 +190,11 @@ mod tests {
         reconcile(&mut a, &mut b);
 
         assert_eq!(a.view(), b.view(), "replicas must converge");
-        assert_eq!(a.view().len(), 3, "all three memories present on both sides");
+        assert_eq!(
+            a.view().len(),
+            3,
+            "all three memories present on both sides"
+        );
     }
 
     #[test]

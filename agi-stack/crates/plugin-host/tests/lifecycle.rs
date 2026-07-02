@@ -1,19 +1,17 @@
 //! Manifest parsing, plugin-shape classification, and the enable/disable
 //! lifecycle (the native path — no WASM needed).
 
-use futures::executor::block_on;
 use agistack_plugin_host::host::PluginHost;
 use agistack_plugin_host::manifest::PluginManifest;
 use agistack_plugin_host::native::NativeToolFactory;
 use agistack_plugin_host::registry::HotPlugRegistry;
 use agistack_plugin_host::tool::PluginShape;
+use futures::executor::block_on;
 
 #[test]
 fn classifies_plugin_shapes_from_actual_contributions() {
-    let plain = PluginManifest::from_json(
-        r#"{ "name": "p", "tools": [ { "name": "a" } ] }"#,
-    )
-    .unwrap();
+    let plain =
+        PluginManifest::from_json(r#"{ "name": "p", "tools": [ { "name": "a" } ] }"#).unwrap();
     assert_eq!(plain.shape(), PluginShape::PlainCapability);
 
     let hybrid = PluginManifest::from_json(
@@ -58,7 +56,10 @@ fn enable_registers_and_disable_unregisters_exactly_its_tools() {
 
     // Enable: both declared tools appear atomically.
     let added = host.enable(&manifest, &factory).unwrap();
-    assert_eq!(added, vec!["note_create".to_string(), "note_search".to_string()]);
+    assert_eq!(
+        added,
+        vec!["note_create".to_string(), "note_search".to_string()]
+    );
     assert!(host.is_enabled("notes-pack"));
     assert_eq!(
         registry.names(),
@@ -74,7 +75,10 @@ fn enable_registers_and_disable_unregisters_exactly_its_tools() {
 
     // Disable: exactly its tools are removed, registry returns to empty.
     let removed = host.disable("notes-pack");
-    assert_eq!(removed, vec!["note_create".to_string(), "note_search".to_string()]);
+    assert_eq!(
+        removed,
+        vec!["note_create".to_string(), "note_search".to_string()]
+    );
     assert!(!host.is_enabled("notes-pack"));
     assert!(registry.names().is_empty());
 }
@@ -85,12 +89,17 @@ fn disabling_one_plugin_leaves_others_intact() {
     let host = PluginHost::new(registry.clone());
     let factory = NativeToolFactory;
 
-    let a = PluginManifest::from_json(r#"{ "name": "a", "tools": [ { "name": "a_tool" } ] }"#).unwrap();
-    let b = PluginManifest::from_json(r#"{ "name": "b", "tools": [ { "name": "b_tool" } ] }"#).unwrap();
+    let a =
+        PluginManifest::from_json(r#"{ "name": "a", "tools": [ { "name": "a_tool" } ] }"#).unwrap();
+    let b =
+        PluginManifest::from_json(r#"{ "name": "b", "tools": [ { "name": "b_tool" } ] }"#).unwrap();
 
     host.enable(&a, &factory).unwrap();
     host.enable(&b, &factory).unwrap();
-    assert_eq!(registry.names(), vec!["a_tool".to_string(), "b_tool".to_string()]);
+    assert_eq!(
+        registry.names(),
+        vec!["a_tool".to_string(), "b_tool".to_string()]
+    );
 
     host.disable("a");
     assert_eq!(registry.names(), vec!["b_tool".to_string()]);

@@ -220,7 +220,10 @@ impl HttpLlm {
             ],
             temperature: 0.0,
         };
-        let resp: ChatResponse = self.ep.post_json("/chat/completions", &body, CoreError::Llm).await?;
+        let resp: ChatResponse = self
+            .ep
+            .post_json("/chat/completions", &body, CoreError::Llm)
+            .await?;
         resp.choices
             .into_iter()
             .next()
@@ -271,7 +274,8 @@ impl LlmPort for HttpLlm {
     ) -> CoreResult<AgentAction> {
         // Render the prompt the model reasons over. The engine still owns the
         // loop; only this single judgment is delegated to the model.
-        let mut user = format!("Goal: {goal}\nRound: {round}\nAvailable tools: {available_tools:?}\n");
+        let mut user =
+            format!("Goal: {goal}\nRound: {round}\nAvailable tools: {available_tools:?}\n");
         if !transcript.is_empty() {
             user.push_str("Transcript:\n");
             for e in transcript {
@@ -363,7 +367,10 @@ impl RerankPort for HttpRerank {
             top_n: None,
             return_documents: false,
         };
-        let resp: RerankResponse = self.ep.post_json("/rerank", &body, CoreError::Rerank).await?;
+        let resp: RerankResponse = self
+            .ep
+            .post_json("/rerank", &body, CoreError::Rerank)
+            .await?;
         let mut hits: Vec<RerankHit> = resp
             .results
             .into_iter()
@@ -373,7 +380,11 @@ impl RerankPort for HttpRerank {
             })
             .collect();
         // Providers usually pre-sort by relevance; sort defensively (desc).
-        hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        hits.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         Ok(hits)
     }
 }

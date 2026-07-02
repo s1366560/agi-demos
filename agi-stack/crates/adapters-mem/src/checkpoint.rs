@@ -4,9 +4,9 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use async_trait::async_trait;
 use agistack_core::agent::types::SessionState;
 use agistack_core::ports::{CheckpointStore, CoreError, CoreResult};
+use async_trait::async_trait;
 
 /// `session_id -> latest SessionState`. `save` is insert-or-replace, so a round
 /// boundary simply overwrites the prior checkpoint with the advanced state.
@@ -54,7 +54,10 @@ impl CheckpointStore for InMemoryCheckpointStore {
     }
 
     async fn delete(&self, session_id: &str) -> CoreResult<()> {
-        self.store.lock().map_err(|_| poisoned())?.remove(session_id);
+        self.store
+            .lock()
+            .map_err(|_| poisoned())?
+            .remove(session_id);
         Ok(())
     }
 }

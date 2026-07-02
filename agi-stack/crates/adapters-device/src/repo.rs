@@ -132,7 +132,10 @@ impl MemoryRepository for SqliteMemoryRepository {
             )
             .map_err(to_storage)?;
         let rows = stmt
-            .query_map(params![project_id, limit as i64, offset as i64], row_to_memory)
+            .query_map(
+                params![project_id, limit as i64, offset as i64],
+                row_to_memory,
+            )
             .map_err(to_storage)?;
         let mut out = Vec::new();
         for r in rows {

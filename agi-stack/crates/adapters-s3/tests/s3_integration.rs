@@ -44,15 +44,7 @@ fn unique_bucket() -> String {
 /// printed skip notice if the endpoint is unreachable.
 async fn s3_or_skip(bucket: &str) -> Option<S3ObjectStore> {
     let ep = endpoint();
-    match connect(
-        Some(&ep),
-        "us-east-1",
-        &access_key(),
-        &secret_key(),
-        bucket,
-    )
-    .await
-    {
+    match connect(Some(&ep), "us-east-1", &access_key(), &secret_key(), bucket).await {
         Ok(store) => Some(store),
         Err(e) => {
             eprintln!("[skip] S3/MinIO unreachable at {ep}: {e} — skipping F6 parity test");
@@ -85,7 +77,11 @@ async fn s3_matches_in_memory_object_semantics() {
     // Seed identical objects into both tiers, under a shared prefix + one outside.
     let seeds: [(&str, &[u8], Option<&str>); 4] = [
         ("artifacts/p1/a.txt", b"alpha", Some("text/plain")),
-        ("artifacts/p1/b.json", b"{\"k\":1}", Some("application/json")),
+        (
+            "artifacts/p1/b.json",
+            b"{\"k\":1}",
+            Some("application/json"),
+        ),
         ("artifacts/p1/c.bin", &[0u8, 1, 2, 3, 255], None),
         ("other/z.txt", b"zeta", Some("text/plain")),
     ];

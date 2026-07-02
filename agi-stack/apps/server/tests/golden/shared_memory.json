@@ -1,0 +1,17 @@
+{
+  "memory": {
+    "id": "22222222-2222-4222-8222-222222222222",
+    "title": "Shared memory",
+    "content": "Rust serves a Python-compatible share link.",
+    "tags": ["rust", "share"],
+    "created_at": "<iso8601>",
+    "updated_at": null
+  },
+  "share": {
+    "permissions": {
+      "view": true,
+      "edit": false
+    },
+    "expires_at": null
+  }
+}

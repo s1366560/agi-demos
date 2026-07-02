@@ -4,9 +4,9 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use async_trait::async_trait;
 use agistack_core::model::Memory;
 use agistack_core::ports::{CoreError, CoreResult, MemoryRepository};
+use async_trait::async_trait;
 
 /// A `HashMap`-backed repository. Project-scoped queries filter on `project_id`,
 /// preserving the multi-tenancy invariant the Python repositories enforce.

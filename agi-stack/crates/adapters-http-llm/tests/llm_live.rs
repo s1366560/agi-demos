@@ -124,7 +124,10 @@ async fn glm_coding_plan_live() {
         eprintln!("[skip] GLM: no GLM_API_KEY / ZAI_API_KEY in env");
         return;
     };
-    let base = env_or("AGISTACK_GLM_BASE_URL", "https://api.z.ai/api/coding/paas/v4");
+    let base = env_or(
+        "AGISTACK_GLM_BASE_URL",
+        "https://api.z.ai/api/coding/paas/v4",
+    );
     let model = env_or("AGISTACK_GLM_MODEL", "glm-4.6");
     exercise("GLM", base, model, key).await;
 }

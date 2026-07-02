@@ -124,9 +124,7 @@ impl RuntimeHarness for CliBackendHarness {
     async fn run_attempt(&self, attempt: PreparedAttempt) -> CoreResult<TurnOutcome> {
         // Host prepares / harness executes: apply the RuntimePlan's *structural*
         // policy (tool-name normalization) before advertising tools to the CLI.
-        let tools = attempt
-            .runtime_plan
-            .normalize_tools(&self.advertised_tools);
+        let tools = attempt.runtime_plan.normalize_tools(&self.advertised_tools);
 
         let request = CliRequest {
             session_id: &attempt.session_id,

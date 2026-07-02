@@ -1,0 +1,18 @@
+{
+  "items": [
+    {
+      "id": "post-1",
+      "workspace_id": "ws-1",
+      "author_id": "user-1",
+      "title": "Status",
+      "content": "P6 started",
+      "status": "open",
+      "is_pinned": true,
+      "metadata": {
+        "lane": "p6"
+      },
+      "created_at": "<iso8601>",
+      "updated_at": null
+    }
+  ]
+}

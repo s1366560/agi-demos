@@ -169,7 +169,11 @@ pub struct SessionState {
 }
 
 impl SessionState {
-    pub fn new(session_id: impl Into<String>, goal: impl Into<String>, project_id: Option<&str>) -> Self {
+    pub fn new(
+        session_id: impl Into<String>,
+        goal: impl Into<String>,
+        project_id: Option<&str>,
+    ) -> Self {
         Self {
             session_id: session_id.into(),
             goal: goal.into(),

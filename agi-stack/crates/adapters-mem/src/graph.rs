@@ -40,10 +40,7 @@ impl InMemoryGraphStore {
     /// Snapshot the project-scoped entities and the relationships whose *both*
     /// endpoints exist in that project. Taken under lock, then released before any
     /// traversal so we never hold two locks at once.
-    fn project_slice(
-        &self,
-        project_id: &str,
-    ) -> CoreResult<(Vec<GraphEntity>, Vec<Relationship>)> {
+    fn project_slice(&self, project_id: &str) -> CoreResult<(Vec<GraphEntity>, Vec<Relationship>)> {
         let entities = self.entities.lock().map_err(|_| poisoned())?;
         let rels = self.relationships.lock().map_err(|_| poisoned())?;
         let present: HashSet<&str> = entities
@@ -159,9 +156,10 @@ pub(crate) fn bfs_subgraph(
         idx.insert(e.uuid.as_str(), n);
     }
     for r in rels {
-        if let (Some(&s), Some(&t)) =
-            (idx.get(r.source_uuid.as_str()), idx.get(r.target_uuid.as_str()))
-        {
+        if let (Some(&s), Some(&t)) = (
+            idx.get(r.source_uuid.as_str()),
+            idx.get(r.target_uuid.as_str()),
+        ) {
             g.add_edge(s, t, ());
         }
     }
@@ -184,8 +182,7 @@ pub(crate) fn bfs_subgraph(
         }
     }
 
-    let by_uuid: HashMap<&str, &GraphEntity> =
-        ents.iter().map(|e| (e.uuid.as_str(), e)).collect();
+    let by_uuid: HashMap<&str, &GraphEntity> = ents.iter().map(|e| (e.uuid.as_str(), e)).collect();
     let mut entities: Vec<GraphEntity> = reached
         .iter()
         .filter_map(|u| by_uuid.get(u.as_str()).map(|e| (*e).clone()))

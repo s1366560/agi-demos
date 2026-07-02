@@ -1,0 +1,14 @@
+{
+  "id": "<uuid>",
+  "share_token": "<urlsafe_token>",
+  "memory_id": "22222222-2222-4222-8222-222222222222",
+  "shared_with_user_id": null,
+  "shared_with_project_id": null,
+  "permissions": {
+    "view": true,
+    "edit": false
+  },
+  "expires_at": null,
+  "created_at": "<iso8601>",
+  "access_count": 0
+}

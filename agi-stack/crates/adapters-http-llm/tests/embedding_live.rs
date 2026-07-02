@@ -63,7 +63,11 @@ async fn embeds_against_real_model_server() {
         .embed("The cat sat on the warm mat.")
         .await
         .expect("embed cat1");
-    assert_eq!(cat1.len(), dim, "dimensionality must be stable across inputs");
+    assert_eq!(
+        cat1.len(),
+        dim,
+        "dimensionality must be stable across inputs"
+    );
 
     // (2) near-determinism: same text twice -> cosine ~ 1.0 (tolerate jitter).
     let cat2 = embedder

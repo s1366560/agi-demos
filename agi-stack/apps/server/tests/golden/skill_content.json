@@ -1,0 +1,7 @@
+{
+  "skill_id": "<uuid>",
+  "name": "code-review",
+  "full_content": "# Code Review\n",
+  "scope": "tenant",
+  "is_system_skill": false
+}

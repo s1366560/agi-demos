@@ -11,8 +11,8 @@
 //! Orphan rule: `HotPlugRegistry` is local to this crate and `ToolHost` comes
 //! from a dependency, so this impl is allowed here (not in `agistack-core`).
 
-use async_trait::async_trait;
 use agistack_core::ports::{CoreResult, ToolHost};
+use async_trait::async_trait;
 
 use crate::registry::HotPlugRegistry;
 

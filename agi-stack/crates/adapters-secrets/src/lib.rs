@@ -14,6 +14,10 @@
 //!    identical in shape to Python's `f"ms_sk_{secrets.token_bytes(32).hex()}"`.
 //!    The raw key is returned once; the caller stores only its SHA-256 (done in
 //!    `adapters-postgres`), exactly as Python does.
+//! 3. [`generate_urlsafe_token`] — URL-safe no-padding base64 over CSPRNG bytes,
+//!    matching Python's `secrets.token_urlsafe(n)` shape for invitation tokens.
+//! 4. [`generate_device_user_code`] — the 8-character RFC-8628-style user code
+//!    alphabet Python uses for CLI device login (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`).
 //!
 //! ## Agent First
 //! Nothing here is a *judgment*: bcrypt verification is a deterministic
@@ -41,6 +45,10 @@ pub fn hash_password(plain_password: &str) -> Result<String, SecretError> {
 /// The `ms_sk_` prefix every MemStack API key carries (Python
 /// `AuthService.generate_api_key`).
 pub const API_KEY_PREFIX: &str = "ms_sk_";
+/// Python `_USER_CODE_ALPHABET`: excludes I/O/0/1 to avoid transcription ambiguity.
+pub const DEVICE_USER_CODE_ALPHABET: &str = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+/// Python `_USER_CODE_LEN`.
+pub const DEVICE_USER_CODE_LEN: usize = 8;
 
 /// Mint a fresh API key: `ms_sk_` + 64 lowercase hex chars from 32 CSPRNG bytes.
 /// Shape-identical to Python `f"ms_sk_{secrets.token_bytes(32).hex()}"`. The
@@ -57,6 +65,50 @@ pub fn generate_api_key() -> String {
         key.push(char::from_digit((byte & 0x0f) as u32, 16).unwrap());
     }
     key
+}
+
+/// Generate a URL-safe, no-padding token from `num_bytes` random bytes. This is
+/// shape-compatible with Python `secrets.token_urlsafe(num_bytes)` and is used
+/// by the P2 invitation flow for bearer links that must fit safely in URLs.
+pub fn generate_urlsafe_token(num_bytes: usize) -> String {
+    let mut bytes = vec![0u8; num_bytes];
+    getrandom::getrandom(&mut bytes).expect("OS CSPRNG must be available to mint tokens");
+    base64_urlsafe_no_pad(&bytes)
+}
+
+/// Mint an 8-character device-login user code using Python's ambiguity-free
+/// alphabet. The alphabet has exactly 32 symbols, so `byte & 31` maps CSPRNG
+/// bytes without modulo bias.
+pub fn generate_device_user_code() -> String {
+    let alphabet = DEVICE_USER_CODE_ALPHABET.as_bytes();
+    debug_assert_eq!(alphabet.len(), 32);
+    let mut bytes = [0u8; DEVICE_USER_CODE_LEN];
+    getrandom::getrandom(&mut bytes).expect("OS CSPRNG must be available to mint device codes");
+    let mut out = String::with_capacity(DEVICE_USER_CODE_LEN);
+    for byte in bytes {
+        out.push(alphabet[(byte & 31) as usize] as char);
+    }
+    out
+}
+
+fn base64_urlsafe_no_pad(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = String::with_capacity((bytes.len() * 4).div_ceil(3));
+    for chunk in bytes.chunks(3) {
+        let b0 = chunk[0];
+        let b1 = *chunk.get(1).unwrap_or(&0);
+        let b2 = *chunk.get(2).unwrap_or(&0);
+        let n = ((b0 as u32) << 16) | ((b1 as u32) << 8) | b2 as u32;
+        out.push(ALPHABET[((n >> 18) & 0x3f) as usize] as char);
+        out.push(ALPHABET[((n >> 12) & 0x3f) as usize] as char);
+        if chunk.len() > 1 {
+            out.push(ALPHABET[((n >> 6) & 0x3f) as usize] as char);
+        }
+        if chunk.len() > 2 {
+            out.push(ALPHABET[(n & 0x3f) as usize] as char);
+        }
+    }
+    out
 }
 
 /// Generate a random RFC 4122 **v4** UUID as a lowercase, hyphenated string —
@@ -99,10 +151,8 @@ mod unit {
     // for the platform's seeded credentials. Because a bcrypt hash embeds its
     // salt, these are permanent vectors: the Rust `bcrypt` crate verifying them
     // proves it reads Python's output byte-for-byte.
-    const USERPASSWORD_HASH: &str =
-        "$2b$12$7zqrguT7EVNDjaBFQ03ITe6Q5Y1YiOL6Vu45Q6rjaLF3VfNYU/VD6";
-    const ADMINPASSWORD_HASH: &str =
-        "$2b$12$CaGi/tOMpl3fjcABfzRrZuE36GNKdszg.85vTcs7F9SGNgOj8/VwC";
+    const USERPASSWORD_HASH: &str = "$2b$12$7zqrguT7EVNDjaBFQ03ITe6Q5Y1YiOL6Vu45Q6rjaLF3VfNYU/VD6";
+    const ADMINPASSWORD_HASH: &str = "$2b$12$CaGi/tOMpl3fjcABfzRrZuE36GNKdszg.85vTcs7F9SGNgOj8/VwC";
 
     #[test]
     fn verifies_python_generated_bcrypt_hashes() {
@@ -136,9 +186,37 @@ mod unit {
         // ms_sk_ (6) + 64 hex chars.
         assert_eq!(k.len(), 6 + 64);
         let hex = &k[6..];
-        assert!(hex.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert!(hex
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
         // Two mints differ (CSPRNG, not constant).
         assert_ne!(generate_api_key(), generate_api_key());
+    }
+
+    #[test]
+    fn urlsafe_token_matches_python_shape() {
+        assert_eq!(base64_urlsafe_no_pad(&[0]), "AA");
+        assert_eq!(base64_urlsafe_no_pad(&[0, 0]), "AAA");
+        assert_eq!(base64_urlsafe_no_pad(&[0, 0, 0]), "AAAA");
+        assert_eq!(base64_urlsafe_no_pad(b"hello"), "aGVsbG8");
+
+        let token = generate_urlsafe_token(32);
+        // Python `secrets.token_urlsafe(32)` produces ceil(32*4/3)=43 chars
+        // without `=` padding.
+        assert_eq!(token.len(), 43);
+        assert!(token
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+        assert_ne!(token, generate_urlsafe_token(32));
+    }
+
+    #[test]
+    fn device_user_code_matches_python_shape() {
+        let code = generate_device_user_code();
+        assert_eq!(code.len(), DEVICE_USER_CODE_LEN);
+        assert!(code.chars().all(|c| DEVICE_USER_CODE_ALPHABET.contains(c)));
+        assert!(!code.chars().any(|c| matches!(c, 'I' | 'O' | '0' | '1')));
+        assert_ne!(code, generate_device_user_code());
     }
 
     #[test]
@@ -154,7 +232,9 @@ mod unit {
         // Version nibble is 4; variant nibble is one of 8/9/a/b.
         assert_eq!(&parts[2][..1], "4");
         assert!(matches!(&parts[3][..1], "8" | "9" | "a" | "b"));
-        assert!(id.chars().all(|c| c == '-' || (c.is_ascii_hexdigit() && !c.is_ascii_uppercase())));
+        assert!(id
+            .chars()
+            .all(|c| c == '-' || (c.is_ascii_hexdigit() && !c.is_ascii_uppercase())));
         assert_ne!(generate_uuid_v4(), generate_uuid_v4());
     }
 }

@@ -1,0 +1,10 @@
+{
+  "success": true,
+  "url": "https://localhost:16080",
+  "display": ":1",
+  "resolution": "1920x1080",
+  "port": 16080,
+  "audio_enabled": false,
+  "dynamic_resize": true,
+  "encoding": "webp"
+}

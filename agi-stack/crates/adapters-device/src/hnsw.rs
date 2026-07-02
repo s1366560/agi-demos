@@ -178,7 +178,10 @@ mod tests {
         let hits = block_on(idx.query("p1", &unit(vec![0.9, 0.1, 0.0]), 2)).unwrap();
         assert_eq!(hits[0].id, "a", "nearest is a");
         assert!(hits[0].score > hits[1].score);
-        assert!(hits.iter().all(|h| h.id != "z"), "p2 must not leak: {hits:?}");
+        assert!(
+            hits.iter().all(|h| h.id != "z"),
+            "p2 must not leak: {hits:?}"
+        );
 
         let p2 = block_on(idx.query("p2", &unit(vec![1.0, 0.0, 0.0]), 5)).unwrap();
         assert_eq!(p2.len(), 1);
@@ -209,7 +212,9 @@ mod tests {
     #[test]
     fn empty_and_k_zero_are_safe() {
         let idx = HnswVectorIndex::new();
-        assert!(block_on(idx.query("missing", &[1.0, 0.0], 3)).unwrap().is_empty());
+        assert!(block_on(idx.query("missing", &[1.0, 0.0], 3))
+            .unwrap()
+            .is_empty());
         block_on(idx.upsert("p", "a", &unit(vec![1.0, 0.0]))).unwrap();
         assert!(block_on(idx.query("p", &[1.0, 0.0], 0)).unwrap().is_empty());
     }

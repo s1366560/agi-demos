@@ -8,8 +8,8 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use async_trait::async_trait;
 use agistack_core::ports::{CoreError, CoreResult, ScoredId, VectorIndexPort};
+use async_trait::async_trait;
 
 /// `(project_id, id) -> vector`. Keying by project keeps tenants isolated:
 /// [`query`](InMemoryVectorIndex::query) never scans across project boundaries.

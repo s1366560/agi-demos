@@ -4,7 +4,6 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use agistack_adapters_device::{
     HnswVectorIndex, SqliteCheckpointStore, SqliteMemoryRepository, SqliteVectorIndex,
 };
@@ -15,6 +14,7 @@ use agistack_core::{
     AgentAction, Episode, HitlKind, HitlRequest, MemoryService, ReActEngine, SessionState,
     SessionStatus, SourceType,
 };
+use async_trait::async_trait;
 use futures::executor::block_on;
 
 fn episode(content: &str) -> Episode {
@@ -95,7 +95,10 @@ fn hnsw_matches_brute_force_top1_on_ngram_corpus() {
         ("m2", "vector embeddings drive semantic similarity search"),
         ("m3", "a recipe for sourdough bread and garlic butter"),
         ("m4", "rust compiles to webassembly for the browser"),
-        ("m5", "approximate nearest neighbour graphs speed up retrieval"),
+        (
+            "m5",
+            "approximate nearest neighbour graphs speed up retrieval",
+        ),
         ("m6", "quarterly revenue forecast and budget planning"),
     ];
     for (id, text) in corpus {
@@ -146,7 +149,11 @@ fn ckpt_survives_restart_and_engine_reuses_completed_call() {
 
     // Mid-round crash state: round 0 tool already executed + persisted.
     let mut seeded = SessionState::new("s1", "len of hello", Some("p1"));
-    seeded.push_unique(TranscriptEntry::new(0, Role::Action, format!("len {LEN_INPUT}")));
+    seeded.push_unique(TranscriptEntry::new(
+        0,
+        Role::Action,
+        format!("len {LEN_INPUT}"),
+    ));
     seeded.completed_tool_calls.push(CompletedCall {
         round: 0,
         tool: "len".into(),
@@ -168,9 +175,7 @@ fn ckpt_survives_restart_and_engine_reuses_completed_call() {
             tool: "len".into(),
             input_json: LEN_INPUT.into(),
         },
-        AgentAction::Finish {
-            answer: "5".into(),
-        },
+        AgentAction::Finish { answer: "5".into() },
     ];
     let engine = ReActEngine::new(
         Arc::new(ScriptedLlm::new(script)),
@@ -180,7 +185,11 @@ fn ckpt_survives_restart_and_engine_reuses_completed_call() {
     );
 
     let state = block_on(engine.run("s1", "len of hello", Some("p1"))).unwrap();
-    assert_eq!(tools.calls.load(Ordering::SeqCst), 0, "must reuse saved output");
+    assert_eq!(
+        tools.calls.load(Ordering::SeqCst),
+        0,
+        "must reuse saved output"
+    );
     assert_eq!(state.status, SessionStatus::Finished);
     assert_eq!(state.answer.as_deref(), Some("5"));
 
@@ -230,7 +239,10 @@ fn hitl_suspend_and_resume_survive_sqlite_roundtrip() {
     let reloaded = block_on(store.load("s-hitl")).unwrap().unwrap();
     assert_eq!(reloaded.status, SessionStatus::AwaitingInput);
     assert_eq!(reloaded.pending_hitl.as_ref().unwrap().id, "approve-1");
-    assert_eq!(reloaded.pending_hitl.as_ref().unwrap().kind, HitlKind::Decision);
+    assert_eq!(
+        reloaded.pending_hitl.as_ref().unwrap().kind,
+        HitlKind::Decision
+    );
 
     // Engine #2 (fresh) resumes against the same store and completes.
     let engine2 = ReActEngine::new(

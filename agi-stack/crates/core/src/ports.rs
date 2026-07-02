@@ -280,14 +280,27 @@ pub trait ObjectStore: Send + Sync {
 /// Desired configuration for a sandbox container, the input to
 /// [`ContainerRuntime::create`]. A minimal, runtime-neutral subset of the Python
 /// `MCPSandboxAdapter` container spec: the `image` to run, an optional `cmd`
-/// override, `env` pairs, and `labels` used to tag ownership (e.g.
-/// `project_id`) so a fleet can be reconciled/listed by selector.
+/// override, `env` pairs, `labels` used to tag ownership (e.g. `project_id`) so
+/// a fleet can be reconciled/listed by selector, and optional TCP port bindings
+/// for sandbox services (MCP, noVNC, ttyd). It deliberately stores plain port
+/// numbers, not Docker/bollard types.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContainerSpec {
     pub image: String,
     pub cmd: Option<Vec<String>>,
     pub env: Vec<(String, String)>,
     pub labels: Vec<(String, String)>,
+    pub ports: Vec<PortBinding>,
+}
+
+/// Runtime-neutral TCP port binding for a sandbox container. `container_port` is
+/// the port inside the container; `host_port` is the selected host port. A
+/// `host_port` of `0` asks runtimes that support it to auto-assign a free port.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PortBinding {
+    pub container_port: u16,
+    pub host_port: u16,
+    pub host_ip: Option<String>,
 }
 
 /// Normalized lifecycle state of a container, collapsing the various
@@ -311,6 +324,7 @@ pub struct ContainerStatus {
     pub state: ContainerState,
     pub running: bool,
     pub exit_code: Option<i64>,
+    pub ports: Vec<PortBinding>,
 }
 
 /// Hexagonal port for **provisioning sandbox containers** — the lifecycle layer

@@ -1,0 +1,16 @@
+{
+  "id": "edge-1",
+  "workspace_id": "ws-1",
+  "source_node_id": "node-1",
+  "target_node_id": "node-2",
+  "label": "depends_on",
+  "source_hex_q": 1,
+  "source_hex_r": -1,
+  "target_hex_q": 2,
+  "target_hex_r": -1,
+  "direction": "forward",
+  "auto_created": false,
+  "data": {},
+  "created_at": "<iso8601>",
+  "updated_at": null
+}

@@ -408,7 +408,10 @@ mod tests {
         ];
         let out = mmr_rerank(&items, MMR_LAMBDA);
         assert_eq!(out[0].id, "a");
-        assert_eq!(out[1].id, "b", "diverse pick should beat the near-duplicate");
+        assert_eq!(
+            out[1].id, "b",
+            "diverse pick should beat the near-duplicate"
+        );
         assert_eq!(out[2].id, "a2");
         // rank-based scores: 1, 1-1/3, 1-2/3
         assert!((out[0].score - 1.0).abs() < 1e-12);

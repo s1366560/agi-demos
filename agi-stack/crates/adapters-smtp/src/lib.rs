@@ -42,7 +42,10 @@ impl SmtpEmailSender {
         let transport = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
             .port(port)
             .build();
-        Self { transport, default_from: None }
+        Self {
+            transport,
+            default_from: None,
+        }
     }
 
     /// Authenticated TLS submission relay (implicit TLS / STARTTLS negotiated by
@@ -52,14 +55,19 @@ impl SmtpEmailSender {
             .map_err(|e| CoreError::Email(e.to_string()))?
             .credentials(Credentials::new(username, password))
             .build();
-        Ok(Self { transport, default_from: None })
+        Ok(Self {
+            transport,
+            default_from: None,
+        })
     }
 
     /// Set a fallback `From` used when an [`EmailMessage::from`] is empty (mirrors
     /// a configured `MAIL_FROM`). Returns `Self` for builder-style use.
     pub fn with_default_from(mut self, from: &str) -> CoreResult<Self> {
-        self.default_from =
-            Some(from.parse::<Mailbox>().map_err(|e| CoreError::Email(format!("default from: {e}")))?);
+        self.default_from = Some(
+            from.parse::<Mailbox>()
+                .map_err(|e| CoreError::Email(format!("default from: {e}")))?,
+        );
         Ok(self)
     }
 
@@ -69,7 +77,9 @@ impl SmtpEmailSender {
                 .clone()
                 .ok_or_else(|| CoreError::Email("no from address and no default".into()))?
         } else {
-            msg.from.parse().map_err(|e| CoreError::Email(format!("from: {e}")))?
+            msg.from
+                .parse()
+                .map_err(|e| CoreError::Email(format!("from: {e}")))?
         };
 
         if msg.to.is_empty() {
@@ -78,14 +88,20 @@ impl SmtpEmailSender {
 
         let mut builder = Message::builder().from(from).subject(msg.subject.clone());
         for to in &msg.to {
-            let mbox: Mailbox = to.parse().map_err(|e| CoreError::Email(format!("to {to}: {e}")))?;
+            let mbox: Mailbox = to
+                .parse()
+                .map_err(|e| CoreError::Email(format!("to {to}: {e}")))?;
             builder = builder.to(mbox);
         }
 
         let email = match &msg.body_html {
-            Some(html) => builder
-                .multipart(MultiPart::alternative_plain_html(msg.body_text.clone(), html.clone())),
-            None => builder.header(ContentType::TEXT_PLAIN).body(msg.body_text.clone()),
+            Some(html) => builder.multipart(MultiPart::alternative_plain_html(
+                msg.body_text.clone(),
+                html.clone(),
+            )),
+            None => builder
+                .header(ContentType::TEXT_PLAIN)
+                .body(msg.body_text.clone()),
         }
         .map_err(|e| CoreError::Email(e.to_string()))?;
 
@@ -97,7 +113,10 @@ impl SmtpEmailSender {
 impl EmailSender for SmtpEmailSender {
     async fn send(&self, message: &EmailMessage) -> CoreResult<()> {
         let email = self.build_message(message)?;
-        self.transport.send(email).await.map_err(|e| CoreError::Email(e.to_string()))?;
+        self.transport
+            .send(email)
+            .await
+            .map_err(|e| CoreError::Email(e.to_string()))?;
         Ok(())
     }
 }

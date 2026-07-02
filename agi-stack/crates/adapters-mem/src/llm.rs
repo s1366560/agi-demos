@@ -3,10 +3,10 @@
 //! network, fully reproducible — the spike's robustness/agent tests depend on
 //! that determinism.
 
-use async_trait::async_trait;
 use agistack_core::agent::types::{AgentAction, Role, TranscriptEntry};
 use agistack_core::model::Episode;
 use agistack_core::ports::{CoreError, CoreResult, LlmPort, MemoryDraft};
+use async_trait::async_trait;
 
 /// A naive but deterministic LLM: extraction takes the first line as a title and
 /// long words as tags; `decide` runs a fixed one-tool-then-finish policy so an

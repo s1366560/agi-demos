@@ -189,7 +189,11 @@ fn supervisor_continue_overrules_trigger_until_round_budget() {
     );
     // Consulted repeatedly (rounds 2..5), always about a doom-loop, always Continue.
     let calls = log.lock().unwrap();
-    assert!(calls.len() >= 3, "supervisor consulted {} times", calls.len());
+    assert!(
+        calls.len() >= 3,
+        "supervisor consulted {} times",
+        calls.len()
+    );
     assert!(calls.iter().all(|r| *r == TriggerReason::DoomLoop));
 }
 
@@ -211,7 +215,10 @@ fn cost_ceiling_without_supervisor_stops() {
     // rounds counted at the boundary: 1,2,3 -> fires when the 3rd completes, i.e.
     // at round index 2, before the round is advanced.
     assert_eq!(state.round, 2);
-    assert_eq!(state.answer.as_deref(), Some("structural stop: CostCeiling"));
+    assert_eq!(
+        state.answer.as_deref(),
+        Some("structural stop: CostCeiling")
+    );
 }
 
 /// A cost trigger with a supervisor: a `stalled -> reassign` verdict ends the

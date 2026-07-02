@@ -26,7 +26,9 @@ async fn mock(status: u16, body: &'static str) -> (String, Arc<tokio::sync::Mute
             };
             let mut buf = vec![0u8; 8192];
             let n = sock.read(&mut buf).await.unwrap_or(0);
-            sink.lock().await.push(String::from_utf8_lossy(&buf[..n]).to_string());
+            sink.lock()
+                .await
+                .push(String::from_utf8_lossy(&buf[..n]).to_string());
             let reason = if status == 200 { "OK" } else { "ERROR" };
             let resp = format!(
                 "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
@@ -104,7 +106,12 @@ async fn decide_tolerates_markdown_fenced_finish() {
     let llm = HttpLlm::new(base, "m");
     let transcript = vec![TranscriptEntry::new(0, Role::Observation, "len=42")];
     let got = llm.decide("len", 1, &transcript, &[]).await.unwrap();
-    assert_eq!(got, AgentAction::Finish { answer: "42".into() });
+    assert_eq!(
+        got,
+        AgentAction::Finish {
+            answer: "42".into()
+        }
+    );
 }
 
 #[tokio::test]

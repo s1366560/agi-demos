@@ -111,8 +111,12 @@ fn host_runtime_plan_normalizes_tool_aliases_before_dispatch() {
 fn nonzero_exit_is_classified_as_failed() {
     let harness = cli_backend(&["read"]);
     // The fixture exits 7 for this sentinel goal.
-    let attempt =
-        PreparedAttempt::new("s3", "__fail__", None, HarnessCtx::new("anthropic", "claude"));
+    let attempt = PreparedAttempt::new(
+        "s3",
+        "__fail__",
+        None,
+        HarnessCtx::new("anthropic", "claude"),
+    );
     let outcome = block_on(harness.run_attempt(attempt)).unwrap();
 
     assert_eq!(outcome.session.status, SessionStatus::Failed);

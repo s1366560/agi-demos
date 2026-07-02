@@ -29,17 +29,47 @@ pub use sqlx::postgres::PgPool;
 
 mod auth_store;
 mod checkpoint;
+mod invitation_repo;
 mod memory_repo;
+mod project_repo;
+mod sandbox_repo;
+mod share_repo;
+mod skill_repo;
 mod tenant_repo;
+mod trust_repo;
 mod user_store;
 mod vector_index;
+mod workspace_repo;
 
 pub use auth_store::{ApiKeyRecord, PgApiKeyStore, PgProjectStore, ProjectRecord};
 pub use checkpoint::PgCheckpointStore;
+pub use invitation_repo::{
+    normalize_email, InvitationRecord, PgInvitationRepository, TenantAdminStatus,
+};
 pub use memory_repo::PgMemoryRepository;
-pub use tenant_repo::{PgTenantRepository, TenantLookup, TenantRecord};
+pub use project_repo::{
+    PgProjectReadRepository, ProjectActivityRecord, ProjectCreateRecord,
+    ProjectDashboardStatsRecord, ProjectListRecords, ProjectLookup, ProjectMemberMutationRecord,
+    ProjectMemberRecord, ProjectMembersLookup, ProjectMembersRecord, ProjectReadRecord,
+    ProjectStatsLookup, ProjectStatsRecord, ProjectUpdatePatch,
+};
+pub use sandbox_repo::{PgProjectSandboxRepository, ProjectSandboxRecord};
+pub use share_repo::{NewShareRecord, PgShareRepository, ShareMemoryRecord, ShareRecord};
+pub use skill_repo::{
+    PgSkillRepository, SkillProjectAccess, SkillRecord, SkillUpdateRecord, SkillVersionRecord,
+};
+pub use tenant_repo::{PgTenantRepository, TenantLookup, TenantRecord, TenantUpdatePatch};
+pub use trust_repo::{
+    DecisionRecordRecord, NewDecisionRecordRecord, NewTrustPolicyRecord, PgTrustRepository,
+    TenantAccessStatus, TrustPolicyRecord,
+};
 pub use user_store::{PgUserStore, UserAuthRecord};
 pub use vector_index::PgVectorIndex;
+pub use workspace_repo::{
+    BlackboardOutboxRecord, BlackboardPostRecord, BlackboardReplyRecord, PgWorkspaceRepository,
+    TopologyEdgeRecord, TopologyNodeRecord, WorkspaceAccess, WorkspaceMemberRecord,
+    WorkspaceProjectAccess, WorkspaceRecord, WorkspaceTaskRecord,
+};
 
 use agistack_core::ports::{CoreError, CoreResult};
 

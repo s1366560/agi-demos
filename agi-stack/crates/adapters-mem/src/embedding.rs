@@ -2,9 +2,9 @@
 //! is pure, offline, and identical across platforms. The same vector is produced
 //! on server, device and browser, so similarity tests are reproducible.
 
-use async_trait::async_trait;
 use agistack_core::ports::{CoreResult, EmbeddingPort};
 use agistack_core::util::fnv1a;
+use async_trait::async_trait;
 
 /// Bag-of-words hashed into a fixed-dimension, L2-normalized vector. Because it
 /// is normalized, cosine similarity reduces to a dot product (see
