@@ -1078,6 +1078,32 @@ impl PgWorkspaceRepository {
         .transpose()
     }
 
+    pub async fn finish_task_session_attempt(
+        &self,
+        attempt_id: &str,
+        status: &str,
+        leader_feedback: Option<&str>,
+        adjudication_reason: Option<&str>,
+        completed_at: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        sqlx::query(&format!(
+            "UPDATE workspace_task_session_attempts \
+             SET status = $2, leader_feedback = $3, adjudication_reason = $4, \
+                 completed_at = $5, updated_at = $5 \
+             WHERE id = $1 RETURNING {TASK_SESSION_ATTEMPT_COLS}"
+        ))
+        .bind(attempt_id)
+        .bind(status)
+        .bind(leader_feedback)
+        .bind(adjudication_reason)
+        .bind(completed_at)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_task_session_attempt)
+        .transpose()
+    }
+
     pub async fn count_recent_running_task_session_attempts_with_conversation(
         &self,
         workspace_id: &str,
