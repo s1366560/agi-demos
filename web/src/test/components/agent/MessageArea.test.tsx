@@ -261,6 +261,60 @@ describe('MessageArea Compound Component', () => {
       expect(virtualizerMock.measure).not.toHaveBeenCalled();
     });
 
+    it('should not jump to bottom when streaming starts after the user scrolled through history', () => {
+      const requestAnimationFrameSpy = vi
+        .spyOn(window, 'requestAnimationFrame')
+        .mockImplementation((callback: FrameRequestCallback) => {
+          callback(0);
+          return 1;
+        });
+
+      try {
+        const { rerender } = render(<MessageArea {...defaultProps} />);
+        const container = screen.getByTestId('message-container');
+        defineScrollMetrics(container, { scrollHeight: 1000, clientHeight: 300 });
+
+        container.scrollTop = 100;
+        fireEvent.scroll(container);
+
+        defineScrollMetrics(container, { scrollHeight: 1200, clientHeight: 300 });
+        act(() => {
+          useStreamingStore.setState({ agentStreamingAssistantContent: 'new streamed token' });
+        });
+        rerender(<MessageArea {...defaultProps} isStreaming />);
+
+        expect(container.scrollTop).toBe(100);
+      } finally {
+        requestAnimationFrameSpy.mockRestore();
+      }
+    });
+
+    it('should keep following the bottom for streaming footer updates when the user is at bottom', () => {
+      const requestAnimationFrameSpy = vi
+        .spyOn(window, 'requestAnimationFrame')
+        .mockImplementation((callback: FrameRequestCallback) => {
+          callback(0);
+          return 1;
+        });
+
+      try {
+        render(<MessageArea {...defaultProps} isStreaming />);
+        const container = screen.getByTestId('message-container');
+        defineScrollMetrics(container, { scrollHeight: 1000, clientHeight: 300 });
+        container.scrollTop = 700;
+        fireEvent.scroll(container);
+
+        defineScrollMetrics(container, { scrollHeight: 1200, clientHeight: 300 });
+        act(() => {
+          useStreamingStore.setState({ agentStreamingAssistantContent: 'streaming token batch' });
+        });
+
+        expect(container.scrollTop).toBe(1200);
+      } finally {
+        requestAnimationFrameSpy.mockRestore();
+      }
+    });
+
     it('should not force-scroll to bottom when a live event arrives after the user scrolls up', () => {
       const requestAnimationFrameSpy = vi
         .spyOn(window, 'requestAnimationFrame')
@@ -284,6 +338,42 @@ describe('MessageArea Compound Component', () => {
             timeline={[
               ...mockTimeline,
               { id: '3', type: 'assistant_message', content: 'New live event', timestamp: 3 },
+            ]}
+            isStreaming
+          />
+        );
+
+        expect(container.scrollTop).toBe(100);
+      } finally {
+        requestAnimationFrameSpy.mockRestore();
+      }
+    });
+
+    it('should keep the user in history after streaming ends and the next live event arrives', () => {
+      const requestAnimationFrameSpy = vi
+        .spyOn(window, 'requestAnimationFrame')
+        .mockImplementation((callback: FrameRequestCallback) => {
+          callback(0);
+          return 1;
+        });
+
+      try {
+        const { rerender } = render(<MessageArea {...defaultProps} isStreaming />);
+        const container = screen.getByTestId('message-container');
+        defineScrollMetrics(container, { scrollHeight: 1000, clientHeight: 300 });
+
+        container.scrollTop = 100;
+        fireEvent.scroll(container);
+
+        rerender(<MessageArea {...defaultProps} isStreaming={false} />);
+
+        defineScrollMetrics(container, { scrollHeight: 1200, clientHeight: 300 });
+        rerender(
+          <MessageArea
+            {...defaultProps}
+            timeline={[
+              ...mockTimeline,
+              { id: '3', type: 'assistant_message', content: 'Next live event', timestamp: 3 },
             ]}
             isStreaming
           />

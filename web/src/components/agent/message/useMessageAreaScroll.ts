@@ -198,12 +198,8 @@ export function useMessageAreaScroll(
     const atBottom = isNearBottom(container, 100);
     setShowScrollButton(!atBottom && timeline.length > 0);
 
-    if (isStreaming && !atBottom) {
-      userScrolledUpRef.current = true;
-    } else if (isStreaming && atBottom) {
-      userScrolledUpRef.current = false;
-    }
-  }, [containerRef, isLoading, timeline.length, checkAndPreload, isStreaming]);
+    userScrolledUpRef.current = !atBottom;
+  }, [containerRef, isLoading, timeline.length, checkAndPreload]);
 
   // Handle timeline changes
   useEffect(() => {
@@ -333,12 +329,28 @@ export function useMessageAreaScroll(
     };
   }, [hasEarlierMessages, showLoadingIndicator]);
 
-  // Reset userScrolledUpRef when streaming ends
+  // Preserve whether the user is reading history when streaming stops.
   useEffect(() => {
     if (!isStreaming) {
-      userScrolledUpRef.current = false;
+      const container = containerRef.current;
+      if (!container) {
+        userScrolledUpRef.current = false;
+        return undefined;
+      }
+
+      const atBottom = isNearBottom(container, 100);
+      userScrolledUpRef.current = !atBottom;
+      const timeoutId = setTimeout(() => {
+        setShowScrollButton(!atBottom && timeline.length > 0);
+      }, 0);
+
+      return () => {
+        clearTimeout(timeoutId);
+      };
     }
-  }, [isStreaming]);
+
+    return undefined;
+  }, [containerRef, isStreaming, timeline.length]);
 
   return {
     showScrollButton,

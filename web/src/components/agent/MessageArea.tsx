@@ -818,6 +818,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               ref={containerRef}
               onScroll={handleScroll}
               className="flex-1 overflow-y-auto chat-scrollbar p-3 md:p-4 pb-20 min-h-0"
+              style={{ overflowAnchor: 'none' }}
               data-testid="message-container"
               role="log"
               aria-live="polite"
