@@ -35,6 +35,10 @@ const WORKSPACE_PLAN_ID: &str = "workspace_plan_id";
 const WORKSPACE_PLAN_NODE_ID: &str = "workspace_plan_node_id";
 const CURRENT_ATTEMPT_ID: &str = "current_attempt_id";
 const CURRENT_ATTEMPT_WORKER_BINDING_ID: &str = "current_attempt_worker_binding_id";
+const TASK_ROLE: &str = "task_role";
+const GOAL_ROOT_TASK_ROLE: &str = "goal_root";
+const REMEDIATION_STATUS: &str = "remediation_status";
+const REMEDIATION_SUMMARY: &str = "remediation_summary";
 const WORKER_LAUNCH_MAX_ACTIVE_ENV: &str = "WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE";
 const WORKER_LAUNCH_DEFER_SECONDS_ENV: &str = "WORKSPACE_WORKER_LAUNCH_DEFER_SECONDS";
 const WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV: &str =
@@ -329,6 +333,18 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         task_id: &str,
     ) -> CoreResult<Option<WorkspaceTaskRecord>>;
 
+    async fn list_tasks_by_root_goal_task_id(
+        &self,
+        workspace_id: &str,
+        root_goal_task_id: &str,
+    ) -> CoreResult<Vec<WorkspaceTaskRecord>>;
+
+    async fn list_current_plan_child_tasks_by_root_goal_task_id(
+        &self,
+        workspace_id: &str,
+        root_goal_task_id: &str,
+    ) -> CoreResult<Vec<WorkspaceTaskRecord>>;
+
     async fn save_task(&self, task: WorkspaceTaskRecord) -> CoreResult<WorkspaceTaskRecord>;
 
     async fn get_plan(&self, plan_id: &str) -> CoreResult<Option<WorkspacePlanRecord>>;
@@ -465,6 +481,32 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
         task_id: &str,
     ) -> CoreResult<Option<WorkspaceTaskRecord>> {
         PgWorkspaceRepository::get_task(self, workspace_id, task_id).await
+    }
+
+    async fn list_tasks_by_root_goal_task_id(
+        &self,
+        workspace_id: &str,
+        root_goal_task_id: &str,
+    ) -> CoreResult<Vec<WorkspaceTaskRecord>> {
+        PgWorkspaceRepository::list_tasks_by_root_goal_task_id(
+            self,
+            workspace_id,
+            root_goal_task_id,
+        )
+        .await
+    }
+
+    async fn list_current_plan_child_tasks_by_root_goal_task_id(
+        &self,
+        workspace_id: &str,
+        root_goal_task_id: &str,
+    ) -> CoreResult<Vec<WorkspaceTaskRecord>> {
+        PgWorkspaceRepository::list_current_plan_child_tasks_by_root_goal_task_id(
+            self,
+            workspace_id,
+            root_goal_task_id,
+        )
+        .await
     }
 
     async fn save_task(&self, task: WorkspaceTaskRecord) -> CoreResult<WorkspaceTaskRecord> {
@@ -1786,8 +1828,144 @@ impl SupervisorTickAdmissionHandler {
         task.blocker_reason = None;
         task.completed_at = Some(now);
         task.updated_at = Some(now);
-        self.store.save_task(task).await?;
+        let saved_task = self.store.save_task(task).await?;
+        self.reconcile_root_goal_progress_for_task(workspace_id, &saved_task, attempt, now)
+            .await?;
         Ok(Some(integration_metadata))
+    }
+
+    async fn reconcile_root_goal_progress_for_task(
+        &self,
+        workspace_id: &str,
+        task: &WorkspaceTaskRecord,
+        attempt: &WorkspaceTaskSessionAttemptRecord,
+        now: DateTime<Utc>,
+    ) -> CoreResult<()> {
+        let Some(root_goal_task_id) = root_goal_task_id_for_progress(task, attempt) else {
+            return Ok(());
+        };
+        if root_goal_task_id == task.id {
+            return Ok(());
+        }
+        self.reconcile_root_goal_progress(workspace_id, &root_goal_task_id, now)
+            .await
+    }
+
+    async fn reconcile_root_goal_progress(
+        &self,
+        workspace_id: &str,
+        root_goal_task_id: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<()> {
+        let Some(mut root_task) = self.store.get_task(workspace_id, root_goal_task_id).await?
+        else {
+            return Ok(());
+        };
+        if !is_goal_root_task(&root_task) {
+            return Ok(());
+        }
+
+        let mut child_tasks = self
+            .store
+            .list_current_plan_child_tasks_by_root_goal_task_id(workspace_id, root_goal_task_id)
+            .await?;
+        if child_tasks.is_empty() {
+            child_tasks = select_root_progress_child_tasks(
+                self.store
+                    .list_tasks_by_root_goal_task_id(workspace_id, root_goal_task_id)
+                    .await?,
+            );
+        }
+
+        let active_child_task_ids = child_tasks
+            .iter()
+            .filter(|task| task.status != "done" && task.archived_at.is_none())
+            .map(|task| task.id.clone())
+            .collect::<Vec<_>>();
+        let blocked_tasks = child_tasks
+            .iter()
+            .filter(|task| task.status == "blocked")
+            .collect::<Vec<_>>();
+        let blocked_child_task_ids = blocked_tasks
+            .iter()
+            .map(|task| task.id.clone())
+            .collect::<Vec<_>>();
+        let in_progress_count = child_tasks
+            .iter()
+            .filter(|task| task.status == "in_progress")
+            .count();
+        let done_count = child_tasks
+            .iter()
+            .filter(|task| task.status == "done")
+            .count();
+        let assigned_count = child_tasks
+            .iter()
+            .filter(|task| task.assignee_agent_id.is_some() || task.assignee_user_id.is_some())
+            .count();
+        let total_count = child_tasks.len();
+        let all_children_done = total_count > 0 && done_count == total_count;
+
+        let (goal_health, blocked_reason, remediation_status, remediation_summary) =
+            if root_task.status == "done" {
+                ("achieved", None, "none", None)
+            } else if let Some(blocked_task) = blocked_tasks.first() {
+                (
+                    "blocked",
+                    blocked_task
+                        .blocker_reason
+                        .clone()
+                        .or_else(|| Some(blocked_task.title.clone())),
+                    "replan_required",
+                    Some(format!(
+                        "{} child task(s) blocked; root goal requires replan or intervention",
+                        blocked_tasks.len()
+                    )),
+                )
+            } else if in_progress_count > 0 {
+                ("healthy", None, "none", None)
+            } else if all_children_done {
+                (
+                "achieved",
+                None,
+                "ready_for_completion",
+                Some(
+                    "All child tasks are done; root goal should now validate completion evidence"
+                        .to_string(),
+                ),
+            )
+            } else {
+                ("healthy", None, "none", None)
+            };
+
+        let progress_summary = format!(
+            "{done_count}/{total_count} child tasks done; {in_progress_count} in progress; {} blocked; {assigned_count}/{total_count} assigned",
+            blocked_tasks.len()
+        );
+        let mut metadata = object_or_empty(root_task.metadata_json);
+        metadata.insert("goal_progress_summary".to_string(), json!(progress_summary));
+        metadata.insert("last_progress_at".to_string(), json!(now.to_rfc3339()));
+        metadata.insert(
+            "active_child_task_ids".to_string(),
+            json!(active_child_task_ids),
+        );
+        metadata.insert(
+            "blocked_child_task_ids".to_string(),
+            json!(blocked_child_task_ids),
+        );
+        metadata.insert(
+            "blocked_reason".to_string(),
+            blocked_reason.map_or(Value::Null, Value::String),
+        );
+        metadata.insert("goal_health".to_string(), json!(goal_health));
+        metadata.insert(REMEDIATION_STATUS.to_string(), json!(remediation_status));
+        metadata.insert(
+            REMEDIATION_SUMMARY.to_string(),
+            remediation_summary.map_or(Value::Null, Value::String),
+        );
+        root_task.metadata_json = Value::Object(metadata);
+        root_task.updated_at = Some(now);
+        self.store.save_task(root_task).await?;
+        Ok(())
     }
 
     async fn integrate_accepted_attempt_worktree(
@@ -2435,6 +2613,43 @@ fn string_from_map(map: &Map<String, Value>, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+fn string_from_value_object(value: &Value, key: &str) -> Option<String> {
+    value.as_object().and_then(|map| string_from_map(map, key))
+}
+
+fn root_goal_task_id_for_progress(
+    task: &WorkspaceTaskRecord,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+) -> Option<String> {
+    string_from_value_object(&task.metadata_json, ROOT_GOAL_TASK_ID).or_else(|| {
+        let candidate = attempt.root_goal_task_id.trim();
+        if candidate.is_empty() {
+            None
+        } else {
+            Some(candidate.to_string())
+        }
+    })
+}
+
+fn is_goal_root_task(task: &WorkspaceTaskRecord) -> bool {
+    string_from_value_object(&task.metadata_json, TASK_ROLE).as_deref() == Some(GOAL_ROOT_TASK_ROLE)
+}
+
+fn select_root_progress_child_tasks(
+    child_tasks: Vec<WorkspaceTaskRecord>,
+) -> Vec<WorkspaceTaskRecord> {
+    let plan_projected = child_tasks
+        .iter()
+        .filter(|task| string_from_value_object(&task.metadata_json, WORKSPACE_PLAN_ID).is_some())
+        .cloned()
+        .collect::<Vec<_>>();
+    if plan_projected.is_empty() {
+        child_tasks
+    } else {
+        plan_projected
+    }
 }
 
 fn bool_from_map(map: &Map<String, Value>, key: &str) -> bool {
@@ -3666,6 +3881,78 @@ mod tests {
                 .cloned())
         }
 
+        async fn list_tasks_by_root_goal_task_id(
+            &self,
+            workspace_id: &str,
+            root_goal_task_id: &str,
+        ) -> CoreResult<Vec<WorkspaceTaskRecord>> {
+            let mut tasks = self
+                .tasks
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|task| {
+                    task.workspace_id == workspace_id
+                        && task.archived_at.is_none()
+                        && string_from_value_object(&task.metadata_json, ROOT_GOAL_TASK_ID)
+                            .as_deref()
+                            == Some(root_goal_task_id)
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            tasks.sort_by(|left, right| {
+                left.created_at
+                    .cmp(&right.created_at)
+                    .then_with(|| left.id.cmp(&right.id))
+            });
+            Ok(tasks)
+        }
+
+        async fn list_current_plan_child_tasks_by_root_goal_task_id(
+            &self,
+            workspace_id: &str,
+            root_goal_task_id: &str,
+        ) -> CoreResult<Vec<WorkspaceTaskRecord>> {
+            let nodes = self.nodes.lock().unwrap().clone();
+            let mut tasks = self
+                .tasks
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|task| {
+                    if task.workspace_id != workspace_id || task.archived_at.is_some() {
+                        return false;
+                    }
+                    if string_from_value_object(&task.metadata_json, ROOT_GOAL_TASK_ID).as_deref()
+                        != Some(root_goal_task_id)
+                    {
+                        return false;
+                    }
+                    let Some(plan_id) =
+                        string_from_value_object(&task.metadata_json, WORKSPACE_PLAN_ID)
+                    else {
+                        return false;
+                    };
+                    let Some(node_id) =
+                        string_from_value_object(&task.metadata_json, WORKSPACE_PLAN_NODE_ID)
+                    else {
+                        return false;
+                    };
+                    nodes.get(&node_id).is_some_and(|node| {
+                        node.plan_id == plan_id
+                            && node.workspace_task_id.as_deref() == Some(task.id.as_str())
+                    })
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            tasks.sort_by(|left, right| {
+                left.created_at
+                    .cmp(&right.created_at)
+                    .then_with(|| left.id.cmp(&right.id))
+            });
+            Ok(tasks)
+        }
+
         async fn save_task(&self, task: WorkspaceTaskRecord) -> CoreResult<WorkspaceTaskRecord> {
             self.tasks
                 .lock()
@@ -3898,6 +4185,30 @@ mod tests {
                 ROOT_GOAL_TASK_ID: "root-task",
                 WORKSPACE_PLAN_ID: "plan-test",
                 WORKSPACE_PLAN_NODE_ID: "node-test"
+            }),
+            created_at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
+            updated_at: None,
+            completed_at: None,
+            archived_at: None,
+        }
+    }
+
+    fn root_goal_task() -> WorkspaceTaskRecord {
+        WorkspaceTaskRecord {
+            id: "root-task".to_string(),
+            workspace_id: "workspace-test".to_string(),
+            title: "Finish root goal".to_string(),
+            description: None,
+            created_by: "actor-test".to_string(),
+            assignee_user_id: None,
+            assignee_agent_id: None,
+            status: "todo".to_string(),
+            priority: 1,
+            estimated_effort: None,
+            blocker_reason: None,
+            metadata_json: json!({
+                TASK_ROLE: GOAL_ROOT_TASK_ROLE,
+                "goal_health": "healthy"
             }),
             created_at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
             updated_at: None,
@@ -4761,6 +5072,71 @@ mod tests {
         assert_eq!(node.metadata_json["worktree_integration_status"], "skipped");
         assert!(store.plan_events().is_empty());
         assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn supervisor_tick_handler_reconciles_root_goal_progress_for_accepted_child() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        store.insert_task(root_goal_task());
+        store.insert_task(task_with_plan_metadata());
+        let mut stale_child = task_with_plan_metadata();
+        stale_child.id = "stale-helper-task".to_string();
+        stale_child.title = "Old helper task".to_string();
+        stale_child.status = "blocked".to_string();
+        stale_child.blocker_reason = Some("stale helper blocked".to_string());
+        stale_child.assignee_agent_id = None;
+        stale_child.metadata_json = json!({
+            ROOT_GOAL_TASK_ID: "root-task",
+            WORKSPACE_PLAN_ID: "old-plan",
+            WORKSPACE_PLAN_NODE_ID: "missing-node"
+        });
+        store.insert_task(stale_child);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.intent = "in_progress".to_string();
+        node.execution = "running".to_string();
+        node.current_attempt_id = Some("attempt-accepted".to_string());
+        store.insert_node(node);
+        let mut attempt = task_session_attempt(
+            "attempt-accepted",
+            ACCEPTED_ATTEMPT_STATUS,
+            Some("conversation-test"),
+        );
+        attempt.leader_feedback = Some("accepted after verification".to_string());
+        store.insert_attempt(attempt);
+        let handler = supervisor_tick_handler(Arc::clone(&store));
+        let mut item = outbox("job-supervisor-tick", SUPERVISOR_TICK_EVENT);
+        item.plan_id = Some("plan-test".to_string());
+        item.payload_json = json!({
+            "workspace_id": "workspace-test",
+            "plan_id": "plan-test"
+        });
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let task = store.task("task-test");
+        assert_eq!(task.status, "done");
+        let root = store.task("root-task");
+        assert_eq!(root.status, "todo");
+        assert_eq!(
+            root.metadata_json["goal_progress_summary"],
+            "1/1 child tasks done; 0 in progress; 0 blocked; 1/1 assigned"
+        );
+        assert_eq!(root.metadata_json["goal_health"], "achieved");
+        assert_eq!(
+            root.metadata_json[REMEDIATION_STATUS],
+            "ready_for_completion"
+        );
+        assert_eq!(
+            root.metadata_json[REMEDIATION_SUMMARY],
+            "All child tasks are done; root goal should now validate completion evidence"
+        );
+        assert_eq!(root.metadata_json["active_child_task_ids"], json!([]));
+        assert_eq!(root.metadata_json["blocked_child_task_ids"], json!([]));
+        assert_eq!(root.metadata_json["blocked_reason"], Value::Null);
+        assert!(root.metadata_json["last_progress_at"].is_string());
     }
 
     #[tokio::test]

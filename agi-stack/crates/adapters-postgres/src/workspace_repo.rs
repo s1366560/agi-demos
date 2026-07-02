@@ -598,6 +598,51 @@ impl PgWorkspaceRepository {
         rows.into_iter().map(row_to_task).collect()
     }
 
+    pub async fn list_tasks_by_root_goal_task_id(
+        &self,
+        workspace_id: &str,
+        root_goal_task_id: &str,
+    ) -> CoreResult<Vec<WorkspaceTaskRecord>> {
+        let rows = sqlx::query(&format!(
+            "SELECT {TASK_COLS} FROM workspace_tasks \
+             WHERE workspace_id = $1 \
+               AND metadata_json->>'root_goal_task_id' = $2 \
+               AND archived_at IS NULL \
+             ORDER BY created_at ASC, id ASC"
+        ))
+        .bind(workspace_id)
+        .bind(root_goal_task_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(row_to_task).collect()
+    }
+
+    pub async fn list_current_plan_child_tasks_by_root_goal_task_id(
+        &self,
+        workspace_id: &str,
+        root_goal_task_id: &str,
+    ) -> CoreResult<Vec<WorkspaceTaskRecord>> {
+        let task_cols = qualified_cols("workspace_tasks", TASK_COLS);
+        let rows = sqlx::query(&format!(
+            "SELECT {task_cols} FROM workspace_tasks \
+             JOIN workspace_plan_nodes \
+               ON workspace_plan_nodes.workspace_task_id = workspace_tasks.id \
+             WHERE workspace_tasks.workspace_id = $1 \
+               AND workspace_tasks.metadata_json->>'root_goal_task_id' = $2 \
+               AND workspace_tasks.archived_at IS NULL \
+               AND workspace_plan_nodes.plan_id = workspace_tasks.metadata_json->>'workspace_plan_id' \
+               AND workspace_plan_nodes.id = workspace_tasks.metadata_json->>'workspace_plan_node_id' \
+             ORDER BY workspace_tasks.created_at ASC, workspace_tasks.id ASC"
+        ))
+        .bind(workspace_id)
+        .bind(root_goal_task_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        rows.into_iter().map(row_to_task).collect()
+    }
+
     pub async fn get_task(
         &self,
         workspace_id: &str,
@@ -2064,6 +2109,13 @@ fn row_to_task(row: PgRow) -> CoreResult<WorkspaceTaskRecord> {
         completed_at: row.try_get("completed_at").map_err(storage)?,
         archived_at: row.try_get("archived_at").map_err(storage)?,
     })
+}
+
+fn qualified_cols(alias: &str, cols: &str) -> String {
+    cols.split(", ")
+        .map(|col| format!("{alias}.{col}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn row_to_task_session_attempt(row: PgRow) -> CoreResult<WorkspaceTaskSessionAttemptRecord> {
