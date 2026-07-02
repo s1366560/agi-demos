@@ -26,7 +26,10 @@ from src.infrastructure.agent.sisyphus.builtin_agent import DEFAULT_GENERAL_AGEN
 
 if TYPE_CHECKING:
     from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, ProjectChatRequest
-    from src.infrastructure.agent.orchestration.orchestrator import SpawnExecutionRequest
+    from src.infrastructure.agent.orchestration.orchestrator import (
+        SessionTurnExecutionRequest,
+        SpawnExecutionRequest,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -292,6 +295,56 @@ class AgentRuntimeBootstrapper:
             conversation_context=[],
             agent_id=request.child_agent_id,
             parent_session_id=request.parent_session_id,
+        )
+
+    @staticmethod
+    async def load_spawned_agent_conversation(
+        *,
+        child_session_id: str,
+        project_id: str,
+        tenant_id: str,
+    ) -> Conversation:
+        """Load and validate the persisted conversation for a spawned child session."""
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
+            SqlConversationRepository,
+        )
+
+        session = async_session_factory()
+        try:
+            repo = SqlConversationRepository(session)
+            conversation = await repo.find_by_id(child_session_id)
+            if conversation is None:
+                raise ValueError(f"Spawned agent conversation not found: {child_session_id}")
+            if project_id and conversation.project_id != project_id:
+                raise ValueError(f"Spawned agent conversation not found: {child_session_id}")
+            if tenant_id and conversation.tenant_id != tenant_id:
+                raise ValueError(f"Spawned agent conversation not found: {child_session_id}")
+            if not conversation.parent_conversation_id:
+                raise ValueError(f"Spawned agent conversation has no parent: {child_session_id}")
+            return conversation
+        finally:
+            await session.close()
+
+    async def launch_agent_session_turn(
+        self,
+        request: SessionTurnExecutionRequest,
+    ) -> None:
+        """Start one follow-up turn for a persistent session spawned via agent_spawn."""
+        conversation = await self.load_spawned_agent_conversation(
+            child_session_id=request.child_session_id,
+            project_id=request.project_id,
+            tenant_id=request.tenant_id,
+        )
+        await self.start_chat_actor(
+            conversation=conversation,
+            message_id=str(uuid.uuid4()),
+            user_message=request.message,
+            conversation_context=[],
+            agent_id=request.child_agent_id,
+            parent_session_id=conversation.parent_conversation_id,
         )
 
     async def start_chat_actor(  # noqa: PLR0913, PLR0915
@@ -1149,6 +1202,7 @@ class AgentRuntimeBootstrapper:
                     message_bus=RedisAgentMessageBusAdapter(_redis),
                     db_session=_db_session,
                     spawn_executor=self.launch_spawned_agent_session,
+                    session_turn_executor=self.launch_agent_session_turn,
                 )
                 set_agent_orchestrator(_orchestrator)
                 logger.info("[AgentService] AgentOrchestrator bootstrapped for multi-agent tools")

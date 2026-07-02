@@ -83,6 +83,20 @@ class SpawnExecutionRequest:
     span_id: str = ""
 
 
+@dataclass(frozen=True)
+class SessionTurnExecutionRequest:
+    """Execution payload for waking a persistent spawned child session."""
+
+    child_agent_id: str
+    child_session_id: str
+    project_id: str
+    tenant_id: str = ""
+    message: str = ""
+    source_message_id: str = ""
+    sender_agent_id: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
 class AgentOrchestrator:
     """Coordination hub for multi-agent lifecycle management.
 
@@ -100,6 +114,8 @@ class AgentOrchestrator:
         spawn_validator: SpawnValidator | None = None,
         db_session: AsyncSession | None = None,
         spawn_executor: Callable[[SpawnExecutionRequest], Awaitable[None]] | None = None,
+        session_turn_executor: Callable[[SessionTurnExecutionRequest], Awaitable[None]]
+        | None = None,
     ) -> None:
         self._agent_registry = agent_registry
         self._session_registry = session_registry
@@ -108,6 +124,7 @@ class AgentOrchestrator:
         self._spawn_validator = spawn_validator
         self._db_session = db_session
         self._spawn_executor = spawn_executor
+        self._session_turn_executor = session_turn_executor
 
     async def _release_read_transaction(self) -> None:
         """Release a read-only transaction held by the shared registry session."""
@@ -622,6 +639,29 @@ class AgentOrchestrator:
             metadata=metadata,
         )
 
+        if effective_message_type == AgentMessageType.REQUEST and self._session_turn_executor:
+            record = await self._spawn_manager.get_record(resolved_session_id)
+            if record is not None and record.mode == SpawnMode.SESSION:
+                try:
+                    await self._session_turn_executor(
+                        SessionTurnExecutionRequest(
+                            child_agent_id=to_agent.id,
+                            child_session_id=resolved_session_id,
+                            project_id=effective_project_id or record.project_id,
+                            tenant_id=tenant_id,
+                            message=message,
+                            source_message_id=message_id,
+                            sender_agent_id=from_agent.id,
+                            metadata=dict(metadata or {}),
+                        )
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to wake persistent agent session: agent=%s session=%s",
+                        to_agent.id,
+                        resolved_session_id,
+                    )
+
         logger.info(
             "Sent message: from=%s to=%s session=%s",
             from_agent.id,
@@ -649,6 +689,10 @@ class AgentOrchestrator:
             new_status=new_status,
             conversation_id=conversation_id,
         )
+
+    async def get_spawn_record(self, child_session_id: str) -> SpawnRecord | None:
+        """Return the spawn record for a child session, if it is tracked."""
+        return await self._spawn_manager.get_record(child_session_id)
 
     async def stop_agent(
         self,
@@ -752,8 +796,33 @@ class AgentOrchestrator:
         session_id: str,
         *,
         limit: int = 50,
+        project_id: str | None = None,
     ) -> list[AgentMessage]:
         """Get message history for an agent session."""
+        if project_id:
+            session = await self._session_registry.get_session_for_conversation(
+                session_id,
+                project_id,
+            )
+            if session is not None:
+                if limit <= 0:
+                    return []
+                return await self._get_agent_history_messages(session_id=session_id, limit=limit)
+
+        record = await self._spawn_manager.get_record(session_id)
+        if record is None and not await self._message_bus.session_has_messages(session_id):
+            raise ValueError(f"Agent session not found: {session_id}")
+        if limit <= 0:
+            return []
+        return await self._get_agent_history_messages(session_id=session_id, limit=limit)
+
+    async def _get_agent_history_messages(
+        self,
+        *,
+        session_id: str,
+        limit: int,
+    ) -> list[AgentMessage]:
+        """Read and collapse queryable message history for an existing session."""
         history_limit = max(limit * 3, limit)
         messages = await self._message_bus.get_message_history(
             session_id=session_id,

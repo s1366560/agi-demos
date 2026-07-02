@@ -36,6 +36,7 @@ class SendDeniedCode(StrEnum):
     TARGET_SESSION_NOT_FOUND = "target_session_not_found"
     TARGET_SESSION_MISMATCH = "target_session_mismatch"
     TARGET_ACTIVE_SESSION_MISSING = "target_active_session_missing"
+    MESSAGE_EMPTY = "message_empty"
 
 
 @dataclass(frozen=True)

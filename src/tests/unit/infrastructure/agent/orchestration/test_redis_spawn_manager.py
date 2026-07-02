@@ -25,6 +25,8 @@ def make_record(
     mode: SpawnMode = SpawnMode.RUN,
     status: str = "running",
     task_summary: str = "do task",
+    trace_id: str = "",
+    span_id: str = "",
 ) -> SpawnRecord:
     """Build a SpawnRecord with predictable defaults."""
     return SpawnRecord(
@@ -35,6 +37,8 @@ def make_record(
         mode=mode,
         status=status,
         task_summary=task_summary,
+        trace_id=trace_id,
+        span_id=span_id,
     )
 
 
@@ -683,6 +687,27 @@ class TestUpdateStatus:
         assert updated is not None
         assert updated.status == "completed"
         assert updated.child_session_id == "session-b"
+
+    async def test_update_status_preserves_trace_context(
+        self, manager: RedisSpawnManager, mock_redis: AsyncMock
+    ) -> None:
+        original = make_record(
+            child_session_id="session-b",
+            trace_id="trace-1",
+            span_id="span-1",
+        )
+        mock_redis.get.return_value = record_json(original)
+        mock_redis.ttl.return_value = 3600
+
+        updated = await manager.update_status("session-b", "completed")
+
+        assert updated is not None
+        assert updated.trace_id == "trace-1"
+        assert updated.span_id == "span-1"
+        _, args, _ = mock_redis.setex.mock_calls[0]
+        persisted = SpawnRecord.from_dict(json.loads(args[2]))
+        assert persisted.trace_id == "trace-1"
+        assert persisted.span_id == "span-1"
 
     async def test_update_status_unknown_session_returns_none(
         self, manager: RedisSpawnManager, mock_redis: AsyncMock

@@ -318,7 +318,7 @@ class TestAgentDefinitionManageTool:
         assert len(ctx._pending_events) == 1
         assert ctx._pending_events[0]["type"] == "agent_definition_deleted"
 
-    async def test_delete_not_found_returns_error(self) -> None:
+    async def test_delete_not_found_returns_idempotent_response(self) -> None:
         orch = _mock_orchestrator()
         orch.get_agent.return_value = None
         configure_agent_definition_manage(orch)
@@ -329,8 +329,16 @@ class TestAgentDefinitionManageTool:
             action="delete",
             agent_id="nonexistent",
         )
-        assert result.is_error is True
-        assert "not found" in json.loads(result.output)["error"].lower()
+        assert result.is_error is False
+        data = json.loads(result.output)
+        assert data == {
+            "deleted": False,
+            "already_deleted": True,
+            "id": "nonexistent",
+            "status": "already_deleted",
+        }
+        orch.delete_agent.assert_not_awaited()
+        assert ctx._pending_events == []
 
     async def test_delete_missing_agent_id_returns_error(self) -> None:
         orch = _mock_orchestrator()

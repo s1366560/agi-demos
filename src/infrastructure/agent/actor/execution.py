@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 import redis.asyncio as aioredis
 
 from src.domain.model.agent.execution.event_time import EventTimeGenerator
+from src.domain.model.agent.spawn_mode import SpawnMode
 from src.domain.ports.services.agent_message_bus_port import AgentMessageType
 from src.infrastructure.adapters.primary.web.metrics import agent_metrics
 from src.infrastructure.adapters.secondary.messaging.redis_agent_message_bus import (
@@ -111,6 +112,34 @@ async def _update_spawn_status(
             parent_session_id,
             exc_info=True,
         )
+
+
+async def _resolve_child_terminal_status(
+    *,
+    child_session_id: str,
+    success: bool,
+) -> str | None:
+    """Resolve the spawn status to mirror after a child turn finishes."""
+    default_status = "completed" if success else "failed"
+    try:
+        from src.infrastructure.agent.state.agent_worker_state import get_agent_orchestrator
+
+        orchestrator = get_agent_orchestrator()
+        if orchestrator is None:
+            return default_status
+        record = await orchestrator.get_spawn_record(child_session_id)
+        if record is None or record.mode != SpawnMode.SESSION:
+            return default_status
+        if record.status in {"stopped", "cancelled"}:
+            return None
+        return "running"
+    except Exception:
+        logger.warning(
+            "Failed to resolve child terminal spawn status: child_session=%s",
+            child_session_id,
+            exc_info=True,
+        )
+        return default_status
 
 
 async def _resolve_chat_runtime_overrides(
@@ -287,8 +316,7 @@ def _complete_event_for_persistence(
     if not (has_text_end_messages or has_complete_assistant_message):
         content = str(event_data.get("content", "")).strip()
         has_completion_metadata = any(
-            raw_event_data.get(field)
-            for field in ("artifacts", "trace_url", "execution_summary")
+            raw_event_data.get(field) for field in ("artifacts", "trace_url", "execution_summary")
         )
         if not (content or has_completion_metadata):
             return None, False
@@ -1569,11 +1597,16 @@ async def _finalize_child_session_result(
             lock_token = None
             lock_acquired = False
 
-        await _update_spawn_status(
+        terminal_status = await _resolve_child_terminal_status(
             child_session_id=child_session_id,
-            status="completed" if success else "failed",
-            parent_session_id=parent_session_id,
+            success=success,
         )
+        if terminal_status is not None:
+            await _update_spawn_status(
+                child_session_id=child_session_id,
+                status=terminal_status,
+                parent_session_id=parent_session_id,
+            )
         await _record_child_result_history(
             agent_id=agent_id,
             child_session_id=child_session_id,
@@ -1674,7 +1707,9 @@ async def _record_child_result_history(
             ),
             None,
         )
-        terminal_metadata = existing_terminal_message.metadata if existing_terminal_message else None
+        terminal_metadata = (
+            existing_terminal_message.metadata if existing_terminal_message else None
+        )
         terminal_metadata = terminal_metadata or {}
         terminal_message_matches = (
             existing_terminal_message is not None

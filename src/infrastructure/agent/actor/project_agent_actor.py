@@ -525,6 +525,7 @@ class ProjectAgentActor:
                     )
                     from src.infrastructure.agent.orchestration.orchestrator import (
                         AgentOrchestrator,
+                        SessionTurnExecutionRequest,
                         SpawnExecutionRequest,
                     )
                     from src.infrastructure.agent.orchestration.session_registry import (
@@ -597,6 +598,35 @@ class ProjectAgentActor:
                             )
                         )
 
+                    async def _session_turn_executor(
+                        request: SessionTurnExecutionRequest,
+                    ) -> None:
+                        conversation = (
+                            await AgentRuntimeBootstrapper.load_spawned_agent_conversation(
+                                child_session_id=request.child_session_id,
+                                project_id=request.project_id,
+                                tenant_id=request.tenant_id,
+                            )
+                        )
+                        tenant_agent_config = (
+                            await AgentRuntimeBootstrapper._load_tenant_agent_config(
+                                conversation.tenant_id
+                            )
+                        )
+                        await self.chat(
+                            ProjectChatRequest(
+                                conversation_id=conversation.id,
+                                message_id=str(uuid.uuid4()),
+                                user_message=request.message,
+                                user_id=conversation.user_id,
+                                conversation_context=[],
+                                plan_mode=conversation.is_in_plan_mode,
+                                agent_id=request.child_agent_id,
+                                tenant_agent_config=tenant_agent_config.to_dict(),
+                                parent_session_id=conversation.parent_conversation_id,
+                            )
+                        )
+
                     _orchestrator = AgentOrchestrator(
                         agent_registry=SqlAgentRegistryRepository(_db_session),
                         session_registry=_session_registry,
@@ -607,6 +637,7 @@ class ProjectAgentActor:
                         message_bus=RedisAgentMessageBusAdapter(_redis),
                         db_session=_db_session,
                         spawn_executor=_spawn_executor,
+                        session_turn_executor=_session_turn_executor,
                     )
                     set_agent_orchestrator(_orchestrator)
                     logger.info(

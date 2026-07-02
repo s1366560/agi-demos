@@ -367,6 +367,31 @@ class TestAgentSendTool:
         assert ctx._pending_events[0]["data"]["from_agent_name"] == "selected-name"
 
     @pytest.mark.asyncio
+    async def test_empty_message_returns_structured_denial(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Blank messages are rejected before delivery."""
+        import src.infrastructure.agent.tools.agent_send as mod
+
+        orchestrator = Mock()
+        orchestrator.send_message = AsyncMock()
+        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+
+        ctx = _make_ctx(runtime_context={"selected_agent_id": "agent-123"})
+        result = await agent_send_tool.execute(ctx, agent_id="target-agent", message="  ")
+
+        assert result.is_error is True
+        data = json.loads(result.output)
+        assert data["ok"] is False
+        assert data["code"] == "message_empty"
+        assert data["from_agent_ref"] == "agent-123"
+        assert data["to_agent_ref"] == "target-agent"
+        assert data["sender_session_id"] == "session-1"
+        assert data["project_id"] == "proj-1"
+        orchestrator.send_message.assert_not_awaited()
+        assert ctx._pending_events == []
+
+    @pytest.mark.asyncio
     async def test_value_error_does_not_emit_message_sent_event(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -502,12 +527,37 @@ class TestAgentHistoryTool:
         ctx = _make_ctx()
         result = await agent_history_tool.execute(ctx, session_id="sess-1")
         assert result.is_error is False
+        orchestrator.get_agent_history.assert_awaited_once_with(
+            session_id="sess-1",
+            limit=50,
+            project_id="proj-1",
+        )
         data = json.loads(result.output)
         assert len(data) == 1
         assert data[0]["id"] == "msg-1"
         assert data[0]["from_agent_id"] == "agent-a"
         assert data[0]["message_type"] == "request"
         assert data[0]["timestamp"] == "2026-01-01T00:00:00+00:00"
+
+    @pytest.mark.asyncio
+    async def test_limit_zero_returns_empty_history(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """limit=0 is forwarded and returns an empty history."""
+        import src.infrastructure.agent.tools.agent_history as mod
+
+        orchestrator = Mock()
+        orchestrator.get_agent_history = AsyncMock(return_value=[])
+        monkeypatch.setattr(mod, "_orchestrator", orchestrator)
+
+        ctx = _make_ctx()
+        result = await agent_history_tool.execute(ctx, session_id="sess-1", limit=0)
+
+        assert result.is_error is False
+        assert json.loads(result.output) == []
+        orchestrator.get_agent_history.assert_awaited_once_with(
+            session_id="sess-1",
+            limit=0,
+            project_id="proj-1",
+        )
 
     @pytest.mark.asyncio
     async def test_value_error(self, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -23,6 +23,7 @@ from src.infrastructure.agent.orchestration.orchestrator import (
     AgentOrchestrator,
     SendDenied,
     SendResult,
+    SessionTurnExecutionRequest,
     SpawnResult,
 )
 from src.infrastructure.agent.orchestration.send_denied import (
@@ -1043,6 +1044,144 @@ class TestSendMessage:
             metadata=None,
         )
 
+    async def test_send_message_wakes_persistent_session_turn(
+        self, fx: _OrchestratorFixture
+    ) -> None:
+        """REQUEST delivery to a session-mode child starts one follow-up turn."""
+        session_turn_executor = AsyncMock()
+        fx.orchestrator = AgentOrchestrator(
+            fx.agent_registry,
+            fx.session_registry,
+            fx.spawn_manager,
+            fx.message_bus,
+            session_turn_executor=session_turn_executor,
+        )
+        from_agent = _make_agent(id="agent-a")
+        to_agent = _make_agent(id="agent-b")
+        fx.agent_registry.get_by_id = AsyncMock(side_effect=[from_agent, to_agent])
+        fx.session_registry.get_session_for_conversation = AsyncMock(
+            side_effect=[
+                AgentSession(agent_id="agent-b", conversation_id="sess-to-b", project_id="proj-1"),
+                AgentSession(
+                    agent_id="agent-a", conversation_id="sender-sess", project_id="proj-1"
+                ),
+            ]
+        )
+        fx.spawn_manager.get_record = AsyncMock(
+            return_value=_make_spawn_record(
+                child_agent_id="agent-b",
+                child_session_id="sess-to-b",
+                project_id="proj-1",
+                mode=SpawnMode.SESSION,
+            )
+        )
+        fx.message_bus.send_message = AsyncMock(return_value="msg-1")
+
+        result = await fx.orchestrator.send_message(
+            from_agent_id="agent-a",
+            to_agent_id="agent-b",
+            message="follow up",
+            session_id="sess-to-b",
+            sender_session_id="sender-sess",
+            project_id="proj-1",
+            tenant_id="tenant-1",
+            metadata={"k": "v"},
+        )
+
+        assert isinstance(result, SendResult)
+        session_turn_executor.assert_awaited_once()
+        request = session_turn_executor.await_args.args[0]
+        assert isinstance(request, SessionTurnExecutionRequest)
+        assert request.child_agent_id == "agent-b"
+        assert request.child_session_id == "sess-to-b"
+        assert request.project_id == "proj-1"
+        assert request.tenant_id == "tenant-1"
+        assert request.message == "follow up"
+        assert request.source_message_id == "msg-1"
+        assert request.sender_agent_id == "agent-a"
+        assert request.metadata == {"k": "v"}
+
+    async def test_send_message_does_not_wake_run_mode_child(
+        self, fx: _OrchestratorFixture
+    ) -> None:
+        """Run-mode child sessions remain one-shot and are not restarted by agent_send."""
+        session_turn_executor = AsyncMock()
+        fx.orchestrator = AgentOrchestrator(
+            fx.agent_registry,
+            fx.session_registry,
+            fx.spawn_manager,
+            fx.message_bus,
+            session_turn_executor=session_turn_executor,
+        )
+        from_agent = _make_agent(id="agent-a")
+        to_agent = _make_agent(id="agent-b")
+        fx.agent_registry.get_by_id = AsyncMock(side_effect=[from_agent, to_agent])
+        fx.session_registry.get_session_for_conversation = AsyncMock(
+            side_effect=[
+                AgentSession(agent_id="agent-b", conversation_id="sess-to-b", project_id="proj-1"),
+                AgentSession(
+                    agent_id="agent-a", conversation_id="sender-sess", project_id="proj-1"
+                ),
+            ]
+        )
+        fx.spawn_manager.get_record = AsyncMock(
+            return_value=_make_spawn_record(
+                child_agent_id="agent-b",
+                child_session_id="sess-to-b",
+                mode=SpawnMode.RUN,
+            )
+        )
+        fx.message_bus.send_message = AsyncMock(return_value="msg-1")
+
+        result = await fx.orchestrator.send_message(
+            from_agent_id="agent-a",
+            to_agent_id="agent-b",
+            message="follow up",
+            session_id="sess-to-b",
+            sender_session_id="sender-sess",
+            project_id="proj-1",
+        )
+
+        assert isinstance(result, SendResult)
+        session_turn_executor.assert_not_awaited()
+
+    async def test_send_message_does_not_wake_notification(self, fx: _OrchestratorFixture) -> None:
+        """Only REQUEST messages start a persistent session turn."""
+        session_turn_executor = AsyncMock()
+        fx.orchestrator = AgentOrchestrator(
+            fx.agent_registry,
+            fx.session_registry,
+            fx.spawn_manager,
+            fx.message_bus,
+            session_turn_executor=session_turn_executor,
+        )
+        from_agent = _make_agent(id="agent-a")
+        to_agent = _make_agent(id="agent-b")
+        fx.agent_registry.get_by_id = AsyncMock(side_effect=[from_agent, to_agent])
+        fx.session_registry.get_session_for_conversation = AsyncMock(
+            side_effect=[
+                AgentSession(agent_id="agent-b", conversation_id="sess-to-b", project_id="proj-1"),
+                AgentSession(
+                    agent_id="agent-a", conversation_id="sender-sess", project_id="proj-1"
+                ),
+            ]
+        )
+        fx.message_bus.send_message = AsyncMock(return_value="msg-1")
+
+        result = await fx.orchestrator.send_message(
+            from_agent_id="agent-a",
+            to_agent_id="agent-b",
+            message="note",
+            session_id="sess-to-b",
+            sender_session_id="sender-sess",
+            project_id="proj-1",
+            message_type=AgentMessageType.NOTIFICATION,
+        )
+
+        assert isinstance(result, SendResult)
+        fx.spawn_manager.get_record.assert_not_awaited()
+        session_turn_executor.assert_not_awaited()
+
     async def test_send_message_target_allowlist_rejects_sender(
         self, fx: _OrchestratorFixture
     ) -> None:
@@ -1358,6 +1497,65 @@ class TestGetAgentHistory:
         # Assert
         assert result == expected
         fx.message_bus.get_message_history.assert_called_once_with(session_id="sess-1", limit=30)
+
+    async def test_get_agent_history_limit_zero_for_existing_session(
+        self, fx: _OrchestratorFixture
+    ) -> None:
+        """limit=0 checks existence but does not query message history."""
+        fx.session_registry.get_session_for_conversation = AsyncMock(
+            return_value=AgentSession(
+                agent_id="agent-a",
+                conversation_id="sess-1",
+                project_id="proj-1",
+            )
+        )
+
+        result = await fx.orchestrator.get_agent_history(
+            session_id="sess-1",
+            limit=0,
+            project_id="proj-1",
+        )
+
+        assert result == []
+        fx.message_bus.get_message_history.assert_not_awaited()
+
+    async def test_get_agent_history_missing_session_raises_value_error(
+        self, fx: _OrchestratorFixture
+    ) -> None:
+        """Unknown sessions are distinguishable from empty existing history."""
+        fx.session_registry.get_session_for_conversation = AsyncMock(return_value=None)
+        fx.spawn_manager.get_record = AsyncMock(return_value=None)
+        fx.message_bus.session_has_messages = AsyncMock(return_value=False)
+
+        with pytest.raises(ValueError, match="Agent session not found: missing"):
+            await fx.orchestrator.get_agent_history(
+                session_id="missing",
+                project_id="proj-1",
+            )
+
+        fx.message_bus.get_message_history.assert_not_awaited()
+
+    async def test_get_agent_history_allows_stream_backed_session(
+        self, fx: _OrchestratorFixture
+    ) -> None:
+        """Message stream presence is enough when the session registry record is gone."""
+        expected = [Mock()]
+        fx.session_registry.get_session_for_conversation = AsyncMock(return_value=None)
+        fx.spawn_manager.get_record = AsyncMock(return_value=None)
+        fx.message_bus.session_has_messages = AsyncMock(return_value=True)
+        fx.message_bus.get_message_history = AsyncMock(return_value=expected)
+
+        result = await fx.orchestrator.get_agent_history(
+            session_id="sess-1",
+            limit=10,
+            project_id="proj-1",
+        )
+
+        assert result == expected
+        fx.message_bus.get_message_history.assert_awaited_once_with(
+            session_id="sess-1",
+            limit=30,
+        )
 
     async def test_get_agent_history_collapses_terminal_retries(
         self, fx: _OrchestratorFixture

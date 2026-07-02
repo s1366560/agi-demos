@@ -11,7 +11,7 @@ from src.infrastructure.agent.orchestration.orchestrator import (
     AgentOrchestrator,
     SendResult,
 )
-from src.infrastructure.agent.orchestration.send_denied import SendDenied
+from src.infrastructure.agent.orchestration.send_denied import SendDenied, SendDeniedCode
 from src.infrastructure.agent.tools.context import ToolContext
 from src.infrastructure.agent.tools.define import tool_define
 from src.infrastructure.agent.tools.result import ToolResult
@@ -81,6 +81,26 @@ async def agent_send_tool(
         )
     sender_agent_ref = _get_runtime_string(ctx, "selected_agent_id") or ctx.agent_name
     sender_agent_name = _get_runtime_string(ctx, "selected_agent_name") or ctx.agent_name
+    if not message.strip():
+        return ToolResult(
+            output=json.dumps(
+                SendDenied(
+                    ok=False,
+                    code=SendDeniedCode.MESSAGE_EMPTY,
+                    message="message cannot be empty",
+                    from_agent_ref=sender_agent_ref,
+                    to_agent_ref=agent_id,
+                    resolved_from_agent_id=None,
+                    resolved_to_agent_id=None,
+                    sender_session_id=ctx.session_id,
+                    target_session_id=session_id,
+                    project_id=ctx.project_id or None,
+                    tenant_id=ctx.tenant_id,
+                    allowlist=None,
+                ).to_dict()
+            ),
+            is_error=True,
+        )
 
     try:
         result = await _orchestrator.send_message(

@@ -596,8 +596,9 @@ def _spawn_resolve_agent_id(
 @tool_define(
     name="sessions_list",
     description=(
-        "List active SubAgent sessions for this conversation. "
-        "Use status='active' for pending/running runs."
+        "List SubAgent sessions for this conversation. "
+        "By default status='active' returns only pending/running runs; "
+        "pass a terminal status such as 'completed' to inspect finished runs."
     ),
     parameters={
         "type": "object",

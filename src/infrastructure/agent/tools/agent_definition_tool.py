@@ -489,8 +489,15 @@ async def _handle_delete(
     )
     if existing is None:
         return ToolResult(
-            output=json.dumps({"error": f"Agent not found: {agent_id}"}),
-            is_error=True,
+            output=json.dumps(
+                {
+                    "deleted": False,
+                    "already_deleted": True,
+                    "id": agent_id,
+                    "status": "already_deleted",
+                }
+            ),
+            title=f"Agent definition already deleted: {agent_id}",
         )
 
     deleted = await _orchestrator.delete_agent(

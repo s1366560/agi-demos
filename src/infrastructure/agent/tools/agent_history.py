@@ -68,6 +68,7 @@ async def agent_history_tool(
         messages = await _orchestrator.get_agent_history(
             session_id=session_id,
             limit=limit,
+            project_id=ctx.project_id or None,
         )
         result: list[dict[str, Any]] = [
             {

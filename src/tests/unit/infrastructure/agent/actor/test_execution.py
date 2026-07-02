@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 
 from src.domain.model.agent.hitl.hitl_types import HITLPendingException, HITLType
+from src.domain.model.agent.spawn_mode import SpawnMode
 from src.domain.ports.services.agent_message_bus_port import AgentMessageType
 from src.infrastructure.agent.actor import execution
 from src.infrastructure.agent.actor.types import ProjectChatRequest
@@ -651,6 +652,50 @@ async def test_finalize_child_session_announce_uses_error_fallback() -> None:
         event_count=0,
         execution_time_ms=12.3,
     )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_finalize_child_session_keeps_session_mode_running() -> None:
+    redis_client = _make_finalization_redis_client()
+    orchestrator = SimpleNamespace(
+        get_spawn_record=AsyncMock(
+            return_value=SimpleNamespace(mode=SpawnMode.SESSION, status="running")
+        )
+    )
+
+    with (
+        patch.object(execution, "_get_redis_client", new=AsyncMock(return_value=redis_client)),
+        patch(
+            "src.infrastructure.agent.state.agent_worker_state.get_agent_orchestrator",
+            return_value=orchestrator,
+        ),
+        patch.object(execution, "_update_spawn_status", new=AsyncMock()) as update_status,
+        patch.object(execution, "_record_child_result_history", new=AsyncMock()) as history_writer,
+        patch.object(
+            execution, "_publish_announce_via_service", new=AsyncMock()
+        ) as announce_writer,
+    ):
+        await execution._finalize_child_session_result(
+            agent_id="child-agent",
+            child_session_id="child-conv",
+            request_message_id="msg-1",
+            parent_session_id="parent-conv",
+            result_content="done",
+            success=True,
+            event_count=1,
+            execution_time_ms=12.3,
+            error_message=None,
+        )
+        await asyncio.sleep(0)
+
+    update_status.assert_awaited_once_with(
+        child_session_id="child-conv",
+        status="running",
+        parent_session_id="parent-conv",
+    )
+    history_writer.assert_awaited_once()
+    announce_writer.assert_awaited_once()
 
 
 @pytest.mark.unit

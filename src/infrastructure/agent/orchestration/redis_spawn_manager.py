@@ -351,6 +351,8 @@ class RedisSpawnManager:
             mode=old.mode,
             task_summary=old.task_summary,
             status=new_status,
+            trace_id=old.trace_id,
+            span_id=old.span_id,
             created_at=old.created_at,
         )
 
