@@ -2,9 +2,9 @@
 //!
 //! This deliberately covers only precise, database-backed resources:
 //! workspaces, workspace tasks, topology nodes/edges, and blackboard
-//! posts/replies/files plus transactional outbox rows. Runtime-heavy siblings
-//! (plan actions, execution diagnostics, leader adjudication) remain Python-owned
-//! until their full semantics are migrated.
+//! posts/replies/files plus transactional plan action/outbox rows. Runtime-heavy
+//! siblings (execution diagnostics, leader adjudication, chat, autonomy) remain
+//! Python-owned until their full semantics are migrated.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -47,6 +47,79 @@ pub(crate) type SharedWorkspaces = Arc<dyn WorkspaceService>;
 
 const PIPELINE_RUN_REQUESTED_EVENT: &str = "pipeline_run_requested";
 const SUPERVISOR_TICK_EVENT: &str = "supervisor_tick";
+const OPERATOR_CLEARED_RETRY_KEYS: &[&str] = &[
+    "retry_count",
+    "retry_last_reason",
+    "retry_not_before",
+    "terminal_attempt_retry_count",
+    "terminal_attempt_retry_reason",
+    "terminal_attempt_reconciled_at",
+    "terminal_attempt_status",
+    "terminal_attempt_superseded_attempt_id",
+    "terminal_attempt_superseded_reason",
+    "terminal_attempt_superseded_status",
+];
+const OPERATOR_CLEARED_ATTEMPT_KEYS: &[&str] = &[
+    "candidate_artifacts",
+    "candidate_verifications",
+    "deploy_mode",
+    "deployment_status",
+    "evidence_refs",
+    "execution_verifications",
+    "external_id",
+    "external_provider",
+    "external_url",
+    "current_repair_turn",
+    "last_verification_attempt_id",
+    "last_verification_feedback_items",
+    "last_verification_hard_fail",
+    "last_verification_judge_confidence",
+    "last_verification_judge_failed_criteria",
+    "last_verification_judge_next_action_kind",
+    "last_verification_judge_rationale",
+    "last_verification_judge_repair_brief",
+    "last_verification_judge_required_next_action",
+    "last_verification_judge_verdict",
+    "last_verification_passed",
+    "last_verification_ran_at",
+    "last_verification_summary",
+    "last_worker_report_attempt_id",
+    "last_worker_report_artifacts",
+    "last_worker_report_summary",
+    "last_worker_report_type",
+    "last_worker_report_verifications",
+    "obsolete_by_verifier_feedback",
+    "obsolete_feedback_items",
+    "pipeline_evidence_refs",
+    "pipeline_finished_at",
+    "pipeline_gate_status",
+    "pipeline_last_summary",
+    "pipeline_request_count",
+    "pipeline_requested_at",
+    "pipeline_run_id",
+    "pipeline_status",
+    "reported_attempt_reconciled_at",
+    "reported_attempt_status",
+    "source_publish_branch",
+    "source_publish_commit_ref",
+    "source_publish_provider",
+    "source_publish_reason",
+    "source_publish_source_commit_ref",
+    "source_publish_status",
+    "source_publish_token_env",
+    "verification_evidence_refs",
+    "verification_feedback_disposition",
+    "verified_commit_ref",
+    "verified_git_diff_summary",
+    "verified_test_commands",
+    "worktree_integration_attempt_id",
+    "worktree_integration_commit_ref",
+    "worktree_integration_dirty_signature",
+    "worktree_integration_ran_at",
+    "worktree_integration_status",
+    "worktree_integration_summary",
+    "worktree_integration_worktree_path",
+];
 
 #[async_trait]
 pub(crate) trait WorkspaceService: Send + Sync {
@@ -100,6 +173,30 @@ pub(crate) trait WorkspaceService: Send + Sync {
         &self,
         user_id: &str,
         workspace_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError>;
+
+    async fn request_plan_node_replan(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        node_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError>;
+
+    async fn reopen_plan_node(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        node_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError>;
+
+    async fn accept_plan_node_review(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        node_id: &str,
         body: WorkspacePlanActionRequest,
     ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError>;
 
@@ -1600,6 +1697,250 @@ impl WorkspaceService for PgWorkspaceService {
             plan_id: plan.id,
             node_id: None,
             outbox_id: Some(outbox.id),
+        })
+    }
+
+    async fn request_plan_node_replan(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        node_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_action_request(&body)?;
+        self.ensure_workspace_access(user_id, workspace_id, WorkspaceAccess::Write)
+            .await?;
+        let mut plan = self
+            .repo
+            .list_plans(workspace_id, 1)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .into_iter()
+            .next()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let node = self
+            .repo
+            .list_plan_nodes(&plan.id)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .into_iter()
+            .find(|node| node.id == node_id)
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let attempt_id = node.current_attempt_id.clone();
+        let reason = body.reason.clone();
+        let now = Utc::now();
+        let updated = reset_node_for_operator(
+            node,
+            user_id,
+            "operator_replan_requested",
+            reason.as_deref(),
+            now,
+            done_node_has_recoverable_failure,
+        )?;
+        let plan_changed = reactivate_plan_for_operator_recovery(&mut plan, now);
+        self.repo
+            .save_plan_node(updated)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        if plan_changed {
+            self.repo
+                .save_plan(plan.clone())
+                .await
+                .map_err(WorkspaceApiError::internal)?;
+        }
+        self.repo
+            .create_plan_event(operator_plan_event(
+                &plan.id,
+                workspace_id,
+                node_id,
+                attempt_id,
+                "operator_replan_requested",
+                user_id,
+                json!({"reason": reason}),
+                now,
+            ))
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        self.repo
+            .enqueue_plan_outbox(operator_tick_outbox(
+                &plan.id,
+                workspace_id,
+                node_id,
+                user_id,
+                "operator_replan_requested",
+                body.reason.as_deref(),
+                now,
+            ))
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: "Plan node sent back for supervisor recovery.".to_string(),
+            plan_id: plan.id,
+            node_id: Some(node_id.to_string()),
+            outbox_id: None,
+        })
+    }
+
+    async fn reopen_plan_node(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        node_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_action_request(&body)?;
+        self.ensure_workspace_access(user_id, workspace_id, WorkspaceAccess::Write)
+            .await?;
+        let mut plan = self
+            .repo
+            .list_plans(workspace_id, 1)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .into_iter()
+            .next()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let node = self
+            .repo
+            .list_plan_nodes(&plan.id)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .into_iter()
+            .find(|node| node.id == node_id)
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        if node.intent != "blocked" {
+            return Err(WorkspaceApiError::bad_request(
+                "Invalid workspace plan request",
+            ));
+        }
+        let attempt_id = node.current_attempt_id.clone();
+        let reason = body.reason.clone();
+        let now = Utc::now();
+        let updated = reset_node_for_operator(
+            node,
+            user_id,
+            "operator_node_reopened",
+            reason.as_deref(),
+            now,
+            |_| false,
+        )?;
+        let plan_changed = reactivate_plan_for_operator_recovery(&mut plan, now);
+        self.repo
+            .save_plan_node(updated)
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        if plan_changed {
+            self.repo
+                .save_plan(plan.clone())
+                .await
+                .map_err(WorkspaceApiError::internal)?;
+        }
+        self.repo
+            .create_plan_event(operator_plan_event(
+                &plan.id,
+                workspace_id,
+                node_id,
+                attempt_id,
+                "operator_node_reopened",
+                user_id,
+                json!({"reason": reason}),
+                now,
+            ))
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        self.repo
+            .enqueue_plan_outbox(operator_tick_outbox(
+                &plan.id,
+                workspace_id,
+                node_id,
+                user_id,
+                "operator_node_reopened",
+                body.reason.as_deref(),
+                now,
+            ))
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: "Blocked plan node reopened.".to_string(),
+            plan_id: plan.id,
+            node_id: Some(node_id.to_string()),
+            outbox_id: None,
+        })
+    }
+
+    async fn accept_plan_node_review(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        node_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_action_request(&body)?;
+        self.ensure_workspace_access(user_id, workspace_id, WorkspaceAccess::Write)
+            .await?;
+        let plan = self
+            .repo
+            .list_plans(workspace_id, 1)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .into_iter()
+            .next()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let node = self
+            .repo
+            .list_plan_nodes(&plan.id)
+            .await
+            .map_err(WorkspaceApiError::internal)?
+            .into_iter()
+            .find(|node| node.id == node_id)
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let attempt_id = node.current_attempt_id.clone();
+        let task_id = node.workspace_task_id.clone();
+        let reason = body
+            .reason
+            .clone()
+            .unwrap_or_else(|| "Accepted after operator review.".to_string());
+        let evidence_refs = trimmed_evidence_refs(&body.evidence_refs);
+        let now = Utc::now();
+        let updated =
+            accept_node_for_operator_review(node, user_id, &reason, evidence_refs.clone(), now)?;
+        self.repo
+            .save_plan_node(updated.clone())
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        if let Some(task_id) = task_id {
+            let mut task = self
+                .repo
+                .get_task(workspace_id, &task_id)
+                .await
+                .map_err(WorkspaceApiError::internal)?
+                .ok_or_else(WorkspaceApiError::task_not_found)?;
+            apply_human_review_acceptance_to_task(&mut task, &reason, &updated.metadata_json, now);
+            self.repo
+                .save_task(task)
+                .await
+                .map_err(WorkspaceApiError::internal)?;
+        }
+        self.repo
+            .create_plan_event(operator_plan_event(
+                &plan.id,
+                workspace_id,
+                node_id,
+                attempt_id,
+                "operator_review_accepted",
+                user_id,
+                json!({"reason": reason, "evidence_refs": evidence_refs}),
+                now,
+            ))
+            .await
+            .map_err(WorkspaceApiError::internal)?;
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: "Plan node accepted after human review.".to_string(),
+            plan_id: plan.id,
+            node_id: Some(node_id.to_string()),
+            outbox_id: None,
         })
     }
 
@@ -3397,6 +3738,198 @@ impl WorkspaceService for DevWorkspaceService {
             plan_id: plan.id,
             node_id: None,
             outbox_id: Some(outbox_id),
+        })
+    }
+
+    async fn request_plan_node_replan(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        node_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_action_request(&body)?;
+        self.require_dev_user(user_id)?;
+        let mut state = self.state.lock().expect("workspace dev state");
+        let mut plan = latest_plan_for_workspace(&state, workspace_id)
+            .cloned()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let node = state
+            .plan_nodes
+            .get(node_id)
+            .filter(|node| node.plan_id == plan.id)
+            .cloned()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let attempt_id = node.current_attempt_id.clone();
+        let reason = body.reason.clone();
+        let now = Utc::now();
+        let updated = reset_node_for_operator(
+            node,
+            user_id,
+            "operator_replan_requested",
+            reason.as_deref(),
+            now,
+            done_node_has_recoverable_failure,
+        )?;
+        let plan_changed = reactivate_plan_for_operator_recovery(&mut plan, now);
+        state.plan_nodes.insert(node_id.to_string(), updated);
+        if plan_changed {
+            state.plans.insert(plan.id.clone(), plan.clone());
+        }
+        state.plan_events.push(operator_plan_event(
+            &plan.id,
+            workspace_id,
+            node_id,
+            attempt_id,
+            "operator_replan_requested",
+            user_id,
+            json!({"reason": reason}),
+            now,
+        ));
+        let outbox = operator_tick_outbox(
+            &plan.id,
+            workspace_id,
+            node_id,
+            user_id,
+            "operator_replan_requested",
+            body.reason.as_deref(),
+            now,
+        );
+        state.plan_outbox.push(outbox);
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: "Plan node sent back for supervisor recovery.".to_string(),
+            plan_id: plan.id,
+            node_id: Some(node_id.to_string()),
+            outbox_id: None,
+        })
+    }
+
+    async fn reopen_plan_node(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        node_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_action_request(&body)?;
+        self.require_dev_user(user_id)?;
+        let mut state = self.state.lock().expect("workspace dev state");
+        let mut plan = latest_plan_for_workspace(&state, workspace_id)
+            .cloned()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let node = state
+            .plan_nodes
+            .get(node_id)
+            .filter(|node| node.plan_id == plan.id)
+            .cloned()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        if node.intent != "blocked" {
+            return Err(WorkspaceApiError::bad_request(
+                "Invalid workspace plan request",
+            ));
+        }
+        let attempt_id = node.current_attempt_id.clone();
+        let reason = body.reason.clone();
+        let now = Utc::now();
+        let updated = reset_node_for_operator(
+            node,
+            user_id,
+            "operator_node_reopened",
+            reason.as_deref(),
+            now,
+            |_| false,
+        )?;
+        let plan_changed = reactivate_plan_for_operator_recovery(&mut plan, now);
+        state.plan_nodes.insert(node_id.to_string(), updated);
+        if plan_changed {
+            state.plans.insert(plan.id.clone(), plan.clone());
+        }
+        state.plan_events.push(operator_plan_event(
+            &plan.id,
+            workspace_id,
+            node_id,
+            attempt_id,
+            "operator_node_reopened",
+            user_id,
+            json!({"reason": reason}),
+            now,
+        ));
+        let outbox = operator_tick_outbox(
+            &plan.id,
+            workspace_id,
+            node_id,
+            user_id,
+            "operator_node_reopened",
+            body.reason.as_deref(),
+            now,
+        );
+        state.plan_outbox.push(outbox);
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: "Blocked plan node reopened.".to_string(),
+            plan_id: plan.id,
+            node_id: Some(node_id.to_string()),
+            outbox_id: None,
+        })
+    }
+
+    async fn accept_plan_node_review(
+        &self,
+        user_id: &str,
+        workspace_id: &str,
+        node_id: &str,
+        body: WorkspacePlanActionRequest,
+    ) -> Result<WorkspacePlanActionResultView, WorkspaceApiError> {
+        validate_plan_action_request(&body)?;
+        self.require_dev_user(user_id)?;
+        let mut state = self.state.lock().expect("workspace dev state");
+        let plan = latest_plan_for_workspace(&state, workspace_id)
+            .cloned()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let node = state
+            .plan_nodes
+            .get(node_id)
+            .filter(|node| node.plan_id == plan.id)
+            .cloned()
+            .ok_or_else(WorkspaceApiError::plan_not_found)?;
+        let attempt_id = node.current_attempt_id.clone();
+        let task_id = node.workspace_task_id.clone();
+        let reason = body
+            .reason
+            .clone()
+            .unwrap_or_else(|| "Accepted after operator review.".to_string());
+        let evidence_refs = trimmed_evidence_refs(&body.evidence_refs);
+        let now = Utc::now();
+        let updated =
+            accept_node_for_operator_review(node, user_id, &reason, evidence_refs.clone(), now)?;
+        state
+            .plan_nodes
+            .insert(node_id.to_string(), updated.clone());
+        if let Some(task_id) = task_id {
+            let task = state
+                .tasks
+                .get_mut(&task_id)
+                .filter(|task| task.workspace_id == workspace_id)
+                .ok_or_else(WorkspaceApiError::task_not_found)?;
+            apply_human_review_acceptance_to_task(task, &reason, &updated.metadata_json, now);
+        }
+        state.plan_events.push(operator_plan_event(
+            &plan.id,
+            workspace_id,
+            node_id,
+            attempt_id,
+            "operator_review_accepted",
+            user_id,
+            json!({"reason": reason, "evidence_refs": evidence_refs}),
+            now,
+        ));
+        Ok(WorkspacePlanActionResultView {
+            ok: true,
+            message: "Plan node accepted after human review.".to_string(),
+            plan_id: plan.id,
+            node_id: Some(node_id.to_string()),
+            outbox_id: None,
         })
     }
 
@@ -5642,6 +6175,294 @@ fn plan_action_outbox(
     }
 }
 
+fn operator_tick_outbox(
+    plan_id: &str,
+    workspace_id: &str,
+    node_id: &str,
+    actor_id: &str,
+    action: &str,
+    reason: Option<&str>,
+    created_at: DateTime<Utc>,
+) -> WorkspacePlanOutboxRecord {
+    plan_action_outbox(
+        plan_id,
+        workspace_id,
+        SUPERVISOR_TICK_EVENT,
+        json!({
+            "workspace_id": workspace_id,
+            "plan_id": plan_id,
+            "node_id": node_id,
+            "actor_user_id": actor_id,
+            "operator_action": action,
+            "reason": reason
+        }),
+        json!({"source": "operator_action"}),
+        created_at,
+    )
+}
+
+fn operator_plan_event(
+    plan_id: &str,
+    workspace_id: &str,
+    node_id: &str,
+    attempt_id: Option<String>,
+    event_type: &str,
+    actor_id: &str,
+    payload_json: Value,
+    created_at: DateTime<Utc>,
+) -> WorkspacePlanEventRecord {
+    WorkspacePlanEventRecord {
+        id: new_id(),
+        plan_id: plan_id.to_string(),
+        workspace_id: workspace_id.to_string(),
+        node_id: Some(node_id.to_string()),
+        attempt_id,
+        event_type: event_type.to_string(),
+        source: "operator".to_string(),
+        actor_id: Some(actor_id.to_string()),
+        payload_json,
+        created_at,
+    }
+}
+
+fn reset_node_for_operator<F>(
+    mut node: WorkspacePlanNodeRecord,
+    actor_id: &str,
+    action: &str,
+    reason: Option<&str>,
+    now: DateTime<Utc>,
+    allow_done_recovery: F,
+) -> Result<WorkspacePlanNodeRecord, WorkspaceApiError>
+where
+    F: Fn(&WorkspacePlanNodeRecord) -> bool,
+{
+    if node.intent == "done" && !allow_done_recovery(&node) {
+        return Err(WorkspaceApiError::bad_request(
+            "Invalid workspace plan request",
+        ));
+    }
+    let action_label = if action == "operator_node_reopened" {
+        "reopened"
+    } else {
+        "sent back for replan"
+    };
+    let confidence = node
+        .progress_json
+        .get("confidence")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0);
+    let mut metadata = metadata_map(node.metadata_json.clone());
+    clear_operator_metadata(&mut metadata, OPERATOR_CLEARED_RETRY_KEYS);
+    clear_operator_metadata(&mut metadata, OPERATOR_CLEARED_ATTEMPT_KEYS);
+    metadata.insert(
+        "operator_action".to_string(),
+        json!({
+            "action": action,
+            "actor_id": actor_id,
+            "reason": reason,
+            "created_at": iso(now)
+        }),
+    );
+    node.intent = "todo".to_string();
+    node.execution = "idle".to_string();
+    node.progress_json = json!({
+        "percent": 0,
+        "confidence": confidence,
+        "note": format!("Operator {action_label}.")
+    });
+    node.assignee_agent_id = None;
+    node.current_attempt_id = None;
+    node.feature_checkpoint_json = reset_feature_checkpoint(node.feature_checkpoint_json);
+    node.metadata_json = Value::Object(metadata);
+    node.completed_at = None;
+    node.updated_at = Some(now);
+    Ok(node)
+}
+
+fn done_node_has_recoverable_failure(node: &WorkspacePlanNodeRecord) -> bool {
+    if node.intent != "done" {
+        return false;
+    }
+    let failed = |key: &str| {
+        matches!(
+            normalized_metadata_status(&node.metadata_json, key).as_str(),
+            "failed" | "failure" | "error"
+        )
+    };
+    failed("pipeline_status")
+        || failed("pipeline_gate_status")
+        || failed("source_publish_status")
+        || node
+            .metadata_json
+            .get("last_verification_passed")
+            .and_then(Value::as_bool)
+            == Some(false)
+}
+
+fn normalized_metadata_status(metadata: &Value, key: &str) -> String {
+    metadata
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_ascii_lowercase()
+}
+
+fn reactivate_plan_for_operator_recovery(
+    plan: &mut WorkspacePlanRecord,
+    now: DateTime<Utc>,
+) -> bool {
+    if matches!(plan.status.as_str(), "completed" | "suspended") {
+        plan.status = "active".to_string();
+        plan.updated_at = Some(now);
+        true
+    } else {
+        false
+    }
+}
+
+fn accept_node_for_operator_review(
+    mut node: WorkspacePlanNodeRecord,
+    actor_id: &str,
+    reason: &str,
+    evidence_refs: Vec<String>,
+    now: DateTime<Utc>,
+) -> Result<WorkspacePlanNodeRecord, WorkspaceApiError> {
+    if node.intent == "done" {
+        return Err(WorkspaceApiError::bad_request(
+            "Invalid workspace plan request",
+        ));
+    }
+    let metadata_value = node.metadata_json.clone();
+    let reviewable = node.intent == "blocked"
+        || metadata_value
+            .get("last_verification_passed")
+            .and_then(Value::as_bool)
+            == Some(false);
+    if !reviewable {
+        return Err(WorkspaceApiError::bad_request(
+            "Invalid workspace plan request",
+        ));
+    }
+    let previous_refs = string_values(metadata_value.get("verification_evidence_refs"));
+    let mut merged_evidence_refs = previous_refs;
+    merged_evidence_refs.extend(evidence_refs);
+    dedup_truncate(&mut merged_evidence_refs, usize::MAX);
+
+    let mut metadata = metadata_map(metadata_value);
+    clear_operator_metadata(&mut metadata, OPERATOR_CLEARED_RETRY_KEYS);
+    let review_record = json!({
+        "action": "accept_with_human_review",
+        "actor_id": actor_id,
+        "reason": reason,
+        "evidence_refs": merged_evidence_refs,
+        "created_at": iso(now)
+    });
+    metadata.insert("operator_action".to_string(), review_record.clone());
+    metadata.insert("human_review_acceptance".to_string(), review_record.clone());
+    metadata.insert("last_verification_summary".to_string(), json!(reason));
+    metadata.insert("last_verification_passed".to_string(), json!(true));
+    metadata.insert("last_verification_hard_fail".to_string(), json!(false));
+    metadata.insert(
+        "last_verification_judge_verdict".to_string(),
+        json!("accepted"),
+    );
+    metadata.insert(
+        "last_verification_judge_rationale".to_string(),
+        json!(reason),
+    );
+    metadata.insert(
+        "verification_evidence_refs".to_string(),
+        review_record["evidence_refs"].clone(),
+    );
+
+    let confidence = node
+        .progress_json
+        .get("confidence")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0)
+        .max(0.75);
+    node.intent = "done".to_string();
+    node.execution = "idle".to_string();
+    node.progress_json = json!({
+        "percent": 100,
+        "confidence": confidence,
+        "note": "Accepted after human review."
+    });
+    node.assignee_agent_id = None;
+    node.current_attempt_id = None;
+    node.metadata_json = Value::Object(metadata);
+    node.completed_at = Some(now);
+    node.updated_at = Some(now);
+    Ok(node)
+}
+
+fn apply_human_review_acceptance_to_task(
+    task: &mut WorkspaceTaskRecord,
+    reason: &str,
+    node_metadata: &Value,
+    now: DateTime<Utc>,
+) {
+    let mut metadata = metadata_map(task.metadata_json.clone());
+    metadata.insert("durable_plan_verdict".to_string(), json!("accepted"));
+    metadata.insert(
+        "durable_plan_verification_summary".to_string(),
+        json!(reason),
+    );
+    metadata.insert("last_worker_report_type".to_string(), json!("completed"));
+    metadata.insert("last_worker_report_summary".to_string(), json!(reason));
+    metadata.insert(
+        "human_review_acceptance".to_string(),
+        node_metadata
+            .get("human_review_acceptance")
+            .cloned()
+            .unwrap_or(Value::Null),
+    );
+    metadata.insert("pending_leader_adjudication".to_string(), json!(false));
+    let evidence_refs = string_values(node_metadata.get("verification_evidence_refs"));
+    if !evidence_refs.is_empty() {
+        metadata.insert("evidence_refs".to_string(), json!(evidence_refs));
+    }
+    task.status = "done".to_string();
+    task.metadata_json = Value::Object(metadata);
+    task.completed_at = Some(now);
+    task.updated_at = Some(now);
+}
+
+fn reset_feature_checkpoint(value: Option<Value>) -> Option<Value> {
+    match value {
+        Some(Value::Object(mut checkpoint)) => {
+            checkpoint.insert("worktree_path".to_string(), Value::Null);
+            checkpoint.insert("branch_name".to_string(), Value::Null);
+            checkpoint.insert("base_ref".to_string(), json!("HEAD"));
+            checkpoint.insert("commit_ref".to_string(), Value::Null);
+            Some(Value::Object(checkpoint))
+        }
+        other => other,
+    }
+}
+
+fn metadata_map(value: Value) -> Map<String, Value> {
+    match value {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    }
+}
+
+fn clear_operator_metadata(metadata: &mut Map<String, Value>, keys: &[&str]) {
+    for key in keys {
+        metadata.remove(*key);
+    }
+}
+
+fn trimmed_evidence_refs(values: &[String]) -> Vec<String> {
+    values
+        .iter()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
 fn pipeline_target_node<'a>(
     nodes: &'a [WorkspacePlanNodeRecord],
     node_id: Option<&str>,
@@ -6689,6 +7510,42 @@ async fn request_delivery_contract_regeneration(
         .map(Json)
 }
 
+async fn request_plan_node_replan(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((workspace_id, node_id)): Path<(String, String)>,
+    Json(body): Json<WorkspacePlanActionRequest>,
+) -> Result<Json<WorkspacePlanActionResultView>, WorkspaceApiError> {
+    app.workspaces
+        .request_plan_node_replan(&identity.user_id, &workspace_id, &node_id, body)
+        .await
+        .map(Json)
+}
+
+async fn reopen_plan_node(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((workspace_id, node_id)): Path<(String, String)>,
+    Json(body): Json<WorkspacePlanActionRequest>,
+) -> Result<Json<WorkspacePlanActionResultView>, WorkspaceApiError> {
+    app.workspaces
+        .reopen_plan_node(&identity.user_id, &workspace_id, &node_id, body)
+        .await
+        .map(Json)
+}
+
+async fn accept_plan_node_review(
+    State(app): State<AppState>,
+    Extension(identity): Extension<Identity>,
+    Path((workspace_id, node_id)): Path<(String, String)>,
+    Json(body): Json<WorkspacePlanActionRequest>,
+) -> Result<Json<WorkspacePlanActionResultView>, WorkspaceApiError> {
+    app.workspaces
+        .accept_plan_node_review(&identity.user_id, &workspace_id, &node_id, body)
+        .await
+        .map(Json)
+}
+
 async fn update_workspace(
     State(app): State<AppState>,
     Extension(identity): Extension<Identity>,
@@ -7400,6 +8257,18 @@ pub(crate) fn router() -> Router<AppState> {
             "/api/v1/workspaces/:workspace_id/plan/delivery/regenerate-contract",
             post(request_delivery_contract_regeneration),
         )
+        .route(
+            "/api/v1/workspaces/:workspace_id/plan/nodes/:node_id/request-replan",
+            post(request_plan_node_replan),
+        )
+        .route(
+            "/api/v1/workspaces/:workspace_id/plan/nodes/:node_id/reopen",
+            post(reopen_plan_node),
+        )
+        .route(
+            "/api/v1/workspaces/:workspace_id/plan/nodes/:node_id/accept-review",
+            post(accept_plan_node_review),
+        )
         .route("/api/v1/workspaces/:workspace_id/tasks", post(create_task).get(list_tasks))
         .route(
             "/api/v1/workspaces/:workspace_id/tasks/:task_id",
@@ -7795,6 +8664,36 @@ mod tests {
             &delivery_results,
             serde_json::from_str(include_str!(
                 "../tests/golden/workspace_plan_delivery_action_results.json"
+            ))
+            .unwrap(),
+        );
+        let node_action_results = json!({
+            "request_replan": serde_json::to_value(WorkspacePlanActionResultView {
+                ok: true,
+                message: "Plan node sent back for supervisor recovery.".to_string(),
+                plan_id: "plan-1".to_string(),
+                node_id: Some("node-1".to_string()),
+                outbox_id: None,
+            }).unwrap(),
+            "reopen": serde_json::to_value(WorkspacePlanActionResultView {
+                ok: true,
+                message: "Blocked plan node reopened.".to_string(),
+                plan_id: "plan-1".to_string(),
+                node_id: Some("node-1".to_string()),
+                outbox_id: None,
+            }).unwrap(),
+            "accept_review": serde_json::to_value(WorkspacePlanActionResultView {
+                ok: true,
+                message: "Plan node accepted after human review.".to_string(),
+                plan_id: "plan-1".to_string(),
+                node_id: Some("node-1".to_string()),
+                outbox_id: None,
+            }).unwrap()
+        });
+        assert_golden(
+            &node_action_results,
+            serde_json::from_str(include_str!(
+                "../tests/golden/workspace_plan_node_action_results.json"
             ))
             .unwrap(),
         );
@@ -8195,6 +9094,163 @@ mod tests {
             let delivery = &state.workspaces[&workspace.id].metadata_json["delivery_cicd"];
             assert_eq!(delivery["contract_source"], "agent_regeneration_requested");
             assert_eq!(delivery["regenerate_reason"], "refresh contract");
+        }
+        let replan = service
+            .request_plan_node_replan(
+                "user-1",
+                &workspace.id,
+                "plan-node-dev",
+                WorkspacePlanActionRequest {
+                    reason: Some("needs another attempt".to_string()),
+                    evidence_refs: Vec::new(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            replan.message,
+            "Plan node sent back for supervisor recovery."
+        );
+        let replan_snapshot = service
+            .get_plan_snapshot(
+                "user-1",
+                &workspace.id,
+                WorkspacePlanSnapshotQuery::default(),
+            )
+            .await
+            .unwrap();
+        let replan_node = &replan_snapshot.plan.as_ref().unwrap().nodes[0];
+        assert_eq!(
+            replan_node.metadata["operator_action"]["action"],
+            "operator_replan_requested"
+        );
+        assert!(replan_node.current_attempt_id.is_none());
+        assert!(replan_snapshot.outbox.iter().any(|item| {
+            item.event_type == SUPERVISOR_TICK_EVENT
+                && item.payload["operator_action"] == "operator_replan_requested"
+                && item.metadata["source"] == "operator_action"
+        }));
+        assert!(replan_snapshot.events.iter().any(|event| {
+            event.event_type == "operator_replan_requested"
+                && event.payload["reason"] == "needs another attempt"
+        }));
+        {
+            let mut state = service.state.lock().expect("workspace dev state");
+            state.plans.get_mut("plan-dev").unwrap().status = "suspended".to_string();
+            let node = state.plan_nodes.get_mut("plan-node-dev").unwrap();
+            node.intent = "blocked".to_string();
+            node.execution = "running".to_string();
+            node.assignee_agent_id = Some("agent-1".to_string());
+            node.current_attempt_id = Some("attempt-blocked".to_string());
+            node.feature_checkpoint_json = Some(json!({
+                "worktree_path": "/tmp/work",
+                "branch_name": "feature/p6",
+                "base_ref": "main",
+                "commit_ref": "abc123"
+            }));
+            node.metadata_json = json!({
+                "retry_count": 2,
+                "candidate_artifacts": ["old"],
+                "last_verification_passed": false
+            });
+        }
+        let reopened = service
+            .reopen_plan_node(
+                "user-1",
+                &workspace.id,
+                "plan-node-dev",
+                WorkspacePlanActionRequest {
+                    reason: Some("human unblocked".to_string()),
+                    evidence_refs: Vec::new(),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(reopened.message, "Blocked plan node reopened.");
+        {
+            let state = service.state.lock().expect("workspace dev state");
+            let plan = state.plans.get("plan-dev").unwrap();
+            let node = state.plan_nodes.get("plan-node-dev").unwrap();
+            assert_eq!(plan.status, "active");
+            assert_eq!(node.intent, "todo");
+            assert_eq!(node.execution, "idle");
+            assert!(node.assignee_agent_id.is_none());
+            assert!(node.current_attempt_id.is_none());
+            assert!(node.metadata_json.get("retry_count").is_none());
+            assert!(node.metadata_json.get("candidate_artifacts").is_none());
+            assert_eq!(
+                node.metadata_json["operator_action"]["action"],
+                "operator_node_reopened"
+            );
+            assert_eq!(
+                node.feature_checkpoint_json.as_ref().unwrap()["base_ref"],
+                "HEAD"
+            );
+            assert!(state.plan_events.iter().any(|event| {
+                event.event_type == "operator_node_reopened"
+                    && event.attempt_id.as_deref() == Some("attempt-blocked")
+            }));
+        }
+        {
+            let mut state = service.state.lock().expect("workspace dev state");
+            let node = state.plan_nodes.get_mut("plan-node-dev").unwrap();
+            node.intent = "blocked".to_string();
+            node.execution = "reported".to_string();
+            node.current_attempt_id = Some("attempt-review".to_string());
+            node.metadata_json = json!({
+                "retry_count": 1,
+                "last_verification_passed": false,
+                "verification_evidence_refs": ["ci:previous"]
+            });
+            let task = state.tasks.get_mut(&task.id).unwrap();
+            task.status = "blocked".to_string();
+            task.completed_at = None;
+        }
+        let accepted = service
+            .accept_plan_node_review(
+                "user-1",
+                &workspace.id,
+                "plan-node-dev",
+                WorkspacePlanActionRequest {
+                    reason: Some("operator accepts evidence".to_string()),
+                    evidence_refs: vec![
+                        "ci:new".to_string(),
+                        "ci:previous".to_string(),
+                        " ".to_string(),
+                    ],
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(accepted.message, "Plan node accepted after human review.");
+        {
+            let state = service.state.lock().expect("workspace dev state");
+            let node = state.plan_nodes.get("plan-node-dev").unwrap();
+            let task = state.tasks.get(&task.id).unwrap();
+            assert_eq!(node.intent, "done");
+            assert_eq!(node.execution, "idle");
+            assert!(node.current_attempt_id.is_none());
+            assert!(node.completed_at.is_some());
+            assert_eq!(
+                node.metadata_json["human_review_acceptance"]["reason"],
+                "operator accepts evidence"
+            );
+            assert_eq!(
+                node.metadata_json["verification_evidence_refs"],
+                json!(["ci:previous", "ci:new"])
+            );
+            assert!(node.metadata_json.get("retry_count").is_none());
+            assert_eq!(task.status, "done");
+            assert_eq!(task.metadata_json["durable_plan_verdict"], "accepted");
+            assert_eq!(
+                task.metadata_json["evidence_refs"],
+                json!(["ci:previous", "ci:new"])
+            );
+            assert!(state.plan_events.iter().any(|event| {
+                event.event_type == "operator_review_accepted"
+                    && event.attempt_id.as_deref() == Some("attempt-review")
+                    && event.payload_json["evidence_refs"] == json!(["ci:new", "ci:previous"])
+            }));
         }
         let done = service
             .transition_task(

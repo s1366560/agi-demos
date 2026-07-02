@@ -1248,6 +1248,23 @@ impl PgWorkspaceRepository {
         .ok_or_else(|| CoreError::Storage("workspace plan insert returned no row".into()))
     }
 
+    pub async fn save_plan(&self, plan: WorkspacePlanRecord) -> CoreResult<WorkspacePlanRecord> {
+        sqlx::query(&format!(
+            "UPDATE workspace_plans SET status=$3, updated_at=$4 \
+             WHERE id=$1 AND workspace_id=$2 RETURNING {PLAN_COLS}"
+        ))
+        .bind(&plan.id)
+        .bind(&plan.workspace_id)
+        .bind(&plan.status)
+        .bind(plan.updated_at)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_plan)
+        .transpose()?
+        .ok_or_else(|| CoreError::Storage("workspace plan update returned no row".into()))
+    }
+
     pub async fn list_plans(
         &self,
         workspace_id: &str,
@@ -1325,6 +1342,52 @@ impl PgWorkspaceRepository {
         .map(row_to_plan_node)
         .transpose()?
         .ok_or_else(|| CoreError::Storage("workspace plan node insert returned no row".into()))
+    }
+
+    pub async fn save_plan_node(
+        &self,
+        node: WorkspacePlanNodeRecord,
+    ) -> CoreResult<WorkspacePlanNodeRecord> {
+        sqlx::query(&format!(
+            "UPDATE workspace_plan_nodes SET parent_id=$3, kind=$4, title=$5, description=$6, \
+                 depends_on=$7, inputs_schema=$8, outputs_schema=$9, acceptance_criteria=$10, \
+                 feature_checkpoint=$11, handoff_package=$12, recommended_capabilities=$13, \
+                 preferred_agent_id=$14, estimated_effort=$15, priority=$16, intent=$17, \
+                 execution=$18, progress=$19, assignee_agent_id=$20, current_attempt_id=$21, \
+                 workspace_task_id=$22, metadata_json=$23, updated_at=$24, completed_at=$25 \
+             WHERE id=$1 AND plan_id=$2 RETURNING {PLAN_NODE_COLS}"
+        ))
+        .bind(&node.id)
+        .bind(&node.plan_id)
+        .bind(&node.parent_id)
+        .bind(&node.kind)
+        .bind(&node.title)
+        .bind(&node.description)
+        .bind(Json(&node.depends_on_json))
+        .bind(Json(&node.inputs_schema_json))
+        .bind(Json(&node.outputs_schema_json))
+        .bind(Json(&node.acceptance_criteria_json))
+        .bind(node.feature_checkpoint_json.as_ref().map(Json))
+        .bind(node.handoff_package_json.as_ref().map(Json))
+        .bind(Json(&node.recommended_capabilities_json))
+        .bind(&node.preferred_agent_id)
+        .bind(Json(&node.estimated_effort_json))
+        .bind(node.priority)
+        .bind(&node.intent)
+        .bind(&node.execution)
+        .bind(Json(&node.progress_json))
+        .bind(&node.assignee_agent_id)
+        .bind(&node.current_attempt_id)
+        .bind(&node.workspace_task_id)
+        .bind(Json(&node.metadata_json))
+        .bind(node.updated_at)
+        .bind(node.completed_at)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_plan_node)
+        .transpose()?
+        .ok_or_else(|| CoreError::Storage("workspace plan node update returned no row".into()))
     }
 
     pub async fn list_plan_nodes(&self, plan_id: &str) -> CoreResult<Vec<WorkspacePlanNodeRecord>> {

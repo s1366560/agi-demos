@@ -449,6 +449,29 @@ async fn workspace_repository_roundtrips_against_shared_schema() {
     let nodes = repo.list_plan_nodes("plan_p6_repo").await.unwrap();
     assert_eq!(nodes.len(), 1);
     assert_eq!(nodes[0].acceptance_criteria_json[0]["kind"], "test");
+    let mut updated_plan = plan.clone();
+    updated_plan.status = "suspended".to_string();
+    updated_plan.updated_at = Some(created_at);
+    let updated_plan = repo.save_plan(updated_plan).await.unwrap();
+    assert_eq!(updated_plan.status, "suspended");
+    assert_eq!(updated_plan.updated_at, Some(created_at));
+    let mut updated_node = node.clone();
+    updated_node.intent = "blocked".to_string();
+    updated_node.execution = "idle".to_string();
+    updated_node.progress_json = json!({"percent": 50, "confidence": 0.6, "note": "waiting"});
+    updated_node.current_attempt_id = Some("attempt_p6_repo".to_string());
+    updated_node.metadata_json = json!({"operator_action": {"action": "test"}});
+    updated_node.updated_at = Some(created_at);
+    let updated_node = repo.save_plan_node(updated_node).await.unwrap();
+    assert_eq!(updated_node.intent, "blocked");
+    assert_eq!(
+        updated_node.current_attempt_id.as_deref(),
+        Some("attempt_p6_repo")
+    );
+    assert_eq!(
+        updated_node.metadata_json["operator_action"]["action"],
+        "test"
+    );
 
     repo.create_plan_blackboard_entry(WorkspacePlanBlackboardEntryRecord {
         id: "plan_bb_p6_v1".to_string(),

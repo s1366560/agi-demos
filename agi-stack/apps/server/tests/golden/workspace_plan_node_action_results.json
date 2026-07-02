@@ -1,0 +1,23 @@
+{
+  "accept_review": {
+    "message": "Plan node accepted after human review.",
+    "node_id": "node-1",
+    "ok": true,
+    "outbox_id": null,
+    "plan_id": "plan-1"
+  },
+  "reopen": {
+    "message": "Blocked plan node reopened.",
+    "node_id": "node-1",
+    "ok": true,
+    "outbox_id": null,
+    "plan_id": "plan-1"
+  },
+  "request_replan": {
+    "message": "Plan node sent back for supervisor recovery.",
+    "node_id": "node-1",
+    "ok": true,
+    "outbox_id": null,
+    "plan_id": "plan-1"
+  }
+}
