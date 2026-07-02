@@ -66,6 +66,15 @@ plugin tools, MCP server tools, and sandbox tools without editing the static bui
 | Runtime/model | `list_available_models`, `switch_model_next_turn`, `session_status`, `structured_output`, `reflect_friction`, `verdict`, `handoff`, `cron`, `custom_tools_status` | Runtime introspection, structured outputs, review/verdicts, scheduled actions, and custom-tool loading diagnostics. |
 | Environment UI | `terminal`, `desktop` | Web terminal and remote desktop service management. |
 
+## Multi-Agent Tool Semantics
+
+- Agent definition `name` values are stored and matched exactly as provided. Matching is
+  case-sensitive and does not normalize whitespace, Unicode, or emoji.
+- `agent_stop` makes a child session no longer addressable. Later `agent_send` calls to that
+  stopped session return the same not-found denial shape used for unknown sessions.
+- `SESSION`-mode agent follow-up turns are accepted immediately, then executed FIFO per target
+  session. Different sessions can still execute concurrently.
+
 ## Plan Mode Status
 
 Historical docs referenced built-in tools named `plan_enter`, `plan_update`, and

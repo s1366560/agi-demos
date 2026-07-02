@@ -53,6 +53,7 @@ class ProjectAgentActor:
         self._tasks: dict[str, asyncio.Task[Any]] = {}
         self._task_conversations: dict[str, str] = {}
         self._abort_signals: dict[str, asyncio.Event] = {}
+        self._conversation_locks: dict[str, asyncio.Lock] = {}
         self._current_conversation_id: str | None = None
         self._current_message_id: str | None = None
 
@@ -249,24 +250,31 @@ class ProjectAgentActor:
         request: ProjectChatRequest,
         abort_signal: asyncio.Event | None = None,
     ) -> None:
-        self._current_conversation_id = request.conversation_id
-        self._current_message_id = request.message_id
+        lock = self._conversation_locks.setdefault(request.conversation_id, asyncio.Lock())
+        async with lock:
+            self._current_conversation_id = request.conversation_id
+            self._current_message_id = request.message_id
 
-        if not self._agent:
-            return
+            try:
+                if not self._agent:
+                    return
 
-        result = await execute_project_chat(self._agent, request, abort_signal=abort_signal)
-        if result.hitl_pending:
-            logger.info(
-                "[ProjectAgentActor] HITL pending: request_id=%s",
-                result.hitl_request_id,
-            )
-        if result.is_error:
-            logger.warning(
-                "[ProjectAgentActor] Chat failed: message_id=%s error=%s",
-                request.message_id,
-                result.error_message,
-            )
+                result = await execute_project_chat(self._agent, request, abort_signal=abort_signal)
+                if result.hitl_pending:
+                    logger.info(
+                        "[ProjectAgentActor] HITL pending: request_id=%s",
+                        result.hitl_request_id,
+                    )
+                if result.is_error:
+                    logger.warning(
+                        "[ProjectAgentActor] Chat failed: message_id=%s error=%s",
+                        request.message_id,
+                        result.error_message,
+                    )
+            finally:
+                if self._current_message_id == request.message_id:
+                    self._current_conversation_id = None
+                    self._current_message_id = None
 
     async def _run_continue(
         self,

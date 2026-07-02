@@ -11,7 +11,7 @@ import signal
 import subprocess
 import sys
 import uuid
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from subprocess import DEVNULL
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -45,6 +45,13 @@ _WORKSPACE_CONTRACT_STAGES = frozenset(
     }
 )
 _WORKSPACE_WORKER_STAGES = frozenset({"worker_launch"})
+
+
+@dataclass(frozen=True)
+class _LocalChatWorkItem:
+    config: ProjectAgentActorConfig
+    request: ProjectChatRequest
+    run_in_subprocess: bool = False
 
 
 def _safe_request_file_name(value: str) -> str:
@@ -162,6 +169,8 @@ class AgentRuntimeBootstrapper:
     _local_chat_lock = asyncio.Lock()
     _local_chat_tasks: ClassVar[dict[str, asyncio.Task[Any]]] = {}
     _local_chat_abort_signals: ClassVar[dict[str, asyncio.Event]] = {}
+    _local_chat_queues: ClassVar[dict[str, asyncio.Queue[_LocalChatWorkItem]]] = {}
+    _local_chat_queue_tasks: ClassVar[dict[str, asyncio.Task[Any]]] = {}
     _local_subprocesses: ClassVar[dict[str, asyncio.subprocess.Process]] = {}
     _local_subprocess_request_paths: ClassVar[dict[str, Path]] = {}
     _local_subprocess_superseded: ClassVar[set[tuple[str, int | None]]] = set()
@@ -581,10 +590,11 @@ class AgentRuntimeBootstrapper:
     async def _start_local_chat(
         self, conversation_id: str, config: ProjectAgentActorConfig, request: ProjectChatRequest
     ) -> None:
-        """Start local execution task and register cancellation signal."""
-        abort_signal = asyncio.Event()
-        task = asyncio.create_task(self._run_chat_local(config, request, abort_signal=abort_signal))
-        await self._track_local_chat_task(conversation_id, task, abort_signal)
+        """Queue local execution for this conversation."""
+        await self._enqueue_local_chat_work(
+            conversation_id,
+            _LocalChatWorkItem(config=config, request=request),
+        )
 
     async def _start_local_subprocess_chat(
         self,
@@ -592,17 +602,97 @@ class AgentRuntimeBootstrapper:
         config: ProjectAgentActorConfig,
         request: ProjectChatRequest,
     ) -> None:
-        """Start workspace local execution in a child process.
+        """Queue workspace local execution in a child process.
 
         Workspace worker turns can outlive a dev-server reload. Running them
         in the uvicorn process turns reload SIGTERM into false task blockers,
         so local mode uses a short-lived child process for those turns.
         """
+        await self._enqueue_local_chat_work(
+            conversation_id,
+            _LocalChatWorkItem(
+                config=config,
+                request=request,
+                run_in_subprocess=True,
+            ),
+        )
+
+    async def _enqueue_local_chat_work(
+        self,
+        conversation_id: str,
+        item: _LocalChatWorkItem,
+    ) -> None:
+        """Append a local turn to the per-conversation FIFO worker."""
         async with self._local_chat_lock:
-            await self._terminate_local_subprocess_locked(
-                conversation_id,
-                reason="replacement",
-            )
+            queue = self._local_chat_queues.get(conversation_id)
+            if queue is None:
+                queue = asyncio.Queue[_LocalChatWorkItem]()
+                self._local_chat_queues[conversation_id] = queue
+            queue.put_nowait(item)
+
+            worker = self._local_chat_queue_tasks.get(conversation_id)
+            if worker is None or worker.done():
+                worker = asyncio.create_task(
+                    self._run_local_chat_queue(conversation_id),
+                    name=f"local-agent-chat-queue:{conversation_id}",
+                )
+                self._local_chat_queue_tasks[conversation_id] = worker
+                self._local_chat_tasks[conversation_id] = worker
+                worker.add_done_callback(
+                    lambda done_task: self._schedule_local_chat_cleanup(
+                        conversation_id,
+                        done_task,
+                    )
+                )
+
+    async def _run_local_chat_queue(self, conversation_id: str) -> None:
+        """Run queued local turns sequentially for one conversation."""
+        while True:
+            async with self._local_chat_lock:
+                queue = self._local_chat_queues.get(conversation_id)
+                if queue is None or queue.empty():
+                    _ = self._local_chat_queues.pop(conversation_id, None)
+                    _ = self._local_chat_queue_tasks.pop(conversation_id, None)
+                    current_task = asyncio.current_task()
+                    if (
+                        current_task is not None
+                        and self._local_chat_tasks.get(conversation_id) is current_task
+                    ):
+                        _ = self._local_chat_tasks.pop(conversation_id, None)
+                    _ = self._local_chat_abort_signals.pop(conversation_id, None)
+                    return
+
+                item = queue.get_nowait()
+                abort_signal = asyncio.Event()
+                self._local_chat_abort_signals[conversation_id] = abort_signal
+
+            try:
+                if item.run_in_subprocess:
+                    await self._run_local_subprocess_chat_once(
+                        conversation_id,
+                        item.config,
+                        item.request,
+                    )
+                else:
+                    await self._run_chat_local(
+                        item.config,
+                        item.request,
+                        abort_signal=abort_signal,
+                    )
+            finally:
+                queue.task_done()
+                async with self._local_chat_lock:
+                    if self._local_chat_abort_signals.get(conversation_id) is abort_signal:
+                        _ = self._local_chat_abort_signals.pop(conversation_id, None)
+
+    async def _run_local_subprocess_chat_once(
+        self,
+        conversation_id: str,
+        config: ProjectAgentActorConfig,
+        request: ProjectChatRequest,
+    ) -> None:
+        """Start and monitor one local subprocess turn."""
+        async with self._local_chat_lock:
             request_path = self._write_local_subprocess_request(config, request)
             try:
                 env = os.environ.copy()
@@ -610,7 +700,7 @@ class AgentRuntimeBootstrapper:
                 process = await asyncio.create_subprocess_exec(
                     sys.executable,
                     "-m",
-                    "src.infrastructure.agent.actor.local_chat_worker",
+                    _LOCAL_CHAT_WORKER_MODULE,
                     str(request_path),
                     cwd=str(Path.cwd()),
                     stdout=DEVNULL,
@@ -623,18 +713,14 @@ class AgentRuntimeBootstrapper:
                 raise
             self._local_subprocesses[conversation_id] = process
             self._local_subprocess_request_paths[conversation_id] = request_path
-        monitor = asyncio.create_task(
-            self._monitor_local_subprocess_chat(
-                conversation_id=conversation_id,
-                message_id=request.message_id,
-                correlation_id=request.correlation_id,
-                process=process,
-                request_path=request_path,
-            ),
-            name=f"workspace-local-agent-subprocess:{conversation_id}",
+
+        await self._monitor_local_subprocess_chat(
+            conversation_id=conversation_id,
+            message_id=request.message_id,
+            correlation_id=request.correlation_id,
+            process=process,
+            request_path=request_path,
         )
-        _background_tasks.add(monitor)
-        monitor.add_done_callback(_background_tasks.discard)
 
     @classmethod
     async def has_running_local_subprocess(cls, conversation_id: str) -> bool:
@@ -907,16 +993,8 @@ class AgentRuntimeBootstrapper:
         task: asyncio.Task[Any],
         abort_signal: asyncio.Event,
     ) -> None:
-        """Track local task and ensure previous in-flight execution is cancelled."""
+        """Track a local worker task for cancellation and cleanup."""
         async with cls._local_chat_lock:
-            previous_abort = cls._local_chat_abort_signals.get(conversation_id)
-            previous_task = cls._local_chat_tasks.get(conversation_id)
-
-            if previous_abort:
-                previous_abort.set()
-            if previous_task and not previous_task.done():
-                previous_task.cancel()
-
             cls._local_chat_tasks[conversation_id] = task
             cls._local_chat_abort_signals[conversation_id] = abort_signal
 
@@ -934,23 +1012,42 @@ class AgentRuntimeBootstrapper:
         except RuntimeError:
             # Event loop closed; best-effort direct cleanup.
             if cls._local_chat_tasks.get(conversation_id) is task:
-                cls._local_chat_tasks.pop(conversation_id, None)
-                cls._local_chat_abort_signals.pop(conversation_id, None)
+                _ = cls._local_chat_tasks.pop(conversation_id, None)
+                _ = cls._local_chat_abort_signals.pop(conversation_id, None)
 
     @classmethod
     async def _cleanup_local_chat_task(cls, conversation_id: str, task: asyncio.Task[Any]) -> None:
         """Cleanup tracked local task if it is still current."""
         async with cls._local_chat_lock:
             if cls._local_chat_tasks.get(conversation_id) is task:
-                cls._local_chat_tasks.pop(conversation_id, None)
-                cls._local_chat_abort_signals.pop(conversation_id, None)
+                _ = cls._local_chat_tasks.pop(conversation_id, None)
+                _ = cls._local_chat_abort_signals.pop(conversation_id, None)
+            if cls._local_chat_queue_tasks.get(conversation_id) is task:
+                _ = cls._local_chat_queue_tasks.pop(conversation_id, None)
+                queue = cls._local_chat_queues.get(conversation_id)
+                if queue is None or queue.empty():
+                    _ = cls._local_chat_queues.pop(conversation_id, None)
 
     @classmethod
     async def cancel_local_chat(cls, conversation_id: str) -> bool:
-        """Cancel locally running chat task for a conversation."""
+        """Cancel the active local turn and discard queued turns for a conversation."""
         async with cls._local_chat_lock:
             abort_signal = cls._local_chat_abort_signals.get(conversation_id)
-            task = cls._local_chat_tasks.get(conversation_id)
+            task = cls._local_chat_queue_tasks.pop(
+                conversation_id,
+                None,
+            ) or cls._local_chat_tasks.get(conversation_id)
+            queue = cls._local_chat_queues.pop(conversation_id, None)
+            dropped_pending = 0
+            if queue is not None:
+                while True:
+                    try:
+                        _ = queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    dropped_pending += 1
+                    queue.task_done()
+
             subprocess_cancelled = await cls._terminate_local_subprocess_locked(
                 conversation_id,
                 reason="cancel",
@@ -959,13 +1056,14 @@ class AgentRuntimeBootstrapper:
             if abort_signal:
                 abort_signal.set()
 
+            task_cancelled = False
             if task and not task.done():
-                task.cancel()
-                return True
+                _ = task.cancel()
+                task_cancelled = True
 
-            cls._local_chat_tasks.pop(conversation_id, None)
-            cls._local_chat_abort_signals.pop(conversation_id, None)
-            return subprocess_cancelled
+            _ = cls._local_chat_tasks.pop(conversation_id, None)
+            _ = cls._local_chat_abort_signals.pop(conversation_id, None)
+            return task_cancelled or subprocess_cancelled or dropped_pending > 0
 
     async def _run_chat_local(
         self,

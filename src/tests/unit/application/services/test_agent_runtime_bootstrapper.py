@@ -16,12 +16,16 @@ from src.infrastructure.agent.actor.types import ProjectAgentActorConfig, Projec
 def _reset_local_task_tracking() -> None:
     AgentRuntimeBootstrapper._local_chat_tasks.clear()
     AgentRuntimeBootstrapper._local_chat_abort_signals.clear()
+    AgentRuntimeBootstrapper._local_chat_queues.clear()
+    AgentRuntimeBootstrapper._local_chat_queue_tasks.clear()
     AgentRuntimeBootstrapper._local_subprocesses.clear()
     AgentRuntimeBootstrapper._local_subprocess_request_paths.clear()
     AgentRuntimeBootstrapper._local_subprocess_superseded.clear()
     yield
     AgentRuntimeBootstrapper._local_chat_tasks.clear()
     AgentRuntimeBootstrapper._local_chat_abort_signals.clear()
+    AgentRuntimeBootstrapper._local_chat_queues.clear()
+    AgentRuntimeBootstrapper._local_chat_queue_tasks.clear()
     AgentRuntimeBootstrapper._local_subprocesses.clear()
     AgentRuntimeBootstrapper._local_subprocess_request_paths.clear()
     AgentRuntimeBootstrapper._local_subprocess_superseded.clear()
@@ -124,7 +128,7 @@ async def test_start_chat_actor_local_mode_uses_local_only(
     )
     created_tasks = []
 
-    def _capture_task(coro):
+    def _capture_task(coro, **kwargs):
         created_tasks.append(coro)
         coro.close()
         return MagicMock()
@@ -175,7 +179,9 @@ async def test_start_chat_actor_local_mode_uses_local_only(
 
     assert actor_id == "agent:tenant-1:proj-1:default"
     register_local_mock.assert_awaited_once_with("tenant-1", "proj-1")
-    assert local_run_mock.call_args.args[1].preferred_language == "zh-CN"
+    local_run_mock.assert_not_awaited()
+    queued = AgentRuntimeBootstrapper._local_chat_queues["conv-1"].get_nowait()
+    assert queued.request.preferred_language == "zh-CN"
     create_task_mock.assert_called_once()
     assert len(created_tasks) == 1
 
@@ -493,12 +499,6 @@ async def test_local_workspace_subprocess_starts_new_session(bootstrapper, tmp_p
     """Detached process sessions keep workspace workers alive across dev reloads."""
     request_path = tmp_path / "request.json"
     process = _FakeProcess(pid=123)
-    created_tasks = []
-
-    def _capture_task(coro, **kwargs):
-        created_tasks.append((coro, kwargs))
-        coro.close()
-        return _FakeTask(done=True)
 
     config = ProjectAgentActorConfig(tenant_id="tenant-1", project_id="proj-1")
     request = ProjectChatRequest(
@@ -515,57 +515,73 @@ async def test_local_workspace_subprocess_starts_new_session(bootstrapper, tmp_p
             return_value=request_path,
         ),
         patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as subprocess_mock,
-        patch("asyncio.create_task", side_effect=_capture_task),
     ):
         subprocess_mock.return_value = process
-        await bootstrapper._start_local_subprocess_chat("conv-1", config, request)
+        await bootstrapper._run_local_subprocess_chat_once("conv-1", config, request)
 
     subprocess_mock.assert_awaited_once()
     assert subprocess_mock.await_args.kwargs["start_new_session"] is True
     assert subprocess_mock.await_args.kwargs["env"]["MEMSTACK_POSTGRES_POOL_MODE"] == "null"
-    assert created_tasks
-    assert AgentRuntimeBootstrapper._local_subprocesses["conv-1"] is process
+    assert "conv-1" not in AgentRuntimeBootstrapper._local_subprocesses
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_local_workspace_subprocess_replaces_previous_process(bootstrapper, tmp_path):
-    """Relaunching the same conversation should terminate the old detached worker."""
-    request_paths = [tmp_path / "request-1.json", tmp_path / "request-2.json"]
-    for path in request_paths:
-        path.write_text("{}", encoding="utf-8")
-    previous = _FakeProcess(pid=111)
-    current = _FakeProcess(pid=222)
-
-    def _capture_task(coro, **kwargs):
-        coro.close()
-        return _FakeTask(done=True)
-
+async def test_local_workspace_subprocess_queue_runs_fifo_without_replacement(
+    bootstrapper,
+) -> None:
+    """Concurrent subprocess follow-ups should queue instead of replacing the active one."""
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+    started: list[str] = []
     config = ProjectAgentActorConfig(tenant_id="tenant-1", project_id="proj-1")
-    request = ProjectChatRequest(
+    first = ProjectChatRequest(
         conversation_id="conv-1",
         message_id="msg-1",
         user_message="hello",
         user_id="user-1",
     )
+    second = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="msg-2",
+        user_message="hello again",
+        user_id="user-1",
+    )
+
+    async def _run_once(
+        conversation_id: str,
+        _config: ProjectAgentActorConfig,
+        request: ProjectChatRequest,
+    ) -> None:
+        assert conversation_id == "conv-1"
+        started.append(request.message_id)
+        if request.message_id == "msg-1":
+            first_started.set()
+            await release_first.wait()
 
     with (
+        patch.object(bootstrapper, "_run_local_subprocess_chat_once", side_effect=_run_once),
         patch.object(
-            bootstrapper,
-            "_write_local_subprocess_request",
-            side_effect=request_paths,
-        ),
-        patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as subprocess_mock,
-        patch("asyncio.create_task", side_effect=_capture_task),
+            AgentRuntimeBootstrapper,
+            "_terminate_local_subprocess_locked",
+            new_callable=AsyncMock,
+        ) as terminate_mock,
     ):
-        subprocess_mock.side_effect = [previous, current]
-        await bootstrapper._start_local_subprocess_chat("conv-1", config, request)
-        await bootstrapper._start_local_subprocess_chat("conv-1", config, request)
+        await bootstrapper._start_local_subprocess_chat("conv-1", config, first)
+        await first_started.wait()
+        await bootstrapper._start_local_subprocess_chat("conv-1", config, second)
+        await asyncio.sleep(0)
 
-    assert previous.terminate_called is True
-    assert AgentRuntimeBootstrapper._local_subprocesses["conv-1"] is current
-    assert AgentRuntimeBootstrapper._local_subprocess_request_paths["conv-1"] == request_paths[1]
-    assert not request_paths[0].exists()
+        assert started == ["msg-1"]
+        terminate_mock.assert_not_awaited()
+
+        release_first.set()
+        for _ in range(20):
+            if started == ["msg-1", "msg-2"]:
+                break
+            await asyncio.sleep(0.01)
+
+    assert started == ["msg-1", "msg-2"]
 
 
 @pytest.mark.unit
@@ -830,7 +846,7 @@ async def test_start_chat_actor_auto_mode_falls_back_to_local(
     )
     created_tasks = []
 
-    def _capture_task(coro):
+    def _capture_task(coro, **kwargs):
         created_tasks.append(coro)
         coro.close()
         return MagicMock()
@@ -893,8 +909,100 @@ async def test_start_chat_actor_auto_mode_falls_back_to_local(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_local_chat_tracking_replaces_previous_task() -> None:
-    """Tracking a new local task should cancel previous in-flight task for same conversation."""
+async def test_start_local_chat_queues_same_conversation_fifo(bootstrapper) -> None:
+    """Concurrent local follow-ups for the same conversation should execute FIFO."""
+    first_started = asyncio.Event()
+    release_first = asyncio.Event()
+    started: list[str] = []
+    config = ProjectAgentActorConfig(tenant_id="tenant-1", project_id="proj-1")
+    first = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+    )
+    second = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="msg-2",
+        user_message="hello again",
+        user_id="user-1",
+    )
+
+    async def _run_local(
+        _config: ProjectAgentActorConfig,
+        request: ProjectChatRequest,
+        abort_signal: asyncio.Event | None = None,
+    ) -> None:
+        assert abort_signal is not None
+        started.append(request.message_id)
+        if request.message_id == "msg-1":
+            first_started.set()
+            await release_first.wait()
+
+    with patch.object(bootstrapper, "_run_chat_local", side_effect=_run_local):
+        await bootstrapper._start_local_chat("conv-1", config, first)
+        await first_started.wait()
+        await bootstrapper._start_local_chat("conv-1", config, second)
+        await asyncio.sleep(0)
+
+        assert started == ["msg-1"]
+
+        release_first.set()
+        for _ in range(20):
+            if started == ["msg-1", "msg-2"]:
+                break
+            await asyncio.sleep(0.01)
+
+    assert started == ["msg-1", "msg-2"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cancel_local_chat_discards_pending_queue(bootstrapper) -> None:
+    """Cancellation should stop the active turn and prevent queued ghost turns."""
+    first_started = asyncio.Event()
+    started: list[str] = []
+    config = ProjectAgentActorConfig(tenant_id="tenant-1", project_id="proj-1")
+    first = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="msg-1",
+        user_message="hello",
+        user_id="user-1",
+    )
+    second = ProjectChatRequest(
+        conversation_id="conv-1",
+        message_id="msg-2",
+        user_message="hello again",
+        user_id="user-1",
+    )
+
+    async def _run_local(
+        _config: ProjectAgentActorConfig,
+        request: ProjectChatRequest,
+        abort_signal: asyncio.Event | None = None,
+    ) -> None:
+        assert abort_signal is not None
+        started.append(request.message_id)
+        first_started.set()
+        await asyncio.Event().wait()
+
+    with patch.object(bootstrapper, "_run_chat_local", side_effect=_run_local):
+        await bootstrapper._start_local_chat("conv-1", config, first)
+        await first_started.wait()
+        await bootstrapper._start_local_chat("conv-1", config, second)
+
+        cancelled = await AgentRuntimeBootstrapper.cancel_local_chat("conv-1")
+        await asyncio.sleep(0)
+
+    assert cancelled is True
+    assert started == ["msg-1"]
+    assert "conv-1" not in AgentRuntimeBootstrapper._local_chat_queues
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_local_chat_tracking_does_not_cancel_previous_task() -> None:
+    """Tracking a local worker should not cancel previous work by itself."""
     previous_abort = asyncio.Event()
     previous_task = _FakeTask()
 
@@ -904,8 +1012,8 @@ async def test_local_chat_tracking_replaces_previous_task() -> None:
     await AgentRuntimeBootstrapper._track_local_chat_task("conv-1", previous_task, previous_abort)
     await AgentRuntimeBootstrapper._track_local_chat_task("conv-1", current_task, current_abort)
 
-    assert previous_task.cancel_called is True
-    assert previous_abort.is_set()
+    assert previous_task.cancel_called is False
+    assert previous_abort.is_set() is False
 
 
 @pytest.mark.unit
