@@ -25,6 +25,7 @@ use serde_yaml_ng::Value as YamlValue;
 use tokio::io::AsyncWriteExt;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
+use uuid::Uuid;
 
 use crate::sandbox_api::{ExecuteToolResponse, ProjectSandboxService};
 
@@ -56,6 +57,7 @@ const WORKSPACE_PLAN_ID: &str = "workspace_plan_id";
 const WORKSPACE_PLAN_NODE_ID: &str = "workspace_plan_node_id";
 const CURRENT_ATTEMPT_ID: &str = "current_attempt_id";
 const CURRENT_ATTEMPT_WORKER_BINDING_ID: &str = "current_attempt_worker_binding_id";
+const CURRENT_ATTEMPT_CONVERSATION_ID: &str = "current_attempt_conversation_id";
 const TASK_ROLE: &str = "task_role";
 const GOAL_ROOT_TASK_ROLE: &str = "goal_root";
 const REMEDIATION_STATUS: &str = "remediation_status";
@@ -64,6 +66,8 @@ const WORKER_LAUNCH_MAX_ACTIVE_ENV: &str = "WORKSPACE_WORKER_LAUNCH_MAX_ACTIVE";
 const WORKER_LAUNCH_DEFER_SECONDS_ENV: &str = "WORKSPACE_WORKER_LAUNCH_DEFER_SECONDS";
 const WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS_ENV: &str =
     "WORKSPACE_WORKER_LAUNCH_ACTIVE_EVENT_GRACE_SECONDS";
+const WORKER_LAUNCH_CONVERSATION_SOURCE: &str = "workspace_worker_launch";
+const WORKER_LAUNCH_CONVERSATION_STAGE: &str = "worker_launch";
 const WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY_ENV: &str =
     "AGISTACK_WORKSPACE_PLAN_OUTBOX_PRODUCTION_READY";
 const PLAN_TERMINAL_ATTEMPT_MAX_RETRIES_ENV: &str = "WORKSPACE_PLAN_TERMINAL_ATTEMPT_MAX_RETRIES";
@@ -543,6 +547,30 @@ pub(crate) trait WorkspacePlanDispatchStore: Send + Sync {
         now: DateTime<Utc>,
     ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>>;
 
+    #[allow(clippy::too_many_arguments)]
+    async fn ensure_worker_launch_conversation(
+        &self,
+        conversation_id: &str,
+        project_id: &str,
+        tenant_id: &str,
+        user_id: &str,
+        title: &str,
+        agent_config_json: &Value,
+        metadata_json: &Value,
+        participant_agents_json: &[String],
+        focused_agent_id: &str,
+        workspace_id: &str,
+        linked_workspace_task_id: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<()>;
+
+    async fn bind_task_session_attempt_conversation(
+        &self,
+        attempt_id: &str,
+        conversation_id: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>>;
+
     async fn finish_task_session_attempt(
         &self,
         attempt_id: &str,
@@ -846,6 +874,54 @@ impl WorkspacePlanDispatchStore for PgWorkspaceRepository {
         now: DateTime<Utc>,
     ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
         PgWorkspaceRepository::mark_task_session_attempt_running(self, attempt_id, now).await
+    }
+
+    async fn ensure_worker_launch_conversation(
+        &self,
+        conversation_id: &str,
+        project_id: &str,
+        tenant_id: &str,
+        user_id: &str,
+        title: &str,
+        agent_config_json: &Value,
+        metadata_json: &Value,
+        participant_agents_json: &[String],
+        focused_agent_id: &str,
+        workspace_id: &str,
+        linked_workspace_task_id: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<()> {
+        PgWorkspaceRepository::ensure_worker_launch_conversation(
+            self,
+            conversation_id,
+            project_id,
+            tenant_id,
+            user_id,
+            title,
+            agent_config_json,
+            metadata_json,
+            participant_agents_json,
+            focused_agent_id,
+            workspace_id,
+            linked_workspace_task_id,
+            now,
+        )
+        .await
+    }
+
+    async fn bind_task_session_attempt_conversation(
+        &self,
+        attempt_id: &str,
+        conversation_id: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        PgWorkspaceRepository::bind_task_session_attempt_conversation(
+            self,
+            attempt_id,
+            conversation_id,
+            now,
+        )
+        .await
     }
 
     async fn finish_task_session_attempt(
@@ -1187,6 +1263,57 @@ impl WorkerLaunchAdmissionConfig {
     }
 }
 
+fn worker_conversation_scope_for_task(task_id: &str, attempt_id: Option<&str>) -> String {
+    attempt_id
+        .map(|attempt_id| format!("task:{task_id}:attempt:{attempt_id}"))
+        .unwrap_or_else(|| format!("task:{task_id}"))
+}
+
+fn worker_conversation_id(
+    workspace_id: &str,
+    worker_agent_id: &str,
+    task_id: &str,
+    attempt_id: Option<&str>,
+) -> String {
+    let scope = worker_conversation_scope_for_task(task_id, attempt_id);
+    let name = format!("workspace:{workspace_id}:agent:{worker_agent_id}:scope:{scope}");
+    Uuid::new_v5(&Uuid::NAMESPACE_DNS, name.as_bytes()).to_string()
+}
+
+fn worker_conversation_title(task: &WorkspaceTaskRecord) -> String {
+    let title_prefix = task.title.chars().take(80).collect::<String>();
+    format!("Workspace Worker - {title_prefix}")
+}
+
+fn worker_conversation_metadata(
+    workspace_id: &str,
+    task: &WorkspaceTaskRecord,
+    worker_agent_id: &str,
+    attempt: &WorkspaceTaskSessionAttemptRecord,
+    now: DateTime<Utc>,
+) -> Value {
+    let task_metadata = object_or_empty(task.metadata_json.clone());
+    let mut metadata = json!({
+        "workspace_id": workspace_id,
+        "agent_id": worker_agent_id,
+        "workspace_agent_binding_id": Value::Null,
+        "workspace_task_id": task.id,
+        "linked_workspace_task_id": task.id,
+        ROOT_GOAL_TASK_ID: attempt.root_goal_task_id,
+        "attempt_id": attempt.id,
+        "conversation_scope": worker_conversation_scope_for_task(&task.id, Some(&attempt.id)),
+        "source": WORKER_LAUNCH_CONVERSATION_SOURCE,
+        "workspace_llm_stage": WORKER_LAUNCH_CONVERSATION_STAGE,
+        "created_at": now.to_rfc3339(),
+    });
+    if let Some(preferred_language) = string_from_map(&task_metadata, "preferred_language") {
+        if let Some(map) = metadata.as_object_mut() {
+            map.insert("preferred_language".to_string(), json!(preferred_language));
+        }
+    }
+    metadata
+}
+
 pub(crate) struct WorkerLaunchAdmissionHandler {
     store: Arc<dyn WorkspacePlanDispatchStore>,
     config: WorkerLaunchAdmissionConfig,
@@ -1276,12 +1403,20 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
             return Ok(WorkspacePlanOutboxHandlerOutcome::Complete);
         }
 
-        let workspace = self.store.get_workspace(&workspace_id).await?;
+        let workspace = self
+            .store
+            .get_workspace(&workspace_id)
+            .await?
+            .ok_or_else(|| {
+                CoreError::Storage(format!(
+                    "workspace {workspace_id} not found for worker launch"
+                ))
+            })?;
         let launch_node = self
             .load_launch_node(plan_id.as_deref(), node_id.as_deref())
             .await?;
         let worktree_context = worker_launch_worktree_context(
-            workspace.as_ref(),
+            Some(&workspace),
             &task,
             launch_node.as_ref(),
             attempt_id.as_deref(),
@@ -1304,11 +1439,80 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
             }
         }
 
-        task_metadata.insert("launch_state".to_string(), json!("runtime_admitted"));
+        let mut bound_attempt = None;
+        let mut current_attempt_conversation_id = None;
+        if let Some(attempt_id) = attempt_id.as_deref() {
+            let attempt = self
+                .store
+                .get_task_session_attempt(attempt_id)
+                .await?
+                .ok_or_else(|| {
+                    CoreError::Storage(format!(
+                        "workspace task session attempt {attempt_id} not found"
+                    ))
+                })?;
+            let conversation_id = string_from_map(&payload, "reuse_conversation_id")
+                .or_else(|| attempt.conversation_id.clone())
+                .unwrap_or_else(|| {
+                    worker_conversation_id(
+                        &workspace_id,
+                        &worker_agent_id,
+                        &task.id,
+                        Some(attempt_id),
+                    )
+                });
+            let agent_config = json!({
+                "selected_agent_id": worker_agent_id,
+                "agent_definition_id": worker_agent_id,
+            });
+            let conversation_metadata =
+                worker_conversation_metadata(&workspace_id, &task, &worker_agent_id, &attempt, now);
+            let participant_agents = vec![worker_agent_id.clone()];
+            self.store
+                .ensure_worker_launch_conversation(
+                    &conversation_id,
+                    &workspace.project_id,
+                    &workspace.tenant_id,
+                    &actor_user_id,
+                    &worker_conversation_title(&task),
+                    &agent_config,
+                    &conversation_metadata,
+                    &participant_agents,
+                    &worker_agent_id,
+                    &workspace_id,
+                    &task.id,
+                    now,
+                )
+                .await?;
+            let attempt = self
+                .store
+                .bind_task_session_attempt_conversation(attempt_id, &conversation_id, now)
+                .await?
+                .ok_or_else(|| {
+                    CoreError::Storage(format!(
+                        "workspace task session attempt {attempt_id} not found"
+                    ))
+                })?;
+            current_attempt_conversation_id = Some(conversation_id);
+            bound_attempt = Some(attempt);
+        }
+
+        let launch_state = if current_attempt_conversation_id.is_some() {
+            "bound"
+        } else {
+            "runtime_admitted"
+        };
+        task_metadata.insert("launch_state".to_string(), json!(launch_state));
         task_metadata.insert(
             "worker_launch_admitted_at".to_string(),
             json!(now.to_rfc3339()),
         );
+        if current_attempt_conversation_id.is_some() {
+            task_metadata.insert(
+                "worker_launch_bound_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+        }
         task_metadata.insert(
             "worker_launch_admitted_by".to_string(),
             json!(leader_agent_id),
@@ -1318,14 +1522,30 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
             json!(worker_agent_id),
         );
         task_metadata.insert(CURRENT_ATTEMPT_WORKER_BINDING_ID.to_string(), Value::Null);
-        if let Some(attempt_id) = attempt_id.as_deref() {
+        if let Some(attempt) = bound_attempt.as_ref() {
+            task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt.id.clone()));
+            task_metadata.insert(
+                "current_attempt_number".to_string(),
+                json!(attempt.attempt_number),
+            );
+            if let Some(conversation_id) = current_attempt_conversation_id.as_deref() {
+                task_metadata.insert(
+                    CURRENT_ATTEMPT_CONVERSATION_ID.to_string(),
+                    json!(conversation_id),
+                );
+            }
+        } else if let Some(attempt_id) = attempt_id.as_deref() {
             task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!(attempt_id));
         }
         task_metadata.insert(
             "execution_state".to_string(),
             json!({
                 "phase": "in_progress",
-                "last_agent_reason": "workspace_plan.worker_launch.admitted",
+                "last_agent_reason": if current_attempt_conversation_id.is_some() {
+                    "workspace_worker_launch.bind_conversation"
+                } else {
+                    "workspace_plan.worker_launch.admitted"
+                },
                 "last_agent_action": "schedule",
                 "updated_by_actor_type": "agent",
                 "updated_by_actor_id": task_metadata
@@ -1348,6 +1568,8 @@ impl WorkspacePlanOutboxHandler for WorkerLaunchAdmissionHandler {
             plan_id.as_deref(),
             node_id.as_deref(),
             attempt_id.as_deref(),
+            current_attempt_conversation_id.as_deref(),
+            launch_state,
             now,
         )
         .await?;
@@ -1461,6 +1683,8 @@ impl WorkerLaunchAdmissionHandler {
         plan_id: Option<&str>,
         node_id: Option<&str>,
         attempt_id: Option<&str>,
+        conversation_id: Option<&str>,
+        launch_state: &str,
         now: DateTime<Utc>,
     ) -> CoreResult<()> {
         let (Some(plan_id), Some(node_id)) = (plan_id, node_id) else {
@@ -1484,11 +1708,21 @@ impl WorkerLaunchAdmissionHandler {
             node.current_attempt_id = Some(attempt_id.to_string());
         }
         let mut metadata = object_or_empty(node.metadata_json);
-        metadata.insert("launch_state".to_string(), json!("runtime_admitted"));
+        metadata.insert("launch_state".to_string(), json!(launch_state));
         metadata.insert(
             "worker_launch_admitted_at".to_string(),
             json!(now.to_rfc3339()),
         );
+        if let Some(conversation_id) = conversation_id {
+            metadata.insert(
+                CURRENT_ATTEMPT_CONVERSATION_ID.to_string(),
+                json!(conversation_id),
+            );
+            metadata.insert(
+                "worker_launch_bound_at".to_string(),
+                json!(now.to_rfc3339()),
+            );
+        }
         node.metadata_json = Value::Object(metadata);
         node.updated_at = Some(now);
         self.store.save_plan_node(node).await?;
@@ -10468,6 +10702,22 @@ mod tests {
         updated_at: Option<DateTime<Utc>>,
     }
 
+    #[derive(Debug, Clone, PartialEq)]
+    struct FakeWorkerConversationRecord {
+        id: String,
+        project_id: String,
+        tenant_id: String,
+        user_id: String,
+        title: String,
+        agent_config_json: Value,
+        metadata_json: Value,
+        participant_agents_json: Vec<String>,
+        focused_agent_id: String,
+        workspace_id: String,
+        linked_workspace_task_id: String,
+        updated_at: DateTime<Utc>,
+    }
+
     #[derive(Default)]
     struct FakeWorkspacePlanDispatchStore {
         workspaces: Mutex<HashMap<String, WorkspaceRecord>>,
@@ -10475,6 +10725,7 @@ mod tests {
         plans: Mutex<HashMap<String, WorkspacePlanRecord>>,
         nodes: Mutex<HashMap<String, WorkspacePlanNodeRecord>>,
         attempts: Mutex<HashMap<String, WorkspaceTaskSessionAttemptRecord>>,
+        conversations: Mutex<HashMap<String, FakeWorkerConversationRecord>>,
         pipeline_contracts: Mutex<HashMap<(String, String), FakePipelineContractRecord>>,
         pipeline_runs: Mutex<HashMap<String, WorkspacePipelineRunRecord>>,
         pipeline_stage_runs: Mutex<HashMap<String, WorkspacePipelineStageRunRecord>>,
@@ -10576,6 +10827,15 @@ mod tests {
 
         fn attempts(&self) -> Vec<WorkspaceTaskSessionAttemptRecord> {
             self.attempts.lock().unwrap().values().cloned().collect()
+        }
+
+        fn conversation(&self, id: &str) -> FakeWorkerConversationRecord {
+            self.conversations
+                .lock()
+                .unwrap()
+                .get(id)
+                .cloned()
+                .unwrap_or_else(|| panic!("conversation {id} not found"))
         }
 
         fn plan_events(&self) -> Vec<WorkspacePlanEventRecord> {
@@ -10975,6 +11235,67 @@ mod tests {
                 return Ok(None);
             };
             attempt.status = "running".to_string();
+            attempt.updated_at = Some(now);
+            Ok(Some(attempt.clone()))
+        }
+
+        async fn ensure_worker_launch_conversation(
+            &self,
+            conversation_id: &str,
+            project_id: &str,
+            tenant_id: &str,
+            user_id: &str,
+            title: &str,
+            agent_config_json: &Value,
+            metadata_json: &Value,
+            participant_agents_json: &[String],
+            focused_agent_id: &str,
+            workspace_id: &str,
+            linked_workspace_task_id: &str,
+            now: DateTime<Utc>,
+        ) -> CoreResult<()> {
+            let mut conversations = self.conversations.lock().unwrap();
+            if let Some(existing) = conversations.get(conversation_id) {
+                if existing.workspace_id != workspace_id
+                    || existing.linked_workspace_task_id != linked_workspace_task_id
+                {
+                    return Err(CoreError::Storage(format!(
+                        "worker launch conversation {conversation_id} is linked to another workspace task"
+                    )));
+                }
+            }
+            conversations.insert(
+                conversation_id.to_string(),
+                FakeWorkerConversationRecord {
+                    id: conversation_id.to_string(),
+                    project_id: project_id.to_string(),
+                    tenant_id: tenant_id.to_string(),
+                    user_id: user_id.to_string(),
+                    title: title.to_string(),
+                    agent_config_json: agent_config_json.clone(),
+                    metadata_json: metadata_json.clone(),
+                    participant_agents_json: participant_agents_json.to_vec(),
+                    focused_agent_id: focused_agent_id.to_string(),
+                    workspace_id: workspace_id.to_string(),
+                    linked_workspace_task_id: linked_workspace_task_id.to_string(),
+                    updated_at: now,
+                },
+            );
+            Ok(())
+        }
+
+        async fn bind_task_session_attempt_conversation(
+            &self,
+            attempt_id: &str,
+            conversation_id: &str,
+            now: DateTime<Utc>,
+        ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+            let mut attempts = self.attempts.lock().unwrap();
+            let Some(attempt) = attempts.get_mut(attempt_id) else {
+                return Ok(None);
+            };
+            attempt.status = "running".to_string();
+            attempt.conversation_id = Some(conversation_id.to_string());
             attempt.updated_at = Some(now);
             Ok(Some(attempt.clone()))
         }
@@ -11944,12 +12265,27 @@ esac
         assert_eq!(checkpoint["base_ref"], "abcdef1234567890");
     }
 
+    #[test]
+    fn worker_conversation_id_matches_python_uuid5_contract() {
+        assert_eq!(
+            worker_conversation_id(
+                "workspace-test",
+                "agent-worker",
+                "task-test",
+                Some("attempt-test")
+            ),
+            "d267a78e-eefc-5d33-bfb3-ac4fa7ece855"
+        );
+    }
+
     #[tokio::test]
-    async fn worker_launch_handler_marks_dispatched_node_running_and_task_admitted() {
+    async fn worker_launch_handler_binds_conversation_and_marks_node_running() {
         let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
         let mut task = task_with_plan_metadata();
         let mut task_metadata = object_or_empty(task.metadata_json.clone());
         task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task_metadata.insert("preferred_language".to_string(), json!("zh-CN"));
         task.metadata_json = Value::Object(task_metadata);
         store.insert_task(task);
         store.insert_plan(plan());
@@ -11965,22 +12301,114 @@ esac
         assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
         let task = store.task("task-test");
         assert_eq!(task.status, "in_progress");
-        assert_eq!(task.metadata_json["launch_state"], "runtime_admitted");
+        assert_eq!(task.metadata_json["launch_state"], "bound");
+        assert_eq!(
+            task.metadata_json[CURRENT_ATTEMPT_CONVERSATION_ID],
+            "d267a78e-eefc-5d33-bfb3-ac4fa7ece855"
+        );
+        assert_eq!(task.metadata_json["current_attempt_number"], 1);
         assert_eq!(
             task.metadata_json["current_attempt_worker_agent_id"],
             "agent-worker"
         );
         assert!(task.metadata_json["worker_launch_admitted_at"].is_string());
+        assert!(task.metadata_json["worker_launch_bound_at"].is_string());
+        let attempt = store
+            .attempts()
+            .into_iter()
+            .find(|attempt| attempt.id == "attempt-test")
+            .unwrap();
+        assert_eq!(attempt.status, "running");
+        assert_eq!(
+            attempt.conversation_id.as_deref(),
+            Some("d267a78e-eefc-5d33-bfb3-ac4fa7ece855")
+        );
+        let conversation = store.conversation("d267a78e-eefc-5d33-bfb3-ac4fa7ece855");
+        assert_eq!(conversation.project_id, "project-test");
+        assert_eq!(conversation.tenant_id, "tenant-test");
+        assert_eq!(conversation.user_id, "actor-test");
+        assert_eq!(conversation.title, "Workspace Worker - Build feature");
+        assert_eq!(
+            conversation.agent_config_json["selected_agent_id"],
+            "agent-worker"
+        );
+        assert_eq!(
+            conversation.metadata_json["source"],
+            "workspace_worker_launch"
+        );
+        assert_eq!(
+            conversation.metadata_json["conversation_scope"],
+            "task:task-test:attempt:attempt-test"
+        );
+        assert_eq!(conversation.metadata_json["preferred_language"], "zh-CN");
+        assert_eq!(conversation.participant_agents_json, vec!["agent-worker"]);
+        assert_eq!(conversation.focused_agent_id, "agent-worker");
+        assert_eq!(conversation.linked_workspace_task_id, "task-test");
         let node = store.node("node-test");
         assert_eq!(node.execution, "running");
         assert_eq!(node.current_attempt_id.as_deref(), Some("attempt-test"));
-        assert_eq!(node.metadata_json["launch_state"], "runtime_admitted");
+        assert_eq!(node.metadata_json["launch_state"], "bound");
+        assert_eq!(
+            node.metadata_json[CURRENT_ATTEMPT_CONVERSATION_ID],
+            "d267a78e-eefc-5d33-bfb3-ac4fa7ece855"
+        );
         assert!(store.outbox().is_empty());
+    }
+
+    #[tokio::test]
+    async fn worker_launch_handler_reuses_repair_conversation_id_when_present() {
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
+        let mut task = task_with_plan_metadata();
+        let mut task_metadata = object_or_empty(task.metadata_json.clone());
+        task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
+        task.metadata_json = Value::Object(task_metadata);
+        store.insert_task(task);
+        store.insert_plan(plan());
+        let mut node = plan_node();
+        node.execution = "dispatched".to_string();
+        node.current_attempt_id = Some("attempt-test".to_string());
+        store.insert_node(node);
+        store.insert_attempt(task_session_attempt("attempt-test", "running", None));
+        let handler = worker_launch_handler(Arc::clone(&store), 4);
+        let mut item = worker_launch_item();
+        if let Some(payload) = item.payload_json.as_object_mut() {
+            payload.insert(
+                "reuse_conversation_id".to_string(),
+                json!("conv-existing-repair"),
+            );
+        }
+
+        let outcome = handler.handle(item).await.unwrap();
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let task = store.task("task-test");
+        assert_eq!(task.metadata_json["launch_state"], "bound");
+        assert_eq!(
+            task.metadata_json[CURRENT_ATTEMPT_CONVERSATION_ID],
+            "conv-existing-repair"
+        );
+        let attempt = store
+            .attempts()
+            .into_iter()
+            .find(|attempt| attempt.id == "attempt-test")
+            .unwrap();
+        assert_eq!(
+            attempt.conversation_id.as_deref(),
+            Some("conv-existing-repair")
+        );
+        let conversation = store.conversation("conv-existing-repair");
+        assert_eq!(conversation.metadata_json["attempt_id"], "attempt-test");
+        assert_eq!(
+            conversation.metadata_json["conversation_scope"],
+            "task:task-test:attempt:attempt-test"
+        );
     }
 
     #[tokio::test]
     async fn worker_launch_handler_records_skipped_worktree_context_without_sandbox_root() {
         let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_metadata(json!({})));
         let mut task = task_with_plan_metadata();
         let mut task_metadata = object_or_empty(task.metadata_json.clone());
         task_metadata.insert(CURRENT_ATTEMPT_ID.to_string(), json!("attempt-test"));
@@ -11998,7 +12426,7 @@ esac
 
         assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
         let task = store.task("task-test");
-        assert_eq!(task.metadata_json["launch_state"], "runtime_admitted");
+        assert_eq!(task.metadata_json["launch_state"], "bound");
         assert_eq!(task.metadata_json["worktree_setup"]["status"], "skipped");
         assert_eq!(
             task.metadata_json["worktree_setup"]["reason"],
@@ -12014,6 +12442,10 @@ esac
             .find(|attempt| attempt.id == "attempt-test")
             .unwrap();
         assert_eq!(attempt.status, "running");
+        assert_eq!(
+            attempt.conversation_id.as_deref(),
+            Some("d267a78e-eefc-5d33-bfb3-ac4fa7ece855")
+        );
     }
 
     #[tokio::test]
@@ -12094,6 +12526,7 @@ esac
         assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
         let task = store.task("task-test");
         assert_eq!(task.status, "in_progress");
+        assert_eq!(task.metadata_json["launch_state"], "bound");
         assert_eq!(task.metadata_json["worktree_setup"]["status"], "prepared");
         let worktree_path = task.metadata_json["worktree_setup"]["worktree_path"]
             .as_str()
@@ -12107,6 +12540,7 @@ esac
         assert_eq!(inside.trim(), "true");
         let node = store.node("node-test");
         assert_eq!(node.execution, "running");
+        assert_eq!(node.metadata_json["launch_state"], "bound");
     }
 
     #[tokio::test]

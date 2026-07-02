@@ -1078,6 +1078,113 @@ impl PgWorkspaceRepository {
         .transpose()
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn ensure_worker_launch_conversation(
+        &self,
+        conversation_id: &str,
+        project_id: &str,
+        tenant_id: &str,
+        user_id: &str,
+        title: &str,
+        agent_config_json: &Value,
+        metadata_json: &Value,
+        participant_agents_json: &[String],
+        focused_agent_id: &str,
+        workspace_id: &str,
+        linked_workspace_task_id: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<()> {
+        let existing = sqlx::query(
+            "SELECT workspace_id, linked_workspace_task_id \
+             FROM conversations WHERE id = $1",
+        )
+        .bind(conversation_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?;
+        if let Some(row) = existing {
+            let existing_workspace_id: Option<String> =
+                row.try_get("workspace_id").map_err(storage)?;
+            let existing_task_id: Option<String> =
+                row.try_get("linked_workspace_task_id").map_err(storage)?;
+            if existing_workspace_id
+                .as_deref()
+                .is_some_and(|candidate| candidate != workspace_id)
+                || existing_task_id
+                    .as_deref()
+                    .is_some_and(|candidate| candidate != linked_workspace_task_id)
+            {
+                return Err(CoreError::Storage(format!(
+                    "worker launch conversation {conversation_id} is linked to another workspace task"
+                )));
+            }
+            sqlx::query(
+                "UPDATE conversations \
+                 SET agent_config = $2, meta = $3, participant_agents = $4, \
+                     conversation_mode = 'isolated', focused_agent_id = $5, \
+                     workspace_id = $6, linked_workspace_task_id = $7, updated_at = $8 \
+                 WHERE id = $1",
+            )
+            .bind(conversation_id)
+            .bind(Json(agent_config_json))
+            .bind(Json(metadata_json))
+            .bind(Json(participant_agents_json))
+            .bind(focused_agent_id)
+            .bind(workspace_id)
+            .bind(linked_workspace_task_id)
+            .bind(now)
+            .execute(&self.pool)
+            .await
+            .map_err(storage)?;
+            return Ok(());
+        }
+
+        sqlx::query(
+            "INSERT INTO conversations \
+                (id, project_id, tenant_id, user_id, title, status, agent_config, meta, \
+                 message_count, current_mode, participant_agents, conversation_mode, \
+                 focused_agent_id, workspace_id, linked_workspace_task_id, created_at, updated_at) \
+             VALUES ($1,$2,$3,$4,$5,'active',$6,$7,0,'build',$8,'isolated',$9,$10,$11,$12,$12)",
+        )
+        .bind(conversation_id)
+        .bind(project_id)
+        .bind(tenant_id)
+        .bind(user_id)
+        .bind(title)
+        .bind(Json(agent_config_json))
+        .bind(Json(metadata_json))
+        .bind(Json(participant_agents_json))
+        .bind(focused_agent_id)
+        .bind(workspace_id)
+        .bind(linked_workspace_task_id)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(storage)?;
+        Ok(())
+    }
+
+    pub async fn bind_task_session_attempt_conversation(
+        &self,
+        attempt_id: &str,
+        conversation_id: &str,
+        now: DateTime<Utc>,
+    ) -> CoreResult<Option<WorkspaceTaskSessionAttemptRecord>> {
+        sqlx::query(&format!(
+            "UPDATE workspace_task_session_attempts \
+             SET status = 'running', conversation_id = $2, updated_at = $3 \
+             WHERE id = $1 RETURNING {TASK_SESSION_ATTEMPT_COLS}"
+        ))
+        .bind(attempt_id)
+        .bind(conversation_id)
+        .bind(now)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .map(row_to_task_session_attempt)
+        .transpose()
+    }
+
     pub async fn finish_task_session_attempt(
         &self,
         attempt_id: &str,
