@@ -39,6 +39,9 @@ const DRONE_PROVIDER: &str = "drone";
 const DRONE_SERVER_ENV: &str = "DRONE_SERVER";
 const DRONE_SERVER_URL_ENV: &str = "DRONE_SERVER_URL";
 const DRONE_TOKEN_ENV: &str = "DRONE_TOKEN";
+const DRONE_DOCKER_DEPLOY_VALIDATION: &str = "explicit_deploy_step_v1";
+const DEFAULT_DRONE_DEPLOY_MODE: &str = "cli";
+const DEFAULT_DRONE_DEPLOY_STAGE: &str = "deploy";
 const PLANNING_CONTRACT_SOURCE: &str = "planner_agent_code_analysis";
 const DEFAULT_PIPELINE_TIMEOUT_SECONDS: i32 = 600;
 const DEFAULT_PREVIEW_PORT: i32 = 3000;
@@ -1896,6 +1899,7 @@ struct DronePipelineConfig {
     branch: Option<String>,
     commit: Option<String>,
     params: Vec<(String, String)>,
+    deploy: Option<DroneDeployConfig>,
     timeout_seconds: u64,
     poll_interval_seconds: u64,
 }
@@ -1914,6 +1918,17 @@ impl DronePipelineConfig {
             build_number
         )
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DroneDeployConfig {
+    mode: String,
+    stage: String,
+    required: bool,
+    target: Option<String>,
+    docker: Map<String, Value>,
+    kubernetes: Map<String, Value>,
+    cli: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2310,11 +2325,18 @@ fn drone_pipeline_config(
         return Ok(None);
     };
 
+    let deploy = drone_deploy_config(provider_config.get("deploy"));
     let mut params = string_pairs_from_map(
         provider_config
             .get("params")
             .or_else(|| provider_config.get("build_params")),
     );
+    let target = string_from_map(&provider_config, "target")
+        .or_else(|| deploy.as_ref().and_then(|deploy| deploy.target.clone()));
+    if let Some(target) = target {
+        insert_default_param(&mut params, "target", target);
+    }
+    add_drone_deploy_params(&mut params, deploy.as_ref());
     params.sort_by(|left, right| left.0.cmp(&right.0));
 
     Ok(Some(DronePipelineConfig {
@@ -2325,6 +2347,7 @@ fn drone_pipeline_config(
         branch: string_from_map(&provider_config, "branch"),
         commit: string_from_map(&provider_config, "commit"),
         params,
+        deploy,
         timeout_seconds: positive_u64_from_map(
             &provider_config,
             "timeout_seconds",
@@ -2332,6 +2355,130 @@ fn drone_pipeline_config(
         ),
         poll_interval_seconds: positive_u64_from_map(&provider_config, "poll_interval_seconds", 5),
     }))
+}
+
+fn drone_deploy_config(value: Option<&Value>) -> Option<DroneDeployConfig> {
+    let map = value.and_then(Value::as_object)?;
+    if !bool_from_map_default(map, "enabled", false) {
+        return None;
+    }
+    let mode = string_from_map(map, "mode")
+        .unwrap_or_else(|| DEFAULT_DRONE_DEPLOY_MODE.to_string())
+        .to_ascii_lowercase();
+    let stage =
+        string_from_map(map, "stage").unwrap_or_else(|| DEFAULT_DRONE_DEPLOY_STAGE.to_string());
+    Some(DroneDeployConfig {
+        mode,
+        stage,
+        required: bool_from_map_default(map, "required", true),
+        target: string_from_map(map, "target"),
+        docker: map
+            .get("docker")
+            .cloned()
+            .map(object_or_empty)
+            .unwrap_or_default(),
+        kubernetes: map
+            .get("kubernetes")
+            .cloned()
+            .map(object_or_empty)
+            .unwrap_or_default(),
+        cli: map
+            .get("cli")
+            .cloned()
+            .map(object_or_empty)
+            .unwrap_or_default(),
+    })
+}
+
+fn add_drone_deploy_params(params: &mut Vec<(String, String)>, deploy: Option<&DroneDeployConfig>) {
+    let Some(deploy) = deploy else {
+        return;
+    };
+    insert_default_param(params, "MEMSTACK_DEPLOY_ENABLED", "true");
+    insert_default_param(params, "MEMSTACK_DEPLOY_MODE", deploy.mode.clone());
+    insert_default_param(params, "MEMSTACK_DEPLOY_STAGE", deploy.stage.clone());
+    if let Some(target) = &deploy.target {
+        insert_default_param(params, "MEMSTACK_DEPLOY_TARGET", target.clone());
+    }
+    match deploy.mode.as_str() {
+        "docker" => {
+            add_prefixed_drone_deploy_params(params, "MEMSTACK_DEPLOY_DOCKER", &deploy.docker)
+        }
+        "kubernetes" => add_prefixed_drone_deploy_params(
+            params,
+            "MEMSTACK_DEPLOY_KUBERNETES",
+            &deploy.kubernetes,
+        ),
+        "cli" => add_prefixed_drone_deploy_params(params, "MEMSTACK_DEPLOY_CLI", &deploy.cli),
+        _ => {}
+    }
+}
+
+fn add_prefixed_drone_deploy_params(
+    params: &mut Vec<(String, String)>,
+    prefix: &str,
+    values: &Map<String, Value>,
+) {
+    for (key, value) in values {
+        let Some(param_value) = drone_deploy_param_value(value) else {
+            continue;
+        };
+        let safe_key = drone_deploy_safe_param_key(key);
+        if !safe_key.is_empty() {
+            insert_default_param(params, format!("{prefix}_{safe_key}"), param_value);
+        }
+    }
+}
+
+fn insert_default_param(
+    params: &mut Vec<(String, String)>,
+    key: impl Into<String>,
+    value: impl Into<String>,
+) {
+    let key = key.into();
+    if params.iter().any(|(existing, _)| existing == &key) {
+        return;
+    }
+    params.push((key, value.into()));
+}
+
+fn drone_deploy_safe_param_key(key: &str) -> String {
+    key.chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_uppercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('_')
+        .to_string()
+}
+
+fn drone_deploy_param_value(value: &Value) -> Option<String> {
+    if value.is_null() {
+        None
+    } else if let Some(value) = value.as_bool() {
+        Some(if value { "true" } else { "false" }.to_string())
+    } else if value.is_i64() || value.is_u64() || value.is_f64() {
+        Some(value.to_string())
+    } else if let Some(value) = value.as_str() {
+        metadata_string(Some(&Value::String(value.to_string())))
+    } else if let Some(items) = value.as_array() {
+        let joined = items
+            .iter()
+            .filter_map(|item| metadata_string(Some(&Value::String(scalar_to_string(item)))))
+            .collect::<Vec<_>>()
+            .join(",");
+        if joined.is_empty() {
+            None
+        } else {
+            Some(joined)
+        }
+    } else {
+        None
+    }
 }
 
 fn drone_config_failure_config(message: &str) -> DronePipelineConfig {
@@ -2343,6 +2490,7 @@ fn drone_config_failure_config(message: &str) -> DronePipelineConfig {
         branch: None,
         commit: None,
         params: vec![("__configuration_error__".to_string(), message.to_string())],
+        deploy: None,
         timeout_seconds: 1,
         poll_interval_seconds: 1,
     }
@@ -2362,6 +2510,7 @@ async fn run_drone_pipeline(config: &DronePipelineConfig) -> CoreResult<DronePip
         .build()
         .map_err(|err| CoreError::Storage(format!("Drone HTTP client error: {err}")))?;
     ensure_drone_repo_enabled(&client, config).await?;
+    ensure_drone_docker_deploy_repo_trusted(&client, config).await?;
     let running = running_drone_build_for_commit(&client, config).await?;
     let build_number = if let Some(build) = running {
         required_i64(build.get("number"), "Drone build number")?
@@ -2414,6 +2563,58 @@ async fn ensure_drone_repo_enabled(
         }
         Err(err) => Err(CoreError::Storage(err)),
     }
+}
+
+async fn ensure_drone_docker_deploy_repo_trusted(
+    client: &reqwest::Client,
+    config: &DronePipelineConfig,
+) -> CoreResult<()> {
+    if !drone_docker_deploy_requires_trusted_repo(config.deploy.as_ref()) {
+        return Ok(());
+    }
+    let repo = drone_api_request(
+        client,
+        config,
+        reqwest::Method::GET,
+        &drone_repo_path(config),
+        &[],
+    )
+    .await
+    .map_err(CoreError::Storage)?;
+    if repo.get("trusted").and_then(Value::as_bool) == Some(true) {
+        return Ok(());
+    }
+    let updated = drone_api_json_request(
+        client,
+        config,
+        reqwest::Method::PATCH,
+        &drone_repo_path(config),
+        &[],
+        Some(&json!({"trusted": true})),
+    )
+    .await
+    .map_err(CoreError::Storage)?;
+    if updated.get("trusted").and_then(Value::as_bool) != Some(true) {
+        return Err(CoreError::Storage(format!(
+            "Drone repo {} must be trusted for docker deploy host volumes",
+            config.repo_slug()
+        )));
+    }
+    Ok(())
+}
+
+fn drone_docker_deploy_requires_trusted_repo(deploy: Option<&DroneDeployConfig>) -> bool {
+    let Some(deploy) = deploy else {
+        return false;
+    };
+    if deploy.mode != "docker" {
+        return false;
+    }
+    deploy
+        .docker
+        .get("trusted")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
 }
 
 async fn running_drone_build_for_commit(
@@ -2503,10 +2704,33 @@ async fn drone_result_from_build(
     let external_id = format!("{}#{build_number}", config.repo_slug());
     let external_url = config.build_url(build_number);
     let drone_status = drone_status(build.get("status"));
-    let status = drone_internal_status(&drone_status);
-    let reason = drone_failure_reason(&drone_status, &external_id);
+    let mut status = drone_internal_status(&drone_status);
+    let mut reason = drone_failure_reason(&drone_status, &external_id);
     let stage_results =
         drone_stage_results(client, config, build_number, build, &external_url).await;
+    let deploy_state = drone_deploy_state(&stage_results, config.deploy.as_ref());
+    let deploy_validation_issues = if deploy_state.as_deref() == Some("invalid") {
+        drone_deploy_validation_issues(&stage_results, config.deploy.as_ref())
+    } else {
+        Vec::new()
+    };
+    if let Some(deploy) = config.deploy.as_ref() {
+        if deploy.required
+            && matches!(
+                deploy_state.as_deref(),
+                Some("failed" | "missing" | "invalid")
+            )
+            && status == "success"
+        {
+            status = "failed".to_string();
+            reason = Some(drone_deploy_failure_reason(
+                deploy,
+                &external_id,
+                deploy_state.as_deref().unwrap_or("failed"),
+                &deploy_validation_issues,
+            ));
+        }
+    }
     let mut evidence_refs = vec![
         format!(
             "ci_pipeline:{}",
@@ -2521,6 +2745,22 @@ async fn drone_result_from_build(
     ];
     for stage in &stage_results {
         evidence_refs.push(format!("pipeline_stage:{}:{}", stage.stage, stage.status));
+    }
+    if let Some(deploy) = config.deploy.as_ref() {
+        if let Some(deploy_state) = deploy_state.as_deref() {
+            evidence_refs.push(format!(
+                "deployment:{}:{}",
+                if deploy_state == "passed" {
+                    "passed"
+                } else {
+                    deploy_state
+                },
+                deploy.mode
+            ));
+            if let Some(target) = &deploy.target {
+                evidence_refs.push(format!("deployment_target:{target}"));
+            }
+        }
     }
     dedup_strings(&mut evidence_refs);
 
@@ -2538,6 +2778,11 @@ async fn drone_result_from_build(
             .and_then(Value::as_str)
             .map_or(Value::Null, |value| json!(value)),
     );
+    metadata.extend(drone_deploy_metadata(
+        config.deploy.as_ref(),
+        deploy_state.as_deref(),
+        &deploy_validation_issues,
+    ));
 
     Ok(DronePipelineResult {
         status,
@@ -2568,6 +2813,7 @@ async fn drone_stage_results(
             String::new(),
             build.get("error").and_then(Value::as_str).unwrap_or(""),
             external_url,
+            config.deploy.as_ref(),
         )];
     };
     let mut output = Vec::new();
@@ -2618,6 +2864,7 @@ async fn drone_stage_results(
                     log_text,
                     step.get("error").and_then(Value::as_str).unwrap_or(""),
                     external_url,
+                    config.deploy.as_ref(),
                 ));
             }
         } else {
@@ -2631,6 +2878,7 @@ async fn drone_stage_results(
                 String::new(),
                 stage.get("error").and_then(Value::as_str).unwrap_or(""),
                 external_url,
+                config.deploy.as_ref(),
             ));
         }
     }
@@ -2645,6 +2893,7 @@ async fn drone_stage_results(
             String::new(),
             build.get("error").and_then(Value::as_str).unwrap_or(""),
             external_url,
+            config.deploy.as_ref(),
         ));
     }
     output
@@ -2660,6 +2909,7 @@ fn drone_pipeline_stage_result(
     log_text: String,
     error_text: &str,
     external_url: &str,
+    deploy: Option<&DroneDeployConfig>,
 ) -> DronePipelineStageResult {
     let status = drone_internal_status(&drone_status);
     let stage = drone_stage_label(stage_name, step_name);
@@ -2678,6 +2928,16 @@ fn drone_pipeline_stage_result(
     metadata.insert("drone_status".to_string(), json!(drone_status));
     if !compact_error.is_empty() {
         metadata.insert("drone_error".to_string(), json!(compact_error));
+    }
+    if drone_is_deploy_stage(stage_name, step_name, deploy) {
+        metadata.insert("drone_step_kind".to_string(), json!("deploy"));
+        if let Some(deploy) = deploy {
+            metadata.insert("deploy_mode".to_string(), json!(deploy.mode));
+            metadata.insert("deploy_stage".to_string(), json!(deploy.stage));
+            if let Some(target) = &deploy.target {
+                metadata.insert("deploy_target".to_string(), json!(target));
+            }
+        }
     }
     DronePipelineStageResult {
         stage,
@@ -2870,11 +3130,26 @@ async fn drone_api_request(
     path: &str,
     query: &[(&str, String)],
 ) -> Result<Value, String> {
+    drone_api_json_request(client, config, method, path, query, None).await
+}
+
+async fn drone_api_json_request(
+    client: &reqwest::Client,
+    config: &DronePipelineConfig,
+    method: reqwest::Method,
+    path: &str,
+    query: &[(&str, String)],
+    json_body: Option<&Value>,
+) -> Result<Value, String> {
     let url = format!("{}{}", config.server_url.trim_end_matches('/'), path);
-    let response = client
+    let mut request = client
         .request(method.clone(), &url)
         .bearer_auth(&config.token)
-        .query(query)
+        .query(query);
+    if let Some(json_body) = json_body {
+        request = request.json(json_body);
+    }
+    let response = request
         .send()
         .await
         .map_err(|err| format!("Drone API {method} {path} failed: {err}"))?;
@@ -3064,6 +3339,519 @@ fn drone_stage_label(stage_name: &str, step_name: &str) -> String {
         format!("{stage_name}/{step_name}")
     };
     label.chars().take(40).collect()
+}
+
+fn drone_is_deploy_stage(
+    stage_name: &str,
+    step_name: &str,
+    deploy: Option<&DroneDeployConfig>,
+) -> bool {
+    let Some(deploy) = deploy else {
+        return false;
+    };
+    drone_is_deploy_label(stage_name, deploy) || drone_is_deploy_label(step_name, deploy)
+}
+
+fn drone_is_deploy_label(value: &str, deploy: &DroneDeployConfig) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    let configured = deploy.stage.trim().to_ascii_lowercase();
+    normalized == configured
+        || normalized.ends_with(&format!("/{configured}"))
+        || normalized.starts_with("deploy-")
+        || normalized.ends_with("-deploy")
+        || normalized == "deployment"
+}
+
+fn drone_deploy_state(
+    stages: &[DronePipelineStageResult],
+    deploy: Option<&DroneDeployConfig>,
+) -> Option<String> {
+    let deploy = deploy?;
+    let deploy_results = stages
+        .iter()
+        .filter(|stage| {
+            stage
+                .metadata
+                .get("drone_step_kind")
+                .and_then(Value::as_str)
+                == Some("deploy")
+                || drone_is_deploy_label(&stage.stage, deploy)
+        })
+        .collect::<Vec<_>>();
+    if deploy_results.is_empty() {
+        return Some("missing".to_string());
+    }
+    if !deploy_results
+        .iter()
+        .all(|stage| matches!(stage.status.as_str(), "success" | "skipped"))
+    {
+        return Some("failed".to_string());
+    }
+    if !deploy_results
+        .iter()
+        .any(|stage| drone_deploy_result_matches_mode(stage, deploy, stages))
+    {
+        return Some("invalid".to_string());
+    }
+    Some("passed".to_string())
+}
+
+fn drone_deploy_result_matches_mode(
+    stage: &DronePipelineStageResult,
+    deploy: &DroneDeployConfig,
+    stages: &[DronePipelineStageResult],
+) -> bool {
+    match deploy.mode.as_str() {
+        "docker" => drone_docker_deploy_validation_issues(stage, deploy, stages).is_empty(),
+        "kubernetes" => {
+            let image = stage
+                .metadata
+                .get("drone_image")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            let output = drone_stage_output(stage).to_ascii_lowercase();
+            image.contains("kubectl")
+                || output.contains("kubectl apply")
+                || output.contains("helm upgrade")
+        }
+        "cli" => true,
+        _ => false,
+    }
+}
+
+fn drone_deploy_validation_issues(
+    stages: &[DronePipelineStageResult],
+    deploy: Option<&DroneDeployConfig>,
+) -> Vec<String> {
+    let Some(deploy) = deploy else {
+        return Vec::new();
+    };
+    if deploy.mode != "docker" {
+        return Vec::new();
+    }
+    let mut issues = Vec::new();
+    for stage in stages.iter().filter(|stage| {
+        stage
+            .metadata
+            .get("drone_step_kind")
+            .and_then(Value::as_str)
+            == Some("deploy")
+            || drone_is_deploy_label(&stage.stage, deploy)
+    }) {
+        let stage_issues = drone_docker_deploy_validation_issues(stage, deploy, stages);
+        if stage_issues.is_empty() {
+            return Vec::new();
+        }
+        issues.extend(stage_issues);
+    }
+    dedup_strings(&mut issues);
+    issues
+}
+
+fn drone_docker_deploy_validation_issues(
+    stage: &DronePipelineStageResult,
+    deploy: &DroneDeployConfig,
+    stages: &[DronePipelineStageResult],
+) -> Vec<String> {
+    let output = drone_stage_output(stage).to_ascii_lowercase();
+    let mut issues = Vec::new();
+    if drone_docker_deploy_output_masks_failure(&output) {
+        issues.push(
+            "deploy output contains failure markers despite a successful Drone step".to_string(),
+        );
+    }
+    if drone_docker_deploy_uses_forbidden_local_registry_pull(&output) {
+        issues.push(
+            "deploy step pulls or runs host.docker.internal/localhost local-registry images through the mounted host Docker daemon".to_string(),
+        );
+    }
+    let missing_services = drone_missing_docker_deploy_required_services(&output, deploy);
+    if !missing_services.is_empty() {
+        issues.push(format!(
+            "missing required deploy services: {}",
+            missing_services.join(", ")
+        ));
+    }
+    let missing_images = drone_missing_docker_deploy_built_images(&output, deploy, stages);
+    if !missing_images.is_empty() {
+        issues.push(format!(
+            "missing built image deploy references: {}",
+            missing_images.join(", ")
+        ));
+    }
+    if !drone_docker_deploy_has_run_marker(&output) {
+        issues.push("missing docker run/compose/stack/service deploy command".to_string());
+    }
+    dedup_strings(&mut issues);
+    issues
+}
+
+fn drone_deploy_failure_reason(
+    deploy: &DroneDeployConfig,
+    external_id: &str,
+    deploy_state: &str,
+    validation_issues: &[String],
+) -> String {
+    match deploy_state {
+        "missing" => format!(
+            "Drone build {external_id} did not report deploy stage {}",
+            deploy.stage
+        ),
+        "invalid" => {
+            if validation_issues.is_empty() {
+                format!(
+                    "Drone build {external_id} deploy stage {} did not implement {} deployment semantics",
+                    deploy.stage, deploy.mode
+                )
+            } else {
+                format!(
+                    "Drone build {external_id} deploy stage {} did not implement {} deployment semantics: {}",
+                    deploy.stage,
+                    deploy.mode,
+                    validation_issues
+                        .iter()
+                        .take(4)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                )
+            }
+        }
+        _ => format!(
+            "Drone build {external_id} deploy stage {} failed",
+            deploy.stage
+        ),
+    }
+}
+
+fn drone_deploy_metadata(
+    deploy: Option<&DroneDeployConfig>,
+    deploy_state: Option<&str>,
+    validation_issues: &[String],
+) -> Map<String, Value> {
+    let mut metadata = Map::new();
+    let Some(deploy) = deploy else {
+        return metadata;
+    };
+    metadata.insert("deploy_enabled".to_string(), json!(true));
+    metadata.insert("deploy_mode".to_string(), json!(deploy.mode));
+    metadata.insert("deploy_stage".to_string(), json!(deploy.stage));
+    metadata.insert(
+        "deployment_status".to_string(),
+        match deploy_state {
+            Some("passed") => json!("deployed"),
+            Some("failed" | "missing" | "invalid") => json!(deploy_state.unwrap()),
+            _ => Value::Null,
+        },
+    );
+    if let Some(target) = &deploy.target {
+        metadata.insert("deploy_target".to_string(), json!(target));
+    }
+    if deploy.mode == "docker" && deploy_state == Some("passed") {
+        metadata.insert(
+            "deploy_validation".to_string(),
+            json!(DRONE_DOCKER_DEPLOY_VALIDATION),
+        );
+    }
+    if !validation_issues.is_empty() {
+        metadata.insert(
+            "deploy_validation_failure".to_string(),
+            json!(validation_issues
+                .iter()
+                .take(4)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")),
+        );
+        metadata.insert(
+            "deploy_validation_issues".to_string(),
+            json!(validation_issues
+                .iter()
+                .take(8)
+                .cloned()
+                .collect::<Vec<_>>()),
+        );
+    }
+    metadata
+}
+
+fn drone_stage_output(stage: &DronePipelineStageResult) -> String {
+    [stage.stdout_preview.as_str(), stage.stderr_preview.as_str()]
+        .into_iter()
+        .filter(|value| !value.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn drone_docker_deploy_output_masks_failure(output: &str) -> bool {
+    if [
+        "|| echo",
+        "container start skipped",
+        "health check skipped",
+        "image may not exist yet",
+        "deployment skipped",
+        "deploy skipped",
+    ]
+    .iter()
+    .any(|marker| output.contains(marker))
+    {
+        return true;
+    }
+    output.lines().any(|line| {
+        line.contains("|| true")
+            && !line.contains("docker rm")
+            && !line.contains("docker container rm")
+            && [
+                "docker pull",
+                "docker run",
+                "docker container run",
+                "docker compose up",
+                "docker-compose up",
+                "docker stack deploy",
+                "docker service create",
+                "docker service update",
+                "wget ",
+                "curl ",
+            ]
+            .iter()
+            .any(|marker| line.contains(marker))
+    })
+}
+
+fn drone_docker_deploy_uses_forbidden_local_registry_pull(output: &str) -> bool {
+    output.lines().any(|line| {
+        (line.contains("docker pull")
+            || line.contains("docker run")
+            || line.contains("docker container run"))
+            && (line.contains("host.docker.internal/")
+                || line.contains("localhost:")
+                || line.contains("127.0.0.1:")
+                || line.contains("[::1]:"))
+    })
+}
+
+fn drone_docker_deploy_has_run_marker(output: &str) -> bool {
+    [
+        "docker run",
+        "docker container run",
+        "docker compose up",
+        "docker-compose up",
+        "docker stack deploy",
+        "docker service create",
+        "docker service update",
+    ]
+    .iter()
+    .any(|marker| output.contains(marker))
+        || (output.contains("container id") && output.contains("names") && output.contains(" up "))
+}
+
+fn drone_missing_docker_deploy_required_services(
+    output: &str,
+    deploy: &DroneDeployConfig,
+) -> Vec<String> {
+    drone_docker_deploy_service_requirements(deploy)
+        .into_iter()
+        .filter(|markers| !markers.iter().any(|marker| output.contains(marker)))
+        .map(|markers| {
+            markers
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string())
+        })
+        .collect()
+}
+
+fn drone_missing_docker_deploy_built_images(
+    output: &str,
+    deploy: &DroneDeployConfig,
+    stages: &[DronePipelineStageResult],
+) -> Vec<String> {
+    drone_docker_build_service_requirements(stages, deploy)
+        .into_iter()
+        .filter(|markers| !markers.iter().any(|marker| output.contains(marker)))
+        .map(|markers| {
+            markers
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string())
+        })
+        .collect()
+}
+
+fn drone_docker_deploy_service_requirements(deploy: &DroneDeployConfig) -> Vec<Vec<String>> {
+    let raw = deploy
+        .docker
+        .get("deploy_services")
+        .or_else(|| deploy.docker.get("services"));
+    raw.and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let item = item.as_object()?;
+                    if item.get("required").and_then(Value::as_bool) == Some(false) {
+                        return None;
+                    }
+                    let mut markers = [
+                        "container_name",
+                        "image_deploy_local",
+                        "image_host_docker",
+                        "image",
+                        "service_id",
+                        "id",
+                    ]
+                    .iter()
+                    .filter_map(|key| string_from_map(item, key))
+                    .map(|value| value.to_ascii_lowercase())
+                    .collect::<Vec<_>>();
+                    dedup_strings(&mut markers);
+                    if markers.is_empty() {
+                        None
+                    } else {
+                        Some(markers)
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn drone_docker_build_service_requirements(
+    stages: &[DronePipelineStageResult],
+    deploy: &DroneDeployConfig,
+) -> Vec<Vec<String>> {
+    let mut requirements = Vec::new();
+    for stage in stages {
+        if stage
+            .metadata
+            .get("drone_step_kind")
+            .and_then(Value::as_str)
+            == Some("deploy")
+            || drone_is_deploy_label(&stage.stage, deploy)
+        {
+            continue;
+        }
+        let output = drone_stage_output(stage).to_ascii_lowercase();
+        if !output.contains("docker build") && !output.contains("docker buildx build") {
+            continue;
+        }
+        let identity = format!(
+            "{}\n{}\n{}\n{}",
+            stage.stage,
+            stage.command,
+            stage
+                .metadata
+                .get("drone_stage")
+                .and_then(Value::as_str)
+                .unwrap_or(""),
+            stage
+                .metadata
+                .get("drone_step")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+        )
+        .to_ascii_lowercase();
+        let mut markers = Vec::new();
+        for part in identity.split(|ch: char| ch.is_whitespace() || ch == ':' || ch == '/') {
+            if let Some(service) = drone_docker_build_service_name(part) {
+                markers.push(service);
+            }
+        }
+        for image in drone_docker_build_tag_images(&output) {
+            markers.extend(drone_docker_image_marker_candidates(&image));
+        }
+        dedup_strings(&mut markers);
+        if !markers.is_empty() && !requirements.contains(&markers) {
+            requirements.push(markers);
+        }
+    }
+    requirements
+}
+
+fn drone_docker_build_service_name(value: &str) -> Option<String> {
+    let lower = value.to_ascii_lowercase();
+    for separator in [
+        "docker-build-",
+        "docker_build_",
+        "docker-build/",
+        "docker_build/",
+    ] {
+        if let Some(rest) = lower.split(separator).nth(1) {
+            let service = rest
+                .chars()
+                .take_while(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-'))
+                .collect::<String>();
+            if !service.is_empty() {
+                return Some(service);
+            }
+        }
+    }
+    None
+}
+
+fn drone_docker_build_tag_images(output: &str) -> Vec<String> {
+    output
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .windows(2)
+        .filter_map(|window| {
+            if matches!(window[0], "-t" | "--tag") {
+                Some(window[1].trim_matches(|ch| matches!(ch, '\'' | '"' | ',')))
+            } else {
+                None
+            }
+        })
+        .filter(|image| drone_docker_image_ref_is_named_artifact(image))
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn drone_docker_image_ref_is_named_artifact(image: &str) -> bool {
+    let normalized = image.trim_matches(|ch| matches!(ch, '\'' | '"' | ','));
+    if normalized.is_empty() {
+        return false;
+    }
+    let without_digest = normalized.split('@').next().unwrap_or(normalized);
+    let basename = without_digest.rsplit('/').next().unwrap_or(without_digest);
+    without_digest.contains('/')
+        || basename.contains(':')
+        || basename.contains('-')
+        || basename.contains('_')
+        || basename.contains('.')
+}
+
+fn drone_docker_image_marker_candidates(image: &str) -> Vec<String> {
+    let normalized = image.trim_matches(|ch| matches!(ch, '\'' | '"' | ','));
+    if normalized.is_empty() {
+        return Vec::new();
+    }
+    let without_digest = normalized.split('@').next().unwrap_or(normalized);
+    let mut path_parts = without_digest.split('/').collect::<Vec<_>>();
+    if path_parts.len() > 1
+        && path_parts.first().is_some_and(|value| {
+            value.contains('.') || value.contains(':') || *value == "localhost"
+        })
+    {
+        path_parts.remove(0);
+    }
+    let mut repository = path_parts.join("/");
+    if let Some((before_tag, _)) = repository.rsplit_once(':') {
+        repository = before_tag.to_string();
+    }
+    let basename = repository.rsplit('/').next().unwrap_or(&repository);
+    let mut markers = vec![
+        normalized.to_ascii_lowercase(),
+        repository.to_ascii_lowercase(),
+        basename.to_ascii_lowercase(),
+    ];
+    for separator in ['-', '_', '.'] {
+        if let Some((_, suffix)) = basename.rsplit_once(separator) {
+            markers.push(suffix.to_ascii_lowercase());
+        }
+    }
+    dedup_strings(&mut markers);
+    markers
 }
 
 fn combine_failure_preview(error_text: &str, log_text: &str) -> String {
@@ -7991,6 +8779,50 @@ mod tests {
         }))
     }
 
+    fn workspace_with_drone_docker_deploy_pipeline_contract(
+        server_url: &str,
+        token_env: &str,
+    ) -> WorkspaceRecord {
+        workspace_with_metadata(json!({
+            "source_control": {
+                "default_branch": "main"
+            },
+            "delivery_cicd": {
+                "provider": "drone",
+                "auto_deploy": true,
+                "contract_source": PLANNING_CONTRACT_SOURCE,
+                "deploy": {
+                    "enabled": true,
+                    "mode": "docker",
+                    "stage": "deploy",
+                    "required": true,
+                    "target": "production",
+                    "docker": {
+                        "trusted": true,
+                        "host_port": 18080,
+                        "labels": ["blue", "green"],
+                        "deploy_services": [
+                            {
+                                "service_id": "web",
+                                "container_name": "app-web",
+                                "image": "registry.local/app-web:abc"
+                            }
+                        ]
+                    }
+                },
+                "drone": {
+                    "repo": "owner/repo",
+                    "branch": "main",
+                    "commit": "abc123",
+                    "server_url": server_url,
+                    "token_env": token_env,
+                    "poll_interval_seconds": 1,
+                    "timeout_seconds": 1
+                }
+            }
+        }))
+    }
+
     async fn drone_api_mock(
         responses: Vec<(u16, &'static str)>,
     ) -> (String, Arc<tokio::sync::Mutex<Vec<String>>>) {
@@ -8005,12 +8837,22 @@ mod tests {
                 let Ok((mut socket, _)) = listener.accept().await else {
                     break;
                 };
-                let mut buffer = vec![0u8; 8192];
-                let read = socket.read(&mut buffer).await.unwrap_or(0);
+                let mut request = Vec::new();
+                loop {
+                    let mut buffer = vec![0u8; 8192];
+                    let read = socket.read(&mut buffer).await.unwrap_or(0);
+                    if read == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buffer[..read]);
+                    if http_request_complete(&request) {
+                        break;
+                    }
+                }
                 captured_sink
                     .lock()
                     .await
-                    .push(String::from_utf8_lossy(&buffer[..read]).to_string());
+                    .push(String::from_utf8_lossy(&request).to_string());
                 let (status, body) = response_queue
                     .lock()
                     .await
@@ -8027,6 +8869,19 @@ mod tests {
             }
         });
         (format!("http://{addr}"), captured)
+    }
+
+    fn http_request_complete(request: &[u8]) -> bool {
+        let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n") else {
+            return false;
+        };
+        let headers = String::from_utf8_lossy(&request[..header_end]).to_ascii_lowercase();
+        let content_length = headers
+            .lines()
+            .find_map(|line| line.strip_prefix("content-length:"))
+            .and_then(|value| value.trim().parse::<usize>().ok())
+            .unwrap_or(0);
+        request.len() >= header_end + 4 + content_length
     }
 
     struct GitPublishFixture {
@@ -9041,6 +9896,167 @@ mod tests {
                 "pipeline_stage:ci/test:failed".to_string(),
                 format!("pipeline_run:failed:{}", run.id),
                 "pipeline_run_external:drone:owner/repo#42".to_string(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_trusts_repo_and_marks_docker_deploy_success() {
+        let (server_url, captured) = drone_api_mock(vec![
+            (200, r#"{"active":true,"trusted":false}"#),
+            (200, r#"{"active":true,"trusted":false}"#),
+            (200, r#"{"active":true,"trusted":true}"#),
+            (200, r#"[]"#),
+            (200, r#"{"number":43,"status":"running"}"#),
+            (
+                200,
+                r#"{"number":43,"status":"success","stages":[{"name":"docker-build-web","number":1,"steps":[{"name":"build","number":1,"status":"success","exit_code":0}]},{"name":"deploy","number":2,"steps":[{"name":"deploy","number":1,"status":"success","exit_code":0}]}]}"#,
+            ),
+            (
+                200,
+                r#"[{"out":"docker build -t registry.local/app-web:abc .\n"}]"#,
+            ),
+            (
+                200,
+                r#"[{"out":"docker run -d --name app-web registry.local/app-web:abc\n"}]"#,
+            ),
+        ])
+        .await;
+        std::env::set_var("AGISTACK_TEST_DRONE_TOKEN_DEPLOY_SUCCESS", "token-deploy");
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_drone_docker_deploy_pipeline_contract(
+            &server_url,
+            "AGISTACK_TEST_DRONE_TOKEN_DEPLOY_SUCCESS",
+        ));
+        store.insert_plan(plan());
+        store.insert_node(plan_node());
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler
+            .handle(pipeline_run_item_without_attempt())
+            .await
+            .unwrap();
+        std::env::remove_var("AGISTACK_TEST_DRONE_TOKEN_DEPLOY_SUCCESS");
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let run = store.pipeline_runs().into_iter().next().unwrap();
+        assert_eq!(run.status, "success");
+        assert_eq!(run.metadata_json["deploy_enabled"], true);
+        assert_eq!(run.metadata_json["deploy_mode"], "docker");
+        assert_eq!(run.metadata_json["deploy_stage"], "deploy");
+        assert_eq!(run.metadata_json["deploy_target"], "production");
+        assert_eq!(run.metadata_json["deployment_status"], "deployed");
+        assert_eq!(
+            run.metadata_json["deploy_validation"],
+            DRONE_DOCKER_DEPLOY_VALIDATION
+        );
+        let stages = store.pipeline_stage_runs();
+        let deploy_stage = stages
+            .iter()
+            .find(|stage| stage.stage == "deploy")
+            .expect("deploy stage should be persisted");
+        assert_eq!(deploy_stage.status, "success");
+        assert_eq!(deploy_stage.metadata_json["drone_step_kind"], "deploy");
+        assert_eq!(deploy_stage.metadata_json["deploy_mode"], "docker");
+
+        let node = store.node("node-test");
+        assert_eq!(node.metadata_json["pipeline_status"], "success");
+        assert_eq!(node.metadata_json["deployment_status"], "deployed");
+        assert_eq!(
+            node.metadata_json["deploy_validation"],
+            DRONE_DOCKER_DEPLOY_VALIDATION
+        );
+        assert_eq!(
+            metadata_string_values(node.metadata_json.get("pipeline_evidence_refs")),
+            vec![
+                "ci_pipeline:passed".to_string(),
+                "drone_build:success:owner/repo#43".to_string(),
+                "pipeline_external:drone:owner/repo#43".to_string(),
+                "pipeline_stage:docker-build-web/build:success".to_string(),
+                "pipeline_stage:deploy:success".to_string(),
+                "deployment:passed:docker".to_string(),
+                "deployment_target:production".to_string(),
+                format!("pipeline_run:success:{}", run.id),
+                "pipeline_run_external:drone:owner/repo#43".to_string(),
+            ]
+        );
+
+        let requests = captured.lock().await;
+        assert_eq!(requests.len(), 8);
+        assert!(requests[2].contains("PATCH /api/repos/owner/repo"));
+        assert!(requests[2].contains(r#""trusted":true"#));
+        assert!(requests[4].contains("POST /api/repos/owner/repo/builds?"));
+        assert!(requests[4].contains("MEMSTACK_DEPLOY_ENABLED=true"));
+        assert!(requests[4].contains("MEMSTACK_DEPLOY_MODE=docker"));
+        assert!(requests[4].contains("MEMSTACK_DEPLOY_STAGE=deploy"));
+        assert!(requests[4].contains("MEMSTACK_DEPLOY_TARGET=production"));
+        assert!(requests[4].contains("MEMSTACK_DEPLOY_DOCKER_HOST_PORT=18080"));
+        assert!(requests[4].contains("MEMSTACK_DEPLOY_DOCKER_LABELS=blue%2Cgreen"));
+        assert!(requests[4].contains("target=production"));
+    }
+
+    #[tokio::test]
+    async fn pipeline_run_handler_fails_required_docker_deploy_without_run_marker() {
+        let (server_url, _captured) = drone_api_mock(vec![
+            (200, r#"{"active":true,"trusted":true}"#),
+            (200, r#"{"active":true,"trusted":true}"#),
+            (200, r#"[]"#),
+            (200, r#"{"number":44,"status":"running"}"#),
+            (
+                200,
+                r#"{"number":44,"status":"success","stages":[{"name":"deploy","number":1,"steps":[{"name":"deploy","number":1,"status":"success","exit_code":0}]}]}"#,
+            ),
+            (200, r#"[{"out":"echo app-web deployed\n"}]"#),
+        ])
+        .await;
+        std::env::set_var(
+            "AGISTACK_TEST_DRONE_TOKEN_DEPLOY_INVALID",
+            "token-deploy-invalid",
+        );
+        let store = Arc::new(FakeWorkspacePlanDispatchStore::default());
+        store.insert_workspace(workspace_with_drone_docker_deploy_pipeline_contract(
+            &server_url,
+            "AGISTACK_TEST_DRONE_TOKEN_DEPLOY_INVALID",
+        ));
+        store.insert_plan(plan());
+        store.insert_node(plan_node());
+        let handler = pipeline_run_handler(Arc::clone(&store));
+
+        let outcome = handler
+            .handle(pipeline_run_item_without_attempt())
+            .await
+            .unwrap();
+        std::env::remove_var("AGISTACK_TEST_DRONE_TOKEN_DEPLOY_INVALID");
+
+        assert_eq!(outcome, WorkspacePlanOutboxHandlerOutcome::Complete);
+        let run = store.pipeline_runs().into_iter().next().unwrap();
+        assert_eq!(run.status, "failed");
+        assert_eq!(run.metadata_json["deployment_status"], "invalid");
+        assert_eq!(
+            run.metadata_json["deploy_validation_failure"],
+            "missing docker run/compose/stack/service deploy command"
+        );
+        assert_eq!(
+            run.reason.as_deref(),
+            Some(
+                "Drone build owner/repo#44 deploy stage deploy did not implement docker deployment semantics: missing docker run/compose/stack/service deploy command"
+            )
+        );
+
+        let node = store.node("node-test");
+        assert_eq!(node.metadata_json["pipeline_status"], "failed");
+        assert_eq!(node.metadata_json["deployment_status"], "invalid");
+        assert_eq!(
+            metadata_string_values(node.metadata_json.get("pipeline_evidence_refs")),
+            vec![
+                "ci_pipeline:failed".to_string(),
+                "drone_build:success:owner/repo#44".to_string(),
+                "pipeline_external:drone:owner/repo#44".to_string(),
+                "pipeline_stage:deploy:success".to_string(),
+                "deployment:invalid:docker".to_string(),
+                "deployment_target:production".to_string(),
+                format!("pipeline_run:failed:{}", run.id),
+                "pipeline_run_external:drone:owner/repo#44".to_string(),
             ]
         );
     }
